@@ -30,6 +30,8 @@ class Http2ClientPlugin extends ClientPlugin {
 
   bindStart (message) {
     const { authority, options, headers = {} } = message
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const hasAuth = otelSemantics && hasUrlAuth(authority)
     const sessionDetails = extractSessionDetails(authority, options)
     const path = headers[HTTP2_HEADER_PATH] || '/'
     const pathname = path.split(/[?#]/, 1)[0]
@@ -37,7 +39,10 @@ class Http2ClientPlugin extends ClientPlugin {
     const base = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}`
     const uri = `${base}${pathname}`
     const allowed = this.config.filter(uri)
-    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const otelBase = hasAuth
+      ? `${sessionDetails.protocol}//REDACTED:REDACTED@${sessionDetails.host}:${sessionDetails.port}`
+      : base
+    const otelUri = hasAuth ? `${otelBase}${pathname}` : uri
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
@@ -51,7 +56,7 @@ class Http2ClientPlugin extends ClientPlugin {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
+        'http.url': otelSemantics ? buildClientHttpUrl(this.config, otelBase, path, otelUri) : uri,
         'out.host': sessionDetails.host,
       },
       metrics: {
@@ -140,6 +145,12 @@ function extractSessionDetails (authority, options) {
   }
 
   return { protocol, port, host }
+}
+
+/** @param {string | URL} authority */
+function hasUrlAuth (authority) {
+  if (typeof authority === 'string') authority = new URL(authority)
+  return Boolean(authority.username || authority.password)
 }
 
 function hasAmazonSignature (headers, path) {

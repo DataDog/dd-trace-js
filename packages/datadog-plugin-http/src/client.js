@@ -30,16 +30,24 @@ class HttpClientPlugin extends ClientPlugin {
     const hostname = options.hostname || options.host || 'localhost'
     const host = options.port ? `${hostname}:${options.port}` : hostname
     const base = `${protocol}//${host}`
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const otelHostname = otelSemantics ? formatHostnameForUrl(hostname) : hostname
+    const otelHost = otelSemantics ? (options.port ? `${otelHostname}:${options.port}` : otelHostname) : host
+    const redactedAuth = otelSemantics ? getRedactedAuth(options) : undefined
+    let otelBase = base
+    if (otelSemantics) {
+      otelBase = redactedAuth ? `${protocol}//${redactedAuth}@${otelHost}` : `${protocol}//${otelHost}`
+    }
     // A URL object (e.g. from the fetch integration) carries the query in
     // `options.search`, not `options.path`; keep it so url.full retains the query.
     const pathname = options.path || `${options.pathname || ''}${options.search || ''}`
     const path = pathname ? stripQueryAndFragment(pathname) : '/'
     const uri = `${base}${path}`
+    const otelUri = otelSemantics ? `${otelBase}${path}` : uri
 
     const allowed = this.config.filter(uri)
 
     const method = (options.method || 'GET').toUpperCase()
-    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
@@ -52,7 +60,7 @@ class HttpClientPlugin extends ClientPlugin {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, pathname, uri) : uri,
+        'http.url': otelSemantics ? buildClientHttpUrl(this.config, otelBase, pathname, otelUri) : uri,
         'out.host': hostname,
       },
       metrics: {
@@ -134,6 +142,16 @@ class HttpClientPlugin extends ClientPlugin {
   configure (config) {
     return super.configure(normalizeClientConfig(config))
   }
+}
+
+/** @param {string} hostname */
+function formatHostnameForUrl (hostname) {
+  return hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname
+}
+
+/** @param {Record<string, unknown>} options */
+function getRedactedAuth (options) {
+  if (typeof options.auth === 'string' && options.auth) return 'REDACTED:REDACTED'
 }
 
 function addResponseHeaders (res, span, config) {

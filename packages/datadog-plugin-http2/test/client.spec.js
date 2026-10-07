@@ -7,7 +7,9 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const net = require('node:net')
 const path = require('node:path')
+const tls = require('node:tls')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
@@ -33,7 +35,7 @@ describe('Plugin', () => {
     const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
     const loadPlugin = pluginToBeLoaded.includes('node:') ? 'node:http2' : 'http2'
     describe(`http2/client, protocol ${pluginToBeLoaded}`, () => {
-      function server (app, listener) {
+      function server (app, listener, hostname = 'localhost') {
         let server
         if (pluginToBeLoaded === 'https' || pluginToBeLoaded === 'node:https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
@@ -42,7 +44,7 @@ describe('Plugin', () => {
           server = require(loadPlugin).createServer()
         }
         server.on('stream', app)
-        server.listen(0, 'localhost', () => listener(
+        server.listen(0, hostname, () => listener(
           (/** @type {import('net').AddressInfo} */ (server.address())).port
         ))
         return server
@@ -104,6 +106,70 @@ describe('Plugin', () => {
             req.on('error', done)
             req.end()
           })
+        })
+        for (const input of ['URL string', 'URL object', 'colonless URL', 'password-only URL']) {
+          it(`redacts credentials in url.full from ${input}`, done => {
+            appListener = server(stream => {
+              stream.respond({ ':status': 200 })
+              stream.end()
+            }, port => {
+              agent.assertFirstTraceSpan(span => {
+                assert.strictEqual(span.meta['url.full'], `${protocol}://REDACTED:REDACTED@localhost:${port}/user`)
+                assert.strictEqual(span.metrics['server.port'], port)
+              }).then(done).catch(done)
+
+              const auth = input === 'colonless URL'
+                ? 'username'
+                : input === 'password-only URL' ? ':password' : 'username:password'
+              const url = `${protocol}://${auth}@localhost:${port}`
+              const client = http2.connect(input === 'URL object' ? new URL(url) : url).on('error', done)
+              client.request({ ':path': '/user' }).on('error', done).once('end', () => client.close()).resume().end()
+            })
+          })
+        }
+
+        for (const explicitPort of [false, true]) {
+          it(`captures credentials and IPv6 with ${explicitPort ? 'explicit' : 'implicit'} default port`, done => {
+            appListener = server(stream => {
+              stream.respond({ ':status': 200 })
+              stream.end()
+            }, port => {
+              const defaultPort = protocol === 'https' ? 443 : 80
+              agent.assertFirstTraceSpan(span => {
+                assert.strictEqual(span.meta['url.full'], `${protocol}://REDACTED:REDACTED@[::1]:${defaultPort}/user`)
+                assert.strictEqual(span.meta['server.address'], '::1')
+                assert.strictEqual(span.metrics['server.port'], defaultPort)
+              }).then(done).catch(done)
+
+              const authority = explicitPort ? `[::1]:${defaultPort}` : '[::1]'
+              const client = http2.connect(`${protocol}://username@${authority}`, {
+                createConnection: () => protocol === 'https'
+                  ? tls.connect({ host: '::1', port, rejectUnauthorized: false, ALPNProtocols: ['h2'] })
+                  : net.connect({ host: '::1', port }),
+              }).on('error', done)
+              client.request({ ':path': '/user' }).on('error', done).once('end', () => client.close()).resume().end()
+            }, '::1')
+          })
+        }
+
+        it('obfuscates queries while preserving redacted credentials and IPv6', done => {
+          appListener = server(stream => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          }, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(
+                span.meta['url.full'],
+                `${protocol}://REDACTED:REDACTED@[::1]:${port}/user?foo=bar&<redacted>`
+              )
+              assert.strictEqual(span.meta['server.address'], '::1')
+              assert.strictEqual(span.metrics['server.port'], port)
+            }).then(done).catch(done)
+
+            const client = http2.connect(new URL(`${protocol}://username:password@[::1]:${port}`)).on('error', done)
+            client.request({ ':path': '/user?foo=bar&token=secret' })
+              .on('error', done).once('end', () => client.close()).resume().end()
+          }, '::1')
         })
       })
 
@@ -184,6 +250,24 @@ describe('Plugin', () => {
 
             req.end()
           })
+        })
+
+        it('keeps legacy credential URL capture with OTel semantics disabled', done => {
+          appListener = server(stream => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          }, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.meta['http.url'], `${protocol}://[::1]:${port}/user`)
+              assert.strictEqual(span.meta['http.status_code'], '200')
+              assert.ok(!Object.hasOwn(span.meta, 'url.full'))
+              assert.strictEqual(span.metrics['network.destination.port'], port)
+            }).then(done).catch(done)
+
+            const client = http2.connect(`${protocol}://username:password@[::1]:${port}`).on('error', done)
+            client.request({ ':path': '/user?token=secret' })
+              .on('error', done).once('end', () => client.close()).resume().end()
+          }, '::1')
         })
 
         it('should support request configuration without a path and method', done => {

@@ -100,8 +100,8 @@ function toHttpScheme (scheme) {
 
 /**
  * Redact any userinfo embedded in a URL's authority, since `url.full` must not
- * leak credentials: `user:pass@host` -> `REDACTED:REDACTED@host`, `user@host` ->
- * `REDACTED@host`. Returns the URL unchanged when no userinfo is present.
+ * leak credentials. Any userinfo becomes `REDACTED:REDACTED@host`, matching OpenTelemetry HTTP
+ * instrumentation. Returns the URL unchanged when no userinfo is present.
  *
  * @param {string} url
  */
@@ -124,8 +124,7 @@ function redactUrlCredentials (url) {
   const at = url.lastIndexOf('@', authorityEnd - 1)
   if (at < authorityStart) return url
 
-  const redacted = url.slice(authorityStart, at).includes(':') ? 'REDACTED:REDACTED' : 'REDACTED'
-  return url.slice(0, authorityStart) + redacted + url.slice(at)
+  return url.slice(0, authorityStart) + 'REDACTED:REDACTED' + url.slice(at)
 }
 
 /**

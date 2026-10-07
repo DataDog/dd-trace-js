@@ -30,7 +30,7 @@ describe('Plugin', () => {
     const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
 
     describe(pluginToBeLoaded, () => {
-      function server (app, listener) {
+      function server (app, listener, hostname = 'localhost') {
         let server
         if (pluginToBeLoaded === 'https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
@@ -43,7 +43,7 @@ describe('Plugin', () => {
         } else {
           server = require('node:http').createServer(app)
         }
-        server.listen(0, 'localhost', () => {
+        server.listen(0, hostname, () => {
           listener((/** @type {import('net').AddressInfo} */ (server.address())).port)
         })
         return server
@@ -108,6 +108,95 @@ describe('Plugin', () => {
             })
             req.end()
           })
+        })
+
+        for (const input of ['URL string', 'URL object', 'options']) {
+          it(`brackets IPv6 in url.full from ${input}`, done => {
+            appListener = server((req, res) => res.end(), port => {
+              agent.assertFirstTraceSpan(span => {
+                assert.strictEqual(span.meta['url.full'], `${protocol}://[::1]:${port}/user`)
+                assert.strictEqual(span.meta['server.address'], '::1')
+                assert.strictEqual(span.metrics['server.port'], port)
+              }).then(done).catch(done)
+
+              const url = `${protocol}://[::1]:${port}/user`
+              const options = input === 'options'
+                ? { protocol: `${protocol}:`, hostname: '::1', port, path: '/user' }
+                : input === 'URL object' ? new URL(url) : url
+              http.get(options, res => res.resume()).on('error', done)
+            }, '::1')
+          })
+        }
+
+        for (const explicitPort of [false, true]) {
+          it(`brackets IPv6 with ${explicitPort ? 'explicit' : 'implicit'} default port`, done => {
+            appListener = server((req, res) => res.end(), port => {
+              const defaultPort = protocol === 'https' ? 443 : 80
+              const localAgent = new http.Agent({ keepAlive: false })
+              localAgent.defaultPort = port
+
+              agent.assertFirstTraceSpan(span => {
+                assert.strictEqual(span.meta['url.full'], `${protocol}://[::1]/user`)
+                assert.strictEqual(span.meta['server.address'], '::1')
+                assert.strictEqual(span.metrics['server.port'], defaultPort)
+              }).then(done).catch(done)
+
+              const authority = explicitPort ? `[::1]:${defaultPort}` : '[::1]'
+              http.get(`${protocol}://${authority}/user`, { agent: localAgent }, res => res.resume())
+                .on('error', done)
+            }, '::1')
+          })
+        }
+
+        for (const input of ['URL string', 'URL object', 'auth option', 'colonless URL', 'colonless auth option']) {
+          it(`redacts credentials in url.full from ${input}`, done => {
+            appListener = server((req, res) => res.end(), port => {
+              agent.assertFirstTraceSpan(span => {
+                assert.strictEqual(span.meta['url.full'], `${protocol}://REDACTED:REDACTED@localhost:${port}/user`)
+                assert.strictEqual(span.metrics['server.port'], port)
+              }).then(done).catch(done)
+
+              const auth = input.startsWith('colonless') ? 'username' : 'username:password'
+              const url = `${protocol}://${auth}@localhost:${port}/user`
+              const options = input.endsWith('option')
+                ? { protocol: `${protocol}:`, hostname: 'localhost', port, path: '/user', auth }
+                : input === 'URL object' ? new URL(url) : url
+              http.get(options, res => res.resume()).on('error', done)
+            })
+          })
+        }
+
+        for (const explicitPort of [false, true]) {
+          it(`redacts credentials with ${explicitPort ? 'explicit' : 'implicit'} default port`, done => {
+            appListener = server((req, res) => res.end(), port => {
+              const defaultPort = protocol === 'https' ? 443 : 80
+              const localAgent = new http.Agent({ keepAlive: false })
+              localAgent.defaultPort = port
+
+              agent.assertFirstTraceSpan(span => {
+                assert.strictEqual(span.meta['url.full'], `${protocol}://REDACTED:REDACTED@localhost/user`)
+                assert.strictEqual(span.metrics['server.port'], defaultPort)
+              }).then(done).catch(done)
+
+              const authority = explicitPort ? `localhost:${defaultPort}` : 'localhost'
+              http.get(`${protocol}://username:password@${authority}/user`, { agent: localAgent }, res => res.resume())
+                .on('error', done)
+            })
+          })
+        }
+
+        it('obfuscates queries while preserving redacted credentials and IPv6', done => {
+          appListener = server((req, res) => res.end(), port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(
+                span.meta['url.full'],
+                `${protocol}://REDACTED:REDACTED@[::1]:${port}/user?foo=bar&<redacted>`
+              )
+            }).then(done).catch(done)
+
+            http.get(`${protocol}://username:password@[::1]:${port}/user?foo=bar&token=secret`, res => res.resume())
+              .on('error', done)
+          }, '::1')
         })
 
         it('sets error.type to the status code on a 4xx client response', done => {
@@ -218,6 +307,24 @@ describe('Plugin', () => {
             req.end()
           })
         })
+
+        for (const hostname of ['localhost', '::1']) {
+          it(`keeps legacy credential URL capture for ${hostname} with OTel semantics disabled`, done => {
+            appListener = server((req, res) => res.end(), port => {
+              agent.assertFirstTraceSpan(span => {
+                assert.strictEqual(span.meta['http.url'], `${protocol}://${hostname}:${port}/user`)
+                assert.strictEqual(span.meta['out.host'], hostname)
+                assert.strictEqual(span.meta['http.status_code'], '200')
+                assert.ok(!Object.hasOwn(span.meta, 'url.full'))
+                assert.strictEqual(span.metrics['network.destination.port'], port)
+              }).then(done).catch(done)
+
+              const host = hostname === '::1' ? '[::1]' : hostname
+              http.get(`${protocol}://username:password@${host}:${port}/user?token=secret`, res => res.resume())
+                .on('error', done)
+            }, hostname)
+          })
+        }
 
         it('should also support get()', done => {
           const app = express()

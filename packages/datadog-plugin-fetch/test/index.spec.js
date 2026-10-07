@@ -24,9 +24,9 @@ describe('Plugin', function () {
   let appListener
 
   describe('fetch', () => {
-    function server (app, listener) {
+    function server (app, listener, hostname = 'localhost') {
       const server = require('http').createServer(app)
-      server.listen(0, 'localhost', () => listener((/** @type {import('net').AddressInfo} */ (server.address())).port))
+      server.listen(0, hostname, () => listener((/** @type {import('net').AddressInfo} */ (server.address())).port))
       return server
     }
 
@@ -78,6 +78,19 @@ describe('Plugin', function () {
 
           fetch(`http://localhost:${port}/user?foo=bar`)
         })
+      })
+      it('preserves bracketed IPv6 and obfuscated queries in url.full', done => {
+        appListener = server((req, res) => res.end(), port => {
+          const trace = agent.assertFirstTraceSpan(span => {
+            assert.strictEqual(span.meta['url.full'], `http://[::1]:${port}/user?foo=bar&<redacted>`)
+            assert.strictEqual(span.meta['server.address'], '::1')
+            assert.strictEqual(span.metrics['server.port'], port)
+            assert.strictEqual(span.metrics['http.response.status_code'], 200)
+          })
+          const response = fetch(new URL(`http://[::1]:${port}/user?foo=bar&token=secret`))
+            .then(res => res.text())
+          Promise.all([trace, response]).then(() => done(), done)
+        }, '::1')
       })
     })
 
