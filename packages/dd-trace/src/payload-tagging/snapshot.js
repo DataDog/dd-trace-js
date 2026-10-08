@@ -4,6 +4,105 @@ const { Stream } = require('node:stream')
 
 const { truncated } = require('./constants')
 
+// Payload-controlled objects must not be able to influence how their binary
+// values are copied, identified, or measured: an overridden `slice`, a custom
+// `Symbol.species`, or a spoofed `byteLength` could otherwise mutate caller
+// bytes or bypass the copy budget. Everything below is captured once at module
+// initialization from this realm's intrinsics and invoked directly on the
+// payload value, so payload-defined methods, constructors, species, and
+// metadata properties are never consulted. Defending against arbitrary
+// replacement of the global intrinsics themselves before module load is out of
+// scope: only payload-controlled object behavior is hardened here.
+
+/**
+ * @param {object} object
+ * @param {string | symbol} key
+ * @returns {Function | undefined} the own accessor getter, if any
+ */
+function getterOf (object, key) {
+  const descriptor = Object.getOwnPropertyDescriptor(object, key)
+  return descriptor?.get
+}
+
+// The element-kind, byteLength, byteOffset and buffer getters live on
+// `%TypedArray%.prototype`, which every typed array (including Buffers and
+// subclasses) inherits. Calling them directly yields intrinsic metadata even
+// when the payload defines own spoofed properties.
+const typedArrayProto = Object.getPrototypeOf(Uint8Array.prototype)
+const getTypedArrayKind = getterOf(typedArrayProto, Symbol.toStringTag)
+const getTypedArrayByteLength = getterOf(typedArrayProto, 'byteLength')
+const getTypedArrayByteOffset = getterOf(typedArrayProto, 'byteOffset')
+const getTypedArrayBuffer = getterOf(typedArrayProto, 'buffer')
+
+// Native ArrayBuffer.prototype.slice reads through the backing storage and
+// throws for a detached buffer, which makes it a non-destructive detachment
+// probe. SharedArrayBuffer storage needs its own slice method.
+const arrayBufferSlice = ArrayBuffer.prototype.slice
+const sharedArrayBufferSlice = typeof SharedArrayBuffer === 'function'
+  ? SharedArrayBuffer.prototype.slice
+  : null
+
+/**
+ * Throw when `buffer` is detached. A zero-byte view over a detached buffer is
+ * indistinguishable from a genuine empty view through intrinsic metadata, and
+ * constructing it does not throw, so the backing buffer is read through its
+ * native slice instead. This preserves the previous fail-soft behavior of
+ * copying through `TypedArray.prototype.slice`, which read the source bytes.
+ * A cross-realm SharedArrayBuffer reaches the non-shared slice and throws; the
+ * fail-soft boundary absorbs the error.
+ *
+ * @param {ArrayBuffer} buffer
+ */
+function assertBufferNotDetached (buffer) {
+  if (sharedArrayBufferSlice && buffer instanceof SharedArrayBuffer) {
+    sharedArrayBufferSlice.call(buffer, 0, 0)
+    return
+  }
+  arrayBufferSlice.call(buffer, 0, 0)
+}
+
+// A brand check: the DataView byteLength getter throws for typed arrays and
+// other non-DataView receivers, so it identifies genuine DataViews without the
+// realm-sensitive `instanceof`. DataView.prototype[Symbol.toStringTag] is a
+// data property rather than an accessor, so it cannot be used as a brand check.
+const getDataViewByteLength = getterOf(DataView.prototype, 'byteLength')
+const getDataViewByteOffset = getterOf(DataView.prototype, 'byteOffset')
+const getDataViewBuffer = getterOf(DataView.prototype, 'buffer')
+
+/**
+ * A trusted native typed-array constructor, usable with `new`.
+ *
+ * @typedef {typeof Int8Array | typeof Uint8Array | typeof Uint8ClampedArray |
+ *   typeof Int16Array | typeof Uint16Array | typeof Int32Array | typeof Uint32Array |
+ *   typeof Float32Array | typeof Float64Array | typeof BigInt64Array | typeof BigUint64Array}
+ *   TypedArrayConstructor
+ */
+
+// Closed map of trusted native constructors, used to wrap fresh copies in the
+// payload value's native element kind. Payload-defined subclasses and species
+// are never consulted, so a payload cannot choose the copy's type or storage.
+const typedArrayEntries = /** @type {Array<[string, TypedArrayConstructor]>} */ ([
+  ['Int8Array', Int8Array],
+  ['Uint8Array', Uint8Array],
+  ['Uint8ClampedArray', Uint8ClampedArray],
+  ['Int16Array', Int16Array],
+  ['Uint16Array', Uint16Array],
+  ['Int32Array', Int32Array],
+  ['Uint32Array', Uint32Array],
+  ['Float32Array', Float32Array],
+  ['Float64Array', Float64Array],
+  ['BigInt64Array', BigInt64Array],
+  ['BigUint64Array', BigUint64Array],
+])
+const typedArrayConstructors = new Map(typedArrayEntries)
+// Optional numeric format: only added when the runtime exposes it, keeping the
+// module loadable on runtimes without this typed array.
+if (typeof globalThis.Float16Array === 'function') {
+  typedArrayConstructors.set(
+    'Float16Array', /** @type {TypedArrayConstructor} */ (/** @type {unknown} */ (globalThis.Float16Array))
+  )
+}
+
 // Snapshot limits are independent of the configured output max depth: payload
 // capture must stay bounded no matter how deep the caller asks tags to go.
 const maxDepth = 100
@@ -92,33 +191,95 @@ function assign (container, key, value, root) {
 }
 
 /**
+ * Identify a genuine Buffer or ArrayBuffer view by its native kind using only
+ * intrinsic brand checks, returning `null` when the value is a genuine view of
+ * an unsupported kind. Never consults payload-defined properties.
+ *
+ * @param {Buffer | TypedArray | DataView} value
+ * @returns {string | null} 'buffer', 'DataView', or a trusted typed-array kind
+ */
+function binaryKind (value) {
+  if (Buffer.isBuffer(value)) {
+    return 'buffer'
+  }
+  try {
+    // The DataView byteLength getter requires the [[DataView]] internal slot
+    // and throws for typed arrays, which fall through to the kind getter.
+    getDataViewByteLength?.call(value)
+    return 'DataView'
+  } catch {}
+  const kind = /** @type {string} */ (getTypedArrayKind?.call(value))
+  return typedArrayConstructors.has(kind) ? kind : null
+}
+
+/**
+ * Read the visible byte length of a genuine Buffer or ArrayBuffer view using
+ * only intrinsic getters. Never consults payload-defined metadata properties.
+ *
+ * @param {Buffer | TypedArray | DataView} value
+ * @param {string} kind trusted kind from `binaryKind`
+ */
+function visibleByteLength (value, kind) {
+  if (kind === 'DataView') {
+    return /** @type {number} */ (getDataViewByteLength?.call(value))
+  }
+  return /** @type {number} */ (getTypedArrayByteLength?.call(value))
+}
+
+/**
  * Copy a Buffer or ArrayBuffer view into fresh writable storage so that later
  * redaction of the snapshot can never mutate application-owned bytes. Only the
  * view's visible byte range is copied, never its entire backing buffer. The
  * element type is preserved so existing tag formats stay stable: Buffers keep
  * their string tag and typed arrays keep their per-index tags.
  *
+ * Copying relies solely on the intrinsics captured at module initialization:
+ * payload-defined methods, constructors, species, `Symbol.toStringTag`, and
+ * metadata properties are never consulted. `kind` and `byteLength` must come
+ * from the same trusted source used for budget admission. Copy failures,
+ * including detached buffers, reach computeTags' fail-soft boundary.
+ *
  * @param {Buffer | TypedArray | DataView} value
+ * @param {string} kind trusted kind from `binaryKind`
+ * @param {number} byteLength trusted visible byte length from `visibleByteLength`
  * @returns {Buffer | TypedArray | DataView}
  */
-function copyBinary (value) {
-  if (Buffer.isBuffer(value)) {
-    // Buffer.from copies the bytes; Buffer.prototype.slice would share them.
-    return Buffer.from(value)
+function copyBinary (value, kind, byteLength) {
+  if (kind === 'buffer') {
+    // Build a trusted byte view over the intrinsic backing range and copy from
+    // it, so Buffer construction cannot consult spoofed source properties.
+    const sourceBuffer = /** @type {ArrayBuffer} */ (getTypedArrayBuffer?.call(value))
+    if (byteLength === 0) assertBufferNotDetached(sourceBuffer)
+    const source = new Uint8Array(
+      sourceBuffer,
+      /** @type {number} */ (getTypedArrayByteOffset?.call(value)),
+      byteLength
+    )
+    const copy = Buffer.alloc(byteLength)
+    copy.set(source)
+    return copy
   }
-  if (value instanceof DataView) {
-    const bytes = new Uint8Array(value.byteLength)
-    if (value.byteLength > 0) {
-      bytes.set(new Uint8Array(value.buffer, value.byteOffset, value.byteLength))
+  if (kind === 'DataView') {
+    const buffer = /** @type {ArrayBuffer} */ (getDataViewBuffer?.call(value))
+    const byteOffset = /** @type {number} */ (getDataViewByteOffset?.call(value))
+    const bytes = new Uint8Array(byteLength)
+    if (byteLength > 0) {
+      bytes.set(new Uint8Array(buffer, byteOffset, byteLength))
     }
     return new DataView(bytes.buffer)
   }
-  // %TypedArray%.prototype.slice copies the visible range into a new buffer of
-  // the same type. A spread would produce a plain array and lose the element
-  // type. Copy failures, including detached buffers, reach computeTags' fail-soft
-  // boundary.
-  // eslint-disable-next-line unicorn/prefer-spread
-  return value.slice()
+  const TypedArray = /** @type {TypedArrayConstructor} */ (typedArrayConstructors.get(kind))
+  // Copy the visible bytes through a trusted Uint8Array view, then wrap the
+  // fresh buffer in the payload value's native kind. All steps stay on native
+  // code paths, so payload-defined hooks are never consulted.
+  const buffer = /** @type {ArrayBuffer} */ (getTypedArrayBuffer?.call(value))
+  if (byteLength === 0) assertBufferNotDetached(buffer)
+  const byteOffset = /** @type {number} */ (getTypedArrayByteOffset?.call(value))
+  const bytes = new Uint8Array(byteLength)
+  if (byteLength > 0) {
+    bytes.set(new Uint8Array(buffer, byteOffset, byteLength))
+  }
+  return new TypedArray(bytes.buffer)
 }
 
 /**
@@ -198,16 +359,19 @@ function createSafeSnapshot (input) {
     }
 
     if (Buffer.isBuffer(value) || ArrayBuffer.isView(value)) {
-      if (value.byteLength > state.binaryBudget) {
+      const view = /** @type {Buffer | TypedArray | DataView} */ (value)
+      const kind = binaryKind(view)
+      const byteLength = kind === null ? null : visibleByteLength(view, kind)
+      // Unsupported genuine views are truncated like over-budget ones, and an
+      // unexpectedly thrown error (for example a detached buffer) still reaches
+      // computeTags' fail-soft boundary unchanged.
+      if (byteLength === null || byteLength > state.binaryBudget) {
         state.incomplete = true
         assign(container, key, truncated, root)
         return
       }
-      state.binaryBudget -= value.byteLength
-      assign(
-        container, key,
-        copyBinary(/** @type {Buffer | TypedArray | DataView} */ (value)), root
-      )
+      state.binaryBudget -= byteLength
+      assign(container, key, copyBinary(view, /** @type {string} */ (kind), byteLength), root)
       return
     }
 
