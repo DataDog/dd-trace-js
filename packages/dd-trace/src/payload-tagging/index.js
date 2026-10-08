@@ -10,7 +10,7 @@ const jsonpath = require('../../../../vendor/dist/jsonpath-plus').JSONPath
 const log = require('../log')
 
 const { tagsFromObject } = require('./tagging')
-const { createSafeSnapshot } = require('./snapshot')
+const { createSafeSnapshot, createSnapshotBudget } = require('./snapshot')
 const { truncated } = require('./constants')
 
 // JSONPath constructs that select based on data values (predicates, script
@@ -23,8 +23,9 @@ const { truncated } = require('./constants')
 // branches.
 const dataDependentRulePattern = /[?()@^~:`]/
 
-// Bound expansion of JSON-encoded strings before parsing them, so an oversized
-// candidate can neither be parsed nor retained for later truncation.
+// Bound the combined length of JSON-encoded strings parsed while expanding one
+// payload, so oversized or numerous candidates can neither be parsed nor
+// retained for later truncation.
 const maxExpansionLength = 1_000_000
 
 /**
@@ -60,12 +61,23 @@ function assignSafe (parent, parentProperty, value) {
 }
 
 /**
+ * Work shared by every expansion of one payload: the snapshot budget left by
+ * the payload capture and the remaining parseable string length.
+ *
+ * @typedef {{
+ *   incomplete: boolean,
+ *   budget: import('./snapshot').SnapshotBudget,
+ *   expansionLength: number
+ * }} Capture
+ */
+
+/**
  * Given an identified value, attempt to parse it as JSON if relevant. Parsed
- * values pass through the same bounded snapshot handling as the rest of the
- * payload, so expansion cannot introduce unbounded traversal either.
+ * values pass through the same bounded snapshot handling, sharing the payload's
+ * budget, so expansion cannot introduce unbounded parsing or traversal either.
  *
  * @param {unknown} value
- * @param {{ incomplete: boolean }} capture
+ * @param {Capture} capture
  * @returns {unknown} the parsed snapshot if parsing was successful, the input if not
  */
 function maybeJSONParseValue (value, capture) {
@@ -73,10 +85,11 @@ function maybeJSONParseValue (value, capture) {
     return value
   }
 
-  if (value.length > maxExpansionLength) {
+  if (value.length > capture.expansionLength) {
     capture.incomplete = true
     return truncated
   }
+  capture.expansionLength -= value.length
 
   let parsed
   try {
@@ -85,7 +98,7 @@ function maybeJSONParseValue (value, capture) {
     return value
   }
 
-  const snapshot = createSafeSnapshot(parsed)
+  const snapshot = createSafeSnapshot(parsed, capture.budget)
   if (snapshot.incomplete) {
     capture.incomplete = true
   }
@@ -97,7 +110,7 @@ function maybeJSONParseValue (value, capture) {
  *
  * @param {Record<string, unknown>} object
  * @param {string[]} expansionRules list of JSONPath queries
- * @param {{ incomplete: boolean }} capture
+ * @param {Capture} capture
  */
 function expand (object, expansionRules, capture) {
   for (const rule of expansionRules) {
@@ -162,7 +175,8 @@ function computeTags (config, object, opts) {
  * @returns {Record<string, string|boolean>}
  */
 function computeBoundedTags (config, object, opts) {
-  const snapshot = createSafeSnapshot(object)
+  const budget = createSnapshotBudget()
+  const snapshot = createSafeSnapshot(object, budget)
   const payload = /** @type {Record<string, unknown>} */ (snapshot.value)
   const redactionRules = opts.prefix === PAYLOAD_TAG_REQUEST_PREFIX ? config.request : config.response
   const expansionRules = config.expand
@@ -179,7 +193,8 @@ function computeBoundedTags (config, object, opts) {
     return {}
   }
 
-  const capture = { incomplete: snapshot.incomplete }
+  /** @type {Capture} */
+  const capture = { incomplete: snapshot.incomplete, budget, expansionLength: maxExpansionLength }
   expand(payload, expansionRules, capture)
 
   if (capture.incomplete && hasDataDependentRules(redactionRules)) {
