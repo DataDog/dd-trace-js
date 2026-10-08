@@ -4868,10 +4868,9 @@ declare namespace tracer {
 
     /**
      * Declares the agent an `agent` span represents. `version` is set as an `agent_version` tag on the agent
-     * span and on the spans under it that have not finished, up to a nested agent. The other fields are
-     * reported as the agent's manifest. Only applies to `agent` spans. Unreportable values are dropped with a
-     * warning, and unset values (`undefined`, `null`, `''`, `[]`) leave what an earlier annotation declared in
-     * place.
+     * span and its child spans within the same process. The other fields are reported as the agent's manifest.
+     * Only applies to `agent` spans. Unreportable values are dropped with a warning, and unset values
+     * (`undefined`, `null`, `''`, `[]`) leave what an earlier annotation declared in place.
      */
     interface Agent {
       /** The version of the agent. */
@@ -5034,8 +5033,8 @@ declare namespace tracer {
       modelProvider?: string,
 
       /**
-       * The version of the agent, set as an `agent_version` tag on the agent span and the spans started under it,
-       * up to a nested agent. Only used on `agent` spans, and wins over a version declared by an enclosing
+       * The version of the agent, set as an `agent_version` tag on the agent span and its child spans within the
+       * same process. Only used on `agent` spans, and wins over a version declared by an enclosing
        * `annotationContext`.
        */
       version?: string,

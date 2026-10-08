@@ -1054,39 +1054,15 @@ describe('sdk', () => {
         assert.ok(emittedTags('outer_llm').includes('agent_version:1.0.0'))
       })
 
-      it('does not report an outer version on a nested agent without one, or on the spans it runs', () => {
+      it('reports the outer version on a nested agent without one, and on the spans it runs', () => {
         llmobs.trace({ kind: 'agent', name: 'outer', version: '1.0.0' }, () => {
           llmobs.trace({ kind: 'agent', name: 'inner' }, () => {
             llmobs.trace({ kind: 'llm', name: 'llm' }, () => {})
           })
         })
 
-        assert.ok(hasNoVersion('inner'))
-        assert.ok(hasNoVersion('llm'))
-      })
-
-      it('reports a version annotated after an intermediate span started on the spans under it', () => {
-        llmobs.trace({ kind: 'agent', name: 'agent' }, agent => {
-          llmobs.trace({ kind: 'workflow', name: 'step' }, () => {
-            llmobs.annotate(agent, { agent: { version: '2.0.0' } })
-            llmobs.trace({ kind: 'llm', name: 'llm' }, () => {})
-          })
-        })
-
-        assert.ok(emittedTags('step').includes('agent_version:2.0.0'))
-        assert.ok(emittedTags('llm').includes('agent_version:2.0.0'))
-      })
-
-      it('reports a replaced version on the spans under an intermediate span', () => {
-        llmobs.trace({ kind: 'agent', name: 'agent', version: '1.0.0' }, agent => {
-          llmobs.trace({ kind: 'workflow', name: 'step' }, () => {
-            llmobs.annotate(agent, { agent: { version: '2.0.0' } })
-            llmobs.trace({ kind: 'llm', name: 'llm' }, () => {})
-          })
-        })
-
-        assert.ok(emittedTags('llm').includes('agent_version:2.0.0'))
-        assert.ok(!emittedTags('llm').includes('agent_version:1.0.0'))
+        assert.ok(emittedTags('inner').includes('agent_version:1.0.0'))
+        assert.ok(emittedTags('llm').includes('agent_version:1.0.0'))
       })
 
       it('warns when dropping a non-string version option on an agent span', () => {
@@ -1099,17 +1075,6 @@ describe('sdk', () => {
         }
 
         assert.ok(hasNoVersion('agent'))
-      })
-
-      it('reports an annotated version on the spans started after the annotation', () => {
-        llmobs.trace({ kind: 'agent', name: 'agent' }, () => {
-          llmobs.trace({ kind: 'tool', name: 'before' }, () => {})
-          llmobs.annotate({ agent: { version: '1.0.1' } })
-          llmobs.trace({ kind: 'tool', name: 'after' }, () => {})
-        })
-
-        assert.ok(hasNoVersion('before'))
-        assert.ok(emittedTags('after').includes('agent_version:1.0.1'))
       })
 
       it('wins over the version declared by an enclosing annotation context', () => {

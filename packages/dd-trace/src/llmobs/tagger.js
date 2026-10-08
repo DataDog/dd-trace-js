@@ -27,9 +27,9 @@ const {
   OUTPUT_MESSAGES,
   TAGS,
   NAME,
-  PARENT_AGENT,
   PARENT_AGENT_NAME,
   PARENT_AGENT_SPAN_ID,
+  PARENT_AGENT_VERSION,
   PROPAGATED_PARENT_ID_KEY,
   PROPAGATED_PARENT_AGENT_ID_KEY,
   PROPAGATED_PARENT_AGENT_NAME_KEY,
@@ -284,10 +284,9 @@ class LLMObsTagger {
 
   /**
    * Store the nearest agent ancestor on the span so it can be surfaced as
-   * `meta.agent_attribution` at finish, along with the agent span itself, whose version is read when
-   * this span finishes so an annotation made after this span started still applies. The agent panel
-   * reads that version off each span to attribute its spend. Resolved once here, at registration, so
-   * downstream children inherit it with a single lookup rather than walking the ancestor chain.
+   * `meta.agent_attribution` at finish, along with that agent's version, which the agent panel reads
+   * off each span to attribute its spend. Resolved once here, at registration, so downstream children
+   * inherit it with a single lookup rather than walking the ancestor chain.
    *
    * @param {import('../opentracing/span')} span
    * @param {import('../opentracing/span')} [parent] the LLMObs parent span, if any
@@ -295,10 +294,10 @@ class LLMObsTagger {
   // TODO: spans whose kind changes after registration (e.g. claude-agent-sdk tools promoted to
   // sub-agents) will not retroactively update already-finished children's attribution. Follow up.
   #tagAgentAttribution (span, parent) {
-    let name, spanId, agent
+    let name, spanId, version
     if (registry.has(parent)) {
       // Local LLMObs parent: attribute to it if it is an agent, else inherit its resolution.
-      ({ name, spanId, agent } = resolveAgentAttribution(registry.get(parent), parent))
+      ({ name, spanId, version } = resolveAgentAttribution(registry.get(parent), parent))
     } else if (span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY]) {
       // Distributed LLMObs parent: inherit the nearest agent propagated from upstream. The
       // name may be absent when the upstream hop ran an older SDK or its name was not
@@ -310,7 +309,7 @@ class LLMObsTagger {
 
     if (name != null) this._setTag(span, PARENT_AGENT_NAME, name)
     if (spanId != null) this._setTag(span, PARENT_AGENT_SPAN_ID, spanId)
-    if (agent) this._setTag(span, PARENT_AGENT, agent)
+    if (version) this._setTag(span, PARENT_AGENT_VERSION, version)
   }
 
   // TODO: similarly for the following `tag` methods,
