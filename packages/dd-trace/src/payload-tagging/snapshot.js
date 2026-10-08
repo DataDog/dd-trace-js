@@ -187,7 +187,7 @@ function assign (container, key, value, root) {
  * an unsupported kind. Brand detection never consults payload-defined
  * properties and never throws, which keeps it separate from metadata
  * validation: `visibleByteLength` reads view metadata and may throw for
- * detached storage, propagating that error to the fail-soft boundary.
+ * detached storage, which truncates only that leaf.
  *
  * @param {Buffer | TypedArray | DataView} value
  * @returns {string | null} 'buffer', 'DataView', or a trusted typed-array kind
@@ -207,8 +207,7 @@ function binaryKind (value) {
  * Read the visible byte length of a genuine Buffer or ArrayBuffer view using
  * only intrinsic getters. Never consults payload-defined metadata properties.
  * Unlike brand detection, this validation reads view metadata and the DataView
- * getter throws for detached storage; the error propagates unchanged to
- * computeTags' fail-soft boundary.
+ * getter throws for detached storage; the caller truncates only that leaf.
  *
  * @param {Buffer | TypedArray | DataView} value
  * @param {string} kind trusted kind from `binaryKind`
@@ -233,7 +232,7 @@ function visibleByteLength (value, kind) {
  * from the same trusted source used for budget admission. Native construction
  * of the source view rejects detached ArrayBuffers for every visible byte
  * length, including zero, without consulting backing-buffer constructors or
- * species; that error reaches computeTags' fail-soft boundary.
+ * species; the caller truncates only that leaf.
  *
  * @param {Buffer | TypedArray | DataView} value
  * @param {string} kind trusted kind from `binaryKind`
@@ -359,6 +358,38 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
   const stack = []
 
   /**
+   * Copy a genuine Buffer or ArrayBuffer view within the binary budget, or
+   * return the `truncated` sentinel for unsupported or over-budget views. Throws
+   * for detached storage; the budget is only debited after a successful copy.
+   *
+   * @param {Buffer | TypedArray | DataView} view
+   * @returns {Buffer | TypedArray | DataView | string}
+   */
+  function captureBinary (view) {
+    const kind = binaryKind(view)
+    if (kind === null) {
+      state.incomplete = true
+      return truncated
+    }
+    const byteLength = visibleByteLength(view, kind)
+    let copyLength = byteLength
+    if (byteLength > budget.binaryBytes) {
+      // An over-budget Buffer keeps the prefix its string tag renders. The
+      // shortened copy changes data such as its length, so the snapshot is
+      // marked incomplete and data-dependent rules stay suppressed. Typed
+      // arrays render one tag per element and are never shortened.
+      copyLength = kind === 'buffer' ? Math.min(byteLength, maxBufferPrefixBytes) : byteLength
+      state.incomplete = true
+      if (copyLength > budget.binaryBytes) {
+        return truncated
+      }
+    }
+    const copy = copyBinary(view, kind, copyLength)
+    budget.binaryBytes -= copyLength
+    return copy
+  }
+
+  /**
    * Store one admitted value in its destination container, pushing a frame
    * when the value is itself a container that can be expanded.
    *
@@ -375,32 +406,16 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     }
 
     if (Buffer.isBuffer(value) || ArrayBuffer.isView(value)) {
-      const view = /** @type {Buffer | TypedArray | DataView} */ (value)
-      const kind = binaryKind(view)
-      const byteLength = kind === null ? null : visibleByteLength(view, kind)
-      // Unsupported genuine views are truncated like over-budget ones, and an
-      // unexpectedly thrown error (for example a detached buffer) still reaches
-      // computeTags' fail-soft boundary unchanged.
-      if (byteLength === null) {
+      let copy
+      try {
+        copy = captureBinary(/** @type {Buffer | TypedArray | DataView} */ (value))
+      } catch {
+        // Intrinsic metadata reads and native construction reject detached
+        // storage. Only this leaf is lost; never inspect the caught value.
         state.incomplete = true
-        assign(container, key, truncated, root)
-        return
+        copy = truncated
       }
-      let copyLength = byteLength
-      if (byteLength > budget.binaryBytes) {
-        // An over-budget Buffer keeps the prefix its string tag renders. The
-        // shortened copy changes data such as its length, so the snapshot is
-        // marked incomplete and data-dependent rules stay suppressed. Typed
-        // arrays render one tag per element and are never shortened.
-        copyLength = kind === 'buffer' ? Math.min(byteLength, maxBufferPrefixBytes) : byteLength
-        state.incomplete = true
-        if (copyLength > budget.binaryBytes) {
-          assign(container, key, truncated, root)
-          return
-        }
-      }
-      budget.binaryBytes -= copyLength
-      assign(container, key, copyBinary(view, /** @type {string} */ (kind), copyLength), root)
+      assign(container, key, copy, root)
       return
     }
 
