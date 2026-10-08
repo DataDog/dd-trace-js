@@ -131,12 +131,67 @@ let ThreadContext
 let getContext
 let clearContext
 
+// The upper 64 bits of a 128-bit trace id, when the identifier itself only holds
+// the lower 64; see DatadogSpanContext#toTraceId.
+const TRACE_ID_128 = '_dd.p.tid'
+const HEX16 = /^[\da-f]{16}$/i
+
+// Scratch buffers the IDs are assembled in. The ThreadContext constructor copies
+// both into its own record, so they are free for reuse as soon as it returns.
+const traceIdBytes = new Uint8Array(16)
+const spanIdBytes = new Uint8Array(8)
+
+// Single-entry memo for the decoded upper half of the trace id. Locally started
+// traces derive it from their start second, so it changes about once a second
+// rather than once per trace.
+let lastTraceIdHigh
+const lastTraceIdHighBytes = new Uint8Array(8)
+
+// The same bytes as `Buffer.from(spanContext.toTraceId(true), 'hex')`, read
+// straight from the identifier instead of round-tripping through hex. Shapes
+// toTraceId can produce but this does not expect (an identifier that is neither
+// 64 nor 128 bits, a malformed _dd.p.tid) take that slow path verbatim.
+//
+// Identifier buffers are usually plain arrays, which indexed copies handle
+// about twice as fast as TypedArray#set.
+function getTraceIdBytes (spanContext) {
+  const low = spanContext._traceId.toBuffer()
+  if (low.length === 16) {
+    for (let i = 0; i < 16; i++) traceIdBytes[i] = low[i]
+    return traceIdBytes
+  }
+  if (low.length !== 8) return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
+  const high = spanContext._trace.tags[TRACE_ID_128]
+  if (high) {
+    if (high !== lastTraceIdHigh) {
+      if (typeof high !== 'string' || !HEX16.test(high)) {
+        return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
+      }
+      for (let i = 0; i < 8; i++) lastTraceIdHighBytes[i] = Number.parseInt(high.slice(i * 2, i * 2 + 2), 16)
+      lastTraceIdHigh = high
+    }
+    for (let i = 0; i < 8; i++) traceIdBytes[i] = lastTraceIdHighBytes[i]
+  } else {
+    for (let i = 0; i < 8; i++) traceIdBytes[i] = 0
+  }
+  for (let i = 0; i < 8; i++) traceIdBytes[i + 8] = low[i]
+  return traceIdBytes
+}
+
+// The same bytes as `Buffer.from(spanContext.toSpanId(true), 'hex')`.
+function getSpanIdBytes (spanContext) {
+  const bytes = spanContext._spanId.toBuffer()
+  if (bytes.length !== 8) return Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex'))
+  for (let i = 0; i < 8; i++) spanIdBytes[i] = bytes[i]
+  return spanIdBytes
+}
+
 function getOrBuildContext (span) {
   let cached = span[CachedSym]
   if (cached !== undefined && cached.context !== undefined) return cached.context
   const spanContext = span.context()
-  const traceId = Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
-  const spanId = Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex'))
+  const traceId = getTraceIdBytes(spanContext)
+  const spanId = getSpanIdBytes(spanContext)
   // Local root span: the first entry in the trace's started-spans list, or
   // this span itself when it IS the root. Encoded as 16-char lowercase hex
   // per the libdatadog convention.
@@ -152,7 +207,7 @@ function getOrBuildContext (span) {
   attrs[THREAD_NAME_IDX] = THREAD_NAME
   attrs[THREAD_ID_IDX] = THREAD_ID
   if (cached === undefined) {
-    cached = {}
+    cached = { context: undefined, webTags: undefined, awaitsOwnEndpoint: false }
     span[CachedSym] = cached
   }
   // The flags are the one part of the record that can still change after
@@ -163,17 +218,25 @@ function getOrBuildContext (span) {
   // built before the decision keeps reading as not sampled.
   cached.context = new ThreadContext(traceId, spanId, traceFlagsOf(spanContext), attrs)
   cached.webTags = webTags
-  if (endpoint === undefined) awaitEndpoint(webTags, cached)
+  if (endpoint === undefined) awaitEndpoint(span, webTags, cached)
   return cached.context
 }
 
 // Enlist a record built without an endpoint, so the resolution announcement for
 // its request fills it in.
-function awaitEndpoint (webTags, cached) {
+function awaitEndpoint (span, webTags, cached) {
   // No web-server span in this span's ancestry, so no endpoint is coming. Should
   // one appear later, webTagsCache announces that separately — see
   // onWebTagsResolved.
   if (webTags === undefined) return
+  // The request span itself, by far the most common waiter. Its announcement
+  // names this very span, so onEndpointResolved finds the record on it and the
+  // shared waiting list (a WeakMap entry and an array per request) is only
+  // needed for descendants.
+  if (webTags === span.context().getTags()) {
+    cached.awaitsOwnEndpoint = true
+    return
+  }
   const waiting = pendingEndpoints.get(webTags)
   if (waiting === undefined) {
     pendingEndpoints.set(webTags, [cached])
@@ -195,7 +258,9 @@ function onEnter () {
   if (!started) return
   const span = getActiveSpan()
   if (!span) {
-    clearContext()
+    // Clearing an already empty frame would still make @datadog/pprof install a
+    // fresh AsyncContextFrame holding nothing.
+    if (getContext() !== undefined) clearContext()
     return
   }
   const context = getOrBuildContext(span)
@@ -246,11 +311,18 @@ function onSpanFinished (span) {
 function onEndpointResolved (span) {
   if (!started) return
   const webTags = span.context().getTags()
+  const own = span[CachedSym]
+  const ownWaits = own !== undefined && own.awaitsOwnEndpoint
   const waiting = pendingEndpoints.get(webTags)
-  if (waiting === undefined) return
+  if (!ownWaits && waiting === undefined) return
   const endpoint = finalEndpoint(webTags)
   // webTagsCache only announces settled endpoints, so this is belt and braces.
   if (endpoint === undefined) return
+  if (ownWaits) {
+    own.awaitsOwnEndpoint = false
+    if (own.context !== undefined && own.webTags === webTags) appendEndpoint(own.context, endpoint)
+  }
+  if (waiting === undefined) return
   pendingEndpoints.delete(webTags)
   for (const cached of waiting) {
     // A record whose span has since been attributed to a nearer web-server span
@@ -281,7 +353,7 @@ function onWebTagsResolved (span) {
     // ThreadContext would strand every async-context frame holding this one.
     // The work is still nested in the outer request, which makes that the least
     // wrong of the values available.
-    awaitEndpoint(webTags, cached)
+    awaitEndpoint(span, webTags, cached)
   } else {
     appendEndpoint(cached.context, endpoint)
   }
