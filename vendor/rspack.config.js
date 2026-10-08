@@ -22,6 +22,7 @@ const include = new Set([
 
 const exclude = new Set([
   'mutexify', // we only ever use `mutexify/promise`
+  'opentracing', // only its public TypeScript declarations are needed
 ])
 
 const difference = new Set([...include].filter(x => !exclude.has(x)))
@@ -82,6 +83,26 @@ module.exports = {
         {
           from: 'source-map/lib/mappings.wasm',
           to: 'source-map',
+        },
+        {
+          from: 'opentracing/lib',
+          to: 'opentracing/lib',
+          globOptions: {
+            ignore: ['**/*.js', '**/*.js.map', '**/*.d.ts.map', '**/examples/**', '**/test/**'],
+          },
+        },
+        {
+          from: 'opentracing/package.json',
+          to: 'opentracing/package.json',
+          transform (content) {
+            const { name, version, types } = JSON.parse(content.toString())
+            return `${JSON.stringify({ name, version, types }, undefined, 2)}\n`
+          },
+        },
+        {
+          from: 'opentracing/LICENSE',
+          to: 'opentracing/LICENSE',
+          toType: 'file',
         },
       ],
     }),

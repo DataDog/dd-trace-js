@@ -30,31 +30,40 @@ function createChaiShim () {
   }
 }
 
-// @ts-expect-error - `Module._load` is an internal Node API used only for this test shim.
-const originalLoad = Module._load
-// @ts-expect-error - `Module._load` is an internal Node API used only for this test shim.
-Module._load = function (request, parent, isMain) {
-  if (request === 'chai') return createChaiShim()
-  return originalLoad.call(this, request, parent, isMain)
-}
-
-let apiCompatibilityChecks
-try {
-  apiCompatibilityChecks = require('opentracing/lib/test/api_compatibility').default
-} finally {
-  // Restore immediately after loading OpenTracing's test helper.
+function loadApiCompatibilityChecks (packageName) {
   // @ts-expect-error - `Module._load` is an internal Node API used only for this test shim.
-  Module._load = originalLoad
+  const originalLoad = Module._load
+  // @ts-expect-error - `Module._load` is an internal Node API used only for this test shim.
+  Module._load = function (request, parent, isMain) {
+    if (request === 'chai') return createChaiShim()
+    return originalLoad.call(this, request, parent, isMain)
+  }
+
+  try {
+    return require(`${packageName}/lib/test/api_compatibility`).default
+  } finally {
+    // Restore immediately after loading OpenTracing's test helper.
+    // @ts-expect-error - `Module._load` is an internal Node API used only for this test shim.
+    Module._load = originalLoad
+  }
 }
 
 const tracer = require('../..')
 
 describe('OpenTracing API', () => {
-  apiCompatibilityChecks(() => {
-    return tracer.init({
-      service: 'test',
-      flushInterval: 0,
-      plugins: false,
+  // Keep the older runtime contract covered even though public type identity is pinned to 0.14.7.
+  for (const [version, packageName] of [
+    ['0.14.0', 'opentracing-0.14.0'],
+    ['0.14.7', 'opentracing'],
+  ]) {
+    describe(version, () => {
+      const apiCompatibilityChecks = loadApiCompatibilityChecks(packageName)
+
+      apiCompatibilityChecks(() => tracer.init({
+        service: 'test',
+        flushInterval: 0,
+        plugins: false,
+      }))
     })
-  })
+  }
 })
