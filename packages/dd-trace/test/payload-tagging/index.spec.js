@@ -1070,45 +1070,41 @@ describe('Safe payload capture', () => {
       })
     })
 
-    it('should omit payload tags without throwing when a typed-array buffer is detached', () => {
+    const detachedLeafTags = {
+      'aws.response.body.Body': 'truncated',
+      'aws.response.body.Ok': 'true',
+      '_dd.payload_tags_incomplete': true,
+    }
+
+    it('should truncate only the leaf when a typed-array buffer is detached', () => {
       const body = new Uint8Array([1, 2])
       structuredClone(body.buffer, { transfer: [body.buffer] })
 
-      assert.deepStrictEqual(computeTags(safeConfig, { Body: body, Ok: true }, responseOpts), {})
+      assert.deepStrictEqual(computeTags(safeConfig, { Body: body, Ok: true }, responseOpts), detachedLeafTags)
     })
 
     for (const visibleLength of [0, 3]) {
-      it(`should omit payload tags when a detached DataView with ${visibleLength} visible bytes is captured`, () => {
+      it(`should truncate only the leaf of a detached DataView with ${visibleLength} visible bytes`, () => {
         const backing = new ArrayBuffer(3)
         const body = new DataView(backing, 0, visibleLength)
         structuredClone(backing, { transfer: [backing] })
 
-        assert.throws(() => createSafeSnapshot({ Body: body, Ok: true }), TypeError)
+        const snapshot = createSafeSnapshot({ Body: body, Ok: true })
+        assert.strictEqual(snapshot.incomplete, true)
+        assert.deepStrictEqual({ ...(/** @type {object} */ (snapshot.value)) }, { Body: 'truncated', Ok: true })
 
-        const config = { expand: [], request: [], response: [] }
-        // No redaction or expansion rules: data-dependent rules would suppress
-        // the broken partial capture and conceal the defect.
-        assert.deepStrictEqual(
-          computeTags(config, { Body: body, Ok: true }, { prefix: PAYLOAD_TAG_RESPONSE_PREFIX, maxDepth: 10 }),
-          {}
-        )
-        assert.deepStrictEqual(
-          computeTags(config, { Body: body, Ok: true }, { prefix: PAYLOAD_TAG_REQUEST_PREFIX, maxDepth: 10 }),
-          {}
-        )
+        assert.deepStrictEqual(computeTags(safeConfig, { Body: body, Ok: true }, responseOpts), detachedLeafTags)
       })
     }
 
     for (const name of ['typed-array', 'Buffer']) {
-      it(`should omit payload tags without throwing when an originally empty ${name} view is detached`, () => {
+      it(`should truncate only the leaf when an originally empty ${name} view is detached`, () => {
         const backing = new ArrayBuffer(3)
         /** @type {Uint8Array | Buffer} */
         const body = name === 'Buffer' ? Buffer.from(backing, 1, 0) : new Uint8Array(backing, 1, 0)
         structuredClone(backing, { transfer: [backing] })
 
-        assert.throws(() => createSafeSnapshot({ Body: body }), TypeError)
-
-        assert.deepStrictEqual(computeTags(safeConfig, { Body: body, Ok: true }, responseOpts), {})
+        assert.deepStrictEqual(computeTags(safeConfig, { Body: body, Ok: true }, responseOpts), detachedLeafTags)
       })
     }
 
