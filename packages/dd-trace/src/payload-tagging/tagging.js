@@ -2,13 +2,12 @@
 
 const { PAYLOAD_TAGGING_MAX_TAGS } = require('../constants')
 const { truncateString } = require('../util')
-const { truncated } = require('./constants')
+const { maxValueLength, truncated } = require('./constants')
 
 const redactedKeys = new Set([
   'authorization', 'x-authorization', 'password', 'token',
 ])
 const redacted = 'redacted'
-const maxValueLength = 5000
 const maxRetainedValueLength = maxValueLength * 2
 
 /**

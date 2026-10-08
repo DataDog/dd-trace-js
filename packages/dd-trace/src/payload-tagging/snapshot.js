@@ -3,7 +3,7 @@
 const { Stream } = require('node:stream')
 const { isDataView, isDate, isMap, isSet } = require('node:util').types
 
-const { truncated } = require('./constants')
+const { maxValueLength, truncated } = require('./constants')
 
 // Payload-controlled objects must not be able to influence how their binary
 // values are copied, identified, or measured: an overridden `slice`, a custom
@@ -95,9 +95,18 @@ const maxArrayLength = 10_000
 // across a single `createSafeSnapshot` invocation. Copying keeps later
 // JSONPath redaction from mutating application-owned bytes; the shared budget
 // keeps the total copy work bounded no matter how many binary values a payload
-// carries. A value that does not fit in the remaining budget is replaced with
-// the `truncated` sentinel instead of being partially copied.
+// carries. A typed array or DataView that does not fit in the remaining budget
+// is replaced with the `truncated` sentinel; an over-budget Buffer keeps its
+// rendered prefix when that prefix still fits.
 const maxBinaryCopyBytes = 1_000_000
+
+// Buffers render as their UTF-8 decoding cut to `maxValueLength` code units.
+// Each code unit consumes at most three bytes (a malformed sequence decodes to
+// one U+FFFD per maximal subpart of up to three bytes), so the first
+// `maxValueLength * 3` bytes always decode to the rendered units; four extra
+// bytes are a defensive margin. A prefix of this size therefore renders the
+// same tag value as the full Buffer.
+const maxBufferPrefixBytes = maxValueLength * 3 + 4
 
 /**
  * Typed-array views over an ArrayBuffer, excluding Buffers and DataViews.
@@ -228,7 +237,8 @@ function visibleByteLength (value, kind) {
  *
  * @param {Buffer | TypedArray | DataView} value
  * @param {string} kind trusted kind from `binaryKind`
- * @param {number} byteLength trusted visible byte length from `visibleByteLength`
+ * @param {number} byteLength number of leading visible bytes to copy, at most the trusted
+ *   visible byte length from `visibleByteLength`
  * @returns {Buffer | TypedArray | DataView}
  */
 function copyBinary (value, kind, byteLength) {
@@ -302,6 +312,7 @@ function copyBinary (value, kind, byteLength) {
  *   cannot silently change redaction decisions after their contents are omitted.
  * - Buffers and ArrayBuffer views are copied into fresh storage within the
  *   binary budget so path-based redaction cannot mutate caller-owned bytes.
+ *   An over-budget Buffer keeps only the prefix its string tag renders.
  * - Repeated non-circular references are copied per occurrence so path-based
  *   redaction rules keep matching each path independently.
  * - Own enumerable string-keyed properties of plain objects and class
@@ -356,13 +367,26 @@ function createSafeSnapshot (input) {
       // Unsupported genuine views are truncated like over-budget ones, and an
       // unexpectedly thrown error (for example a detached buffer) still reaches
       // computeTags' fail-soft boundary unchanged.
-      if (byteLength === null || byteLength > state.binaryBudget) {
+      if (byteLength === null) {
         state.incomplete = true
         assign(container, key, truncated, root)
         return
       }
-      state.binaryBudget -= byteLength
-      assign(container, key, copyBinary(view, /** @type {string} */ (kind), byteLength), root)
+      let copyLength = byteLength
+      if (byteLength > state.binaryBudget) {
+        // An over-budget Buffer keeps the prefix its string tag renders. The
+        // shortened copy changes data such as its length, so the snapshot is
+        // marked incomplete and data-dependent rules stay suppressed. Typed
+        // arrays render one tag per element and are never shortened.
+        copyLength = kind === 'buffer' ? Math.min(byteLength, maxBufferPrefixBytes) : byteLength
+        state.incomplete = true
+        if (copyLength > state.binaryBudget) {
+          assign(container, key, truncated, root)
+          return
+        }
+      }
+      state.binaryBudget -= copyLength
+      assign(container, key, copyBinary(view, /** @type {string} */ (kind), copyLength), root)
       return
     }
 
