@@ -435,10 +435,12 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     }
 
     if (
-      isStream(value) ||
+      // Structural checks come first: stream duck typing reads a payload
+      // property, which must not run for values rejected anyway.
       hasAncestor(ancestors, value) ||
       depth >= maxDepth ||
-      (Array.isArray(value) && value.length > maxArrayLength)
+      (Array.isArray(value) && value.length > maxArrayLength) ||
+      isStream(value)
     ) {
       state.incomplete = true
       assign(container, key, truncated, root)
