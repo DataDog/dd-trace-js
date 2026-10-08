@@ -92,7 +92,7 @@ const maxEntries = 10_000
 const maxArrayLength = 10_000
 
 // Aggregate budget for copies of binary values (Buffers and typed-array views)
-// across a single `createSafeSnapshot` invocation. Copying keeps later
+// across every `createSafeSnapshot` call sharing one budget. Copying keeps later
 // JSONPath redaction from mutating application-owned bytes; the shared budget
 // keeps the total copy work bounded no matter how many binary values a payload
 // carries. A typed array or DataView that does not fit in the remaining budget
@@ -299,6 +299,19 @@ function copyBinary (value, kind, byteLength) {
  */
 
 /**
+ * Remaining snapshot work: admitted entries and binary copy bytes.
+ *
+ * @typedef {{ entries: number, binaryBytes: number }} SnapshotBudget
+ */
+
+/**
+ * @returns {SnapshotBudget} a full budget for one payload
+ */
+function createSnapshotBudget () {
+  return { entries: maxEntries, binaryBytes: maxBinaryCopyBytes }
+}
+
+/**
  * Produce a bounded, acyclic, stream-safe snapshot of an arbitrary payload.
  *
  * - Streams become `truncated` without being read.
@@ -324,6 +337,10 @@ function copyBinary (value, kind, byteLength) {
  * without reading or materializing anything else; the snapshot is marked
  * incomplete instead of allocating a placeholder per omitted property.
  *
+ * Budget sharing: passing the same `budget` to several calls bounds their
+ * combined entry and binary copy work, which keeps a payload plus all of its
+ * expanded values within one set of limits.
+ *
  * Known limitation: `Object.keys` still enumerates and allocates one entry per
  * own key of every expanded container, so raw key enumeration grows with
  * container width. Standard JavaScript offers no lazy own-key enumeration
@@ -332,14 +349,11 @@ function copyBinary (value, kind, byteLength) {
  * pending frames, and downstream tag growth) is bounded by `maxEntries`.
  *
  * @param {unknown} input
+ * @param {SnapshotBudget} [budget] remaining work, consumed in place
  * @returns {{ value: unknown, incomplete: boolean }}
  */
-function createSafeSnapshot (input) {
-  const state = {
-    incomplete: false,
-    visited: 0,
-    binaryBudget: maxBinaryCopyBytes,
-  }
+function createSafeSnapshot (input, budget = createSnapshotBudget()) {
+  const state = { incomplete: false }
   const root = { value: undefined }
   /** @type {Frame[]} */
   const stack = []
@@ -373,19 +387,19 @@ function createSafeSnapshot (input) {
         return
       }
       let copyLength = byteLength
-      if (byteLength > state.binaryBudget) {
+      if (byteLength > budget.binaryBytes) {
         // An over-budget Buffer keeps the prefix its string tag renders. The
         // shortened copy changes data such as its length, so the snapshot is
         // marked incomplete and data-dependent rules stay suppressed. Typed
         // arrays render one tag per element and are never shortened.
         copyLength = kind === 'buffer' ? Math.min(byteLength, maxBufferPrefixBytes) : byteLength
         state.incomplete = true
-        if (copyLength > state.binaryBudget) {
+        if (copyLength > budget.binaryBytes) {
           assign(container, key, truncated, root)
           return
         }
       }
-      state.binaryBudget -= copyLength
+      budget.binaryBytes -= copyLength
       assign(container, key, copyBinary(view, /** @type {string} */ (kind), copyLength), root)
       return
     }
@@ -429,7 +443,10 @@ function createSafeSnapshot (input) {
   }
 
   // The root counts as one admitted entry like every other value.
-  state.visited = 1
+  if (budget.entries <= 0) {
+    return { value: truncated, incomplete: true }
+  }
+  budget.entries--
   admit(null, null, input, 0, null)
 
   while (stack.length > 0) {
@@ -441,7 +458,7 @@ function createSafeSnapshot (input) {
       continue
     }
 
-    if (state.visited >= maxEntries) {
+    if (budget.entries <= 0) {
       // Budget exhausted: stop reading values entirely. Remaining properties
       // are neither read nor materialized; the snapshot is marked incomplete.
       state.incomplete = true
@@ -450,7 +467,7 @@ function createSafeSnapshot (input) {
 
     const key = frame.keys[frame.index]
     frame.index++
-    state.visited++
+    budget.entries--
     // The value is read only once its work is admitted, so getter side
     // effects cannot grow with omitted siblings.
     admit(frame.copy, key, frame.source[key], frame.childDepth, frame.ancestors)
@@ -459,4 +476,4 @@ function createSafeSnapshot (input) {
   return { value: root.value, incomplete: state.incomplete }
 }
 
-module.exports = { createSafeSnapshot }
+module.exports = { createSafeSnapshot, createSnapshotBudget }

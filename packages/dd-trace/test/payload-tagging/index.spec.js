@@ -488,6 +488,34 @@ describe('Safe payload capture', () => {
     assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
   })
 
+  it('should bound the combined length of expanded JSON strings', () => {
+    // 1,000,000 characters of expansion in total: the first two strings fit
+    // exactly, the third would exceed the shared limit.
+    const half = `{ "a": "${'x'.repeat(500_000 - 11)}" }`
+    assert.strictEqual(half.length, 500_000)
+    const config = { expand: ['$.body[*]'], request: [], response: [] }
+
+    const tags = computeTags(config, { body: [half, half, '{ "a": 1 }'] }, { maxDepth: 10, prefix: 'foo' })
+
+    assert.strictEqual(tags['foo.body.0.a'], 'x'.repeat(5000))
+    assert.strictEqual(tags['foo.body.1.a'], 'x'.repeat(5000))
+    assert.strictEqual(tags['foo.body.2'], 'truncated')
+    assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
+  })
+
+  it('should share the entry budget between the payload and its expanded values', () => {
+    // The payload admits the root, the array and 9,997 strings (9,999 entries),
+    // leaving one entry: the first expansion's root fits, its child does not.
+    const body = Array.from({ length: 9997 }, () => '{ "a": 1 }')
+    const config = { expand: ['$.body[*]'], request: [], response: [] }
+
+    const tags = computeTags(config, { body }, { maxDepth: 10, prefix: 'foo' })
+
+    assert.strictEqual(tags['foo.body.0.a'], undefined)
+    assert.strictEqual(tags['foo.body.1'], 'truncated')
+    assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
+  })
+
   it('should suppress payload tags when expansion truncation meets data-dependent redaction rules', () => {
     const huge = `{ "a": "${'x'.repeat(1000001)}" }`
     const config = { expand: ['$.body'], request: [], response: ['$..[?(@.token)]'] }
