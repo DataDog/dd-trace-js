@@ -327,13 +327,13 @@
   dependencies:
     "@datadog/flagging-core" "3.1.0"
 
-"@datadog/pprof@5.19.0":
-  version "5.19.0"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.19.0.tgz#dd734725bd4593ffecc4c733bf88182bce7b1a18"
-  integrity sha512-0ACUNjUdZ254ay7ZeAm8A3iO1t+jdPzAV8DuVHzqsuxV72KqygwT6ydq4/tm4LqIq51m1pQXEPT1L+j9myzn6g==
+"@datadog/pprof@5.20.0":
+  version "5.20.0"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.20.0.tgz#ccd90829f4c3e345dfb23941767be78f356e1962"
+  integrity sha512-el72sY8ipZsA6dPFqNhXtXbA0e189U+eyYUWl2bBz4+qEIheIgmpLzDrF2F7gxu/Cn87pLLYnj+oNcySKBdylQ==
   dependencies:
     node-gyp-build "^4.8.4"
-    pprof-format "^2.3.1"
+    pprof-format "^2.3.2"
     source-map "^0.8.0"
 
 "@datadog/wasm-js-rewriter@5.0.4":
@@ -2629,7 +2629,7 @@ hashery@^1.4.0, hashery@^1.5.1:
   dependencies:
     hookified "^1.15.0"
 
-hasown@^2.0.2, hasown@^2.0.4:
+hasown@^2.0.2:
   version "2.0.4"
   resolved "https://registry.yarnpkg.com/hasown/-/hasown-2.0.4.tgz#8c62d8cb90beb2aad5d0a5b67581ad9854c3f003"
   integrity sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==
@@ -3648,10 +3648,10 @@ pluralize@^8.0.0:
   resolved "https://registry.yarnpkg.com/pluralize/-/pluralize-8.0.0.tgz#1a6fa16a38d12a1901e0320fa017051c539ce3b1"
   integrity sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==
 
-pprof-format@^2.3.1:
-  version "2.3.1"
-  resolved "https://registry.yarnpkg.com/pprof-format/-/pprof-format-2.3.1.tgz#990201155cf6d720bfbf5e50f2def3b77c004843"
-  integrity sha512-y51Z83qG2vEQBACPu6lkGFREVkHwQaCaNDdSFEMLIqSo3bmpADsbP6J3F2SSk7tYB741oTQ9Kt5YAdQsmiCRkA==
+pprof-format@^2.3.2:
+  version "2.3.2"
+  resolved "https://registry.yarnpkg.com/pprof-format/-/pprof-format-2.3.2.tgz#b2066ad0a3f1646040adb8b08c9c5c8f97f8e883"
+  integrity sha512-fcMM+sgKMOveSurz7i0BMHfy1hHNnI9+VWjd4kdclqQjSTuiHWaP69DGwvkw3zcLkM/F76LhVIKvPyrxmp6iiw==
 
 prelude-ls@^1.2.1:
   version "1.2.1"
