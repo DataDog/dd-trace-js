@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { execFile } = require('node:child_process')
 const { Readable } = require('node:stream')
+const nodeVm = require('node:vm')
 const sinon = require('sinon')
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
@@ -648,12 +649,181 @@ describe('Safe payload capture', () => {
       })
     }
 
+    describe('empty views backed by nonempty storage', () => {
+      /**
+       * Install a payload-controlled `constructor` hook on the backing storage
+       * and return counters for every way capture could consult it. The
+       * `species-call` mode also mutates a nonempty backing byte if the species
+       * function runs, so silent invocation is observable.
+       *
+       * @param {ArrayBuffer | SharedArrayBuffer} backing
+       * @param {'getter' | 'species-getter' | 'species-call'} mode
+       * @returns {{ getterReads: number, speciesGets: number, speciesCalls: number }}
+       */
+      function hookBackingConstructor (backing, mode) {
+        const probe = { getterReads: 0, speciesGets: 0, speciesCalls: 0 }
+        if (mode === 'getter') {
+          Object.defineProperty(backing, 'constructor', {
+            get () {
+              probe.getterReads++
+              throw new Error('constructor getter')
+            },
+          })
+          return probe
+        }
+        const speciesTarget = {}
+        if (mode === 'species-getter') {
+          Object.defineProperty(speciesTarget, Symbol.species, {
+            get () {
+              probe.speciesGets++
+              throw new Error('species getter')
+            },
+          })
+        } else {
+          speciesTarget[Symbol.species] = function (size) {
+            probe.speciesCalls++
+            new Uint8Array(/** @type {ArrayBuffer} */ (backing))[1] = 0
+            return new ArrayBuffer(size)
+          }
+        }
+        Object.defineProperty(backing, 'constructor', { value: speciesTarget })
+        return probe
+      }
+
+      for (const name of ['Uint8Array', 'Buffer']) {
+        for (const mode of ['getter', 'species-getter', 'species-call']) {
+          it(`should capture an empty ${name} view without consulting its backing constructor (${mode})`, () => {
+            const backing = new ArrayBuffer(3)
+            new Uint8Array(backing).set([97, 98, 99])
+            /** @type {Uint8Array | Buffer} */
+            const body = name === 'Buffer'
+              ? Buffer.from(backing, 2, 0)
+              : new Uint8Array(backing, 1, 0)
+            const probe = hookBackingConstructor(
+              backing,
+              /** @type {'getter' | 'species-getter' | 'species-call'} */ (mode)
+            )
+
+            const snapshot = createSafeSnapshot({ Body: body, Ok: 'sib' })
+
+            assert.strictEqual(snapshot.incomplete, false)
+            assert.strictEqual(probe.getterReads, 0)
+            assert.strictEqual(probe.speciesGets, 0)
+            assert.strictEqual(probe.speciesCalls, 0)
+            assert.deepStrictEqual(Array.from(new Uint8Array(backing)), [97, 98, 99])
+            const copy = /** @type {{ Body: Uint8Array | Buffer, Ok: string }} */ (snapshot.value).Body
+            if (name === 'Buffer') {
+              assert.ok(Buffer.isBuffer(copy))
+            } else {
+              assert.strictEqual(copy.constructor, Uint8Array)
+            }
+            assert.strictEqual(copy.byteLength, 0)
+            assert.notStrictEqual(copy.buffer, backing)
+            // Capture of the hooked value must not block its safe sibling.
+            assert.strictEqual(/** @type {{ Ok: string }} */ (snapshot.value).Ok, 'sib')
+          })
+        }
+      }
+
+      it('should capture an empty DataView control without consulting its backing constructor', () => {
+        const backing = new ArrayBuffer(3)
+        new Uint8Array(backing).set([97, 98, 99])
+        const body = new DataView(backing, 2, 0)
+        const probe = hookBackingConstructor(backing, 'species-call')
+
+        const snapshot = createSafeSnapshot({ Body: body, Ok: 'sib' })
+
+        assert.strictEqual(snapshot.incomplete, false)
+        assert.strictEqual(probe.speciesCalls, 0)
+        assert.deepStrictEqual(Array.from(new Uint8Array(backing)), [97, 98, 99])
+        const copy = /** @type {{ Body: DataView }} */ (snapshot.value).Body
+        assert.ok(copy instanceof DataView)
+        assert.strictEqual(copy.byteLength, 0)
+        assert.notStrictEqual(copy.buffer, backing)
+        assert.strictEqual(/** @type {{ Ok: string }} */ (snapshot.value).Ok, 'sib')
+      })
+
+      it('should capture a same-realm empty shared-backed typed array without consulting its constructor', () => {
+        const backing = new SharedArrayBuffer(3)
+        new Uint8Array(backing).set([97, 98, 99])
+        const body = new Uint8Array(backing, 1, 0)
+        const probe = hookBackingConstructor(backing, 'species-call')
+
+        const snapshot = createSafeSnapshot({ Body: body })
+
+        assert.strictEqual(snapshot.incomplete, false)
+        assert.strictEqual(probe.speciesCalls, 0)
+        assert.deepStrictEqual(Array.from(new Uint8Array(backing)), [97, 98, 99])
+        const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
+        assert.strictEqual(copy.constructor, Uint8Array)
+        assert.strictEqual(copy.byteLength, 0)
+        assert.notStrictEqual(copy.buffer, backing)
+      })
+
+      it('should capture a cross-realm empty shared-backed typed array without consulting its constructor', () => {
+        // The backing storage and the view both come from a foreign realm, so
+        // this covers removal of the realm-sensitive detachment branch.
+        const { backing, ForeignUint8Array } = nodeVm.runInNewContext(`
+          const backing = new SharedArrayBuffer(3)
+          new Uint8Array(backing).set([97, 98, 99])
+          ;({ backing, ForeignUint8Array: Uint8Array })
+        `)
+        const body = new ForeignUint8Array(backing, 2, 0)
+        const probe = hookBackingConstructor(backing, 'species-call')
+
+        const snapshot = createSafeSnapshot({ Body: body })
+
+        assert.strictEqual(snapshot.incomplete, false)
+        assert.strictEqual(probe.speciesCalls, 0)
+        assert.deepStrictEqual(Array.from(new Uint8Array(backing)), [97, 98, 99])
+        const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
+        assert.strictEqual(copy.constructor, Uint8Array)
+        assert.strictEqual(copy.byteLength, 0)
+        assert.notStrictEqual(copy.buffer, backing)
+      })
+    })
+
     it('should omit payload tags without throwing when a typed-array buffer is detached', () => {
       const body = new Uint8Array([1, 2])
       structuredClone(body.buffer, { transfer: [body.buffer] })
 
       assert.deepStrictEqual(computeTags(safeConfig, { Body: body, Ok: true }, responseOpts), {})
     })
+
+    for (const visibleLength of [0, 3]) {
+      it(`should omit payload tags when a detached DataView with ${visibleLength} visible bytes is captured`, () => {
+        const backing = new ArrayBuffer(3)
+        const body = new DataView(backing, 0, visibleLength)
+        structuredClone(backing, { transfer: [backing] })
+
+        assert.throws(() => createSafeSnapshot({ Body: body, Ok: true }), TypeError)
+
+        const config = { expand: [], request: [], response: [] }
+        // No redaction or expansion rules: data-dependent rules would suppress
+        // the broken partial capture and conceal the defect.
+        assert.deepStrictEqual(
+          computeTags(config, { Body: body, Ok: true }, { prefix: PAYLOAD_TAG_RESPONSE_PREFIX, maxDepth: 10 }),
+          {}
+        )
+        assert.deepStrictEqual(
+          computeTags(config, { Body: body, Ok: true }, { prefix: PAYLOAD_TAG_REQUEST_PREFIX, maxDepth: 10 }),
+          {}
+        )
+      })
+    }
+
+    for (const name of ['typed-array', 'Buffer']) {
+      it(`should omit payload tags without throwing when an originally empty ${name} view is detached`, () => {
+        const backing = new ArrayBuffer(3)
+        /** @type {Uint8Array | Buffer} */
+        const body = name === 'Buffer' ? Buffer.from(backing, 1, 0) : new Uint8Array(backing, 1, 0)
+        structuredClone(backing, { transfer: [backing] })
+
+        assert.throws(() => createSafeSnapshot({ Body: body }), TypeError)
+
+        assert.deepStrictEqual(computeTags(safeConfig, { Body: body, Ok: true }, responseOpts), {})
+      })
+    }
 
     it('should keep partial tags and flag incompleteness when a binary value exceeds the budget', () => {
       const body = Buffer.alloc(1_000_001, 120)
