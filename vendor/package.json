@@ -5,7 +5,8 @@
   },
   "dependencies": {
     "@apm-js-collab/code-transformer": "^0.18.1",
-    "@datadog/openfeature-node-server": "2.4.0",
+    "@datadog/flagging-core": "file:packages/datadog-flagging-core-3.1.1.tgz",
+    "@datadog/openfeature-node-server": "file:packages/datadog-openfeature-node-server-2.4.0.tgz",
     "@datadog/sketches-js": "2.1.1",
     "@datadog/source-map": "npm:source-map@^0.6.0",
     "@isaacs/ttlcache": "^2.1.5",
