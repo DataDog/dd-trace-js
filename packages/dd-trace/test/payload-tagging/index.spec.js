@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
 const { Readable } = require('node:stream')
 const sinon = require('sinon')
 const {
@@ -663,6 +664,293 @@ describe('Safe payload capture', () => {
       assert.strictEqual(tags['aws.request.body.Ok'], 'redacted')
       assert.strictEqual(tags['aws.request.body.Body'], 'truncated')
       assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
+    })
+
+    it('should not mutate caller bytes when an own slice override shares storage', () => {
+      const body = new Uint8Array([97, 98, 99])
+      let calls = 0
+      Object.defineProperty(body, 'slice', {
+        value () {
+          calls++
+          return this.subarray()
+        },
+      })
+      const config = { expand: [], request: ['$.Body[1]'], response: [] }
+
+      const tags = computeTags(config, { Body: body }, requestOpts)
+
+      assert.strictEqual(calls, 0)
+      assert.deepStrictEqual(Array.from(body), [97, 98, 99])
+      assert.strictEqual(tags['aws.request.body.Body.0'], '97')
+      assert.notStrictEqual(tags['aws.request.body.Body.1'], '98')
+    })
+
+    it('should ignore a subclass slice override and preserve the native element type', () => {
+      class View extends Uint8Array {}
+      const body = new View([97, 98, 99])
+      let calls = 0
+      Object.defineProperty(body, 'slice', {
+        value () {
+          calls++
+          return this
+        },
+      })
+      const config = { expand: [], request: ['$.Body[1]'], response: [] }
+
+      const snapshot = createSafeSnapshot({ Body: body })
+
+      assert.strictEqual(calls, 0)
+      assert.strictEqual(snapshot.incomplete, false)
+      const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
+      // The copy must be the native kind, not the payload-defined subclass.
+      assert.strictEqual(copy.constructor, Uint8Array)
+      assert.deepStrictEqual(Array.from(copy), [97, 98, 99])
+      assert.notStrictEqual(copy.buffer, body.buffer)
+
+      const tags = computeTags(config, { Body: body }, requestOpts)
+
+      assert.strictEqual(calls, 0)
+      assert.deepStrictEqual(Array.from(body), [97, 98, 99])
+      assert.strictEqual(tags['aws.request.body.Body.0'], '97')
+      assert.notStrictEqual(tags['aws.request.body.Body.1'], '98')
+    })
+
+    it('should ignore custom species returning caller-owned storage', () => {
+      const body = new Uint8Array([97, 98, 99])
+      let speciesCalls = 0
+      Object.defineProperty(body, 'constructor', {
+        value: {
+          [Symbol.species]: function () {
+            speciesCalls++
+            return new Uint8Array(body.buffer)
+          },
+        },
+      })
+      const config = { expand: [], request: ['$.Body[1]'], response: [] }
+
+      const tags = computeTags(config, { Body: body }, requestOpts)
+
+      assert.strictEqual(speciesCalls, 0)
+      assert.deepStrictEqual(Array.from(body), [97, 98, 99])
+      assert.strictEqual(tags['aws.request.body.Body.0'], '97')
+      assert.notStrictEqual(tags['aws.request.body.Body.1'], '98')
+    })
+
+    it('should copy without invoking payload-defined hooks whose getters throw', () => {
+      const body = new Uint8Array([97, 98, 99])
+      const hooks = ['slice', 'constructor']
+      for (const hook of hooks) {
+        Object.defineProperty(body, hook, {
+          get () {
+            throw new Error(hook)
+          },
+        })
+      }
+      const config = { expand: [], request: ['$.Body[1]'], response: [] }
+
+      const tags = computeTags(config, { Body: body }, requestOpts)
+
+      assert.deepStrictEqual(Array.from(body), [97, 98, 99])
+      assert.strictEqual(tags['aws.request.body.Body.0'], '97')
+      assert.notStrictEqual(tags['aws.request.body.Body.1'], '98')
+    })
+
+    it('should copy using intrinsic metadata when payload metadata getters throw', () => {
+      const body = new Uint8Array([97, 98, 99])
+      for (const key of ['byteLength', 'byteOffset', 'buffer']) {
+        Object.defineProperty(body, key, {
+          get () {
+            throw new Error(key)
+          },
+        })
+      }
+
+      const snapshot = createSafeSnapshot({ Body: body })
+
+      assert.strictEqual(snapshot.incomplete, false)
+      const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
+      assert.deepStrictEqual(Array.from(copy), [97, 98, 99])
+    })
+
+    it('should copy a DataView using intrinsic metadata when its own metadata getters throw', () => {
+      const backing = new Uint8Array([1, 2, 3, 4])
+      const view = new DataView(backing.buffer, 1, 2)
+      for (const key of ['byteLength', 'byteOffset', 'buffer']) {
+        Object.defineProperty(view, key, {
+          get () {
+            throw new Error(key)
+          },
+        })
+      }
+
+      const snapshot = createSafeSnapshot({ Body: view })
+
+      assert.strictEqual(snapshot.incomplete, false)
+      const copy = /** @type {{ Body: DataView }} */ (snapshot.value).Body
+      assert.strictEqual(copy.byteLength, 2)
+      assert.strictEqual(copy.getUint8(0), 2)
+      assert.strictEqual(copy.getUint8(1), 3)
+      assert.deepStrictEqual(Array.from(backing), [1, 2, 3, 4])
+    })
+
+    it('should detect the native kind without invoking a spoofed toStringTag', () => {
+      const body = new Uint8Array([104, 105])
+      let reads = 0
+      Object.defineProperty(body, Symbol.toStringTag, {
+        get () {
+          reads++
+          throw new Error('toStringTag')
+        },
+      })
+
+      const snapshot = createSafeSnapshot({ Body: body })
+
+      assert.strictEqual(reads, 0)
+      assert.strictEqual(snapshot.incomplete, false)
+      assert.strictEqual(/** @type {{ Body: Uint8Array }} */ (snapshot.value).Body.constructor, Uint8Array)
+    })
+
+    it('should capture a clean copy when an overridden slice returns an oversized array', () => {
+      // The overridden slice previously let a three-byte value smuggle a
+      // 1,000,001-byte array past the binary copy budget.
+      const oversized = new Uint8Array(1_000_001)
+      const body = new Uint8Array([97, 98, 99])
+      Object.defineProperty(body, 'slice', { value () { return oversized } })
+
+      const snapshot = createSafeSnapshot({ Body: body })
+
+      assert.strictEqual(snapshot.incomplete, false)
+      const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
+      assert.strictEqual(copy.byteLength, 3)
+      assert.deepStrictEqual(Array.from(copy), [97, 98, 99])
+      assert.notStrictEqual(copy, oversized)
+      assert.strictEqual(oversized.byteLength, 1_000_001)
+    })
+
+    it('should reject an oversized typed array that spoofs byteLength', () => {
+      const body = new Uint8Array(1_000_001)
+      Object.defineProperty(body, 'byteLength', { value: 0 })
+
+      const snapshot = createSafeSnapshot({ Body: body })
+
+      assert.strictEqual(snapshot.incomplete, true)
+      assert.strictEqual(/** @type {{ Body: unknown }} */ (snapshot.value).Body, 'truncated')
+    })
+
+    it('should reject an oversized Buffer that spoofs byteLength', () => {
+      const body = Buffer.alloc(1_000_001)
+      Object.defineProperty(body, 'byteLength', { value: 0 })
+
+      const snapshot = createSafeSnapshot({ Body: body })
+
+      assert.strictEqual(snapshot.incomplete, true)
+      assert.strictEqual(/** @type {{ Body: unknown }} */ (snapshot.value).Body, 'truncated')
+    })
+
+    it('should preserve the native element type of every declared typed array', () => {
+      const kinds = /** @type {typeof Uint8Array[]} */ (/** @type {unknown} */ ([
+        Int8Array, Uint8Array, Uint8ClampedArray, Int16Array, Uint16Array,
+        Int32Array, Uint32Array, Float32Array, Float64Array,
+        BigInt64Array, BigUint64Array,
+      ]))
+      const isBigInt = kind => kind === BigInt64Array || kind === BigUint64Array
+
+      for (const Kind of kinds) {
+        const body = new Kind(/** @type {number[]} */ (/** @type {unknown} */ (
+          isBigInt(Kind) ? [1n, 2n] : [1, 2]
+        )))
+
+        const snapshot = createSafeSnapshot({ Body: body })
+
+        assert.strictEqual(snapshot.incomplete, false, Kind.name)
+        const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
+        assert.strictEqual(copy.constructor, Kind, Kind.name)
+        assert.deepStrictEqual(Array.from(copy), Array.from(body), Kind.name)
+        assert.notStrictEqual(copy.buffer, body.buffer, Kind.name)
+      }
+    })
+
+    it('should copy BigInt arrays with raw-byte and type preservation', () => {
+      const body = new BigUint64Array([0n, 0xffff_ffff_ffff_ffffn])
+
+      const snapshot = createSafeSnapshot({ Body: body })
+
+      assert.strictEqual(snapshot.incomplete, false)
+      const copy = /** @type {{ Body: BigUint64Array }} */ (snapshot.value).Body
+      assert.strictEqual(copy.constructor, BigUint64Array)
+      assert.deepStrictEqual(Array.from(copy), [0n, 0xffff_ffff_ffff_ffffn])
+      assert.notStrictEqual(copy.buffer, body.buffer)
+    })
+
+    it('should admit a small visible range backed by an oversized buffer', () => {
+      const backing = new Uint8Array(2_000_000)
+      const view = backing.subarray(0, 3)
+
+      const snapshot = createSafeSnapshot({ Body: view })
+
+      assert.strictEqual(snapshot.incomplete, false)
+      const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
+      assert.strictEqual(copy.byteLength, 3)
+      assert.notStrictEqual(copy.buffer, backing.buffer)
+      assert.strictEqual(backing.byteLength, 2_000_000)
+    })
+
+    it('should copy aliased typed arrays independently per occurrence', () => {
+      const shared = new Uint8Array([115, 101, 99, 114, 101, 116])
+      const config = { expand: [], request: ['$.a[0]'], response: [] }
+
+      const tags = computeTags(config, { a: shared, b: shared }, requestOpts)
+
+      assert.strictEqual(tags['aws.request.body.a.0'], '0')
+      assert.strictEqual(tags['aws.request.body.b.0'], '115')
+      assert.strictEqual(shared[0], 115)
+    })
+
+    it('should account for the aggregate budget across mixed binary kinds', () => {
+      const first = Buffer.alloc(600_000, 97)
+      const second = new Uint8Array(600_000).fill(98)
+
+      const tags = computeTags(safeConfig, { a: first, b: second }, responseOpts)
+
+      assert.strictEqual(tags['aws.response.body.a'], 'a'.repeat(5000))
+      assert.strictEqual(tags['aws.response.body.b'], 'truncated')
+      assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
+      assert.strictEqual(first[0], 97)
+      assert.strictEqual(second[0], 98)
+    })
+
+    // Skipped on runtimes without the optional numeric format: there is then
+    // no unsupported kind left to exercise.
+    it('should truncate an unsupported typed-array kind in an isolated process', async function () {
+      if (typeof (/** @type {Record<string, unknown>} */ (globalThis)).Float16Array !== 'function') {
+        this.skip()
+      }
+
+      // Masking the optional global before loading the module leaves a genuine
+      // Float16Array view that the snapshot module must treat as unsupported.
+      const script = `
+        const Float16Array = globalThis.Float16Array
+        globalThis.Float16Array = undefined
+        const { createSafeSnapshot } = require(${JSON.stringify(
+          require.resolve('../../src/payload-tagging/snapshot')
+        )})
+        const view = new Float16Array([1.5, 2.5])
+        const snapshot = createSafeSnapshot({ Body: view, Ok: true })
+        console.log(JSON.stringify({
+          incomplete: snapshot.incomplete,
+          body: snapshot.value.Body,
+          ok: snapshot.value.Ok,
+        }))
+      `
+      const stdout = await new Promise((resolve, reject) => {
+        execFile(process.execPath, ['-e', script], (err, out) => (err ? reject(err) : resolve(out)))
+      })
+
+      assert.deepStrictEqual(JSON.parse(stdout), {
+        incomplete: true,
+        body: 'truncated',
+        ok: true,
+      })
     })
   })
 
