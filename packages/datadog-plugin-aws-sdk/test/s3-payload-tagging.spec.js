@@ -12,6 +12,27 @@ const bodyContent = 'payload-tagging-body-content'
 const bucketName = 's3-payload-tagging-test'
 const failingBucketName = 's3-payload-tagging-capture-failure'
 
+/**
+ * @param {string} version
+ * @param {boolean} isV3
+ */
+function createS3Client (version, isV3) {
+  const name = isV3 ? '@aws-sdk/client-s3' : 'aws-sdk'
+  const AWS = require(`../../../versions/${name}@${version}`).get()
+  const options = { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' }
+  if (isV3) {
+    options.forcePathStyle = true
+  } else {
+    options.s3ForcePathStyle = true
+  }
+  const s3 = new AWS.S3(options)
+  // Fix for LocationConstraint issue, only for SDK v2 (same as s3.spec.js).
+  if (!isV3) {
+    s3.api.globalEndpoint = '127.0.0.1'
+  }
+  return s3
+}
+
 // The pinned LocalStack community images (3.0.2 and 1.1.0) have no working
 // HTTP state-reset endpoint: `POST /reset` answers 200 but leaves S3 state
 // untouched, and `POST /_localstack/state/reset` is 404 because the state
@@ -128,8 +149,6 @@ describe('Plugin', () => {
 
     withAwsSdkVersions((version, moduleName) => {
       const isV3 = moduleName === '@aws-sdk/smithy-client'
-      const s3ClientName = isV3 ? '@aws-sdk/client-s3' : 'aws-sdk'
-
       let s3
 
       describe('with payload tagging enabled', () => {
@@ -146,18 +165,7 @@ describe('Plugin', () => {
         })
 
         before(async () => {
-          const AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
-          const options = { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' }
-          if (isV3) {
-            options.forcePathStyle = true
-          } else {
-            options.s3ForcePathStyle = true
-          }
-          s3 = new AWS.S3(options)
-          // Fix for LocationConstraint issue - only for SDK v2 (same as s3.spec.js).
-          if (!isV3) {
-            s3.api.globalEndpoint = '127.0.0.1'
-          }
+          s3 = createS3Client(version, isV3)
 
           await drainBucket(s3, bucketName, { tolerateMissing: true })
           await callViaCallback(s3, 'createBucket', { Bucket: bucketName })
@@ -268,18 +276,7 @@ describe('Plugin', () => {
         })
 
         before(async () => {
-          const AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
-          const options = { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' }
-          if (isV3) {
-            options.forcePathStyle = true
-          } else {
-            options.s3ForcePathStyle = true
-          }
-          s3 = new AWS.S3(options)
-          // Fix for LocationConstraint issue - only for SDK v2 (same as s3.spec.js).
-          if (!isV3) {
-            s3.api.globalEndpoint = '127.0.0.1'
-          }
+          s3 = createS3Client(version, isV3)
 
           await drainBucket(s3, failingBucketName, { tolerateMissing: true })
           await callViaCallback(s3, 'createBucket', { Bucket: failingBucketName })
