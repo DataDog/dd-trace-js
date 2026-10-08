@@ -58,6 +58,7 @@ const {
   addCoverageBackfillUntestedFiles,
   getCoverageBackfillFiles,
 } = require('./jest/coverage-backfill')
+const { getSessionError } = require('./jest/session-error')
 const {
   getChannelPromise,
   publishWithCompletion,
@@ -2739,13 +2740,6 @@ function applySkippedCoverageToJestCoverageMap (coverageMap, rootDir) {
   )
 }
 
-function getSessionFinishError (results) {
-  const numFailedTestSuites = results?.numFailedTestSuites || 0
-  const numFailedTests = results?.numFailedTests || 0
-
-  return new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
-}
-
 function getTestSessionCoveragePayload (results, fallbackRootDir) {
   const payload = {}
   if (!shouldReportCodeCoverageLinesPct()) return payload
@@ -2847,7 +2841,7 @@ function getTestSessionFinishPayload (status, error, extra = {}) {
 async function finishBailTestSession (results, fallbackRootDir) {
   await waitForTestSessionFinish(getTestSessionFinishPayload(
     'fail',
-    getSessionFinishError(results),
+    getSessionError(results),
     getTestSessionCoveragePayload(results, fallbackRootDir)
   ))
 }
@@ -3170,8 +3164,8 @@ function getCliWrapper (isNewJestVersion) {
 
       const {
         results: {
-          numFailedTestSuites,
           numFailedTests,
+          numPassedTests,
           numRuntimeErrorTestSuites = 0,
           numTotalTests,
           numTotalTestSuites,
@@ -3342,16 +3336,19 @@ function getCliWrapper (isNewJestVersion) {
 
       // Determine session status after EFD and quarantine checks have potentially modified success
       let status, error
-      const isExpectedEmptySession = numTotalTests === 0 && numTotalTestSuites === 0
+      const hasExecutedTests = numPassedTests > 0 || numFailedTests > 0 || numSuppressedQuarantinedTests > 0
+      const testSessionEmptyReason = result.results.success && !hasExecutedTests
+        ? (numTotalTests > 0 || isSuitesSkipped ? 'all_tests_skipped' : 'zero_tests')
+        : undefined
       if (result.results.success) {
-        status = isExpectedEmptySession ? 'skip' : 'pass'
+        status = testSessionEmptyReason ? 'skip' : 'pass'
       } else {
         status = 'fail'
-        error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
+        error = getSessionError(result.results)
       }
 
       await waitForTestSessionFinish(getTestSessionFinishPayload(status, error, {
-        isExpectedEmptySession: result.results.success && isExpectedEmptySession,
+        testSessionEmptyReason,
         ...getTestSessionCoveragePayload(result.results, result.globalConfig?.rootDir),
       }))
 

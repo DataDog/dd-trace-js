@@ -61,6 +61,7 @@ describe('breakpoints', function () {
    *     location: { file: string; lines: string[] };
    *     templateRequiresEvaluation: boolean;
    *     template: string;
+   *     templateRedactionErrors?: { expr: string; message: string }[];
    *     nsBetweenSampling: bigint;
    *     compiledCaptureExpressions?:
    *       import('../../../src/debugger/devtools_client/snapshot').CompiledCaptureExpression[];
@@ -123,7 +124,19 @@ describe('breakpoints', function () {
       '@noCallThru': true,
     }
 
+    const load = proxyquire.noCallThru()
+    const redaction = load('../../../src/debugger/devtools_client/snapshot/redaction', {
+      '../config': {
+        dynamicInstrumentation: {
+          DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: [],
+          DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: [],
+        },
+      },
+    })
+    const condition = load('../../../src/debugger/devtools_client/condition', { './snapshot/redaction': redaction })
+
     breakpoints = proxyquire('../../../src/debugger/devtools_client/breakpoints', {
+      './condition': condition,
       './session': sessionMock,
       './source-maps': sourceMapsMock,
       './state': stateMock,
@@ -651,6 +664,35 @@ describe('breakpoints', function () {
         ])
       })
 
+      it('should not compile capture expressions reading redacted identifiers', async function () {
+        await addProbe({
+          captureSnapshot: false,
+          captureExpressions: [
+            { name: 'a', expr: { dsl: 'a', json: { ref: 'a' } } },
+            { name: 'pw', expr: { dsl: 'user.password', json: { getmember: [{ ref: 'user' }, 'password'] } } },
+          ],
+        })
+
+        const probe = getInstalledProbe()
+
+        assert.deepStrictEqual(probe.compiledCaptureExpressions, [
+          {
+            name: 'a',
+            expression: 'a',
+            limits: { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+          },
+          {
+            name: 'pw',
+            redactionError: {
+              expr: 'pw',
+              message: "Could not evaluate the expression because 'password' was redacted",
+            },
+          },
+        ])
+        // The probe still produces snapshots, so it keeps the snapshot sampling rate
+        assert.strictEqual(probe.nsBetweenSampling, 1_000_000_000n)
+      })
+
       it('should handle capture expression compilation errors', async function () {
         await assert.rejects(
           addProbe({
@@ -710,6 +752,35 @@ describe('breakpoints', function () {
         const probe = getInstalledProbe()
 
         assert.strictEqual(probe.compiledCaptureExpressions, undefined)
+      })
+    })
+
+    describe('templates', function () {
+      it('should record the evaluation errors of template segments reading redacted identifiers', async function () {
+        await addProbe({
+          segments: [
+            { str: 'user: ' },
+            { dsl: 'user.name', json: { getmember: [{ ref: 'user' }, 'name'] } },
+            { str: ', secret: ' },
+            { dsl: 'secret', json: { ref: 'secret' } },
+          ],
+        })
+
+        const probe = getInstalledProbe()
+
+        assert.strictEqual(probe.templateRequiresEvaluation, true)
+        assert.match(probe.template, /,", secret: ","\{redacted\}"\]$/)
+        assert.deepStrictEqual(probe.templateRedactionErrors, [
+          { expr: 'secret', message: "Could not evaluate the expression because 'secret' was redacted" },
+        ])
+      })
+
+      it('should not record evaluation errors if no template segment reads a redacted identifier', async function () {
+        await addProbe({
+          segments: [{ str: 'user: ' }, { dsl: 'user.name', json: { getmember: [{ ref: 'user' }, 'name'] } }],
+        })
+
+        assert.strictEqual(getInstalledProbe().templateRedactionErrors, undefined)
       })
     })
   })

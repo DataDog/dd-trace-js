@@ -881,14 +881,19 @@ function setRumTestTags (testSpan, isRumActive, browserVersion) {
 }
 
 /**
- * Marks a successful test session that intentionally executed no tests.
+ * Marks a successful test session that did not execute any tests.
  *
  * @param {import('../../opentracing/span')} testSessionSpan
  * @param {import('../../opentracing/span')|undefined} testModuleSpan
- * @param {string} skipReason
- * @param {string} emptyReason
+ * @param {'zero_tests'|'all_tests_skipped'|'zero_test_shard'|'test_discovery'} emptyReason
  */
-function setExpectedEmptyTestSessionTags (testSessionSpan, testModuleSpan, skipReason, emptyReason) {
+function setExpectedEmptyTestSessionTags (testSessionSpan, testModuleSpan, emptyReason) {
+  const skipReason = emptyReason === 'test_discovery'
+    ? 'Test discovery only (--list)'
+    : emptyReason === 'zero_test_shard'
+      ? 'No tests were assigned to this shard'
+      : emptyReason === 'all_tests_skipped' ? 'All tests were skipped' : 'No tests were detected'
+
   for (const span of [testSessionSpan, testModuleSpan]) {
     if (!span) continue
 
@@ -2020,6 +2025,10 @@ function getModifiedFilesFromDiff (diff) {
     if (lineMatch && currentFile) {
       const start = Number(lineMatch.groups.start)
       const count = lineMatch.groups.count ? Number(lineMatch.groups.count) : 1
+      if (count === 0) {
+        // Keep the surviving line before a deletion so line-based consumers can match its scope.
+        result[currentFile].push(start)
+      }
       for (let j = 0; j < count; j++) {
         result[currentFile].push(start + j)
       }

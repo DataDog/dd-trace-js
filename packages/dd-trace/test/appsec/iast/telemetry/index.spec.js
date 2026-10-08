@@ -2,8 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
-
 const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -13,6 +11,7 @@ const { Verbosity } = require('../../../../src/appsec/iast/telemetry/verbosity')
 const { getConfigFresh } = require('../../../helpers/config')
 const agent = require('../../../plugins/agent')
 const { testInRequest } = require('../utils')
+const httpRequest = require('../../../setup/helpers/http-client')
 
 describe('Telemetry', () => {
   describe('unit test', () => {
@@ -197,7 +196,7 @@ describe('Telemetry', () => {
           })
           .then(done)
           .catch(done)
-        axios.get(`http://localhost:${config.port}/`, {
+        httpRequest.get(`http://localhost:${config.port}/`, {
           headers: {
             'x-test-header': 'test-value',
           },
@@ -211,7 +210,7 @@ describe('Telemetry', () => {
           })
           .then(done)
           .catch(done)
-        axios.get(`http://localhost:${config.port}/`).catch(done)
+        httpRequest.get(`http://localhost:${config.port}/`).catch(done)
       })
     }
     testInRequest(app, tests)

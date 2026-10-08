@@ -398,11 +398,35 @@ for (const version of versions) {
 
           for (const event of [session, module]) {
             assert.strictEqual(event.meta[TEST_STATUS], 'skip')
-            assert.strictEqual(event.meta[TEST_SKIP_REASON], 'No tests were executed')
+            assert.strictEqual(event.meta[TEST_SKIP_REASON], 'No tests were detected')
             assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
           }
         }, 0, { framework })
       })
+    }
+
+    for (const framework of ['mocha', 'jasmine']) {
+      for (const [scenario, sessions, reason, exitCode] of [
+        ['allSkipped', 1, 'all_tests_skipped', 0],
+        ['emptyShard', 0, 'zero_test_shard', 0],
+        ['noWorkers', 0, undefined, 1],
+        ['noWorkersSharded', 0, undefined, 0],
+      ]) {
+        it(`reports zero-execution sessions: ${framework} ${scenario}`, async () => {
+          await runScenario(scenario, sessions, ({ session, module, tests }) => {
+            assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'skip'))
+            for (const event of [session, module]) {
+              assert.strictEqual(event.meta[TEST_STATUS], reason ? 'skip' : 'fail')
+              assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], reason)
+              assert.strictEqual(event.meta[TEST_SKIP_REASON], reason === 'all_tests_skipped'
+                ? 'All tests were skipped'
+                : reason === 'zero_test_shard'
+                  ? 'No tests were assigned to this shard'
+                  : reason === 'zero_tests' ? 'No tests were detected' : undefined)
+            }
+          }, exitCode, { framework })
+        })
+      }
     }
 
     it('reports parallel Jasmine workers as one session', async () => {
@@ -423,7 +447,7 @@ for (const version of versions) {
       }, 0, { framework: 'jasmine' })
     })
 
-    it('reports Jasmine statuses and a failure screenshot without global injection', async () => {
+    it('reports Jasmine statuses and a failure screenshot by default without global injection', async () => {
       await runScenario('jasmineStatuses', 1, ({ media, session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'fail')
         assert.strictEqual(suites.length, 1)
@@ -439,7 +463,7 @@ for (const version of versions) {
         assert.match(failedTest.meta['error.message'], /expected WebdriverIO/)
         assertFailureScreenshotUploaded(failedTest, media)
       }, 1, {
-        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true' },
+        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: undefined },
         expectedScreenshots: 1,
         framework: 'jasmine',
       })
@@ -679,7 +703,7 @@ for (const version of versions) {
       }, 1)
     })
 
-    it('reports native Mocha retries and captures only the failed attempt', async () => {
+    it('reports native Mocha retries and captures only the failed attempt by default', async () => {
       await runScenario('retries', 1, ({ media, session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'pass')
         assert.strictEqual(suites.length, 1)
@@ -689,10 +713,26 @@ for (const version of versions) {
         assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 1)
         assertFailureScreenshotUploaded(tests.find(test => test.meta[TEST_STATUS] === 'fail'), media)
       }, 0, {
-        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true' },
+        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: undefined },
         expectedScreenshots: 1,
       })
     })
+
+    for (const framework of ['mocha', 'jasmine']) {
+      it(`does not capture or upload ${framework} failure screenshots when explicitly disabled`, async () => {
+        await runScenario(framework === 'mocha' ? 'retries' : 'jasmineStatuses', 1, ({ media, tests }) => {
+          const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+          assert.ok(failedTest)
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+          assert.strictEqual(media.length, 0)
+        }, framework === 'mocha' ? 0 : 1, {
+          env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false' },
+          expectedScreenshots: 0,
+          framework,
+        })
+      })
+    }
 
     it('supports the Mocha TDD interface', async () => {
       await runScenario('tdd', 1, ({ suites, tests }) => {
