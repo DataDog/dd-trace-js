@@ -1,12 +1,13 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const os = require('node:os')
 
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 require('./setup/core')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const SamplingRule = require('../src/sampling_rule')
 const tracerVersion = require('../../../package.json').version
 const { getConfigFresh } = require('./helpers/config')
@@ -127,6 +128,47 @@ describe('startup logging', () => {
       otlp_traces_export_enabled: false,
       otlp_metrics_export_enabled: false,
       otlp_logs_export_enabled: false,
+      DD_AGENT_HOST: null,
+      DD_DATA_STREAMS_ENABLED: true,
+      DD_DBM_PROPAGATION_MODE: null,
+      DD_LOGS_OTEL_ENABLED: false,
+      DD_METRICS_OTEL_ENABLED: false,
+      DD_TRACE_OTEL_ENABLED: false,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: false,
+      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: false,
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE: null,
+      OTEL_BSP_MAX_QUEUE_SIZE: null,
+      OTEL_BSP_SCHEDULE_DELAY: null,
+      OTEL_EXPORTER_OTLP_ENDPOINT: null,
+      OTEL_EXPORTER_OTLP_HEADERS: {},
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: null,
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS: {},
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: null,
+      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: null,
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: null,
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: {},
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: null,
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: null,
+      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: null,
+      OTEL_EXPORTER_OTLP_PROTOCOL: null,
+      OTEL_EXPORTER_OTLP_TIMEOUT: null,
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: null,
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS: {},
+      OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: null,
+      OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: null,
+      OTEL_LOG_LEVEL: null,
+      OTEL_LOGS_EXPORTER: null,
+      OTEL_METRIC_EXPORT_INTERVAL: null,
+      OTEL_METRIC_EXPORT_TIMEOUT: null,
+      OTEL_METRICS_EXPORTER: null,
+      OTEL_PROPAGATORS: null,
+      OTEL_RESOURCE_ATTRIBUTES: {},
+      OTEL_SDK_DISABLED: null,
+      OTEL_SERVICE_NAME: 'test',
+      OTEL_TRACES_EXPORTER: null,
+      OTEL_TRACES_SAMPLER: null,
+      OTEL_TRACES_SAMPLER_ARG: null,
+      OTEL_TRACES_SPAN_METRICS_ENABLED: null,
     })
   })
 })
@@ -385,5 +427,271 @@ describe('otlp export flags', () => {
   it('otlp_logs_export_enabled should be true when DD_LOGS_OTEL_ENABLED is true', () => {
     process.env.DD_LOGS_OTEL_ENABLED = 'true'
     assert.strictEqual(startupLogObj().otlp_logs_export_enabled, true)
+  })
+})
+
+describe('resolved OpenTelemetry startup configuration', () => {
+  let env
+  let warn
+  let startupLog
+
+  beforeEach(() => {
+    env = process.env
+    process.env = { DD_TRACE_STARTUP_LOGS: 'true' }
+    warn = sinon.stub(console, 'warn')
+    delete require.cache[require.resolve('../src/startup-log')]
+    startupLog = require('../src/startup-log')
+  })
+
+  afterEach(() => {
+    warn.restore()
+    process.env = env
+  })
+
+  /**
+   * @param {import('../../../index').TracerOptions} [options]
+   */
+  function logConfiguration (options) {
+    startupLog.setStartupLogConfig(getConfigFresh(options))
+    startupLog.startupLog()
+    return JSON.parse(warn.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+  }
+
+  it('should include supported OTel settings with resolved defaults and native JSON types', () => {
+    const info = logConfiguration({ service: 'startup-test' })
+    const otel = Object.fromEntries(Object.entries(info).filter(([name]) => name.startsWith('OTEL_')))
+    assert.deepEqual(otel, {
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE: 512,
+      OTEL_BSP_MAX_QUEUE_SIZE: 2048,
+      OTEL_BSP_SCHEDULE_DELAY: 5000,
+      OTEL_EXPORTER_OTLP_ENDPOINT: null,
+      OTEL_EXPORTER_OTLP_HEADERS: {},
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: 'http://127.0.0.1:4318/v1/logs',
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS: {},
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 10000,
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://127.0.0.1:4318/v1/metrics',
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: {},
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA',
+      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 10000,
+      OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_TIMEOUT: 10000,
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://127.0.0.1:4318/v1/traces',
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS: {},
+      OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/json',
+      OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: 10000,
+      OTEL_LOG_LEVEL: 'debug',
+      OTEL_LOGS_EXPORTER: null,
+      OTEL_METRIC_EXPORT_INTERVAL: 10000,
+      OTEL_METRIC_EXPORT_TIMEOUT: 7500,
+      OTEL_METRICS_EXPORTER: null,
+      OTEL_PROPAGATORS: {
+        inject: ['datadog', 'tracecontext', 'baggage'],
+        extract: ['datadog', 'tracecontext', 'baggage'],
+      },
+      OTEL_RESOURCE_ATTRIBUTES: {},
+      OTEL_SDK_DISABLED: true,
+      OTEL_SERVICE_NAME: 'startup-test',
+      OTEL_TRACES_EXPORTER: null,
+      OTEL_TRACES_SAMPLER: 'parentbased_always_on',
+      OTEL_TRACES_SAMPLER_ARG: null,
+      OTEL_TRACES_SPAN_METRICS_ENABLED: false,
+    })
+    assertObjectContains(info, {
+      DD_AGENT_HOST: '127.0.0.1',
+      DD_DATA_STREAMS_ENABLED: false,
+      DD_DBM_PROPAGATION_MODE: 'disabled',
+      DD_LOGS_OTEL_ENABLED: false,
+      DD_METRICS_OTEL_ENABLED: false,
+      DD_TRACE_OTEL_ENABLED: false,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: false,
+      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: false,
+    })
+  })
+
+  it('should log OTel aliases as resolved service, log level, and propagation styles', () => {
+    process.env.OTEL_SERVICE_NAME = 'otel-service'
+    process.env.OTEL_LOG_LEVEL = 'INFO'
+    process.env.OTEL_PROPAGATORS = 'tracecontext,baggage'
+    process.env.OTEL_RESOURCE_ATTRIBUTES = 'deployment.environment.name=production,custom=value'
+
+    assertObjectContains(logConfiguration(), {
+      OTEL_SERVICE_NAME: 'otel-service',
+      OTEL_LOG_LEVEL: 'INFO',
+      OTEL_PROPAGATORS: { inject: ['tracecontext', 'baggage'], extract: ['tracecontext', 'baggage'] },
+      OTEL_RESOURCE_ATTRIBUTES: { env: 'production', custom: 'value' },
+    })
+  })
+
+  for (const codeOptions of [false, true]) {
+    it(`should honor ${codeOptions ? 'code' : 'Datadog environment'} precedence over OTel aliases`, () => {
+      process.env.OTEL_SERVICE_NAME = 'otel-service'
+      process.env.DD_SERVICE = 'dd-service'
+      process.env.OTEL_LOG_LEVEL = 'info'
+      process.env.DD_TRACE_LOG_LEVEL = 'error'
+      process.env.OTEL_PROPAGATORS = 'b3'
+      process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'baggage'
+      process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'tracecontext'
+
+      /** @type {import('../../../index').TracerOptions | undefined} */
+      const options = codeOptions
+        ? { service: 'code-service', logLevel: 'warn', tracePropagationStyle: { inject: ['datadog'], extract: ['b3'] } }
+        : undefined
+      assertObjectContains(logConfiguration(options), {
+        OTEL_SERVICE_NAME: codeOptions ? 'code-service' : 'dd-service',
+        OTEL_LOG_LEVEL: codeOptions ? 'warn' : 'error',
+        OTEL_PROPAGATORS: codeOptions
+          ? { inject: ['datadog'], extract: ['b3'] }
+          : { inject: ['baggage'], extract: ['tracecontext'] },
+      })
+    })
+  }
+
+  it('should report generic OTLP fallbacks and signal-specific overrides', () => {
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318/base/'
+    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'HTTP/PROTOBUF'
+    process.env.OTEL_EXPORTER_OTLP_TIMEOUT = '1234'
+    process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://logs:4318/custom'
+    process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'HTTP/JSON'
+    process.env.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT = '2345'
+
+    assertObjectContains(logConfiguration(), {
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4318/base/',
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://collector:4318/base/v1/traces',
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://collector:4318/base/v1/metrics',
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: 'http://logs:4318/custom',
+      OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/json',
+      OTEL_EXPORTER_OTLP_TIMEOUT: 1234,
+      OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: 1234,
+      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 1234,
+      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 2345,
+    })
+  })
+
+  it('should log parsed numbers and booleans, including false and zero', () => {
+    Object.assign(process.env, {
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '123',
+      OTEL_BSP_MAX_QUEUE_SIZE: '456',
+      OTEL_BSP_SCHEDULE_DELAY: '789',
+      OTEL_METRIC_EXPORT_INTERVAL: '1234',
+      OTEL_METRIC_EXPORT_TIMEOUT: '2345',
+      OTEL_TRACES_SAMPLER: 'parentbased_traceidratio',
+      OTEL_TRACES_SAMPLER_ARG: '0',
+      OTEL_TRACES_EXPORTER: 'otlp',
+      OTEL_LOGS_EXPORTER: 'otlp',
+      OTEL_METRICS_EXPORTER: 'otlp',
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'cumulative',
+      OTEL_SDK_DISABLED: 'false',
+      DD_TRACE_OTEL_ENABLED: 'true',
+      DD_LOGS_OTEL_ENABLED: 'true',
+      DD_METRICS_OTEL_ENABLED: 'true',
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
+      DD_AGENT_HOST: 'agent',
+      DD_DBM_PROPAGATION_MODE: 'full',
+      DD_DATA_STREAMS_ENABLED: 'true',
+      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: 'true',
+    })
+
+    assertObjectContains(logConfiguration(), {
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE: 123,
+      OTEL_BSP_MAX_QUEUE_SIZE: 456,
+      OTEL_BSP_SCHEDULE_DELAY: 789,
+      OTEL_METRIC_EXPORT_INTERVAL: 1234,
+      OTEL_METRIC_EXPORT_TIMEOUT: 2345,
+      OTEL_TRACES_SAMPLER: 'parentbased_traceidratio',
+      OTEL_TRACES_SAMPLER_ARG: 0,
+      OTEL_TRACES_EXPORTER: 'otlp',
+      OTEL_LOGS_EXPORTER: 'otlp',
+      OTEL_METRICS_EXPORTER: 'otlp',
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE',
+      OTEL_TRACES_SPAN_METRICS_ENABLED: true,
+      OTEL_SDK_DISABLED: false,
+      DD_TRACE_OTEL_ENABLED: true,
+      DD_LOGS_OTEL_ENABLED: true,
+      DD_METRICS_OTEL_ENABLED: true,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
+      DD_AGENT_HOST: 'agent',
+      DD_DBM_PROPAGATION_MODE: 'full',
+      DD_DATA_STREAMS_ENABLED: true,
+      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: true,
+    })
+  })
+
+  it('should report defaults and calculated values when invalid or conflicting values are ignored', () => {
+    Object.assign(process.env, {
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'ftp://collector:4318',
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'not a URL',
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '0',
+      OTEL_TRACES_SAMPLER_ARG: 'invalid',
+      OTEL_TRACES_EXPORTER: 'otlp',
+      DD_TRACE_AGENT_PROTOCOL_VERSION: '0.4',
+      DD_METRICS_OTEL_ENABLED: 'true',
+      OTEL_METRICS_EXPORTER: 'none',
+    })
+
+    assertObjectContains(logConfiguration(), {
+      OTEL_EXPORTER_OTLP_ENDPOINT: null,
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://127.0.0.1:4318/v1/traces',
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE: 512,
+      OTEL_TRACES_SAMPLER_ARG: null,
+      OTEL_TRACES_EXPORTER: 'none',
+      DD_METRICS_OTEL_ENABLED: false,
+      otlp_traces_export_enabled: false,
+      otlp_metrics_export_enabled: false,
+    })
+  })
+
+  it('should redact explicit and inherited OTLP headers without mutating configuration', () => {
+    process.env.OTEL_EXPORTER_OTLP_HEADERS = 'authorization=shared-secret,x-custom=custom-secret'
+    process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS = 'authorization=trace-secret'
+    process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'x-logs=logs-secret'
+    const config = getConfigFresh()
+    const headers = [
+      'OTEL_EXPORTER_OTLP_HEADERS',
+      'OTEL_EXPORTER_OTLP_TRACES_HEADERS',
+      'OTEL_EXPORTER_OTLP_LOGS_HEADERS',
+      'OTEL_EXPORTER_OTLP_METRICS_HEADERS',
+    ]
+    const originals = headers.map(name => ({ ...config[name] }))
+    for (const name of headers) Object.freeze(config[name])
+    startupLog.setStartupLogConfig(config)
+    startupLog.setStartupLogPluginManager({ _pluginsByName: {} })
+    startupLog.startupLog()
+
+    const info = JSON.parse(warn.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    const flareInfo = JSON.stringify(startupLog.tracerInfo())
+    assert.doesNotMatch(warn.firstCall.args[0], /shared-secret|custom-secret|trace-secret|logs-secret/)
+    assert.doesNotMatch(flareInfo, /shared-secret|custom-secret|trace-secret|logs-secret/)
+    for (let i = 0; i < headers.length; i++) {
+      const name = headers[i]
+      const expected = Object.fromEntries(Object.keys(originals[i]).map(key => [key, '<redacted>']))
+      assert.deepEqual(info[name], expected)
+      assert.deepEqual(JSON.parse(flareInfo)[name], expected)
+      assert.deepEqual(config[name], originals[i])
+    }
+  })
+
+  it('should redact agentless API keys injected into all signal-specific headers', () => {
+    process.env.DD_AGENTLESS_ENABLED = 'true'
+    process.env.DD_API_KEY = 'injected-api-key-secret'
+    const info = logConfiguration()
+
+    assert.doesNotMatch(warn.firstCall.args[0], /injected-api-key-secret/)
+    assert.deepEqual(info.OTEL_EXPORTER_OTLP_HEADERS, {})
+    for (const signal of ['TRACES', 'LOGS', 'METRICS']) {
+      assert.deepEqual(info[`OTEL_EXPORTER_OTLP_${signal}_HEADERS`], { 'dd-api-key': '<redacted>' })
+    }
+  })
+
+  it('should preserve header names that shadow object properties', () => {
+    process.env.OTEL_EXPORTER_OTLP_HEADERS = 'constructor=constructor-secret,toString=string-secret'
+    const info = logConfiguration()
+
+    assert.deepEqual(info.OTEL_EXPORTER_OTLP_HEADERS, { constructor: '<redacted>', toString: '<redacted>' })
+    assert.doesNotMatch(warn.firstCall.args[0], /constructor-secret|string-secret/)
   })
 })

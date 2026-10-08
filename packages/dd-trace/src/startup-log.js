@@ -110,9 +110,66 @@ function configInfo () {
     otlp_traces_export_enabled: config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility,
     otlp_metrics_export_enabled: !!config.DD_METRICS_OTEL_ENABLED,
     otlp_logs_export_enabled: !!config.DD_LOGS_OTEL_ENABLED,
+    DD_AGENT_HOST: config.hostname ?? null,
+    DD_DATA_STREAMS_ENABLED: !!config.dsmEnabled,
+    DD_DBM_PROPAGATION_MODE: config.dbmPropagationMode ?? null,
+    DD_LOGS_OTEL_ENABLED: !!config.DD_LOGS_OTEL_ENABLED,
+    DD_METRICS_OTEL_ENABLED: !!config.DD_METRICS_OTEL_ENABLED,
+    DD_TRACE_OTEL_ENABLED: !!config.DD_TRACE_OTEL_ENABLED,
+    DD_TRACE_OTEL_SEMANTICS_ENABLED: !!config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
+    DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: !!config.spanRemoveIntegrationFromService,
+    // JSON omits undefined values; keep unset settings distinguishable from unsupported ones.
+    OTEL_BSP_MAX_EXPORT_BATCH_SIZE: config.OTEL_BSP_MAX_EXPORT_BATCH_SIZE ?? null,
+    OTEL_BSP_MAX_QUEUE_SIZE: config.OTEL_BSP_MAX_QUEUE_SIZE ?? null,
+    OTEL_BSP_SCHEDULE_DELAY: config.OTEL_BSP_SCHEDULE_DELAY ?? null,
+    OTEL_EXPORTER_OTLP_ENDPOINT: config.OTEL_EXPORTER_OTLP_ENDPOINT ?? null,
+    OTEL_EXPORTER_OTLP_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_HEADERS),
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT ?? null,
+    OTEL_EXPORTER_OTLP_LOGS_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS),
+    OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ?? null,
+    OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: config.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT ?? null,
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT ?? null,
+    OTEL_EXPORTER_OTLP_METRICS_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS),
+    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL ?? null,
+    OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: config.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE ?? null,
+    OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT ?? null,
+    OTEL_EXPORTER_OTLP_PROTOCOL: config.OTEL_EXPORTER_OTLP_PROTOCOL ?? null,
+    OTEL_EXPORTER_OTLP_TIMEOUT: config.OTEL_EXPORTER_OTLP_TIMEOUT ?? null,
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? null,
+    OTEL_EXPORTER_OTLP_TRACES_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS),
+    OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ?? null,
+    OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT ?? null,
+    OTEL_LOG_LEVEL: config.logLevel ?? null,
+    OTEL_LOGS_EXPORTER: config.OTEL_LOGS_EXPORTER ?? null,
+    OTEL_METRIC_EXPORT_INTERVAL: config.OTEL_METRIC_EXPORT_INTERVAL ?? null,
+    OTEL_METRIC_EXPORT_TIMEOUT: config.OTEL_METRIC_EXPORT_TIMEOUT ?? null,
+    OTEL_METRICS_EXPORTER: config.OTEL_METRICS_EXPORTER ?? null,
+    OTEL_PROPAGATORS: config.tracePropagationStyle ?? null,
+    OTEL_RESOURCE_ATTRIBUTES: config.OTEL_RESOURCE_ATTRIBUTES ?? {},
+    OTEL_SDK_DISABLED: config.OTEL_SDK_DISABLED ?? null,
+    OTEL_SERVICE_NAME: config.service ?? null,
+    OTEL_TRACES_EXPORTER: config.OTEL_TRACES_EXPORTER ?? null,
+    OTEL_TRACES_SAMPLER: config.OTEL_TRACES_SAMPLER ?? null,
+    OTEL_TRACES_SAMPLER_ARG: config.OTEL_TRACES_SAMPLER_ARG ?? null,
+    OTEL_TRACES_SPAN_METRICS_ENABLED: config.OTEL_TRACES_SPAN_METRICS_ENABLED ?? null,
   }
   if (config.tags?.version) startupLog.dd_version = config.tags.version
   return startupLog
+}
+
+/**
+ * @param {Record<string, string> | undefined} headers
+ */
+function redactHeaders (headers) {
+  // Header names must remain data even when they shadow object properties.
+  /** @type {Record<string, string>} */
+  const redacted = Object.create(null)
+  if (headers) {
+    for (const name of Object.keys(headers)) {
+      redacted[name] = '<redacted>'
+    }
+  }
+  return redacted
 }
 
 /**
