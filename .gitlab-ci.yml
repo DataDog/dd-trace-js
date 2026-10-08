@@ -95,6 +95,10 @@ configure_system_tests:
       when: never
     - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/
       when: on_success
+    - if: $CI_COMMIT_BRANCH == "robertomonteromiguel/ssi-vault-secrets-test"
+      variables:
+        SYSTEM_TESTS_REF: robertomonteromiguel/ssi-secrets-vault-templates
+      when: on_success
     - when: never
 
 system_tests:
@@ -104,6 +108,8 @@ system_tests:
     - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
       when: never
     - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == "robertomonteromiguel/ssi-vault-secrets-test"
       when: on_success
     - when: never
 
