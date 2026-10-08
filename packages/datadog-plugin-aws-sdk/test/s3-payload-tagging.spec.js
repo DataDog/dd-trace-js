@@ -296,7 +296,7 @@ describe('Plugin', () => {
           const spanPromise = agent.assertFirstTraceSpan(span => {
             assert.ok(!Object.keys(span.meta).some(key => key.startsWith('aws.request.body')))
             // The operation itself must not be marked as failed.
-            assert.strictEqual(span.meta.error, undefined)
+            assert.strictEqual(span.error, 0)
             // Response tagging is unaffected by the request-tagging failure.
             assert.ok(span.meta['aws.response.body.ETag'])
           }, { timeoutMs: 20000, spanResourceMatch: new RegExp(`^putObject ${failingBucketName}$`) })
@@ -312,7 +312,7 @@ describe('Plugin', () => {
 
           // the plugin must remain enabled and tracing must continue normally
           const nextSpanPromise = agent.assertFirstTraceSpan(span => {
-            assert.strictEqual(span.meta.error, undefined)
+            assert.strictEqual(span.error, 0)
           }, { timeoutMs: 20000, spanResourceMatch: new RegExp(`^getObject ${failingBucketName}$`) })
 
           await Promise.all([
