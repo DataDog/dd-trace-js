@@ -5,4 +5,8 @@
 // observable tag value stays identical everywhere it is produced.
 const truncated = 'truncated'
 
-module.exports = { truncated }
+// Maximum length, in UTF-16 code units, of a single tag value. Shared so the
+// snapshot can size partial Buffer copies to exactly what flattening renders.
+const maxValueLength = 5000
+
+module.exports = { maxValueLength, truncated }
