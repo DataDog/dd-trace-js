@@ -63,7 +63,7 @@ const getSetSize = getterOf(Set.prototype, 'size')
 // Closed map of trusted native constructors, used to wrap fresh copies in the
 // payload value's native element kind. Payload-defined subclasses and species
 // are never consulted, so a payload cannot choose the copy's type or storage.
-const typedArrayEntries = /** @type {Array<[string, TypedArrayConstructor]>} */ ([
+const typedArrayConstructors = new Map(/** @type {Array<[string, TypedArrayConstructor]>} */ ([
   ['Int8Array', Int8Array],
   ['Uint8Array', Uint8Array],
   ['Uint8ClampedArray', Uint8ClampedArray],
@@ -75,8 +75,7 @@ const typedArrayEntries = /** @type {Array<[string, TypedArrayConstructor]>} */ 
   ['Float64Array', Float64Array],
   ['BigInt64Array', BigInt64Array],
   ['BigUint64Array', BigUint64Array],
-])
-const typedArrayConstructors = new Map(typedArrayEntries)
+]))
 // Optional numeric format: only added when the runtime exposes it, keeping the
 // module loadable on runtimes without this typed array.
 if (typeof globalThis.Float16Array === 'function') {
@@ -241,42 +240,25 @@ function visibleByteLength (value, kind) {
  * @returns {Buffer | TypedArray | DataView}
  */
 function copyBinary (value, kind, byteLength) {
+  const getBuffer = kind === 'DataView' ? getDataViewBuffer : getTypedArrayBuffer
+  const getByteOffset = kind === 'DataView' ? getDataViewByteOffset : getTypedArrayByteOffset
+  // Native construction validates even zero-byte views without consulting
+  // payload-defined hooks, backing-buffer constructors, or species.
+  const source = new Uint8Array(
+    /** @type {ArrayBuffer} */ (getBuffer?.call(value)),
+    /** @type {number} */ (getByteOffset?.call(value)),
+    byteLength
+  )
+  const bytes = kind === 'buffer' ? Buffer.alloc(byteLength) : new Uint8Array(byteLength)
+  bytes.set(source)
+
   if (kind === 'buffer') {
-    // Build a trusted source view over the intrinsic backing range, including
-    // for zero-byte views, and copy from it, so Buffer construction cannot
-    // consult spoofed source properties. Native construction rejects detached
-    // storage instead of consulting backing-buffer constructors or species.
-    const source = new Uint8Array(
-      /** @type {ArrayBuffer} */ (getTypedArrayBuffer?.call(value)),
-      /** @type {number} */ (getTypedArrayByteOffset?.call(value)),
-      byteLength
-    )
-    const copy = Buffer.alloc(byteLength)
-    copy.set(source)
-    return copy
+    return bytes
   }
   if (kind === 'DataView') {
-    const source = new Uint8Array(
-      /** @type {ArrayBuffer} */ (getDataViewBuffer?.call(value)),
-      /** @type {number} */ (getDataViewByteOffset?.call(value)),
-      byteLength
-    )
-    const bytes = new Uint8Array(byteLength)
-    bytes.set(source)
     return new DataView(bytes.buffer)
   }
   const TypedArray = /** @type {TypedArrayConstructor} */ (typedArrayConstructors.get(kind))
-  // Copy the visible bytes through a trusted Uint8Array source view, including
-  // for zero-byte views, then wrap the fresh buffer in the payload value's
-  // native kind. All steps stay on native code paths, so payload-defined hooks
-  // are never consulted, and detached storage is rejected by construction.
-  const source = new Uint8Array(
-    /** @type {ArrayBuffer} */ (getTypedArrayBuffer?.call(value)),
-    /** @type {number} */ (getTypedArrayByteOffset?.call(value)),
-    byteLength
-  )
-  const bytes = new Uint8Array(byteLength)
-  bytes.set(source)
   return new TypedArray(bytes.buffer)
 }
 
@@ -352,7 +334,7 @@ function createSnapshotBudget () {
  * @returns {{ value: unknown, incomplete: boolean }}
  */
 function createSafeSnapshot (input, budget = createSnapshotBudget()) {
-  const state = { incomplete: false }
+  let incomplete = false
   const root = { value: undefined }
   /** @type {Frame[]} */
   const stack = []
@@ -368,7 +350,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
   function captureBinary (view) {
     const kind = binaryKind(view)
     if (kind === null) {
-      state.incomplete = true
+      incomplete = true
       return truncated
     }
     const byteLength = visibleByteLength(view, kind)
@@ -379,7 +361,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       // marked incomplete and data-dependent rules stay suppressed. Typed
       // arrays render one tag per element and are never shortened.
       copyLength = kind === 'buffer' ? Math.min(byteLength, maxBufferPrefixBytes) : byteLength
-      state.incomplete = true
+      incomplete = true
       if (copyLength > budget.binaryBytes) {
         return truncated
       }
@@ -412,7 +394,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       } catch {
         // Intrinsic metadata reads and native construction reject detached
         // storage. Only this leaf is lost; never inspect the caught value.
-        state.incomplete = true
+        incomplete = true
         copy = truncated
       }
       assign(container, key, copy, root)
@@ -424,12 +406,12 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       return
     }
     if (isMap(value)) {
-      if (getMapSize?.call(value) !== 0) state.incomplete = true
+      if (getMapSize?.call(value) !== 0) incomplete = true
       assign(container, key, new Map(), root)
       return
     }
     if (isSet(value)) {
-      if (getSetSize?.call(value) !== 0) state.incomplete = true
+      if (getSetSize?.call(value) !== 0) incomplete = true
       assign(container, key, new Set(), root)
       return
     }
@@ -442,7 +424,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       (Array.isArray(value) && value.length > maxArrayLength) ||
       isStream(value)
     ) {
-      state.incomplete = true
+      incomplete = true
       assign(container, key, truncated, root)
       return
     }
@@ -478,7 +460,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     if (budget.entries <= 0) {
       // Budget exhausted: stop reading values entirely. Remaining properties
       // are neither read nor materialized; the snapshot is marked incomplete.
-      state.incomplete = true
+      incomplete = true
       break
     }
 
@@ -490,7 +472,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     admit(frame.copy, key, frame.source[key], frame.childDepth, frame.ancestors)
   }
 
-  return { value: root.value, incomplete: state.incomplete }
+  return { value: root.value, incomplete }
 }
 
 module.exports = { createSafeSnapshot, createSnapshotBudget }
