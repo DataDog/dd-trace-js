@@ -575,6 +575,144 @@ describe('Safe payload capture', () => {
     }
   })
 
+  describe('opaque leaf isolation', () => {
+    const kinds = [
+      { name: 'Date', expression: 'new Date(1234)', make: () => new Date(1234), prototype: Date.prototype },
+      { name: 'Map', expression: 'new Map()', make: () => new Map(), prototype: Map.prototype },
+      { name: 'Set', expression: 'new Set()', make: () => new Set(), prototype: Set.prototype },
+    ]
+
+    for (const kind of kinds) {
+      for (const flavor of ['native', 'subclass', 'cross-realm']) {
+        const makeLeaf = () => {
+          if (flavor === 'cross-realm') return nodeVm.runInNewContext(kind.expression)
+          if (flavor === 'subclass') {
+            const Leaf = nodeVm.runInThisContext(`(class extends ${kind.name} {})`)
+            return kind.name === 'Date' ? new Leaf(1234) : new Leaf()
+          }
+          return kind.make()
+        }
+
+        it(`does not redact or expand attached properties of a ${flavor} ${kind.name}`, () => {
+          const leaf = makeLeaf()
+          const detail = { secret: 's3cret', encoded: '{"secret":"encoded-secret"}' }
+          leaf.detail = detail
+          const input = { leaf, safe: 'ok' }
+          const config = {
+            expand: ['$.leaf.detail.encoded'],
+            request: [],
+            response: ['$.leaf.detail.secret', '$.leaf.detail.encoded.secret'],
+          }
+
+          const tags = computeTags(config, input, responseOpts)
+
+          assert.strictEqual(leaf.detail, detail)
+          assert.deepStrictEqual(detail, { secret: 's3cret', encoded: '{"secret":"encoded-secret"}' })
+          assert.deepStrictEqual(tags, { 'aws.response.body.safe': 'ok' })
+          assert.deepStrictEqual(computeTags(config, input, { ...responseOpts, maxDepth: 1 }), {
+            'aws.response.body.leaf': 'truncated',
+            'aws.response.body.safe': 'ok',
+          })
+        })
+
+        it(`never traverses attached properties or hooks of a ${flavor} ${kind.name}`, () => {
+          const leaf = makeLeaf()
+          const stream = makeReadable()
+          const inspect = sinon.spy(() => { throw new Error('unexpected leaf inspection') })
+          leaf.detail = { stream, cycle: leaf, wide: new Array(20000).fill('ignored') }
+          for (const key of ['getReader', 'constructor', 'getTime', 'size', Symbol.iterator, Symbol.toPrimitive]) {
+            Object.defineProperty(leaf, key, { enumerable: true, get: inspect })
+          }
+
+          assert.deepStrictEqual(computeTags(safeConfig, { leaf, safe: 'ok' }, responseOpts), {
+            'aws.response.body.safe': 'ok',
+          })
+          assert.strictEqual(inspect.callCount, 0)
+          assert.strictEqual(stream.readableLength, 5)
+          assert.strictEqual(stream.readableFlowing, null)
+          assert.strictEqual(stream.destroyed, false)
+          stream.destroy()
+        })
+
+        it(`isolates repeated aliases of a ${flavor} ${kind.name}`, () => {
+          const leaf = makeLeaf()
+          const snapshot = createSafeSnapshot({ a: leaf, b: leaf })
+          const { a, b } = /** @type {Record<string, object>} */ (snapshot.value)
+
+          assert.strictEqual(snapshot.incomplete, false)
+          assert.notStrictEqual(a, leaf)
+          assert.notStrictEqual(b, leaf)
+          assert.notStrictEqual(a, b)
+          assert.strictEqual(Object.getPrototypeOf(a), kind.prototype)
+          assert.strictEqual(Object.getPrototypeOf(b), kind.prototype)
+          if (kind.name === 'Date') {
+            assert.strictEqual(Date.prototype.getTime.call(a), 1234)
+            Date.prototype.setTime.call(a, 9999)
+            assert.strictEqual(Date.prototype.getTime.call(b), 1234)
+            assert.strictEqual(Date.prototype.getTime.call(leaf), 1234)
+          } else if (kind.name === 'Map') {
+            Map.prototype.set.call(a, 'local', 'value')
+            assert.strictEqual(Map.prototype.has.call(b, 'local'), false)
+            assert.strictEqual(Map.prototype.has.call(leaf, 'local'), false)
+          } else {
+            Set.prototype.add.call(a, 'local')
+            assert.strictEqual(Set.prototype.has.call(b, 'local'), false)
+            assert.strictEqual(Set.prototype.has.call(leaf, 'local'), false)
+          }
+        })
+      }
+    }
+
+    it('preserves an invalid Date without invoking conversion hooks', () => {
+      const date = new Date(NaN)
+      const snapshot = createSafeSnapshot(date)
+      assert.notStrictEqual(snapshot.value, date)
+      assert.ok(Number.isNaN(Date.prototype.getTime.call(snapshot.value)))
+      assert.strictEqual(snapshot.incomplete, false)
+    })
+
+    for (const name of ['Map', 'Set']) {
+      it(`discards nonempty ${name} contents without iteration and flags structural captures`, () => {
+        const stream = makeReadable()
+        const leaf = name === 'Map' ? new Map([['key', stream]]) : new Set([stream])
+        const inspect = sinon.spy(() => { throw new Error('unexpected collection inspection') })
+        for (const key of ['size', 'entries', 'values', Symbol.iterator]) {
+          Object.defineProperty(leaf, key, { get: inspect })
+        }
+        const snapshot = createSafeSnapshot(leaf)
+        assert.notStrictEqual(snapshot.value, leaf)
+        assert.deepStrictEqual(Array.from(/** @type {Set<unknown>} */ (snapshot.value)), [])
+        assert.strictEqual(snapshot.incomplete, true)
+        assert.deepStrictEqual(computeTags({ ...safeConfig, response: ['$.secret'] }, {
+          leaf, secret: 's3cret', safe: 'ok',
+        }, responseOpts), {
+          'aws.response.body.secret': 'redacted',
+          'aws.response.body.safe': 'ok',
+          '_dd.payload_tags_incomplete': true,
+        })
+        assert.strictEqual(inspect.callCount, 0)
+        assert.strictEqual(stream.readableLength, 5)
+        assert.strictEqual(stream.destroyed, false)
+        stream.destroy()
+      })
+
+      for (const phase of ['expand', 'response']) {
+        it(`suppresses ${name} captures when ${phase} predicates depend on discarded contents`, () => {
+          const leaf = name === 'Map' ? new Map([['key', 'value']]) : new Set(['value'])
+          const input = { items: [{ leaf, secret: 's3cret', encoded: '{"secret":"encoded-secret"}' }] }
+          const rule = phase === 'expand'
+            ? '$.items[?(@.leaf.size > 0)].encoded'
+            : '$.items[?(@.leaf.size > 0)].secret'
+          const config = { ...safeConfig, [phase]: [rule] }
+
+          assert.deepStrictEqual(computeTags(config, input, responseOpts), {})
+          assert.strictEqual(input.items[0].secret, 's3cret')
+          assert.strictEqual(input.items[0].encoded, '{"secret":"encoded-secret"}')
+        })
+      }
+    }
+  })
+
   describe('binary capture safety', () => {
     const requestOpts = { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX }
 
