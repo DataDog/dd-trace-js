@@ -1235,23 +1235,21 @@ describe('sdk', () => {
       const MANIFEST = '_ml_obs.meta.metadata._dd.agent_manifest'
 
       it('records the manifest on an agent span', () => {
+        const agent = {
+          name: 'travel_desk',
+          instructions: 'Book travel.',
+          model: 'gpt-4o',
+          tools: [{ name: 'get_weather', parameters: { city: { type: 'string', required: true } } }],
+        }
+
         llmobs.trace({ kind: 'agent', name: 'test' }, span => {
           llmobs.annotate({
-            agent: {
-              name: 'travel_desk',
-              instructions: 'Book travel.',
-              model: 'gpt-4o',
-              modelSettings: { temperature: 0.1, extra_headers: { authorization: 'secret' } },
-              tools: [{ name: 'get_weather', parameters: { city: { type: 'string', required: true } } }],
-            },
+            agent: { ...agent, modelSettings: { temperature: 0.1, extra_headers: { authorization: 'secret' } } },
           })
 
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span)[MANIFEST], {
-            name: 'travel_desk',
-            instructions: 'Book travel.',
-            model: 'gpt-4o',
+            ...agent,
             model_settings: { temperature: 0.1 },
-            tools: [{ name: 'get_weather', parameters: { city: { type: 'string', required: true } } }],
           })
         })
       })

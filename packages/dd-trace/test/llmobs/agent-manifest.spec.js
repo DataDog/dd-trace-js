@@ -23,31 +23,21 @@ describe('agent manifest', () => {
     }
 
     it('builds every supported field', () => {
-      const declaration = buildAgentDeclaration({
+      const agent = {
         name: 'travel_desk',
         instructions: 'Book travel.',
         model: 'gpt-4o',
-        modelSettings: { temperature: 0.1, max_tokens: 1024 },
         tools: [{
           name: 'get_weather',
           description: 'Look up the weather.',
           parameters: { city: { type: 'string', required: true } },
         }],
-      })
+      }
+      const modelSettings = { temperature: 0.1, max_tokens: 1024 }
 
-      assert.deepStrictEqual(declaration, {
-        manifest: {
-          name: 'travel_desk',
-          instructions: 'Book travel.',
-          model: 'gpt-4o',
-          model_settings: { temperature: 0.1, max_tokens: 1024 },
-          tools: [{
-            name: 'get_weather',
-            description: 'Look up the weather.',
-            parameters: { city: { type: 'string', required: true } },
-          }],
-        },
-      })
+      const declaration = buildAgentDeclaration({ ...agent, modelSettings })
+
+      assert.deepStrictEqual(declaration, { manifest: { ...agent, model_settings: modelSettings } })
       sinon.assert.notCalled(log.warn)
     })
 
