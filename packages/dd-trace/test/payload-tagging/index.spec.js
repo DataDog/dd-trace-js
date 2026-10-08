@@ -526,6 +526,55 @@ describe('Safe payload capture', () => {
     assert.deepStrictEqual(computeTags(safeConfig, input, responseOpts), {})
   })
 
+  describe('payload-controlled exceptions', () => {
+    /** @type {Array<[string, (inspect: () => void) => unknown]>} */
+    const cases = [
+      ['ordinary Error', () => new Error('payload-secret')],
+      ['string', () => 'payload-secret'],
+      ['null', () => null],
+      ['undefined', () => undefined],
+      ['symbol', () => Symbol('payload-secret')],
+      ['hostile Error', inspect => {
+        const error = new Error('payload-secret')
+        // Define stack first, before V8 can consult the hostile name getter.
+        for (const key of ['stack', 'message', 'name', Symbol.toPrimitive]) {
+          Object.defineProperty(error, key, {
+            get () {
+              inspect()
+              throw error
+            },
+          })
+        }
+        return error
+      }],
+      ['hostile Proxy', inspect => new Proxy({}, {
+        get () { inspect(); throw new Error('unexpected inspection') },
+        getPrototypeOf () { inspect(); throw new Error('unexpected reflection') },
+      })],
+    ]
+
+    for (const [name, makeError] of cases) {
+      it(`omits tags without inspecting a thrown ${name}`, () => {
+        const inspect = sinon.spy()
+        const error = makeError(inspect)
+        const input = Object.defineProperty({ safe: 'ok' }, 'getReader', {
+          get () { throw error },
+        })
+        const diagnostic = sinon.stub(log, 'error')
+        try {
+          assert.deepStrictEqual(computeTags(safeConfig, input, responseOpts), {})
+          assert.strictEqual(inspect.callCount, 0)
+          assert.strictEqual(diagnostic.callCount, 1)
+          assert.deepStrictEqual(diagnostic.firstCall.args, [
+            'Error generating payload tags; omitting payload tags for this operation',
+          ])
+        } finally {
+          diagnostic.restore()
+        }
+      })
+    }
+  })
+
   describe('binary capture safety', () => {
     const requestOpts = { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX }
 
