@@ -254,6 +254,26 @@ describe('Tagging orchestration', () => {
     })
   })
 
+  it('should redact and expand array elements at index 0', () => {
+    const config = {
+      request: ['$.secrets[*]'],
+      response: [],
+      expand: ['$.messages[*]'],
+    }
+    const input = {
+      secrets: ['s0', 's1'],
+      messages: ['{ "id": 0 }', '{ "id": 1 }'],
+    }
+    const prefix = PAYLOAD_TAG_REQUEST_PREFIX
+    const tags = computeTags(config, input, { maxDepth: 10, prefix })
+    assert.deepStrictEqual(tags, {
+      [`${prefix}.secrets.0`]: 'redacted',
+      [`${prefix}.secrets.1`]: 'redacted',
+      [`${prefix}.messages.0.id`]: '0',
+      [`${prefix}.messages.1.id`]: '1',
+    })
+  })
+
   it('should apply expansion rules', () => {
     const config = {
       request: [],
