@@ -142,15 +142,11 @@ function redact (object, redactionRules) {
 function computeTags (config, object, opts) {
   try {
     return computeBoundedTags(config, object, opts)
-  } catch (err) {
+  } catch {
     // Payload capture must never break the instrumented operation or disable
-    // the plugin. Omit payload tags entirely rather than emit a capture that
-    // may be partly expanded or partly redacted. Log only the error name:
-    // exception messages can carry payload contents.
-    log.error(
-      'Error generating payload tags; omitting payload tags for this operation (error: %s)',
-      err instanceof Error ? err.name : typeof err
-    )
+    // the plugin. Omit possibly partly expanded or redacted tags. Never inspect
+    // the caught value: payload-controlled getters can throw during logging.
+    log.error('Error generating payload tags; omitting payload tags for this operation')
     return {}
   }
 }
