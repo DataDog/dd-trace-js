@@ -24,6 +24,7 @@ const {
   INPUT_MESSAGES,
   OUTPUT_MESSAGES,
   TAGS,
+  AGENT_VERSION,
   NAME,
   PARENT_AGENT_NAME,
   PARENT_AGENT_SPAN_ID,
@@ -114,6 +115,7 @@ class LLMObsTagger {
     kind,
     name,
     integration,
+    version,
     _decorator,
   } = {}) {
     if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
@@ -194,6 +196,12 @@ class LLMObsTagger {
     // apply annotation context prompt
     const annotationContextPrompt = annotationContext?.prompt
     if (annotationContextPrompt) this.tagPrompt(span, annotationContextPrompt)
+
+    // Stashed rather than tagged: the kind here can still be changed before finish, and
+    // only agent spans carry the tag. The span processor materializes it.
+    // Annotation context wins over the span's own option, matching `name` above.
+    const agentVersion = annotationContext?.agent?.version ?? version
+    if (agentVersion) this.tagAgentVersion(span, agentVersion)
 
     const routing = storage.getStore()?.routingContext
     if (routing) {
@@ -339,6 +347,20 @@ class LLMObsTagger {
     } else {
       this._setTag(span, TAGS, tags)
     }
+  }
+
+  /**
+   * Stashes a user-supplied agent version on the span. The span processor promotes it to an
+   * `agent_version` span tag at finish, but only if the span's final kind is `agent`.
+   * @param {import('../opentracing/span')} span
+   * @param {string} version
+   */
+  tagAgentVersion (span, version) {
+    if (typeof version !== 'string' || !version) {
+      this.#handleFailure('Agent version must be a non-empty string.', 'invalid_agent_version')
+      return
+    }
+    this._setTag(span, AGENT_VERSION, version)
   }
 
   /**
