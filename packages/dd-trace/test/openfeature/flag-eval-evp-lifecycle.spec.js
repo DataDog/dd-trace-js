@@ -257,6 +257,65 @@ describe('FlaggingProvider EVP lifecycle', () => {
     sinon.assert.notCalled(request)
   })
 
+  it('records successful prerequisite evaluations before the root', async () => {
+    provider = new Provider({}, config)
+    provider.setConfiguration(dependentConfiguration(false))
+    await OpenFeature.setProviderAndWait('evp-lifecycle', provider)
+    const client = OpenFeature.getClient('evp-lifecycle')
+    enable()
+
+    const result = await client.getBooleanDetails('root', false, { targetingKey: 'customer' })
+    assert.strictEqual(result.value, true)
+    provider.onClose()
+
+    sinon.assert.calledOnce(request)
+    const rows = JSON.parse(request.firstCall.args[0]).flagEvaluations
+    assert.deepStrictEqual(rows.map(row => row.flag.key), ['prerequisite', 'root'])
+  })
+
+  it('retains successful prerequisite and root error evaluations after a missing dependency', async () => {
+    provider = new Provider({}, config)
+    provider.setConfiguration(dependentConfiguration(true))
+    await OpenFeature.setProviderAndWait('evp-lifecycle', provider)
+    const client = OpenFeature.getClient('evp-lifecycle')
+    enable()
+
+    const result = await client.getBooleanDetails('root', false, { targetingKey: 'customer' })
+    assert.strictEqual(result.value, false)
+    assert.strictEqual(result.reason, 'ERROR')
+    assert.strictEqual(result.errorCode, ErrorCode.FLAG_NOT_FOUND)
+    provider.onClose()
+
+    sinon.assert.calledOnce(request)
+    const rows = JSON.parse(request.firstCall.args[0]).flagEvaluations
+    assert.deepStrictEqual(rows.map(row => row.flag.key), ['prerequisite', 'root'])
+    assert.strictEqual(rows[0].error, undefined)
+    assert.deepStrictEqual(rows[1].error, { message: 'FLAG_NOT_FOUND' })
+    assert.strictEqual(rows[1].runtime_default_used, true)
+  })
+
+  it('records errors for dependency ancestors affected by a missing descendant', async () => {
+    provider = new Provider({}, config)
+    provider.setConfiguration(dependentConfiguration(false, true))
+    await OpenFeature.setProviderAndWait('evp-lifecycle', provider)
+    const client = OpenFeature.getClient('evp-lifecycle')
+    enable()
+
+    const result = await client.getBooleanDetails('root', false, { targetingKey: 'customer' })
+    assert.strictEqual(result.value, false)
+    assert.strictEqual(result.reason, 'ERROR')
+    assert.strictEqual(result.errorCode, ErrorCode.FLAG_NOT_FOUND)
+    provider.onClose()
+
+    sinon.assert.calledOnce(request)
+    const rows = JSON.parse(request.firstCall.args[0]).flagEvaluations
+    assert.deepStrictEqual(rows.map(row => row.flag.key), ['parent', 'root'])
+    for (const row of rows) {
+      assert.deepStrictEqual(row.error, { message: 'FLAG_NOT_FOUND' })
+      assert.strictEqual(row.runtime_default_used, true)
+    }
+  })
+
   it('omits an invalid targeting key once without dropping the evaluation', async () => {
     const client = await register()
     enable()
@@ -273,3 +332,57 @@ describe('FlaggingProvider EVP lifecycle', () => {
     assert.strictEqual(series.find(metric => metric.metric === 'flagevaluation.targeting_key.omitted').points[0][1], 1)
   })
 })
+
+function dependentConfiguration (includeMissing, transitiveFailure = false) {
+  const condition = key => ({
+    flagEvaluation: { key },
+    operator: 'ONE_OF',
+    value: ['on'],
+  })
+  const flag = (key, conditions = []) => ({
+    key,
+    enabled: true,
+    variationType: 'BOOLEAN',
+    variations: {
+      on: { key: 'on', value: true },
+      off: { key: 'off', value: false },
+    },
+    allocations: conditions.length > 0
+      ? [
+          {
+            key: `${key}-targeted`,
+            doLog: true,
+            rules: [{ conditions }],
+            splits: [{ variationKey: 'on', shards: [] }],
+          },
+          {
+            key: `${key}-default`,
+            doLog: true,
+            rules: [],
+            splits: [{ variationKey: 'off', shards: [] }],
+          },
+        ]
+      : [
+          {
+            key: `${key}-static`,
+            doLog: true,
+            rules: [],
+            splits: [{ variationKey: 'on', shards: [] }],
+          },
+        ],
+  })
+
+  return {
+    createdAt: '2026-10-07T12:00:00Z',
+    format: 'SERVER',
+    observeFullEvaluationData: true,
+    environment: { name: 'test' },
+    flags: {
+      prerequisite: flag('prerequisite'),
+      ...(transitiveFailure ? { parent: flag('parent', [condition('missing')]) } : {}),
+      root: flag('root', transitiveFailure
+        ? [condition('parent')]
+        : [condition('prerequisite'), ...(includeMissing ? [condition('missing')] : [])]),
+    },
+  }
+}

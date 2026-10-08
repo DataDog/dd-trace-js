@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { InMemoryProvider, OpenFeature, ProviderEvents, ProviderStatus } = require('@openfeature/server-sdk')
+const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -10,6 +11,9 @@ const sinon = require('sinon')
 require('../../setup/core')
 const { snapshotEvaluationContext } = require('../../../src/openfeature/writers/flag-evaluation-context')
 const telemetryMetrics = require('../../../src/telemetry/metrics')
+const { DEPENDENCY_EVALUATION_CHANNEL } = require('../../../src/openfeature/constants/constants')
+
+const dependencyEvaluationCh = channel(DEPENDENCY_EVALUATION_CHANNEL)
 
 const config = {
   url: new URL('http://localhost:8126'),
@@ -89,6 +93,33 @@ describe('FlagEvalEVPHook', () => {
     sinon.assert.calledOnce(writer.enqueue)
     assert.deepStrictEqual({ ...writer.enqueue.firstCall.args[0].attrs }, { 'nested.plan': 'pro' })
     assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'unavailable'), 0)
+  })
+
+  it('captures prerequisite evaluations from the provider channel', () => {
+    enable()
+    dependencyEvaluationCh.publish({
+      context: { targetingKey: 'customer' },
+      details: { ...details(), flagKey: 'prerequisite' },
+    })
+
+    sinon.assert.calledOnce(writer.enqueue)
+    assert.strictEqual(writer.enqueue.firstCall.args[0].flagKey, 'prerequisite')
+    assert.strictEqual(writer.enqueue.firstCall.args[0].targetingKey, 'customer')
+  })
+
+  it('captures a root error after dependency graph failure', () => {
+    enable()
+    const result = details()
+    result.value = false
+    result.variant = undefined
+    result.reason = 'ERROR'
+    result.errorCode = 'FLAG_NOT_FOUND'
+    hook.finally({ flagKey: 'root', context: { targetingKey: 'customer' } }, result)
+
+    sinon.assert.calledOnce(writer.enqueue)
+    assert.strictEqual(writer.enqueue.firstCall.args[0].flagKey, 'root')
+    assert.strictEqual(writer.enqueue.firstCall.args[0].errorCode, 'FLAG_NOT_FOUND')
+    assert.strictEqual(writer.enqueue.firstCall.args[0].runtimeDefault, true)
   })
 
   it('reuses route selection and captures detached context with evaluation-time metadata', () => {

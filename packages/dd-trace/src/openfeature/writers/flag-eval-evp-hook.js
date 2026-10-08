@@ -1,6 +1,8 @@
 'use strict'
 
-const { MAX_EVALUATION_TIMESTAMP_MS } = require('../constants/constants')
+const { channel } = require('dc-polyfill')
+
+const { DEPENDENCY_EVALUATION_CHANNEL, MAX_EVALUATION_TIMESTAMP_MS } = require('../constants/constants')
 const { snapshotEvaluationContext } = require('./flag-evaluation-context')
 const {
   recordContextTruncated, recordDropped, recordHookError, recordTargetingKeyOmitted,
@@ -8,12 +10,17 @@ const {
 const FlagEvaluationsWriter = require('./flag-evaluations')
 const { setExposureDeliveryStrategy } = require('./util')
 
+const dependencyEvaluationCh = channel(DEPENDENCY_EVALUATION_CHANNEL)
+
 /** Captures terminal SDK results; the writer owns deferred aggregation and delivery. */
 class FlagEvalEVPHook {
   /** @type {FlagEvaluationsWriter} */
   #writer
   #closed = false
   #stopDeliveryStrategy
+  #handleDependencyEvaluation = ({ context, details }) => {
+    this.#capture(details.flagKey, { context }, details)
+  }
 
   /**
    * The provider only constructs this hook when evaluation counts are enabled.
@@ -27,6 +34,7 @@ class FlagEvalEVPHook {
       if (this.#closed) return
       writer.setEnabled(enabled, route)
     })
+    dependencyEvaluationCh.subscribe(this.#handleDependencyEvaluation)
   }
 
   /**
@@ -37,6 +45,17 @@ class FlagEvalEVPHook {
    * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
    */
   finally (hookContext, evaluationDetails) {
+    this.#capture(hookContext.flagKey, hookContext, evaluationDetails)
+  }
+
+  /**
+   * Capture a root or prerequisite evaluation with the same privacy and capacity rules.
+   *
+   * @param {string} flagKey
+   * @param {{ context?: import('@openfeature/core').EvaluationContext }} hookContext
+   * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
+   */
+  #capture (flagKey, hookContext, evaluationDetails) {
     try {
       const unavailableReason = this.#closed ? 'closed' : this.#writer.getUnavailableReason()
       if (unavailableReason !== undefined) {
@@ -79,7 +98,7 @@ class FlagEvalEVPHook {
       }
 
       this.#writer.enqueue({
-        flagKey: hookContext.flagKey,
+        flagKey,
         variant: evaluationDetails.variant,
         allocationKey: typeof metadata?.__dd_allocation_key === 'string' ? metadata.__dd_allocation_key : undefined,
         runtimeDefault: evaluationDetails.variant === undefined,
@@ -97,6 +116,7 @@ class FlagEvalEVPHook {
   destroy () {
     if (this.#closed) return
     this.#closed = true
+    dependencyEvaluationCh.unsubscribe(this.#handleDependencyEvaluation)
     this.#stopDeliveryStrategy?.()
     this.#writer.destroy()
   }
