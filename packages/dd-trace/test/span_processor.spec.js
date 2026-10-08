@@ -497,96 +497,47 @@ describe('SpanProcessor', () => {
       }
     }
 
-    it('preserves Datadog HTTP fields when Test Optimization disables requested OTel semantics', () => {
-      const previousValue = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
-      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    for (const { platform, options } of [
+      { platform: 'Test Optimization', options: { isCiVisibility: true, experimental: { exporter: 'jest_worker' } } },
+      { platform: 'Electron', options: { experimental: { exporter: 'electron' } } },
+      { platform: 'Lambda' },
+    ]) {
+      it(`preserves Datadog HTTP fields when ${platform} disables requested OTel semantics`, () => {
+        const previousSemantics = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        const previousFunctionName = process.env.AWS_LAMBDA_FUNCTION_NAME
+        process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+        if (platform === 'Lambda') process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
 
-      try {
-        spanFormat.returns(formattedHttpSpan())
-        const testOptimizationConfig = getConfigFresh({
-          isCiVisibility: true,
-          experimental: { exporter: 'jest_worker' },
-        })
-        const testOptimizationProcessor = new SpanProcessor(exporter, prioritySampler, testOptimizationConfig)
-        trace.started = [finishedSpan]
-        trace.finished = [finishedSpan]
+        try {
+          spanFormat.returns(formattedHttpSpan())
+          const platformConfig = getConfigFresh(options)
+          const processor = new SpanProcessor(exporter, prioritySampler, platformConfig)
+          trace.started = [finishedSpan]
+          trace.finished = [finishedSpan]
 
-        testOptimizationProcessor.process(finishedSpan)
+          processor.process(finishedSpan)
 
-        const exported = exporter.export.firstCall.args[0][0]
-        assert.strictEqual(testOptimizationConfig.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
-        assert.strictEqual(exported.meta['http.method'], 'GET')
-        assert.strictEqual(exported.meta['http.status_code'], '200')
-        assert.ok(!('http.request.method' in exported.meta))
-      } finally {
-        if (previousValue === undefined) {
-          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
-        } else {
-          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = previousValue
+          const exported = exporter.export.firstCall.args[0][0]
+          assert.strictEqual(platformConfig.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+          assert.strictEqual(exported.meta['http.method'], 'GET')
+          assert.strictEqual(exported.meta['http.status_code'], '200')
+          assert.ok(!('http.request.method' in exported.meta))
+        } finally {
+          if (platform === 'Lambda') {
+            if (previousFunctionName === undefined) {
+              delete process.env.AWS_LAMBDA_FUNCTION_NAME
+            } else {
+              process.env.AWS_LAMBDA_FUNCTION_NAME = previousFunctionName
+            }
+          }
+          if (previousSemantics === undefined) {
+            delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          } else {
+            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = previousSemantics
+          }
         }
-      }
-    })
-
-    it('preserves Datadog HTTP fields when Electron disables requested OTel semantics', () => {
-      const previousValue = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
-      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
-
-      try {
-        spanFormat.returns(formattedHttpSpan())
-        const electronConfig = getConfigFresh({ experimental: { exporter: 'electron' } })
-        const electronProcessor = new SpanProcessor(exporter, prioritySampler, electronConfig)
-        trace.started = [finishedSpan]
-        trace.finished = [finishedSpan]
-
-        electronProcessor.process(finishedSpan)
-
-        const exported = exporter.export.firstCall.args[0][0]
-        assert.strictEqual(electronConfig.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
-        assert.strictEqual(exported.meta['http.method'], 'GET')
-        assert.strictEqual(exported.meta['http.status_code'], '200')
-        assert.ok(!('http.request.method' in exported.meta))
-      } finally {
-        if (previousValue === undefined) {
-          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
-        } else {
-          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = previousValue
-        }
-      }
-    })
-
-    it('preserves Datadog HTTP fields when Lambda disables requested OTel semantics', () => {
-      const previousFunctionName = process.env.AWS_LAMBDA_FUNCTION_NAME
-      const previousSemantics = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
-      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
-      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
-
-      try {
-        spanFormat.returns(formattedHttpSpan())
-        const lambdaConfig = getConfigFresh()
-        const lambdaProcessor = new SpanProcessor(exporter, prioritySampler, lambdaConfig)
-        trace.started = [finishedSpan]
-        trace.finished = [finishedSpan]
-
-        lambdaProcessor.process(finishedSpan)
-
-        const exported = exporter.export.firstCall.args[0][0]
-        assert.strictEqual(lambdaConfig.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
-        assert.strictEqual(exported.meta['http.method'], 'GET')
-        assert.strictEqual(exported.meta['http.status_code'], '200')
-        assert.ok(!('http.request.method' in exported.meta))
-      } finally {
-        if (previousFunctionName === undefined) {
-          delete process.env.AWS_LAMBDA_FUNCTION_NAME
-        } else {
-          process.env.AWS_LAMBDA_FUNCTION_NAME = previousFunctionName
-        }
-        if (previousSemantics === undefined) {
-          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
-        } else {
-          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = previousSemantics
-        }
-      }
-    })
+      })
+    }
 
     it('applies the OTel HTTP rename to the exported span', () => {
       spanFormat.returns(formattedHttpSpan())

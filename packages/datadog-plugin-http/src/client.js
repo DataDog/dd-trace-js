@@ -36,19 +36,11 @@ class HttpClientPlugin extends ClientPlugin {
     const host = options.port ? `${hostname}:${options.port}` : hostname
     const base = `${protocol}//${host}`
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
-    const otelHostname = otelSemantics ? formatHostnameForUrl(hostname) : hostname
-    const otelHost = otelSemantics ? (options.port ? `${otelHostname}:${options.port}` : otelHostname) : host
-    const redactedAuth = otelSemantics ? getRedactedAuth(options) : undefined
-    let otelBase = base
-    if (otelSemantics) {
-      otelBase = redactedAuth ? `${protocol}//${redactedAuth}@${otelHost}` : `${protocol}//${otelHost}`
-    }
     // A URL object (e.g. from the fetch integration) carries the query in
     // `options.search`, not `options.path`; keep it so url.full retains the query.
     const pathname = options.path || `${options.pathname || ''}${options.search || ''}`
     const path = pathname ? stripQueryAndFragment(pathname) : '/'
     const uri = `${base}${path}`
-    const otelUri = otelSemantics ? `${otelBase}${path}` : uri
 
     const allowed = this.config.filter(uri)
 
@@ -61,10 +53,15 @@ class HttpClientPlugin extends ClientPlugin {
       'resource.name': method,
       'span.type': 'http',
       'http.method': method,
-      'http.url': otelSemantics ? buildClientHttpUrl(this.config, otelBase, pathname, otelUri) : uri,
+      'http.url': uri,
       'out.host': hostname,
     }
     if (otelSemantics) {
+      const otelHostname = formatHostnameForUrl(hostname)
+      const otelHost = options.port ? `${otelHostname}:${options.port}` : otelHostname
+      const auth = typeof options.auth === 'string' && options.auth ? 'REDACTED:REDACTED@' : ''
+      const otelBase = `${protocol}//${auth}${otelHost}`
+      meta['http.url'] = buildClientHttpUrl(this.config, otelBase, pathname, `${otelBase}${path}`)
       const resource = otelHttpResourceName(method)
       meta['resource.name'] = resource
       meta[INSTRUMENTATION_HTTP_RESOURCE] = resource
@@ -161,11 +158,6 @@ class HttpClientPlugin extends ClientPlugin {
 
 function formatHostnameForUrl (hostname) {
   return hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname
-}
-
-/** @param {Record<string, unknown>} options */
-function getRedactedAuth (options) {
-  if (typeof options.auth === 'string' && options.auth) return 'REDACTED:REDACTED'
 }
 
 function addResponseHeaders (res, span, config) {

@@ -2137,125 +2137,79 @@ describe('compiled Next runtimes', () => {
       await trace
     })
 
-    it('preserves a custom HTTP parent resource through the App Route lifecycle', async () => {
-      class AppRouteRouteModule {
-        definition = { pathname: '/api/web-request' }
+    for (const { title, customResource, expectedResource } of [
+      {
+        title: 'preserves a custom HTTP parent resource through the App Route lifecycle',
+        customResource: 'custom-http-resource',
+        expectedResource: 'custom-http-resource',
+      },
+      {
+        title: 'updates the HTTP parent resource through the App Route lifecycle',
+        expectedResource: 'HTTP /api/web-request',
+      },
+    ]) {
+      it(title, async () => {
+        class AppRouteRouteModule {
+          definition = { pathname: '/api/web-request' }
 
-        prepare () {
-          return Promise.resolve()
-        }
+          prepare () {
+            return Promise.resolve()
+          }
 
-        handleResponse ({ responseGenerator }) {
-          return responseGenerator()
-        }
+          handleResponse ({ responseGenerator }) {
+            return responseGenerator()
+          }
 
-        handle () {
-          return Promise.resolve({ status: 201 })
+          handle () {
+            return Promise.resolve({ status: 201 })
+          }
         }
-      }
-      applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
-      const routeModule = new AppRouteRouteModule()
-      const server = http.createServer(async (req, res) => {
+        applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
+        const routeModule = new AppRouteRouteModule()
+        const server = http.createServer(async (req, res) => {
+          try {
+            if (customResource) {
+              storage('legacy').getStore().span.setTag('resource.name', customResource)
+            }
+            const request = new Request(`http://${req.headers.host}${req.url}`, { method: req.method })
+            await routeModule.prepare(req, res, {})
+            const result = await routeModule.handleResponse({
+              req,
+              responseGenerator: async () => {
+                const response = await routeModule.handle(request, {})
+                return { value: { status: response.status } }
+              },
+            })
+            res.statusCode = result.value.status
+            res.end()
+          } catch (error) {
+            res.destroy(error)
+          }
+        })
+        server.listen(0, '127.0.0.1')
+        await once(server, 'listening')
+        const port = server.address().port
+        const trace = agent.assertSomeTraces(traces => {
+          const spans = traces.find(trace => trace.some(span => span.name === 'next.request'))
+          assert.ok(spans)
+          const nextSpan = spans.find(span => span.name === 'next.request')
+          assert.ok(nextSpan)
+          const parentSpan = spans.find(span => span.span_id.toString() === nextSpan.parent_id.toString())
+          assert.ok(parentSpan)
+          assert.strictEqual(parentSpan.resource, expectedResource)
+          assert.strictEqual(nextSpan.resource, 'HTTP /api/web-request')
+        })
+
         try {
-          storage('legacy').getStore().span.setTag('resource.name', 'custom-http-resource')
-          const request = new Request(`http://${req.headers.host}${req.url}`, { method: req.method })
-          await routeModule.prepare(req, res, {})
-          const result = await routeModule.handleResponse({
-            req,
-            responseGenerator: async () => {
-              const response = await routeModule.handle(request, {})
-              return { value: { status: response.status } }
-            },
-          })
-          res.statusCode = result.value.status
-          res.end()
-        } catch (error) {
-          res.destroy(error)
+          const [response] = await Promise.all([
+            httpRequest({ method: 'PROPFIND', url: `http://127.0.0.1:${port}/api/web-request` }),
+            trace,
+          ])
+          assert.strictEqual(response.status, 201)
+        } finally {
+          await new Promise(resolve => server.close(resolve))
         }
       })
-      server.listen(0, '127.0.0.1')
-      await once(server, 'listening')
-      const port = server.address().port
-      const trace = agent.assertSomeTraces(traces => {
-        const spans = traces.find(trace => trace.some(span => span.name === 'next.request'))
-        assert.ok(spans)
-        const nextSpan = spans.find(span => span.name === 'next.request')
-        assert.ok(nextSpan)
-        const parentSpan = spans.find(span => span.span_id.toString() === nextSpan.parent_id.toString())
-        assert.ok(parentSpan)
-        assert.strictEqual(parentSpan.resource, 'custom-http-resource')
-        assert.strictEqual(nextSpan.resource, 'HTTP /api/web-request')
-      })
-
-      try {
-        const [response] = await Promise.all([
-          httpRequest({ method: 'PROPFIND', url: `http://127.0.0.1:${port}/api/web-request` }),
-          trace,
-        ])
-        assert.strictEqual(response.status, 201)
-      } finally {
-        await new Promise(resolve => server.close(resolve))
-      }
-    })
-
-    it('updates the HTTP parent resource through the App Route lifecycle', async () => {
-      class AppRouteRouteModule {
-        definition = { pathname: '/api/web-request' }
-
-        prepare () {
-          return Promise.resolve()
-        }
-
-        handleResponse ({ responseGenerator }) {
-          return responseGenerator()
-        }
-
-        handle () {
-          return Promise.resolve({ status: 201 })
-        }
-      }
-      applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
-      const routeModule = new AppRouteRouteModule()
-      const server = http.createServer(async (req, res) => {
-        try {
-          const request = new Request(`http://${req.headers.host}${req.url}`, { method: req.method })
-          await routeModule.prepare(req, res, {})
-          const result = await routeModule.handleResponse({
-            req,
-            responseGenerator: async () => {
-              const response = await routeModule.handle(request, {})
-              return { value: { status: response.status } }
-            },
-          })
-          res.statusCode = result.value.status
-          res.end()
-        } catch (error) {
-          res.destroy(error)
-        }
-      })
-      server.listen(0, '127.0.0.1')
-      await once(server, 'listening')
-      const port = server.address().port
-      const trace = agent.assertSomeTraces(traces => {
-        const spans = traces.find(trace => trace.some(span => span.name === 'next.request'))
-        assert.ok(spans)
-        const nextSpan = spans.find(span => span.name === 'next.request')
-        assert.ok(nextSpan)
-        const parentSpan = spans.find(span => span.span_id.toString() === nextSpan.parent_id.toString())
-        assert.ok(parentSpan)
-        assert.strictEqual(parentSpan.resource, 'HTTP /api/web-request')
-        assert.strictEqual(nextSpan.resource, 'HTTP /api/web-request')
-      })
-
-      try {
-        const [response] = await Promise.all([
-          httpRequest({ method: 'PROPFIND', url: `http://127.0.0.1:${port}/api/web-request` }),
-          trace,
-        ])
-        assert.strictEqual(response.status, 201)
-      } finally {
-        await new Promise(resolve => server.close(resolve))
-      }
-    })
+    }
   })
 })

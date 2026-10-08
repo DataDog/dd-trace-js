@@ -36,8 +36,8 @@ class Http2ClientPlugin extends ClientPlugin {
   bindStart (message) {
     const { authority, options, headers = {} } = message
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
-    const hasAuth = otelSemantics && hasUrlAuth(authority)
-    const sessionDetails = extractSessionDetails(authority, options)
+    const sessionDetails = extractSessionDetails(authority, options, otelSemantics)
+    const { hasAuth } = sessionDetails
     const path = headers[HTTP2_HEADER_PATH] || '/'
     const pathname = path.split(/[?#]/, 1)[0]
     const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
@@ -143,7 +143,7 @@ class Http2ClientPlugin extends ClientPlugin {
   }
 }
 
-function extractSessionDetails (authority, options) {
+function extractSessionDetails (authority, options, otelSemantics) {
   if (typeof authority === 'string') {
     authority = new URL(authority)
   }
@@ -159,12 +159,8 @@ function extractSessionDetails (authority, options) {
     host = options.host || host
   }
 
-  return { protocol, port, host }
-}
-
-function hasUrlAuth (authority) {
-  if (typeof authority === 'string') authority = new URL(authority)
-  return Boolean(authority.username || authority.password)
+  const hasAuth = otelSemantics && Boolean(authority.username || authority.password)
+  return { protocol, port, host, hasAuth }
 }
 
 function hasAmazonSignature (headers, path) {

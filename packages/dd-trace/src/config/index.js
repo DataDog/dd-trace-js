@@ -748,8 +748,8 @@ class Config extends ConfigBase {
     const otlpAgentlessOrigin = agentlessTracingEnabled && !this.OTEL_EXPORTER_OTLP_ENDPOINT
       ? createSiteUrl(this.site, 'otlp')?.origin
       : undefined
-    const defaultOtlpBase = otlpAgentlessOrigin ||
-      this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') || `http://${agentHostname}:4318`
+    const defaultOtlpBase = otlpAgentlessOrigin ??
+      this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
 
     const assignOtlpHeaderApiKey = (configName) => {
       if (otlpAgentlessOrigin) {

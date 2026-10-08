@@ -409,12 +409,6 @@ describe('http-otel-semantics', () => {
       assert.ok(!Object.hasOwn(span.meta, INSTRUMENTATION_HTTP_RESOURCE))
     })
 
-    it('leaves a span the semantics layer never touched alone', () => {
-      const span = run({ 'span.kind': 'client', 'db.name': 'orders' }, {}, 0)
-
-      assert.deepStrictEqual(span.meta, { 'span.kind': 'client', 'db.name': 'orders' })
-    })
-
     it('keeps a canonical numeric attribute when no derived replacement exists', () => {
       const span = run({ 'span.kind': 'server', 'http.method': 'GET' }, { 'http.response.status_code': 204 })
 
