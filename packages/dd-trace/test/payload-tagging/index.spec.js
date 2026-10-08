@@ -357,6 +357,28 @@ describe('Safe payload capture', () => {
     assert.deepStrictEqual(await reader.read(), { value: undefined, done: true })
   })
 
+  it('should not probe for streams on values rejected by structural checks', () => {
+    let reads = 0
+    const probe = () => {
+      reads++
+    }
+    const cyclic = Object.defineProperty({}, 'getReader', { get: probe, enumerable: false })
+    cyclic.self = cyclic
+    let deep = Object.defineProperty({}, 'getReader', { get: probe, enumerable: false })
+    for (let i = 0; i < 150; i++) {
+      deep = { a: deep }
+    }
+    const longArray = new Array(10_001)
+    Object.defineProperty(longArray, 'getReader', { get: probe, enumerable: false })
+
+    const snapshot = createSafeSnapshot({ cyclic, deep, longArray })
+
+    assert.strictEqual(snapshot.incomplete, true)
+    // Only the first visit of the cyclic object is probed; the back-reference,
+    // the over-depth object and the over-length array are rejected first.
+    assert.strictEqual(reads, 1)
+  })
+
   it('should replace cyclic back-references with "truncated"', () => {
     const direct = { name: 'direct' }
     direct.self = direct
