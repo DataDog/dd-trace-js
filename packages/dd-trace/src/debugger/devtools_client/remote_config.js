@@ -1,6 +1,7 @@
 'use strict'
 
 const { workerData: { probePort } } = require('node:worker_threads')
+const { WORKER_ERROR_REASON } = require('../constants')
 const { addBreakpoint, removeBreakpoint, modifyBreakpoint } = require('./breakpoints')
 const { ackReceived, ackInstalled, ackError } = require('./status')
 const log = require('./log')
@@ -54,7 +55,8 @@ probePort.on('message', async ({ action, probe, ackId }) => {
     await processMsg(action, probe)
     probePort.postMessage({ ackId })
   } catch (err) {
-    probePort.postMessage({ ackId, error: err })
+    // Structured cloning an Error drops its custom properties, so send the reason separately.
+    probePort.postMessage({ ackId, error: err, reason: err.reason })
     ackError(err, probe)
   }
 })
@@ -72,18 +74,20 @@ async function processMsg (action, probe) {
   if (action !== 'unapply') ackReceived(probe)
 
   if (probe.type !== 'LOG_PROBE') {
-    throw new Error(`Unsupported probe type: ${probe.type} (id: ${probe.id}, version: ${probe.version})`)
+    throw Object.assign(new Error(
+      `Unsupported probe type: ${probe.type} (id: ${probe.id}, version: ${probe.version})`
+    ), { reason: WORKER_ERROR_REASON.UNSUPPORTED_PROBE_TYPE })
   }
   if (!probe.where.sourceFile && !probe.where.lines) {
-    throw new Error(
+    throw Object.assign(new Error(
       // eslint-disable-next-line @stylistic/max-len
       `Unsupported probe insertion point! Only line-based probes are supported (id: ${probe.id}, version: ${probe.version})`
-    )
+    ), { reason: WORKER_ERROR_REASON.UNSUPPORTED_INSERTION_POINT })
   }
   if (probe.captureSnapshot && probe.captureExpressions?.length > 0) {
-    throw new Error(
+    throw Object.assign(new Error(
       `Cannot set both captureSnapshot and captureExpressions (probe: ${probe.id}, version: ${probe.version})`
-    )
+    ), { reason: WORKER_ERROR_REASON.CONFLICTING_CAPTURE_OPTIONS })
   }
 
   switch (action) {
@@ -99,8 +103,8 @@ async function processMsg (action, probe) {
       ackInstalled(probe)
       break
     default:
-      throw new Error(
+      throw Object.assign(new Error(
         `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
-      )
+      ), { reason: WORKER_ERROR_REASON.UNKNOWN_REMOTE_CONFIG_ACTION })
   }
 }

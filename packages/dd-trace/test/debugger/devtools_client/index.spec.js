@@ -12,6 +12,7 @@ require('../../setup/mocha')
 
 const { LARGE_OBJECT_SKIP_THRESHOLD } = require('../../../src/debugger/devtools_client/snapshot/constants')
 const { EVENT_TYPE, GuardrailMetrics, INCOMPLETE_REASON } = require('../../../src/debugger/guardrail-metrics')
+const { PauseDurationHistogram } = require('../../../src/debugger/pause-duration-histogram')
 const { installProbeSampler } = require('../../../src/debugger/probe_sampler')
 const {
   CONDITION_ERROR_FLAG,
@@ -48,7 +49,7 @@ describe('onPause', function () {
    */
   /** @type {MockSession} */
   let session
-  /** @type {sinon.SinonSpy} */
+  /** @type {sinon.SinonStub} */
   let send
   /** @type {Function} */
   let onPaused
@@ -60,13 +61,13 @@ describe('onPause', function () {
   let state
   /** @type {Int32Array} */
   let sampledProbeIndexes
-  /** @type {unknown} */
+  /** @type {{ error: sinon.SinonSpy, debug: sinon.SinonSpy, '@noCallThru': boolean }} */
   let log
-  let parentPort
+  /** @type {PauseDurationHistogram} */
+  let pauseDurations
 
   beforeEach(async function () {
     ackEmitting = sinon.spy()
-    parentPort = { postMessage: sinon.spy() }
     refreshBreakpoints = sinon.stub().resolves()
     log = {
       error: sinon.spy(),
@@ -96,6 +97,7 @@ describe('onPause', function () {
       parentThreadId,
       dynamicInstrumentation: {
         captureTimeoutNs: 15_000_000n, // Default value is 15ms
+        evaluationTimeoutNs: 10_000_000n, // The time budget tests assume 10ms rather than the 50ms default
         DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: [],
         DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: [],
       },
@@ -103,9 +105,14 @@ describe('onPause', function () {
       '@noCallThru': true,
     }
 
-    send = sinon.spy()
+    send = sinon.stub()
     send['@noCallThru'] = true
-    sampledProbeIndexes = new Int32Array(installProbeSampler(new GuardrailMetrics(GuardrailMetrics.createBuffer())))
+    sampledProbeIndexes = new Int32Array(installProbeSampler(
+      new GuardrailMetrics(GuardrailMetrics.createBuffer()),
+      { dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 10 } }
+    ))
+    const pauseDurationBuffer = PauseDurationHistogram.createBuffer()
+    pauseDurations = new PauseDurationHistogram(pauseDurationBuffer)
 
     state = proxyquire('../../../src/debugger/devtools_client/state', { './session': session })
     const loadStatus = proxyquire.noCallThru()
@@ -123,8 +130,7 @@ describe('onPause', function () {
     proxyquire('../../../src/debugger/devtools_client', {
       worker_threads: {
         ...workerThreads,
-        parentPort,
-        workerData: { probeSamplerBuffer: sampledProbeIndexes.buffer },
+        workerData: { probeSamplerBuffer: sampledProbeIndexes.buffer, pauseDurationBuffer },
       },
       './config': config,
       './session': session,
@@ -161,9 +167,11 @@ describe('onPause', function () {
     beforeEach(function () {
       hrtime = sinon.stub(process.hrtime, 'bigint').returns(1_000_000n)
       session.post.withArgs('Debugger.resume').callsFake(async () => {
-        sinon.assert.notCalled(parentPort.postMessage)
+        assertPauseDurations([])
         hrtime.returns(3_500_000n)
       })
+      // Recording the duration only after sending would include the time spent processing the pause after resuming
+      send.callsFake(() => { hrtime.returns(10_000_000n) })
     })
 
     afterEach(function () {
@@ -171,7 +179,7 @@ describe('onPause', function () {
     })
 
     for (const kind of ['log', 'snapshot', 'capture expressions', 'condition error', 'removed probe']) {
-      it(`should report milliseconds after resuming a ${kind}`, async function () {
+      it(`should record milliseconds after resuming a ${kind}`, async function () {
         const probe = genProcessedProbe('probe-1')
         if (kind === 'snapshot') {
           probe.captureSnapshot = true
@@ -193,8 +201,8 @@ describe('onPause', function () {
           params: { ...event.params, callFrames: [{ ...event.params.callFrames[0], scopeChain: [] }] },
         })
 
-        sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 2.5 })
-        if (kind !== 'removed probe') sinon.assert.callOrder(parentPort.postMessage, send)
+        if (kind !== 'removed probe') sinon.assert.called(send)
+        assertPauseDurations([2.5])
       })
     }
 
@@ -203,24 +211,24 @@ describe('onPause', function () {
       session.post.withArgs('Debugger.resume').returns(new Promise((resolve) => { completeResume = resolve }))
 
       const paused = onPaused(event)
-      sinon.assert.notCalled(parentPort.postMessage)
+      assertPauseDurations([])
       hrtime.returns(6_000_000n)
       completeResume()
       await paused
 
-      sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 5 })
+      assertPauseDurations([5])
     })
 
-    it('should not report a completed pause if resume fails', async function () {
+    it('should not record a completed pause if resume fails', async function () {
       const error = new Error('resume failed')
       session.post.withArgs('Debugger.resume').rejects(error)
 
       await assert.rejects(onPaused(event), error)
 
-      sinon.assert.notCalled(parentPort.postMessage)
+      assertPauseDurations([])
     })
 
-    it('should report once when several probes share the pause', async function () {
+    it('should record once when several probes share the pause', async function () {
       const probes = [genProcessedProbe('probe-1'), genProcessedProbe('probe-2')]
       state.breakpointToProbes.set(breakpointId, new Map(probes.map(probe => [probe.id, probe])))
       for (const [i, probe] of probes.entries()) {
@@ -232,8 +240,27 @@ describe('onPause', function () {
       await onPaused(event)
 
       sinon.assert.calledTwice(send)
-      sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 2.5 })
+      assertPauseDurations([2.5])
     })
+
+    /**
+     * Drain the pause durations recorded by the worker and compare them with the expected ones.
+     *
+     * @param {number[]} expectedMs - The expected durations in milliseconds, in ascending order.
+     */
+    function assertPauseDurations (expectedMs) {
+      /** @type {number[]} */
+      const recordedMs = []
+      pauseDurations.drain((durationMs, count) => {
+        for (let i = 0; i < count; i++) recordedMs.push(durationMs)
+      })
+      assert.strictEqual(recordedMs.length, expectedMs.length, `Unexpected pause durations: ${recordedMs}`)
+      for (const [i, durationMs] of recordedMs.entries()) {
+        // The histogram reports durations with a relative accuracy of 1%
+        assert.ok(Math.abs(durationMs - expectedMs[i]) <= expectedMs[i] * 0.01,
+          `Expected ${durationMs} to be ~${expectedMs[i]} ms`)
+      }
+    }
   })
 
   it('should not fail if there is no probe for at the breakpoint', async function () {
@@ -261,6 +288,8 @@ describe('onPause', function () {
 
     assert(thrown instanceof Error)
     assert.strictEqual(thrown.message, 'Unexpected Debugger.paused reason: OOM')
+    assert.ok('reason' in thrown)
+    assert.strictEqual(thrown.reason, 'unexpected_pause_reason')
     sinon.assert.notCalled(session.post)
     sinon.assert.notCalled(ackEmitting)
     sinon.assert.notCalled(send)
@@ -297,6 +326,58 @@ describe('onPause', function () {
     const [, , , , , eventType, incompleteReasons] = send.firstCall.args
     assert.strictEqual(eventType, EVENT_TYPE.LOG)
     assert.strictEqual(incompleteReasons, 0)
+  })
+
+  describe('redacted template segments', function () {
+    const redactionError = {
+      expr: 'secret',
+      message: "Could not evaluate the expression because 'secret' was redacted",
+    }
+
+    /**
+     * @param {unknown[]} templateResult - The evaluated template segments returned by the paused thread.
+     */
+    function sampleTemplatedProbe (templateResult) {
+      const probe = genProcessedProbe('probe-1')
+      probe.templateRequiresEvaluation = true
+      probe.template = '["template"]'
+      probe.templateRedactionErrors = [redactionError]
+      sampleProbe(probe)
+
+      session.post = sinon.stub().callsFake((method) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          return Promise.resolve({ result: { value: [{}, templateResult] } })
+        }
+        return Promise.resolve({})
+      })
+
+      return probe
+    }
+
+    it('should report their evaluation errors', async function () {
+      sampleTemplatedProbe(['secret: ', '{redacted}'])
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      assert.strictEqual(send.firstCall.args[0], 'secret: {redacted}')
+      assert.deepStrictEqual(send.firstCall.args[3].evaluationErrors, [redactionError])
+    })
+
+    it('should report their evaluation errors after those of the evaluated segments', async function () {
+      const runtimeError = { expr: 'foo', message: 'ReferenceError: foo is not defined' }
+      const probe = sampleTemplatedProbe(['secret: ', '{redacted}', ', foo: ', runtimeError])
+
+      await onPaused(event)
+      sampleProbe(probe)
+      await onPaused(event)
+
+      sinon.assert.calledTwice(send)
+      for (const { args } of send.getCalls()) {
+        assert.strictEqual(args[0], 'secret: {redacted}, foo: {ReferenceError: foo is not defined}')
+        assert.deepStrictEqual(args[3].evaluationErrors, [runtimeError, redactionError])
+      }
+    })
   })
 
   it('should send snapshot probe results as snapshot events with the enforced capture limits', async function () {
@@ -720,6 +801,162 @@ describe('onPause', function () {
       assert.deepStrictEqual(send.secondCall.args[3].captures.lines[1].captureExpressions.foo, {
         type: 'number', value: '42',
       })
+    })
+  })
+
+  describe('evaluation time budget', function () {
+    const evaluationTimedOutExpression = 'globalThis[Symbol.for("dd-trace")]?.' +
+      '[Symbol.for("dd-trace.debugger.probeSampler")]?.evaluationTimedOut("probe-1")'
+    /** @type {sinon.SinonStub} */
+    let hrtime
+
+    beforeEach(function () {
+      hrtime = sinon.stub(process.hrtime, 'bigint').returns(0n)
+    })
+
+    afterEach(function () {
+      hrtime.restore()
+    })
+
+    it('should not report templates evaluated within the budget', async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.templateRequiresEvaluation = true
+      probe.template = '["hello ", foo]'
+      sampleProbe(probe)
+
+      session.post = sinon.stub().callsFake((method) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          hrtime.returns(10_000_000n) // exactly the 10ms budget
+          return Promise.resolve({ result: { value: [{}, ['hello ', 'world']] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      assert.strictEqual(send.firstCall.args[0], 'hello world')
+      assert.strictEqual(send.firstCall.args[3].evaluationErrors, undefined)
+      sinon.assert.neverCalledWith(session.post, 'Runtime.evaluate')
+    })
+
+    it('should report templates that exceed the budget and throttle the probe', async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.templateRequiresEvaluation = true
+      probe.template = '["hello ", foo]'
+      sampleProbe(probe)
+
+      session.post = sinon.stub().callsFake((method) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          hrtime.returns(10_000_001n)
+          return Promise.resolve({ result: { value: [{}, ['hello ', 'world']] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      const [message, , , snapshot, , , incompleteReasons] = send.firstCall.args
+      assert.strictEqual(message, 'hello world', 'should still report the result')
+      assert.deepStrictEqual(snapshot.evaluationErrors, [
+        { expr: '', message: 'Template evaluation exceeded its time budget of 10ms' },
+      ])
+      assert.strictEqual(incompleteReasons, 0)
+      sinon.assert.calledWith(session.post, 'Runtime.evaluate', { expression: evaluationTimedOutExpression })
+      assert.ok(
+        session.post.withArgs('Runtime.evaluate').firstCall.calledAfter(
+          session.post.withArgs('Debugger.resume').firstCall
+        ),
+        'should throttle after resuming the application'
+      )
+      assert.ok(
+        session.post.withArgs('Runtime.evaluate').firstCall.calledBefore(send.firstCall),
+        'should throttle before processing the result'
+      )
+    })
+
+    it('should not attribute a slow evaluation to probes without templates', async function () {
+      const probe = genProcessedProbe('probe-1')
+      sampleProbe(probe)
+
+      session.post = sinon.stub().callsFake((method) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          hrtime.returns(10_000_001n)
+          return Promise.resolve({ result: { value: [{}] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      assert.strictEqual(send.firstCall.args[3].evaluationErrors, undefined)
+      sinon.assert.neverCalledWith(session.post, 'Runtime.evaluate')
+    })
+
+    it('should report capture expressions that exceed the budget and throttle the probe', async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.compiledCaptureExpressions = [{
+        name: 'foo',
+        expression: 'foo',
+        limits: { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+      }]
+      sampleProbe(probe)
+
+      session.post = sinon.stub().callsFake((method, params) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          if (params.expression === 'foo') {
+            hrtime.returns(10_000_001n)
+            return Promise.resolve({ result: { type: 'string', value: 'bar' } })
+          }
+          return Promise.resolve({ result: { value: [{}] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      const [, , , snapshot, , , incompleteReasons] = send.firstCall.args
+      assert.deepStrictEqual(snapshot.captures.lines[1].captureExpressions.foo, { type: 'string', value: 'bar' })
+      assert.deepStrictEqual(snapshot.evaluationErrors, [
+        { expr: 'foo', message: 'Expression evaluation exceeded its time budget of 10ms' },
+      ])
+      assert.strictEqual(incompleteReasons, 0)
+      sinon.assert.calledWith(session.post, 'Runtime.evaluate', { expression: evaluationTimedOutExpression })
+      assert.ok(
+        session.post.withArgs('Runtime.evaluate').firstCall.calledAfter(
+          session.post.withArgs('Debugger.resume').firstCall
+        ),
+        'should throttle after resuming the application'
+      )
+      assert.ok(
+        session.post.withArgs('Runtime.evaluate').firstCall.calledBefore(send.firstCall),
+        'should throttle before processing the result'
+      )
+    })
+
+    it('should log if throttling the probe fails', async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.templateRequiresEvaluation = true
+      probe.template = '["hello"]'
+      sampleProbe(probe)
+
+      const error = new Error('boom')
+      session.post = sinon.stub().callsFake((method) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          hrtime.returns(10_000_001n)
+          return Promise.resolve({ result: { value: [{}, ['hello']] } })
+        }
+        if (method === 'Runtime.evaluate') return Promise.reject(error)
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+      await new Promise((resolve) => setImmediate(resolve))
+
+      sinon.assert.calledWith(log.error, '[debugger:devtools_client] Error throttling probe %s', 'probe-1', error)
     })
   })
 

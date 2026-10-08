@@ -6,6 +6,8 @@ const { describe, it, beforeEach } = require('mocha')
 
 require('../../setup/core')
 
+const { defaults } = require('../../../src/config/defaults')
+
 describe('plugins/util/url', () => {
   let url
 
@@ -135,6 +137,44 @@ describe('plugins/util/url', () => {
       const result = url.obfuscateQs(config, urlPath + 'secret/' + qs)
 
       assert.strictEqual(result, urlPath + 'secret/?data=<redacted>')
+    })
+
+    it('should replace the whole match of a user-provided regex with capturing groups', () => {
+      config.queryStringObfuscation = url.getQsObfuscator({ queryStringObfuscation: '(password=)[^&]+' })
+
+      const result = url.obfuscateQs(config, urlPath + '?password=hunter2&b=2')
+
+      assert.strictEqual(result, urlPath + '?<redacted>&b=2')
+    })
+
+    describe('with the default regex', () => {
+      const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'
+
+      beforeEach(() => {
+        config.queryStringObfuscation = url.getQsObfuscator({
+          queryStringObfuscation: defaults.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
+        })
+      })
+
+      const cases = [
+        [`jwt=${jwt}&b=2`, 'jwt=<redacted>&b=2'],
+        [`a=1&${jwt}&b=2`, 'a=1&<redacted>&b=2'],
+        [`x=%22${jwt}%22`, 'x=%22<redacted>%22'],
+        [`x=%3D${jwt}`, 'x=%3D<redacted>'],
+        [`${jwt}&b=2`, '<redacted>&b=2'],
+        ['jwt=eyJhbGciOiJIUzI1NiJ9==.eyJzdWIiOiIxMjM0NTY3ODkwIn0=.sig', 'jwt=<redacted>'],
+        ['password=hunter2&b=2', '<redacted>&b=2'],
+        ['old_password=a&app_key=b&api-key=c', '<redacted>&<redacted>&<redacted>'],
+        [`x=abc${jwt}`, `x=abc${jwt}`],
+        ['keyLength=10&monkeyIsland=1&keyid=3', 'keyLength=10&monkeyIsland=1&keyid=3'],
+        ['h=heyJude.eyJoe', 'h=heyJude.eyJoe'],
+      ]
+
+      for (const [qs, expected] of cases) {
+        it(`should obfuscate ${qs.replace(jwt, '<JWT>')}`, () => {
+          assert.strictEqual(url.obfuscateQs(config, `${urlPath}?${qs}`), `${urlPath}?${expected}`)
+        })
+      }
     })
   })
 

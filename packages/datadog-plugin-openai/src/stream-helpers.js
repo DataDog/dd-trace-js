@@ -17,7 +17,13 @@
  * @typedef {JsonObject & { choices: Array<StreamChoice | undefined>, usage?: unknown }} StreamResponseBody
  *
  * @typedef {JsonObject & { status?: string }} ResponsesApiResponse
- * @typedef {JsonObject & { response?: ResponsesApiResponse }} ResponsesApiChunk
+ * @typedef {JsonObject & {
+ *   type?: string,
+ *   response?: ResponsesApiResponse,
+ *   output_index?: number,
+ *   item?: JsonObject,
+ *   delta?: string
+ * }} ResponsesApiChunk
  */
 
 /**
@@ -143,12 +149,55 @@ function constructResponseResponseFromStreamedChunks (chunks) {
   // Find the last chunk with a complete response object (status: done, incomplete, or completed)
   const responseStatusSet = new Set(['done', 'incomplete', 'completed'])
 
+  let latestResponse
   for (let i = chunks.length - 1; i >= 0; i--) {
     const chunk = chunks[i]
     if (chunk.response && responseStatusSet.has(chunk.response.status)) {
       return chunk.response
     }
+    latestResponse ??= chunk.response
   }
+
+  // A stream that ends early (e.g. aborted by the caller) never sends a final response,
+  // so rebuild a partial one from the output streamed so far, as the chat helpers do.
+  if (latestResponse) {
+    return { ...latestResponse, output: constructPartialResponseOutput(chunks) }
+  }
+}
+
+/**
+ * Rebuilds the output items of a Responses API stream that ended before its final response.
+ * Items are shallow-copied so the chunks handed to the application are not mutated.
+ * @param {ResponsesApiChunk[]} chunks
+ * @returns {JsonObject[]}
+ */
+function constructPartialResponseOutput (chunks) {
+  const output = []
+
+  for (const chunk of chunks) {
+    const index = chunk.output_index
+    if (index === undefined) continue
+
+    const item = output[index]
+
+    switch (chunk.type) {
+      case 'response.output_item.added':
+      case 'response.output_item.done':
+        output[index] = { ...chunk.item }
+        break
+      case 'response.output_text.delta':
+        if (item) {
+          const text = (item.content?.[0]?.text ?? '') + (chunk.delta ?? '')
+          item.content = [{ type: 'output_text', text }]
+        }
+        break
+      case 'response.function_call_arguments.delta':
+        if (item) item.arguments = (item.arguments ?? '') + (chunk.delta ?? '')
+        break
+    }
+  }
+
+  return output.filter(Boolean)
 }
 
 module.exports = {

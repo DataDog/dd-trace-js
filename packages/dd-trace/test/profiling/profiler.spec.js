@@ -70,6 +70,10 @@ describe('profiler', function () {
     await Promise.resolve()
   }
 
+  function waitForStopped () {
+    return new Promise(resolve => profiler.once('stopped', resolve))
+  }
+
   function setUpProfiler () {
     buildProfilingRuntimeError = undefined
     flushInterval = 65 * 1000
@@ -215,12 +219,13 @@ describe('profiler', function () {
       profiler.stop()
 
       wallProfiler.setCustomLabelKeys.resetHistory()
-      profiler.start(makeStartOptions())
 
-      // stop()'s shutdown collection is still in flight, so this start() is deferred until it
-      // settles (see the '#stopping' chaining in Profiler#start/#stop).
+      // stop()'s shutdown collection is still in flight, and the profiler refuses to start again
+      // until it settles.
+      const stopped = waitForStopped()
       await waitForExport()
-      for (let i = 0; i < 20; i++) await Promise.resolve()
+      await stopped
+      profiler.start(makeStartOptions())
 
       sinon.assert.calledOnce(wallProfiler.setCustomLabelKeys)
       assert.deepStrictEqual(
@@ -271,10 +276,11 @@ describe('profiler', function () {
 
       wallProfiler.encode.rejects(new Error('wall encoding failed'))
       spaceProfiler.encode.rejects(new Error('space encoding failed'))
+      const stopped = waitForStopped()
       profiler.stop()
-      profiler.start(makeStartOptions({ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: false }))
+      await stopped
 
-      for (let i = 0; i < 100 && !profiler.enabled; i++) await Promise.resolve()
+      profiler.start(makeStartOptions({ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: false }))
       assert.strictEqual(profiler.enabled, true)
 
       wallProfiler.encode.resolves(wallProfile)
@@ -414,7 +420,7 @@ describe('profiler', function () {
       sinon.assert.calledOnce(exporter.export)
     })
 
-    it('should defer a restart until a pending shutdown collection has finished', async () => {
+    it('should refuse a start while a shutdown collection is in flight', async () => {
       await profiler.start(makeStartOptions())
 
       let resolveEncode
@@ -424,82 +430,62 @@ describe('profiler', function () {
       profiler.stop()
       wallProfiler.start.resetHistory()
       spaceProfiler.start.resetHistory()
+      assert.strictEqual(profiler.isStopping(), true)
 
-      const restarted = profiler.start(makeStartOptions())
-      assert.strictEqual(restarted, true)
+      assert.throws(() => profiler.start(makeStartOptions()), {
+        message: 'Cannot start the profiler while a shutdown collection is still in flight',
+      })
       await Promise.resolve()
 
       sinon.assert.notCalled(wallProfiler.start)
       sinon.assert.notCalled(spaceProfiler.start)
 
+      const stopped = waitForStopped()
       resolveEncode(wallProfile)
       await waitForExport()
-      // The chained restart resolves a few more microtask ticks after the shutdown export
-      // (submit -> _collect's returned promise settling -> .finally() -> .then()).
-      for (let i = 0; i < 20; i++) await Promise.resolve()
+      await stopped
 
+      // The refusal is not a permanent failure: the profiler is startable again as soon as the
+      // shutdown export has settled.
+      assert.strictEqual(profiler.isStopping(), false)
+      assert.strictEqual(profiler.start(makeStartOptions()), true)
       sinon.assert.calledOnce(wallProfiler.start)
       sinon.assert.calledOnce(spaceProfiler.start)
     })
 
-    it('should cancel a deferred restart if stopped again before the shutdown collection finishes', async () => {
+    it('should announce a settled shutdown once even when the collection fails', async () => {
       await profiler.start(makeStartOptions())
 
-      let resolveEncode
-      wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
+      let rejectEncode
+      wallProfilePromise = new Promise((resolve, reject) => { rejectEncode = reject })
       wallProfiler.encode.returns(wallProfilePromise)
 
+      const stoppedListener = sinon.spy()
+      profiler.on('stopped', stoppedListener)
       profiler.stop()
-      wallProfiler.start.resetHistory()
-      spaceProfiler.start.resetHistory()
+      assert.strictEqual(profiler.isStopping(), true)
 
-      const restarted = profiler.start(makeStartOptions())
-      assert.strictEqual(restarted, true)
-      await Promise.resolve()
-
-      // A second stop() arrives before the first shutdown collection settles - it reflects the
-      // latest desired state, so it must cancel the queued restart above.
-      profiler.stop()
-
-      resolveEncode(wallProfile)
-      await waitForExport()
+      rejectEncode(new Error('encoding failed'))
+      await wallProfilePromise.catch(() => {})
       for (let i = 0; i < 20; i++) await Promise.resolve()
 
-      sinon.assert.notCalled(wallProfiler.start)
-      sinon.assert.notCalled(spaceProfiler.start)
-      assert.strictEqual(profiler.enabled, false)
+      sinon.assert.calledOnce(stoppedListener)
+      assert.strictEqual(profiler.isStopping(), false)
     })
 
-    it('logs and does not crash when a deferred restart fails during setup', async () => {
+    it('logs and does not crash when a listener throws on a settled shutdown', async () => {
       await profiler.start(makeStartOptions())
 
-      let resolveEncode
-      wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
-      wallProfiler.encode.returns(wallProfilePromise)
+      const listenerError = new Error('boom')
+      profiler.on('stopped', () => { throw listenerError })
 
       profiler.stop()
-
-      const restarted = profiler.start(makeStartOptions())
-      assert.strictEqual(restarted, true)
-      await Promise.resolve()
-
-      // The deferred restart calls start() again once the shutdown collection settles; make that
-      // call fail during setup.
-      const setupError = new Error('boom')
-      buildProfilingRuntimeError = setupError
-
-      resolveEncode(wallProfile)
       await waitForExport()
       for (let i = 0; i < 20; i++) await Promise.resolve()
 
       sinon.assert.calledOnce(consoleLogger.error)
-      assert.strictEqual(consoleLogger.error.firstCall.args[0], setupError)
-      assert.strictEqual(profiler.enabled, false)
-
-      const retryResult = profiler.start(makeStartOptions())
-      assert.strictEqual(retryResult, false)
-      sinon.assert.calledOnce(wallProfiler.start)
-      sinon.assert.calledOnce(spaceProfiler.start)
+      assert.strictEqual(consoleLogger.error.firstCall.args[0], listenerError)
+      assert.strictEqual(profiler.isStopping(), false)
     })
 
     it('logs shutdown cleanup failures without leaking a rejection', async () => {
@@ -597,15 +583,18 @@ describe('profiler', function () {
         process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off' }
         profiler.start(makeStartOptions())
         let exported = nextExport()
+        let stopped
         clock.tick(interval)
         assert.strictEqual((await exported).profiles.wall.indexOf(wallProfile), 0)
 
         process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip' }
         exported = nextExport()
+        stopped = waitForStopped()
         profiler.stop()
-        profiler.start(makeStartOptions())
         await exported
-        for (let i = 0; i < 100 && !profiler.enabled; i++) await Promise.resolve()
+        await stopped
+
+        profiler.start(makeStartOptions())
         assert.strictEqual(profiler.enabled, true)
         exported = nextExport()
         clock.tick(interval)
@@ -613,10 +602,12 @@ describe('profiler', function () {
 
         process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off' }
         exported = nextExport()
+        stopped = waitForStopped()
         profiler.stop()
-        profiler.start(makeStartOptions())
         await exported
-        for (let i = 0; i < 100 && !profiler.enabled; i++) await Promise.resolve()
+        await stopped
+
+        profiler.start(makeStartOptions())
         assert.strictEqual(profiler.enabled, true)
         exported = nextExport()
         clock.tick(interval)
@@ -646,9 +637,10 @@ describe('profiler', function () {
         await waitForExport()
         assert.deepStrictEqual(gzip.lastCall.args[1], { level: 3 })
 
+        const stopped = waitForStopped()
         profiler.stop()
         await waitForExport()
-        for (let i = 0; i < 20; i++) await Promise.resolve()
+        await stopped
 
         gzip.resetHistory()
         process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip' }
