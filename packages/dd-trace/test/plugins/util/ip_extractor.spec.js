@@ -4,11 +4,11 @@ const assert = require('node:assert/strict')
 const http = require('node:http')
 
 const { describe, it, before, after } = require('mocha')
-const axios = require('axios')
 
 require('../../setup/core')
 const { extractIp } = require('../../../src/plugins/util/ip_extractor')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const httpRequest = require('../../setup/helpers/http-client')
 
 describe('ip extractor', () => {
   let port, appListener, controller
@@ -41,7 +41,7 @@ describe('ip extractor', () => {
       }
     }
 
-    axios.get(`http://localhost:${port}/`, { headers }).catch(done)
+    httpRequest.get(`http://localhost:${port}/`, { headers }).catch(done)
   }
 
   const ipHeaderList = [
@@ -81,7 +81,7 @@ describe('ip extractor', () => {
         done(e)
       }
     }
-    axios.get(`http://localhost:${port}/`, {
+    httpRequest.get(`http://localhost:${port}/`, {
       headers: {
         [clientIpHeader]: expectedIp,
       },
@@ -100,7 +100,7 @@ describe('ip extractor', () => {
         done(e)
       }
     }
-    axios.get(`http://localhost:${port}/`, {
+    httpRequest.get(`http://localhost:${port}/`, {
       headers: {
         [clientIpHeader]: expectedIp,
       },
@@ -119,7 +119,7 @@ describe('ip extractor', () => {
         done(e)
       }
     }
-    axios.get(`http://localhost:${port}/`, {
+    httpRequest.get(`http://localhost:${port}/`, {
       headers: {
         [clientIpHeader]: invalidIp,
       },
@@ -200,7 +200,7 @@ describe('ip extractor', () => {
         done(e)
       }
     }
-    axios.get(`http://localhost:${port}/`).catch(done)
+    httpRequest.get(`http://localhost:${port}/`).catch(done)
   })
 
   it('should detect public ip between multiple headers', (done) => {
@@ -226,7 +226,7 @@ describe('ip extractor', () => {
         done(e)
       }
     }
-    axios.get(`http://localhost:${port}/`, {
+    httpRequest.get(`http://localhost:${port}/`, {
       headers: {
         'x-forwarded-for': 'bonjour',
         'x-client-ip': '[::1',
