@@ -1,7 +1,7 @@
 'use strict'
 
-const { isDataView } = require('node:util').types
 const { Stream } = require('node:stream')
+const { isDataView, isDate, isMap, isSet } = require('node:util').types
 
 const { truncated } = require('./constants')
 
@@ -43,6 +43,13 @@ const getTypedArrayBuffer = getterOf(typedArrayProto, 'buffer')
 const getDataViewByteLength = getterOf(DataView.prototype, 'byteLength')
 const getDataViewByteOffset = getterOf(DataView.prototype, 'byteOffset')
 const getDataViewBuffer = getterOf(DataView.prototype, 'buffer')
+
+// Opaque leaves must also be isolated from downstream JSONPath mutations.
+// Native brands and metadata operations avoid cross-realm instanceof checks
+// and payload-defined constructors, conversion hooks, getters, and iterators.
+const getDateTime = Date.prototype.getTime
+const getMapSize = getterOf(Map.prototype, 'size')
+const getSetSize = getterOf(Set.prototype, 'size')
 
 /**
  * A trusted native typed-array constructor, usable with `new`.
@@ -289,10 +296,12 @@ function copyBinary (value, kind, byteLength) {
  * - Traversal depth, total admitted values, and aggregate binary copy bytes
  *   are bounded; over-limit values become `truncated` and mark the snapshot
  *   incomplete.
- * - Scalars, Dates, Maps and Sets are carried by reference because payload
- *   tagging only reads them. Buffers and ArrayBuffer views are copied into
- *   fresh storage within the binary budget so path-based redaction rules
- *   cannot mutate the application's own bytes.
+ * - Dates, Maps and Sets become isolated native leaves without attached
+ *   properties. Dates retain their time value; collection entries are not
+ *   traversed. Nonempty collections mark the snapshot incomplete so predicates
+ *   cannot silently change redaction decisions after their contents are omitted.
+ * - Buffers and ArrayBuffer views are copied into fresh storage within the
+ *   binary budget so path-based redaction cannot mutate caller-owned bytes.
  * - Repeated non-circular references are copied per occurrence so path-based
  *   redaction rules keep matching each path independently.
  * - Own enumerable string-keyed properties of plain objects and class
@@ -357,10 +366,18 @@ function createSafeSnapshot (input) {
       return
     }
 
-    if (value instanceof Date || value instanceof Map || value instanceof Set) {
-      // Payload tagging only reads these leaves, so they are carried by
-      // reference like the scalars above.
-      assign(container, key, value, root)
+    if (isDate(value)) {
+      assign(container, key, new Date(getDateTime.call(value)), root)
+      return
+    }
+    if (isMap(value)) {
+      if (getMapSize?.call(value) !== 0) state.incomplete = true
+      assign(container, key, new Map(), root)
+      return
+    }
+    if (isSet(value)) {
+      if (getSetSize?.call(value) !== 0) state.incomplete = true
+      assign(container, key, new Set(), root)
       return
     }
 
