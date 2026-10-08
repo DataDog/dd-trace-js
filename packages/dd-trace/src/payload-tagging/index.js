@@ -102,7 +102,7 @@ function maybeJSONParseValue (value, capture) {
 function expand (object, expansionRules, capture) {
   for (const rule of expansionRules) {
     jsonpath(rule, object, (value, _type, desc) => {
-      if (desc.parent && desc.parentProperty) {
+      if (desc.parent && desc.parentProperty !== undefined) {
         assignSafe(desc.parent, desc.parentProperty, maybeJSONParseValue(value, capture))
       }
     })
@@ -118,7 +118,7 @@ function expand (object, expansionRules, capture) {
 function redact (object, redactionRules) {
   for (const rule of redactionRules) {
     jsonpath(rule, object, (_value, _type, desc) => {
-      if (desc.parent && desc.parentProperty) {
+      if (desc.parent && desc.parentProperty !== undefined) {
         assignSafe(desc.parent, desc.parentProperty, 'redacted')
       }
     })
