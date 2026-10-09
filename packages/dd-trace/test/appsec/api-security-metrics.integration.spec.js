@@ -3,8 +3,8 @@
 const assert = require('node:assert/strict')
 const path = require('path')
 
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../integration-tests/helpers')
+const HttpRequest = require('../setup/helpers/http-client')
 
 describe('API Security Telemetry metrics', () => {
   let cwd, appFile, rulesFile
@@ -22,7 +22,7 @@ describe('API Security Telemetry metrics', () => {
   })
 
   describe('request schema', () => {
-    let agent, proc, axios
+    let agent, proc, httpRequest
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -37,7 +37,7 @@ describe('API Security Telemetry metrics', () => {
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -65,14 +65,14 @@ describe('API Security Telemetry metrics', () => {
         resolveAtFirstSuccess: true,
       })
 
-      await Promise.all([axios.post('/api_security_sampling/1', { key: 'value' }), checkTelemetryMetrics])
+      await Promise.all([httpRequest.post('/api_security_sampling/1', { key: 'value' }), checkTelemetryMetrics])
 
       assert.strictEqual(metricReceived, true)
     }).timeout(20_000)
   })
 
   describe('missing route', () => {
-    let agent, proc, axios
+    let agent, proc, httpRequest
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -88,7 +88,7 @@ describe('API Security Telemetry metrics', () => {
           DD_TRACE_RESOURCE_RENAMING_ENABLED: 'false',
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -119,7 +119,7 @@ describe('API Security Telemetry metrics', () => {
       // This path is served by raw http.createServer, so express has no route registered.
       // With resource renaming disabled, there is also no http.endpoint fallback.
       await Promise.all([
-        axios.post('/api_security_sampling_resource_renaming/1', { key: 'value' }),
+        httpRequest.post('/api_security_sampling_resource_renaming/1', { key: 'value' }),
         checkTelemetryMetrics,
       ])
 

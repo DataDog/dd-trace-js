@@ -4,13 +4,13 @@ const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
 const { inspect } = require('node:util')
 
-const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 // hapi 19.x and 20.x are EOL and hang CI: on error and 404 replies they crash inside their own
 // `Request._finalize` (null `response.statusCode`) and never finish the request, stalling the
 // worker until the job is cancelled. 21.x fixed it, so the matrix covers 16.x and 21+.
@@ -124,7 +124,7 @@ describe('Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/user/123`)
           .catch(done)
       })
@@ -140,7 +140,7 @@ describe('Plugin', () => {
           },
         })
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/user/123`)
           .catch(done)
       })
@@ -163,7 +163,7 @@ describe('Plugin', () => {
             },
           })
 
-          axios
+          httpRequest
             .post(`http://localhost:${port}/user/123`, {})
             .catch(done)
         })
@@ -185,7 +185,7 @@ describe('Plugin', () => {
           },
         })
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/user/123`)
           .catch(done)
       })
@@ -210,7 +210,7 @@ describe('Plugin', () => {
           return reply(request, h)
         })
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/user/123`)
           .catch(done)
       })
@@ -242,7 +242,7 @@ describe('Plugin', () => {
             },
           })
 
-          axios
+          httpRequest
             .get(`http://localhost:${port}/user/123`)
             .catch(done)
         })
@@ -262,7 +262,7 @@ describe('Plugin', () => {
           return reply(request, h)
         })
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/user/123`)
           .catch(done)
       })
@@ -282,7 +282,7 @@ describe('Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/user/123`, {
             headers: {
               'x-datadog-trace-id': '1234',
@@ -301,7 +301,7 @@ describe('Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/user/123`)
           .catch(() => {})
       })
@@ -332,7 +332,7 @@ describe('Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/user/123`)
           .catch(() => {})
       })
@@ -361,7 +361,7 @@ describe('Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}/user/123`)
           .catch(() => {})
       })
@@ -385,7 +385,7 @@ describe('Plugin', () => {
           },
         })
 
-        axios
+        httpRequest
           .get(`http://localhost:${port}${path}`)
           .catch(() => {})
       })

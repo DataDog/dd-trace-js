@@ -17,6 +17,7 @@ const {
   MODEL_PROVIDER,
   METADATA,
   COST_TAGS,
+  AGENT_MANIFEST,
   TOOL_DEFINITIONS,
   EXPERIMENT_INPUT,
   EXPERIMENT_OUTPUT,
@@ -46,6 +47,7 @@ const {
   DEFAULT_MODEL,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
+const { MANUAL_FRAMEWORK_NAME } = require('./agent-manifest')
 const { setGenAiApmTags } = require('./gen-ai-tags')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
@@ -216,14 +218,25 @@ class LLMObsSpanProcessor {
       meta.model_provider = (mlObsTags[MODEL_PROVIDER] || DEFAULT_MODEL).toLowerCase()
     }
 
-    if (mlObsTags[METADATA] || mlObsTags[COST_TAGS]) {
+    const name = mlObsTags[NAME] || span._name
+    const agentManifest = spanKind === 'agent' ? mlObsTags[AGENT_MANIFEST] : undefined
+
+    if (mlObsTags[METADATA] || mlObsTags[COST_TAGS] || agentManifest) {
+      /** @type {Record<string, unknown>} */
       const metadata = {}
       if (mlObsTags[METADATA]) this.#addObject(mlObsTags[METADATA], metadata)
-      // Only seed `metadata._dd` when there's something to put in it (currently cost_tags). Mirrors
-      // dd-trace-py and the cross-language wire format enforced by system-tests — metadata-only
-      // spans must not carry an empty `_dd: {}` block.
+      // Only seed `metadata._dd` when there's something to put in it. Mirrors dd-trace-py and the
+      // cross-language wire format enforced by system-tests, so metadata-only spans must not carry
+      // an empty `_dd: {}` block.
       if (mlObsTags[COST_TAGS]) {
         this.#getDdMetadata(metadata).cost_tags = mlObsTags[COST_TAGS]
+      }
+      if (agentManifest) {
+        this.#getDdMetadata(metadata).agent_manifest = {
+          framework: MANUAL_FRAMEWORK_NAME,
+          ...agentManifest,
+          name: agentManifest.name ?? name,
+        }
       }
       meta.metadata = metadata
     }
@@ -290,8 +303,6 @@ class LLMObsSpanProcessor {
     const mlApp = mlObsTags[ML_APP]
     const sessionId = mlObsTags[SESSION_ID]
     const parentId = mlObsTags[PARENT_ID_KEY]
-
-    const name = mlObsTags[NAME] || span._name
 
     const tags = this.#getTags(span, mlApp, sessionId, error)
     llmObsSpan._tags = tags

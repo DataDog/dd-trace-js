@@ -2,7 +2,6 @@
 
 const assert = require('assert')
 
-const axios = require('axios')
 const { satisfies } = require('semver')
 const msgpack = require('@msgpack/msgpack')
 
@@ -10,6 +9,7 @@ const agent = require('../plugins/agent')
 const { NODE_MAJOR, NODE_VERSION } = require('../../../../version')
 const { withVersions } = require('../setup/mocha')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const httpRequest = require('../setup/helpers/http-client')
 const { initApp, startServer } = require('./next.utils')
 const { createDeepObject, getWebSpan } = require('./utils')
 
@@ -59,7 +59,7 @@ describe('extended data collection', () => {
             },
           }
 
-          await axios.post(
+          await httpRequest.post(
             `http://127.0.0.1:${serverData.port}/api/extended-data-collection`,
             requestBody,
             {
@@ -90,7 +90,7 @@ describe('extended data collection', () => {
           const requestBody = {
             bodyParam: 'collect-standard',
           }
-          await axios.post(
+          await httpRequest.post(
             `http://127.0.0.1:${serverData.port}/api/extended-data-collection/redacted-headers`,
             requestBody,
             {
@@ -142,7 +142,7 @@ describe('extended data collection', () => {
               child2: 2,
             },
           }
-          await axios.post(
+          await httpRequest.post(
             `http://127.0.0.1:${serverData.port}/api/extended-data-collection`,
             requestBody,
             {
@@ -198,7 +198,7 @@ describe('extended data collection', () => {
             bodyParam: 'collect-standard',
             deepObject: expectedDeepTruncatedObject,
           }
-          await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
+          await httpRequest.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
             const span = getWebSpan(traces)
@@ -218,7 +218,7 @@ describe('extended data collection', () => {
             bodyParam: 'collect-standard',
             longValue: Array(4096).fill('A').join(''),
           }
-          await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
+          await httpRequest.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
             const span = getWebSpan(traces)
@@ -239,7 +239,7 @@ describe('extended data collection', () => {
             bodyParam: 'collect-standard',
             children: children.slice(0, 256),
           }
-          await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
+          await httpRequest.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
             const span = getWebSpan(traces)
@@ -251,7 +251,7 @@ describe('extended data collection', () => {
 
         it('Should always report content-type and content-length on the web span when no security event is triggered',
           async () => {
-            const response = await axios.get(
+            const response = await httpRequest.get(
               `http://127.0.0.1:${serverData.port}/api/no-event-headers`,
               { headers: { 'user-agent': 'Mozilla/5.0' } }
             )
