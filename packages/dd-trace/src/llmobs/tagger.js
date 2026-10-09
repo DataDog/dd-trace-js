@@ -196,7 +196,7 @@ class LLMObsTagger {
       storage.getStore()?.agentDeclarations
     )
     if (agentDeclarations) this.#applyAgentDeclarations(span, agentDeclarations)
-    // The span's own version wins over the enclosing contexts, matching dd-trace-py.
+    // The span's own version wins over the enclosing contexts.
     if (agentVersion) this._setTag(span, AGENT_VERSION, agentVersion)
 
     // apply annotation context name
