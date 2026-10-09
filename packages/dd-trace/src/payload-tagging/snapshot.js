@@ -50,6 +50,11 @@ const getDataViewBuffer = getterOf(DataView.prototype, 'buffer')
 const getDateTime = Date.prototype.getTime
 const getMapSize = getterOf(Map.prototype, 'size')
 const getSetSize = getterOf(Set.prototype, 'size')
+// Available in Node 18, despite the experimental label on older LTS lines.
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
+const webStreamPrototype = globalThis.ReadableStream?.prototype
+const getStreamLocked = webStreamPrototype && getterOf(webStreamPrototype, 'locked')
+const maxStreamPrototypeDepth = 100
 
 /**
  * A trusted native typed-array constructor, usable with `new`.
@@ -115,21 +120,40 @@ const maxBufferPrefixBytes = maxValueLength * 3 + 4
  */
 
 /**
- * Detect Node.js streams and web ReadableStreams. Streams are never
- * enumerated, cloned, drained, or otherwise touched: their internals hold
- * circular references (sockets, parsers, readable state), and consuming them
- * would corrupt the application's own use of the payload.
+ * Detect native streams and descriptor-backed getReader methods without
+ * executing payload accessors. Accessor-only duck types are ordinary payloads,
+ * not stream evidence. Streams are never enumerated, cloned, drained, or locked:
+ * their internals hold circular references (sockets, parsers, readable state),
+ * and consuming them would corrupt the application's own use of the payload.
  *
  * @param {object} value
  */
 function isStream (value) {
-  if (value instanceof Stream) {
-    return true
+  // Inspect the effective descriptor without executing an accessor outside
+  // admitted copying. Own nonfunctions/accessors shadow inherited methods.
+  // Native prototype recognition shares this bound, rather than using an
+  // unbounded instanceof walk through a payload-controlled prototype chain.
+  let current = value
+  let descriptor
+  for (let depth = 0; current !== null && depth < maxStreamPrototypeDepth; depth++) {
+    if (current === Stream.prototype || current === webStreamPrototype) return true
+    descriptor ??= Object.getOwnPropertyDescriptor(current, 'getReader')
+    if (typeof descriptor?.value === 'function') return true
+    current = Object.getPrototypeOf(current)
   }
-  // Duck-type web ReadableStreams. A plain object exposing getReader is
-  // treated as a stream as well: truncating a stream-like value is safe,
-  // whereas enumerating an unknown exotic object is not.
-  return typeof value.getReader === 'function'
+  // An exhausted inspection bound is ambiguous, so truncate conservatively.
+  if (current !== null) return true
+  if (descriptor && getStreamLocked) {
+    // A foreign native stream may shadow getReader. Check its native brand
+    // without calling getReader or inspecting a brand-check exception.
+    try {
+      getStreamLocked.call(value)
+      return true
+    } catch {
+      return false
+    }
+  }
+  return false
 }
 
 /**
@@ -302,8 +326,9 @@ function createSnapshotBudget () {
  *   incomplete.
  * - Dates, Maps and Sets become isolated native leaves without attached
  *   properties. Dates retain their time value; collection entries are not
- *   traversed. Nonempty collections mark the snapshot incomplete so predicates
- *   cannot silently change redaction decisions after their contents are omitted.
+ *   traversed. Discarded enumerable fields and nonempty collections mark the
+ *   snapshot incomplete so predicates cannot silently change redaction or
+ *   expansion decisions after their data is omitted.
  * - Buffers and ArrayBuffer views are copied into fresh storage within the
  *   binary budget so path-based redaction cannot mutate caller-owned bytes.
  *   An over-budget Buffer keeps only the prefix its string tag renders.
@@ -401,24 +426,28 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       return
     }
 
+    // Opaque leaves discard arbitrary fields: key enumeration detects lost
+    // predicate data without ever reading getters or traversing their values.
+    /* eslint-disable no-restricted-syntax */
     if (isDate(value)) {
+      if (Object.keys(value).length !== 0) incomplete = true
       assign(container, key, new Date(getDateTime.call(value)), root)
       return
     }
     if (isMap(value)) {
-      if (getMapSize?.call(value) !== 0) incomplete = true
+      if (getMapSize?.call(value) !== 0 || Object.keys(value).length !== 0) incomplete = true
       assign(container, key, new Map(), root)
       return
     }
     if (isSet(value)) {
-      if (getSetSize?.call(value) !== 0) incomplete = true
+      if (getSetSize?.call(value) !== 0 || Object.keys(value).length !== 0) incomplete = true
       assign(container, key, new Set(), root)
       return
     }
+    /* eslint-enable no-restricted-syntax */
 
     if (
-      // Structural checks come first: stream duck typing reads a payload
-      // property, which must not run for values rejected anyway.
+      // Reject omitted work before even inspecting stream descriptors.
       hasAncestor(ancestors, value) ||
       depth >= maxDepth ||
       (Array.isArray(value) && value.length > maxArrayLength) ||
@@ -429,7 +458,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       return
     }
 
-    const copy = Array.isArray(value) ? [] : Object.create(null)
+    const copy = Array.isArray(value) ? [] : {}
     assign(container, key, copy, root)
     stack.push({
       source: value,

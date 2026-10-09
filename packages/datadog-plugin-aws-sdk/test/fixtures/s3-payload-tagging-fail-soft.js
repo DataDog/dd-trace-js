@@ -59,10 +59,36 @@ function fail () {
 }
 
 async function main () {
+  /** @type {{ Bucket: string, Key: string, Body: Buffer, boom?: unknown }} */
   const params = { Bucket: 's3-fail-soft', Key: 'first', Body: Buffer.from('original bytes') }
-  let restore = () => {}
+  let restore
   if (scenario === 'snapshot') {
-    Object.defineProperty(params, 'getReader', { get: fail })
+    const original = Object.getOwnPropertyDescriptor(plugin, 'payloadTaggingRules')
+    const rules = plugin.payloadTaggingRules
+    // Install only at the capture boundary, after SDK parameter handling.
+    // The admitted getter removes itself before throwing, so it cannot leak
+    // into SDK serialization or the next request's parameter spread.
+    Object.defineProperty(plugin, 'payloadTaggingRules', {
+      configurable: true,
+      get () {
+        if (enabled && failures === 0) {
+          Object.defineProperty(params, 'boom', {
+            configurable: true,
+            enumerable: true,
+            get () {
+              delete params.boom
+              return fail()
+            },
+          })
+        }
+        return rules
+      },
+    })
+    restore = () => {
+      delete params.boom
+      if (original) Object.defineProperty(plugin, 'payloadTaggingRules', original)
+      else delete plugin.payloadTaggingRules
+    }
   } else {
     const property = scenario === 'request' ? 'payloadTaggingRules' : 'extractResponseBody'
     const original = Object.getOwnPropertyDescriptor(plugin, property)
