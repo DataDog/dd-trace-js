@@ -49,6 +49,7 @@ const missingPlugins = [
 
 // instrumentations that do not have a hook, but are still instrumented
 const missingInstrumentationHooks = [
+  'ai',
   'azure-cosmos',
   'bullmq',
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
@@ -199,6 +200,7 @@ describe('Plugin Structure Validation', () => {
       '@supabase/postgrest-js',
       '@supabase/realtime-js',
       '@supabase/storage-js',
+      'ai',
       'bullmq',
       'mercurius',
       'postgres',

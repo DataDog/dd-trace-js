@@ -61,7 +61,6 @@ module.exports = {
   '@wdio/local-runner': { esmFirst: true, fn: () => require('../webdriverio') },
   '@wdio/utils': { esmFirst: true, fn: () => require('../webdriverio') },
   aerospike: () => require('../aerospike'),
-  ai: () => require('../ai'),
   amqp10: () => require('../amqp10'),
   amqplib: () => require('../amqplib'),
   avsc: () => require('../avsc'),

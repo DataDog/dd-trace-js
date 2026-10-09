@@ -8,6 +8,9 @@ const { pathToFileURL, fileURLToPath } = require('node:url')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const {
+  getBundlerActivationModules,
+} = require('../datadog-instrumentations/src/helpers/rewriter/instrumentation-registry')
 const log = require('./src/log')
 const { createEsmResolver } = require('./src/resolver')
 const { isESMFile, processModule } = require('./src/utils')
@@ -47,6 +50,10 @@ for (const [name, instrumentation] of Object.entries(instrumentations)) {
   for (const entry of instrumentation) {
     addModuleOfInterest(name, entry.file)
   }
+}
+const bundlerActivationModules = new Set(getBundlerActivationModules())
+for (const name of bundlerActivationModules) {
+  addModuleOfInterest(name)
 }
 
 const CHANNEL = 'dd-trace:bundler:load'
@@ -352,6 +359,14 @@ ${[...setters.values()].join(';\n')};
 
 register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)});
 `
+          // No import-in-the-middle hook activates these modules, so publish the activation directly.
+          if (bundlerActivationModules.has(data.pkg)) {
+            const payload = { activate: true, package: data.pkg, version: data.version, path: pkgPath }
+            contents += `
+import $dd_dc from ${JSON.stringify(require.resolve('dc-polyfill'))};
+$dd_dc.channel(${JSON.stringify(CHANNEL)}).publish(${JSON.stringify(payload)});
+`
+          }
         } else {
           contents = fs.readFileSync(args.path, 'utf8')
         }

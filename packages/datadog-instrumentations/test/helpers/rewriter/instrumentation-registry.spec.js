@@ -6,6 +6,8 @@ const { runInNewContext } = require('node:vm')
 
 const {
   getActivationSetup,
+  getBundlerActivationModules,
+  isBundlerActivationEnabled,
   isRewriteActivationEnabled,
   instrumentations,
   registry,
@@ -24,14 +26,51 @@ describe('instrumentation registry', () => {
       for (const { module } of entryInstrumentations) {
         assert.strictEqual(isRewriteActivationEnabled(module.name), modules.has(module.name))
         assert.strictEqual(getActivationSetup(module.name), modules.has(module.name) ? config?.setup : undefined)
+        assert.strictEqual(isBundlerActivationEnabled(module.name), modules.has(module.name) && !!config?.bundlers)
       }
     }
+  })
+
+  it('activates ai in esbuild and webpack bundles', () => {
+    assert.deepStrictEqual([...getBundlerActivationModules()], ['ai'])
   })
 
   it('returns false for unknown module names', () => {
     assert.strictEqual(isRewriteActivationEnabled('not-a-registered-module'), false)
     assert.strictEqual(getActivationSetup('not-a-registered-module'), undefined)
+    assert.strictEqual(isBundlerActivationEnabled('not-a-registered-module'), false)
   })
+
+  it('enables bundler activation only for the activation modules of entries that opt in', () => {
+    const registry = loadRegistry([
+      {
+        activate: { modules: ['bundled'], bundlers: true },
+        instrumentations: [{ module: { name: 'bundled' } }, { module: { name: 'bundled-helper' } }],
+      },
+      { activate: { bundlers: false }, instrumentations: [{ module: { name: 'opted-out' } }] },
+      { activate: true, instrumentations: [{ module: { name: 'flagged' } }] },
+      { instrumentations: [{ module: { name: 'rewrite-only' } }] },
+    ])
+
+    assert.deepStrictEqual([...registry.getBundlerActivationModules()], ['bundled'])
+    assert.strictEqual(registry.isBundlerActivationEnabled('bundled'), true)
+    for (const name of ['bundled-helper', 'opted-out', 'flagged', 'rewrite-only']) {
+      assert.strictEqual(registry.isBundlerActivationEnabled(name), false)
+    }
+    assert.strictEqual(registry.isRewriteActivationEnabled('opted-out'), true)
+  })
+
+  for (const bundlers of [null, 0, 1, 'true', {}, []]) {
+    it(`rejects invalid bundler activation ${String(bundlers)}`, () => {
+      assert.throws(() => loadRegistry([{
+        activate: { modules: ['entry'], bundlers },
+        instrumentations: [{ module: { name: 'entry' } }],
+      }]), {
+        name: 'TypeError',
+        message: 'Instrumentation registry activate.bundlers must be a boolean',
+      })
+    })
+  }
 
   it('activates every rewrite target in an entry that opts in without naming modules', () => {
     const setup = () => {}

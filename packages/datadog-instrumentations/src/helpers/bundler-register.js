@@ -13,7 +13,7 @@ const {
 } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
-const { isRewriteActivationEnabled } = require('./rewriter/targets')
+const { isBundlerActivationEnabled, isRewriteActivationEnabled } = require('./rewriter/targets')
 const disabledInstrumentations = getDisabledInstrumentations()
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
@@ -95,7 +95,8 @@ dc.subscribe(CHANNEL, (message) => {
   const name = payload.package
   if (disabledInstrumentations.has(name)) return
 
-  if (payload.activate && isRewriteActivationEnabled(name)) {
+  // esbuild and webpack publish without `activate` since they do not rewrite; some modules still opt in.
+  if ((payload.activate || isBundlerActivationEnabled(name)) && isRewriteActivationEnabled(name)) {
     activate(name, payload.version)
     return
   }

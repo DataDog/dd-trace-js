@@ -54,4 +54,17 @@ function isRewriteActivationEnabled (moduleName) {
   return require('./instrumentation-registry').isRewriteActivationEnabled(moduleName)
 }
 
-module.exports = { getRewriteTarget, getRewriteTargetNames, isRewriteActivationEnabled, isRewriteTargetName }
+/**
+ * @param {string} moduleName
+ */
+function isBundlerActivationEnabled (moduleName) {
+  return require('./instrumentation-registry').isBundlerActivationEnabled(moduleName)
+}
+
+module.exports = {
+  getRewriteTarget,
+  getRewriteTargetNames,
+  isBundlerActivationEnabled,
+  isRewriteActivationEnabled,
+  isRewriteTargetName,
+}

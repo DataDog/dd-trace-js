@@ -155,5 +155,21 @@ describe('datadog-esbuild plugin', () => {
 
       assert.match(result.contents, /set\["Client"\]/)
     })
+
+    it('publishes the activation of bundler-activated packages that no hook activates', async () => {
+      const onLoad = captureOnLoad()
+      const modulePath = path.join(__dirname, 'resources/export-method.mjs')
+      const load = pkg => onLoad({
+        path: `${modulePath}._dd_esbuild_intercepted`,
+        pluginData: { internal: false, isESM: true, pkg, pkgOfInterest: true, raw: pkg, version: '7.0.0' },
+      })
+
+      const [activated, hooked] = await Promise.all([load('ai'), load('fixture')])
+
+      const publication = '.publish({"activate":true,"package":"ai","version":"7.0.0","path":"ai"});'
+      assert.ok(activated.contents.includes(`.channel("dd-trace:bundler:load")${publication}`), activated.contents)
+      assert.ok(activated.contents.includes(`import $dd_dc from ${JSON.stringify(require.resolve('dc-polyfill'))};`))
+      assert.doesNotMatch(hooked.contents, /dd-trace:bundler:load/)
+    })
   })
 })

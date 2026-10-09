@@ -98,6 +98,20 @@ subscriber order relative to plugins. Re-entrant activation using the same setup
 returns. A throwing setup permanently prevents activation for every package sharing that callback. Conflicting
 setup callbacks for one package are rejected.
 
+esbuild and webpack do not rewrite source, so they skip pure integrations. When activation alone is useful in those
+bundles, because the library publishes its own diagnostic channels, set `bundlers: true`:
+
+```javascript
+{
+  activate: { setup: activation => require('../../ai')(activation.version), bundlers: true },
+  instrumentations: require('./instrumentations/ai'),
+}
+```
+
+Both bundlers then intercept the activation packages and run the same activation, setup included, when the bundled
+package loads. esbuild covers CommonJS and ESM packages; webpack covers CommonJS only. Rewritten channels still never
+publish in those bundles.
+
 ## Config Schema
 
 ```javascript
