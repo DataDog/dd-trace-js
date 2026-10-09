@@ -6,6 +6,7 @@ const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../../setup/core')
+const { USER_KEEP, USER_REJECT } = require('../../../../../ext/priority')
 const tagsExt = require('../../../../../ext/tags')
 
 const ERROR = tagsExt.ERROR
@@ -14,6 +15,7 @@ const HTTP_ENDPOINT = tagsExt.HTTP_ENDPOINT
 const HTTP_REQUEST_HEADERS = tagsExt.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tagsExt.HTTP_RESPONSE_HEADERS
 const HTTP_ROUTE = tagsExt.HTTP_ROUTE
+const MANUAL_DROP = tagsExt.MANUAL_DROP
 const RESOURCE_NAME = tagsExt.RESOURCE_NAME
 
 describe('plugins/util/web', () => {
@@ -432,6 +434,132 @@ describe('plugins/util/web', () => {
 
       assert.strictEqual(spanContext.getTag('service.name'), 'integration-svc')
       assert.strictEqual(spanContext.getTag(SVC_SRC_KEY), undefined)
+    })
+  })
+
+  describe('request exclusion', () => {
+    beforeEach(() => {
+      req.url = '/'
+      web.plugin = null
+    })
+
+    function assertExcluded (span) {
+      const spanContext = span.context()
+
+      assert.strictEqual(spanContext.getTag(MANUAL_DROP), true)
+      assert.strictEqual(spanContext._sampling.priority, USER_REJECT)
+      assert.strictEqual(spanContext._trace.isRecording, false)
+    }
+
+    function assertRecording (span) {
+      const spanContext = span.context()
+
+      assert.strictEqual(spanContext.hasTag(MANUAL_DROP), false)
+      assert.notStrictEqual(spanContext._sampling.priority, USER_REJECT)
+      assert.notStrictEqual(spanContext._trace.isRecording, false)
+    }
+
+    describe('with disabled OPTIONS request tracing', () => {
+      beforeEach(() => {
+        config = web.normalizeConfig({ DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED: false })
+      })
+
+      it('drops OPTIONS requests', () => {
+        req.method = 'OPTIONS'
+
+        assertExcluded(web.startSpan(tracer, config, req, res, 'test.request'))
+      })
+
+      it('keeps tracing other request methods', () => {
+        req.method = 'GET'
+
+        assertRecording(web.startSpan(tracer, config, req, res, 'test.request'))
+      })
+
+      it('drops OPTIONS requests on the serverless path that skips setConfig', () => {
+        req.method = 'OPTIONS'
+        web.patch(req)
+
+        assertExcluded(web.startServerlessSpanWithInferredProxy(tracer, config, 'test.request', req))
+      })
+
+      it('keeps the OPTIONS request in the extracted upstream trace', () => {
+        req.method = 'OPTIONS'
+        req.headers['x-datadog-trace-id'] = '123'
+        req.headers['x-datadog-parent-id'] = '456'
+
+        const span = web.startSpan(tracer, config, req, res, 'test.request')
+
+        assertExcluded(span)
+        assert.strictEqual(span.context().toTraceId(), '123')
+        assert.strictEqual(span.context()._parentId.toString(10), '456')
+      })
+
+      it('overrides a keep decision made upstream', () => {
+        req.method = 'OPTIONS'
+        req.headers['x-datadog-trace-id'] = '123'
+        req.headers['x-datadog-parent-id'] = '456'
+        req.headers['x-datadog-sampling-priority'] = String(USER_KEEP)
+        req.headers['x-datadog-tags'] = '_dd.p.dm=-4'
+
+        const span = web.startSpan(tracer, config, req, res, 'test.request')
+
+        assertExcluded(span)
+        assert.strictEqual(span.context()._trace.tags['_dd.p.dm'], undefined)
+      })
+
+      it('does not drop a span that was already created for the request', () => {
+        req.method = 'GET'
+        const span = web.startSpan(tracer, config, req, res, 'test.request')
+
+        req.method = 'OPTIONS'
+        const reused = web.startSpan(tracer, config, req, res, 'test.request')
+
+        assert.strictEqual(reused, span)
+        assertRecording(reused)
+      })
+    })
+
+    describe('with enabled OPTIONS request tracing', () => {
+      it('keeps tracing OPTIONS requests when enabled explicitly', () => {
+        config = web.normalizeConfig({ DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED: true })
+        req.method = 'OPTIONS'
+
+        assertRecording(web.startSpan(tracer, config, req, res, 'test.request'))
+      })
+
+      it('keeps tracing OPTIONS requests when the option is absent', () => {
+        req.method = 'OPTIONS'
+
+        assertRecording(web.startSpan(tracer, config, req, res, 'test.request'))
+      })
+    })
+
+    describe('with a blocklist', () => {
+      beforeEach(() => {
+        config = web.normalizeConfig({ blocklist: ['/health'] })
+      })
+
+      it('drops requests matching the blocklist', () => {
+        req.url = '/health'
+
+        assertExcluded(web.startSpan(tracer, config, req, res, 'test.request'))
+      })
+
+      it('overrides a keep decision made upstream', () => {
+        req.url = '/health'
+        req.headers['x-datadog-trace-id'] = '123'
+        req.headers['x-datadog-parent-id'] = '456'
+        req.headers['x-datadog-sampling-priority'] = String(USER_KEEP)
+
+        assertExcluded(web.startSpan(tracer, config, req, res, 'test.request'))
+      })
+
+      it('keeps tracing requests outside the blocklist', () => {
+        req.url = '/user'
+
+        assertRecording(web.startSpan(tracer, config, req, res, 'test.request'))
+      })
     })
   })
 
