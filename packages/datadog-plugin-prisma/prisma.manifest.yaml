@@ -1,0 +1,10 @@
+_v: 1
+name: prisma
+display_name: Prisma
+description: Instruments Prisma Client database operations and transactions, including query engine database queries.
+packages:
+- name: '@prisma/client'
+category:
+- db.client
+systems: []
+creation_date: '2025-06-23'

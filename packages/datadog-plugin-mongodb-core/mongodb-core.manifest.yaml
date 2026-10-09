@@ -1,0 +1,13 @@
+_v: 1
+name: mongodb-core
+display_name: MongoDB
+description: Instruments MongoDB client queries, commands, cursor operations, and bulk writes, with Database Monitoring propagation
+  and NoSQL-injection analysis of collection filters.
+packages:
+- name: mongodb
+- name: mongodb-core
+category:
+- db.client
+systems:
+- mongodb
+creation_date: '2018-05-17'

@@ -1,0 +1,12 @@
+_v: 1
+name: iovalkey
+display_name: iovalkey
+description: Instruments Valkey client commands executed through iovalkey, recording command details, connection information,
+  and errors.
+packages:
+- name: iovalkey
+category:
+- db.client
+systems:
+- valkey
+creation_date: '2025-05-21'
