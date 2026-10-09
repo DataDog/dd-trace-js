@@ -244,7 +244,8 @@ function onEnter () {
   if (!started) return
   const span = getActiveSpan()
   if (!span) {
-    clearContext()
+    // Clearing an empty frame would still make pprof install a new AsyncContextFrame.
+    if (getContext() !== undefined) clearContext()
     return
   }
   const context = getOrBuildContext(span)

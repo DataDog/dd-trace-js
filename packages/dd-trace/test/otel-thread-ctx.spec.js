@@ -304,10 +304,23 @@ describe('otel-thread-ctx', () => {
       pprofStub.otelThreadCtx.clearContext.resetHistory()
     })
 
-    it('clearContext when no active span', () => {
+    it('clearContext when no active span and a context is installed', () => {
+      activeSpan = makeSpan()
+      enterCh.publish()
+      setActive.resetHistory()
+      activeSpan = null
       enterCh.publish()
       sinon.assert.calledOnce(pprofStub.otelThreadCtx.clearContext)
       sinon.assert.calledOnceWithExactly(setActive)
+      assert.equal(activeContext, undefined)
+      assert.equal(constructedContexts.length, 1)
+    })
+
+    it('does not clearContext when no active span and nothing is installed', () => {
+      enterCh.publish()
+      sinon.assert.notCalled(pprofStub.otelThreadCtx.clearContext)
+      sinon.assert.notCalled(setActive)
+      assert.equal(activeContext, undefined)
       assert.equal(constructedContexts.length, 0)
     })
 
