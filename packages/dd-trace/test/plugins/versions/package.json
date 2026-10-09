@@ -32,7 +32,7 @@
     "@azure/cosmos": "4.10.1",
     "@azure/event-hubs": "6.0.4",
     "@azure/functions": "4.16.5",
-    "@azure/service-bus": "7.9.5",
+    "@azure/service-bus": "7.10.0",
     "@babel/core": "8.0.6",
     "@babel/preset-typescript": "8.0.1",
     "@confluentinc/kafka-javascript": "1.10.1",
