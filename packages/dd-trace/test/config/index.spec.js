@@ -798,6 +798,8 @@ describe('Config', () => {
       })
       assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
       assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
+      assert.ok(!Object.hasOwn(config.tags, 'service.name'))
+      assert.ok(!Object.hasOwn(config.tags, 'service.version'))
     })
 
     it('maps deployment.environment.name', () => {

@@ -874,6 +874,8 @@ describe('OpenTelemetry Traces', () => {
       process.env.DD_SERVICE = 'my-trace-service'
       process.env.DD_VERSION = 'v2.0.0'
       process.env.DD_ENV = 'staging'
+      process.env.DD_TAGS = 'service.name:tag-service,service.version:tag-version,' +
+        'deployment.environment:legacy,deployment.environment.name:tag-env'
       process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
 
       mockOtlpExport((decoded) => {
@@ -899,6 +901,7 @@ describe('OpenTelemetry Traces', () => {
             'telemetry.sdk.language': 'nodejs',
           }
         )
+        assert.strictEqual(resourceAttrs['deployment.environment'], undefined)
         assert.ok(resourceAttrs['telemetry.sdk.version'], 'telemetry.sdk.version should be set')
       })
 

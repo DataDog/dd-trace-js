@@ -27,11 +27,16 @@ function refreshActiveResourceAttributes () {
  */
 function buildResourceAttributes (config) {
   const { service, version, env, ...tags } = config.tags
+  delete tags['service.name']
+  delete tags['service.version']
+  delete tags['deployment.environment']
+  delete tags['deployment.environment.name']
+
   const resourceAttributes = {
+    ...tags,
     'service.name': config.service,
     'service.version': config.version,
     'deployment.environment.name': config.env,
-    ...tags,
   }
 
   if (config.reportHostname) resourceAttributes['host.name'] = os.hostname()

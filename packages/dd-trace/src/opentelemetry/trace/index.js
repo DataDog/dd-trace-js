@@ -34,7 +34,14 @@ const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
  * @returns {import('@opentelemetry/api').Attributes} Resource attributes
  */
 function buildResourceAttributes (config) {
+  const { service, version, env, ...filteredTags } = config.tags
+  delete filteredTags['service.name']
+  delete filteredTags['service.version']
+  delete filteredTags['deployment.environment']
+  delete filteredTags['deployment.environment.name']
+
   const resourceAttributes = {
+    ...filteredTags,
     'service.name': config.service,
     'telemetry.sdk.name': 'datadog',
     'telemetry.sdk.version': VERSION,
@@ -43,9 +50,6 @@ function buildResourceAttributes (config) {
 
   if (config.env) resourceAttributes['deployment.environment.name'] = config.env
   if (config.version) resourceAttributes['service.version'] = config.version
-
-  const { service, version, env, ...filteredTags } = config.tags
-  Object.assign(resourceAttributes, filteredTags)
 
   // Tracer-owned adoption markers; set after the global tags so a user tag can't contradict them.
   resourceAttributes[SDK_OTLP_EXPORT_KEY] = 'true'
