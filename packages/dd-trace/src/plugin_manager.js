@@ -119,11 +119,20 @@ module.exports = class PluginManager {
         (!Plugin.optIn || isTrue(getEnabled(Plugin))),
     }
 
+    const sharedConfig = this.#getSharedConfig(name)
+
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
     const config = {
-      ...this.#getSharedConfig(name),
+      ...sharedConfig,
       ...pluginConfig,
     }
+
+    // Remote configuration must be able to disable DBM propagation even when an integration has a
+    // programmatic override. Once RC relinquishes control, the stored integration config wins again.
+    if (this._tracerConfig.getOrigin?.('dbmPropagationMode') === 'remote_config') {
+      config.dbmPropagationMode = sharedConfig.dbmPropagationMode
+    }
+
     const plugin = this._pluginsByName[name]
     try {
       plugin.configure(config)
