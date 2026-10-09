@@ -5,12 +5,16 @@ const { Readable } = require('node:stream')
 
 const { after, before, describe, it } = require('mocha')
 
+const { JSONPath } = require('../../../vendor/dist/jsonpath-plus')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { callViaCallback, setup, withAwsSdkVersions } = require('./spec_helpers')
 
 const bodyContent = 'payload-tagging-body-content'
 const bucketName = 's3-payload-tagging-test'
 const failingBucketName = 's3-payload-tagging-capture-failure'
+// Shared by the failing-redaction fixture below and its precondition test.
+const failingRedactionRule = '$[?(@.missing.child)]'
 
 /**
  * @param {string} version
@@ -143,6 +147,30 @@ describe('Plugin', () => {
     })
   })
 
+  describe('aws-sdk (s3 payload tagging) fixture precondition', () => {
+    it('vendored JSONPath throws for the failing-redaction rule on representative S3 parameters', () => {
+      assert.throws(
+        () => JSONPath({
+          path: failingRedactionRule,
+          json: {
+            Bucket: failingBucketName,
+            Key: 'capture-failure',
+            Body: Buffer.from(bodyContent),
+          },
+        }),
+        {
+          name: 'Error',
+          message: /@\.missing\.child/,
+        },
+        // The S3 fail-soft fixture relies on this rule throwing during request
+        // payload tagging. If JSONPath semantics change so it no longer throws,
+        // the fixture no longer exercises the fail-soft path and must be revisited.
+        'the S3 fail-soft fixture requires this rule to throw on representative S3 parameters; ' +
+          'revisit the fixture if JSONPath semantics change'
+      )
+    })
+  })
+
   describe('aws-sdk (s3 payload tagging)', function () {
     setup()
     this.timeout(30000)
@@ -266,9 +294,10 @@ describe('Plugin', () => {
           return agent.load('aws-sdk', {}, {
             cloudPayloadTagging: {
               // A filter that dereferences a missing nested value throws inside
-              // the vendored JSONPath implementation for any object payload,
+              // the vendored JSONPath implementation for representative S3
+              // request payloads (pinned by the fixture precondition test),
               // which exercises the fail-soft path through valid SDK input.
-              request: '$[?(@.missing.child)]',
+              request: failingRedactionRule,
               response: 'all',
               maxDepth: 10,
             },
