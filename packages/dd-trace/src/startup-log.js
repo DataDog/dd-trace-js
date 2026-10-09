@@ -79,8 +79,6 @@ function logGenericError (message) {
 function configInfo () {
   const url = config.url
   const profilingEnabled = config.profiling.DD_PROFILING_ENABLED
-  const inject = config.tracePropagationStyle?.inject?.join(',')
-  const extract = config.tracePropagationStyle?.extract?.join(',')
   // PrioritySampler appends the global rule after accepted custom rules and publishes the normalized list.
   const globalRule = config.sampler.sampleRate === undefined ? undefined : samplingRules.at(-1)
   let samplerName
@@ -135,8 +133,6 @@ function configInfo () {
     DD_TRACE_OTEL_ENABLED: !!config.DD_TRACE_OTEL_ENABLED,
     DD_TRACE_OTEL_SEMANTICS_ENABLED: !!config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
     DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: !!config.spanRemoveIntegrationFromService,
-    DD_TRACE_PROPAGATION_STYLE_INJECT: inject ?? null,
-    DD_TRACE_PROPAGATION_STYLE_EXTRACT: extract ?? null,
     // JSON omits undefined values; keep unset settings distinguishable from unsupported ones.
     OTEL_BSP_MAX_EXPORT_BATCH_SIZE: config.OTEL_BSP_MAX_EXPORT_BATCH_SIZE ?? null,
     OTEL_BSP_MAX_QUEUE_SIZE: config.OTEL_BSP_MAX_QUEUE_SIZE ?? null,
@@ -165,7 +161,7 @@ function configInfo () {
     OTEL_METRIC_EXPORT_INTERVAL: config.OTEL_METRIC_EXPORT_INTERVAL ?? null,
     OTEL_METRIC_EXPORT_TIMEOUT: config.OTEL_METRIC_EXPORT_TIMEOUT ?? null,
     OTEL_METRICS_EXPORTER: config.OTEL_METRICS_EXPORTER ?? null,
-    OTEL_PROPAGATORS: inject === extract ? inject ?? null : null,
+    OTEL_PROPAGATORS: config.tracePropagationStyle ?? { inject: [], extract: [] },
     OTEL_RESOURCE_ATTRIBUTES: config.OTEL_RESOURCE_ATTRIBUTES ?? {},
     OTEL_SDK_DISABLED: config.OTEL_SDK_DISABLED ?? null,
     OTEL_SERVICE_NAME: config.service ?? null,

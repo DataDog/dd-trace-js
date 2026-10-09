@@ -137,8 +137,6 @@ describe('startup logging', () => {
       DD_TRACE_OTEL_ENABLED: false,
       DD_TRACE_OTEL_SEMANTICS_ENABLED: false,
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: false,
-      DD_TRACE_PROPAGATION_STYLE_INJECT: null,
-      DD_TRACE_PROPAGATION_STYLE_EXTRACT: null,
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE: null,
       OTEL_BSP_MAX_QUEUE_SIZE: null,
       OTEL_BSP_SCHEDULE_DELAY: null,
@@ -164,7 +162,7 @@ describe('startup logging', () => {
       OTEL_METRIC_EXPORT_INTERVAL: null,
       OTEL_METRIC_EXPORT_TIMEOUT: null,
       OTEL_METRICS_EXPORTER: null,
-      OTEL_PROPAGATORS: null,
+      OTEL_PROPAGATORS: { inject: [], extract: [] },
       OTEL_RESOURCE_ATTRIBUTES: {},
       OTEL_SDK_DISABLED: null,
       OTEL_SERVICE_NAME: 'test',
@@ -494,7 +492,10 @@ describe('resolved OpenTelemetry startup configuration', () => {
       OTEL_METRIC_EXPORT_INTERVAL: 10000,
       OTEL_METRIC_EXPORT_TIMEOUT: 7500,
       OTEL_METRICS_EXPORTER: null,
-      OTEL_PROPAGATORS: 'datadog,tracecontext,baggage',
+      OTEL_PROPAGATORS: {
+        inject: ['datadog', 'tracecontext', 'baggage'],
+        extract: ['datadog', 'tracecontext', 'baggage'],
+      },
       OTEL_RESOURCE_ATTRIBUTES: {},
       OTEL_SDK_DISABLED: true,
       OTEL_SERVICE_NAME: 'startup-test',
@@ -524,12 +525,32 @@ describe('resolved OpenTelemetry startup configuration', () => {
     assertObjectContains(logConfiguration(), {
       OTEL_SERVICE_NAME: 'otel-service',
       OTEL_LOG_LEVEL: 'INFO',
-      OTEL_PROPAGATORS: 'tracecontext,baggage',
-      DD_TRACE_PROPAGATION_STYLE_INJECT: 'tracecontext,baggage',
-      DD_TRACE_PROPAGATION_STYLE_EXTRACT: 'tracecontext,baggage',
+      OTEL_PROPAGATORS: { inject: ['tracecontext', 'baggage'], extract: ['tracecontext', 'baggage'] },
       OTEL_RESOURCE_ATTRIBUTES: { env: 'production', custom: 'value' },
     })
   })
+
+  for (const styles of [
+    { inject: ['tracecontext', 'baggage'], extract: ['tracecontext', 'baggage'] },
+    { inject: ['tracecontext'], extract: ['datadog', 'tracecontext'] },
+    { inject: [], extract: [] },
+  ]) {
+    it(`should preserve both propagation directions in startup and flare: ${JSON.stringify(styles)}`, () => {
+      const config = getConfigFresh({ tracePropagationStyle: styles })
+      const before = JSON.stringify(config.tracePropagationStyle)
+      startupLog.setStartupLogConfig(config)
+      startupLog.setStartupLogPluginManager({ _pluginsByName: {} })
+      startupLog.startupLog()
+      const info = JSON.parse(warn.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+      const flare = JSON.parse(JSON.stringify(startupLog.tracerInfo()))
+      for (const output of [info, flare]) {
+        assert.deepEqual(output.OTEL_PROPAGATORS, styles)
+        assert.equal(Object.hasOwn(output, 'DD_TRACE_PROPAGATION_STYLE_INJECT'), false)
+        assert.equal(Object.hasOwn(output, 'DD_TRACE_PROPAGATION_STYLE_EXTRACT'), false)
+      }
+      assert.equal(JSON.stringify(config.tracePropagationStyle), before)
+    })
+  }
 
   for (const codeOptions of [false, true]) {
     it(`should honor ${codeOptions ? 'code' : 'Datadog environment'} precedence over OTel aliases`, () => {
@@ -548,9 +569,9 @@ describe('resolved OpenTelemetry startup configuration', () => {
       assertObjectContains(logConfiguration(options), {
         OTEL_SERVICE_NAME: codeOptions ? 'code-service' : 'dd-service',
         OTEL_LOG_LEVEL: codeOptions ? 'warn' : 'error',
-        OTEL_PROPAGATORS: null,
-        DD_TRACE_PROPAGATION_STYLE_INJECT: codeOptions ? 'datadog' : 'baggage',
-        DD_TRACE_PROPAGATION_STYLE_EXTRACT: codeOptions ? 'b3' : 'tracecontext',
+        OTEL_PROPAGATORS: codeOptions
+          ? { inject: ['datadog'], extract: ['b3'] }
+          : { inject: ['baggage'], extract: ['tracecontext'] },
       })
     })
   }
