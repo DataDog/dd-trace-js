@@ -57,9 +57,8 @@ source commit and branch for API lookup. Default-branch, tag, native GitLab MR, 
 from a GitLab MR IID. Missing open PRs skip; ambiguous matches and API errors remain
 visible in the optional downstream job.
 
-`SLS_PR_BENCHMARK_CI_BRANCH` selects the serverless-tools branch/tag for this feature.
-For validation, point it to the serverless-tools feature branch without changing
-`SLS_CI_BRANCH` for existing regression tests. Before merging the enablement, pin
-it to the released serverless-tools tag. Deploy downstream support before
-enabling this trigger. The jobs avoid automatic interruption once started, but
-this remains best-effort measurement: failed or cancelled jobs can miss commits.
+`SLS_PR_BENCHMARK_CI_BRANCH` selects the serverless-tools branch/tag for this feature
+and defaults to its `main` branch. Merge the downstream publisher before enabling
+this trigger. `SLS_CI_BRANCH` independently selects the version for existing
+regression tests. The jobs avoid automatic interruption once started, but this
+remains best-effort measurement: failed or cancelled jobs can miss commits.

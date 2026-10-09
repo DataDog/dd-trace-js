@@ -22,8 +22,7 @@ variables:
   BASE_CI_IMAGE_PLATFORM: linux/amd64
 
   SLS_CI_BRANCH: main
-  # Validate the publisher first; pin its released tag before merging this enablement.
-  SLS_PR_BENCHMARK_CI_BRANCH: joey/pr-lambda-benchmarks
+  SLS_PR_BENCHMARK_CI_BRANCH: main
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
   UNCONFIDENCE_THRESHOLD: "2.0"
