@@ -193,6 +193,9 @@ module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {
+  /** @type {Set<'logs' | 'metrics'>} */
+  #warnedOtlpProtocols = new Set()
+
   /**
    * parsed DD_TAGS, usable as a standalone tag set across products
    * @type {Record<string, string>}
@@ -363,6 +366,23 @@ class Config extends ConfigBase {
    */
   getOrigin (name) {
     return trackedConfigOrigins.get(name) ?? 'default'
+  }
+
+  /**
+   * @param {'logs' | 'metrics'} signal
+   * @param {string | undefined} requested
+   * @param {string} resolved
+   */
+  #warnOtlpFallback (signal, requested, resolved) {
+    if (requested !== 'grpc' || requested === resolved || this.#warnedOtlpProtocols.has(signal)) return
+
+    // Calculated values are reapplied on remote updates; warn once per active signal for this Config.
+    this.#warnedOtlpProtocols.add(signal)
+    log.warn(
+      // eslint-disable-next-line @stylistic/max-len
+      'OTLP gRPC protocol is not supported for %s. Defaulting to %s. gRPC protobuf support may be added in a future release.',
+      signal, resolved
+    )
   }
 
   // Handles values calculated from a mixture of options and env vars
@@ -738,11 +758,19 @@ class Config extends ConfigBase {
     // Resolve after generic aliases and signal overrides; exporters and diagnostics consume these same values.
     setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL',
       resolveProtocol(this.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'traces'))
-    setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_PROTOCOL',
-      resolveProtocol(this.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'logs', this.DD_LOGS_OTEL_ENABLED))
-    setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL',
-      resolveProtocol(this.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'metrics',
-        this.DD_METRICS_OTEL_ENABLED || this.OTEL_TRACES_SPAN_METRICS_ENABLED))
+
+    const logsProtocol = resolveProtocol(this.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'logs')
+    if (this.DD_LOGS_OTEL_ENABLED) {
+      this.#warnOtlpFallback('logs', this.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, logsProtocol)
+    }
+    setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_PROTOCOL', logsProtocol)
+
+    const metricsProtocol = resolveProtocol(this.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'metrics')
+    if (this.DD_METRICS_OTEL_ENABLED || this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+      this.#warnOtlpFallback('metrics', this.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, metricsProtocol)
+    }
+    setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL', metricsProtocol)
+
     setAndTrack(this, 'OTEL_EXPORTER_OTLP_PROTOCOL',
       resolveProtocol(this.OTEL_EXPORTER_OTLP_PROTOCOL, 'default'))
 

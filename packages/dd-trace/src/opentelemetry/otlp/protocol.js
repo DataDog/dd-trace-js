@@ -1,7 +1,5 @@
 'use strict'
 
-const log = require('../../log')
-
 // The first supported protocol is also the fallback for that signal.
 const httpProtocols = /** @type {const} */ (['http/protobuf', 'http/json'])
 const protocols = {
@@ -16,22 +14,14 @@ const protocols = {
  * @template {keyof typeof protocols} T
  * @param {string | undefined} protocol
  * @param {T} signal
- * @param {boolean} [warnUnsupported]
  * @returns {(typeof protocols)[T][number]}
  */
-function resolveProtocol (protocol, signal, warnUnsupported = false) {
+function resolveProtocol (protocol, signal) {
   const supported = protocols[signal]
   if (protocol && /** @type {readonly string[]} */ (supported).includes(protocol)) {
     return /** @type {(typeof protocols)[T][number]} */ (protocol)
   }
 
-  if (protocol === 'grpc' && warnUnsupported) {
-    log.warn(
-      // eslint-disable-next-line @stylistic/max-len
-      'OTLP gRPC protocol is not supported for %s. Defaulting to %s. gRPC protobuf support may be added in a future release.',
-      signal, supported[0]
-    )
-  }
   return supported[0]
 }
 
