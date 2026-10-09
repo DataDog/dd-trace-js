@@ -28,6 +28,7 @@
     "lint:inspect": "npx @eslint/config-inspector@latest",
     "lint:codeowners": "codeowners-audit",
     "lint:editorconfig": "docker build -q -t ec .github/editorconfig-checker && docker run --rm --volume=$PWD:/check ec",
+    "lint:changed-curly": "node scripts/lint-changed-curly.mjs",
     "release:merge-proposal": "node scripts/release/merge-proposal.js",
     "release:proposal": "node scripts/release/proposal",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
