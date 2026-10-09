@@ -2,10 +2,16 @@
 
 const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
-const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('../../../packages/dd-trace/src/plugins/util/url')
+const {
+  ClientQueryStringSchema,
+  calculateHttpEndpoint,
+  extractURL,
+  obfuscateQs,
+} = require('../../../packages/dd-trace/src/plugins/util/url')
 const configManifest = require('../../../packages/dd-trace/src/config/supported-configurations.json')
 
 const OPERATIONS = Number(process.env.OPERATIONS)
+const MODE = process.env.MODE
 
 // The per-request server path in addRequestTags runs extractURL (rebuild the URL
 // from the request), obfuscateQs (redact secrets from the query string) and
@@ -46,24 +52,71 @@ const reqs = [
   },
 ]
 
-// Verify the three transforms actually fire before the timed loop: a broken
-// helper would otherwise keep sink non-zero and silently "pass".
-{
+const clientQueries = [
+  {
+    pathname: '/api/v2/users?token=abc123def456&page=2',
+    strippedUrl: 'https://example.com/api/v2/users',
+    expectedQuery: 'page=<number>&token=<redacted>',
+  },
+  {
+    pathname: '/api/v2/products?category=books&sort=price',
+    strippedUrl: 'https://example.com/api/v2/products',
+    expectedQuery: 'category=<string>&sort=<string>',
+  },
+  {
+    pathname: '/api/v2/events?id=4f45f5d2-7682-4f1e-9d02-8c3b652a7a4f&at=2026-09-09T12%3A30%3A00Z',
+    strippedUrl: 'https://example.com/api/v2/events',
+    expectedQuery: 'at=<date>&id=<uuid>',
+  },
+  {
+    pathname: '/api/v2/network?address=192.0.2.1&active=true',
+    strippedUrl: 'https://example.com/api/v2/network',
+    expectedQuery: 'active=<boolean>&address=<IPv4>',
+  },
+]
+
+if (MODE === 'client-query-schema') {
+  runClientQuerySchema()
+} else {
+  runEndpointAndObfuscation()
+}
+
+function runEndpointAndObfuscation () {
   const secretReq = reqs[3] // .../profile?password=hunter2
   const url = extractURL(secretReq)
   assert.ok(url.includes('example.com'), 'extractURL did not rebuild the request URL')
   assert.ok(!obfuscateQs(config, url).includes('hunter2'), 'obfuscateQs did not redact the secret')
   assert.equal(typeof calculateHttpEndpoint(url), 'string', 'calculateHttpEndpoint did not return a path')
+
+  guard.loopStart()
+  let sink = 0
+  for (let i = 0; i < OPERATIONS; i++) {
+    const req = reqs[i & 3]
+    const url = extractURL(req)
+    sink += obfuscateQs(config, url).length
+    sink += calculateHttpEndpoint(url).length
+  }
+
+  assert.ok(sink > 0, 'url bench produced no output')
+  guard.done()
 }
 
-guard.loopStart()
-let sink = 0
-for (let i = 0; i < OPERATIONS; i++) {
-  const req = reqs[i & 3]
-  const url = extractURL(req)
-  sink += obfuscateQs(config, url).length
-  sink += calculateHttpEndpoint(url).length
-}
+function runClientQuerySchema () {
+  const schema = new ClientQueryStringSchema()
+  for (const query of clientQueries) {
+    schema.getUrl(config, query.pathname, query.strippedUrl, 'http')
+    schema.getUrl(config, query.pathname, query.strippedUrl, 'http')
+    const admittedUrl = schema.getUrl(config, query.pathname, query.strippedUrl, 'http')
+    assert.strictEqual(admittedUrl, `${query.strippedUrl}?${query.expectedQuery}`)
+  }
 
-assert.ok(sink > 0, 'url bench produced no output')
-guard.done()
+  guard.loopStart()
+  let sink = 0
+  for (let i = 0; i < OPERATIONS; i++) {
+    const query = clientQueries[i & 3]
+    sink += schema.getUrl(config, query.pathname, query.strippedUrl, 'http').length
+  }
+
+  assert.ok(sink > 0, 'client query schema bench produced no output')
+  guard.done()
+}
