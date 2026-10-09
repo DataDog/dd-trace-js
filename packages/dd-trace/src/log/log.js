@@ -17,11 +17,7 @@ class Log {
   get formatted () {
     const { message, args } = this
 
-    let formatted = message
-    if (message && args && args.length) {
-      formatted = format(message, ...args)
-    }
-    return formatted
+    return message && args && args.length ? format(message, ...args) : message
   }
 
   static parse (...args) {

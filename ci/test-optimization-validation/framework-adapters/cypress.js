@@ -37,10 +37,7 @@ function getTestExtension (filename) {
  * @param {string} input.testName generated test name
  */
 function getGeneratedTestContent ({ scenarioId, testName }) {
-  let content = ''
-  if (scenarioId === 'atr-fail-once') {
-    content = 'let attempt = 0\n\n'
-  }
+  let content = scenarioId === 'atr-fail-once' ? 'let attempt = 0\n\n' : ''
   content += "describe('dd-test-optimization-validation', () => {\n" +
     `  it(${JSON.stringify(testName)}, () => {\n` +
     (scenarioId === 'atr-fail-once'
