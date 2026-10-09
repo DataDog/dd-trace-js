@@ -5,10 +5,11 @@
 const fs = require('fs')
 const path = require('path')
 const { exec, stdio } = require('./run-util')
+const { prepareMetaFile } = require('./squash-affinity')
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
-require('./squash-affinity')
+prepareMetaFile()
 
 const metaJson = require(path.join(process.cwd(), 'meta.json'))
 const env = { ...process.env, DD_TRACE_STARTUP_LOGS: 'false' }

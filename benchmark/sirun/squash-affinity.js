@@ -16,17 +16,30 @@ const path = require('path')
  * @property {Record<string, BenchmarkMeta>} [variants]
  */
 
-const metaJson = require(path.join(process.cwd(), 'meta.json'))
-const nodeMajor = process.env.MAJOR_VERSION ?? process.versions.node.split('.')[0]
-
-prepareMeta(metaJson)
-
 /**
  * Resolves runner-only metadata before Sirun reads the generated file.
  *
  * @param {BenchmarkMeta} meta
+ * @param {object} [options]
+ * @param {boolean} [options.enableAffinity]
+ * @param {string} [options.nodeMajor]
+ * @param {string} [options.nodeOptions]
  */
-function prepareMeta (meta) {
+function prepareMeta (meta, options = {}) {
+  const nodeMajor = options.nodeMajor ?? process.env.MAJOR_VERSION ?? process.versions.node.split('.')[0]
+  const enableAffinity = options.enableAffinity ?? Boolean(process.env.ENABLE_AFFINITY)
+
+  meta.env ??= {}
+  meta.env.NODE_OPTIONS = appendExposeGc(meta.env.NODE_OPTIONS ?? options.nodeOptions ?? process.env.NODE_OPTIONS)
+  prepareNestedMeta(meta, nodeMajor, enableAffinity)
+}
+
+/**
+ * @param {BenchmarkMeta} meta
+ * @param {string} nodeMajor
+ * @param {boolean} enableAffinity
+ */
+function prepareNestedMeta (meta, nodeMajor, enableAffinity) {
   const operations = meta.operations_by_node?.[nodeMajor]
   if (operations !== undefined) {
     meta.env ??= {}
@@ -34,13 +47,24 @@ function prepareMeta (meta) {
   }
   delete meta.operations_by_node
 
-  if (process.env.ENABLE_AFFINITY) {
+  if (enableAffinity) {
     squashAffinity(meta)
   }
 
   for (const variant of Object.values(meta.variants ?? {})) {
-    prepareMeta(variant)
+    if (variant.env?.NODE_OPTIONS !== undefined) {
+      variant.env.NODE_OPTIONS = appendExposeGc(variant.env.NODE_OPTIONS)
+    }
+    prepareNestedMeta(variant, nodeMajor, enableAffinity)
   }
+}
+
+/**
+ * @param {string} [nodeOptions]
+ */
+function appendExposeGc (nodeOptions) {
+  if (/(?:^|\s)--expose-gc(?:\s|$)/.test(nodeOptions ?? '')) return nodeOptions
+  return [nodeOptions, '--expose-gc'].filter(Boolean).join(' ')
 }
 
 /**
@@ -60,4 +84,12 @@ function squashAffinity (meta) {
   }
 }
 
-fs.writeFileSync(path.join(process.cwd(), 'meta-temp.json'), JSON.stringify(metaJson, null, 2))
+function prepareMetaFile () {
+  const metaJson = require(path.join(process.cwd(), 'meta.json'))
+  prepareMeta(metaJson)
+  fs.writeFileSync(path.join(process.cwd(), 'meta-temp.json'), JSON.stringify(metaJson, null, 2))
+}
+
+if (require.main === module) prepareMetaFile()
+
+module.exports = { appendExposeGc, prepareMeta, prepareMetaFile }
