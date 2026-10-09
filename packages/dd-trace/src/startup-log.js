@@ -4,7 +4,7 @@ const os = require('os')
 const { inspect } = require('util')
 
 const tracerVersion = require('../../../package.json').version
-const { obfuscateQs } = require('./plugins/util/url')
+const { obfuscateQs, redactUrlCredentials } = require('./plugins/util/url')
 const { warn } = require('./log/writer')
 
 const errors = {}
@@ -173,9 +173,7 @@ function redactEndpoint (endpoint) {
   try {
     const url = new URL(endpoint)
     if (!url.username && !url.password) return endpoint
-    if (url.username) url.username = 'REDACTED'
-    if (url.password) url.password = 'REDACTED'
-    return url.href
+    return redactUrlCredentials(url.href)
   } catch {
     // Do not expose potential credentials if a calculated endpoint cannot be parsed.
     return null
@@ -186,15 +184,7 @@ function redactEndpoint (endpoint) {
  * @param {Record<string, string> | undefined} headers
  */
 function redactHeaders (headers) {
-  // Header names must remain data even when they shadow object properties.
-  /** @type {Record<string, string>} */
-  const redacted = Object.create(null)
-  if (headers) {
-    for (const name of Object.keys(headers)) {
-      redacted[name] = '<redacted>'
-    }
-  }
-  return redacted
+  return Object.fromEntries(Object.keys(headers ?? {}).map(name => [name, '<redacted>']))
 }
 
 /**

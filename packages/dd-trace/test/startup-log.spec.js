@@ -706,7 +706,8 @@ describe('resolved OpenTelemetry startup configuration', () => {
     ['https://user:secret@collector:4318/path?token=secret', 'https://REDACTED:REDACTED@collector:4318/path'],
     ['https://user:secret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
     ['https://user@collector:4318/path', 'https://REDACTED@collector:4318/path'],
-    ['https://:secret@collector:4318/path', 'https://:REDACTED@collector:4318/path'],
+    ['https://user:@collector:4318/path', 'https://REDACTED@collector:4318/path'],
+    ['https://:secret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
     ['https://us%40er:sec%3Aret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
     ['https://user:sec@ret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
     ['https:user:secret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
@@ -798,10 +799,13 @@ describe('resolved OpenTelemetry startup configuration', () => {
   })
 
   it('should preserve header names that shadow object properties', () => {
-    process.env.OTEL_EXPORTER_OTLP_HEADERS = 'constructor=constructor-secret,toString=string-secret'
+    process.env.OTEL_EXPORTER_OTLP_HEADERS =
+      'constructor=constructor-secret,toString=string-secret,toJSON=json-secret'
     const info = logConfiguration()
 
-    assert.deepEqual(info.OTEL_EXPORTER_OTLP_HEADERS, { constructor: '<redacted>', toString: '<redacted>' })
-    assert.doesNotMatch(warn.firstCall.args[0], /constructor-secret|string-secret/)
+    assert.deepEqual(info.OTEL_EXPORTER_OTLP_HEADERS, {
+      constructor: '<redacted>', toString: '<redacted>', toJSON: '<redacted>',
+    })
+    assert.doesNotMatch(warn.firstCall.args[0], /constructor-secret|string-secret|json-secret/)
   })
 })

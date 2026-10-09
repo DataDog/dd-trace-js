@@ -63,6 +63,34 @@ function obfuscateQs (config, url) {
   return `${path}?${qs}`
 }
 
+/**
+ * Mask userinfo in an absolute URL containing `://`, preserving the rest of the string.
+ * Callers are responsible for validating or normalizing noncanonical URLs when needed.
+ * @param {string} url
+ */
+function redactUrlCredentials (url) {
+  const schemeEnd = url.indexOf('://')
+  if (schemeEnd === -1) return url
+  const authorityStart = schemeEnd + 3
+
+  let authorityEnd = url.length
+  for (let i = authorityStart; i < url.length; i++) {
+    const char = url[i]
+    if (char === '/' || char === '?' || char === '#') {
+      authorityEnd = i
+      break
+    }
+  }
+
+  // userinfo runs to the LAST '@' in the authority (WHATWG); using the first
+  // '@' would leak the remainder, e.g. `user:p@ss@host`.
+  const at = url.lastIndexOf('@', authorityEnd - 1)
+  if (at < authorityStart) return url
+
+  const redacted = url.slice(authorityStart, at).includes(':') ? 'REDACTED:REDACTED' : 'REDACTED'
+  return url.slice(0, authorityStart) + redacted + url.slice(at)
+}
+
 const qsObfuscatorCache = new Map()
 let defaultQsObfuscator
 
@@ -204,6 +232,7 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
 module.exports = {
   extractURL,
   obfuscateQs,
+  redactUrlCredentials,
   getQsObfuscator,
   buildClientHttpUrl,
   calculateHttpEndpoint,

@@ -213,6 +213,27 @@ describe('plugins/util/url', () => {
     })
   })
 
+  describe('redactUrlCredentials', () => {
+    for (const [input, expected] of [
+      ['https://user:pass@host/path?q=1#fragment', 'https://REDACTED:REDACTED@host/path?q=1#fragment'],
+      ['http://user@host', 'http://REDACTED@host'],
+      ['http://:pass@host', 'http://REDACTED:REDACTED@host'],
+      ['http://user:@host', 'http://REDACTED:REDACTED@host'],
+      ['http://user:p@ss@host', 'http://REDACTED:REDACTED@host'],
+      ['http://us%40er:pa%3Ass@host', 'http://REDACTED:REDACTED@host'],
+      ['HTTP://user:pass@Host:80/path', 'HTTP://REDACTED:REDACTED@Host:80/path'],
+      ['http://host/path@part', 'http://host/path@part'],
+      ['http://host?user=user@part', 'http://host?user=user@part'],
+      ['http://host#user@part', 'http://host#user@part'],
+      ['http://host', 'http://host'],
+      ['/relative/path@part', '/relative/path@part'],
+    ]) {
+      it(`should redact only URL userinfo in ${input}`, () => {
+        assert.equal(url.redactUrlCredentials(input), expected)
+      })
+    }
+  })
+
   describe('getQsObfuscator', () => {
     it('passes booleans through', () => {
       assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: true }), true)
