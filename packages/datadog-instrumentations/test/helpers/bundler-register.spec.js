@@ -298,7 +298,7 @@ function loadBundlerRegister ({
         },
         './register.js': register,
         '../../../dd-trace/src/log': log,
-        'dc-polyfill': dc,
+        '../../../../vendor/dist/dc-polyfill': dc,
       }
       return stubs[request] || originalRequire.call(this, request)
     }

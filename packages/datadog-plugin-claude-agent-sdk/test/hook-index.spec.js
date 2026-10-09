@@ -65,7 +65,7 @@ function loadInstrumentation () {
   let hookCallback
 
   proxyquire.noPreserveCache().load('../../datadog-instrumentations/src/claude-agent-sdk', {
-    'dc-polyfill': fakeDc,
+    '../../../vendor/dist/dc-polyfill': fakeDc,
     './helpers/instrument': {
       getHooks: () => [{
         name: '@anthropic-ai/claude-agent-sdk',

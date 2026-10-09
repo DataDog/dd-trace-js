@@ -3,7 +3,7 @@
 const tracer = require('dd-trace')
 
 const assert = require('node:assert/strict')
-const { channel } = require('dc-polyfill')
+const { channel } = require('node:diagnostics_channel')
 
 const testStartCh = channel('dd-trace:ci:manual:test:start')
 const testFinishCh = channel('dd-trace:ci:manual:test:finish')

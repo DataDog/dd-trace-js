@@ -38,7 +38,7 @@
 // Consumers MUST balance every activate() call with a matching
 // deactivate() when they stop caring.
 
-const dc = require('dc-polyfill')
+const dc = require('../../../vendor/dist/dc-polyfill')
 const { finalEndpoint, isWebServerSpan, getStartedSpans } = require('./profiling/webspan-utils')
 
 // Fields on the cache entry:

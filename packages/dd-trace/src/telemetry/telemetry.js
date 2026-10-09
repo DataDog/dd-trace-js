@@ -1,7 +1,7 @@
 'use strict'
 
 const os = require('os')
-const dc = require('dc-polyfill')
+const dc = require('../../../../vendor/dist/dc-polyfill')
 
 const tracerVersion = require('../../../../package.json').version
 const { errors } = require('../startup-log')

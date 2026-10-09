@@ -18,7 +18,7 @@ describe('SSIHeuristics', () => {
       unsubscribe: sinon.spy(),
     }
     const ssiHeuristicsModule = proxyquire('../../src/profiling/ssi-heuristics', {
-      'dc-polyfill': dc,
+      '../../../../vendor/dist/dc-polyfill': dc,
     })
     SSIHeuristics = ssiHeuristicsModule.SSIHeuristics
   })

@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import urlLib from 'node:url'
 import express from 'express'
-import dc from 'dc-polyfill'
 
 const parseFinishChannel = dc.channel('datadog:url:parse:finish')
 let counter = 0

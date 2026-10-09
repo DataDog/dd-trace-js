@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import inject from 'light-my-request'
-import dc from 'dc-polyfill'
 
 const startServerCh = dc.channel('apm:http:server:request:start')
 

@@ -2,7 +2,7 @@
 
 const { randomFillSync } = require('crypto')
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../vendor/dist/dc-polyfill')
 
 const UINT_MAX = 4_294_967_296
 

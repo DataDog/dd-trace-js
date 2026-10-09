@@ -2,9 +2,13 @@
 
 const assert = require('node:assert')
 
-const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const sinon = require('sinon')
+
+const dcPath = require.resolve('../../../vendor/dist/dc-polyfill')
+const dcExports = require(dcPath)
+const dc = { ...dcExports, channel: sinon.spy(dcExports.channel) }
+require.cache[dcPath].exports = dc
 
 const SELF = Symbol('self')
 
@@ -19,8 +23,6 @@ describe('Plugin', () => {
     const testedChannels = new Set()
 
     before(async () => {
-      sinon.spy(dc, 'channel')
-
       await agent.load('dd-trace-api')
 
       tracer = require('../../dd-trace')
@@ -49,7 +51,10 @@ describe('Plugin', () => {
       dc.channel('datadog-api:v1:tracerinit').publish(payload)
     })
 
-    after(() => agent.close())
+    after(async () => {
+      await agent.close()
+      require.cache[dcPath].exports = dcExports
+    })
 
     describe('scope', () => {
       let dummyScope

@@ -16,7 +16,7 @@ function loadAiInstrumentation () {
   const hookCallbacks = []
   const cache = require.cache[instrumentPath]
   const previousExports = cache.exports
-  const dcPath = require.resolve('dc-polyfill')
+  const dcPath = require.resolve('../../../vendor/dist/dc-polyfill')
   const dcCache = require.cache[dcPath]
   const dcExports = dcCache.exports
   const channelNames = [

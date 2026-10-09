@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import express from 'express'
 import bodyParser from 'body-parser'
-import dc from 'dc-polyfill'
 const bodyParserReadCh = dc.channel('datadog:body-parser:read:finish')
 
 let counter = 0

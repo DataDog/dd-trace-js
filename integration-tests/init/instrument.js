@@ -1,7 +1,7 @@
 'use strict'
 
 const http = require('http')
-const dc = require('dc-polyfill')
+const dc = require('dd-trace/vendor/dist/dc-polyfill')
 
 let gotEvent = false
 dc.subscribe('apm:http:client:request:start', (event) => {

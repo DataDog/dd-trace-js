@@ -1,6 +1,8 @@
 'use strict'
 
-const { tracingChannel } = /** @type {import('node:diagnostics_channel')} */ (require('dc-polyfill'))
+const { tracingChannel } = /** @type {import('node:diagnostics_channel')} */ (
+  require('../../../vendor/dist/dc-polyfill')
+)
 const clientCH = tracingChannel('apm:prisma')
 const { storage } = require('../../datadog-core')
 

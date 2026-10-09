@@ -23,7 +23,7 @@ describe('endpoints telemetry', () => {
     const subscribe = sinon.stub()
     const dc = { channel () { return { subscribe } } }
     const endpoints = proxyquire('../../src/telemetry/endpoints', {
-      'dc-polyfill': dc,
+      '../../../../vendor/dist/dc-polyfill': dc,
     })
 
     beforeEach(() => {

@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import express from 'express'
 import multer from 'multer'
-import dc from 'dc-polyfill'
 
 const multerReadCh = dc.channel('datadog:multer:read:finish')
 let counter = 0

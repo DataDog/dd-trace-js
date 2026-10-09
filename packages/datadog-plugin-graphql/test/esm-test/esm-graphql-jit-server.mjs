@@ -2,7 +2,7 @@ import 'dd-trace/init.js'
 import tracer from 'dd-trace'
 import { createServer } from 'node:http'
 
-import dc from 'dc-polyfill'
+import dc from 'node:diagnostics_channel'
 import * as graphql from 'graphql'
 import { compileQuery } from 'graphql-jit'
 

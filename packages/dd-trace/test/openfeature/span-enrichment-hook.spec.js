@@ -60,7 +60,7 @@ describe('SpanEnrichmentHook', () => {
     }
 
     SpanEnrichmentHook = proxyquire('../../src/openfeature/span-enrichment-hook', {
-      'dc-polyfill': {
+      '../../../../vendor/dist/dc-polyfill': {
         channel: sinon.stub().returns(mockFinishChannel),
       },
       '../log': log,
