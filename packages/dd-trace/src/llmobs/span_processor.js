@@ -16,6 +16,8 @@ const {
   METADATA,
   COST_TAGS,
   AGENT_MANIFEST,
+  AGENT_VERSION,
+  AGENT_VERSION_TAG_KEY,
   TOOL_DEFINITIONS,
   EXPERIMENT_INPUT,
   EXPERIMENT_OUTPUT,
@@ -32,6 +34,7 @@ const {
   PARENT_ID_KEY,
   PARENT_AGENT_NAME,
   PARENT_AGENT_SPAN_ID,
+  PARENT_AGENT_VERSION,
   SESSION_ID,
   NAME,
   INPUT_PROMPT,
@@ -406,6 +409,15 @@ class LLMObsSpanProcessor {
 
     const existingTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
+
+    const mlObsTags = LLMObsTagger.tagMap.get(span)
+    // Resolved here because a span can become an agent after registration. An agent without its own version, and
+    // any other span, reports the version inherited at registration. Either wins over a user
+    // tag of the same name.
+    const agentVersion = mlObsTags?.[SPAN_KIND] === 'agent'
+      ? mlObsTags[AGENT_VERSION] || mlObsTags[PARENT_AGENT_VERSION]
+      : mlObsTags?.[PARENT_AGENT_VERSION]
+    if (agentVersion) tags[AGENT_VERSION_TAG_KEY] = agentVersion
 
     return tags
   }

@@ -348,14 +348,46 @@ describe('span processor', () => {
         assert.equal(payload.meta.metadata, undefined)
       })
 
-      it('does not emit a manifest once the span is no longer an agent', () => {
+      it('does not emit a manifest or version once the span is no longer an agent', () => {
         processor.process(makeSpan({
           '_ml_obs.meta.span.kind': 'workflow',
+          '_ml_obs.agent_version': '1.0.0',
           '_ml_obs.meta.metadata._dd.agent_manifest': { model: 'gpt-4o' },
         }))
         const payload = writer.append.getCall(0).firstArg
 
         assert.equal(payload.meta.metadata, undefined)
+        assert.ok(!payload.tags.some(tag => tag.startsWith('agent_version:')))
+      })
+
+      it('emits the version of the agent a non-agent span ran under', () => {
+        processor.process(makeSpan({
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.parent_agent_version': '1.0.0',
+          '_ml_obs.tags': { agent_version: 'from_tags' },
+        }))
+        const { tags } = writer.append.getCall(0).firstArg
+
+        assert.ok(tags.includes('agent_version:1.0.0'))
+        assert.ok(!tags.includes('agent_version:from_tags'))
+      })
+
+      it('emits the inherited version on an agent span without its own', () => {
+        processor.process(makeSpan({ '_ml_obs.parent_agent_version': '1.0.0' }))
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.ok(payload.tags.includes('agent_version:1.0.0'))
+      })
+
+      it('emits the declared version over a user tag of the same name', () => {
+        processor.process(makeSpan({
+          '_ml_obs.agent_version': '1.0.0',
+          '_ml_obs.tags': { agent_version: 'from_tags' },
+        }))
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.ok(payload.tags.includes('agent_version:1.0.0'))
+        assert.ok(!payload.tags.includes('agent_version:from_tags'))
       })
     })
 

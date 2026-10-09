@@ -35,7 +35,7 @@ const LABEL_FIELDS = ['name', 'instructions', 'model']
  *   model_settings?: Record<string, unknown>,
  *   tools?: AgentTool[],
  * }} AgentManifestFields
- * @typedef {{ manifest: AgentManifestFields }} AgentDeclaration
+ * @typedef {{ version?: string, manifest?: AgentManifestFields }} AgentDeclaration
  */
 
 /**
@@ -50,8 +50,9 @@ function buildAgentDeclaration (agent) {
   let declaration
   try {
     if (isPlainObject(agent)) {
+      const version = toAgentVersion(agent.version)
       const manifest = buildAgentManifest(agent)
-      if (manifest !== undefined) declaration = { manifest }
+      if (version !== undefined || manifest !== undefined) declaration = { version, manifest }
     } else {
       log.warn('Dropping agent annotation, the agent must be a plain object.')
     }
@@ -103,6 +104,16 @@ function buildAgentManifest (agent) {
   }
 
   return manifest
+}
+
+/**
+ * Unset values (`undefined`, `null`, `''`) are ignored without a warning, so they leave an earlier version in place.
+ *
+ * @param {unknown} version
+ */
+function toAgentVersion (version) {
+  if (typeof version === 'string' && version !== '') return version
+  if (!isUnset(version)) log.warn('Dropping the agent version, it must be a string.')
 }
 
 /**
@@ -293,4 +304,5 @@ function isScalar (value) {
 module.exports = {
   MANUAL_FRAMEWORK_NAME,
   buildAgentDeclaration,
+  toAgentVersion,
 }

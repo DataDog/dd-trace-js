@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -35,11 +36,41 @@ describe('agent manifest', () => {
       }
       const modelSettings = { temperature: 0.1, max_tokens: 1024 }
 
-      const declaration = buildAgentDeclaration({ ...agent, modelSettings })
+      const declaration = buildAgentDeclaration({ ...agent, version: '2.1.0', modelSettings })
 
-      assert.deepStrictEqual(declaration, { manifest: { ...agent, model_settings: modelSettings } })
+      assert.deepStrictEqual(declaration, { version: '2.1.0', manifest: { ...agent, model_settings: modelSettings } })
       sinon.assert.notCalled(log.warn)
     })
+
+    it('declares a version without a manifest for a version-only agent', () => {
+      assert.deepStrictEqual(buildAgentDeclaration({ version: '1.0.0' }), { version: '1.0.0', manifest: undefined })
+    })
+
+    const versions = [
+      ['1.0.0', '1.0.0'], ['1.10', '1.10'], ['0', '0'], ['', undefined], [2, undefined], [0, undefined],
+      [{}, undefined],
+    ]
+    for (const [version, expected] of versions) {
+      it(`reads version ${inspect(version)} as ${inspect(expected)}`, () => {
+        assert.strictEqual(buildAgentDeclaration({ version, name: 'a' }).version, expected)
+      })
+    }
+
+    for (const version of [2, {}, true]) {
+      it(`warns when dropping a non-string version (${inspect(version)})`, () => {
+        buildAgentDeclaration({ version, name: 'a' })
+
+        sinon.assert.calledOnceWithExactly(log.warn, 'Dropping the agent version, it must be a string.')
+      })
+    }
+
+    for (const version of [undefined, null, '']) {
+      it(`ignores an unset version without a warning (${inspect(version)})`, () => {
+        buildAgentDeclaration({ version, name: 'a' })
+
+        sinon.assert.notCalled(log.warn)
+      })
+    }
 
     it('returns undefined for an agent that declares nothing', () => {
       assert.strictEqual(buildAgentDeclaration({}), undefined)
@@ -55,7 +86,7 @@ describe('agent manifest', () => {
     }
 
     it('never throws on an agent whose fields cannot be read', () => {
-      const agent = { name: 'travel_desk' }
+      const agent = { version: '1.0.0' }
       Object.defineProperty(agent, 'instructions', { enumerable: true, get () { throw new Error('dynamic') } })
 
       assert.strictEqual(buildAgentDeclaration(agent), undefined)
