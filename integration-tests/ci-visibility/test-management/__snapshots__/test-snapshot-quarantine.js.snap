@@ -1,0 +1,9 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`quarantine snapshot can pass normally 1`] = `"stored"`;
+
+exports[`quarantine snapshot fails a snapshot 1`] = `"stored"`;
+
+exports[`quarantine snapshot fails a snapshot before passing 1`] = `"stored"`;
+
+exports[`quarantine snapshot fails before a snapshot 1`] = `"stored"`;

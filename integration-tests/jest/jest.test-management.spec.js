@@ -7,6 +7,9 @@ const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
 const { inspect } = require('node:util')
+
+const satisfies = require('semifies')
+
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -61,6 +64,8 @@ const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
+// Jest resets the snapshot state of retried tests since 24.9.0
+const itIfRetriesResetSnapshots = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=24.9.0') ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 
 // TODO: add ESM tests
@@ -2416,6 +2421,142 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
         assert.strictEqual(exitCode, 1, 'exit code 1 when suite fails (resolution error)')
+      })
+
+      context('snapshot assertions', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            jest: {
+              suites: {
+                'ci-visibility/test-management/test-snapshot-quarantine.js': {
+                  tests: {
+                    'quarantine snapshot fails a snapshot': { properties: { quarantined: true } },
+                    'quarantine snapshot fails before a snapshot': { properties: { quarantined: true } },
+                    'quarantine snapshot fails a snapshot before passing': { properties: { quarantined: true } },
+                  },
+                },
+                'ci-visibility/test-management/test-snapshot-image.js': {
+                  tests: {
+                    'snapshot can match': { properties: { quarantined: true } },
+                  },
+                },
+              },
+            },
+          })
+        })
+
+        const runSnapshotTests = async (env, onEvents) => {
+          let stdout = ''
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              const executions = {}
+              for (const { content } of events.filter(event => event.type === 'test')) {
+                executions[content.meta[TEST_NAME]] ??= []
+                executions[content.meta[TEST_NAME]].push(
+                  [content.meta[TEST_STATUS], content.meta[TEST_MANAGEMENT_IS_QUARANTINED]]
+                )
+              }
+              onEvents(testSession, executions)
+            })
+
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                SHOULD_CHECK_RESULTS: '1',
+                ...env,
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (chunk) => {
+            stdout += chunk.toString()
+          })
+          childProcess.stderr?.on('data', (chunk) => {
+            stdout += chunk.toString()
+          })
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          return { exitCode, stdout }
+        }
+
+        for (const parallel of [false, true]) {
+          it(`does not fail the run when quarantined tests fail snapshots (parallel=${parallel})`, async () => {
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            const { exitCode, stdout } = await runSnapshotTests(
+              {
+                TESTS_TO_RUN: 'test-management/test-snapshot-(quarantine|image)',
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              },
+              (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+                assert.deepStrictEqual(executions, {
+                  'quarantine snapshot fails a snapshot': [['fail', 'true']],
+                  'quarantine snapshot fails before a snapshot': [['fail', 'true']],
+                  'quarantine snapshot fails a snapshot before passing': [['fail', 'true']],
+                  'quarantine snapshot can pass normally': [['pass', undefined]],
+                  'snapshot can match': [['fail', 'true']],
+                })
+              }
+            )
+
+            assert.strictEqual(exitCode, 0)
+            assert.match(stdout, /Quarantined: 4 tests run; 4 failures did not affect the test session\./)
+            assert.doesNotMatch(stdout, /snapshots? failed/)
+            assert.doesNotMatch(stdout, /obsolete/)
+          })
+        }
+
+        itIfRetriesResetSnapshots('does not fail the run when ATR retries quarantined snapshot tests', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: true,
+          })
+
+          const { exitCode, stdout } = await runSnapshotTests(
+            {
+              TESTS_TO_RUN: 'test-management/test-snapshot-quarantine',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+            },
+            (testSession, executions) => {
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+              assert.deepStrictEqual(executions, {
+                'quarantine snapshot fails a snapshot': [['fail', 'true'], ['fail', 'true'], ['fail', 'true']],
+                'quarantine snapshot fails before a snapshot': [['fail', 'true'], ['fail', 'true'], ['fail', 'true']],
+                'quarantine snapshot fails a snapshot before passing': [['fail', 'true'], ['pass', 'true']],
+                'quarantine snapshot can pass normally': [['pass', undefined]],
+              })
+            }
+          )
+
+          assert.strictEqual(exitCode, 0)
+          assert.doesNotMatch(stdout, /snapshots? failed/)
+          assert.doesNotMatch(stdout, /obsolete/)
+        })
+
+        it('fails the run when snapshot assertions fail and quarantine is not enabled', async () => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          const { exitCode, stdout } = await runSnapshotTests(
+            { TESTS_TO_RUN: 'test-management/test-snapshot-quarantine' },
+            (testSession, executions) => {
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+              assert.deepStrictEqual(executions, {
+                'quarantine snapshot fails a snapshot': [['fail', undefined]],
+                'quarantine snapshot fails before a snapshot': [['fail', undefined]],
+                'quarantine snapshot fails a snapshot before passing': [['fail', undefined]],
+                'quarantine snapshot can pass normally': [['pass', undefined]],
+              })
+            }
+          )
+
+          assert.strictEqual(exitCode, 1)
+          assert.match(stdout, /2 snapshots failed/)
+        })
       })
     })
 
