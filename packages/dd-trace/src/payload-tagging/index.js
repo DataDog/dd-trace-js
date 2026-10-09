@@ -197,11 +197,14 @@ function computeBoundedTags (config, object, opts) {
   const capture = { incomplete: snapshot.incomplete, budget, expansionLength: maxExpansionLength }
   expand(payload, expansionRules, capture)
 
-  if (capture.incomplete && hasDataDependentRules(redactionRules)) {
+  if (
+    capture.incomplete &&
+    (hasDataDependentRules(redactionRules) || hasDataDependentRules(expansionRules))
+  ) {
     // Fixed, payload-safe diagnostic: no payload values, rule text, exception
     // messages or stacks are ever included.
     log.debug(
-      'Omitting payload tags: expansion was truncated and the redaction rules are data-dependent'
+      'Omitting payload tags: expansion was truncated and the rules are data-dependent'
     )
     return {}
   }
