@@ -30,7 +30,7 @@
     "retry": "^0.13.1",
     "rfdc": "^1.4.1",
     "semifies": "^1.0.0",
-    "shell-quote": "^1.10.0",
+    "shell-quote": "^1.11.0",
     "source-map": "^0.8.0",
     "tlhunter-sorted-set": "^0.1.0",
     "ttl-set": "^1.0.0"
