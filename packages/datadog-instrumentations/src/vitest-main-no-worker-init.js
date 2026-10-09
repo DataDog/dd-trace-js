@@ -350,6 +350,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
     testManagementTestsBySuite,
     testPropertiesByFilepath,
     testSessionConfiguration,
+    flakyTests,
     flakyTestRetriesConfiguration,
   } = setupData
   const { earlyFlakeDetectionRetryPolicy, dynamicAtrBuckets } = state
@@ -376,6 +377,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       isEfdSuiteAdmissionEnabled: state.isEfdSuiteAdmissionEnabled,
       isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionActive(state),
       dynamicAtrRetryPolicy,
+      flakyTests,
       flakyTestRetriesConfiguration,
       isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},
@@ -933,6 +935,8 @@ function createMainProcessReporter (reporterState) {
     const { flakyTestRetriesConfiguration } = testOptimizationData
     const isFlakyTestRetries = !!flakyTestRetriesConfiguration && isFlakyTestRetriesEnabledForTask({
       isFlakyTestRetriesEnabled: state.isFlakyTestRetriesEnabled,
+      flakyTests: state.flakyTests,
+      testPropertiesByFilepath: { [task.file.filepath]: { testSuite } },
       isDynamicAtrEnabled: state.isDynamicAtrEnabled,
       flakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
       flakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,

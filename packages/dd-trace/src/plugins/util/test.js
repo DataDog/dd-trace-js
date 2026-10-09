@@ -218,6 +218,7 @@ const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test
 // Library configuration request error tags
 const DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS = '_dd.ci.library_configuration_error.settings'
 const DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS = '_dd.ci.library_configuration_error.skippable_tests'
+const DD_CI_LIBRARY_CONFIGURATION_ERROR_FLAKY_TESTS = '_dd.ci.library_configuration_error.flaky_tests'
 const DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS = '_dd.ci.library_configuration_error.known_tests'
 const DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS =
   '_dd.ci.library_configuration_error.test_management_tests'
@@ -334,6 +335,9 @@ function getSessionRequestErrorTags (sessionSpan) {
   }
   if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS] === 'true') {
     sessionRequestErrorTags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS] = 'true'
+  }
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_FLAKY_TESTS] === 'true') {
+    sessionRequestErrorTags[DD_CI_LIBRARY_CONFIGURATION_ERROR_FLAKY_TESTS] = 'true'
   }
   if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS] === 'true') {
     sessionRequestErrorTags[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS] = 'true'
@@ -594,6 +598,7 @@ module.exports = {
   getSessionRequestErrorTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_FLAKY_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   getSessionItrSkippingEnabledTags,
