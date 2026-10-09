@@ -11,6 +11,7 @@ const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const { clientResourceName } = require('../../dd-trace/src/plugins/util/path-quantization')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -38,6 +39,8 @@ class Http2ClientPlugin extends ClientPlugin {
     const uri = `${base}${pathname}`
     const allowed = this.config.filter(uri)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const resourceName = clientResourceName(method, pathname,
+      this.config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE)
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
@@ -48,7 +51,7 @@ class Http2ClientPlugin extends ClientPlugin {
       meta: {
         [COMPONENT]: this.constructor.id,
         [SPAN_KIND]: CLIENT,
-        'resource.name': method,
+        'resource.name': resourceName,
         'span.type': 'http',
         'http.method': method,
         'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
