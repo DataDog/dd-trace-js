@@ -1,11 +1,11 @@
 'use strict'
 
-const axios = require('axios')
 const { satisfies } = require('semver')
 
 const agent = require('../plugins/agent')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../../version')
 const { withVersions } = require('../setup/mocha')
+const httpRequest = require('../setup/helpers/http-client')
 const { initApp, startServer } = require('./next.utils')
 
 describe('test suite', () => {
@@ -70,7 +70,7 @@ describe('test suite', () => {
           const findBodyThreat = getFindBodyThreatMethod(done)
 
           agent.subscribe(findBodyThreat)
-          axios
+          httpRequest
             .post(`http://127.0.0.1:${serverData.port}/api/test`, {
               key: 'testattack',
             }).catch(e => { done(e) })
@@ -83,7 +83,7 @@ describe('test suite', () => {
 
           agent.subscribe(findBodyThreat)
 
-          axios
+          httpRequest
             .post(`http://127.0.0.1:${serverData.port}/api/test-formdata`, new URLSearchParams({
               key: 'testattack',
             })).catch(e => {
@@ -99,7 +99,7 @@ describe('test suite', () => {
 
             const findBodyThreat = getFindBodyThreatMethod(done)
             agent.subscribe(findBodyThreat)
-            axios
+            httpRequest
               .post(`http://127.0.0.1:${serverData.port}/api/test-text`, {
                 key: 'testattack',
               }).catch(e => {
@@ -113,7 +113,7 @@ describe('test suite', () => {
 
           const findBodyThreat = getFindBodyThreatMethod(done)
 
-          axios
+          httpRequest
             .get(`http://127.0.0.1:${serverData.port}/api/test?param=testattack`)
             .catch(e => { done(e) })
 
@@ -125,7 +125,7 @@ describe('test suite', () => {
 
           const findBodyThreat = getFindBodyThreatMethod(done)
 
-          axios
+          httpRequest
             .get(`http://127.0.0.1:${serverData.port}/api/test?param[]=safe&param[]=testattack`)
             .catch(e => { done(e) })
 
@@ -137,7 +137,7 @@ describe('test suite', () => {
 
           const findBodyThreat = getFindBodyThreatMethod(done)
 
-          axios
+          httpRequest
             .get(`http://127.0.0.1:${serverData.port}/api/test?param[]=testattack&param[]=safe`)
             .catch(e => { done(e) })
 
