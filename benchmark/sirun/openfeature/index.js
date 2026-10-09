@@ -1,6 +1,6 @@
 'use strict'
 
-// Load timing starts before dependencies, as required by the sirun startup guard.
+// Preserve the established initialization order for the shared loop reporter.
 // eslint-disable-next-line import/order
 const guard = require('../startup-guard')
 const assert = require('node:assert/strict')
