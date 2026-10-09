@@ -189,6 +189,17 @@ describe('http-otel-semantics', () => {
       )
     })
 
+    it('preserves client URL formatting and query policy when redacting credentials', () => {
+      assert.equal(
+        run({ 'span.kind': 'client', 'http.url': 'HTTP://:secret@Host:80/path?token=<redacted>#part' }).meta['url.full'],
+        'HTTP://REDACTED:REDACTED@Host:80/path?token=<redacted>#part'
+      )
+      assert.equal(
+        run({ 'span.kind': 'client', 'http.url': 'http://host/path@part?user=user@part' }).meta['url.full'],
+        'http://host/path@part?user=user@part'
+      )
+    })
+
     it('falls back to the scheme default port for a client without an explicit port', () => {
       assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'https://h/p' }).metrics['server.port'], 443)
       assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'http://h/p' }).metrics['server.port'], 80)

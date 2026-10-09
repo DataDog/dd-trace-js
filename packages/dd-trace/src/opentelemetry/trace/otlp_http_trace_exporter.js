@@ -1,6 +1,7 @@
 'use strict'
 
 const OtlpHttpExporterBase = require('../otlp/otlp_http_exporter_base')
+const { resolveProtocol } = require('../otlp/protocol')
 const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const OtlpTraceTransformer = require('./otlp_transformer')
@@ -36,11 +37,13 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
    *   corresponding `OTEL_EXPORTER_OTLP_*_HEADERS` env by the MAP parser.
    * @param {number} timeout - Request timeout in milliseconds
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
-   * @param {boolean} otelTraceSemanticsEnabled - When true, do not emit Datadog-only attributes as span attributes
+   * @param {boolean} [otelTraceSemanticsEnabled] - When true, do not emit Datadog-only attributes as span attributes
+   * @param {string} [protocol] - Effective protocol resolved by Config
    */
-  constructor (url, headers, timeout, resourceAttributes, otelTraceSemanticsEnabled) {
-    super(url, headers, timeout, 'http/json', 'traces')
-    this.#transformer = new OtlpTraceTransformer(resourceAttributes, otelTraceSemanticsEnabled)
+  constructor (url, headers, timeout, resourceAttributes, otelTraceSemanticsEnabled,
+    protocol = resolveProtocol(undefined, 'traces')) {
+    super(url, headers, timeout, protocol, 'traces')
+    this.#transformer = new OtlpTraceTransformer(resourceAttributes, otelTraceSemanticsEnabled, protocol)
   }
 
   /**

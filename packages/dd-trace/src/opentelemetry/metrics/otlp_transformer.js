@@ -25,16 +25,6 @@ const AGGREGATION_TEMPORALITY_CUMULATIVE = protoAggregationTemporality.values.AG
  */
 class OtlpTransformer extends OtlpTransformerBase {
   /**
-   * Creates a new OtlpTransformer instance.
-   *
-   * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
-   * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
-   */
-  constructor (resourceAttributes, protocol) {
-    super(resourceAttributes, protocol, 'metrics')
-  }
-
-  /**
    * Transforms metrics to OTLP format based on the configured protocol.
    * @param {Iterable<AggregatedMetric>} metrics - Iterable of metric data to transform
    * @returns {Buffer} Transformed metrics in the appropriate format

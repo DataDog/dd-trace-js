@@ -59,16 +59,6 @@ function encodeHrTime (hrTime) {
  */
 class OtlpTransformer extends OtlpTransformerBase {
   /**
-   * Creates a new OtlpTransformer instance.
-   *
-   * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
-   * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
-   */
-  constructor (resourceAttributes, protocol) {
-    super(resourceAttributes, protocol, 'logs')
-  }
-
-  /**
    * Transforms log records to OTLP format based on the configured protocol.
    * @param {LogRecord[]} logRecords - Array of enriched log records to transform
    * @returns {Buffer} Transformed log records in the appropriate format

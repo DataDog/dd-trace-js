@@ -1,6 +1,6 @@
 'use strict'
 
-const { extractPathFromUrl } = require('./url')
+const { extractPathFromUrl, redactUrlCredentials } = require('./url')
 
 // OpenTelemetry HTTP semantic-convention attribute names, emitted in place of
 // the Datadog ones when `DD_TRACE_OTEL_SEMANTICS_ENABLED` is set.
@@ -96,36 +96,6 @@ function toHttpScheme (scheme) {
   if (scheme === 'ws') return 'http'
   if (scheme === 'wss') return 'https'
   return scheme
-}
-
-/**
- * Redact any userinfo embedded in a URL's authority, since `url.full` must not
- * leak credentials: `user:pass@host` -> `REDACTED:REDACTED@host`, `user@host` ->
- * `REDACTED@host`. Returns the URL unchanged when no userinfo is present.
- *
- * @param {string} url
- */
-function redactUrlCredentials (url) {
-  const schemeEnd = url.indexOf('://')
-  if (schemeEnd === -1) return url
-  const authorityStart = schemeEnd + 3
-
-  let authorityEnd = url.length
-  for (let i = authorityStart; i < url.length; i++) {
-    const char = url[i]
-    if (char === '/' || char === '?' || char === '#') {
-      authorityEnd = i
-      break
-    }
-  }
-
-  // userinfo runs to the LAST '@' in the authority (WHATWG); using the first
-  // '@' would leak the remainder, e.g. `user:p@ss@host`.
-  const at = url.lastIndexOf('@', authorityEnd - 1)
-  if (at < authorityStart) return url
-
-  const redacted = url.slice(authorityStart, at).includes(':') ? 'REDACTED:REDACTED' : 'REDACTED'
-  return url.slice(0, authorityStart) + redacted + url.slice(at)
 }
 
 /**
