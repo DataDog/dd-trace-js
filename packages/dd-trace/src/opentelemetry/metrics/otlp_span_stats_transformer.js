@@ -60,14 +60,6 @@ const STATUS_CODE_ERROR = 'STATUS_CODE_ERROR'
 
 class OtlpStatsTransformer extends OtlpTransformerBase {
   /**
-   * @param {import('@opentelemetry/api').Attributes} resourceAttributes
-   * @param {string} protocol
-   */
-  constructor (resourceAttributes, protocol) {
-    super(resourceAttributes, protocol, 'span-stats')
-  }
-
-  /**
    * @param {Array<{timeNs: number, bucket: import('../../span_stats').SpanBuckets}>} drained
    * @param {number} bucketSizeNs
    */

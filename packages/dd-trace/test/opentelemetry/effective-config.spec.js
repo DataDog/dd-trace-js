@@ -8,6 +8,7 @@ const sinon = require('sinon')
 
 require('../setup/core')
 const { getConfigFresh } = require('../helpers/config')
+const id = require('../../src/id')
 const OtlpHttpLogExporter = require('../../src/opentelemetry/logs/otlp_http_log_exporter')
 const OtlpHttpMetricExporter = require('../../src/opentelemetry/metrics/otlp_http_metric_exporter')
 const { getProtobufTypes } = require('../../src/opentelemetry/otlp/protobuf_loader')
@@ -59,6 +60,24 @@ describe('effective OpenTelemetry configuration', () => {
         const config = getConfigFresh()
         const traceExporter = createOtlpTraceExporter(config)
         assert.equal(traceExporter.options.headers['Content-Type'], 'application/json')
+        assert.equal(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, traceExporter.protocol)
+        // Capture the serialized payload at the protected transport boundary without making a network request.
+        // @ts-expect-error - sendPayload is protected in the exporter base class.
+        const sendPayload = sinon.stub(traceExporter, 'sendPayload')
+        traceExporter.export([{
+          trace_id: id('123'),
+          span_id: id('456'),
+          parent_id: id('0'),
+          name: 'test',
+          resource: 'test',
+          error: 0,
+          meta: {},
+          metrics: {},
+          start: 1,
+          duration: 1,
+        }])
+        const tracePayload = JSON.parse(sendPayload.firstCall.args[0])
+        assert.equal(tracePayload.resourceSpans[0].scopeSpans[0].spans[0].name, 'test')
         const expected = protocol === 'grpc' ? 'http/protobuf' : protocol
         const { protoLogsService, protoMetricsService } = getProtobufTypes()
         const exporters = [
@@ -79,12 +98,29 @@ describe('effective OpenTelemetry configuration', () => {
           assert.equal(decoded[resourceKey].length, 1)
           assert.equal(exporter.options.headers['Content-Type'],
             expected === 'http/json' ? 'application/json' : 'application/x-protobuf')
+          assert.equal(config[key], expected)
+          assert.equal(exporter.protocol, expected)
           assert.equal(exporter.transformer.protocol, expected)
           for (const info of output) assert.equal(info[key], expected)
         }
       })
     }
   }
+
+  it('preserves signal overrides and effective protocols when Config is recalculated', () => {
+    Object.assign(process.env, {
+      OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/json',
+    })
+    const config = getConfigFresh()
+    for (const remote of [{ DD_TRACE_SAMPLE_RATE: '0.5' }, {}]) {
+      config.setRemoteConfig(remote)
+      assert.equal(config.OTEL_EXPORTER_OTLP_PROTOCOL, 'http/protobuf')
+      assert.equal(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
+      assert.equal(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'http/json')
+      assert.equal(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'http/protobuf')
+    }
+  })
 
   for (const [name, variables, options, expectedName, expectedArgument, kept] of [
     ['always on', { OTEL_TRACES_SAMPLER: 'always_on', OTEL_TRACES_SAMPLER_ARG: '0.2' }, {},

@@ -626,7 +626,7 @@ describe('Config', () => {
     assert.strictEqual(getConfig({ site: 'DATADOGHQ.EU' }).site, 'datadoghq.eu')
   })
 
-  it('should keep standard gRPC protocols inert when OTLP exporters are inactive', () => {
+  it('should resolve gRPC protocols without warning when OTLP exporters are inactive', () => {
     process.env.OTEL_TRACES_EXPORTER = 'none'
     process.env.OTEL_LOGS_EXPORTER = 'none'
     process.env.OTEL_METRICS_EXPORTER = 'none'
@@ -636,9 +636,9 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_PROTOCOL, 'grpc')
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'grpc')
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'grpc')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_PROTOCOL, 'http/protobuf')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'http/protobuf')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'http/protobuf')
     sinon.assert.notCalled(log.warn)
   })
 

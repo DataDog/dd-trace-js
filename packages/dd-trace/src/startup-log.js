@@ -141,20 +141,19 @@ function configInfo () {
     OTEL_EXPORTER_OTLP_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_HEADERS),
     OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: redactEndpoint(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT),
     OTEL_EXPORTER_OTLP_LOGS_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS),
-    OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: httpProtocol(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL),
+    OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ?? null,
     OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: config.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT ?? null,
     OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: redactEndpoint(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT),
     OTEL_EXPORTER_OTLP_METRICS_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS),
-    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: httpProtocol(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL),
+    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL ?? null,
     OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE:
       config.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE?.toLowerCase() ?? null,
     OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT ?? null,
-    OTEL_EXPORTER_OTLP_PROTOCOL: httpProtocol(config.OTEL_EXPORTER_OTLP_PROTOCOL),
+    OTEL_EXPORTER_OTLP_PROTOCOL: config.OTEL_EXPORTER_OTLP_PROTOCOL ?? null,
     OTEL_EXPORTER_OTLP_TIMEOUT: config.OTEL_EXPORTER_OTLP_TIMEOUT ?? null,
     OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: redactEndpoint(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT),
     OTEL_EXPORTER_OTLP_TRACES_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS),
-    // OtlpHttpTraceExporter always serializes JSON, regardless of the configured protocol.
-    OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/json',
+    OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ?? null,
     OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT ?? null,
     OTEL_LOG_LEVEL: config.logLevel ?? null,
     OTEL_LOGS_EXPORTER: config.OTEL_LOGS_EXPORTER ?? null,
@@ -172,14 +171,6 @@ function configInfo () {
   }
   if (config.tags?.version) startupLog.dd_version = config.tags.version
   return startupLog
-}
-
-/**
- * OtlpTransformerBase falls back to HTTP/protobuf for gRPC logs and metrics.
- * @param {string | undefined} protocol
- */
-function httpProtocol (protocol) {
-  return protocol === 'grpc' ? 'http/protobuf' : protocol ?? null
 }
 
 /**

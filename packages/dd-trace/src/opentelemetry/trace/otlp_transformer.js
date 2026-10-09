@@ -1,6 +1,7 @@
 'use strict'
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
+const { resolveProtocol } = require('../otlp/protocol')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { VERSION } = require('../../../../../version')
@@ -100,9 +101,10 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    *
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
    * @param {boolean} [otelTraceSemanticsEnabled] - When true, do not emit Datadog-only attributes as span attributes
+   * @param {string} [protocol] - Effective protocol resolved by Config
    */
-  constructor (resourceAttributes, otelTraceSemanticsEnabled) {
-    super(resourceAttributes, 'http/json', 'traces')
+  constructor (resourceAttributes, otelTraceSemanticsEnabled, protocol = resolveProtocol(undefined, 'traces')) {
+    super(resourceAttributes, protocol)
     this.#otelTraceSemanticsEnabled = otelTraceSemanticsEnabled
   }
 

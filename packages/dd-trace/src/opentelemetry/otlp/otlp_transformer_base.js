@@ -1,7 +1,5 @@
 'use strict'
 
-const log = require('../../log')
-
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/api').AttributeValue} AttributeValue
@@ -23,18 +21,9 @@ class OtlpTransformerBase {
    *
    * @param {Attributes} resourceAttributes - Resource attributes
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
-   * @param {string} signalType - Signal type for warning messages (e.g., 'logs', 'metrics')
    */
-  constructor (resourceAttributes, protocol, signalType) {
+  constructor (resourceAttributes, protocol) {
     this.#resourceAttributes = this.transformAttributes(resourceAttributes)
-    if (protocol === 'grpc') {
-      log.warn(
-        // eslint-disable-next-line @stylistic/max-len
-        'OTLP gRPC protocol is not supported for %s. Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.',
-        signalType
-      )
-      protocol = 'http/protobuf'
-    }
     this.protocol = protocol
   }
 

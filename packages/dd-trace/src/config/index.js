@@ -25,6 +25,7 @@ const {
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
+const { resolveProtocol } = require('../opentelemetry/otlp/protocol')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -733,6 +734,17 @@ class Config extends ConfigBase {
     if (this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
       this.stats = { ...this.stats, DD_TRACE_STATS_COMPUTATION_ENABLED: true }
     }
+
+    // Resolve after generic aliases and signal overrides; exporters and diagnostics consume these same values.
+    setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL',
+      resolveProtocol(this.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'traces'))
+    setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_PROTOCOL',
+      resolveProtocol(this.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'logs', this.DD_LOGS_OTEL_ENABLED))
+    setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL',
+      resolveProtocol(this.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'metrics',
+        this.DD_METRICS_OTEL_ENABLED || this.OTEL_TRACES_SPAN_METRICS_ENABLED))
+    setAndTrack(this, 'OTEL_EXPORTER_OTLP_PROTOCOL',
+      resolveProtocol(this.OTEL_EXPORTER_OTLP_PROTOCOL, 'default'))
 
     const flushInterval = getValueFromEnvSources('_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL')
     setAndTrack(this, '_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL', flushInterval)

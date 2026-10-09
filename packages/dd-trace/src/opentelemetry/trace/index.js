@@ -70,7 +70,8 @@ function createOtlpTraceExporter (config) {
     config.OTEL_EXPORTER_OTLP_TRACES_HEADERS,
     config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
     buildResourceAttributes(config),
-    config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
+    config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
   )
 
   registerResourceAttributeRefresh(exporter, () => buildResourceAttributes(config))
