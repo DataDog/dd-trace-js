@@ -1206,6 +1206,111 @@ describe('integrations', () => {
         })
       })
 
+      describe('decisions', function () {
+        const input = 'I was charged twice for my subscription this month.'
+        const questions = [
+          {
+            type: 'choice',
+            name: 'department',
+            instructions: 'Which team should handle this request?',
+            choices: [{ value: 'billing' }, { value: 'technical' }, { value: 'sales' }],
+          },
+          {
+            type: 'score',
+            name: 'severity',
+            instructions: 'How severe is the issue?',
+            levels: [{ label: 'Minor' }, { label: 'Workaround available' }, { label: 'Blocking' }],
+          },
+          { type: 'predicate', name: 'needs_refund', instructions: 'Is the customer asking for a refund?' },
+        ]
+
+        beforeEach(function () {
+          if (semifies(realVersion, '<7.30.0')) {
+            this.skip()
+          }
+        })
+
+        it('submits a decision span', async function () {
+          const decision = await openai.decisions.create({ model: 'gpt-6-luna', input, questions })
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const answers = JSON.parse(llmobsSpans[0].meta.output.messages[0].content)
+          assert.deepStrictEqual(answers.map(answer => answer.name), ['department', 'severity', 'needs_refund'])
+
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createDecision',
+            inputMessages: [{ role: 'user', content: input }],
+            outputMessages: [{ role: 'assistant', content: JSON.stringify(decision.answers) }],
+            metrics: {
+              input_tokens: MOCK_NUMBER,
+              output_tokens: 0,
+              total_tokens: MOCK_NUMBER,
+              cache_read_input_tokens: 0,
+              reasoning_output_tokens: 0,
+            },
+            modelName: 'gpt-6-luna',
+            modelProvider: 'openai',
+            metadata: { questions },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+        })
+
+        it('submits a decision span with image input', async function () {
+          const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEU' +
+            'lEQVR4nGO4IyeHFTEMLQkAid1GAXiz9RcAAAAASUVORK5CYII='
+          await openai.decisions.create({
+            model: 'gpt-6-luna',
+            input: [{
+              role: 'user',
+              content: [
+                { type: 'input_text', text: 'Classify this image.' },
+                { type: 'input_image', image_url: image },
+              ],
+            }],
+            questions: [{
+              type: 'choice',
+              name: 'color',
+              instructions: 'What is the dominant color of the image?',
+              choices: [{ value: 'red' }, { value: 'green' }, { value: 'blue' }],
+            }],
+          })
+
+          const { llmobsSpans } = await getEvents()
+          assert.deepStrictEqual(llmobsSpans[0].meta.input.messages, [
+            { role: 'user', content: 'Classify this image.\n[image]' },
+          ])
+        })
+
+        it('submits a decision span with an error', async function () {
+          let error
+          try {
+            await openai.decisions.create({ model: 'not-a-decision-model', input, questions })
+          } catch (e) {
+            error = e
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createDecision',
+            inputMessages: [{ role: 'user', content: input }],
+            outputMessages: [{ content: '', role: '' }],
+            modelName: 'not-a-decision-model',
+            modelProvider: 'openai',
+            metadata: { questions },
+            tags: { ml_app: 'test', integration: 'openai' },
+            error: {
+              type: MOCK_STRING,
+              message: error.message,
+              stack: error.stack,
+            },
+          })
+        })
+      })
+
       describe('prompts', function () {
         beforeEach(function () {
           if (semifies(realVersion, '<4.87.0')) {
