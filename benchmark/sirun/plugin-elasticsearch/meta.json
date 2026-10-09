@@ -8,10 +8,10 @@
   "variants": {
     "search": {
       "iterations": 10,
-      "env": { "VARIANT": "search", "OPERATIONS": "4000000" }
+      "env": { "VARIANT": "search", "OPERATIONS": "2700000" }
     },
     "bulk-index": {
-      "env": { "VARIANT": "bulk-index", "OPERATIONS": "274000" }
+      "env": { "VARIANT": "bulk-index", "OPERATIONS": "230000" }
     },
     "get": {
       "env": { "VARIANT": "get", "OPERATIONS": "5400000" }
