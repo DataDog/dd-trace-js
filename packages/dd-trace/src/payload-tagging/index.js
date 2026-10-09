@@ -23,9 +23,14 @@ const { truncated } = require('./constants')
 // branches.
 const dataDependentRulePattern = /[?()@^~:`]/
 
-// Bound the combined length of JSON-encoded strings parsed while expanding one
-// payload, so oversized or numerous candidates can neither be parsed nor
-// retained for later truncation.
+// Budget for parse attempts while expanding one payload: the remaining
+// cumulative string length (in UTF-16 code units, measured with String.length,
+// not bytes) still available for JSON.parse attempts. The budget is shared
+// across all expansion attempts of one payload. Each attempt subtracts its
+// input length before parsing, and failed parse attempts are not refunded,
+// because the parsing work has already been done. This bounds combined parse
+// work so oversized or numerous candidates can neither be parsed nor retained
+// for later truncation.
 const maxExpansionLength = 1_000_000
 
 /**
@@ -62,7 +67,10 @@ function assignSafe (parent, parentProperty, value) {
 
 /**
  * Work shared by every expansion of one payload: the snapshot budget left by
- * the payload capture and the remaining parseable string length.
+ * the payload capture, and the remaining cumulative string length (in UTF-16
+ * code units) available for parse attempts. That parse budget is shared across
+ * all expansion attempts for one payload; failed attempts still consume it
+ * because they perform parsing work.
  *
  * @typedef {{
  *   incomplete: boolean,
