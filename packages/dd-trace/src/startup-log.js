@@ -4,7 +4,7 @@ const os = require('os')
 const { inspect } = require('util')
 
 const tracerVersion = require('../../../package.json').version
-const { obfuscateQs, redactUrlCredentials } = require('./plugins/util/url')
+const { redactEndpoint, redactHeaders } = require('./log/redact')
 const { warn } = require('./log/writer')
 
 const errors = {}
@@ -158,33 +158,6 @@ function configInfo () {
   }
   if (config.tags?.version) startupLog.dd_version = config.tags.version
   return startupLog
-}
-
-/**
- * @param {string | undefined} endpoint
- */
-function redactEndpoint (endpoint) {
-  if (endpoint === undefined) return null
-
-  // Credentials can use arbitrary query parameter names, independent of span obfuscation settings.
-  endpoint = obfuscateQs({ queryStringObfuscation: true }, endpoint)
-  if (!endpoint.includes('@')) return endpoint
-
-  try {
-    const url = new URL(endpoint)
-    if (!url.username && !url.password) return endpoint
-    return redactUrlCredentials(url.href)
-  } catch {
-    // Do not expose potential credentials if a calculated endpoint cannot be parsed.
-    return null
-  }
-}
-
-/**
- * @param {Record<string, string> | undefined} headers
- */
-function redactHeaders (headers) {
-  return Object.fromEntries(Object.keys(headers ?? {}).map(name => [name, '<redacted>']))
 }
 
 /**
