@@ -1,5 +1,7 @@
 'use strict'
 
+const { SPAN_TYPE } = require('../../../../ext/tags')
+
 const log = require('../log')
 const Sampler = require('../sampler')
 const { formatKnuthRate } = require('../util')
@@ -136,6 +138,8 @@ class LLMObsTagger {
     }
 
     this._register(span)
+
+    if (!span.context().getTag(SPAN_TYPE)) span.setTag(SPAN_TYPE, 'llm')
 
     const traceTags = span.context()._trace.tags
 
