@@ -95,6 +95,12 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    it('activates hookless integrations that publish their own channels in ESM-only packages', () => {
+      execSync('node ./build-and-test-ai.mjs', {
+        timeout,
+      })
+    })
+
     it('injects Git metadata into bundled applications', () => {
       execSync('node ./build-and-test-git-tags.js', {
         timeout,

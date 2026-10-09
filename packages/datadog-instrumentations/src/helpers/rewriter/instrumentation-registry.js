@@ -5,6 +5,8 @@
 // Setup must not load rewrite targets: re-entrant activations of the same group are dropped.
 // activate: true covers every rewrite target in the entry; activate.modules narrows it to the packages
 // that should trigger activation, leaving the rest of the entry rewrite-only.
+// activate.bundlers also activates those packages when esbuild or webpack bundle them. Those bundlers do not
+// rewrite source, so only opt in when activation alone is useful, e.g. when the library publishes its own channels.
 // Other entries use hooks or another activation path, or do not need activation from a rewrite.
 /**
  * @typedef {object} Activation
@@ -14,6 +16,7 @@
  * @typedef {object} ActivationConfig
  * @property {string[]} [modules]
  * @property {((activation: Activation) => void)} [setup]
+ * @property {boolean} [bundlers]
  *
  * @typedef {object} InstrumentationRegistryEntry
  * @property {true|ActivationConfig} [activate]
@@ -22,7 +25,17 @@
 
 /** @satisfies {InstrumentationRegistryEntry[]} */
 const registry = [
-  { instrumentations: require('./instrumentations/ai') },
+  {
+    activate: {
+      setup: ({ version }) => {
+        const setUpAi = require('../../ai')
+        setUpAi(version)
+      },
+      // ai >=7 publishes its own telemetry channel, so bundles without rewrites still need activation.
+      bundlers: true,
+    },
+    instrumentations: require('./instrumentations/ai'),
+  },
   { activate: true, instrumentations: require('./instrumentations/azure-cosmos') },
   { instrumentations: require('./instrumentations/azure-durable-functions') },
   { activate: true, instrumentations: require('./instrumentations/bullmq') },
@@ -42,6 +55,7 @@ const registry = [
 ]
 
 const activatedModules = new Set()
+const bundlerActivatedModules = new Set()
 /** @type {Map<string, (activation: Activation) => void>} */
 const activationSetups = new Map()
 for (const { activate, instrumentations } of registry) {
@@ -54,6 +68,10 @@ for (const { activate, instrumentations } of registry) {
   if (setup !== undefined && typeof setup !== 'function') {
     throw new TypeError('Instrumentation registry activate.setup must be a function')
   }
+  const bundlers = config?.bundlers
+  if (bundlers !== undefined && typeof bundlers !== 'boolean') {
+    throw new TypeError('Instrumentation registry activate.bundlers must be a boolean')
+  }
 
   const rewriteModules = new Set(instrumentations.map(({ module }) => module.name))
   for (const moduleName of resolveActivationModules(config?.modules, rewriteModules)) {
@@ -62,6 +80,7 @@ for (const { activate, instrumentations } of registry) {
     }
     activatedModules.add(moduleName)
     if (setup) activationSetups.set(moduleName, setup)
+    if (bundlers) bundlerActivatedModules.add(moduleName)
   }
 }
 
@@ -107,10 +126,28 @@ function isRewriteActivationEnabled (moduleName) {
 
 /**
  * @param {string} moduleName
+ */
+function isBundlerActivationEnabled (moduleName) {
+  return bundlerActivatedModules.has(moduleName)
+}
+
+function getBundlerActivationModules () {
+  return bundlerActivatedModules.values()
+}
+
+/**
+ * @param {string} moduleName
  * @returns {((activation: Activation) => void)|undefined}
  */
 function getActivationSetup (moduleName) {
   return activationSetups.get(moduleName)
 }
 
-module.exports = { getActivationSetup, isRewriteActivationEnabled, instrumentations, registry }
+module.exports = {
+  getActivationSetup,
+  getBundlerActivationModules,
+  isBundlerActivationEnabled,
+  isRewriteActivationEnabled,
+  instrumentations,
+  registry,
+}

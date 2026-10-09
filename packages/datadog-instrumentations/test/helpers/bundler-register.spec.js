@@ -176,6 +176,50 @@ describe('bundler register', () => {
     })
   })
 
+  it('activates bundler-activated integrations published without rewriting', () => {
+    const setup = sinon.stub()
+    const exportHook = sinon.stub()
+    const { activate, loadChannel, log, publish } = loadBundlerRegister({
+      rewriteActivationEnabled: new Set(['test-bundled', 'test-rewrite-only-activation']),
+      bundlerActivationEnabled: new Set(['test-bundled']),
+      activationSetups: new Map([['test-bundled', setup]]),
+      hooks: {},
+      instrumentations: { 'test-bundled': [{ hook: exportHook }] },
+    })
+    const payload = { module: {}, package: 'test-bundled', path: 'test-bundled', version: '7.0.0' }
+
+    publish(payload)
+    publish({ module: {}, package: 'test-rewrite-only-activation', path: 'test-rewrite-only-activation' })
+
+    sinon.assert.calledOnceWithExactly(setup, { moduleName: 'test-bundled', version: '7.0.0' })
+    assert.deepStrictEqual(activate.args, [['test-bundled', '7.0.0']])
+    sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-bundled' })
+    sinon.assert.notCalled(exportHook)
+    assert.deepStrictEqual(payload.module, {})
+    // A rewrite-activated module that did not opt into bundler activation keeps the hook path.
+    assert.deepStrictEqual(log.error.args, [
+      ['esbuild-wrapped %s missing in list of hooks', 'test-rewrite-only-activation'],
+      ['esbuild-wrapped %s missing in list of instrumentations', 'test-rewrite-only-activation'],
+    ])
+  })
+
+  it('does not activate a disabled bundler-activated integration', () => {
+    const setup = sinon.stub()
+    const { loadChannel, publish } = loadBundlerRegister({
+      disabled: new Set(['test-bundled']),
+      rewriteActivationEnabled: new Set(['test-bundled']),
+      bundlerActivationEnabled: new Set(['test-bundled']),
+      activationSetups: new Map([['test-bundled', setup]]),
+      hooks: {},
+      instrumentations: {},
+    })
+
+    publish({ module: {}, package: 'test-bundled', path: 'test-bundled', version: '7.0.0' })
+
+    sinon.assert.notCalled(loadChannel.publish)
+    sinon.assert.notCalled(setup)
+  })
+
   it('does not activate a disabled hookless source-rewritten integration', () => {
     const setup = sinon.stub()
     const { loadChannel, publish } = loadBundlerRegister({
@@ -320,6 +364,7 @@ function throwValue (value) {
  * @param {{
  *   disabled?: Set<string>,
  *   rewriteActivationEnabled?: Set<string>,
+ *   bundlerActivationEnabled?: Set<string>,
  *   activationSetups?: Map<string, (activation: { moduleName: string, version?: string }) => void>,
  *   hooks: Record<string, Function|{ fn: Function }>,
  *   instrumentations: Record<string, Array<object>>
@@ -328,6 +373,7 @@ function throwValue (value) {
 function loadBundlerRegister ({
   disabled = new Set(),
   rewriteActivationEnabled = new Set(),
+  bundlerActivationEnabled = new Set(),
   activationSetups = new Map(),
   hooks,
   instrumentations,
@@ -375,6 +421,7 @@ function loadBundlerRegister ({
         },
         './instrumentations': instrumentations,
         './rewriter/targets': {
+          isBundlerActivationEnabled: name => bundlerActivationEnabled.has(name),
           isRewriteActivationEnabled: name => rewriteActivationEnabled.has(name),
         },
         './register.js': register,

@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const { describe, it } = require('mocha')
 
 const DatadogWebpackPlugin = require('../index')
@@ -47,6 +50,38 @@ describe('DatadogWebpackPlugin', () => {
 
       plugin.apply(compiler)
       assert.equal(tapped[0], 'DatadogWebpackPlugin')
+    })
+
+    it('adds the loader to bundler-activated packages without hooks', () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webpack-'))
+      const packageDirectory = path.join(directory, 'node_modules', 'ai')
+      fs.mkdirSync(path.join(packageDirectory, 'dist'), { recursive: true })
+      fs.writeFileSync(path.join(packageDirectory, 'package.json'), JSON.stringify({ version: '6.0.0' }))
+      fs.writeFileSync(path.join(packageDirectory, 'dist', 'index.js'), 'module.exports = {}\n')
+
+      let afterResolve
+      new DatadogWebpackPlugin().apply({
+        options: {},
+        hooks: {
+          environment: { tap: () => {} },
+          thisCompilation: { tap: () => {} },
+          normalModuleFactory: {
+            tap: (name, fn) => fn({ hooks: { afterResolve: { tap: (name, hook) => { afterResolve = hook } } } }),
+          },
+        },
+      })
+
+      try {
+        const createData = { resource: path.join(packageDirectory, 'dist', 'index.js') }
+        afterResolve({ request: 'ai', createData })
+
+        assert.deepStrictEqual(createData.loaders, [{
+          loader: require.resolve('../src/loader'),
+          options: { pkg: 'ai', version: '6.0.0', path: 'ai' },
+        }])
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true })
+      }
     })
   })
 })

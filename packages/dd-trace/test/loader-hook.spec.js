@@ -46,13 +46,14 @@ describe('loader hook', () => {
           'bullmq'
         ),
         includesHybridOrchestrion: data.shouldInclude(
-          'file:///app/node_modules/ai/dist/index.js',
-          'ai'
+          'file:///app/node_modules/graphql/execution/execute.mjs',
+          'graphql'
         ),
         pureIncludes: Object.fromEntries(${JSON.stringify([
           '@azure/cosmos',
           '@langchain/core',
           '@langchain/langgraph',
+          'ai',
           'bullmq',
           'mercurius',
         ])}.map(name => [name, data.shouldInclude(
@@ -86,6 +87,7 @@ describe('loader hook', () => {
         '@azure/cosmos': false,
         '@langchain/core': false,
         '@langchain/langgraph': false,
+        ai: false,
         bullmq: false,
         mercurius: false,
       },

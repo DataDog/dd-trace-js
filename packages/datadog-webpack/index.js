@@ -6,6 +6,9 @@ const fs = require('node:fs')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const {
+  getBundlerActivationModules,
+} = require('../datadog-instrumentations/src/helpers/rewriter/instrumentation-registry')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
 const log = require('./src/log')
 
@@ -29,6 +32,10 @@ for (const [name, instrumentation] of Object.entries(instrumentations)) {
       modulesOfInterest.add(name) // e.g. "redis"
     }
   }
+}
+
+for (const name of getBundlerActivationModules()) {
+  modulesOfInterest.add(name)
 }
 
 /**
