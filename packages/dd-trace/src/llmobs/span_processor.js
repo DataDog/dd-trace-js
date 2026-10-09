@@ -412,7 +412,7 @@ class LLMObsSpanProcessor {
 
     const mlObsTags = LLMObsTagger.tagMap.get(span)
     // Resolved here because a span can become an agent after registration. An agent without its own version, and
-    // any other span, reports the version inherited at registration, matching dd-trace-java. Either wins over a user
+    // any other span, reports the version inherited at registration. Either wins over a user
     // tag of the same name.
     const agentVersion = mlObsTags?.[SPAN_KIND] === 'agent'
       ? mlObsTags[AGENT_VERSION] || mlObsTags[PARENT_AGENT_VERSION]
