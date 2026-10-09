@@ -391,7 +391,7 @@ function testBasicInputWithoutRC (t, probe, done) {
  *   config to use instead of t.rcConfig.config.
  */
 function setupAssertionListeners (t, done, probe) {
-  let traceId, spanId, dd
+  let traceId, spanId, spanRuntimeId, dd, runtimeId
 
   const messageListener = ({ payload }) => {
     const span = payload
@@ -402,6 +402,7 @@ function setupAssertionListeners (t, done, probe) {
 
     traceId = span.trace_id.toString()
     spanId = span.span_id.toString()
+    spanRuntimeId = span.meta['runtime-id']
 
     assertDD()
   }
@@ -422,6 +423,7 @@ function setupAssertionListeners (t, done, probe) {
     assert.ok(payload.dd.trace_id.length > 0, `Expected ${payload.dd.trace_id.length} > 0`)
     assert.ok(payload.dd.span_id.length > 0, `Expected ${payload.dd.span_id.length} > 0`)
     dd = payload.dd
+    runtimeId = payload.runtime_id
 
     assertDD()
   })
@@ -430,6 +432,8 @@ function setupAssertionListeners (t, done, probe) {
     if (!traceId || !spanId || !dd) return
     assert.strictEqual(dd.trace_id, traceId)
     assert.strictEqual(dd.span_id, spanId)
+    // The snapshot is emitted by the same process as the span it was captured in
+    assert.strictEqual(runtimeId, spanRuntimeId)
     t.agent.removeListener('message', messageListener)
     done()
   }
@@ -475,6 +479,7 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
 
   assert.match(data.logger.thread_id, /^pid:\d+$/)
 
+  assertUUID(data.runtime_id)
   assertUUID(data.debugger.snapshot.id)
   assert.strictEqual(typeof data.debugger.snapshot.timestamp, 'number')
   assert.ok(
