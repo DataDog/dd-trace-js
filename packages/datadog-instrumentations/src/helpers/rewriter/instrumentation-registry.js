@@ -26,7 +26,10 @@ const registry = [
   { activate: true, instrumentations: require('./instrumentations/azure-cosmos') },
   { instrumentations: require('./instrumentations/azure-durable-functions') },
   { activate: true, instrumentations: require('./instrumentations/bullmq') },
-  { instrumentations: require('./instrumentations/claude-agent-sdk') },
+  {
+    activate: { setup: () => require('../../claude-agent-sdk') },
+    instrumentations: require('./instrumentations/claude-agent-sdk'),
+  },
   { instrumentations: require('./instrumentations/graphql') },
   { instrumentations: require('./instrumentations/graphql-jit') },
   { activate: true, instrumentations: require('./instrumentations/langchain') },
