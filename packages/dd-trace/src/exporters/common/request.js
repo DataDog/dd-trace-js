@@ -227,10 +227,10 @@ function request (data, options, callback) {
             isRetriableNetworkError(error)) {
           settled = true
           finalize()
-          // Unref so a pending retry never keeps the host process alive past
-          // its natural exit point; long-running apps still retry because the
-          // event loop is held open by their own work.
-          setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
+          const retryTimer = setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1)
+          // Background retries must not keep the host process alive. Lifecycle-owned
+          // requests can opt in when their final result must be observed.
+          if (!options.keepProcessAlive) retryTimer.unref?.()
         } else {
           complete(error)
         }

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert')
 const { inspect } = require('node:util')
+
 const { describe, before, it } = require('mocha')
 const semifies = require('semifies')
 const { withVersions } = require('../../../setup/mocha')
@@ -68,14 +69,6 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertLLMObsSpan(apmSpans, llmobsSpans)
-
-        // MLOS-591 regression: the default `LLMObsPlugin.start` registration
-        // path must emit OTel bridge tags onto the local trace so dd-go can
-        // correlate manual OTel `gen_ai.*` spans with this LLMObs span.
-        const apmMeta = apmSpans[0].meta
-        assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
-        assert.ok(apmMeta.llmobs_parent_id)
-        assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
       })
 
       it('sets model_provider to unknown for unrecognized base URLs', async () => {
@@ -488,6 +481,50 @@ describe('Plugin', () => {
         const { apmSpans, llmobsSpans } = await getEvents()
         assertLLMObsSpan(apmSpans, llmobsSpans)
       })
+    })
+  })
+})
+
+describe('Plugin with LLMObs direct traces', () => {
+  useEnv({
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>',
+  })
+
+  const { getEvents } = useLlmObs({
+    plugin: 'anthropic',
+    tracerConfigOptions: {
+      samplingRules: [{ sampleRate: 0 }],
+    },
+  })
+
+  withVersions('anthropic', '@anthropic-ai/sdk', (version) => {
+    let client
+
+    before(() => {
+      const { Anthropic } = require(`../../../../../../versions/@anthropic-ai/sdk@${version}`).get()
+      client = new Anthropic({ baseURL: 'http://127.0.0.1:9126/vcr/anthropic' })
+    })
+
+    it('submits rejected spans through direct LLMObs intake', async () => {
+      await client.messages.create({
+        model: 'claude-3-7-sonnet-20250219',
+        messages: [{ role: 'user', content: 'Hello, world!' }],
+        max_tokens: 100,
+        temperature: 0.5,
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents()
+
+      // MLOS-591 regression: the default `LLMObsPlugin.start` registration
+      // path must emit OTel bridge tags onto the local trace so dd-go can
+      // correlate manual OTel `gen_ai.*` spans with this LLMObs span.
+      assert.equal(apmSpans.length, 1)
+      assert.equal(llmobsSpans.length, 1)
+      assert.strictEqual(llmobsSpans[0].name, 'anthropic.request')
+      const apmMeta = apmSpans[0].meta
+      assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
+      assert.ok(apmMeta.llmobs_parent_id)
+      assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
     })
   })
 })

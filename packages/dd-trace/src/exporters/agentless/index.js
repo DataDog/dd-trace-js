@@ -86,7 +86,7 @@ class AgentlessExporter {
    * @param {object[]} spans - Array of spans (all from the same trace)
    */
   export (spans) {
-    this._writer.append(spans)
+    const appended = this._writer.append(spans)
 
     const { flushInterval } = this.#config
 
@@ -107,6 +107,8 @@ class AgentlessExporter {
       }, flushInterval)
       this.#timer.unref?.()
     }
+
+    return appended
   }
 
   /**

@@ -538,6 +538,44 @@ describe('request', function () {
     })
   })
 
+  for (const [description, options, expectedHasRef] of [
+    ['unrefs retry timers by default', {}, false],
+    ['keeps retry timers referenced when requested', { keepProcessAlive: true }, true],
+  ]) {
+    it(description, () => {
+      const error = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+      const requestMessage = new EventEmitter()
+      requestMessage.setTimeout = sinon.stub()
+      requestMessage.write = sinon.stub()
+      requestMessage.end = () => requestMessage.emit('error', error)
+
+      const createRequest = sinon.stub().returns(requestMessage)
+      const retryRequest = proxyquire('../../../src/exporters/common/request', {
+        '../../../../datadog-core': {
+          storage: () => ({ run: runInNoopContext }),
+        },
+        http: { ...http, request: createRequest },
+        './docker': docker,
+        '../../log': log,
+        './retry': {
+          ...require('../../../src/exporters/common/retry'),
+          ...retryStubs,
+        },
+      })
+      const setTimeoutSpy = sinon.spy(global, 'setTimeout')
+
+      try {
+        retryRequest('', { method: 'GET', ...options }, sinon.spy())
+
+        const retryTimer = setTimeoutSpy.lastCall.returnValue
+        assert.strictEqual(retryTimer.hasRef(), expectedHasRef)
+        clearTimeout(retryTimer)
+      } finally {
+        setTimeoutSpy.restore()
+      }
+    })
+  }
+
   it('should not retry on a non-retriable error code', (done) => {
     const error = Object.assign(new Error('not found'), { code: 'ENOTFOUND' })
 

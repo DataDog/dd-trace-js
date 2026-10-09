@@ -1,6 +1,7 @@
 'use strict'
 module.exports = {
   LOG: 'log',
+  LLMOBS: 'llmobs',
   AGENT: 'agent',
   AGENTLESS: 'agentless',
   DATADOG: 'datadog',
