@@ -138,6 +138,40 @@ moduleTypes.forEach(({
     })
 
     context('intelligent test runner', () => {
+      it('reports suite TIA test skip counts independently of coverage and framework skips', async () => {
+        const suite = 'cypress/e2e/tia-skip-count.cy.js'
+        receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
+        receiver.setSuitesToSkip(['TIA skip one', 'TIA skip two'].map(name => ({
+          type: 'test', attributes: { suite, name: `suite ${name}` },
+        })))
+        childProcess = exec(testCommand, {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            SPEC_PATTERN: suite,
+          },
+        })
+        let output = ''
+        childProcess.stdout.on('data', chunk => { output += chunk.toString() })
+        childProcess.stderr.on('data', chunk => { output += chunk.toString() })
+        await gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const suites = events.filter(event => event.type === 'test_suite_end')
+          assert.strictEqual(suites.length, 1, output)
+          const suite = suites[0].content
+          assert.strictEqual(suite.metrics[TEST_ITR_SKIPPING_COUNT], 2)
+          assert.strictEqual(suite.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          const tests = events.filter(event => event.type === 'test')
+          assert.strictEqual(tests.length, 4)
+          assert.strictEqual(tests.filter(event => event.content.meta[TEST_SKIPPED_BY_ITR] === 'true').length, 2)
+          const session = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(session.metrics[TEST_ITR_SKIPPING_COUNT], 2)
+          assert.strictEqual(session.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+        })
+        assert.strictEqual(childProcess.exitCode, 0, output)
+      })
+
       it('can report git metadata', async () => {
         const searchCommitsRequestPromise = receiver.payloadReceived(
           ({ url }) => url.endsWith('/api/v2/git/repository/search_commits'),

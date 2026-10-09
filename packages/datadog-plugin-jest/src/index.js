@@ -15,6 +15,7 @@ const {
   JEST_TEST_RUNNER,
   finishAllTraceSpans,
   getTestSuiteCommonTags,
+  getTestSuiteItrTags,
   addIntelligentTestRunnerSpanTags,
   TEST_PARAMETERS,
   TEST_FRAMEWORK_VERSION,
@@ -207,6 +208,7 @@ class JestPlugin extends CiPlugin {
         config._ddTestCommand = this.command
         config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
+        config._ddIsItrEnabled = this.libraryConfig?.isItrEnabled ?? false
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
         config._ddEarlyFlakeDetectionRetryPolicy = this.libraryConfig?.earlyFlakeDetectionRetryPolicy
         config._ddRepositoryRoot = this.repositoryRoot
@@ -237,6 +239,7 @@ class JestPlugin extends CiPlugin {
         _ddTestModuleId: testModuleId,
         _ddRequestErrorTags: requestErrorTags,
         _ddItrCorrelationId: itrCorrelationId,
+        _ddIsItrEnabled: isItrEnabled,
         _ddForcedToRun,
         _ddUnskippable,
         _ddTestCodeCoverageEnabled,
@@ -250,6 +253,7 @@ class JestPlugin extends CiPlugin {
 
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
+        ...getTestSuiteItrTags(isItrEnabled ?? this.libraryConfig?.isItrEnabled),
         ...requestErrorTags,
         ...itrSkippingEnabledTags,
       }
