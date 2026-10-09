@@ -22,7 +22,7 @@ const {
   TEST_SUITE_EXECUTION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
 const { publishWithCompletion } = require('./helpers/channel')
-const { addHook, channel, tracingChannel } = require('./helpers/instrument')
+const { channel, tracingChannel } = require('./helpers/instrument')
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
@@ -89,7 +89,8 @@ if (loadCh.hasSubscribers) {
 
 const coordinatorStates = new WeakMap()
 const emptyShardConfigurations = new WeakSet()
-const localRunnerVersions = new WeakMap()
+// A WebdriverIO process runs a single @wdio/local-runner version.
+let localRunnerVersion
 const rumBrowsers = new Set()
 const rumCorrelationBrowsers = new Set()
 const rumRunnerBrowsers = new WeakSet()
@@ -107,15 +108,14 @@ function getCurrentRumContext () {
   return globalThis.window
 }
 
-addHook({
-  name: '@wdio/local-runner',
-  versions: ['>=9.0.0'],
-  file: 'build/index.js',
-  patchDefault: true,
-}, (LocalRunner, version) => {
-  localRunnerVersions.set(LocalRunner, version)
-  return LocalRunner
-})
+/**
+ * @param {import('./helpers/rewriter/instrumentation-registry').Activation} activation
+ */
+function recordLocalRunnerVersion ({ moduleName, version }) {
+  if (moduleName === '@wdio/local-runner') localRunnerVersion = version
+}
+
+exports.recordLocalRunnerVersion = recordLocalRunnerVersion
 
 /**
  * Returns whether this browser can preload and clean correlation across every browsing context.
@@ -1156,7 +1156,7 @@ function getCoordinatorState (localRunner) {
     initializationCallbacks: [],
     sessionStarted: false,
     finished: false,
-    frameworkVersion: localRunnerVersions.get(localRunner.constructor),
+    frameworkVersion: localRunnerVersion,
     testFrameworkAdapter: getRunnerConfiguration(localRunner)?.framework,
     activeWorkers: 0,
     attemptToFixExecutions: new Map(),
