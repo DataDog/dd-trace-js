@@ -21,8 +21,7 @@ const { maxValueLength, truncated } = require('./constants')
  * @returns {Function | undefined} the own accessor getter, if any
  */
 function getterOf (object, key) {
-  const descriptor = Object.getOwnPropertyDescriptor(object, key)
-  return descriptor?.get
+  return Object.getOwnPropertyDescriptor(object, key)?.get
 }
 
 // The element-kind, byteLength, byteOffset and buffer getters live on
