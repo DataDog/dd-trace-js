@@ -1,6 +1,7 @@
 'use strict'
 
 const { DD_MAJOR } = require('../../../../version')
+const { getInstrumentation } = require('../setup/helpers/load-inst')
 
 module.exports = {
   '@aws/durable-execution-sdk-js': [
@@ -307,9 +308,11 @@ module.exports = {
     },
     {
       name: 'graphql-jit',
+      // JIT layouts and their GraphQL peers must remain workspace-local without identity hooks.
+      isolated: true,
       versions: [
+        ...new Set(getInstrumentation('graphql-jit').flatMap(({ versions }) => versions)),
         '>=0.8.0 <0.8.5',
-        '>=0.8.5 <0.8.7',
       ],
     },
   ],
