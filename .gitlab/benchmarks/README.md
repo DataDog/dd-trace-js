@@ -51,8 +51,10 @@ no `strategy`, so it finishes after dispatch, and `allow_failure: true` keeps a
 failed dispatch from failing PR checks. The downstream lookup/build/publish job is
 also allowed to fail. Results are collected by the deployed Lambda pool afterward.
 
-The job supports branch pipelines and external GitHub PR pipelines, passing the
-source commit and branch for API lookup. Default-branch, tag, native GitLab MR, and
+The job runs only in `external_pull_request_event` pipelines, passing the GitHub
+PR source commit and branch for API lookup. GitLab also creates a branch pipeline
+for a push to an open PR; excluding that pipeline prevents duplicate dispatches
+for the same update. Branch, tag, native GitLab MR, scheduled, manual, and
 `graphite-base/*` runs do not launch this job. No PR number is hardcoded or inferred
 from a GitLab MR IID. Missing open PRs skip; ambiguous matches and API errors remain
 visible in the optional downstream job.

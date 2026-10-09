@@ -184,9 +184,11 @@ benchmark-serverless-pr-performance:
   rules:
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
-    - if: '$CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_SHA && $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_NAME'
+    # GitHub PR updates also create a branch pipeline; dispatch only from the PR pipeline.
+    - if: >-
+        $CI_PIPELINE_SOURCE == "external_pull_request_event" &&
+        $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_SHA && $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_NAME
       variables:
         UPSTREAM_COMMIT_SHA: $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_SHA
         UPSTREAM_COMMIT_BRANCH: $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_NAME
-    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH'
     - when: never
