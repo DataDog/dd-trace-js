@@ -1,12 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { executionAsyncResource } = require('async_hooks')
+const { AsyncLocalStorage, executionAsyncResource } = require('async_hooks')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
 require('../../dd-trace/test/setup/core')
-const { storage } = require('../src/storage')
+const { storage, isACFActive } = require('../src/storage')
 
 describe('storage', () => {
   let testStorage
@@ -87,5 +87,20 @@ describe('storage', () => {
     testStorage.enterWith(undefined)
 
     assert.strictEqual(testStorage.getStore(), undefined)
+  })
+
+  it('should guard missing trigger resources for every legacy AsyncLocalStorage', () => {
+    assert.strictEqual(Object.hasOwn(testStorage.constructor.prototype, '_propagate'), false)
+
+    if (isACFActive) {
+      assert.strictEqual(testStorage._propagate, AsyncLocalStorage.prototype._propagate)
+      return
+    }
+
+    const nativeStorage = new AsyncLocalStorage()
+    nativeStorage.enterWith('native')
+
+    testStorage._propagate({}, undefined, 'PROMISE')
+    nativeStorage._propagate({}, undefined, 'PROMISE')
   })
 })
