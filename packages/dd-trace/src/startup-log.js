@@ -2,7 +2,9 @@
 
 const os = require('os')
 const { inspect } = require('util')
+
 const tracerVersion = require('../../../package.json').version
+const { obfuscateQs } = require('./plugins/util/url')
 const { warn } = require('./log/writer')
 
 const errors = {}
@@ -161,7 +163,11 @@ function configInfo () {
  * @param {string | undefined} endpoint
  */
 function redactEndpoint (endpoint) {
-  if (!endpoint?.includes('@')) return endpoint ?? null
+  if (endpoint === undefined) return null
+
+  // Credentials can use arbitrary query parameter names, independent of span obfuscation settings.
+  endpoint = obfuscateQs({ queryStringObfuscation: true }, endpoint)
+  if (!endpoint.includes('@')) return endpoint
 
   try {
     const url = new URL(endpoint)

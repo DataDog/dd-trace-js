@@ -676,13 +676,20 @@ describe('resolved OpenTelemetry startup configuration', () => {
   })
 
   for (const [endpoint, expected] of [
+    ['https://collector:4318/path?api_key=secret', 'https://collector:4318/path'],
+    ['https://collector:4318/path?api%5Fkey=secret&region=eu', 'https://collector:4318/path'],
+    ['https://collector:4318/path?custom_credential=secret&custom_credential=other', 'https://collector:4318/path'],
+    ['https://collector:4318/path?secret', 'https://collector:4318/path'],
+    ['https://collector:4318/path?', 'https://collector:4318/path'],
+    ['https://user:secret@collector:4318/path?token=secret', 'https://REDACTED:REDACTED@collector:4318/path'],
     ['https://user:secret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
     ['https://user@collector:4318/path', 'https://REDACTED@collector:4318/path'],
     ['https://:secret@collector:4318/path', 'https://:REDACTED@collector:4318/path'],
     ['https://us%40er:sec%3Aret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
     ['https://user:sec@ret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
     ['https:user:secret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
-    ['HTTP://Collector:80/path@part?key=value@part#fragment', 'HTTP://Collector:80/path@part?key=value@part#fragment'],
+    ['HTTP://Collector:80/path@part?key=value@part#fragment', 'HTTP://Collector:80/path@part'],
+    ['HTTP://Collector:80/path@part#fragment', 'HTTP://Collector:80/path@part#fragment'],
   ]) {
     it(`should safely project OTLP endpoint ${endpoint} without mutating configuration`, () => {
       const endpoints = [
@@ -715,6 +722,25 @@ describe('resolved OpenTelemetry startup configuration', () => {
     for (const signal of ['TRACES', 'LOGS', 'METRICS']) {
       assert.equal(info[`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`],
         `https://REDACTED:REDACTED@collector:4318/base/v1/${signal.toLowerCase()}`)
+    }
+  })
+
+  it('should remove inherited endpoint queries even when span query obfuscation is disabled', () => {
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'https://collector:4318/base?custom_credential=secret'
+    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = ''
+    const config = getConfigFresh()
+    assert.equal(config.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP, '')
+    startupLog.setStartupLogConfig(config)
+    startupLog.setStartupLogPluginManager({ _pluginsByName: {} })
+    startupLog.startupLog()
+
+    const info = JSON.parse(warn.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+    const flareInfo = JSON.parse(JSON.stringify(startupLog.tracerInfo()))
+    for (const suffix of ['', '_TRACES', '_LOGS', '_METRICS']) {
+      const name = `OTEL_EXPORTER_OTLP${suffix}_ENDPOINT`
+      assert.equal(info[name], 'https://collector:4318/base')
+      assert.equal(flareInfo[name], 'https://collector:4318/base')
+      assert.match(config[name], /\?custom_credential=secret/)
     }
   })
 
