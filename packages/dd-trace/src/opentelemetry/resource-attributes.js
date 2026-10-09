@@ -30,7 +30,7 @@ function buildResourceAttributes (config) {
   const resourceAttributes = {
     'service.name': config.service,
     'service.version': config.version,
-    'deployment.environment': config.env,
+    'deployment.environment.name': config.env,
     ...tags,
   }
 
