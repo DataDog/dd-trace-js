@@ -37,12 +37,14 @@ const COLUMNS = [
 
 const NODE_BUILTINS = new Set(builtinModules)
 
-// Umbrella packages users install directly while the tracer only hooks their
-// subpackages, so they have no runtime hook or plugin getter of their own.
-// Maps the umbrella dependency to its integration; the supported range comes
-// from that integration's test externals entry for the umbrella package.
+// Supported packages without a plugin getter of their own: umbrella packages
+// whose subpackages are hooked, and packages whose load must not activate the
+// plugin by itself (graphql-jit is traced only once graphql activates it).
+// Maps each dependency to its integration; the supported range comes from that
+// integration's test externals entry for the dependency.
 const PACKAGE_ALIASES = new Map([
   ['@supabase/supabase-js', 'supabase'],
+  ['graphql-jit', 'graphql'],
 ])
 
 // Capture `get '<key>' () { return require('.../datadog-plugin-<name>/src') }`

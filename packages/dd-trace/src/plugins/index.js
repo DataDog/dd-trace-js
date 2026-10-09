@@ -71,7 +71,6 @@ const plugins = {
   get fs () { return require('../../../datadog-plugin-fs/src') },
   get 'global:fetch' () { return require('../../../datadog-plugin-fetch/src') },
   get graphql () { return require('../../../datadog-plugin-graphql/src') },
-  get 'graphql-jit' () { return require('../../../datadog-plugin-graphql/src') },
   get grpc () { return require('../../../datadog-plugin-grpc/src') },
   get hapi () { return require('../../../datadog-plugin-hapi/src') },
   get hono () { return require('../../../datadog-plugin-hono/src') },
