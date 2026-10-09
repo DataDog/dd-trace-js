@@ -75,7 +75,8 @@ function ackEmitting ({ id: probeId, version }) {
 }
 
 function ackError (err, { id: probeId, version }) {
-  log.error('[debugger:devtools_client] ackError', err)
+  // The main thread logs the error itself, as it receives it with the probe acknowledgement
+  log.debug('[debugger:devtools_client] Queueing ERROR status for probe %s (version: %d)', probeId, version)
 
   onlyUniqueUpdates(STATUSES.ERROR, probeId, version, () => {
     const payload = statusPayload(probeId, version, STATUSES.ERROR)

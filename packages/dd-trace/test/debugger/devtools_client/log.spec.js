@@ -35,16 +35,15 @@ describe('worker thread logger', function () {
     log.debug('test4')
   })
 
-  it('should respect the debug flag', function (done) {
-    const logChannel = new MessageChannel()
+  it('should forward only errors when debug logging is disabled', function () {
+    const messages = []
     const log = proxyquire('../../../src/debugger/devtools_client/log', {
       'node:worker_threads': {
-        workerData: { logPort: logChannel.port1, config: { debug: false, logLevel: 'debug' } },
+        workerData: {
+          logPort: { postMessage: message => messages.push(message) },
+          config: { debug: false, logLevel: 'debug' },
+        },
       },
-    })
-
-    logChannel.port2.on('message', () => {
-      throw new Error('should not have logged')
     })
 
     log.error('test1')
@@ -52,7 +51,7 @@ describe('worker thread logger', function () {
     log.info('test3')
     log.debug('test4')
 
-    setImmediate(done)
+    assert.deepStrictEqual(messages, [{ level: 'error', args: ['test1'] }])
   })
 
   it('should not log without a message port', function () {
