@@ -18,7 +18,6 @@
     "generate:rewriter:targets": "node scripts/generate-rewriter-targets.js",
     "verify:rewriter:targets": "node scripts/generate-rewriter-targets.js --check",
     "generate:supported-integrations": "node scripts/generate-supported-integrations.js",
-    "verify:supported-integrations": "node scripts/generate-supported-integrations.js --check",
     "type:check": "tsc --noEmit -p tsconfig.dev.json",
     "type:doc:build": "cd docs && yarn && yarn build",
     "type:doc:test": "cd docs && yarn && yarn test",
