@@ -30,13 +30,21 @@ function shaHash (checkpointString) {
 }
 
 /**
+ * Computes the pathway hash from the node's identity (service, env, edge tags) and its parent.
+ *
+ * DSM2-335: the process-tags/container-tags propagation hash used to be folded in here. It is
+ * deliberately excluded: those are per-process/per-pod metadata that change on every rolling
+ * deploy without any real change in topology, and the backend never decoded them into discrete
+ * tags, so they only inflated the cardinality of the (hash, parentHash) pairs DSM's stats are
+ * keyed and quota-limited on. See `../propagation-hash` for the DBM-facing hash that still
+ * folds them in.
+ *
  * @param {string} service
  * @param {string} env
  * @param {string[]} edgeTags
  * @param {Buffer} parentHash
- * @param {bigint | null} propagationHashBigInt - Optional propagation hash for process/container tags
  */
-function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt = null) {
+function computeHash (service, env, edgeTags, parentHash) {
   edgeTags.sort()
   const hashableEdgeTags = edgeTags.includes('manual_checkpoint:true')
     ? edgeTags.filter(item => item !== 'manual_checkpoint:true')
@@ -46,19 +54,14 @@ function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt 
   // gets distinct cache entries; the hash input below excludes parentHash and
   // gets combined with it via a second sha pass to produce the final hash.
   const joinedEdgeTags = hashableEdgeTags.join('')
-  const propagationHex = propagationHashBigInt ? propagationHashBigInt.toString(16) : ''
-  const propagationPart = propagationHex ? `:${propagationHex}` : ''
-  const key = `${service}${env}${joinedEdgeTags}${parentHash}${propagationPart}`
+  const key = `${service}${env}${joinedEdgeTags}${parentHash}`
 
   let value = cache.get(key)
   if (value) {
     return value
   }
 
-  const baseString = `${service}${env}${joinedEdgeTags}`
-  const hashInput = propagationHex ? `${baseString}:${propagationHex}` : baseString
-
-  const currentHash = shaHash(hashInput)
+  const currentHash = shaHash(`${service}${env}${joinedEdgeTags}`)
   const buf = Buffer.concat([currentHash, parentHash], 16)
   value = shaHash(buf.toString())
   cache.set(key, value)
