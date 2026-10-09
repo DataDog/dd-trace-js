@@ -107,6 +107,13 @@ describe('Plugin', () => {
 - `withNamingSchema(agent, ...)` — tests naming schema conventions
 - `withPeerService(agent, ...)` — tests peer service tag
 
+### Version Coverage
+
+Before reporting a version as untested, trace the exact case through the instrumentation range, `withVersions`, the
+version resolver, and each `useSandbox` call in the suite. A dedicated sandbox with a pinned root dependency can own
+one exact release outside a surrounding `withVersions` block. Report a gap only when no executed test materializes
+and invokes that version through the public entry point.
+
 ## ESM Integration Tests
 
 ESM tests verify the plugin works with native ES module imports. They live in `packages/datadog-plugin-<name>/test/integration-test/`.
