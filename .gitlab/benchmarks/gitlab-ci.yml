@@ -22,6 +22,7 @@ variables:
   BASE_CI_IMAGE_PLATFORM: linux/amd64
 
   SLS_CI_BRANCH: main
+  SLS_PR_BENCHMARK_CI_BRANCH: main
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
   UNCONFIDENCE_THRESHOLD: "2.0"
@@ -161,3 +162,33 @@ benchmark-serverless:
     # only available on Merge Requests
     UPSTREAM_MERGE_TARGET_BRANCH: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
     DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"
+
+# Launch queued Lambda measurements without waiting for builds or AWS runs.
+benchmark-serverless-pr-performance:
+  stage: benchmarks
+  needs: []
+  allow_failure: true
+  interruptible: false
+  trigger:
+    project: DataDog/serverless-tools
+    branch: $SLS_PR_BENCHMARK_CI_BRANCH
+  variables:
+    PR_BENCHMARK_ENABLED: "true"
+    PR_BENCHMARK_ONLY: "true"
+    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
+    UPSTREAM_PROJECT_URL: $CI_PROJECT_URL
+    UPSTREAM_PIPELINE_ID: $CI_PIPELINE_ID
+    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
+    UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
+    UPSTREAM_DEFAULT_BRANCH: $CI_DEFAULT_BRANCH
+  rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
+    # GitHub PR updates also create a branch pipeline; dispatch only from the PR pipeline.
+    - if: >-
+        $CI_PIPELINE_SOURCE == "external_pull_request_event" &&
+        $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_SHA && $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_NAME
+      variables:
+        UPSTREAM_COMMIT_SHA: $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_SHA
+        UPSTREAM_COMMIT_BRANCH: $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_NAME
+    - when: never
