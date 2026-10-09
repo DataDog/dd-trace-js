@@ -1,0 +1,13 @@
+_v: 1
+name: http
+display_name: HTTP
+description: Instruments Node.js HTTP and HTTPS client requests and server request handling, including optional Google Cloud
+  Pub/Sub push-message consumption.
+packages: []
+category:
+- http.client
+- http.server
+- messaging.consumer
+systems:
+- gcp.pubsub
+creation_date: '2018-03-27'

@@ -1,0 +1,10 @@
+_v: 1
+name: find-my-way
+display_name: find-my-way
+description: Instruments find-my-way route handlers to record matched routes on existing HTTP request spans.
+packages:
+- name: find-my-way
+category:
+- other
+systems: []
+creation_date: '2019-07-08'

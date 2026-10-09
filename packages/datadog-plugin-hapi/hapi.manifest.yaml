@@ -1,0 +1,12 @@
+_v: 1
+name: hapi
+display_name: hapi
+description: Instruments hapi HTTP server requests, capturing routes and errors and preserving trace context through request
+  handlers and lifecycle extensions.
+packages:
+- name: '@hapi/hapi'
+- name: hapi
+category:
+- http.server
+systems: []
+creation_date: '2018-09-18'

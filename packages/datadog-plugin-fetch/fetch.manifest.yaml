@@ -1,0 +1,10 @@
+_v: 1
+name: fetch
+display_name: Fetch
+description: Instruments outbound HTTP requests made through the global fetch API, including trace propagation and response
+  and error recording.
+packages: []
+category:
+- http.client
+systems: []
+creation_date: '2023-06-21'

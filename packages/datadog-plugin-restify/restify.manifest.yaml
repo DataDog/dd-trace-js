@@ -1,0 +1,11 @@
+_v: 1
+name: restify
+display_name: restify
+description: Instruments inbound HTTP requests handled by restify, capturing routes and handler errors while preserving request
+  context through middleware.
+packages:
+- name: restify
+category:
+- http.server
+systems: []
+creation_date: '2018-09-21'
