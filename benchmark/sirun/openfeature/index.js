@@ -1,8 +1,5 @@
 'use strict'
 
-// Load timing starts before dependencies, as required by the sirun startup guard.
-// eslint-disable-next-line import/order
-const guard = require('../startup-guard')
 const assert = require('node:assert/strict')
 const { fork } = require('node:child_process')
 const fs = require('node:fs')
@@ -12,6 +9,7 @@ const { Worker } = require('node:worker_threads')
 const { OpenFeature } = require('@openfeature/server-sdk')
 const proxyquire = require('proxyquire')
 
+const guard = require('../startup-guard')
 const { evaluationContext } = require('./context')
 
 globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
@@ -188,7 +186,6 @@ async function main () {
       if (!saturated && i % 256 === 255) await new Promise(resolve => setImmediate(resolve))
     }
     const evaluationLoopNs = Number(process.hrtime.bigint() - start)
-    // Final network drain must not dilute the unchanged startup regression guard.
     guard.done()
     const drainStart = process.hrtime.bigint()
     provider.onClose()

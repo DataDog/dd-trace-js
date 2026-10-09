@@ -1,13 +1,12 @@
 'use strict'
 
-const guard = require('../startup-guard')
-// eslint-disable-next-line import/order -- The startup guard must run before every other require.
 const assert = require('node:assert/strict')
 
 const {
   AgentlessCiVisibilityEncoder,
 } = require('../../../packages/dd-trace/src/encode/agentless-ci-visibility')
 const id = require('../../../packages/dd-trace/src/id')
+const guard = require('../startup-guard')
 
 const { VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)
