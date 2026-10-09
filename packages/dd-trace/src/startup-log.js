@@ -122,20 +122,20 @@ function configInfo () {
     OTEL_BSP_MAX_EXPORT_BATCH_SIZE: config.OTEL_BSP_MAX_EXPORT_BATCH_SIZE ?? null,
     OTEL_BSP_MAX_QUEUE_SIZE: config.OTEL_BSP_MAX_QUEUE_SIZE ?? null,
     OTEL_BSP_SCHEDULE_DELAY: config.OTEL_BSP_SCHEDULE_DELAY ?? null,
-    OTEL_EXPORTER_OTLP_ENDPOINT: config.OTEL_EXPORTER_OTLP_ENDPOINT ?? null,
+    OTEL_EXPORTER_OTLP_ENDPOINT: redactEndpoint(config.OTEL_EXPORTER_OTLP_ENDPOINT),
     OTEL_EXPORTER_OTLP_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_HEADERS),
-    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT ?? null,
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: redactEndpoint(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT),
     OTEL_EXPORTER_OTLP_LOGS_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS),
     OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ?? null,
     OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: config.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT ?? null,
-    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT ?? null,
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: redactEndpoint(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT),
     OTEL_EXPORTER_OTLP_METRICS_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS),
     OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL ?? null,
     OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: config.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE ?? null,
     OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT ?? null,
     OTEL_EXPORTER_OTLP_PROTOCOL: config.OTEL_EXPORTER_OTLP_PROTOCOL ?? null,
     OTEL_EXPORTER_OTLP_TIMEOUT: config.OTEL_EXPORTER_OTLP_TIMEOUT ?? null,
-    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? null,
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: redactEndpoint(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT),
     OTEL_EXPORTER_OTLP_TRACES_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS),
     OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ?? null,
     OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT ?? null,
@@ -155,6 +155,24 @@ function configInfo () {
   }
   if (config.tags?.version) startupLog.dd_version = config.tags.version
   return startupLog
+}
+
+/**
+ * @param {string | undefined} endpoint
+ */
+function redactEndpoint (endpoint) {
+  if (!endpoint?.includes('@')) return endpoint ?? null
+
+  try {
+    const url = new URL(endpoint)
+    if (!url.username && !url.password) return endpoint
+    if (url.username) url.username = 'REDACTED'
+    if (url.password) url.password = 'REDACTED'
+    return url.href
+  } catch {
+    // Do not expose potential credentials if a calculated endpoint cannot be parsed.
+    return null
+  }
 }
 
 /**

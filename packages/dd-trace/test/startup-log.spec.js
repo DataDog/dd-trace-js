@@ -675,6 +675,68 @@ describe('resolved OpenTelemetry startup configuration', () => {
     }
   })
 
+  for (const [endpoint, expected] of [
+    ['https://user:secret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
+    ['https://user@collector:4318/path', 'https://REDACTED@collector:4318/path'],
+    ['https://:secret@collector:4318/path', 'https://:REDACTED@collector:4318/path'],
+    ['https://us%40er:sec%3Aret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
+    ['https://user:sec@ret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
+    ['https:user:secret@collector:4318/path', 'https://REDACTED:REDACTED@collector:4318/path'],
+    ['HTTP://Collector:80/path@part?key=value@part#fragment', 'HTTP://Collector:80/path@part?key=value@part#fragment'],
+  ]) {
+    it(`should safely project OTLP endpoint ${endpoint} without mutating configuration`, () => {
+      const endpoints = [
+        'OTEL_EXPORTER_OTLP_ENDPOINT',
+        'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',
+        'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT',
+        'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT',
+      ]
+      for (const name of endpoints) process.env[name] = endpoint
+      const config = getConfigFresh()
+      startupLog.setStartupLogConfig(config)
+      startupLog.setStartupLogPluginManager({ _pluginsByName: {} })
+      startupLog.startupLog()
+
+      const info = JSON.parse(warn.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+      const flareInfo = JSON.parse(JSON.stringify(startupLog.tracerInfo()))
+      for (const name of endpoints) {
+        assert.equal(info[name], expected)
+        assert.equal(flareInfo[name], expected)
+        assert.equal(config[name], endpoint)
+      }
+    })
+  }
+
+  it('should redact credentials inherited from the generic OTLP endpoint', () => {
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'https://user:secret@collector:4318/base/'
+    const info = logConfiguration()
+
+    assert.equal(info.OTEL_EXPORTER_OTLP_ENDPOINT, 'https://REDACTED:REDACTED@collector:4318/base/')
+    for (const signal of ['TRACES', 'LOGS', 'METRICS']) {
+      assert.equal(info[`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`],
+        `https://REDACTED:REDACTED@collector:4318/base/v1/${signal.toLowerCase()}`)
+    }
+  })
+
+  it('should preserve calculated OTLP endpoints without credentials', () => {
+    process.env.DD_AGENT_HOST = '::1'
+    const info = logConfiguration()
+
+    for (const signal of ['TRACES', 'LOGS', 'METRICS']) {
+      assert.equal(info[`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`], `http://::1:4318/v1/${signal.toLowerCase()}`)
+    }
+  })
+
+  it('should omit unparseable OTLP endpoints that may contain credentials', () => {
+    process.env.DD_TRACE_AGENT_URL = 'http://127.0.0.1:8126'
+    process.env.DD_AGENT_HOST = 'collector@::1'
+    const info = logConfiguration()
+
+    for (const signal of ['TRACES', 'LOGS', 'METRICS']) {
+      assert.equal(info[`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`], null)
+    }
+  })
+
   it('should redact agentless API keys injected into all signal-specific headers', () => {
     process.env.DD_AGENTLESS_ENABLED = 'true'
     process.env.DD_API_KEY = 'injected-api-key-secret'
