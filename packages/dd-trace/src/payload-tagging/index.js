@@ -1,8 +1,5 @@
 'use strict'
 
-const createRfdc = require('../../../../vendor/dist/rfdc')
-const rfdc = createRfdc({ proto: false, circles: false })
-
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
   PAYLOAD_TAG_RESPONSE_PREFIX,
@@ -10,24 +7,110 @@ const {
 
 const jsonpath = require('../../../../vendor/dist/jsonpath-plus').JSONPath
 
+const log = require('../log')
+
 const { tagsFromObject } = require('./tagging')
+const { createSafeSnapshot, createSnapshotBudget } = require('./snapshot')
+const { truncated } = require('./constants')
+
+// JSONPath constructs that select based on data values (predicates, script
+// expressions, type, parent and property-name selectors, slices, literal
+// escapes). On a partially captured payload their matches can differ from the
+// full payload, which could stop a redaction rule from matching a sensitive
+// value. Truncated captures are suppressed entirely when any rule uses one of
+// these constructs; structural paths, wildcards, indexes and recursive descent
+// stay safe because truncation only removes content, never reshapes retained
+// branches.
+const dataDependentRulePattern = /[?()@^~:`]/
+
+// Budget for parse attempts while expanding one payload: the remaining
+// cumulative string length (in UTF-16 code units, measured with String.length,
+// not bytes) still available for JSON.parse attempts. The budget is shared
+// across all expansion attempts of one payload. Each attempt subtracts its
+// input length before parsing, and failed parse attempts are not refunded,
+// because the parsing work has already been done. This bounds combined parse
+// work so oversized or numerous candidates can neither be parsed nor retained
+// for later truncation.
+const maxExpansionLength = 1_000_000
 
 /**
- * Given an identified value, attempt to parse it as JSON if relevant
+ * @param {string[]} rules
+ */
+function hasDataDependentRules (rules) {
+  for (const rule of rules) {
+    if (typeof rule !== 'string' || dataDependentRulePattern.test(rule)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Assign to a snapshot container, keeping `__proto__` a plain data property.
+ *
+ * @param {Record<string, unknown>} parent
+ * @param {string | number} parentProperty
+ * @param {unknown} value
+ */
+function assignSafe (parent, parentProperty, value) {
+  if (parentProperty === '__proto__') {
+    Object.defineProperty(parent, parentProperty, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    })
+    return
+  }
+  parent[parentProperty] = value
+}
+
+/**
+ * Work shared by every expansion of one payload: the snapshot budget left by
+ * the payload capture, and the remaining cumulative string length (in UTF-16
+ * code units) available for parse attempts. That parse budget is shared across
+ * all expansion attempts for one payload; failed attempts still consume it
+ * because they perform parsing work.
+ *
+ * @typedef {{
+ *   incomplete: boolean,
+ *   budget: import('./snapshot').SnapshotBudget,
+ *   expansionLength: number
+ * }} Capture
+ */
+
+/**
+ * Given an identified value, attempt to parse it as JSON if relevant. Parsed
+ * values pass through the same bounded snapshot handling, sharing the payload's
+ * budget, so expansion cannot introduce unbounded parsing or traversal either.
  *
  * @param {unknown} value
- * @returns {unknown} the parsed object if parsing was successful, the input if not
+ * @param {Capture} capture
+ * @returns {unknown} the parsed snapshot if parsing was successful, the input if not
  */
-function maybeJSONParseValue (value) {
+function maybeJSONParseValue (value, capture) {
   if (typeof value !== 'string' || value[0] !== '{') {
     return value
   }
 
+  if (value.length > capture.expansionLength) {
+    capture.incomplete = true
+    return truncated
+  }
+  capture.expansionLength -= value.length
+
+  let parsed
   try {
-    return JSON.parse(value)
+    parsed = JSON.parse(value)
   } catch {
     return value
   }
+
+  const snapshot = createSafeSnapshot(parsed, capture.budget)
+  if (snapshot.incomplete) {
+    capture.incomplete = true
+  }
+  return snapshot.value
 }
 
 /**
@@ -35,12 +118,13 @@ function maybeJSONParseValue (value) {
  *
  * @param {Record<string, unknown>} object
  * @param {string[]} expansionRules list of JSONPath queries
+ * @param {Capture} capture
  */
-function expand (object, expansionRules) {
+function expand (object, expansionRules, capture) {
   for (const rule of expansionRules) {
     jsonpath(rule, object, (value, _type, desc) => {
-      if (desc.parent && desc.parentProperty) {
-        desc.parent[desc.parentProperty] = maybeJSONParseValue(value)
+      if (desc.parent && desc.parentProperty !== undefined) {
+        assignSafe(desc.parent, desc.parentProperty, maybeJSONParseValue(value, capture))
       }
     })
   }
@@ -55,8 +139,8 @@ function expand (object, expansionRules) {
 function redact (object, redactionRules) {
   for (const rule of redactionRules) {
     jsonpath(rule, object, (_value, _type, desc) => {
-      if (desc.parent && desc.parentProperty) {
-        desc.parent[desc.parentProperty] = 'redacted'
+      if (desc.parent && desc.parentProperty !== undefined) {
+        assignSafe(desc.parent, desc.parentProperty, 'redacted')
       }
     })
   }
@@ -64,24 +148,79 @@ function redact (object, redactionRules) {
 
 /**
  * Generate a map of tag names to tag values by performing:
- * 1. Attempting to parse identified fields as JSON
- * 2. Redacting fields identified by redaction rules
- * 3. Flattening the resulting object, producing as many tag name/tag value pairs
+ * 1. Taking a bounded, acyclic, stream-safe snapshot of the input
+ * 2. Attempting to parse identified fields as JSON
+ * 3. Redacting fields identified by redaction rules
+ * 4. Flattening the resulting object, producing as many tag name/tag value pairs
  *    as there are leaf values in the object
- * This function performs side-effects on a _copy_ of the input object.
+ * This function never mutates the input object.
  *
  * @param {{ expand: string[], request: string[], response: string[] }} config sdk configuration for the service
- * @param {Record<string, unknown>} object the input object to generate tags from
+ * @param {unknown} object the input object to generate tags from
  * @param {{ prefix: string, maxDepth: number }} opts tag generation options
  * @returns {Record<string, string|boolean>} Tags map
  */
 function computeTags (config, object, opts) {
-  const payload = rfdc(object)
+  try {
+    return computeBoundedTags(config, object, opts)
+  } catch {
+    // Payload capture must never break the instrumented operation or disable
+    // the plugin. Omit possibly partly expanded or redacted tags. Never inspect
+    // the caught value: payload-controlled getters can throw during logging.
+    log.error('Error generating payload tags; omitting payload tags for this operation')
+    return {}
+  }
+}
+
+/**
+ * Snapshot, expand, redact and flatten a payload. When the snapshot is
+ * incomplete, captures whose redaction could be unreliable are suppressed
+ * instead of risking exposure of unredacted values.
+ *
+ * @param {{ expand: string[], request: string[], response: string[] }} config
+ * @param {unknown} object
+ * @param {{ prefix: string, maxDepth: number }} opts
+ * @returns {Record<string, string|boolean>}
+ */
+function computeBoundedTags (config, object, opts) {
+  const budget = createSnapshotBudget()
+  const snapshot = createSafeSnapshot(object, budget)
+  const payload = /** @type {Record<string, unknown>} */ (snapshot.value)
   const redactionRules = opts.prefix === PAYLOAD_TAG_REQUEST_PREFIX ? config.request : config.response
   const expansionRules = config.expand
-  expand(payload, expansionRules)
+
+  if (
+    snapshot.incomplete &&
+    (hasDataDependentRules(redactionRules) || hasDataDependentRules(expansionRules))
+  ) {
+    // Fixed, payload-safe diagnostic: no payload values, rule text, exception
+    // messages or stacks are ever included.
+    log.debug(
+      'Omitting payload tags: the snapshot was truncated and the rules are data-dependent'
+    )
+    return {}
+  }
+
+  /** @type {Capture} */
+  const capture = { incomplete: snapshot.incomplete, budget, expansionLength: maxExpansionLength }
+  expand(payload, expansionRules, capture)
+
+  if (
+    capture.incomplete &&
+    (hasDataDependentRules(redactionRules) || hasDataDependentRules(expansionRules))
+  ) {
+    log.debug(
+      'Omitting payload tags: expansion was truncated and the rules are data-dependent'
+    )
+    return {}
+  }
+
   redact(payload, redactionRules)
-  return tagsFromObject(payload, opts)
+  const tags = tagsFromObject(payload, opts)
+  if (capture.incomplete) {
+    tags['_dd.payload_tags_incomplete'] = true
+  }
+  return tags
 }
 
 /**

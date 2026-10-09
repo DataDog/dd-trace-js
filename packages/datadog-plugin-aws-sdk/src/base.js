@@ -4,6 +4,7 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const getConfig = require('../../dd-trace/src/config')
+const log = require('../../dd-trace/src/log')
 const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
 
 const RESPONSE_SKIP_KEYS = new Set(['request', 'requestId', 'error', '$metadata'])
@@ -117,8 +118,15 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.request) {
         const maxDepth = this.cloudTaggingConfig.maxDepth
-        const requestTags = tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
-        span.addTags(requestTags)
+        try {
+          const requestTags = tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
+          span.addTags(requestTags)
+        } catch {
+          // Last line of defense: a payload capture failure must never disable
+          // the plugin or mark the operation itself as failed. Never inspect the
+          // caught value: payload-controlled getters can throw during logging.
+          log.error('Error attaching request payload tags; omitting payload tags for this operation')
+        }
       }
 
       return ctx.currentStore
@@ -250,9 +258,16 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
     if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.response) {
       const maxDepth = this.cloudTaggingConfig.maxDepth
-      const responseBody = this.extractResponseBody(response)
-      const responseTags = tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })
-      span.addTags(responseTags)
+      try {
+        const responseBody = this.extractResponseBody(response)
+        const responseTags = tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })
+        span.addTags(responseTags)
+      } catch {
+        // Last line of defense: a payload capture failure must never skip the
+        // rest of response tagging or span completion. Never inspect the caught
+        // value: payload-controlled getters can throw during logging.
+        log.error('Error attaching response payload tags; omitting payload tags for this operation')
+      }
     }
   }
 
