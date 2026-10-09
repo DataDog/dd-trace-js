@@ -665,9 +665,14 @@ class AgentEncoder {
 
   /**
    * @param {MsgpackChunk} bytes
-   * @param {string | number | boolean} value
+   * @param {string | number | boolean | null} value
    */
   #encodeValue (bytes, value) {
+    if (value === null) {
+      bytes.writeNull()
+      return
+    }
+
     switch (typeof value) {
       case 'string':
         this._encodeString(bytes, value)
@@ -694,8 +699,8 @@ class AgentEncoder {
     let count = 0
     for (const key of Object.keys(value)) {
       const entryValue = value[key]
-      if (typeof entryValue === 'string' || typeof entryValue === 'number' ||
-        (entryValue !== null && typeof entryValue === 'object')) {
+      if (entryValue === null || typeof entryValue === 'string' || typeof entryValue === 'number' ||
+        typeof entryValue === 'boolean' || (entryValue !== null && typeof entryValue === 'object')) {
         this._encodeString(bytes, key)
         this.#encodeObjectAsByteArray(bytes, entryValue)
         count++
@@ -728,9 +733,11 @@ class AgentEncoder {
 
   #encodeObject (bytes, value, circularReferencesDetector = new Set()) {
     circularReferencesDetector.add(value)
-    if (Array.isArray(value)) {
+    if (value === null) {
+      this.#encodeValue(bytes, value)
+    } else if (Array.isArray(value)) {
       this.#encodeObjectAsArray(bytes, value, circularReferencesDetector)
-    } else if (value !== null && typeof value === 'object') {
+    } else if (typeof value === 'object') {
       this.#encodeObjectAsMap(bytes, value, circularReferencesDetector)
     } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
       this.#encodeValue(bytes, value)
@@ -745,9 +752,9 @@ class AgentEncoder {
     let count = 0
     for (const key of Object.keys(value)) {
       const entryValue = value[key]
-      if (typeof entryValue === 'string' || typeof entryValue === 'number' || typeof entryValue === 'boolean' ||
-        (entryValue !== null && typeof entryValue === 'object' &&
-          !circularReferencesDetector.has(entryValue))) {
+      if (entryValue === null || typeof entryValue === 'string' || typeof entryValue === 'number' ||
+        typeof entryValue === 'boolean' ||
+        (entryValue !== null && typeof entryValue === 'object' && !circularReferencesDetector.has(entryValue))) {
         this._encodeString(bytes, key)
         this.#encodeObject(bytes, entryValue, circularReferencesDetector)
         count++
@@ -768,7 +775,7 @@ class AgentEncoder {
 
     let count = 0
     for (const item of value) {
-      if (typeof item === 'string' || typeof item === 'number' ||
+      if (item === null || typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean' ||
         (item !== null && typeof item === 'object' && !circularReferencesDetector.has(item))) {
         this.#encodeObject(bytes, item, circularReferencesDetector)
         count++
