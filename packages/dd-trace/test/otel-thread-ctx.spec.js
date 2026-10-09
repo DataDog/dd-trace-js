@@ -545,6 +545,51 @@ describe('otel-thread-ctx', () => {
       assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
     })
 
+    it('does not append to the request span record when the span finished before the endpoint settled', () => {
+      const webTags = { 'span.type': 'web', 'http.method': 'GET' }
+      activeSpan = makeSpan({ tags: webTags })
+      cachedWebTags.set(activeSpan, webTags)
+      enterCh.publish()
+      const context = constructedContexts[0]
+      spanFinishCh.publish(activeSpan)
+
+      webTags['http.route'] = '/x'
+      endpointResolvedCh.publish(activeSpan)
+      sinon.assert.notCalled(context.appendAttributes)
+    })
+
+    it('appends the endpoint to the fresh record of a request span re-entered after finishing', () => {
+      const webTags = { 'span.type': 'web', 'http.method': 'GET' }
+      activeSpan = makeSpan({ tags: webTags })
+      cachedWebTags.set(activeSpan, webTags)
+      enterCh.publish()
+      spanFinishCh.publish(activeSpan)
+      enterCh.publish()
+      const [finished, reentered] = constructedContexts
+
+      webTags['http.route'] = '/x'
+      endpointResolvedCh.publish(activeSpan)
+      sinon.assert.notCalled(finished.appendAttributes)
+      sinon.assert.calledOnce(reentered.appendAttributes)
+      assert.equal(reentered.attributes[1], 'GET /x')
+    })
+
+    it('keeps the request span record waiting across a placeholder announcement', () => {
+      const webTags = { 'span.type': 'web', 'http.method': 'GET', 'resource.name': 'GET' }
+      activeSpan = makeSpan({ tags: webTags })
+      cachedWebTags.set(activeSpan, webTags)
+      enterCh.publish()
+      const context = constructedContexts[0]
+
+      endpointResolvedCh.publish(activeSpan)
+      sinon.assert.notCalled(context.appendAttributes)
+      webTags['resource.name'] = 'GET /x'
+      endpointResolvedCh.publish(activeSpan)
+      endpointResolvedCh.publish(activeSpan)
+      sinon.assert.calledOnce(context.appendAttributes)
+      assert.equal(context.attributes[1], 'GET /x')
+    })
+
     it('appends the endpoint to records of descendants built before it settled', () => {
       // The routing tags land on the request span, so the announcement names
       // that span — but each descendant has its own record with its own

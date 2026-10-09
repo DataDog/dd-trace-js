@@ -124,6 +124,7 @@ function traceFlagsOf (spanContext) {
 //             waiting on; undefined while the span has no web-server ancestry.
 //             Distinguishes a stale announcement from a live one when a nearer
 //             web-server span takes over.
+//   awaitsOwnEndpoint: this is the request span, waiting on its own endpoint.
 const CachedSym = Symbol('OtelThreadCtx.cached')
 
 let started = false
@@ -195,7 +196,7 @@ function getOrBuildContext (span) {
   attrs[THREAD_NAME_IDX] = THREAD_NAME
   attrs[THREAD_ID_IDX] = THREAD_ID
   if (cached === undefined) {
-    cached = {}
+    cached = { context: undefined, webTags: undefined, awaitsOwnEndpoint: false }
     span[CachedSym] = cached
   }
   // The flags are the one part of the record that can still change after
@@ -206,17 +207,22 @@ function getOrBuildContext (span) {
   // built before the decision keeps reading as not sampled.
   cached.context = new ThreadContext(traceId, spanId, traceFlagsOf(spanContext), attrs)
   cached.webTags = webTags
-  if (endpoint === undefined) awaitEndpoint(webTags, cached)
+  if (endpoint === undefined) awaitEndpoint(span, webTags, cached)
   return cached.context
 }
 
 // Enlist a record built without an endpoint, so the resolution announcement for
 // its request fills it in.
-function awaitEndpoint (webTags, cached) {
+function awaitEndpoint (span, webTags, cached) {
   // No web-server span in this span's ancestry, so no endpoint is coming. Should
   // one appear later, webTagsCache announces that separately — see
   // onWebTagsResolved.
   if (webTags === undefined) return
+  // The request span waits on its own announcement; only descendants need the shared list.
+  if (webTags === span.context().getTags()) {
+    cached.awaitsOwnEndpoint = true
+    return
+  }
   const waiting = pendingEndpoints.get(webTags)
   if (waiting === undefined) {
     pendingEndpoints.set(webTags, [cached])
@@ -289,11 +295,18 @@ function onSpanFinished (span) {
 function onEndpointResolved (span) {
   if (!started) return
   const webTags = span.context().getTags()
+  const own = span[CachedSym]
+  const ownWaits = own !== undefined && own.awaitsOwnEndpoint
   const waiting = pendingEndpoints.get(webTags)
-  if (waiting === undefined) return
+  if (!ownWaits && waiting === undefined) return
   const endpoint = finalEndpoint(webTags)
   // webTagsCache only announces settled endpoints, so this is belt and braces.
   if (endpoint === undefined) return
+  if (ownWaits) {
+    own.awaitsOwnEndpoint = false
+    if (own.context !== undefined && own.webTags === webTags) appendEndpoint(own.context, endpoint)
+  }
+  if (waiting === undefined) return
   pendingEndpoints.delete(webTags)
   for (const cached of waiting) {
     // A record whose span has since been attributed to a nearer web-server span
@@ -324,7 +337,7 @@ function onWebTagsResolved (span) {
     // ThreadContext would strand every async-context frame holding this one.
     // The work is still nested in the outer request, which makes that the least
     // wrong of the values available.
-    awaitEndpoint(webTags, cached)
+    awaitEndpoint(span, webTags, cached)
   } else {
     appendEndpoint(cached.context, endpoint)
   }
