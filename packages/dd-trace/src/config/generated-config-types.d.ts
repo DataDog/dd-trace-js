@@ -537,6 +537,7 @@ export interface GeneratedConfig {
   spanComputePeerService: boolean;
   spanRemoveIntegrationFromService: boolean;
   spanSamplingRules: import('../../../../index').SpanSamplingRule[] | undefined;
+  startupLogLevel: "info" | "warn";
   startupLogs: boolean;
   stats: {
     DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
@@ -1117,6 +1118,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: "v0" | "v1";
   DD_TRACE_SPAN_LEAK_DEBUG: number;
   DD_TRACE_SQLITE3_ENABLED: boolean;
+  DD_TRACE_STARTUP_LOG_LEVEL: "info" | "warn";
   DD_TRACE_STARTUP_LOGS: boolean;
   DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
   DD_TRACE_SUFFIXPLUGIN_ENABLED: boolean;
