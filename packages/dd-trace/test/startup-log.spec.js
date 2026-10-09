@@ -473,7 +473,7 @@ describe('resolved OpenTelemetry startup configuration', () => {
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://127.0.0.1:4318/v1/metrics',
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: {},
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/protobuf',
-      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA',
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'delta',
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 10000,
       OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_TIMEOUT: 10000,
@@ -607,7 +607,7 @@ describe('resolved OpenTelemetry startup configuration', () => {
       OTEL_TRACES_EXPORTER: 'otlp',
       OTEL_LOGS_EXPORTER: 'otlp',
       OTEL_METRICS_EXPORTER: 'otlp',
-      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE',
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'cumulative',
       OTEL_TRACES_SPAN_METRICS_ENABLED: true,
       OTEL_SDK_DISABLED: false,
       DD_TRACE_OTEL_ENABLED: true,
@@ -620,6 +620,28 @@ describe('resolved OpenTelemetry startup configuration', () => {
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: true,
     })
   })
+
+  for (const [input, resolved, expected] of [
+    ['DeLtA', 'DELTA', 'delta'],
+    ['CuMuLaTiVe', 'CUMULATIVE', 'cumulative'],
+    ['LoWmEmOrY', 'LOWMEMORY', 'lowmemory'],
+    ['invalid', 'DELTA', 'delta'],
+  ]) {
+    it(`should log resolved temporality ${input} in lowercase without mutating configuration`, () => {
+      process.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE = input
+      const config = getConfigFresh()
+      assert.equal(config.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, resolved)
+      startupLog.setStartupLogConfig(config)
+      startupLog.setStartupLogPluginManager({ _pluginsByName: {} })
+      startupLog.startupLog()
+
+      const info = JSON.parse(warn.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+      const flareInfo = JSON.parse(JSON.stringify(startupLog.tracerInfo()))
+      assert.equal(info.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, expected)
+      assert.equal(flareInfo.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, expected)
+      assert.equal(config.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, resolved)
+    })
+  }
 
   it('should report defaults and calculated values when invalid or conflicting values are ignored', () => {
     Object.assign(process.env, {
