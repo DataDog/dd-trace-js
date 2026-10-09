@@ -4,6 +4,7 @@ const { workerData: { probePort } } = require('node:worker_threads')
 const { WORKER_ERROR_REASON } = require('../constants')
 const { addBreakpoint, removeBreakpoint, modifyBreakpoint } = require('./breakpoints')
 const { ackReceived, ackInstalled, ackError } = require('./status')
+const createWorkerError = require('./worker-error')
 const log = require('./log')
 
 // Example log line probe with captureSnapshot (simplified):
@@ -74,20 +75,23 @@ async function processMsg (action, probe) {
   if (action !== 'unapply') ackReceived(probe)
 
   if (probe.type !== 'LOG_PROBE') {
-    throw Object.assign(new Error(
-      `Unsupported probe type: ${probe.type} (id: ${probe.id}, version: ${probe.version})`
-    ), { reason: WORKER_ERROR_REASON.UNSUPPORTED_PROBE_TYPE })
+    throw createWorkerError(
+      `Unsupported probe type: ${probe.type} (id: ${probe.id}, version: ${probe.version})`,
+      WORKER_ERROR_REASON.UNSUPPORTED_PROBE_TYPE
+    )
   }
   if (!probe.where.sourceFile && !probe.where.lines) {
-    throw Object.assign(new Error(
+    throw createWorkerError(
       // eslint-disable-next-line @stylistic/max-len
-      `Unsupported probe insertion point! Only line-based probes are supported (id: ${probe.id}, version: ${probe.version})`
-    ), { reason: WORKER_ERROR_REASON.UNSUPPORTED_INSERTION_POINT })
+      `Unsupported probe insertion point! Only line-based probes are supported (id: ${probe.id}, version: ${probe.version})`,
+      WORKER_ERROR_REASON.UNSUPPORTED_INSERTION_POINT
+    )
   }
   if (probe.captureSnapshot && probe.captureExpressions?.length > 0) {
-    throw Object.assign(new Error(
-      `Cannot set both captureSnapshot and captureExpressions (probe: ${probe.id}, version: ${probe.version})`
-    ), { reason: WORKER_ERROR_REASON.CONFLICTING_CAPTURE_OPTIONS })
+    throw createWorkerError(
+      `Cannot set both captureSnapshot and captureExpressions (probe: ${probe.id}, version: ${probe.version})`,
+      WORKER_ERROR_REASON.CONFLICTING_CAPTURE_OPTIONS
+    )
   }
 
   switch (action) {
@@ -103,8 +107,9 @@ async function processMsg (action, probe) {
       ackInstalled(probe)
       break
     default:
-      throw Object.assign(new Error(
-        `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
-      ), { reason: WORKER_ERROR_REASON.UNKNOWN_REMOTE_CONFIG_ACTION })
+      throw createWorkerError(
+        `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`,
+        WORKER_ERROR_REASON.UNKNOWN_REMOTE_CONFIG_ACTION
+      )
   }
 }
