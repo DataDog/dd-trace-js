@@ -6,7 +6,7 @@
       "Accept": "application/json",
       "Content-Type": "application/json",
       "User-Agent": "claude-cli/2.1.113 (external, sdk-ts)",
-      "X-Claude-Code-Session-Id": "b5a0343b-6ca4-4a86-985a-2aa1c8b6c59c",
+      "X-Claude-Code-Session-Id": "0ac056d7-7c8d-4253-a7e2-6e74f786b49f",
       "X-Stainless-Arch": "arm64",
       "X-Stainless-Lang": "js",
       "X-Stainless-OS": "MacOS",
@@ -15,7 +15,7 @@
       "X-Stainless-Runtime": "node",
       "X-Stainless-Runtime-Version": "v24.3.0",
       "X-Stainless-Timeout": "600",
-      "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advisor-tool-2026-03-01,effort-2025-11-24",
+      "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05,effort-2025-11-24",
       "anthropic-dangerous-direct-browser-access": "true",
       "anthropic-version": "2023-06-01",
       "claude-code": "true",
@@ -27,7 +27,7 @@
       "Accept-Encoding": "gzip, deflate, br, zstd",
       "Content-Length": "1258"
     },
-    "body": "{\"model\":\"claude-sonnet-4-6\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"<system-reminder>\\nAs you answer the user's questions, you can use the following context:\\n# currentDate\\nToday's date is 2026-10-05.\\n\\n      IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\\n</system-reminder>\\n\\n\"},{\"type\":\"text\",\"text\":\"Say hi in three words.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"system\":[{\"type\":\"text\",\"text\":\"x-anthropic-billing-header: cc_version=2.1.113.bcd; cc_entrypoint=sdk-ts; cch=d4b94;\"},{\"type\":\"text\",\"text\":\"You are a Claude agent, built on Anthropic's Claude Agent SDK.\",\"cache_control\":{\"type\":\"ephemeral\"}},{\"type\":\"text\",\"text\":\"Follow instructions\\n\\n__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__\\n\\nReply briefly\",\"cache_control\":{\"type\":\"ephemeral\"}}],\"tools\":[],\"metadata\":{\"user_id\":\"{\\\"device_id\\\":\\\"263ef7a90f3056f6e9b785fddaa75fe9ab978f9dc956651f1c1c3d7ac0973810\\\",\\\"account_uuid\\\":\\\"\\\",\\\"session_id\\\":\\\"b5a0343b-6ca4-4a86-985a-2aa1c8b6c59c\\\"}\"},\"max_tokens\":32000,\"thinking\":{\"type\":\"adaptive\"},\"context_management\":{\"edits\":[{\"type\":\"clear_thinking_20251015\",\"keep\":\"all\"}]},\"output_config\":{\"effort\":\"medium\"},\"stream\":true}"
+    "body": "{\"model\":\"claude-sonnet-4-6\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"<system-reminder>\\nAs you answer the user's questions, you can use the following context:\\n# currentDate\\nToday's date is 2026-10-09.\\n\\n      IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\\n</system-reminder>\\n\\n\"},{\"type\":\"text\",\"text\":\"Say hi in three words.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"system\":[{\"type\":\"text\",\"text\":\"x-anthropic-billing-header: cc_version=2.1.113.bcd; cc_entrypoint=sdk-ts; cch=87c56;\"},{\"type\":\"text\",\"text\":\"You are a Claude agent, built on Anthropic's Claude Agent SDK.\",\"cache_control\":{\"type\":\"ephemeral\"}},{\"type\":\"text\",\"text\":\"Follow instructions\\n\\n__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__\\n\\nReply briefly\",\"cache_control\":{\"type\":\"ephemeral\"}}],\"tools\":[],\"metadata\":{\"user_id\":\"{\\\"device_id\\\":\\\"94b84dddc9400263d3a6713cf609f5507782dc91bb8676f254e963b78aaa86c0\\\",\\\"account_uuid\\\":\\\"\\\",\\\"session_id\\\":\\\"0ac056d7-7c8d-4253-a7e2-6e74f786b49f\\\"}\"},\"max_tokens\":32000,\"thinking\":{\"type\":\"adaptive\"},\"context_management\":{\"edits\":[{\"type\":\"clear_thinking_20251015\",\"keep\":\"all\"}]},\"output_config\":{\"effort\":\"medium\"},\"stream\":true}"
   },
   "response": {
     "status": {
@@ -35,26 +35,26 @@
       "message": "OK"
     },
     "headers": {
-      "Date": "Mon, 05 Oct 2026 14:49:26 GMT",
+      "Date": "Fri, 09 Oct 2026 18:56:04 GMT",
       "Content-Type": "text/event-stream; charset=utf-8",
       "Transfer-Encoding": "chunked",
       "Connection": "keep-alive",
       "Cache-Control": "no-cache",
       "anthropic-ratelimit-input-tokens-limit": "40000000",
       "anthropic-ratelimit-input-tokens-remaining": "40000000",
-      "anthropic-ratelimit-input-tokens-reset": "2026-10-05T14:49:25Z",
+      "anthropic-ratelimit-input-tokens-reset": "2026-10-09T18:56:03Z",
       "anthropic-ratelimit-output-tokens-limit": "6000000",
       "anthropic-ratelimit-output-tokens-remaining": "6000000",
-      "anthropic-ratelimit-output-tokens-reset": "2026-10-05T14:49:25Z",
+      "anthropic-ratelimit-output-tokens-reset": "2026-10-09T18:56:03Z",
       "anthropic-ratelimit-requests-limit": "20000",
       "anthropic-ratelimit-requests-remaining": "19998",
-      "anthropic-ratelimit-requests-reset": "2026-10-05T14:49:25Z",
+      "anthropic-ratelimit-requests-reset": "2026-10-09T18:56:03Z",
       "anthropic-ratelimit-tokens-limit": "46000000",
       "anthropic-ratelimit-tokens-remaining": "46000000",
-      "anthropic-ratelimit-tokens-reset": "2026-10-05T14:49:25Z",
+      "anthropic-ratelimit-tokens-reset": "2026-10-09T18:56:03Z",
       "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-      "request-id": "req_011CfjGwaJ2KZfWiVRW368tD",
-      "traceresponse": "00-283b935d595113e4f75e71af2238fccb-a8a77bc719f72ead-01",
+      "request-id": "req_011CfsAz5Qcy74qxPog2Dk4d",
+      "traceresponse": "00-12fe0a49c9f0825a5ce1be459b35dd71-b22f95b4533f44c8-01",
       "anthropic-organization-id": "4257e925-ee99-4ee8-9c62-8e53716d5203",
       "anthropic-workspace-id": "wrkspc_016aTU2q5hNGVxQMc7MKHPqm",
       "Content-Encoding": "gzip",
@@ -63,8 +63,8 @@
       "cf-cache-status": "DYNAMIC",
       "X-Robots-Tag": "none",
       "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
-      "CF-RAY": "a45d3b9cf8fec674-EWR"
+      "CF-RAY": "a47f9a65af6c7d7a-EWR"
     },
-    "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CfjGwaVvGKbU27Z6PKwxB\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":127,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":2,\"service_tier\":\"standard\",\"inference_geo\":\"global\"},\"diagnostics\":null,\"context_management\":null}    }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi there\"}               }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\",\"}             }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" hello\"}          }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"!\"}         }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0   }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":127,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":8,\"output_tokens_details\":{\"thinking_tokens\":0},\"iterations\":[{\"input_tokens\":127,\"output_tokens\":8,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"type\":\"message\"}]},\"context_management\":{\"applied_edits\":[]}           }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"      }\n\n"
+    "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CfsAz5dkdPrCiBgFHjF1n\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":127,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\"},\"diagnostics\":null,\"context_management\":null}          }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}  }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}             }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" there\"}       }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\",\"}        }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" friend\"}               }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"!\"}           }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0           }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":127,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":8,\"output_tokens_details\":{\"thinking_tokens\":0}},\"context_management\":{\"applied_edits\":[]}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"          }\n\n"
   }
 }
