@@ -9,26 +9,28 @@ const sinon = require('sinon')
 require('./setup/core')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../ext/priority')
+const id = require('../src/id')
+const SpanContext = require('../src/opentracing/span_context')
 
 const TRACE_ID_HEX = '0102030405060708090a0b0c0d0e0f10'
 const SPAN_ID_HEX = '1112131415161718'
 const TRACE_ID_BYTES = Uint8Array.from(Buffer.from(TRACE_ID_HEX, 'hex'))
 const SPAN_ID_BYTES = Uint8Array.from(Buffer.from(SPAN_ID_HEX, 'hex'))
 
-function makeSpan ({ traceId = TRACE_ID_HEX, spanId = SPAN_ID_HEX, parentId, tags = {}, priority } = {}) {
-  return {
-    context () {
-      return {
-        _spanId: spanId,
-        _parentId: parentId,
-        _trace: { started: [] },
-        _sampling: { priority },
-        toTraceId: () => traceId.padStart(32, '0'),
-        toSpanId: () => spanId.padStart(16, '0'),
-        getTags: () => tags,
-      }
-    },
-  }
+// Spans carry a real DatadogSpanContext with real Identifiers, so the writer reads
+// the trace and span ids the way it does from tracer-created spans.
+function makeSpan ({
+  traceId = TRACE_ID_HEX, spanId = SPAN_ID_HEX, parentId, tags = {}, priority, started = [], traceTags = {},
+} = {}) {
+  const spanContext = new SpanContext({
+    traceId: typeof traceId === 'string' ? id(traceId) : traceId,
+    spanId: typeof spanId === 'string' ? id(spanId) : spanId,
+    parentId: parentId === undefined ? undefined : id(parentId),
+    sampling: { priority },
+    tags,
+    trace: { started, finished: [], tags: traceTags },
+  })
+  return { context: () => spanContext }
 }
 
 // A web-server span plus a child that resolves to it through the shared cache,
@@ -100,8 +102,10 @@ describe('otel-thread-ctx', () => {
 
     StubThreadContext = class StubThreadContext {
       constructor (traceId, spanId, traceFlags, attributes) {
-        this.traceId = traceId
-        this.spanId = spanId
+        // The native constructor copies the id bytes into its record, so the
+        // caller may reuse its buffers; capture copies the same way.
+        this.traceId = Uint8Array.from(traceId)
+        this.spanId = Uint8Array.from(spanId)
         this.traceFlags = traceFlags
         this.attributes = attributes
         // Spied per instance so tests can assert call history on the context,
@@ -329,6 +333,37 @@ describe('otel-thread-ctx', () => {
       sinon.assert.calledOnceWithExactly(setActive, context)
     })
 
+    it('writes the ids of every identifier shape the tracer produces byte-for-byte as toTraceId/toSpanId', () => {
+      // Local root with the 128-bit high half in _dd.p.tid (two different values,
+      // to cover the memo), 64-bit without _dd.p.tid (high half zero), a 128-bit
+      // identifier that wins over _dd.p.tid, Datadog decimal ids, and shapes the
+      // byte path declines (malformed _dd.p.tid, a non-64/128-bit identifier).
+      const cases = [
+        { traceId: 'aabbccddeeff0011', traceTags: { '_dd.p.tid': '640cfd8d00000000' } },
+        { traceId: 'aabbccddeeff0012', traceTags: { '_dd.p.tid': '640cfd8e00000000' } },
+        { traceId: 'aabbccddeeff0013', traceTags: { '_dd.p.tid': '640CFD8E000000AA' } },
+        { traceId: 'aabbccddeeff0014' },
+        { traceId: '0af7651916cd43dd8448eb211c80319c', traceTags: { '_dd.p.tid': '1111111111111111' } },
+        { traceId: id('123', 10), spanId: id('-456', 10) },
+        { traceId: 'aabbccddeeff0015', traceTags: { '_dd.p.tid': 'not-hex-16chars!' } },
+        { traceId: 'aabbccddeeff0016', traceTags: { '_dd.p.tid': '640cfd8d' } },
+        { traceId: 'aabbccddeeff0017', traceTags: { '_dd.p.tid': '' } },
+        { traceId: '0102030405060708090a0b0c0d0e0f1011', spanId: '0102030405060708090a' },
+        { traceId: 'aabbccddeeff0018', traceTags: { '_dd.p.tid': '640cfd8d00000000' } },
+      ]
+      for (const fields of cases) {
+        constructedContexts = []
+        activeSpan = makeSpan(fields)
+        enterCh.publish()
+        const spanContext = activeSpan.context()
+        const label = spanContext.toTraceId(true)
+        assert.deepEqual(constructedContexts[0].traceId,
+          Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex')), `trace id ${label}`)
+        assert.deepEqual(constructedContexts[0].spanId,
+          Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex')), `span id ${label}`)
+      }
+    })
+
     it('sets the W3C sampled flag when the priority is AUTO_KEEP or above', () => {
       for (const priority of [AUTO_KEEP, USER_KEEP]) {
         constructedContexts = []
@@ -364,19 +399,8 @@ describe('otel-thread-ctx', () => {
     it('encodes the local-root-span id from the first started-spans entry', () => {
       const rootHex = '99aabbccddeeff00'
       const rootSpan = makeSpan({ spanId: rootHex })
-      activeSpan = makeSpan({ parentId: rootHex })
       // Plant the root in the started-spans list of the active span's trace.
-      activeSpan.context = function () {
-        return {
-          _spanId: SPAN_ID_HEX,
-          _parentId: rootHex,
-          _trace: { started: [rootSpan] },
-          _sampling: {},
-          toTraceId: () => TRACE_ID_HEX.padStart(32, '0'),
-          toSpanId: () => SPAN_ID_HEX.padStart(16, '0'),
-          getTags: () => ({}),
-        }
-      }
+      activeSpan = makeSpan({ parentId: rootHex, started: [rootSpan] })
       enterCh.publish()
       assert.equal(constructedContexts[0].attributes[0], rootHex)
     })

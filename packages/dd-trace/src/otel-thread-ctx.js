@@ -131,12 +131,55 @@ let ThreadContext
 let getContext
 let clearContext
 
+const TRACE_ID_128 = '_dd.p.tid'
+const HEX16 = /^[\da-f]{16}$/i
+
+// Reusable: the ThreadContext constructor copies the ids into its own record.
+const traceIdBytes = new Uint8Array(16)
+const spanIdBytes = new Uint8Array(8)
+
+// The upper half of local trace ids only changes once per second.
+let lastTraceIdHigh
+const lastTraceIdHighBytes = new Uint8Array(8)
+
+// Same bytes as decoding toTraceId(true); unexpected shapes fall back to that.
+function getTraceIdBytes (spanContext) {
+  const low = spanContext._traceId.toBuffer()
+  if (low.length === 16) {
+    for (let i = 0; i < 16; i++) traceIdBytes[i] = low[i]
+    return traceIdBytes
+  }
+  if (low.length !== 8) return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
+  const high = spanContext._trace.tags[TRACE_ID_128]
+  if (high) {
+    if (high !== lastTraceIdHigh) {
+      if (typeof high !== 'string' || !HEX16.test(high)) {
+        return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
+      }
+      for (let i = 0; i < 8; i++) lastTraceIdHighBytes[i] = Number.parseInt(high.slice(i * 2, i * 2 + 2), 16)
+      lastTraceIdHigh = high
+    }
+    for (let i = 0; i < 8; i++) traceIdBytes[i] = lastTraceIdHighBytes[i]
+  } else {
+    for (let i = 0; i < 8; i++) traceIdBytes[i] = 0
+  }
+  for (let i = 0; i < 8; i++) traceIdBytes[i + 8] = low[i]
+  return traceIdBytes
+}
+
+function getSpanIdBytes (spanContext) {
+  const bytes = spanContext._spanId.toBuffer()
+  if (bytes.length !== 8) return Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex'))
+  for (let i = 0; i < 8; i++) spanIdBytes[i] = bytes[i]
+  return spanIdBytes
+}
+
 function getOrBuildContext (span) {
   let cached = span[CachedSym]
   if (cached !== undefined && cached.context !== undefined) return cached.context
   const spanContext = span.context()
-  const traceId = Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
-  const spanId = Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex'))
+  const traceId = getTraceIdBytes(spanContext)
+  const spanId = getSpanIdBytes(spanContext)
   // Local root span: the first entry in the trace's started-spans list, or
   // this span itself when it IS the root. Encoded as 16-char lowercase hex
   // per the libdatadog convention.
