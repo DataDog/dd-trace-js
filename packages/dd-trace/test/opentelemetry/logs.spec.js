@@ -783,12 +783,15 @@ describe('OpenTelemetry Logs', () => {
           'deployment.environment.name': 'production',
           'host.name': os.hostname(),
         })
+        assert.strictEqual(resourceAttrs['deployment.environment'], undefined)
         done()
       })
 
       process.env.DD_SERVICE = 'my-service'
       process.env.DD_VERSION = 'v1.2.3'
-      process.env.OTEL_RESOURCE_ATTRIBUTES = 'deployment.environment.name=production'
+      process.env.DD_ENV = 'production'
+      process.env.DD_TAGS = 'service.name:tag-service,service.version:tag-version,' +
+        'deployment.environment:legacy,deployment.environment.name:tag-env'
       process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
 
       const { logs } = setupLogs()
