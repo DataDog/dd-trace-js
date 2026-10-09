@@ -828,11 +828,14 @@ describe('Safe payload capture', () => {
         const inspect = sinon.spy(() => { throw new Error('unexpected prototype getter') })
         const proto = Object.defineProperty({ detail: { secret: 's3cret' } }, 'inherited', { get: inspect })
         class Instance {}
-        const source = flavor === 'class'
-          ? new Instance()
-          : flavor === 'cross-realm'
-            ? nodeVm.runInNewContext('({})')
-            : Object.create(flavor === 'null-prototype' ? null : proto)
+        let source
+        if (flavor === 'class') {
+          source = new Instance()
+        } else if (flavor === 'cross-realm') {
+          source = nodeVm.runInNewContext('({})')
+        } else {
+          source = Object.create(flavor === 'null-prototype' ? null : proto)
+        }
         source.secret = 's3cret'
         const snapshot = createSafeSnapshot({ a: source, b: source })
         const { a, b } = /** @type {Record<string, Record<string, unknown>>} */ (snapshot.value)
