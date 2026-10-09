@@ -1,0 +1,14 @@
+_v: 1
+name: nats
+display_name: NATS
+description: "Instruments NATS message publishing, request/reply operations, and consumption through subscription\
+  \ callbacks and async iterators."
+packages:
+- name: '@nats-io/nats-core'
+- name: '@nats-io/transport-node'
+category:
+- messaging.consumer
+- messaging.producer
+systems:
+- nats
+creation_date: '2026-05-28'
