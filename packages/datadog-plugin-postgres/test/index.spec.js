@@ -71,12 +71,14 @@ function assertNoOtherQuerySpans (allowedResource) {
  * @template T
  * @param {string} resource
  * @param {() => Promise<T>} run
+ * @param {(span: { metrics: Record<string, number> }) => void} [checkSpan]
  * @returns {Promise<T>}
  */
-async function assertQuerySpan (resource, run) {
+async function assertQuerySpan (resource, run, checkSpan) {
   const spanPromise = agent.assertSomeTraces(traces => {
     const spans = traces.flat().filter(span => span.meta.component === 'postgres' && span.resource === resource)
     assert.strictEqual(spans.length, 1)
+    checkSpan?.(spans[0])
   }, { spanResourceMatch: resourcePattern(resource) })
   const [result] = await Promise.all([run(), spanPromise])
   return result
@@ -179,6 +181,54 @@ describe('Plugin', () => {
       it('does not trace an unexecuted lazy query', async () => {
         sql`SELECT 2 AS value`
         await assertNoQuerySpan('SELECT 2 AS value')
+      })
+
+      it('reports the wait for a new connection and an idle connection', async () => {
+        const firstSpan = agent.assertFirstTraceSpan(span => {
+          assert.strictEqual(span.resource, 'SELECT 1 AS value')
+          assert.ok(span.metrics['db.pool.wait_time_ms'] > 0)
+        })
+        await Promise.all([sql`SELECT 1 AS value`, firstSpan])
+
+        const idleSpan = agent.assertFirstTraceSpan(span => {
+          assert.strictEqual(span.resource, 'SELECT 2 AS value')
+          assert.strictEqual(span.metrics['db.pool.wait_time_ms'], 0)
+        })
+        await Promise.all([sql`SELECT 2 AS value`, idleSpan])
+      })
+
+      it('preserves query results with tracing enabled', async () => {
+        tracer.use('postgres', { enabled: false })
+        const uninstrumented = await sql.unsafe('SELECT 5 AS value')
+
+        tracer.use('postgres', {})
+        const spanPromise = agent.assertFirstTraceSpan(span => {
+          assert.strictEqual(span.resource, 'SELECT 5 AS value')
+        })
+        const [instrumented] = await Promise.all([sql.unsafe('SELECT 5 AS value'), spanPromise])
+
+        assert.deepStrictEqual(instrumented, uninstrumented)
+      })
+
+      it('reports time spent queued for a connection', async () => {
+        let markStarted
+        const started = new Promise(resolve => { markStarted = resolve })
+        const activeQuery = executeQuery(sql.unsafe('SELECT pg_sleep(0.05)', [], {
+          onexecute: () => {
+            markStarted()
+            // Postgres.js moves the connection to its full queue when this returns false.
+            return false
+          },
+        }))
+        await started
+
+        const spanPromise = agent.assertFirstTraceSpan(span => {
+          assert.strictEqual(span.resource, 'SELECT 3 AS value')
+          assert.ok(span.metrics['db.pool.wait_time_ms'] > 0)
+        }, { spanResourceMatch: /^SELECT 3 AS value$/ })
+        const queryPromise = executeQuery(sql.unsafe('SELECT 3 AS value'))
+        const [result] = await Promise.all([queryPromise, activeQuery, spanPromise])
+        assert.strictEqual(result[0].value, 3)
       })
 
       it('does not trace a query cancelled before dispatch', async () => {
@@ -425,7 +475,8 @@ describe('Plugin', () => {
       it('instruments file queries without tracing pre-dispatch file errors', async () => {
         const result = await assertQuerySpan(
           'SELECT $1::text AS message\n',
-          () => sql.file(path.join(__dirname, 'fixtures', 'select.sql'), ['file'])
+          () => sql.file(path.join(__dirname, 'fixtures', 'select.sql'), ['file']),
+          span => assert.strictEqual(typeof span.metrics['db.pool.wait_time_ms'], 'number')
         )
         assert.strictEqual(result[0].message, 'file')
 
@@ -465,7 +516,11 @@ describe('Plugin', () => {
         await assertQuerySpan('SELECT $1::int AS value', () => sql`SELECT ${1}::int AS value`)
         await assertQuerySpan('DISCARD ALL', () => sql.unsafe('DISCARD ALL'))
 
-        const result = await assertQuerySpan('SELECT $1::int AS value', () => sql`SELECT ${2}::int AS value`)
+        const result = await assertQuerySpan(
+          'SELECT $1::int AS value',
+          () => sql`SELECT ${2}::int AS value`,
+          span => assert.strictEqual(span.metrics['db.pool.wait_time_ms'], 0)
+        )
         assert.strictEqual(result[0].value, 2)
       })
 
@@ -475,11 +530,13 @@ describe('Plugin', () => {
         const first = sql.unsafe('SELECT pg_sleep(10)', [], {
           onexecute: () => {
             startFirst()
-            return true
+            // Keep the connection full so the second query waits in the pool queue.
+            return false
           },
         })
         const firstSpanPromise = agent.assertFirstTraceSpan(span => {
           assert.strictEqual(span.resource, 'SELECT pg_sleep(10)')
+          assert.ok(span.metrics['db.pool.wait_time_ms'] > 0)
           assert.strictEqual(span.meta[ERROR_TYPE], 'PostgresError')
           assert.match(span.meta[ERROR_MESSAGE], /canceling statement/)
         }, { spanResourceMatch: /^SELECT pg_sleep\(10\)$/ })
@@ -490,6 +547,7 @@ describe('Plugin', () => {
         const queued = sql.unsafe('SELECT 2 AS value')
         const queuedSpanPromise = agent.assertFirstTraceSpan(span => {
           assert.strictEqual(span.resource, 'SELECT 2 AS value')
+          assert.ok(span.metrics['db.pool.wait_time_ms'] > 0)
           assert.strictEqual(span.meta[ERROR_TYPE], 'Error')
           assert.match(span.meta[ERROR_MESSAGE], /canceling statement/)
         }, { spanResourceMatch: /^SELECT 2 AS value$/ })
@@ -508,6 +566,7 @@ describe('Plugin', () => {
 
         const spanPromise = agent.assertFirstTraceSpan(span => {
           assert.strictEqual(span.resource, 'SELECT 1 AS value')
+          assert.strictEqual(span.metrics['db.pool.wait_time_ms'], 0)
           assert.strictEqual(span.meta[ERROR_TYPE], 'Error')
           assert.strictEqual(span.meta[ERROR_MESSAGE], 'write CONNECTION_ENDED 127.0.0.1:5432')
         }, { spanResourceMatch: /^SELECT 1 AS value$/ })
@@ -517,6 +576,7 @@ describe('Plugin', () => {
 
         const taggedSpanPromise = agent.assertFirstTraceSpan(span => {
           assert.strictEqual(span.resource, 'SELECT 2 AS value')
+          assert.strictEqual(span.metrics['db.pool.wait_time_ms'], 0)
           assert.strictEqual(span.meta[ERROR_TYPE], 'Error')
           assert.strictEqual(span.meta[ERROR_MESSAGE], 'write CONNECTION_ENDED 127.0.0.1:5432')
         }, { spanResourceMatch: /^SELECT 2 AS value$/ })
@@ -525,9 +585,30 @@ describe('Plugin', () => {
         await taggedSpanPromise
       })
 
+      it('reports the wait when connecting to the database fails', async () => {
+        const failingSql = postgres({ ...POSTGRES_TARGET, port: 1, connect_timeout: 1 })
+        const spanPromise = agent.assertFirstTraceSpan(span => {
+          assert.strictEqual(span.resource, 'SELECT 6 AS value')
+          assert.ok(span.metrics['db.pool.wait_time_ms'] > 0)
+          assert.strictEqual(span.meta[ERROR_TYPE], 'Error')
+        }, { spanResourceMatch: /^SELECT 6 AS value$/ })
+
+        try {
+          await Promise.all([
+            assert.rejects(failingSql.unsafe('SELECT 6 AS value'), { code: 'ECONNREFUSED' }),
+            spanPromise,
+          ])
+        } finally {
+          await failingSql.end({ timeout: 0 })
+        }
+      })
+
       it('instruments transaction and reserved-connection handlers', async () => {
         const transactionSpanPromise = agent.assertFirstTraceSpan(
-          { resource: 'SELECT 42 AS value' },
+          span => {
+            assert.strictEqual(span.resource, 'SELECT 42 AS value')
+            assert.strictEqual(span.metrics['db.pool.wait_time_ms'], 0)
+          },
           { spanResourceMatch: /^SELECT 42 AS value$/ }
         )
         const transactionResult = await sql.begin(transaction => transaction`SELECT 42 AS value`)
@@ -539,7 +620,11 @@ describe('Plugin', () => {
 
         const reserved = await sql.reserve()
         try {
-          const reservedResult = await assertQuerySpan('SELECT 43 AS value', () => reserved`SELECT 43 AS value`)
+          const reservedResult = await assertQuerySpan(
+            'SELECT 43 AS value',
+            () => reserved`SELECT 43 AS value`,
+            span => assert.strictEqual(span.metrics['db.pool.wait_time_ms'], 0)
+          )
           assert.strictEqual(reservedResult[0].value, 43)
         } finally {
           reserved.release()

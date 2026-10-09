@@ -1,9 +1,12 @@
 'use strict'
 
+const { performance } = require('node:perf_hooks')
+
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 
+const ACQUIRE_START_CHANNEL = 'tracing:orchestrion:postgres:query:acquire:start'
 const PREPARE_START_CHANNEL = 'tracing:orchestrion:postgres:query:prepare:start'
 
 /**
@@ -14,6 +17,8 @@ const PREPARE_START_CHANNEL = 'tracing:orchestrion:postgres:query:prepare:start'
  * @property {string} [host]
  * @property {number} [pid]
  * @property {number} [port]
+ * @property {boolean} [poolWaitFinished]
+ * @property {number} [poolWaitStartMs]
  * @property {PostgresQuery} query
  * @property {string} [statement]
  * @property {string} user
@@ -63,12 +68,16 @@ class PostgresPlugin extends DatabasePlugin {
   /** @type {WeakMap<PostgresQuery, import('../../..').Span>} */
   #spans = new WeakMap()
 
+  /** @type {WeakMap<PostgresQuery, PostgresContext>} */
+  #waitContexts = new WeakMap()
+
   /**
    * @param {object} tracer
    * @param {import('../../dd-trace/src/config/config-base')} tracerConfig
    */
   constructor (tracer, tracerConfig) {
     super(tracer, tracerConfig)
+    this.addSub(ACQUIRE_START_CHANNEL, ctx => this.#finishPoolWait(ctx.query))
     this.#preparation = new PostgresPreparationPlugin(this.#prepare.bind(this), tracer, tracerConfig)
   }
 
@@ -112,10 +121,24 @@ class PostgresPlugin extends DatabasePlugin {
     }
 
     this.#spans.set(query, span)
+    this.#waitContexts.set(query, ctx)
     if (this.#dbmEnabled) {
       this.#dbmQueries.set(query, { service: service.name })
     }
     return ctx.currentStore
+  }
+
+  /**
+   * @param {PostgresQuery} query
+   */
+  #finishPoolWait (query) {
+    const ctx = this.#waitContexts.get(query)
+    if (ctx === undefined) return
+
+    this.#waitContexts.delete(query)
+    ctx.poolWaitFinished = true
+    const waitTime = ctx.poolWaitStartMs === undefined ? 0 : performance.now() - ctx.poolWaitStartMs
+    ctx.currentStore.span.setTag('db.pool.wait_time_ms', waitTime)
   }
 
   /**
@@ -152,6 +175,7 @@ class PostgresPlugin extends DatabasePlugin {
     this.#dbmQueries.delete(query)
     if (span === undefined) return
 
+    this.#finishPoolWait(query)
     this.#spans.delete(query)
 
     const statement = dbmState?.statement ?? result.statement
