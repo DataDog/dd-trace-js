@@ -1,8 +1,6 @@
 'use strict'
 
-// Response headers captured on `responseWriteHead` (http-response) and later read
-// when the request finishes (http-request end translator). This is the only piece
-// of per-request state shared across the two handler modules.
+// Per-request state shared by the request and response handlers.
 const storedResponseHeaders = new WeakMap()
 
 /**
