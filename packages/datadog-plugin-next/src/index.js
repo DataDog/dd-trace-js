@@ -4,8 +4,16 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  isInstrumentationOwnedResource,
+  otelHttpResourceName,
+  setInstrumentationHttpResource,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
+const addOtelRequestTags = require('./request-tags')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 const reusedNextRequestStores = new WeakSet()
@@ -18,8 +26,7 @@ const nextParentRoutes = new WeakMap()
  *   backgroundRevalidationRequest?: import('node:http').IncomingMessage
  * }} NextRequestStore
  *
- * @typedef {object} NextRequest
- * @property {unknown} [error]
+ * @typedef {Request & { error?: unknown }} NextRequest
  *
  * @typedef {object} NextRequestContext
  * @property {import('node:http').IncomingMessage} req
@@ -76,12 +83,19 @@ class NextPlugin extends ServerPlugin {
       'http.method': req.method,
     }
     if (serviceSource !== undefined) tags[SVC_SRC_KEY] = serviceSource
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      const resource = otelHttpResourceName(req.method)
+      tags['resource.name'] = resource
+      tags[INSTRUMENTATION_HTTP_RESOURCE] = resource
+    }
 
     const span = this.tracer.startSpan(this.operationName(), {
       childOf,
       tags,
       integrationName: this.constructor.id,
     })
+
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) addOtelRequestTags(span, this.config, req)
 
     this.stampIntegrationService(span, serviceName)
 
@@ -112,7 +126,11 @@ class NextPlugin extends ServerPlugin {
 
     const span = store.span
     const error = ctx.error ?? span.context().getTag('error')
-    const requestError = req.error || nextRequest.error
+    const requestError = req.error || nextRequest?.error
+
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && nextRequest) {
+      addOtelRequestTags(span, this.config, nextRequest)
+    }
 
     if (requestError) {
       // prioritize user-set errors from API routes
@@ -125,6 +143,9 @@ class NextPlugin extends ServerPlugin {
     } else if (!this.config.validateStatus(res.statusCode)) {
       // where there's no error, we still need to validate status
       span.setTag('error', true)
+      if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        span.setTag(HTTP_STATUS_ERROR, String(res.statusCode))
+      }
       web.addError(req, true)
     }
 
@@ -168,13 +189,24 @@ class NextPlugin extends ServerPlugin {
         : '/public/*'
     }
 
-    span.addTags({
-      [COMPONENT]: this.constructor.id,
-      'resource.name': `${req.method} ${page}`.trim(),
-      'next.page': page,
-    })
+    let resource = `${req.method} ${page}`.trim()
+    span.setTag(COMPONENT, this.constructor.id)
+    span.setTag('next.page', page)
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      resource = otelHttpResourceName(req.method, page)
+      span.setTag(HTTP_ROUTE, page)
+      setInstrumentationHttpResourceIfOwned(span, resource)
+    } else {
+      span.setTag(RESOURCE_NAME, resource)
+    }
     web.setRouteOrEndpointTag(req)
-    setHttpParentRoute(httpParentSpan, req.method, page, isStatic)
+    setHttpParentRoute(
+      httpParentSpan,
+      page,
+      isStatic,
+      this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
+      resource
+    )
     web.setRoute(req, page)
   }
 
@@ -201,7 +233,14 @@ function normalizeAppPath (page) {
   return page
 }
 
-function setHttpParentRoute (span, method, page, isStatic) {
+/**
+ * @param {import('../../dd-trace/src/opentracing/span') | undefined} span
+ * @param {string | undefined} page
+ * @param {boolean} isStatic
+ * @param {boolean} otelSemanticsEnabled
+ * @param {string} resource
+ */
+function setHttpParentRoute (span, page, isStatic, otelSemanticsEnabled, resource) {
   if (!span) return
   const currentRoute = span.context().getTag(HTTP_ROUTE)
 
@@ -209,7 +248,25 @@ function setHttpParentRoute (span, method, page, isStatic) {
   if (currentRoute && (nextParentRoutes.get(span) !== currentRoute || isStatic)) return
 
   span.setTag(HTTP_ROUTE, page)
-  span.setTag(RESOURCE_NAME, `${method} ${page}`.trim())
+  if (otelSemanticsEnabled) {
+    setInstrumentationHttpResourceIfOwned(span, resource)
+  } else {
+    span.setTag(RESOURCE_NAME, resource)
+  }
   nextParentRoutes.set(span, page)
+}
+
+/**
+ * @param {import('../../dd-trace/src/opentracing/span')} span
+ * @param {string} resource
+ */
+function setInstrumentationHttpResourceIfOwned (span, resource) {
+  const context = span.context()
+  if (isInstrumentationOwnedResource(
+    context.getTag(RESOURCE_NAME),
+    context.getTag(INSTRUMENTATION_HTTP_RESOURCE)
+  )) {
+    setInstrumentationHttpResource(span, resource)
+  }
 }
 module.exports = NextPlugin

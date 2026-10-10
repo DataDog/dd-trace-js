@@ -12,6 +12,7 @@ require('./setup/core')
 const { APM_TRACING_ENABLED_KEY, SDK_OTLP_EXPORT_KEY } = require('../src/constants')
 const { AUTO_REJECT, USER_KEEP } = require('../../../ext/priority')
 const TraceState = require('../src/opentracing/propagation/tracestate')
+const { getConfigFresh } = require('./helpers/config')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -38,6 +39,7 @@ describe('SpanProcessor', () => {
     trace = {
       started: [],
       finished: [],
+      tags: {},
     }
 
     let tags = {}
@@ -495,6 +497,48 @@ describe('SpanProcessor', () => {
       }
     }
 
+    for (const { platform, options } of [
+      { platform: 'Test Optimization', options: { isCiVisibility: true, experimental: { exporter: 'jest_worker' } } },
+      { platform: 'Electron', options: { experimental: { exporter: 'electron' } } },
+      { platform: 'Lambda' },
+    ]) {
+      it(`preserves Datadog HTTP fields when ${platform} disables requested OTel semantics`, () => {
+        const previousSemantics = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        const previousFunctionName = process.env.AWS_LAMBDA_FUNCTION_NAME
+        process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+        if (platform === 'Lambda') process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+
+        try {
+          spanFormat.returns(formattedHttpSpan())
+          const platformConfig = getConfigFresh(options)
+          const processor = new SpanProcessor(exporter, prioritySampler, platformConfig)
+          trace.started = [finishedSpan]
+          trace.finished = [finishedSpan]
+
+          processor.process(finishedSpan)
+
+          const exported = exporter.export.firstCall.args[0][0]
+          assert.strictEqual(platformConfig.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+          assert.strictEqual(exported.meta['http.method'], 'GET')
+          assert.strictEqual(exported.meta['http.status_code'], '200')
+          assert.ok(!('http.request.method' in exported.meta))
+        } finally {
+          if (platform === 'Lambda') {
+            if (previousFunctionName === undefined) {
+              delete process.env.AWS_LAMBDA_FUNCTION_NAME
+            } else {
+              process.env.AWS_LAMBDA_FUNCTION_NAME = previousFunctionName
+            }
+          }
+          if (previousSemantics === undefined) {
+            delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          } else {
+            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = previousSemantics
+          }
+        }
+      })
+    }
+
     it('applies the OTel HTTP rename to the exported span', () => {
       spanFormat.returns(formattedHttpSpan())
       const otelConfig = {
@@ -511,11 +555,13 @@ describe('SpanProcessor', () => {
 
       const exported = exporter.export.firstCall.args[0][0]
       assert.strictEqual(exported.meta['http.request.method'], 'GET')
-      assert.strictEqual(exported.metrics['http.response.status_code'], 200)
+      assert.strictEqual(exported.meta['http.response.status_code'], '200')
       assert.ok(!('http.method' in exported.meta))
+      // Datadog-only, no OTel equivalent, read by ASM and endpoint aggregation.
+      assert.strictEqual(exported.meta['http.endpoint'], '/u')
     })
 
-    it('records span stats from the Datadog tag names, before the export-only rename', () => {
+    it('records span stats from the OTel span shape used for export', () => {
       spanFormat.returns(formattedHttpSpan())
       const otelConfig = {
         flushMinSpans: 3,
@@ -527,8 +573,9 @@ describe('SpanProcessor', () => {
       const statsView = {}
       processor._stats = {
         onSpanFinished: sinon.spy(span => {
-          statsView.method = span.meta['http.method']
-          statsView.statusCode = span.meta['http.status_code']
+          statsView.resource = span.resource
+          statsView.method = span.meta['http.request.method']
+          statsView.statusCode = span.meta['http.response.status_code']
           statsView.endpoint = span.meta['http.endpoint']
         }),
       }
@@ -537,7 +584,7 @@ describe('SpanProcessor', () => {
 
       processor.process(finishedSpan)
 
-      assert.deepStrictEqual(statsView, { method: 'GET', statusCode: '200', endpoint: '/u' })
+      assert.deepStrictEqual(statsView, { resource: 'GET', method: 'GET', statusCode: '200', endpoint: '/u' })
     })
   })
 })

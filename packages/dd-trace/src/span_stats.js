@@ -23,6 +23,7 @@ const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
+const { toSafeInteger } = require('./plugins/util/http-otel-semantics')
 
 const {
   DEFAULT_SPAN_NAME,
@@ -100,16 +101,32 @@ class SpanAggStats {
   }
 }
 
+/**
+ * The status code to aggregate on, preferring the Datadog tag, then the OTel attribute in `meta`,
+ * then the numeric one in `metrics`. Zero when none of them is usable.
+ *
+ * @param {import('./span_format').FormattedSpan} span
+ */
+function httpStatusCode (span) {
+  const datadogStatus = toSafeInteger(span.meta[HTTP_STATUS_CODE])
+  if (datadogStatus !== undefined) return datadogStatus
+
+  const otelMetaStatus = toSafeInteger(span.meta['http.response.status_code'])
+  if (otelMetaStatus !== undefined) return otelMetaStatus
+
+  return toSafeInteger(span.metrics?.['http.response.status_code']) ?? 0
+}
+
 class SpanAggKey {
   constructor (span) {
     this.name = span.name || DEFAULT_SPAN_NAME
     this.service = span.service || DEFAULT_SERVICE_NAME
     this.resource = span.resource || ''
     this.type = span.type || ''
-    this.statusCode = span.meta[HTTP_STATUS_CODE] || 0
+    this.statusCode = httpStatusCode(span)
     this.synthetics = span.meta[ORIGIN_KEY] === 'synthetics'
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
-    this.method = span.meta[HTTP_METHOD] || ''
+    this.method = span.meta[HTTP_METHOD] || span.meta['http.request.method'] || ''
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
     // dd gRPC plugin sets a numeric code via setTag; OTel/manual sets a string name via meta.
