@@ -1,6 +1,6 @@
 'use strict'
 
-const { AUTO_REJECT } = require('../../../ext/priority')
+const { AUTO_KEEP, AUTO_REJECT } = require('../../../ext/priority')
 const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
@@ -15,32 +15,23 @@ const finishedSpans = new WeakSet()
 
 let otelSampling
 
-/**
- * Adds first-class OTLP trace context to a DD-formatted span.
- *
- * @param {import('./opentracing/span')} span
- * @param {boolean} isFirstSpanInChunk
- * @param {string | false} processTagsValue
- */
-function formatOtlpSpan (span, isFirstSpanInChunk, processTagsValue) {
-  const formattedSpan = spanFormat(span, isFirstSpanInChunk, processTagsValue)
-  const context = span.context()
+/** @param {import('./opentracing/span_context')} context */
+function serializeOtlpTraceState (context) {
   const traceState = context._tracestate?.clone() ?? new TraceState()
   otelSampling ??= require('./otel-sampling')
   otelSampling.updateOtelTraceState(context, traceState)
-  formattedSpan.trace_state = traceState.toString()
-  return formattedSpan
+  return traceState.toString()
 }
 
 class SpanProcessor {
-  #formatSpan
+  #exportOtlpTraces
 
   constructor (exporter, prioritySampler, config, otlpStatsExporter, exportOtlpTraces) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
-    this.#formatSpan = exportOtlpTraces ? formatOtlpSpan : spanFormat
+    this.#exportOtlpTraces = exportOtlpTraces
 
     if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
         !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
@@ -95,13 +86,18 @@ class SpanProcessor {
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
       const discard = this.#isDiscarded(spanContext)
-      const formatSpan = this.#formatSpan
+      const exportOtlpTraces = this.#exportOtlpTraces && !(spanContext._sampling.priority < AUTO_KEEP)
+      let traceState
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else if (!discard) {
-          const formattedSpan = formatSpan(span, isFirstSpanInChunk, this._processTags)
+          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          if (exportOtlpTraces) {
+            traceState ??= serializeOtlpTraceState(spanContext)
+            formattedSpan.trace_state = traceState
+          }
           if (stampApmDisabled) {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
           }
