@@ -2,6 +2,7 @@
 
 const { readFileSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
 const dns = require('node:dns')
 const { once } = require('node:events')
 const path = require('node:path')
@@ -484,6 +485,26 @@ describe('Config', () => {
     const proxy = require('../../src/proxy')
     assert.strictEqual(indexFile, proxy)
   })
+
+  for (const semanticsEnabled of ['true', 'false']) {
+    for (const enabled of [undefined, 'true', 'false']) {
+      it(`should honor Electron trace disablement with semantics=${semanticsEnabled} and enabled=${enabled}`, () => {
+        const env = {
+          DD_INJECT_FORCE: 'true',
+          DD_TRACE_EXPERIMENTAL_EXPORTER: 'electron',
+          DD_TRACE_OTEL_SEMANTICS_ENABLED: semanticsEnabled,
+          OTEL_TRACES_EXPORTER: 'none',
+        }
+        if (enabled !== undefined) env.DD_TRACE_ENABLED = enabled
+        const expectedProxy = enabled === 'true' ? '../../src/proxy' : '../../src/noop/proxy'
+        execFileSync(process.execPath, ['-e', `
+          const assert = require('node:assert/strict')
+          const tracer = require(${JSON.stringify(require.resolve('../../../..'))})
+          assert.ok(tracer.constructor === require(${JSON.stringify(require.resolve(expectedProxy))}))
+        `], { env, timeout: 10000, stdio: 'pipe' })
+      })
+    }
+  }
 
   it('should keep the no-op proxy when Lambda disables OTel semantics without an explicit OTLP endpoint', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
@@ -5735,6 +5756,71 @@ rules:
 
       assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true)
       assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_SEMANTICS_ENABLED'), 'env_var')
+    })
+
+    for (const scenario of [
+      { name: 'supported runtime', enabled: true },
+      { name: 'Electron', exporter: 'electron', enabled: false },
+      { name: 'Lambda without an endpoint', lambda: true, enabled: false },
+      { name: 'Lambda with an endpoint', lambda: true, endpoint: 'http://collector:4318', enabled: true },
+      { name: 'Lambda with a traces endpoint', lambda: true, tracesEndpoint: 'http://collector/v1/traces', enabled: true },
+    ]) {
+      it(`should keep startup OTel applicability after remote transport updates in ${scenario.name}`, () => {
+        process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+        if (scenario.exporter) process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = scenario.exporter
+        if (scenario.lambda) process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+        if (scenario.endpoint) process.env.OTEL_EXPORTER_OTLP_ENDPOINT = scenario.endpoint
+        if (scenario.tracesEndpoint) process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = scenario.tracesEndpoint
+        const config = getConfig()
+        const exporter = config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER
+        const endpoint = config.OTEL_EXPORTER_OTLP_ENDPOINT
+        const tracesEndpoint = config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+        const origins = [
+          config.getOrigin('DD_TRACE_OTEL_SEMANTICS_ENABLED'),
+          config.getOrigin('tracing.DD_TRACE_EXPERIMENTAL_EXPORTER'),
+          config.getOrigin('OTEL_EXPORTER_OTLP_ENDPOINT'),
+          config.getOrigin('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'),
+        ]
+        const options = {
+          DD_TRACE_EXPERIMENTAL_EXPORTER: scenario.exporter ? 'datadog' : 'electron',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://remote:4318',
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://remote:4318/v1/traces',
+          DD_LOGS_INJECTION: 'false',
+        }
+        const originalOptions = { ...options }
+
+        for (const update of [options, {}, options, null]) {
+          config.setRemoteConfig(update)
+
+          assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, scenario.enabled)
+          assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, exporter)
+          assert.strictEqual(config.OTEL_EXPORTER_OTLP_ENDPOINT, endpoint)
+          assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, tracesEndpoint)
+          assert.deepStrictEqual([
+            config.getOrigin('DD_TRACE_OTEL_SEMANTICS_ENABLED'),
+            config.getOrigin('tracing.DD_TRACE_EXPERIMENTAL_EXPORTER'),
+            config.getOrigin('OTEL_EXPORTER_OTLP_ENDPOINT'),
+            config.getOrigin('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'),
+          ], origins)
+          assert.strictEqual(config.logInjection, update !== options)
+          if (scenario.enabled) {
+            assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+            assert.strictEqual(config.spanAttributeSchema, 'v0')
+            assert.strictEqual(config.spanComputePeerService, false)
+          }
+        }
+        assert.deepStrictEqual(options, originalOptions)
+      })
+    }
+
+    it('should still apply remote transport options when OTel semantics was not requested', () => {
+      const config = getConfig()
+
+      config.setRemoteConfig({ DD_TRACE_EXPERIMENTAL_EXPORTER: 'electron' })
+
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'electron')
+      assert.strictEqual(config.getOrigin('tracing.DD_TRACE_EXPERIMENTAL_EXPORTER'), 'remote_config')
+      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
     })
 
     it('should restore tracked origins when an individual RC option falls back to code', () => {

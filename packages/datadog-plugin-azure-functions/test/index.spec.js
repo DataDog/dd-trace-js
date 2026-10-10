@@ -122,3 +122,41 @@ describe('azure-functions plugin', () => {
     sinon.assert.notCalled(web.startServerlessSpanWithInferredProxy)
   })
 })
+
+describe('azure-functions HTTP invocation lifecycle', () => {
+  afterEach(() => {
+    sinon.restore()
+  })
+
+  for (const semanticsEnabled of [false, true]) {
+    for (const status of [200, 500]) {
+      it(`keeps serverless type with semantics=${semanticsEnabled} and status=${status}`, () => {
+        const tracer = require('../../dd-trace').init({ plugins: false })
+        const exportSpan = sinon.stub(tracer._tracer._exporter, 'export')
+        const plugin = new AzureFunctionsPlugin(tracer)
+        plugin.configure({ enabled: false, DD_TRACE_OTEL_SEMANTICS_ENABLED: semanticsEnabled })
+        const ctx = {
+          currentStore: {},
+          functionName: 'test-function',
+          methodName: 'http',
+          httpRequest: {
+            headers: new Map([['host', 'request-host']]),
+            method: 'GET',
+            url: 'https://request-host/path?query=value',
+          },
+        }
+
+        plugin.bindStart(ctx)
+        assert.strictEqual(ctx.span.context().getTags()['span.type'], 'serverless')
+
+        ctx.result = { status }
+        plugin.asyncStart(ctx)
+
+        sinon.assert.calledOnce(exportSpan)
+        const [span] = exportSpan.firstCall.args[0]
+        assert.strictEqual(span.type, 'serverless')
+        assert.strictEqual(span.error, status === 500 ? 1 : 0)
+      })
+    }
+  }
+})

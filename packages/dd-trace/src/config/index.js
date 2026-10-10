@@ -192,6 +192,8 @@ module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {
+  #otelSemanticsRequested
+
   /**
    * parsed DD_TAGS, usable as a standalone tag set across products
    * @type {Record<string, string>}
@@ -251,6 +253,7 @@ class Config extends ConfigBase {
       this.#applyOptions(experimental, 'code', 'experimental')
     }
     this.#applyOptions(rest, 'code')
+    this.#otelSemanticsRequested = this.DD_TRACE_OTEL_SEMANTICS_ENABLED
     this.#applyCalculated()
 
     warnWrongOtelSettings()
@@ -351,8 +354,13 @@ class Config extends ConfigBase {
     if (options !== null) {
       const remoteOptions = { ...options }
       // Trace exporter and `OtlpTraceTransformer` are fixed at startup.
-      // Ignore remote semantics changes to keep transformation and export aligned.
+      // Ignore remote changes to semantics and its transport applicability inputs.
       delete remoteOptions.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      if (this.#otelSemanticsRequested) {
+        delete remoteOptions.DD_TRACE_EXPERIMENTAL_EXPORTER
+        delete remoteOptions.OTEL_EXPORTER_OTLP_ENDPOINT
+        delete remoteOptions.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      }
 
       // Resolve aliases and drop configs this tracer version doesn't recognize
       this.#applyEnvs(getEnvironmentVariables(remoteOptions, true), 'remote_config')

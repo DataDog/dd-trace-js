@@ -9,7 +9,8 @@ const inJestWorker = typeof jest !== 'undefined'
 // skipDefault: distinguish an unset DD_TRACE_ENABLED (fall back to the OTel signal) from an
 // explicit value; the registered default would otherwise mask the OTEL_TRACES_EXPORTER check.
 const ddTraceEnabled = getValueFromEnvSources('DD_TRACE_ENABLED', true)
-const otelSemanticsEnabled = getValueFromEnvSources('DD_TRACE_OTEL_SEMANTICS_ENABLED') === true
+const otelSemanticsEnabled = getValueFromEnvSources('DD_TRACE_OTEL_SEMANTICS_ENABLED') === true &&
+  getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_EXPORTER') !== 'electron'
 const isLambdaWithoutOtlpEndpoint = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined &&
   getValueFromEnvSources('OTEL_EXPORTER_OTLP_ENDPOINT', true) === undefined &&
   getValueFromEnvSources('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', true) === undefined

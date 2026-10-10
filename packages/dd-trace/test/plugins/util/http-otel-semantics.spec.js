@@ -7,9 +7,36 @@ const {
   INSTRUMENTATION_HTTP_RESOURCE,
   applyHttpOtelSemantics,
   decomposeServerUrl,
+  otelHttpResourceName,
 } = require('../../../src/plugins/util/http-otel-semantics')
 
 describe('http-otel-semantics', () => {
+  describe('otelHttpResourceName', () => {
+    for (const { method, route, expected } of [
+      { method: 'GET', route: '/users/:id', expected: 'GET /users/:id' },
+      { method: 'PROPFIND', route: '/users/:id', expected: 'HTTP /users/:id' },
+      { method: 'PROPFIND', expected: 'HTTP' },
+    ]) {
+      it(`names ${method} with route ${route} as ${expected}`, () => {
+        assert.strictEqual(otelHttpResourceName(method, route), expected)
+        /** @type {Record<string, string>} */
+        const meta = {
+          'span.kind': 'server',
+          'http.method': method,
+          [INSTRUMENTATION_HTTP_RESOURCE]: expected,
+        }
+        if (route !== undefined) meta['http.route'] = route
+        const span = { meta, metrics: {}, error: 0, resource: expected }
+
+        applyHttpOtelSemantics(span)
+
+        assert.strictEqual(span.resource, expected)
+        assert.strictEqual(span.meta['http.request.method'], method === 'GET' ? 'GET' : '_OTHER')
+        assert.strictEqual(span.meta['http.route'], route)
+      })
+    }
+  })
+
   describe('decomposeServerUrl', () => {
     it('splits scheme, address, port, path, and query', () => {
       assert.deepStrictEqual(
