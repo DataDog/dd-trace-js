@@ -1,13 +1,14 @@
 'use strict'
 
 const { performance } = require('node:perf_hooks')
+const { clearTimeout, setTimeout } = require('node:timers')
 const { fileURLToPath } = require('node:url')
 
 const { channel } = require('dc-polyfill')
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const {
   getEfdRetryCountForDuration,
   hasEfdRetries,
@@ -15,16 +16,20 @@ const {
 const {
   getDynamicAtrRetryCount,
 } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
+const { FINAL_FLUSH_TIMEOUT } = require('../../dd-trace/src/ci-visibility/final-flush')
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
   setScreenshotUploadTags,
 } = require('../../dd-trace/src/ci-visibility/test-screenshot')
+const { setVideoUploadTags } = require('../../dd-trace/src/ci-visibility/test-video')
 const log = require('../../dd-trace/src/log')
 const {
   requestWebdriverioScreenshotUpload,
+  requestWebdriverioVideoUpload,
   sendWebdriverioWorkerMessage,
   SUITE_FINISH,
+  VIDEO_UPLOAD_FLUSH,
   WEBDRIVERIO_WORKER_ENV,
 } = require('../../datadog-instrumentations/src/mocha/webdriverio-protocol')
 
@@ -83,6 +88,11 @@ const {
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
+// Load the recorder and capture clocks before test code can replace globals with fake timers.
+const createWebdriverioVideo = require('./webdriverio-video')
+
+const dateNow = Date.now
+
 const jasmineAdapterRunAsyncEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineAdapter_run:asyncEnd'
 const jasmineDoneCh = 'ci:webdriverio:jasmine:done'
 const jasmineExecuteAsyncEndCh = 'tracing:orchestrion:@wdio/utils:executeAsync:asyncEnd'
@@ -106,6 +116,7 @@ const WEBDRIVERIO_JASMINE_FAILED_EXPECTATION_COUNT = Symbol('webdriverioJasmineF
 const WEBDRIVERIO_JASMINE_FUNCTION_TYPE = Symbol('webdriverioJasmineFunctionType')
 const WEBDRIVERIO_JASMINE_TEST = Symbol('webdriverioJasmineTest')
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
+const shouldRecordWebdriverioVideos = getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 const BASE64_RE = /^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$/
 
@@ -120,6 +131,20 @@ const BASE64_RE = /^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$
  * @property {string|undefined} parentSuiteId
  * @property {string|undefined} status
  */
+
+/**
+ * Waits for an attempt's final capture, bounded by its existing deadline, without waiting for encoding or upload.
+ *
+ * @param {ReturnType<typeof createWebdriverioVideo>} video
+ * @param {Promise<unknown>} [finishPromise]
+ */
+function waitForWebdriverioCapture (video, finishPromise) {
+  if (!video) return finishPromise
+  // WDIO awaits its async framework hook, so bridge the recorder's callback before it can start the next attempt.
+  /** @type {Promise<void>} */
+  const captureWait = new Promise(resolve => video.waitForCapture(resolve))
+  return finishPromise ? Promise.all([finishPromise, captureWait]) : captureWait
+}
 
 /**
  * Normalizes a WebdriverIO Jasmine spec identifier to a filesystem path.
@@ -245,14 +270,19 @@ function getJasmineFailureFile (result, specs) {
 class MochaPlugin extends CiPlugin {
   static id = 'mocha'
 
+  #pendingWebdriverioVideos = new Set()
+  #webdriverioCapture
+  #webdriverioVideoFlushTimer
+
   constructor (...args) {
     super(...args)
 
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
     this._webdriverioScreenshotUploads = new WeakMap()
-    this._pendingWebdriverioScreenshotUploads = 0
-    this._webdriverioScreenshotUploadCallbacks = []
+    this._webdriverioVideos = new Map()
+    this._pendingWebdriverioMediaUploads = 0
+    this._webdriverioMediaUploadCallbacks = []
 
     this.addSub('ci:webdriverio:screenshot:capabilities', (ctx) => {
       ctx.enabled = Boolean(
@@ -283,6 +313,34 @@ class MochaPlugin extends CiPlugin {
       exporter.uploadTestScreenshot({ content, traceId, idempotencyKey, capturedAtMs }, onDone)
     })
 
+    this.addSub('ci:webdriverio:video:capabilities',
+      /** @type {import('node:diagnostics_channel').ChannelListener} */ (
+        /** @param {{enabled?: boolean}} ctx */
+        (ctx) => {
+          ctx.enabled = Boolean(
+            shouldRecordWebdriverioVideos &&
+            this._tracerConfig.testOptimization?.DD_TEST_FAILURE_VIDEOS_ENABLED &&
+            this.tracer._exporter?.canUploadTestVideos?.()
+          )
+        }
+      ))
+
+    this.addSub('ci:webdriverio:video:upload',
+      /** @type {import('node:diagnostics_channel').ChannelListener} */ (
+        /**
+         * @param {{filePath: string, traceId: string, idempotencyKey: string, capturedAtMs: number,
+         *   signal?: AbortSignal, onDone: (error?: Error) => void}} options
+         */
+        ({ filePath, traceId, idempotencyKey, capturedAtMs, signal, onDone }) => {
+          const exporter = this.tracer?._exporter
+          if (!exporter?.canUploadTestVideos?.() || !exporter.uploadTestVideo) {
+            onDone(new Error('WebdriverIO video upload is not supported by the active Test Optimization transport'))
+            return
+          }
+          exporter.uploadTestVideo({ filePath, traceId, idempotencyKey, capturedAtMs, signal }, onDone)
+        }
+      ))
+
     this.addSub('ci:mocha:worker:configuration', ({
       libraryConfig,
       repositoryRoot,
@@ -303,6 +361,19 @@ class MochaPlugin extends CiPlugin {
       ) {
         log.warn(
           'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but WebdriverIO screenshot upload is not supported by the %s',
+          'active Test Optimization transport.'
+        )
+      }
+      if (
+        testFramework === WEBDRIVERIO_FRAMEWORK &&
+        shouldRecordWebdriverioVideos &&
+        this._tracerConfig.testOptimization.DD_TEST_FAILURE_VIDEOS_ENABLED &&
+        !(isWebdriverioWorker
+          ? libraryConfig.isTestFailureVideosEnabled
+          : this.tracer._exporter?.canUploadTestVideos?.())
+      ) {
+        log.warn(
+          'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but WebdriverIO video upload is not supported by the %s',
           'active Test Optimization transport.'
         )
       }
@@ -481,7 +552,13 @@ class MochaPlugin extends CiPlugin {
     this.addSub(jasmineReporterSpecDoneEndCh, (ctx) => {
       if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
         const result = ctx.result
-        const finishPromise = this.#finishWebdriverioJasmineTest(ctx.arguments?.[0], ctx.self?._specs)
+        const testResult = ctx.arguments?.[0]
+        const test = this._webdriverioJasmineState?.tests.get(testResult?.id)
+        const video = this._webdriverioVideos.get(test?.span)
+        const finishPromise = waitForWebdriverioCapture(
+          video,
+          this.#finishWebdriverioJasmineTest(testResult, ctx.self?._specs)
+        )
         if (finishPromise) {
           ctx.result = finishPromise.then(() => result)
         }
@@ -641,6 +718,8 @@ class MochaPlugin extends CiPlugin {
     this.addBind('ci:mocha:test:start', (ctx) => {
       const store = storage('legacy').getStore()
       const span = this.startTestSpan(ctx)
+      const { isDisabled, isAttemptToFix } = /** @type {{isDisabled?: boolean, isAttemptToFix?: boolean}} */ (ctx)
+      if (!isDisabled || isAttemptToFix) this.#startWebdriverioVideo(span)
 
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
@@ -650,13 +729,39 @@ class MochaPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
+    this.addSub('ci:mocha:after-each:finish', (ctx) => {
+      const context = /** @type {{isWaiting: boolean, onDone: () => void}} */ (ctx)
+      const video = this.#webdriverioCapture
+      this.#webdriverioCapture = undefined
+      if (!video) return
+      context.isWaiting = true
+      video.waitForCapture(context.onDone)
+    })
+
     this.addSub('ci:mocha:worker:finish', ({ onDone } = {}) => {
-      const flush = () => this.tracer._exporter.flush(onDone)
-      if (this._pendingWebdriverioScreenshotUploads === 0) {
+      // An interrupted runner may exit without reporting the active attempt.
+      for (const span of this._webdriverioVideos.keys()) {
+        this.#finishWebdriverioMedia(span, 'skip', () => {})
+      }
+      const flush = () => {
+        clearTimeout(this.#webdriverioVideoFlushTimer)
+        this.#webdriverioVideoFlushTimer = undefined
+        this.tracer._exporter.flush(onDone)
+      }
+      if (this._pendingWebdriverioMediaUploads === 0) {
         flush()
         return
       }
-      this._webdriverioScreenshotUploadCallbacks.push(flush)
+      if (isWebdriverioWorker && this.libraryConfig?.isTestFailureVideosEnabled) {
+        sendWebdriverioWorkerMessage({ name: VIDEO_UPLOAD_FLUSH })
+      }
+      this._webdriverioMediaUploadCallbacks.push(flush)
+      if (this.#pendingWebdriverioVideos.size) {
+        this.#webdriverioVideoFlushTimer ??= setTimeout(() => {
+          for (const video of this.#pendingWebdriverioVideos) video.cancel()
+        }, FINAL_FLUSH_TIMEOUT)
+        this.#webdriverioVideoFlushTimer.unref?.()
+      }
     })
 
     this.addSub('ci:mocha:test:finish', ({
@@ -720,7 +825,7 @@ class MochaPlugin extends CiPlugin {
             this.activeTestSpan = null
           }
         }
-        if (status !== 'fail' || !this.#startWebdriverioScreenshotUpload(span, finishSpan)) {
+        if (!this.#finishWebdriverioMedia(span, status, finishSpan)) {
           finishSpan()
         }
       }
@@ -830,23 +935,24 @@ class MochaPlugin extends CiPlugin {
           this.runningTestProbe) {
           finishWait = this.waitForInFlightDiBreakpointHits()
         }
-        let screenshotFinished = false
-        let canFinishScreenshot = false
+        let mediaFinished = false
+        let canFinishMedia = false
         let replayFinished = !finishWait
         let spanFinished = false
         const finishWhenReady = () => {
-          if (!spanFinished && replayFinished && (screenshotStarted === false || screenshotFinished)) {
+          if (!spanFinished && replayFinished && (mediaStarted === false || mediaFinished)) {
             spanFinished = true
             finishSpan()
           }
         }
-        const screenshotStarted = this.#startWebdriverioScreenshotUpload(span, () => {
-          screenshotFinished = true
-          if (canFinishScreenshot) {
+        const video = this._webdriverioVideos.get(span)
+        const mediaStarted = this.#finishWebdriverioMedia(span, 'fail', () => {
+          mediaFinished = true
+          if (canFinishMedia) {
             finishWhenReady()
           }
         })
-        canFinishScreenshot = true
+        canFinishMedia = true
         if (finishWait) {
           const finishReplay = () => {
             replayFinished = true
@@ -856,6 +962,9 @@ class MochaPlugin extends CiPlugin {
           if (promises) {
             promises.finishTestPromise = finishTestPromise
           }
+        }
+        if (video && promises) {
+          promises.finishTestPromise = waitForWebdriverioCapture(video, promises.finishTestPromise)
         }
         finishWhenReady()
       }
@@ -1131,6 +1240,7 @@ class MochaPlugin extends CiPlugin {
       title: test.title,
     })
     test.span = span
+    if (!test.isDisabled || test.isAttemptToFix) this.#startWebdriverioVideo(span)
     test.currentStore = {
       ...parentStore,
       span,
@@ -1486,6 +1596,71 @@ class MochaPlugin extends CiPlugin {
     }
   }
 
+  /** @param {object} span - Span owning one WebdriverIO attempt */
+  #startWebdriverioVideo (span) {
+    if (this.testFramework !== WEBDRIVERIO_FRAMEWORK ||
+        !shouldRecordWebdriverioVideos ||
+        !this._tracerConfig.testOptimization?.DD_TEST_FAILURE_VIDEOS_ENABLED) return
+    const canUpload = isWebdriverioWorker
+      ? this.libraryConfig?.isTestFailureVideosEnabled
+      : this.tracer._exporter?.canUploadTestVideos?.()
+    if (!canUpload) return
+
+    const browser = globalThis._wdioGlobals?.get?.('browser') || globalThis.browser
+    const video = createWebdriverioVideo(browser)
+    this.#webdriverioCapture = video
+    if (video) this._webdriverioVideos.set(span, video)
+  }
+
+  /**
+   * Finishes a span only after its independent screenshot and video uploads settle.
+   *
+   * @param {object} span
+   * @param {string} status
+   * @param {() => void} onDone
+   */
+  #finishWebdriverioMedia (span, status, onDone) {
+    const video = this._webdriverioVideos.get(span)
+    if (!video) return status === 'fail' && this.#startWebdriverioScreenshotUpload(span, onDone)
+
+    this._webdriverioVideos.delete(span)
+    this.#pendingWebdriverioVideos.add(video)
+    this._pendingWebdriverioMediaUploads++
+    const traceId = span.context().toTraceId()
+    const capturedAtMs = dateNow()
+    let pending = 2
+    const complete = () => {
+      if (--pending !== 0) return
+      onDone()
+      this.#completeWebdriverioMediaUpload()
+    }
+    if (status !== 'fail' || !this.#startWebdriverioScreenshotUpload(span, complete)) complete()
+    video.finish(status === 'fail', (filePath, index, callback) => {
+      const options = {
+        filePath,
+        traceId,
+        idempotencyKey: `${traceId}:webdriverio-failure-${index}.webm`,
+        capturedAtMs,
+      }
+      if (isWebdriverioWorker) requestWebdriverioVideoUpload(options, callback)
+      else this.tracer._exporter.uploadTestVideo(options, callback)
+    }, result => {
+      this.#pendingWebdriverioVideos.delete(video)
+      setVideoUploadTags(span, result)
+      complete()
+    })
+    return true
+  }
+
+  /** Releases worker shutdown after all media-owned spans have finished. */
+  #completeWebdriverioMediaUpload () {
+    this._pendingWebdriverioMediaUploads--
+    if (this._pendingWebdriverioMediaUploads !== 0) return
+    const callbacks = this._webdriverioMediaUploadCallbacks
+    this._webdriverioMediaUploadCallbacks = []
+    for (const callback of callbacks) callback()
+  }
+
   /**
    * Captures and uploads the current WebdriverIO browser state once for a failed test attempt.
    *
@@ -1493,6 +1668,7 @@ class MochaPlugin extends CiPlugin {
    * @param {() => void} [onDone] - Called after the screenshot upload finishes
    */
   #startWebdriverioScreenshotUpload (span, onDone) {
+    this._webdriverioVideos.get(span)?.capture()
     if (
       !span ||
       this.testFramework !== WEBDRIVERIO_FRAMEWORK ||
@@ -1527,7 +1703,7 @@ class MochaPlugin extends CiPlugin {
       finished: false,
     }
     this._webdriverioScreenshotUploads.set(span, upload)
-    this._pendingWebdriverioScreenshotUploads++
+    this._pendingWebdriverioMediaUploads++
     const finishUpload = (result) => this.#finishWebdriverioScreenshotUpload(span, upload, result)
     let captureTimeout
     const failCapture = (error) => {
@@ -1586,18 +1762,10 @@ class MochaPlugin extends CiPlugin {
     const uploadCallbacks = upload.callbacks
     upload.callbacks = []
 
-    this._pendingWebdriverioScreenshotUploads--
-    let workerCallbacks = []
-    if (this._pendingWebdriverioScreenshotUploads === 0) {
-      workerCallbacks = this._webdriverioScreenshotUploadCallbacks
-      this._webdriverioScreenshotUploadCallbacks = []
-    }
     for (const callback of uploadCallbacks) {
       callback()
     }
-    for (const callback of workerCallbacks) {
-      callback()
-    }
+    this.#completeWebdriverioMediaUpload()
   }
 
   /**
@@ -1616,7 +1784,7 @@ class MochaPlugin extends CiPlugin {
     }
     const exporter = this.tracer?._exporter
     const traceId = span.context().toTraceId()
-    const capturedAtMs = Date.now()
+    const capturedAtMs = dateNow()
     let pendingUploads = screenshotList.length
     let hasUploadError = false
     const finishOne = (error) => {

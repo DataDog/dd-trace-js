@@ -289,6 +289,7 @@ class FakeCiVisIntake extends FakeAgent {
 
     app.post([
       '/api/v2/ci/test-runs/:traceId/media',
+      '/evp_proxy/:version/api/v2/ci/test-runs/:traceId/media',
       '/api/v2/ci/test-suites/:testSessionId/:testSuiteId/media',
     ], express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
       const receivedAtMs = Date.now()

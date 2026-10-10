@@ -1,5 +1,7 @@
 'use strict'
 
+const { clearTimeout, setTimeout } = require('node:timers')
+
 const {
   createWebdriverioWorkerMessage,
   WEBDRIVERIO_WORKER_ENV,
@@ -11,6 +13,9 @@ const { FINAL_FLUSH_TIMEOUT } = require('../../../dd-trace/src/ci-visibility/fin
 const SCREENSHOT_UPLOAD = 'dd:test-optimization:webdriverio:screenshot:upload'
 const SCREENSHOT_UPLOAD_RESPONSE = 'dd:test-optimization:webdriverio:screenshot:upload:response'
 const SCREENSHOT_UPLOAD_TIMEOUT_MS = FINAL_FLUSH_TIMEOUT + 5000
+const VIDEO_UPLOAD = 'dd:test-optimization:webdriverio:video:upload'
+const VIDEO_UPLOAD_RESPONSE = 'dd:test-optimization:webdriverio:video:upload:response'
+const VIDEO_UPLOAD_TIMEOUT_MS = 5 * FINAL_FLUSH_TIMEOUT + 5000
 
 /**
  * Sends a message over WebdriverIO's worker IPC envelope.
@@ -34,88 +39,105 @@ function sendWebdriverioWorkerMessage (message, onError, onDone) {
   })
 }
 
-let screenshotUploadRequestId = 0
-const screenshotUploadRequests = new Map()
+let mediaUploadRequestId = 0
+const mediaUploadRequests = new Map()
 
 /**
- * Removes shared screenshot response listeners when there are no pending requests.
+ * Removes shared media response listeners when there are no pending requests.
  *
  */
-function removeScreenshotUploadListeners () {
-  if (screenshotUploadRequests.size !== 0) return
+function removeMediaUploadListeners () {
+  if (mediaUploadRequests.size !== 0) return
 
-  process.off('message', onScreenshotUploadResponse)
-  process.off('disconnect', onScreenshotUploadDisconnect)
+  process.off('message', onMediaUploadResponse)
+  process.off('disconnect', onMediaUploadDisconnect)
 }
 
 /**
- * Completes one pending screenshot upload request.
+ * Completes one pending media upload request.
  *
  * @param {string} requestId
  * @param {Error} [error]
  */
-function finishScreenshotUploadRequest (requestId, error) {
-  const request = screenshotUploadRequests.get(requestId)
+function finishMediaUploadRequest (requestId, error) {
+  const request = mediaUploadRequests.get(requestId)
   if (!request) return
 
-  screenshotUploadRequests.delete(requestId)
+  mediaUploadRequests.delete(requestId)
   clearTimeout(request.timeout)
-  removeScreenshotUploadListeners()
+  removeMediaUploadListeners()
   request.onDone(error)
 }
 
 /**
- * Dispatches one coordinator screenshot response to its pending request.
+ * Dispatches one coordinator media response to its pending request.
  *
  * @param {object} message
  */
-function onScreenshotUploadResponse (message) {
-  if (message?.name !== SCREENSHOT_UPLOAD_RESPONSE) return
+function onMediaUploadResponse (message) {
+  if (message?.name !== SCREENSHOT_UPLOAD_RESPONSE && message?.name !== VIDEO_UPLOAD_RESPONSE) return
 
   const { error: errorMessage, requestId } = message.content || {}
   if (!requestId) return
 
-  finishScreenshotUploadRequest(requestId, errorMessage ? new Error(errorMessage) : undefined)
+  finishMediaUploadRequest(requestId, errorMessage ? new Error(errorMessage) : undefined)
 }
 
 /**
- * Fails every pending screenshot upload after coordinator disconnect.
+ * Fails every pending media upload after coordinator disconnect.
  *
  */
-function onScreenshotUploadDisconnect () {
-  for (const requestId of screenshotUploadRequests.keys()) {
-    finishScreenshotUploadRequest(
+function onMediaUploadDisconnect () {
+  for (const requestId of mediaUploadRequests.keys()) {
+    finishMediaUploadRequest(
       requestId,
-      new Error('WebdriverIO coordinator disconnected during screenshot upload')
+      new Error('WebdriverIO coordinator disconnected during media upload')
     )
   }
 }
 
 /**
- * Requests one screenshot upload from the WebdriverIO coordinator.
+ * Requests one media upload from the WebdriverIO coordinator.
  *
- * @param {object} content - Screenshot upload metadata
+ * @param {object} content - Upload metadata
+ * @param {'screenshot'|'video'} kind
  * @param {(error?: Error) => void} onDone - Upload completion callback
  */
-function requestWebdriverioScreenshotUpload (content, onDone) {
-  const requestId = `${process.pid}-${++screenshotUploadRequestId}`
+function requestWebdriverioMediaUpload (content, kind, onDone) {
+  const requestId = `${process.pid}-${++mediaUploadRequestId}`
   const timeout = setTimeout(() => {
-    finishScreenshotUploadRequest(requestId, new Error('WebdriverIO screenshot upload timed out'))
-  }, SCREENSHOT_UPLOAD_TIMEOUT_MS)
+    finishMediaUploadRequest(requestId, new Error(`WebdriverIO ${kind} upload timed out`))
+  }, kind === 'video' ? VIDEO_UPLOAD_TIMEOUT_MS : SCREENSHOT_UPLOAD_TIMEOUT_MS)
   timeout.unref?.()
-  if (screenshotUploadRequests.size === 0) {
-    process.on('message', onScreenshotUploadResponse)
-    process.once('disconnect', onScreenshotUploadDisconnect)
+  if (mediaUploadRequests.size === 0) {
+    process.on('message', onMediaUploadResponse)
+    process.once('disconnect', onMediaUploadDisconnect)
   }
-  screenshotUploadRequests.set(requestId, { onDone, timeout })
+  mediaUploadRequests.set(requestId, { onDone, timeout })
   sendWebdriverioWorkerMessage({
     origin: 'datadog',
-    name: SCREENSHOT_UPLOAD,
+    name: kind === 'video' ? VIDEO_UPLOAD : SCREENSHOT_UPLOAD,
     content: { ...content, requestId },
-  }, error => finishScreenshotUploadRequest(
+  }, error => finishMediaUploadRequest(
     requestId,
-    error || new Error('WebdriverIO screenshot upload IPC failed')
+    error || new Error(`WebdriverIO ${kind} upload IPC failed`)
   ))
+}
+
+/**
+ * @param {object} content
+ * @param {(error?: Error) => void} onDone
+ */
+function requestWebdriverioScreenshotUpload (content, onDone) {
+  requestWebdriverioMediaUpload(content, 'screenshot', onDone)
+}
+
+/**
+ * @param {object} content
+ * @param {(error?: Error) => void} onDone
+ */
+function requestWebdriverioVideoUpload (content, onDone) {
+  requestWebdriverioMediaUpload(content, 'video', onDone)
 }
 
 module.exports = {
@@ -123,6 +145,7 @@ module.exports = {
   CONFIGURATION_RESPONSE: 'dd:test-optimization:webdriverio:configuration:response',
   createWebdriverioWorkerMessage,
   requestWebdriverioScreenshotUpload,
+  requestWebdriverioVideoUpload,
   SCREENSHOT_UPLOAD,
   SCREENSHOT_UPLOAD_RESPONSE,
   SCREENSHOT_UPLOAD_TIMEOUT_MS,
@@ -130,6 +153,10 @@ module.exports = {
   SUITE_FINISH: 'dd:test-optimization:webdriverio:test-suite:finish',
   WORKER_READY: 'dd:test-optimization:webdriverio:worker:ready',
   WORKER_READY_RESPONSE: 'dd:test-optimization:webdriverio:worker:ready:response',
+  VIDEO_UPLOAD_FLUSH: 'dd:test-optimization:webdriverio:video:flush',
+  VIDEO_UPLOAD,
+  VIDEO_UPLOAD_RESPONSE,
+  VIDEO_UPLOAD_TIMEOUT_MS,
   WEBDRIVERIO_WORKER_ENV,
   WEBDRIVERIO_WORKER_EVENT,
   WEBDRIVERIO_WORKER_ORIGIN,
