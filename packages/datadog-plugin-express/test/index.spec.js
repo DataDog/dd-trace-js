@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
 const { once } = require('node:events')
+const { METHODS } = require('node:http')
 const { inspect } = require('node:util')
 
 const dc = require('dc-polyfill')
@@ -147,6 +148,34 @@ describe('Plugin', () => {
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
+        })
+
+        it('should instrument a QUERY endpoint with a request body', async function () {
+          if (!METHODS.includes('QUERY') || !semver.intersects(version, '>=4.16.0')) {
+            // QUERY requires runtime support; the endpoint uses Express's built-in JSON parser.
+            this.skip()
+          }
+          const app = express()
+          app.query('/user/:id', express.json(), (req, res) => {
+            res.json({ id: req.params.id, filter: req.body.filter })
+          })
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = appListener.address().port
+          const [, response] = await Promise.all([
+            agent.assertFirstTraceSpan({
+              name: 'express.request',
+              resource: 'QUERY /user/:id',
+              meta: {
+                'http.method': 'QUERY',
+                'http.route': '/user/:id',
+                'http.status_code': '200',
+              },
+            }),
+            httpRequest({ url: `http://localhost:${port}/user/42`, method: 'QUERY', data: { filter: 'books' } }),
+          ])
+          assert.deepStrictEqual(response.data, { id: '42', filter: 'books' })
         })
 
         it('should do automatic instrumentation on routers', done => {

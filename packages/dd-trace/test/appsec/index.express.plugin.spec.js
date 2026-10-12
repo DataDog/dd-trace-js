@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { METHODS } = require('node:http')
 const path = require('node:path')
 const zlib = require('node:zlib')
 const { inspect } = require('node:util')
@@ -212,6 +213,14 @@ withVersions('express', 'express', version => {
         res.end('DONE')
       })
 
+      if (METHODS.includes('QUERY')) {
+        const bodyParser = require('../../../../versions/body-parser').get()
+        app.query('/', bodyParser.json(), (req, res) => {
+          requestBody()
+          res.json(req.body)
+        })
+      }
+
       server = app.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         httpRequest = HttpRequest.create({ baseURL: `http://localhost:${port}` })
@@ -237,6 +246,35 @@ withVersions('express', 'express', version => {
 
     afterEach(() => {
       appsec.disable()
+    })
+
+    it('should allow a QUERY endpoint with a safe body', async function () {
+      if (!METHODS.includes('QUERY')) {
+        // Older Node.js HTTP parsers do not support QUERY.
+        this.skip()
+      }
+      const res = await httpRequest({ url: '/', method: 'QUERY', data: { key: 'value' } })
+      assert.equal(res.status, 200)
+      assert.deepEqual(res.data, { key: 'value' })
+      sinon.assert.calledOnce(requestBody)
+    })
+
+    it('should block a QUERY endpoint with a malicious body', async function () {
+      if (!METHODS.includes('QUERY')) {
+        // Older Node.js HTTP parsers do not support QUERY.
+        this.skip()
+      }
+      appsec.disable()
+      appsec.enable(getConfigFresh({
+        appsec: { enabled: true, rules: path.join(__dirname, 'body-parser-rules.json') },
+      }))
+      setTestBlockingTemplates()
+      const res = await httpRequest({
+        url: '/', method: 'QUERY', data: { key: 'testattack' }, validateStatus: status => status === 403,
+      })
+      assert.equal(res.status, 403)
+      assert.deepEqual(res.data, JSON.parse(json))
+      sinon.assert.notCalled(requestBody)
     })
 
     it('should not block the request without an attack', async () => {
