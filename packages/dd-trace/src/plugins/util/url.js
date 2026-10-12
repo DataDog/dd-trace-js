@@ -2,6 +2,7 @@
 
 const { URL } = require('url')
 
+const { defaults } = require('../../config/defaults')
 const log = require('../../log')
 
 const HTTP2_HEADER_AUTHORITY = ':authority'
@@ -55,12 +56,15 @@ function obfuscateQs (config, url) {
 
   let qs = url.slice(i + 1)
 
-  qs = qs.replace(queryStringObfuscation, '<redacted>')
+  // Group 1 of the default regex is the delimiter in front of a JWT. A user-provided regex may capture the secret.
+  const replacement = queryStringObfuscation === defaultQsObfuscator ? '$1<redacted>' : '<redacted>'
+  qs = qs.replace(queryStringObfuscation, replacement)
 
   return `${path}?${qs}`
 }
 
 const qsObfuscatorCache = new Map()
+let defaultQsObfuscator
 
 /**
  * Compile the configured query-string obfuscator (a regex string, or a boolean)
@@ -85,6 +89,7 @@ function getQsObfuscator (config) {
     } else if (obfuscator !== '.*') { // '.*' optimizes to a full redact (true)
       try {
         compiled = new RegExp(obfuscator, 'gi')
+        if (obfuscator === defaults.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP) defaultQsObfuscator = compiled
       } catch (err) {
         log.error('Error getting qs obfuscator', err)
       }

@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
@@ -15,6 +14,7 @@ const { withVersions } = require('../../../../setup/mocha')
 const { NODE_MAJOR } = require('../../../../../../../version')
 const { HTTP_REQUEST_COOKIE_VALUE } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 const { testInRequest } = require('../../utils')
+const httpRequest = require('../../../../setup/helpers/http-client')
 
 describe('Cookies sourcing with cookies', () => {
   let cookie
@@ -55,7 +55,7 @@ describe('Cookies sourcing with cookies', () => {
       })
 
       it('should taint cookies', (done) => {
-        axios.get(`http://localhost:${config.port}/`)
+        httpRequest.get(`http://localhost:${config.port}/`)
           .then(() => done())
           .catch(done)
       })
