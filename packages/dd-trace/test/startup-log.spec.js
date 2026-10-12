@@ -9,7 +9,6 @@ const sinon = require('sinon')
 
 require('./setup/core')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const SamplingRule = require('../src/sampling_rule')
 const tracerVersion = require('../../../package.json').version
 const { getConfigFresh } = require('./helpers/config')
 
@@ -32,12 +31,6 @@ const configWithStartupLogs = {
   dsmEnabled: true,
 }
 
-const testSamplingRules = [
-  new SamplingRule({ name: 'rule1', sampleRate: 0.4 }),
-  'rule2',
-  new SamplingRule({ name: 'rule3', sampleRate: 1.4 }),
-]
-
 describe('startup logging', () => {
   let warnStub
   let tracerInfoMethod
@@ -48,7 +41,6 @@ describe('startup logging', () => {
     const {
       setStartupLogConfig,
       setStartupLogPluginManager,
-      setSamplingRules,
       startupLog,
       logIntegrations,
       logAgentError,
@@ -63,7 +55,6 @@ describe('startup logging', () => {
       },
     })
     setStartupLogConfig(configWithStartupLogs)
-    setSamplingRules(testSamplingRules)
     startupLog()
     logIntegrations()
     logAgentError({ status: 500, message: 'Error: fake error' })
@@ -113,11 +104,7 @@ describe('startup logging', () => {
       agent_url: 'http://example.com:4321/',
       debug: true,
       sample_rate: 1,
-      sampling_rules: [
-        { matchers: [{ pattern: 'rule1' }], _sampler: { _rate: 0.4 }, discard: false },
-        'rule2',
-        { matchers: [{ pattern: 'rule3' }], _sampler: { _rate: 1 }, discard: false },
-      ],
+      sampling_rules: [],
       tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: '42' },
       dd_version: '1.2.3',
       log_injection_enabled: true,
@@ -140,8 +127,6 @@ describe('startup logging', () => {
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE: null,
       OTEL_BSP_MAX_QUEUE_SIZE: null,
       OTEL_BSP_SCHEDULE_DELAY: null,
-      OTEL_EXPORTER_OTLP_ENDPOINT: null,
-      OTEL_EXPORTER_OTLP_HEADERS: {},
       OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: null,
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: {},
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: null,
@@ -151,23 +136,19 @@ describe('startup logging', () => {
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: null,
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: null,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: null,
-      OTEL_EXPORTER_OTLP_PROTOCOL: null,
-      OTEL_EXPORTER_OTLP_TIMEOUT: null,
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: null,
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: {},
       OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: null,
       OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: null,
       OTEL_LOG_LEVEL: null,
-      OTEL_LOGS_EXPORTER: null,
+      OTEL_LOGS_EXPORTER: 'none',
       OTEL_METRIC_EXPORT_INTERVAL: null,
-      OTEL_METRIC_EXPORT_TIMEOUT: null,
-      OTEL_METRICS_EXPORTER: null,
+      OTEL_METRICS_EXPORTER: 'none',
       OTEL_PROPAGATORS: { inject: [], extract: [] },
       OTEL_RESOURCE_ATTRIBUTES: {},
-      OTEL_SDK_DISABLED: null,
       OTEL_SERVICE_NAME: 'test',
-      OTEL_TRACES_EXPORTER: null,
-      OTEL_TRACES_SAMPLER: 'datadog_custom_rules',
+      OTEL_TRACES_EXPORTER: 'none',
+      OTEL_TRACES_SAMPLER: null,
       OTEL_TRACES_SAMPLER_ARG: null,
       OTEL_TRACES_SPAN_METRICS_ENABLED: null,
     })
@@ -470,8 +451,6 @@ describe('resolved OpenTelemetry startup configuration', () => {
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE: 512,
       OTEL_BSP_MAX_QUEUE_SIZE: 2048,
       OTEL_BSP_SCHEDULE_DELAY: 5000,
-      OTEL_EXPORTER_OTLP_ENDPOINT: null,
-      OTEL_EXPORTER_OTLP_HEADERS: {},
       OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: 'http://127.0.0.1:4318/v1/logs',
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: {},
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/protobuf',
@@ -479,27 +458,23 @@ describe('resolved OpenTelemetry startup configuration', () => {
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://127.0.0.1:4318/v1/metrics',
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: {},
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/protobuf',
-      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'delta',
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA',
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 10000,
-      OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
-      OTEL_EXPORTER_OTLP_TIMEOUT: 10000,
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://127.0.0.1:4318/v1/traces',
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: {},
       OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/json',
       OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: 10000,
       OTEL_LOG_LEVEL: 'debug',
-      OTEL_LOGS_EXPORTER: null,
+      OTEL_LOGS_EXPORTER: 'none',
       OTEL_METRIC_EXPORT_INTERVAL: 10000,
-      OTEL_METRIC_EXPORT_TIMEOUT: 7500,
-      OTEL_METRICS_EXPORTER: null,
+      OTEL_METRICS_EXPORTER: 'none',
       OTEL_PROPAGATORS: {
         inject: ['datadog', 'tracecontext', 'baggage'],
         extract: ['datadog', 'tracecontext', 'baggage'],
       },
       OTEL_RESOURCE_ATTRIBUTES: {},
-      OTEL_SDK_DISABLED: true,
       OTEL_SERVICE_NAME: 'startup-test',
-      OTEL_TRACES_EXPORTER: null,
+      OTEL_TRACES_EXPORTER: 'none',
       OTEL_TRACES_SAMPLER: null,
       OTEL_TRACES_SAMPLER_ARG: null,
       OTEL_TRACES_SPAN_METRICS_ENABLED: false,
@@ -527,6 +502,88 @@ describe('resolved OpenTelemetry startup configuration', () => {
       OTEL_LOG_LEVEL: 'INFO',
       OTEL_PROPAGATORS: { inject: ['tracecontext', 'baggage'], extract: ['tracecontext', 'baggage'] },
       OTEL_RESOURCE_ATTRIBUTES: { env: 'production', custom: 'value' },
+    })
+  })
+
+  describe('effective resource attributes', () => {
+    /**
+     * @param {import('../../../index').TracerOptions} [options]
+     */
+    function resourceAttributes (options) {
+      const config = getConfigFresh(options)
+      const before = JSON.stringify(config)
+      startupLog.setStartupLogConfig(config)
+      startupLog.setStartupLogPluginManager({ _pluginsByName: {} })
+      startupLog.startupLog()
+      const startup = JSON.parse(warn.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+      const flare = JSON.parse(JSON.stringify(startupLog.tracerInfo()))
+      assert.equal(JSON.stringify(config), before, 'diagnostics must not mutate configuration')
+      return [startup.OTEL_RESOURCE_ATTRIBUTES, flare.OTEL_RESOURCE_ATTRIBUTES]
+    }
+
+    for (const source of ['DD_TAGS', 'DD_TRACE_TAGS', 'programmatic tags']) {
+      it(`should report ${source} overrides in startup and flare`, () => {
+        process.env.OTEL_RESOURCE_ATTRIBUTES = 'custom=otel-value,otel-only=retained'
+        process.env.DD_TAGS = 'custom:dd-value,dd-only:excluded'
+        if (source !== 'DD_TAGS') process.env.DD_TRACE_TAGS = 'custom:trace-value'
+        const options = source === 'programmatic tags'
+          ? { tags: { custom: 'code-value', 'code-only': 'excluded' } }
+          : undefined
+        const custom = source === 'DD_TAGS' ? 'dd-value' : source === 'DD_TRACE_TAGS' ? 'trace-value' : 'code-value'
+
+        for (const attributes of resourceAttributes(options)) {
+          assert.deepEqual(attributes, { custom, 'otel-only': 'retained' })
+        }
+      })
+    }
+
+    for (const environment of ['deployment.environment', 'deployment.environment.name']) {
+      for (const codeOptions of [false, true]) {
+        it(`resolves ${environment} and service aliases with ${codeOptions ? 'code' : 'Datadog'} overrides`, () => {
+          process.env.OTEL_RESOURCE_ATTRIBUTES =
+            `service.name=otel-service,service.version=otel-version,${environment}=otel-env`
+          process.env.DD_SERVICE = 'dd-service'
+          process.env.DD_ENV = 'dd-env'
+          process.env.DD_VERSION = 'dd-version'
+          const options = codeOptions
+            ? { service: 'code-service', env: 'code-env', version: 'code-version' }
+            : undefined
+          const prefix = codeOptions ? 'code' : 'dd'
+
+          for (const attributes of resourceAttributes(options)) {
+            assert.deepEqual(attributes, {
+              service: `${prefix}-service`,
+              version: `${prefix}-version`,
+              env: `${prefix}-env`,
+            })
+          }
+        })
+      }
+    }
+
+    it('should retain OTel-only attributes in startup and flare', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES = 'custom=otel-value'
+
+      for (const attributes of resourceAttributes()) {
+        assert.deepEqual(attributes, { custom: 'otel-value' })
+      }
+    })
+
+    it('should preserve an empty override instead of falling back to the OTel input', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES = 'custom=otel-value'
+      process.env.DD_TRACE_TAGS = 'custom:'
+
+      for (const attributes of resourceAttributes()) {
+        assert.deepEqual(attributes, { custom: '' })
+      }
+    })
+
+    it('should report no resource attributes when unset, even with Datadog tags', () => {
+      process.env.DD_TAGS = 'custom:dd-value'
+
+      for (const attributes of resourceAttributes()) {
+        assert.deepEqual(attributes, {})
+      }
     })
   })
 
@@ -585,15 +642,12 @@ describe('resolved OpenTelemetry startup configuration', () => {
     process.env.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT = '2345'
 
     assertObjectContains(logConfiguration(), {
-      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4318/base/',
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://collector:4318/base/v1/traces',
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://collector:4318/base/v1/metrics',
       OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: 'http://logs:4318/custom',
-      OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/json',
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/json',
-      OTEL_EXPORTER_OTLP_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 2345,
@@ -606,14 +660,12 @@ describe('resolved OpenTelemetry startup configuration', () => {
       OTEL_BSP_MAX_QUEUE_SIZE: '456',
       OTEL_BSP_SCHEDULE_DELAY: '789',
       OTEL_METRIC_EXPORT_INTERVAL: '1234',
-      OTEL_METRIC_EXPORT_TIMEOUT: '2345',
       OTEL_TRACES_SAMPLER: 'parentbased_traceidratio',
       OTEL_TRACES_SAMPLER_ARG: '0',
       OTEL_TRACES_EXPORTER: 'otlp',
       OTEL_LOGS_EXPORTER: 'otlp',
       OTEL_METRICS_EXPORTER: 'otlp',
-      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'cumulative',
-      OTEL_SDK_DISABLED: 'false',
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE',
       DD_TRACE_OTEL_ENABLED: 'true',
       DD_LOGS_OTEL_ENABLED: 'true',
       DD_METRICS_OTEL_ENABLED: 'true',
@@ -629,15 +681,13 @@ describe('resolved OpenTelemetry startup configuration', () => {
       OTEL_BSP_MAX_QUEUE_SIZE: 456,
       OTEL_BSP_SCHEDULE_DELAY: 789,
       OTEL_METRIC_EXPORT_INTERVAL: 1234,
-      OTEL_METRIC_EXPORT_TIMEOUT: 2345,
       OTEL_TRACES_SAMPLER: 'parentbased_always_off',
       OTEL_TRACES_SAMPLER_ARG: null,
       OTEL_TRACES_EXPORTER: 'otlp',
       OTEL_LOGS_EXPORTER: 'otlp',
       OTEL_METRICS_EXPORTER: 'otlp',
-      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'cumulative',
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE',
       OTEL_TRACES_SPAN_METRICS_ENABLED: true,
-      OTEL_SDK_DISABLED: false,
       DD_TRACE_OTEL_ENABLED: true,
       DD_LOGS_OTEL_ENABLED: true,
       DD_METRICS_OTEL_ENABLED: true,
@@ -649,13 +699,13 @@ describe('resolved OpenTelemetry startup configuration', () => {
     })
   })
 
-  for (const [input, resolved, expected] of [
-    ['DeLtA', 'DELTA', 'delta'],
-    ['CuMuLaTiVe', 'CUMULATIVE', 'cumulative'],
-    ['LoWmEmOrY', 'LOWMEMORY', 'lowmemory'],
-    ['invalid', 'DELTA', 'delta'],
+  for (const [input, resolved] of [
+    ['DeLtA', 'DELTA'],
+    ['CuMuLaTiVe', 'CUMULATIVE'],
+    ['LoWmEmOrY', 'LOWMEMORY'],
+    ['invalid', 'DELTA'],
   ]) {
-    it(`should log resolved temporality ${input} in lowercase without mutating configuration`, () => {
+    it(`should log resolved temporality ${input} without changing its canonical case`, () => {
       process.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE = input
       const config = getConfigFresh()
       assert.equal(config.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, resolved)
@@ -665,15 +715,14 @@ describe('resolved OpenTelemetry startup configuration', () => {
 
       const info = JSON.parse(warn.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
       const flareInfo = JSON.parse(JSON.stringify(startupLog.tracerInfo()))
-      assert.equal(info.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, expected)
-      assert.equal(flareInfo.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, expected)
+      assert.equal(info.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, resolved)
+      assert.equal(flareInfo.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, resolved)
       assert.equal(config.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE, resolved)
     })
   }
 
   it('should report defaults and calculated values when invalid or conflicting values are ignored', () => {
     Object.assign(process.env, {
-      OTEL_EXPORTER_OTLP_ENDPOINT: 'ftp://collector:4318',
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'not a URL',
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '0',
       OTEL_TRACES_SAMPLER_ARG: 'invalid',
@@ -684,7 +733,6 @@ describe('resolved OpenTelemetry startup configuration', () => {
     })
 
     assertObjectContains(logConfiguration(), {
-      OTEL_EXPORTER_OTLP_ENDPOINT: null,
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://127.0.0.1:4318/v1/traces',
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE: 512,
       OTEL_TRACES_SAMPLER_ARG: null,
@@ -701,7 +749,6 @@ describe('resolved OpenTelemetry startup configuration', () => {
     process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'x-logs=logs-secret'
     const config = getConfigFresh()
     const headers = [
-      'OTEL_EXPORTER_OTLP_HEADERS',
       'OTEL_EXPORTER_OTLP_TRACES_HEADERS',
       'OTEL_EXPORTER_OTLP_LOGS_HEADERS',
       'OTEL_EXPORTER_OTLP_METRICS_HEADERS',
@@ -757,7 +804,8 @@ describe('resolved OpenTelemetry startup configuration', () => {
 
       const info = JSON.parse(warn.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
       const flareInfo = JSON.parse(JSON.stringify(startupLog.tracerInfo()))
-      for (const name of endpoints) {
+      assert.equal(Object.hasOwn(info, 'OTEL_EXPORTER_OTLP_ENDPOINT'), false)
+      for (const name of endpoints.slice(1)) {
         assert.equal(info[name], expected)
         assert.equal(flareInfo[name], expected)
         assert.equal(config[name], endpoint)
@@ -769,7 +817,7 @@ describe('resolved OpenTelemetry startup configuration', () => {
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'https://user:secret@collector:4318/base/'
     const info = logConfiguration()
 
-    assert.equal(info.OTEL_EXPORTER_OTLP_ENDPOINT, 'https://REDACTED:REDACTED@collector:4318/base/')
+    assert.equal(Object.hasOwn(info, 'OTEL_EXPORTER_OTLP_ENDPOINT'), false)
     for (const signal of ['TRACES', 'LOGS', 'METRICS']) {
       assert.equal(info[`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`],
         `https://REDACTED:REDACTED@collector:4318/base/v1/${signal.toLowerCase()}`)
@@ -787,7 +835,7 @@ describe('resolved OpenTelemetry startup configuration', () => {
 
     const info = JSON.parse(warn.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
     const flareInfo = JSON.parse(JSON.stringify(startupLog.tracerInfo()))
-    for (const suffix of ['', '_TRACES', '_LOGS', '_METRICS']) {
+    for (const suffix of ['_TRACES', '_LOGS', '_METRICS']) {
       const name = `OTEL_EXPORTER_OTLP${suffix}_ENDPOINT`
       assert.equal(info[name], 'https://collector:4318/base')
       assert.equal(flareInfo[name], 'https://collector:4318/base')
@@ -820,7 +868,7 @@ describe('resolved OpenTelemetry startup configuration', () => {
     const info = logConfiguration()
 
     assert.doesNotMatch(warn.firstCall.args[0], /injected-api-key-secret/)
-    assert.deepEqual(info.OTEL_EXPORTER_OTLP_HEADERS, {})
+    assert.equal(Object.hasOwn(info, 'OTEL_EXPORTER_OTLP_HEADERS'), false)
     for (const signal of ['TRACES', 'LOGS', 'METRICS']) {
       assert.deepEqual(info[`OTEL_EXPORTER_OTLP_${signal}_HEADERS`], { 'dd-api-key': '<redacted>' })
     }
@@ -831,9 +879,11 @@ describe('resolved OpenTelemetry startup configuration', () => {
       'constructor=constructor-secret,toString=string-secret,toJSON=json-secret'
     const info = logConfiguration()
 
-    assert.deepEqual(info.OTEL_EXPORTER_OTLP_HEADERS, {
-      constructor: '<redacted>', toString: '<redacted>', toJSON: '<redacted>',
-    })
+    for (const signal of ['TRACES', 'LOGS', 'METRICS']) {
+      assert.deepEqual(info[`OTEL_EXPORTER_OTLP_${signal}_HEADERS`], {
+        constructor: '<redacted>', toString: '<redacted>', toJSON: '<redacted>',
+      })
+    }
     assert.doesNotMatch(warn.firstCall.args[0], /constructor-secret|string-secret|json-secret/)
   })
 })

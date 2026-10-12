@@ -4,11 +4,14 @@ const os = require('os')
 const { inspect } = require('util')
 
 const tracerVersion = require('../../../package.json').version
+const { isOtlpTraceEnabled } = require('./exporter')
 const { redactEndpoint, redactHeaders } = require('./log/redact')
 const { warn } = require('./log/writer')
 
 const errors = {}
 let config
+/** @type {ReturnType<typeof otelConfig>} */
+let otelStartupConfig
 let pluginManager
 /** @type {import('./sampling_rule')[]} */
 let samplingRules = []
@@ -79,20 +82,7 @@ function logGenericError (message) {
 function configInfo () {
   const url = config.url
   const profilingEnabled = config.profiling.DD_PROFILING_ENABLED
-  // PrioritySampler appends the global rule after accepted custom rules and publishes the normalized list.
-  const globalRule = config.sampler.sampleRate === undefined ? undefined : samplingRules.at(-1)
-  let samplerName
-  let samplerArgument
-  if (samplingRules.length > (globalRule ? 1 : 0)) {
-    samplerName = 'datadog_custom_rules'
-  } else if (globalRule) {
-    const rate = globalRule.sampleRate
-    samplerName = rate === 0
-      ? 'parentbased_always_off'
-      : rate === 1 ? 'parentbased_always_on' : 'parentbased_traceidratio'
-    if (samplerName === 'parentbased_traceidratio') samplerArgument = rate
-  }
-
+  /** @type {Record<string, unknown>} */
   const startupLog = {
     [inspect.custom] () {
       return String(this)
@@ -122,9 +112,6 @@ function configInfo () {
     profiling_enabled: profilingEnabled === 'true' || profilingEnabled === 'auto',
     appsec_enabled: config.appsec.DD_APPSEC_ENABLED,
     data_streams_enabled: !!config.dsmEnabled,
-    otlp_traces_export_enabled: config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility,
-    otlp_metrics_export_enabled: !!config.DD_METRICS_OTEL_ENABLED,
-    otlp_logs_export_enabled: !!config.DD_LOGS_OTEL_ENABLED,
     DD_AGENT_HOST: config.hostname ?? null,
     DD_DATA_STREAMS_ENABLED: !!config.dsmEnabled,
     DD_DBM_PROPAGATION_MODE: config.dbmPropagationMode ?? null,
@@ -133,41 +120,7 @@ function configInfo () {
     DD_TRACE_OTEL_ENABLED: !!config.DD_TRACE_OTEL_ENABLED,
     DD_TRACE_OTEL_SEMANTICS_ENABLED: !!config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
     DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: !!config.spanRemoveIntegrationFromService,
-    // JSON omits undefined values; keep unset settings distinguishable from unsupported ones.
-    OTEL_BSP_MAX_EXPORT_BATCH_SIZE: config.OTEL_BSP_MAX_EXPORT_BATCH_SIZE ?? null,
-    OTEL_BSP_MAX_QUEUE_SIZE: config.OTEL_BSP_MAX_QUEUE_SIZE ?? null,
-    OTEL_BSP_SCHEDULE_DELAY: config.OTEL_BSP_SCHEDULE_DELAY ?? null,
-    OTEL_EXPORTER_OTLP_ENDPOINT: redactEndpoint(config.OTEL_EXPORTER_OTLP_ENDPOINT),
-    OTEL_EXPORTER_OTLP_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_HEADERS),
-    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: redactEndpoint(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT),
-    OTEL_EXPORTER_OTLP_LOGS_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS),
-    OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ?? null,
-    OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: config.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT ?? null,
-    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: redactEndpoint(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT),
-    OTEL_EXPORTER_OTLP_METRICS_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS),
-    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL ?? null,
-    OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE:
-      config.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE?.toLowerCase() ?? null,
-    OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT ?? null,
-    OTEL_EXPORTER_OTLP_PROTOCOL: config.OTEL_EXPORTER_OTLP_PROTOCOL ?? null,
-    OTEL_EXPORTER_OTLP_TIMEOUT: config.OTEL_EXPORTER_OTLP_TIMEOUT ?? null,
-    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: redactEndpoint(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT),
-    OTEL_EXPORTER_OTLP_TRACES_HEADERS: redactHeaders(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS),
-    OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ?? null,
-    OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT ?? null,
-    OTEL_LOG_LEVEL: config.logLevel ?? null,
-    OTEL_LOGS_EXPORTER: config.OTEL_LOGS_EXPORTER ?? null,
-    OTEL_METRIC_EXPORT_INTERVAL: config.OTEL_METRIC_EXPORT_INTERVAL ?? null,
-    OTEL_METRIC_EXPORT_TIMEOUT: config.OTEL_METRIC_EXPORT_TIMEOUT ?? null,
-    OTEL_METRICS_EXPORTER: config.OTEL_METRICS_EXPORTER ?? null,
-    OTEL_PROPAGATORS: config.tracePropagationStyle ?? { inject: [], extract: [] },
-    OTEL_RESOURCE_ATTRIBUTES: config.OTEL_RESOURCE_ATTRIBUTES ?? {},
-    OTEL_SDK_DISABLED: config.OTEL_SDK_DISABLED ?? null,
-    OTEL_SERVICE_NAME: config.service ?? null,
-    OTEL_TRACES_EXPORTER: config.OTEL_TRACES_EXPORTER ?? null,
-    OTEL_TRACES_SAMPLER: samplerName ?? null,
-    OTEL_TRACES_SAMPLER_ARG: samplerArgument ?? null,
-    OTEL_TRACES_SPAN_METRICS_ENABLED: config.OTEL_TRACES_SPAN_METRICS_ENABLED ?? null,
+    ...otelStartupConfig,
   }
   if (config.tags?.version) startupLog.dd_version = config.tags.version
   return startupLog
@@ -184,10 +137,12 @@ function tracerInfo () {
 }
 
 /**
- * @param {import('./config')} aConfig
+ * @param {ReturnType<import('./config')>} aConfig
  */
 function setStartupLogConfig (aConfig) {
   config = aConfig
+  // OTel diagnostics describe initialization in both outputs; native diagnostics continue to read current Config.
+  otelStartupConfig = otelConfig(aConfig, samplingRules)
 }
 
 /**
@@ -202,6 +157,69 @@ function setStartupLogPluginManager (thePluginManager) {
  */
 function setSamplingRules (theRules) {
   samplingRules = theRules
+}
+
+/**
+ * Project resolved settings and accepted sampling rules into diagnostic names.
+ * Generic OTLP inputs have no single effective value across signals; report the resolved signal settings instead.
+ * @param {ReturnType<import('./config')>} resolvedConfig
+ * @param {import('./sampling_rule')[]} rules
+ */
+function otelConfig (resolvedConfig, rules) {
+  const exportOtlpTraces = isOtlpTraceEnabled(resolvedConfig)
+  // PrioritySampler appends the global rule after accepted custom rules and publishes the normalized list.
+  const globalRule = resolvedConfig.sampler.sampleRate === undefined ? undefined : rules.at(-1)
+  let samplerName
+  let samplerArgument
+  if (rules.length > (globalRule ? 1 : 0)) {
+    samplerName = 'datadog_custom_rules'
+  } else if (globalRule) {
+    const rate = globalRule.sampleRate
+    samplerName = rate === 0
+      ? 'parentbased_always_off'
+      : rate === 1 ? 'parentbased_always_on' : 'parentbased_traceidratio'
+    if (samplerName === 'parentbased_traceidratio') samplerArgument = rate
+  }
+
+  return {
+    otlp_traces_export_enabled: exportOtlpTraces,
+    otlp_metrics_export_enabled: !!resolvedConfig.DD_METRICS_OTEL_ENABLED,
+    otlp_logs_export_enabled: !!resolvedConfig.DD_LOGS_OTEL_ENABLED,
+    // Preserve unset supported settings in JSON; unsupported inputs are omitted.
+    OTEL_BSP_MAX_EXPORT_BATCH_SIZE: resolvedConfig.OTEL_BSP_MAX_EXPORT_BATCH_SIZE ?? null,
+    OTEL_BSP_MAX_QUEUE_SIZE: resolvedConfig.OTEL_BSP_MAX_QUEUE_SIZE ?? null,
+    OTEL_BSP_SCHEDULE_DELAY: resolvedConfig.OTEL_BSP_SCHEDULE_DELAY ?? null,
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: redactEndpoint(resolvedConfig.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT),
+    OTEL_EXPORTER_OTLP_LOGS_HEADERS: redactHeaders(resolvedConfig.OTEL_EXPORTER_OTLP_LOGS_HEADERS),
+    OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: resolvedConfig.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL ?? null,
+    OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: resolvedConfig.OTEL_EXPORTER_OTLP_LOGS_TIMEOUT ?? null,
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: redactEndpoint(resolvedConfig.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT),
+    OTEL_EXPORTER_OTLP_METRICS_HEADERS: redactHeaders(resolvedConfig.OTEL_EXPORTER_OTLP_METRICS_HEADERS),
+    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: resolvedConfig.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL ?? null,
+    OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE:
+      resolvedConfig.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE ?? null,
+    OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: resolvedConfig.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT ?? null,
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: redactEndpoint(resolvedConfig.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT),
+    OTEL_EXPORTER_OTLP_TRACES_HEADERS: redactHeaders(resolvedConfig.OTEL_EXPORTER_OTLP_TRACES_HEADERS),
+    OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: resolvedConfig.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ?? null,
+    OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: resolvedConfig.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT ?? null,
+    OTEL_LOG_LEVEL: resolvedConfig.logLevel ?? null,
+    OTEL_LOGS_EXPORTER: resolvedConfig.DD_LOGS_OTEL_ENABLED ? 'otlp' : 'none',
+    OTEL_METRIC_EXPORT_INTERVAL: resolvedConfig.OTEL_METRIC_EXPORT_INTERVAL ?? null,
+    OTEL_METRICS_EXPORTER: resolvedConfig.DD_METRICS_OTEL_ENABLED ? 'otlp' : 'none',
+    OTEL_PROPAGATORS: {
+      inject: [...resolvedConfig.tracePropagationStyle?.inject ?? []],
+      extract: [...resolvedConfig.tracePropagationStyle?.extract ?? []],
+    },
+    OTEL_RESOURCE_ATTRIBUTES: Object.fromEntries(
+      Object.keys(resolvedConfig.OTEL_RESOURCE_ATTRIBUTES ?? {}).map(key => [key, resolvedConfig.tags[key]])
+    ),
+    OTEL_SERVICE_NAME: resolvedConfig.service ?? null,
+    OTEL_TRACES_EXPORTER: exportOtlpTraces ? 'otlp' : 'none',
+    OTEL_TRACES_SAMPLER: samplerName ?? null,
+    OTEL_TRACES_SAMPLER_ARG: samplerArgument ?? null,
+    OTEL_TRACES_SPAN_METRICS_ENABLED: resolvedConfig.OTEL_TRACES_SPAN_METRICS_ENABLED ?? null,
+  }
 }
 
 module.exports = {

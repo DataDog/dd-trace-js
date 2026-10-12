@@ -44,3 +44,14 @@ function hasCiValidationEnvironment () {
     getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE') &&
     getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR')
 }
+
+/**
+ * Test Optimization and Electron retain their own delivery paths even when OTLP is requested.
+ * @param {Pick<import('./config/config-base'), 'OTEL_TRACES_EXPORTER' | 'isCiVisibility' | 'tracing'>} config
+ */
+function isOtlpTraceEnabled (config) {
+  return config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility &&
+    config.tracing?.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'
+}
+
+module.exports.isOtlpTraceEnabled = isOtlpTraceEnabled
