@@ -8,11 +8,11 @@ const { test, expect } = require('@playwright/test')
 test.use({ trace: 'on' })
 
 test.describe('injected hook location', () => {
-  test('first test', () => {
+  test('first test', async ({ page }) => {
     expect(1).toBe(1)
   })
 
-  test('second test sharing the same parent suite', () => {
+  test('second test sharing the same parent suite', async ({ page }) => {
     expect(2).toBe(2)
   })
 })

@@ -168,6 +168,38 @@ versions.forEach((version) => {
 
         assert.strictEqual(exitCode, 0)
       })
+
+      // Playwright 1.64 builds hook step stacks from hook.location. The afterEach hook injected by Test
+      // Optimization used to have no location, which crashed the worker when the trace was retained.
+      const itWhenHookStackIsRecorded = version === latest ? it : global.it.skip
+
+      itWhenHookStackIsRecorded('does not crash when the injected hook has a retained trace', async (receiver, run) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(tests.length, 2)
+            for (const test of tests) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+            }
+          })
+
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js injected-hook-location-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-tests-hook-location',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), receiverPromise])
+
+        assert.strictEqual(exitCode, 0)
+      })
     })
 
     contextNewVersions('correlation between tests and RUM sessions', () => {
