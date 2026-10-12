@@ -21,7 +21,7 @@ const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./sna
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')
-const createWorkerError = require('./worker-error')
+const WorkerError = require('./worker-error')
 const config = require('./config')
 const log = require('./log')
 
@@ -50,7 +50,7 @@ session.on('Debugger.paused', async ({ params }) => {
 
   if (params.reason !== 'other') {
     // This error should not be caught, and should exit the worker thread, effectively stopping the debugging session
-    throw createWorkerError(
+    throw new WorkerError(
       `Unexpected Debugger.paused reason: ${params.reason}`,
       WORKER_ERROR_REASON.UNEXPECTED_PAUSE_REASON
     )

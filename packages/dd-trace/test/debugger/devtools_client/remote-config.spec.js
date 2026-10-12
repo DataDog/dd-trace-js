@@ -71,6 +71,7 @@ describe('remote config failure reasons', () => {
       assert.strictEqual(response.ackId, 42)
       assert.strictEqual(response.reason, reason)
       assert.ok(response.error instanceof Error)
+      assert.strictEqual(response.error.name, 'Error')
       assert.match(response.error.message, new RegExp(`^${message}`))
       sinon.assert.calledOnceWithExactly(ackError, sinon.match.instanceOf(Error), probe)
       sinon.assert.notCalled(addBreakpoint)
