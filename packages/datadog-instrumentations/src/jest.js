@@ -666,6 +666,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     #discardedEfdRetryTests
     #earlyFlakeDetectionRetryPolicy
     #efdRetryGatesByName
+    #expect
     #pendingPre30ConcurrentTests
 
     constructor (config, context) {
@@ -1446,7 +1447,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     getSnapshotState () {
-      return this.global.expect?.getState?.()?.snapshotState
+      return this.#expect?.getState?.()?.snapshotState
     }
 
     /**
@@ -1958,6 +1959,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         dynamicAtrResultHandlerRegistrations.delete(this)
         registerResultHandler?.()
       } else if (event.name === 'setup') {
+        this.#expect = event.runtimeGlobals?.expect ?? this.global.expect
         this.wrapConcurrentTest(state)
         this.bindTestEach(this.global.test)
       }

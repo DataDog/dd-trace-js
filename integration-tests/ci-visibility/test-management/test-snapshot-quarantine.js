@@ -2,6 +2,8 @@
 
 const assert = require('assert')
 
+const { describe, it, expect } = globalThis.expect ? globalThis : require('@jest/globals')
+
 let flakyAttempts = 0
 
 describe('quarantine snapshot', () => {

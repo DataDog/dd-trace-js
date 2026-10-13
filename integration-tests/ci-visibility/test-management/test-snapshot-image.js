@@ -1,5 +1,7 @@
 'use strict'
 
+const { describe, it, expect } = globalThis.expect ? globalThis : require('@jest/globals')
+
 const { toMatchImageSnapshot } = require('jest-image-snapshot')
 
 expect.extend({ toMatchImageSnapshot })

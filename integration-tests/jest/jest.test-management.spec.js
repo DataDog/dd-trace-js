@@ -64,6 +64,7 @@ const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
+const supportsImportedGlobals = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=26.0.0')
 // Jest resets the snapshot state of retried tests since 24.9.0
 const itIfRetriesResetSnapshots = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=24.9.0') ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
@@ -2483,13 +2484,21 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           return { exitCode, stdout }
         }
 
-        for (const parallel of [false, true]) {
-          it(`does not fail the run when quarantined tests fail snapshots (parallel=${parallel})`, async () => {
+        const snapshotModes = [
+          { parallel: false, injectGlobals: true },
+          { parallel: true, injectGlobals: true },
+          { parallel: false, injectGlobals: false },
+          { parallel: true, injectGlobals: false },
+        ]
+        for (const { parallel, injectGlobals } of snapshotModes) {
+          const modeIt = injectGlobals || supportsImportedGlobals ? it : it.skip
+          modeIt(`ignores quarantined snapshots (parallel=${parallel}, injectGlobals=${injectGlobals})`, async () => {
             receiver.setSettings({ test_management: { enabled: true } })
 
             const { exitCode, stdout } = await runSnapshotTests(
               {
                 TESTS_TO_RUN: 'test-management/test-snapshot-(quarantine|image)',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
                 ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
               },
               (testSession, executions) => {
