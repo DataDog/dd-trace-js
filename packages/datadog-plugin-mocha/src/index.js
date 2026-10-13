@@ -36,7 +36,6 @@ const {
   getRelativeCoverageFiles,
   getTestParametersString,
   getTestSuiteCommonTags,
-  getTestSuiteItrTags,
   addIntelligentTestRunnerSpanTags,
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
@@ -546,7 +545,6 @@ class MochaPlugin extends CiPlugin {
           testSuite,
           testFramework
         ),
-        ...getTestSuiteItrTags(this.libraryConfig?.isItrEnabled),
         ...this.getSessionRequestErrorTags(),
         ...this.getSessionItrSkippingEnabledTags(),
       }

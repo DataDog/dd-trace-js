@@ -139,12 +139,15 @@ moduleTypes.forEach(({
 
     context('intelligent test runner', () => {
       it('reports suite TIA test skip counts independently of coverage and framework skips', async () => {
-        const suite = 'cypress/e2e/tia-skip-count.cy.js'
+        const suite = 'cypress/e2e/tia-skip-count.js'
         receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
         receiver.setSuitesToSkip(['TIA skip one', 'TIA skip two'].map(name => ({
           type: 'test', attributes: { suite, name: `suite ${name}` },
         })))
-        childProcess = exec(testCommand, {
+        const command = version === '6.7.0'
+          ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${suite}"`
+          : testCommand
+        childProcess = exec(command, {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),

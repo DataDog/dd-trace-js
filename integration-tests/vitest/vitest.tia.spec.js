@@ -349,11 +349,6 @@ versions.forEach((version) => {
           const { events, testSuiteEvents, coverageBySuite } = getTiaPayloads(payloads)
           const skippedSuite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === secondSuite).content
           const runningSuite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === firstSuite).content
-          for (const { content } of testSuiteEvents) {
-            const count = content.meta[TEST_SKIPPED_BY_ITR] === 'true' ? 1 : 0
-            assert.strictEqual(content.metrics[TEST_ITR_SKIPPING_COUNT], count)
-            assert.strictEqual(content.meta[TEST_ITR_TESTS_SKIPPED], count > 0 ? 'true' : 'false')
-          }
           const testSession = events.find(event => event.type === 'test_session_end').content
           const testModule = events.find(event => event.type === 'test_module_end').content
 
@@ -455,10 +450,6 @@ versions.forEach((version) => {
 
         await runTiaTests((payloads) => {
           const { events, testSuiteEvents, coverages } = getTiaPayloads(payloads)
-          for (const { content } of testSuiteEvents) {
-            assert.strictEqual(Object.hasOwn(content.metrics, TEST_ITR_SKIPPING_COUNT), false)
-            assert.strictEqual(Object.hasOwn(content.meta, TEST_ITR_TESTS_SKIPPED), false)
-          }
           const testSession = events.find(event => event.type === 'test_session_end').content
           const testModule = events.find(event => event.type === 'test_module_end').content
 
@@ -487,11 +478,6 @@ versions.forEach((version) => {
         await runTiaTests((payloads) => {
           const { events, testSuiteEvents, coverages } = getTiaPayloads(payloads)
           const skippedSuite = testSuiteEvents.find(({ content }) => content.meta[TEST_SUITE] === secondSuite).content
-          for (const { content } of testSuiteEvents) {
-            const count = content.meta[TEST_SKIPPED_BY_ITR] === 'true' ? 1 : 0
-            assert.strictEqual(content.metrics[TEST_ITR_SKIPPING_COUNT], count)
-            assert.strictEqual(content.meta[TEST_ITR_TESTS_SKIPPED], count > 0 ? 'true' : 'false')
-          }
           const testSession = events.find(event => event.type === 'test_session_end').content
 
           assert.strictEqual(payloads.filter(({ url }) => url === skippableUrl).length, 1)
@@ -516,11 +502,6 @@ versions.forEach((version) => {
 
         await runTiaTests((payloads) => {
           const { events, testSuiteEvents, coverages } = getTiaPayloads(payloads)
-          for (const { content } of testSuiteEvents) {
-            const count = content.meta[TEST_SKIPPED_BY_ITR] === 'true' ? 1 : 0
-            assert.strictEqual(content.metrics[TEST_ITR_SKIPPING_COUNT], count)
-            assert.strictEqual(content.meta[TEST_ITR_TESTS_SKIPPED], count > 0 ? 'true' : 'false')
-          }
           const testSession = events.find(event => event.type === 'test_session_end').content
 
           assert.strictEqual(payloads.some(({ url }) => url === skippableUrl), false)
@@ -548,11 +529,6 @@ versions.forEach((version) => {
 
         await runTiaTests((payloads) => {
           const { events, testSuiteEvents, coverageBySuite } = getTiaPayloads(payloads)
-          for (const { content } of testSuiteEvents) {
-            const count = content.meta[TEST_SKIPPED_BY_ITR] === 'true' ? 1 : 0
-            assert.strictEqual(content.metrics[TEST_ITR_SKIPPING_COUNT], count)
-            assert.strictEqual(content.meta[TEST_ITR_TESTS_SKIPPED], count > 0 ? 'true' : 'false')
-          }
           const testSession = events.find(event => event.type === 'test_session_end').content
           const testModule = events.find(event => event.type === 'test_module_end').content
           const suites = new Map(testSuiteEvents.map(({ content }) => [content.meta[TEST_SUITE], content]))

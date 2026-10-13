@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 
 const msgpack = require('@msgpack/msgpack')
-const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -14,21 +13,18 @@ const { AgentlessCiVisibilityEncoder } = require('../../src/encode/agentless-ci-
 const {
   TEST_ITR_SKIPPING_COUNT,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_SKIPPED_BY_ITR,
   TEST_SUITE,
   getTestModuleCommonTags,
   getTestSessionCommonTags,
 } = require('../../src/plugins/util/test')
 
 const root = process.cwd()
-const frameworkVersions = { jest: '30.2.0', vitest: '3.2.6', mocha: '11.7.5', cucumber: '11.3.0', playwright: '1.55.1' }
 
-describe('suite Test Impact Analysis skip reporting', () => {
-  let tracer, traces, encoder, plugins
+describe('Cypress suite Test Impact Analysis skip reporting', () => {
+  let tracer, traces, encoder
 
   beforeEach(() => {
     traces = []
-    plugins = []
     encoder = new AgentlessCiVisibilityEncoder({ flush: sinon.stub() }, { tags: {} })
     class Exporter {
       export (trace) { traces.push(trace) }
@@ -40,7 +36,6 @@ describe('suite Test Impact Analysis skip reporting', () => {
   })
 
   afterEach(() => {
-    for (const plugin of plugins) plugin.configure(false)
     sinon.restore()
   })
 
@@ -64,116 +59,9 @@ describe('suite Test Impact Analysis skip reporting', () => {
     }
   }
 
-  function createPlugin (framework, isItrEnabled, isSuitesSkippingEnabled = true) {
-    const Plugin = require(`../../../datadog-plugin-${framework}/src`)
-    const plugin = new Plugin(tracer, getConfig())
-    plugins.push(plugin)
-    plugin.configure({ enabled: true, tracing: {} })
-    plugin.libraryConfig = { isItrEnabled, isSuitesSkippingEnabled, isCodeCoverageEnabled: false }
-    dc.channel(`ci:${framework}:session:start`).publish({
-      command: `${framework} run`, frameworkVersion: frameworkVersions[framework], rootDir: root,
-    })
-    return plugin
-  }
-
   function finishSession (plugin) {
     plugin.testModuleSpan.finish()
     plugin.testSessionSpan.finish()
-  }
-
-  for (const framework of Object.keys(frameworkVersions)) {
-    for (const isItrEnabled of [true, false]) {
-      for (const isSuitesSkippingEnabled of [true, false]) {
-        it(`${framework} reports an executed suite (TIA=${isItrEnabled}, skipping=${isSuitesSkippingEnabled})`,
-          async () => {
-            const plugin = createPlugin(framework, isItrEnabled, isSuitesSkippingEnabled)
-            const suitePath = path.join(root, 'suite.js')
-            const ctx = {
-              testSuiteAbsolutePath: suitePath,
-              testFileAbsolutePath: suitePath,
-              frameworkVersion: frameworkVersions[framework],
-              isForcedToRun: isSuitesSkippingEnabled,
-              isUnskippable: isSuitesSkippingEnabled,
-              testEnvironmentOptions: {},
-            }
-            dc.channel(`ci:${framework}:test-suite:start`).runStores(ctx, () => {})
-            const span = ctx.currentStore?.testSuiteSpan || plugin.testSuiteSpan ||
-              plugin._testSuiteSpansByTestSuite.get('suite.js')
-            assert.ok(span)
-            await new Promise(resolve => {
-              dc.channel(`ci:${framework}:test-suite:finish`).publish({
-                testSuiteSpan: span,
-                testSuiteAbsolutePath: suitePath,
-                testSuitePath: 'suite.js',
-                status: 'skip',
-                onDone: resolve,
-              })
-              if (framework !== 'jest' && framework !== 'vitest') resolve(undefined)
-            })
-            finishSession(plugin)
-            assertSuite(events().find(event => event.type === 'test_suite_end'), isItrEnabled ? 0 : undefined)
-          })
-      }
-    }
-
-    it(`${framework} reports one skipped suite without counting children`, () => {
-      const plugin = createPlugin(framework, true)
-      dc.channel(`ci:${framework}:itr:skipped-suites`).publish({
-        skippedSuites: ['suite-a.js', 'suite-b.js'], frameworkVersion: frameworkVersions[framework],
-      })
-      finishSession(plugin)
-      const suites = events().filter(event => event.type === 'test_suite_end')
-      assert.strictEqual(suites.length, 2)
-      for (const suite of suites) {
-        assertSuite(suite, 1)
-        assert.strictEqual(suite.content.meta[TEST_SKIPPED_BY_ITR], 'true')
-      }
-    })
-  }
-
-  for (const isItrEnabled of [true, false]) {
-    it(`Jest transfers TIA enablement before workers serialize suites (TIA=${isItrEnabled})`, async () => {
-      const plugin = createPlugin('jest', isItrEnabled, false)
-      const testEnvironmentOptions = {}
-      dc.channel('ci:jest:session:configuration').publish([testEnvironmentOptions])
-      assert.strictEqual(testEnvironmentOptions._ddIsItrEnabled, isItrEnabled)
-      plugin.libraryConfig = undefined
-      const testSuiteAbsolutePath = path.join(root, 'suite.js')
-      dc.channel('ci:jest:test-suite:start').publish({
-        testSuite: 'suite.js', testSuiteAbsolutePath, frameworkVersion: frameworkVersions.jest, testEnvironmentOptions,
-      })
-      await new Promise(resolve => dc.channel('ci:jest:test-suite:finish').publish({
-        testSuiteAbsolutePath, status: 'pass', onDone: resolve,
-      }))
-      finishSession(plugin)
-      assertSuite(events().find(event => event.type === 'test_suite_end'), isItrEnabled ? 0 : undefined)
-    })
-  }
-
-  for (const framework of ['jest', 'vitest']) {
-    for (const isItrEnabled of [true, false]) {
-      it(`${framework} adds suite metrics to worker reports (TIA=${isItrEnabled})`, () => {
-        const plugin = createPlugin(framework, isItrEnabled, false)
-        for (const suite of ['suite-a.js', 'suite-b.js']) {
-          const workerSpan = tracer.startSpan(`${framework}.test_suite`, {
-            tags: { 'span.type': 'test_suite_end', [TEST_SUITE]: suite },
-          })
-          workerSpan.finish()
-          const workerTrace = traces.pop()
-          const workerPayload = JSON.stringify([workerTrace.map(span => ({
-            ...span,
-            span_id: span.span_id.toString(),
-            trace_id: span.trace_id.toString(),
-            parent_id: span.parent_id.toString(),
-          }))])
-          dc.channel(`ci:${framework}:worker-report:trace`).publish(workerPayload)
-        }
-        finishSession(plugin)
-        const suites = events().filter(event => event.type === 'test_suite_end')
-        assert.strictEqual(suites.length, 2)
-        for (const suite of suites) assertSuite(suite, isItrEnabled ? 0 : undefined)
-      })
-    }
   }
 
   describe('Cypress test skipping', () => {
@@ -243,6 +131,26 @@ describe('suite Test Impact Analysis skip reporting', () => {
       assertSuite(suites.find(event => event.content.meta[TEST_SUITE] === 'a.js'), 2)
       assertSuite(suites.find(event => event.content.meta[TEST_SUITE] === 'b.js'), 1)
       assert.strictEqual(plugin.skippedTests.length, 3)
+    })
+
+    it('counts tests with the same name and distinct IDs separately', () => {
+      plugin.testsToSkip = [{ suite: 'suite.js', name: 'one' }]
+      const span = startSuite('suite.js')
+      skip('suite.js', 'one', 'first')
+      skip('suite.js', 'one', 'second')
+      skip('suite.js', 'one', 'first')
+      assertSuite(finishSuites([span])[0], 2)
+      assert.strictEqual(plugin.skippedTests.length, 2)
+    })
+
+    it('deduplicates skip tasks by name when Cypress does not provide an ID', () => {
+      plugin.testsToSkip = [{ suite: 'suite.js', name: 'one' }]
+      const span = startSuite('suite.js')
+      const test = { testSuite: 'suite.js', testName: 'one' }
+      assert.deepStrictEqual(tasks['dd:beforeEach'](test), { shouldSkip: true })
+      assert.deepStrictEqual(tasks['dd:beforeEach'](test), { shouldSkip: true })
+      assertSuite(finishSuites([span])[0], 1)
+      assert.strictEqual(plugin.skippedTests.length, 1)
     })
 
     it('counts concurrent skip tasks against the owning suite', async () => {

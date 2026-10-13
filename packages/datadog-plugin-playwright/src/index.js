@@ -23,7 +23,6 @@ const {
 const {
   finishAllTraceSpans,
   getTestSuiteCommonTags,
-  getTestSuiteItrTags,
   getTestSuitePath,
   isModifiedTest,
   setRumTestCorrelation,
@@ -282,7 +281,6 @@ class PlaywrightPlugin extends CiPlugin {
           testSuite,
           'playwright'
         ),
-        ...getTestSuiteItrTags(this.libraryConfig?.isItrEnabled),
         ...this.getSessionRequestErrorTags(),
       }
       if (testSourceFile) {

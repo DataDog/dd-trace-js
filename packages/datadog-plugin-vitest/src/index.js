@@ -12,7 +12,6 @@ const {
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
-  getTestSuiteItrTags,
   getTestLevelsMetadataTags,
   getTestSessionName,
   TEST_SOURCE_FILE,
@@ -448,7 +447,6 @@ class VitestPlugin extends CiPlugin {
           testSuite,
           'vitest'
         ),
-        ...getTestSuiteItrTags(this.libraryConfig?.isItrEnabled),
         ...requestErrorTags,
         [TEST_SOURCE_FILE]: testSuite,
         [TEST_SOURCE_START]: 1,

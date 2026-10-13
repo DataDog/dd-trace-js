@@ -31,7 +31,6 @@ const {
   getTestSessionCommonTags,
   getTestModuleCommonTags,
   getTestSuiteCommonTags,
-  getTestSuiteItrTags,
   TEST_SUITE_ID,
   TEST_MODULE_ID,
   TEST_SESSION_ID,
@@ -1044,9 +1043,13 @@ class CypressPlugin {
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
     const testSuiteSpanMetadata = {
       ...getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME),
-      ...getTestSuiteItrTags(this.isItrEnabled),
       ...this.getSessionRequestErrorTags(),
       ...this.getSessionItrSkippingEnabledTags(),
+    }
+
+    if (this.isItrEnabled) {
+      testSuiteSpanMetadata[TEST_ITR_SKIPPING_COUNT] = 0
+      testSuiteSpanMetadata[TEST_ITR_TESTS_SKIPPED] = 'false'
     }
 
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
