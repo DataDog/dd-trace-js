@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
+const { join } = require('node:path')
+const { promisify } = require('node:util')
 
 const { beforeEach, afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -13,6 +16,7 @@ const { useLlmObs, assertLlmObsSpanEvent } = require('../../util')
 const { withVersions } = require('../../../setup/mocha')
 
 const MS = 1e6
+const exec = promisify(execFile)
 
 function named (spans, name) {
   const span = spans.find(s => s.name === name)
@@ -177,6 +181,94 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
         region: 'us-east-1', credentials: { accessKeyId: 'test', secretAccessKey: 'test' }, requestHandler, ...config,
       })
       return transport
+    }
+
+    it('honors the environment service disable before subscribing or wrapping streams', async () => {
+      await exec(process.execPath, [join(__dirname, 'fixtures/nova-sonic-config.js'), version], {
+        env: { ...process.env, DD_TRACE_AWS_SDK_BEDROCKRUNTIME_ENABLED: 'false' },
+      })
+    })
+
+    it('keeps other AWS services enabled when Bedrock is disabled', async () => {
+      const S3 = require('../../../../../../versions/@aws-sdk/client-s3@3').get()
+      const s3 = new S3.S3Client({
+        region: 'us-east-1', credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      })
+      tracer.use('aws-sdk', { bedrockruntime: false })
+      const request = new S3.ListBucketsCommand({})
+      request.middlewareStack.add(() => async () => ({ output: { Buckets: [], $metadata: {} } }),
+        { name: 'fixtureTransport', step: 'initialize', priority: 'high' })
+      try {
+        assert.deepEqual((await s3.send(request)).Buckets, [])
+        tracer.llmobs.trace({ kind: 'workflow', name: 'sentinel' }, () => {})
+        const { apmSpans, llmobsSpans } = await getEvents(1)
+        assert.ok(apmSpans.some(span => span.meta['aws.operation'] === 'listBuckets'))
+        assert.deepEqual(llmobsSpans.map(span => span.name), ['sentinel'])
+      } finally {
+        s3.destroy()
+        tracer.use('aws-sdk', {})
+      }
+    })
+
+    for (const bedrockruntime of [false, { enabled: false }, { llmobs: false }]) {
+      for (const cacheMiddleware of [false, true]) {
+        const label = `${JSON.stringify(bedrockruntime)}, cache=${cacheMiddleware}`
+        it(`honors Bedrock opt-out and re-enable (${label})`, async () => {
+          const records = speech()
+          const outbound = records.filter(r => r.outbound)
+          const transport = serializedClient(() => (async function * () {
+            for (const r of records.filter(r => !r.outbound)) {
+              clock.setSystemTime(EPOCH + r.at)
+              yield r.value
+            }
+          })(), { cacheMiddleware })
+          const send = () => {
+            const body = { async * [Symbol.asyncIterator] () { for (const r of outbound) yield r.value } }
+            return transport.send(new AWS.InvokeModelWithBidirectionalStreamCommand({ modelId: MODEL, body }))
+          }
+          try {
+            for (const enabled of [false, true, false]) {
+              tracer.use('aws-sdk', { bedrockruntime: enabled ? { service: 'sonic-service' } : bedrockruntime })
+              const context = {}
+              require('dc-polyfill').channel('dd-trace:aws:bedrockruntime:sonic:capture-context').publish(context)
+              assert.equal(context.enabled, enabled ? true : undefined)
+              await drain(await send())
+              if (!enabled) tracer.llmobs.trace({ kind: 'workflow', name: 'sentinel' }, () => {})
+              const { llmobsSpans, apmSpans } = await getEvents(enabled ? 4 : 1)
+              const sonic = apmSpans.filter(span => span.name === 'aws.bedrockruntime.sonic')
+              assert.equal(sonic.length, enabled ? 4 : 0)
+              if (enabled) {
+                tree(llmobsSpans)
+                for (const span of sonic) assert.equal(span.service, 'sonic-service')
+              } else {
+                assert.deepEqual(llmobsSpans.map(span => span.name), ['sentinel'])
+              }
+            }
+          } finally {
+            transport.destroy()
+            tracer.use('aws-sdk', {})
+          }
+        })
+      }
+    }
+
+    for (const config of [
+      { enabled: false, bedrockruntime: { enabled: true } },
+      { llmobs: false, bedrockruntime: { llmobs: true } },
+    ]) {
+      it(`preserves the top-level opt-out (${JSON.stringify(config)})`, async () => {
+        tracer.use('aws-sdk', config)
+        try {
+          const run = command(speech())
+          await drain(await client.send(run.request))
+          tracer.llmobs.trace({ kind: 'workflow', name: 'sentinel' }, () => {})
+          const { llmobsSpans, apmSpans } = await getEvents(1)
+          assert.deepEqual(llmobsSpans.map(span => span.name), ['sentinel'])
+          assert.equal(apmSpans.filter(span => span.name === 'aws.bedrockruntime.sonic').length, 0)
+        } finally {
+          tracer.use('aws-sdk', {})
+        }
+      })
     }
 
     for (const kind of ['empty-error', 'tool-only', 'input-only', 'output-only', 'invalid-input', 'invalid-output',

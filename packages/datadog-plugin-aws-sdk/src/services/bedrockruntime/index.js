@@ -16,5 +16,19 @@ class BedrockRuntimePlugin extends CompositePlugin {
       sonicTracing: SonicTracingPlugin,
     }
   }
+
+  /** @param {import('../../../../../').plugins.aws_sdk | boolean} config */
+  configure (config) {
+    if (typeof config === 'boolean') config = { enabled: config }
+    const bedrock = config.bedrockruntime
+    if (config.enabled === false || bedrock === false || bedrock?.enabled === false ||
+        this._tracerConfig.DD_TRACE_AWS_SDK_BEDROCKRUNTIME_ENABLED === false) {
+      // Disable the whole service before any child can subscribe and enable conversation capture.
+      return super.configure(false)
+    }
+    const normalized = { ...config, ...bedrock }
+    if (config.llmobs === false) normalized.llmobs = false
+    super.configure(normalized)
+  }
 }
 module.exports = BedrockRuntimePlugin
