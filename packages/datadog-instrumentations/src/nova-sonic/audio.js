@@ -80,7 +80,18 @@ class InputAudio {
     const end = Math.floor(endMs * this.rate / 1000) * 2
     const base = this.total - this.#bytes
     if (start < base || end > this.total) return
-    return Buffer.from(Buffer.concat(this.#chunks, this.#bytes).subarray(start - base, end - base))
+    const clip = Buffer.allocUnsafe(end - start)
+    let offset = base
+    let written = 0
+    for (const chunk of this.#chunks) {
+      const chunkEnd = offset + chunk.length
+      if (chunkEnd > start) {
+        written += chunk.copy(clip, written, Math.max(start - offset, 0), Math.min(end - offset, chunk.length))
+      }
+      offset = chunkEnd
+      if (offset >= end) break
+    }
+    return clip
   }
 
   clear () {

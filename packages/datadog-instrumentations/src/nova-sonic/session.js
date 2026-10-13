@@ -200,7 +200,13 @@ class SonicSession {
    */
   #startResponse (data, now) {
     if (!this.#current || hasInput(this.#pending)) {
-      if (this.#current) this.#emitTurn(this.#current, now)
+      if (this.#current) {
+        // A new response can arrive before the previous response's text blocks close.
+        for (const block of this.#blocks.values()) {
+          if (block.turn === this.#current) this.#text(block)
+        }
+        this.#emitTurn(this.#current, now)
+      }
       const turn = this.#pending
       this.#pending = new Turn()
       turn.started = now

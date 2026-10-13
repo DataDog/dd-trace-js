@@ -11,6 +11,39 @@ const { INPUT, OUTPUT, pcm } = require('./helpers')
 const LIMIT = LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES - 128
 
 describe('Nova Sonic PCM retention', () => {
+  for (const rate of [8000, 16_000, 24_000, 48_000]) {
+    it(`copies exact input samples across chunk boundaries at ${rate}Hz`, () => {
+      const audio = new InputAudio()
+      audio.configure({ ...INPUT, sampleRateHertz: rate })
+      const raw = Buffer.from(Array.from({ length: 32 }, (_, index) => index))
+      for (const chunk of [raw.subarray(0, 8), raw.subarray(8, 20), raw.subarray(20)]) {
+        audio.append(chunk.toString('base64'), 1000)
+      }
+      // Whole clip, interior chunk, partial ends, exact boundary, and sub-frame empty slice.
+      for (const [start, end] of [[0, 16], [4, 10], [2, 13], [10, 16], [12.1, 12.2]]) {
+        const clip = audio.clip(start * 1000 / rate, end * 1000 / rate)
+        const expected = raw.subarray(Math.floor(start) * 2, Math.floor(end) * 2)
+        assert.deepEqual(clip, expected)
+        clip.fill(255)
+        assert.deepEqual(audio.clip(start * 1000 / rate, end * 1000 / rate), expected)
+      }
+      assert.equal(audio.clip(-1000 / rate, 1000 / rate), undefined)
+      assert.equal(audio.clip(0, 17 * 1000 / rate), undefined)
+      assert.equal(audio.clip(1, 1), undefined)
+    })
+  }
+
+  it('copies a clip across a partially evicted chunk and the next chunk', () => {
+    const audio = new InputAudio()
+    audio.configure(INPUT)
+    audio.append(Buffer.alloc(LIMIT - 4, 1).toString('base64'), 1000)
+    audio.append(Buffer.alloc(8, 2).toString('base64'), 1001)
+    const start = (LIMIT - 8) / 32
+    assert.deepEqual(audio.clip(start, (LIMIT + 4) / 32), Buffer.from([1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2]))
+    assert.equal(audio.clip(0, 1 / 16), undefined)
+    assert.deepEqual(audio.clip(4 / 32, 8 / 32), Buffer.alloc(4, 1))
+  })
+
   it('retains a complete input clip at the ring boundary and omits the first evicted sample', () => {
     const audio = new InputAudio()
     audio.configure(INPUT)

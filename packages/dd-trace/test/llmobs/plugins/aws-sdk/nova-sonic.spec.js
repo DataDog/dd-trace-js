@@ -259,6 +259,49 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
       }
     })
 
+    for (const kind of ['user', 'speculative', 'final']) {
+      for (const closed of [false, true]) {
+        it(`preserves ${closed ? 'closed' : 'open'} ${kind} text at response rollover`, async () => {
+          const first = speech()
+          const contentId = kind === 'user' ? 'user1' : 'final1'
+          if (kind === 'speculative') {
+            first[12] = record('contentStart', {
+              contentId, role: 'ASSISTANT', type: 'TEXT', additionalModelFields: { generationStage: 'SPECULATIVE' },
+            }, 3060)
+          }
+          if (!closed) first.splice(kind === 'user' ? 8 : 14, 1)
+          // Control blocks must never become transcripts, even when they have no contentEnd.
+          first.push(
+            record('contentStart', {
+              contentId: 'control',
+              role: 'ASSISTANT',
+              type: 'TEXT',
+              additionalModelFields: { generationStage: 'FINAL' },
+            }, 3100),
+            record('textOutput', { contentId: 'control', content: '{"interrupted":true}' }, 3101))
+          const second = speech({ id: '2', offset: 1000, at: 4000 })
+          // The next user's open text belongs to the new turn, not the retiring one.
+          second.splice(8, 1)
+          second.splice(9, 0,
+            record('contentEnd', { contentId: 'user2' }, 6710),
+            record('textOutput', { contentId, content: 'late text' }, 6720),
+            record('contentEnd', { contentId }, 6730),
+            record('contentEnd', { contentId }, 6740))
+          const records = [...first, ...second, record('completionEnd', {}, 8000)]
+          await drain(await client.send(command(records).request))
+          const { llmobsSpans } = await getEvents(8)
+          assert.equal(llmobsSpans.length, 8)
+          for (let index = 0; index < 2; index++) {
+            const { root, llm } = tree(llmobsSpans, index)
+            assert.equal(llm.meta.input.messages[0].content, `question ${index + 1}`)
+            assert.equal(llm.meta.output.messages[0].content, `answer ${index + 1}`)
+            assert.equal(root.meta.input.value, `question ${index + 1}`)
+            assert.equal(root.meta.output.value, `answer ${index + 1}`)
+          }
+        })
+      }
+    }
+
     for (const cacheMiddleware of [false, true]) {
       for (const reverse of [false, true]) {
         for (const callback of [false, true]) {
