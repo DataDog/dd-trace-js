@@ -3846,6 +3846,38 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  for (const scenario of [
+    { name: 'beforeEach', before: true },
+    { name: 'beforeEach without teardown', before: true, noTeardown: true },
+    { name: 'inner afterEach', inner: true },
+    { name: 'cascading hook failures', before: true, inner: true, outer: true, root: true },
+    { name: 'root afterEach', root: true },
+    { name: 'cancelled native retry', retry: true, inner: true },
+  ]) {
+    for (const videos of scenario.retry ? [true] : [false, true]) {
+      it(`finishes ${scenario.name} after remaining teardown when videos=${videos}`, async () => {
+        const { stdout } = await execFileAsync(process.execPath, [
+          path.join(__dirname, 'fixtures', 'webdriverio-mocha-hook-failure.js'),
+          JSON.stringify(scenario),
+          String(videos),
+        ])
+        const { events, failures, finishes } = JSON.parse(stdout)
+        assert.strictEqual(failures, scenario.name === 'cascading hook failures' ? 4 : 1)
+        assert.strictEqual(finishes.length, 1)
+        assert.strictEqual(finishes[0].status, 'fail')
+        assert.strictEqual(finishes[0].finalStatus, 'fail')
+        const expected = ['setup', ...(!scenario.before ? ['body'] : []),
+          ...(!scenario.noTeardown ? ['inner', 'outer', 'root'] : [])]
+        const finishIndex = videos
+          ? expected.length
+          : expected.indexOf(scenario.before ? 'setup' : scenario.inner ? 'inner' : 'root') + 1
+        expected.splice(finishIndex, 0, 'finish')
+        if (videos) expected.push('capture', 'captured')
+        assert.deepStrictEqual(events, expected)
+      })
+    }
+  }
+
   for (const videos of [false, true]) {
     it(`publishes native retries after teardown when videos=${videos}`, async () => {
       const events = []

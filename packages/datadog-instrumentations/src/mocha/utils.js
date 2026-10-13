@@ -381,6 +381,7 @@ function resetRunState (rootSuite) {
       delete test._ddIsFinalAttempt
       delete test._ddHookFailed
       delete test._ddPendingRetry
+      delete test._ddPendingHookFailureFinish
       delete test._ddReporterStartFailed
       delete test._ddReporterTerminalFailed
       originalTests.push(test)
@@ -979,6 +980,14 @@ function finishDeferredHookEnd (test) {
  * @returns {unknown}
  */
 function runFailedTestReplayHookUpCallback (fn, test, failedTestReplayPromise, hookThis, args) {
+  if (test._ddPendingHookFailureFinish) {
+    // Mocha restarts teardown at the failed suite's parent. Only the last hookUp completes the attempt.
+    const failedSuite = /** @type {import('mocha').Suite|undefined} */ (args[1])
+    if (args[0] && failedSuite?.parent) return fn.apply(hookThis, /** @type {unknown[]} */ (args))
+    const finish = test._ddPendingHookFailureFinish
+    delete test._ddPendingHookFailureFinish
+    finish()
+  }
   const pendingRetry = test._ddPendingRetry
   if (pendingRetry) {
     delete test._ddPendingRetry
@@ -1060,17 +1069,26 @@ function getOnFailHandler (isMain, config) {
         errorCh.runStores(testContext, () => {})
         // Mocha marks the hook failed, so record the test failure before computing final metadata.
         test._ddHookFailed = true
-        const testFinishInfo = getTestFinishInfo(test, 'fail', config, hookError)
-        if (testFinishInfo.finalStatus !== undefined) {
-          test._ddIsFinalAttempt = true
+        const finish = () => {
+          const testFinishInfo = getTestFinishInfo(test, 'fail', config, testContext.err)
+          if (testFinishInfo.finalStatus !== undefined) {
+            test._ddIsFinalAttempt = true
+          }
+          test._ddTestFinishPublished = true
+          testFinishCh.publish({
+            status: 'fail',
+            hasBeenRetried: isMochaRetry(test),
+            ...testFinishInfo,
+            ...testContext.currentStore,
+          })
         }
-        test._ddTestFinishPublished = true
-        testFinishCh.publish({
-          status: 'fail',
-          hasBeenRetried: isMochaRetry(test),
-          ...testFinishInfo,
-          ...testContext.currentStore,
-        })
+        const { parent } = testOrHook
+        if (config.isTestFailureVideosEnabled &&
+            (parent._beforeEach.includes(testOrHook) || parent._afterEach.includes(testOrHook))) {
+          test._ddPendingHookFailureFinish = finish
+        } else {
+          finish()
+        }
       } else {
         testContext.err = err
         errorCh.runStores(testContext, () => {})

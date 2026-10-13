@@ -538,6 +538,31 @@ for (const version of versions) {
         })
       }
 
+      for (const hook of ['beforeEach', 'afterEach', 'cascading', 'root', 'retry']) {
+        browserTest(`records remaining Chrome teardown after ${hook} failure`, async () => {
+          await runScenario('videosBrowserHooks', 0, ({ media, tests }) => {
+            assert.strictEqual(tests.length, 1)
+            const [test] = tests
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(test.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+            const message = hook === 'beforeEach'
+              ? /setup failed/
+              : hook === 'afterEach' || hook === 'retry' ? /inner teardown failed/ : /final teardown failed/
+            assert.match(test.meta['error.message'], message)
+            assert.strictEqual(media.length, 1)
+            assert.strictEqual(media[0].media.traceId, test.trace_id.toString())
+            const pixels = execFileSync('ffmpeg', [
+              '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
+              '-vf', 'crop=1:1:10:500:exact=1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1',
+            ], { input: media[0].media.content })
+            const [red, green, blue] = pixels.subarray(-3)
+            assert.ok(green > 200 && red < 40 && blue < 40, 'final frame must show the green root teardown page')
+          }, 1, {
+            env: { ...videoEnv, WEBDRIVERIO_CLASSIC: 'true', WEBDRIVERIO_VIDEO_HOOK: hook },
+          })
+        })
+      }
+
       for (const hookFails of [false, true]) {
         browserTest(`includes real Chrome teardown in native retry video (hookFails=${hookFails})`, async () => {
           await runScenario('videosBrowserRetry', 0, ({ media, tests }) => {

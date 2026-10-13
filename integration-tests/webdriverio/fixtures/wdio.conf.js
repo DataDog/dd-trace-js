@@ -388,6 +388,11 @@ scenarioConfig.videosBrowserRetry = {
   specs: ['./videos-browser-retry.e2e.js'],
   mochaOpts: { retries: 1 },
 }
+scenarioConfig.videosBrowserHooks = {
+  ...scenarioConfig.videosBrowser,
+  specs: ['./videos-browser-hooks.e2e.js'],
+  mochaOpts: { retries: 1 },
+}
 const selectedScenario = scenarioConfig[scenario]
 if (scenario.startsWith('videosBrowser') && process.env.WEBDRIVERIO_REAL_MULTIREMOTE === 'true') {
   const [capabilities] = selectedScenario.capabilities
