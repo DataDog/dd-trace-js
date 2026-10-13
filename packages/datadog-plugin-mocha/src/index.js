@@ -131,6 +131,19 @@ function normalizeJasmineFile (file) {
   return file?.startsWith('file://') ? fileURLToPath(file) : file
 }
 
+function getWebdriverioJasmineSpecResult (spec) {
+  if (spec?.result) return spec.result
+  if (typeof spec?.startedEvent === 'function') return spec.startedEvent()
+  if (!spec?.id) return
+  return {
+    description: spec.description,
+    filename: spec.filename,
+    fullName: typeof spec.getFullName === 'function' ? spec.getFullName() : spec.description,
+    id: spec.id,
+    parentSuiteId: spec.parentSuiteId,
+  }
+}
+
 /**
  * Maps a Jasmine result status to the Test Optimization status vocabulary.
  *
@@ -1153,8 +1166,9 @@ class MochaPlugin extends CiPlugin {
       return
     }
 
+    const specResult = getWebdriverioJasmineSpecResult(spec)
     if (this.libraryConfig?.isTestManagementTestsEnabled) {
-      this.#startWebdriverioJasmineTest(spec.result)
+      this.#startWebdriverioJasmineTest(specResult)
       const test = this._webdriverioJasmineState?.tests.get(spec.id)
       if (test?.isDisabled && !test.isAttemptToFix) {
         spec.pend('Skipped by Datadog Test Management')

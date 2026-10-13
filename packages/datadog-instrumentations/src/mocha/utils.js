@@ -54,6 +54,7 @@ const testsQuarantined = new Set()
 const testsStatuses = new Map()
 const efdRetryCountByTestFullName = new Map()
 const efdSlowAbortedTests = new Set()
+const suiteHookFailureFiles = new Set()
 let dynamicAtrRetryCountByTest = new WeakMap()
 const attemptToFixExecutions = new Map()
 const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
@@ -343,6 +344,7 @@ function resetRunState (rootSuite) {
   testsStatuses.clear()
   efdRetryCountByTestFullName.clear()
   efdSlowAbortedTests.clear()
+  suiteHookFailureFiles.clear()
   dynamicAtrRetryCountByTest = new WeakMap()
   attemptToFixExecutions.clear()
   loggedAttemptToFixTests.clear()
@@ -571,6 +573,14 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       }
     }
 
+    const failedTestReplayPromise = (isTestHook || this.type === 'test') &&
+      test._retriedTest?._ddFailedTestReplayPromise
+    if (failedTestReplayPromise) {
+      delete test._retriedTest._ddFailedTestReplayPromise
+      const runRunnable = () => run.apply(this, args)
+      return failedTestReplayPromise.then(runRunnable, runRunnable)
+    }
+
     return run.apply(this, args)
   })
   return RunnablePackage
@@ -578,6 +588,11 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
 
 function getOnTestHandler (isMain) {
   return function (test) {
+    if (suiteHookFailureFiles.has(test.file)) {
+      test._ddTestFinishPublished = true
+      return
+    }
+
     const testStartLine = testToStartLine.get(test)
 
     // This may be a retry. If this is the case, `test.fn` is already wrapped,
@@ -1037,6 +1052,11 @@ function getOnFailHandler (isMain, config) {
     const testFile = testOrHook.file
     let test = testOrHook
     const isHook = testOrHook.type === 'hook'
+    const isTestHook = isHook &&
+      (testOrHook.parent?._beforeEach?.includes(testOrHook) || testOrHook.parent?._afterEach?.includes(testOrHook))
+    if (isHook && !isTestHook && testFile) {
+      suiteHookFailureFiles.add(testFile)
+    }
     if (isHook && testOrHook.ctx) {
       test = testOrHook.ctx.currentTest
     }
@@ -1045,7 +1065,7 @@ function getOnFailHandler (isMain, config) {
       testContext = getTestContext(test)
     }
     if (testContext) {
-      if (isHook && startTestFinish(test)) {
+      if (isTestHook && startTestFinish(test)) {
         delete test._ddPendingRetry
         const hookError = new Error(`${testOrHook.fullTitle()}: ${err.message}`, { cause: err })
         hookError.name = err.name

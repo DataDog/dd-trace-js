@@ -1232,6 +1232,9 @@ for (const version of versions) {
                     'WebdriverIO ATR fails every retry': {
                       properties: { quarantined: true },
                     },
+                    'WebdriverIO ATR always fails fails every retry': {
+                      properties: { quarantined: true },
+                    },
                   },
                 },
                 'managed-hook-fail.e2e.js': {
@@ -1274,7 +1277,12 @@ for (const version of versions) {
             assert.strictEqual(quarantined.meta[TEST_STATUS], 'fail')
             assert.strictEqual(quarantined.meta[TEST_FINAL_STATUS], 'skip')
             assert.strictEqual(quarantined.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-            const expectedStatuses = framework === 'jasmine' ? ['fail', 'pass', 'pass'] : ['fail', 'pass']
+            let expectedStatuses = ['fail', 'pass']
+            if (framework === 'jasmine') {
+              expectedStatuses = ['fail', 'pass', 'pass']
+            } else if (version === 'latest') {
+              expectedStatuses = ['fail', 'fail', 'pass']
+            }
             assert.strictEqual(earlyFlakeDetectionTests.length, expectedStatuses.length)
             assert.deepStrictEqual(
               earlyFlakeDetectionTests.map(test => test.meta[TEST_STATUS]).sort(),
