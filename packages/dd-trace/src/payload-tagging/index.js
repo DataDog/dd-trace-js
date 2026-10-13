@@ -13,24 +13,18 @@ const { tagsFromObject } = require('./tagging')
 const { createSafeSnapshot, createSnapshotBudget } = require('./snapshot')
 const { truncated } = require('./constants')
 
-// JSONPath constructs that select based on data values (predicates, script
-// expressions, type, parent and property-name selectors, slices, literal
-// escapes). On a partially captured payload their matches can differ from the
-// full payload, which could stop a redaction rule from matching a sensitive
-// value. Truncated captures are suppressed entirely when any rule uses one of
-// these constructs; structural paths, wildcards, indexes and recursive descent
-// stay safe because truncation only removes content, never reshapes retained
-// branches.
+// JSONPath constructs that select on data values (predicates, script
+// expressions, type, parent and property-name selectors). On a truncated
+// capture their matches can differ from the full payload, possibly missing a
+// sensitive value. Truncated captures are suppressed when any rule uses one;
+// structural paths, wildcards, indexes and recursive descent stay safe because
+// truncation only removes content.
 const dataDependentRulePattern = /[?()@^~:`]/
 
-// Budget for parse attempts while expanding one payload: the remaining
-// cumulative string length (in UTF-16 code units, measured with String.length,
-// not bytes) still available for JSON.parse attempts. The budget is shared
-// across all expansion attempts of one payload. Each attempt subtracts its
-// input length before parsing, and failed parse attempts are not refunded,
-// because the parsing work has already been done. This bounds combined parse
-// work so oversized or numerous candidates can neither be parsed nor retained
-// for later truncation.
+// Remaining cumulative string length (UTF-16 code units) available for
+// JSON.parse attempts across one payload's expansions. Each attempt subtracts
+// its input length up front and failed attempts are not refunded, bounding
+// combined parse work.
 const maxExpansionLength = 1_000_000
 
 /**
@@ -67,10 +61,7 @@ function assignSafe (parent, parentProperty, value) {
 
 /**
  * Work shared by every expansion of one payload: the snapshot budget left by
- * the payload capture, and the remaining cumulative string length (in UTF-16
- * code units) available for parse attempts. That parse budget is shared across
- * all expansion attempts for one payload; failed attempts still consume it
- * because they perform parsing work.
+ * capture and the remaining parse budget, both consumed in place.
  *
  * @typedef {{
  *   incomplete: boolean,
@@ -80,9 +71,9 @@ function assignSafe (parent, parentProperty, value) {
  */
 
 /**
- * Given an identified value, attempt to parse it as JSON if relevant. Parsed
- * values pass through the same bounded snapshot handling, sharing the payload's
- * budget, so expansion cannot introduce unbounded parsing or traversal either.
+ * Attempt to parse an identified string value as JSON. Parsed values go
+ * through the same bounded snapshot, sharing the payload's budget, so
+ * expansion cannot introduce unbounded parsing or traversal.
  *
  * @param {unknown} value
  * @param {Capture} capture
@@ -164,18 +155,18 @@ function computeTags (config, object, opts) {
   try {
     return computeBoundedTags(config, object, opts)
   } catch {
-    // Payload capture must never break the instrumented operation or disable
-    // the plugin. Omit possibly partly expanded or redacted tags. Never inspect
-    // the caught value: payload-controlled getters can throw during logging.
+    // A capture failure must not break the instrumented operation. Omit
+    // partly expanded or redacted tags; never inspect the caught value, as
+    // payload getters can throw while logging it.
     log.error('Error generating payload tags; omitting payload tags for this operation')
     return {}
   }
 }
 
 /**
- * Snapshot, expand, redact and flatten a payload. When the snapshot is
- * incomplete, captures whose redaction could be unreliable are suppressed
- * instead of risking exposure of unredacted values.
+ * Snapshot, expand, redact and flatten a payload. Incomplete captures whose
+ * rules are data-dependent are suppressed instead of risking exposure of
+ * unredacted values.
  *
  * @param {{ expand: string[], request: string[], response: string[] }} config
  * @param {unknown} object
@@ -193,8 +184,7 @@ function computeBoundedTags (config, object, opts) {
     snapshot.incomplete &&
     (hasDataDependentRules(redactionRules) || hasDataDependentRules(expansionRules))
   ) {
-    // Fixed, payload-safe diagnostic: no payload values, rule text, exception
-    // messages or stacks are ever included.
+    // Fixed, payload-safe diagnostic: no payload values or rule text included.
     log.debug(
       'Omitting payload tags: the snapshot was truncated and the rules are data-dependent'
     )
