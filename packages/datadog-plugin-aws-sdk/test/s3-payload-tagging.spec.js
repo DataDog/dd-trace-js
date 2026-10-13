@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { Readable } = require('node:stream')
+const { text } = require('node:stream/consumers')
 
 const { after, before, describe, it } = require('mocha')
 
@@ -98,12 +99,13 @@ async function cleanup (reset, close) {
   }
 }
 
-// SDK v3 returns the body as a stream mixin (transformToString); SDK v2 as a Buffer.
+// SDK v2 returns response bodies as Buffers, while SDK v3 can return either
+// plain Node streams (SDK 3.0.0) or stream mixins with transformToString().
 async function readBody (body) {
   if (typeof body.transformToString === 'function') {
     return body.transformToString()
   }
-  return body.toString()
+  return Buffer.isBuffer(body) ? body.toString() : text(body)
 }
 
 function hasStreamInternals (meta) {
@@ -168,6 +170,51 @@ describe('Plugin', () => {
         'the S3 fail-soft fixture requires this rule to throw on representative S3 parameters; ' +
           'revisit the fixture if JSONPath semantics change'
       )
+    })
+  })
+
+  describe('aws-sdk (s3 payload tagging) body reader', () => {
+    it('decodes Buffer bodies as UTF-8 text', async () => {
+      assert.strictEqual(await readBody(Buffer.from(bodyContent)), bodyContent)
+    })
+
+    it('decodes plain Node streams, including multibyte characters split across chunks', async () => {
+      const multibyte = Buffer.from('\u{1F642}', 'utf8') // 4-byte UTF-8 sequence
+      const stream = Readable.from([
+        Buffer.from('split-'),
+        multibyte.subarray(0, 2),
+        multibyte.subarray(2),
+      ])
+      try {
+        assert.strictEqual(await readBody(stream), 'split-\u{1F642}')
+      } finally {
+        stream.destroy()
+      }
+    })
+
+    it('prefers transformToString and calls it exactly once', async () => {
+      let calls = 0
+      const body = {
+        transformToString () {
+          calls++
+          return Promise.resolve(bodyContent)
+        },
+      }
+      assert.strictEqual(await readBody(body), bodyContent)
+      assert.strictEqual(calls, 1)
+    })
+
+    it('propagates stream errors instead of returning partial content', async () => {
+      async function * generate () {
+        yield Buffer.from('partial-')
+        throw new Error('stream read failed')
+      }
+      const stream = Readable.from(generate())
+      try {
+        await assert.rejects(() => readBody(stream), { message: 'stream read failed' })
+      } finally {
+        stream.destroy()
+      }
     })
   })
 
