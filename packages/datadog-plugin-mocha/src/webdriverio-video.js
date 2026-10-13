@@ -25,21 +25,21 @@ const captureOwners = new WeakMap()
 const pendingCaptures = new WeakSet()
 
 let ffmpegAvailable
+// PNGs remain charged through encoding and upload, until their temporary files are removed.
+let frameBytes = 0
 
 /** @type {Array<() => void>} */
 const encodingQueue = []
-let encodingBytes = 0
 
 /**
  * Runs one encoder at a time across all attempts in this WDIO process. Uploads do not hold the slot.
  *
- * @param {{ directory: string, index: number, frames: number, filePath: string,
- * size: number[], bytes: number }} recording
+ * @param {{ directory: string, index: number, frames: number, filePath: string, size: number[] }} recording
  * @param {(error?: Error) => void} onDone
  */
 function encodeVideo (recording, onDone) {
-  // Include the active encoder and bound retained PNGs as well as the number of small recordings.
-  if (encodingQueue.length > MAX_PENDING_ENCODINGS || recording.bytes > MAX_FRAME_BYTES - encodingBytes) {
+  // Include the active encoder in the queue limit.
+  if (encodingQueue.length > MAX_PENDING_ENCODINGS) {
     queueMicrotask(() => onDone(new Error('WebdriverIO video encoding queue is full')))
     return
   }
@@ -49,7 +49,6 @@ function encodeVideo (recording, onDone) {
     const index = encodingQueue.indexOf(start)
     if (index === -1) return
     encodingQueue.splice(index, 1)
-    encodingBytes -= recording.bytes
     // Defer the next start so repeated process startup failures cannot recurse through the queue.
     if (encodingQueue.length) queueMicrotask(encodingQueue[0])
     onDone(error)
@@ -83,7 +82,6 @@ function encodeVideo (recording, onDone) {
       queueMicrotask(() => complete(error))
     }
   }
-  encodingBytes += recording.bytes
   encodingQueue.push(start)
   if (encodingQueue.length === 1) start()
   return () => {
@@ -96,7 +94,6 @@ function encodeVideo (recording, onDone) {
       if (!encoder.kill('SIGKILL')) log.error('Error stopping WebdriverIO video encoder')
     } else {
       encodingQueue.splice(index, 1)
-      encodingBytes -= recording.bytes
       if (index === 0 && encodingQueue.length) queueMicrotask(encodingQueue[0])
     }
   }
@@ -215,8 +212,8 @@ class WebdriverioVideo {
     if (!frames.length) throw new Error('WebdriverIO returned no video frames')
     for (let index = 0; index < frames.length; index++) {
       if (typeof frames[index] !== 'string') throw new Error('WebdriverIO returned an invalid video frame')
-      if (Buffer.byteLength(frames[index], 'base64') > MAX_FRAME_BYTES - this.#bytes) {
-        throw new Error('WebdriverIO video frames exceeded the 200 MiB recording limit')
+      if (Buffer.byteLength(frames[index], 'base64') > MAX_FRAME_BYTES - frameBytes) {
+        throw new Error('WebdriverIO video frames exceeded the 200 MiB worker limit')
       }
       const frame = Buffer.from(frames[index], 'base64')
       if (frame.length < 24 || !frame.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
@@ -236,9 +233,11 @@ class WebdriverioVideo {
         ]
       }
       const frameNumber = this.#frames[index] || 0
+      // Reserve before writing so a partial write stays accounted for until cleanup.
+      frameBytes += frame.length
+      this.#bytes += frame.length
       writeFileSync(join(this.#directory, `${index}-${frameNumber}.png`), frame)
       this.#frames[index] = frameNumber + 1
-      this.#bytes += frame.length
     }
   }
 
@@ -312,7 +311,6 @@ class WebdriverioVideo {
       frames: this.#frames[index],
       filePath,
       size: this.#sizes[index],
-      bytes: this.#bytes,
     }
     this.#cancelEncoding = encodeVideo(recording, error => {
       if (this.#finished) return
@@ -338,6 +336,8 @@ class WebdriverioVideo {
     onCapture?.()
     try {
       rmSync(this.#directory, { recursive: true, force: true })
+      frameBytes -= this.#bytes
+      this.#bytes = 0
     } catch (error) {
       log.error('Error removing WebdriverIO video files: %s', error.message)
     }

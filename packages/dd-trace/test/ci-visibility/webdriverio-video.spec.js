@@ -16,6 +16,8 @@ describe('WebdriverIO video recording', () => {
   let browser
   let encode
   let checkFfmpeg
+  let removeFrames
+  let writeFrame
   let log
   let directories
   let recorders
@@ -31,10 +33,14 @@ describe('WebdriverIO video recording', () => {
       return encoder
     })
     checkFfmpeg = sinon.stub().returns({ status: 0 })
+    removeFrames = sinon.stub().callsFake(fs.rmSync)
+    writeFrame = sinon.stub().callsFake(fs.writeFileSync)
     log = { error: sinon.spy(), warn: sinon.spy() }
     createVideo = proxyquire('../../../datadog-plugin-mocha/src/webdriverio-video', {
       'node:child_process': { spawn: encode, spawnSync: checkFfmpeg },
       'node:fs': {
+        rmSync: removeFrames,
+        writeFileSync: writeFrame,
         mkdtempSync: prefix => {
           const directory = fs.mkdtempSync(prefix)
           directories.push(directory)
@@ -50,6 +56,8 @@ describe('WebdriverIO video recording', () => {
     await clock.tickAsync(5000)
     clock.restore()
     for (const directory of directories) fs.rmSync(directory, { recursive: true, force: true })
+    browser.takeScreenshot.reset()
+    writeFrame.reset()
   })
 
   function start () {
@@ -392,6 +400,81 @@ describe('WebdriverIO video recording', () => {
       sinon.assert.calledTwice(upload)
       sinon.assert.calledTwice(encode)
       assert.ok(directories.every(directory => !fs.existsSync(directory)))
+    })
+  }
+
+  for (const sessions of [1, 2]) {
+    for (const outcome of ['success', 'error', 'cancel']) {
+      it(`retains the frame budget during a stalled ${sessions}-session upload until ${outcome}`, async () => {
+        const frame = Buffer.alloc(200 * 1024 * 1024 / sessions)
+        Buffer.from(PNG, 'base64').copy(frame)
+        const screenshot = frame.toString('base64')
+        const screenshots = sessions === 1 ? screenshot : [screenshot, screenshot]
+        browser.takeScreenshot.resolves(screenshots)
+        const upload = sinon.spy()
+        const complete = sinon.spy()
+        const recorder = start()
+        recorder.finish(true, upload, complete)
+        await clock.tickAsync(0)
+        sinon.assert.calledOnce(upload)
+        sinon.assert.notCalled(complete)
+        assert.strictEqual(fs.existsSync(directories[0]), true)
+
+        browser.takeScreenshot.resolves(PNG)
+        const rejected = sinon.spy()
+        start().finish(true, upload, rejected)
+        await clock.tickAsync(0)
+        sinon.assert.calledOnceWithExactly(rejected, 'error')
+        sinon.assert.calledOnce(encode)
+        sinon.assert.calledOnce(upload)
+        assert.strictEqual(fs.existsSync(directories[1]), false)
+
+        if (outcome === 'cancel') recorder.cancel()
+        else {
+          for (let index = 0; index < sessions; index++) {
+            assert.strictEqual(fs.existsSync(directories[0]), true)
+            upload.args[index][2](outcome === 'error' ? new Error('upload failed') : undefined)
+            await clock.tickAsync(0)
+          }
+          assert.strictEqual(upload.callCount, sessions)
+        }
+        sinon.assert.calledOnceWithExactly(complete, outcome === 'success' ? 'uploaded' : 'error')
+        assert.strictEqual(fs.existsSync(directories[0]), false)
+        upload.firstCall.args[2]()
+        recorder.cancel()
+        sinon.assert.calledOnce(complete)
+
+        browser.takeScreenshot.resolves(screenshots)
+        const next = sinon.spy()
+        start().finish(true, (filePath, index, uploaded) => uploaded(), next)
+        await clock.tickAsync(0)
+        sinon.assert.calledOnceWithExactly(next, 'uploaded')
+        assert.ok(directories.every(directory => !fs.existsSync(directory)))
+      })
+    }
+  }
+
+  for (const cleanupFails of [false, true]) {
+    it(`accounts for a partial frame write when cleanup ${cleanupFails ? 'fails' : 'succeeds'}`, async () => {
+      const frame = Buffer.alloc(200 * 1024 * 1024)
+      Buffer.from(PNG, 'base64').copy(frame)
+      browser.takeScreenshot.resolves(frame.toString('base64'))
+      writeFrame.onFirstCall().callsFake((filePath, data) => {
+        fs.writeFileSync(filePath, data.subarray(0, 24))
+        throw new Error('disk write failed')
+      })
+      if (cleanupFails) removeFrames.onFirstCall().throws(new Error('cleanup failed'))
+      const first = sinon.spy()
+      start().finish(true, () => assert.fail('unexpected upload'), first)
+      await clock.tickAsync(0)
+      sinon.assert.calledOnceWithExactly(first, 'error')
+      assert.strictEqual(fs.existsSync(directories[0]), cleanupFails)
+      browser.takeScreenshot.resolves(PNG)
+      const next = sinon.spy()
+      start().finish(true, (filePath, index, uploaded) => uploaded(), next)
+      await clock.tickAsync(0)
+      sinon.assert.calledOnceWithExactly(next, cleanupFails ? 'error' : 'uploaded')
+      assert.strictEqual(fs.existsSync(directories[1]), false)
     })
   }
 
