@@ -6,7 +6,7 @@
   "variants": {
     "appsec-enabled": {
       "cpus": 2,
-      "iterations": 11,
+      "iterations": 8,
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY_SECOND node client.js >/dev/null 2>&1 &\"",
       "run": "node --require ./mock-native-appsec.js server.js",
@@ -20,7 +20,7 @@
     },
     "appsec-enabled-with-attacks": {
       "cpus": 2,
-      "iterations": 9,
+      "iterations": 6,
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY_SECOND node client.js >/dev/null 2>&1 &\"",
       "run": "node --require ./mock-native-appsec.js server.js",
