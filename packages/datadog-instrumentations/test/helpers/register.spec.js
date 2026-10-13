@@ -16,6 +16,9 @@ describe('register', () => {
   let requiredModules
   let satisfiesMock
   let telemetryMock
+  let logMock
+  let getActivationSetupMock
+  let subscriptions
 
   const clearRegisterCache = () => {
     const registerPath = require.resolve('../../src/helpers/register')
@@ -42,6 +45,9 @@ describe('register', () => {
     requiredModules = []
     satisfiesMock = sinon.spy(satisfies)
     telemetryMock = sinon.stub()
+    logMock = { error: sinon.stub(), info: sinon.stub() }
+    getActivationSetupMock = sinon.stub()
+    subscriptions = []
 
     const registerPath = require.resolve('../../src/helpers/register')
     const instrumentationUtilsPath = require.resolve('../../src/helpers/instrumentation-utils')
@@ -60,7 +66,21 @@ describe('register', () => {
           './hooks': hooksMock,
           './hook': HookMock,
           './instrumentations': instrumentationsMock,
+          './rewriter/instrumentation-registry': { getActivationSetup: getActivationSetupMock },
+          '../../../dd-trace/src/log': logMock,
           '../../../dd-trace/src/guardrails/telemetry': telemetryMock,
+          'dc-polyfill': {
+            channel: name => {
+              const ch = channel(name)
+              return {
+                publish: message => ch.publish(message),
+                subscribe: subscriber => {
+                  ch.subscribe(subscriber)
+                  subscriptions.push(() => ch.unsubscribe(subscriber))
+                },
+              }
+            },
+          },
         }
         return stubs[request] || originalModuleProtoRequire.call(this, request)
       }
@@ -71,6 +91,7 @@ describe('register', () => {
   })
 
   afterEach(() => {
+    for (const unsubscribe of subscriptions) unsubscribe()
     sinon.restore()
     Module.prototype.require = originalModuleProtoRequire
     clearRegisterCache()
@@ -82,7 +103,7 @@ describe('register', () => {
     Object.entries(env).forEach(([key, value]) => {
       process.env[key] = value
     })
-    require('../../src/helpers/register')
+    return require('../../src/helpers/register')
   }
 
   const runHookCallbacks = (hookMock) => {
@@ -208,6 +229,127 @@ describe('register', () => {
       loadChannel.unsubscribe(subscriber)
     }
   })
+
+  it('passes metadata to setup before activating every module in a group', () => {
+    const setup = sinon.stub().returns({ ignored: true })
+    getActivationSetupMock.withArgs('first').returns(setup)
+    getActivationSetupMock.withArgs('second').returns(setup)
+    const load = sinon.stub(channel('dd-trace:instrumentation:load'), 'publish')
+    const { activate } = loadRegisterWithEnv()
+
+    channel('dd-trace:instrumentation:load:orchestrion').publish({
+      moduleName: 'first', version: '1.0.0', result: 'matched',
+    })
+    sinon.assert.notCalled(setup)
+    sinon.assert.notCalled(load)
+
+    channel('dd-trace:instrumentation:load:orchestrion').publish({
+      moduleName: 'first', version: '1.0.0', result: 'rewritten',
+    })
+    activate('second', '2.0.0')
+    activate('first', '1.0.1')
+
+    assert.deepStrictEqual(setup.args, [
+      [{ moduleName: 'first', version: '1.0.0' }],
+      [{ moduleName: 'second', version: '2.0.0' }],
+      [{ moduleName: 'first', version: '1.0.1' }],
+    ])
+    sinon.assert.callOrder(setup, load)
+    assert.ok(setup.getCall(1).calledBefore(load.getCall(1)))
+    assert.ok(setup.getCall(2).calledBefore(load.getCall(2)))
+    assert.deepStrictEqual(load.args, [[{ name: 'first' }], [{ name: 'second' }], [{ name: 'first' }]])
+  })
+
+  it('runs distinct setup functions independently and still activates modules without setup', () => {
+    const firstSetup = sinon.stub()
+    const secondSetup = sinon.stub()
+    getActivationSetupMock.withArgs('first').returns(firstSetup)
+    getActivationSetupMock.withArgs('second').returns(secondSetup)
+    const load = sinon.stub(channel('dd-trace:instrumentation:load'), 'publish')
+    const { activate } = loadRegisterWithEnv()
+
+    activate('first')
+    activate('second')
+    activate('without-setup')
+
+    sinon.assert.calledOnceWithExactly(firstSetup, { moduleName: 'first', version: undefined })
+    sinon.assert.calledOnceWithExactly(secondSetup, { moduleName: 'second', version: undefined })
+    assert.deepStrictEqual(load.args, [[{ name: 'first' }], [{ name: 'second' }], [{ name: 'without-setup' }]])
+  })
+
+  it('permanently blocks a group when a later activation setup fails', () => {
+    const error = new Error('metadata failed')
+    const setup = sinon.stub().onSecondCall().throws(error)
+    getActivationSetupMock.withArgs('first').returns(setup)
+    getActivationSetupMock.withArgs('second').returns(setup)
+    const load = sinon.stub(channel('dd-trace:instrumentation:load'), 'publish')
+    const { activate } = loadRegisterWithEnv()
+
+    activate('first', '1.0.0')
+    activate('second', '2.0.0')
+    activate('first', '1.0.1')
+
+    assert.strictEqual(setup.callCount, 2)
+    sinon.assert.calledOnceWithExactly(load, { name: 'first' })
+    sinon.assert.calledOnceWithExactly(logMock.error,
+      'Error during activation setup of %s: %s', 'second', 'metadata failed', error)
+    sinon.assert.calledOnceWithExactly(telemetryMock, 'error', [
+      'error_type:Error', 'integration:second', 'integration_version:2.0.0',
+    ], {
+      result: 'error',
+      result_class: 'internal_error',
+      result_reason: 'Error during activation of second: metadata failed',
+    })
+  })
+
+  it('does not publish re-entrant group activations before setup has completed', () => {
+    const load = sinon.stub(channel('dd-trace:instrumentation:load'), 'publish')
+    const setup = sinon.stub().callsFake(() => {
+      const publishCount = load.callCount
+      activate('second')
+      assert.strictEqual(load.callCount, publishCount)
+    })
+    getActivationSetupMock.withArgs('first').returns(setup)
+    getActivationSetupMock.withArgs('second').returns(setup)
+    const { activate } = loadRegisterWithEnv()
+
+    activate('first')
+    activate('second')
+
+    assert.strictEqual(setup.callCount, 2)
+    assert.deepStrictEqual(load.args, [[{ name: 'first' }], [{ name: 'second' }]])
+  })
+
+  for (const error of [new TypeError('setup failed'), 'setup failed', null]) {
+    it(`permanently blocks a group after setup throws ${String(error)}`, () => {
+      const setup = sinon.stub().callsFake(() => { throw error })
+      getActivationSetupMock.withArgs('first').returns(setup)
+      getActivationSetupMock.withArgs('second').returns(setup)
+      const load = sinon.stub(channel('dd-trace:instrumentation:load'), 'publish')
+      const { activate } = loadRegisterWithEnv()
+      const message = String(error?.message ?? error)
+
+      channel('dd-trace:instrumentation:load:orchestrion').publish({
+        moduleName: 'first', version: '1.0.0', result: 'rewritten',
+      })
+      activate('second')
+      activate('first')
+
+      sinon.assert.calledOnceWithExactly(setup, { moduleName: 'first', version: '1.0.0' })
+      sinon.assert.notCalled(load)
+      sinon.assert.calledOnceWithExactly(logMock.error,
+        'Error during activation setup of %s: %s', 'first', message, error)
+      sinon.assert.calledOnceWithExactly(telemetryMock, 'error', [
+        `error_type:${error?.constructor?.name ?? typeof error}`,
+        'integration:first',
+        'integration_version:1.0.0',
+      ], {
+        result: 'error',
+        result_class: 'internal_error',
+        result_reason: `Error during activation of first: ${message}`,
+      })
+    })
+  }
 
   it('should only unwrap an IITM default export after its instrumentation matches', () => {
     const patch = sinon.stub()
