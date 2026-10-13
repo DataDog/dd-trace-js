@@ -3,6 +3,8 @@
 // TODO: Add test with slow or unresponsive agent.
 // TODO: Add telemetry for things like dropped requests, errors, etc.
 
+const { URL } = require('node:url')
+
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
