@@ -4,6 +4,7 @@ const { version } = require('cypress/package.json')
 
 const exposedEnvironmentVariables = [
   'BASE_URL_SECOND',
+  'DD_SUITE_START_MODE',
   'DYNAMIC_ATR_DURATION_MS',
   'EARLY_BEFORE_EACH_FAILURE',
   'ENABLE_INCOMPATIBLE_PLUGIN',
