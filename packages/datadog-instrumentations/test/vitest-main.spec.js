@@ -404,11 +404,27 @@ describe('vitest main instrumentation', () => {
         this[event] = callback
       }
     }
-    const VitestV5 = class Vitest {}
+    class ForksPoolWorker {
+      constructor () {
+        this.env = { VITEST: 'true' }
+      }
+
+      start () {
+        return this.env
+      }
+
+      on () { /* empty */ }
+    }
+    class ThreadsPoolWorker extends ForksPoolWorker {}
     const vitestV5IndexHook = hooks.find(({ target }) =>
       target.filePattern === 'dist/chunks/index.*' && target.versions[0] === '>=5.0.0'
     ).hook
-    vitestV5IndexHook({ TypecheckPoolWorker, Vitest: VitestV5 }, '5.0.0')
+    vitestV5IndexHook({ ForksPoolWorker, ThreadsPoolWorker, TypecheckPoolWorker }, '5.0.4')
+
+    const forksPoolWorker = new ForksPoolWorker()
+    assert.strictEqual(forksPoolWorker.start().DD_VITEST_WORKER, '1')
+    const threadsPoolWorker = new ThreadsPoolWorker()
+    assert.strictEqual(threadsPoolWorker.start().DD_VITEST_WORKER, '1')
 
     const typecheckPoolWorker = new TypecheckPoolWorker()
     typecheckPoolWorker.on('message', () => {})
