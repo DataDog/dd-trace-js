@@ -635,8 +635,9 @@ and sample idle periods every 500ms; browser dialogs and native UI outside scree
 Each failed attempt, including retries and test hook failures, gets its own upload. Passing and skipped
 attempts are discarded. Multiremote sessions produce separate videos for the same attempt.
 Videos are limited to 1280×720 pixels and use two frames per second. Temporary frames and videos are
-removed after completion. Raw frames are limited to 200 MiB per attempt and 16 megapixels per screenshot;
-capture, encoding, or upload failures do not fail the test run.
+removed after completion. Raw frames share a 200 MiB budget per WDIO worker across capturing, encoding, and
+uploading attempts, released after file cleanup, with a limit of 16 megapixels per screenshot. Capture,
+encoding, or upload failures do not fail the test run.
 
 Set `DD_CODE_COVERAGE_FLAGS` to a comma-separated list of flags to attach to uploaded code coverage
 reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are

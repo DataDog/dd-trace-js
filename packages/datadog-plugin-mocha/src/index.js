@@ -555,10 +555,11 @@ class MochaPlugin extends CiPlugin {
         const testResult = ctx.arguments?.[0]
         const test = this._webdriverioJasmineState?.tests.get(testResult?.id)
         const video = this._webdriverioVideos.get(test?.span)
-        const finishPromise = waitForWebdriverioCapture(
-          video,
-          this.#finishWebdriverioJasmineTest(testResult, ctx.self?._specs)
-        )
+        const finishTestPromise = this.#finishWebdriverioJasmineTest(testResult, ctx.self?._specs)
+        // Replay can defer video.finish(), which must start the final capture before we wait for it.
+        const finishPromise = finishTestPromise
+          ? finishTestPromise.then(() => waitForWebdriverioCapture(video))
+          : waitForWebdriverioCapture(video)
         if (finishPromise) {
           ctx.result = finishPromise.then(() => result)
         }

@@ -3690,6 +3690,114 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  for (const capturePending of [false, true]) {
+    for (const completion of ['capture', 'capture timeout', 'replay rejection']) {
+      it(`waits for Jasmine video after replay with capture pending=${capturePending} (${completion})`, async () => {
+        const clock = sinon.useFakeTimers()
+        const originalBrowser = globalThis.browser
+        const browser = Object.assign(new EventEmitter(), { takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT) })
+        globalThis.browser = browser
+        const directories = []
+        const recorders = []
+        const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
+          'node:child_process': {
+            spawnSync: () => ({ status: 0 }),
+            spawn: () => {
+              const encoder = new EventEmitter()
+              queueMicrotask(() => encoder.emit('close', 0))
+              return encoder
+            },
+          },
+          'node:fs': {
+            mkdtempSync: prefix => {
+              const directory = fs.mkdtempSync(prefix)
+              directories.push(directory)
+              return directory
+            },
+          },
+        })
+        const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+          './webdriverio-video': browser => {
+            const recorder = createVideo(browser)
+            recorders.push(recorder)
+            return recorder
+          },
+          '../../dd-trace/src/config/helper': { getValueFromEnvSources: () => true },
+        })
+        const exporter = { canUploadTestVideos: () => true, uploadTestVideo: sinon.spy() }
+        const { plugin, spans } = createJasminePlugin({ isTestFailureVideosEnabled: true }, {
+          Plugin,
+          exporter,
+          testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+        })
+        const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+        const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-jasmine-video-replay-'))
+        const outputPath = path.join(outputDirectory, 'index.mjs')
+        fs.writeFileSync(outputPath, rewriter.rewrite(source, jasmineFixtureModulePath, 'module'))
+        const file = path.join(process.cwd(), 'video-replay.spec.js')
+        const result = createJasmineResult('captures a replay and video', file, 'failed')
+        let finishReplay
+        const replayFinished = new Promise((resolve, reject) => {
+          finishReplay = completion === 'replay rejection' ? () => reject(new Error('replay failed')) : resolve
+        })
+        sinon.stub(plugin, 'waitForDiBreakpointHits').returns(replayFinished)
+        let finishCapture
+        const captureFinished = new Promise(resolve => { finishCapture = () => resolve(PNG_SCREENSHOT) })
+        try {
+          const { JasmineReporter } = await import(pathToFileURL(outputPath))
+          const reporter = new JasmineReporter([file])
+          reportJasmineSpecStarted(result, file)
+          await clock.tickAsync(0)
+          browser.takeScreenshot.returns(captureFinished)
+          if (capturePending) browser.emit('result', { command: 'elementClick' })
+          plugin._webdriverioJasmineState.tests.get(result.id)._ddShouldWaitForHitProbe = true
+          const nextTest = sinon.spy(reportedResult => {
+            assert.strictEqual(reportedResult, result)
+            reportJasmineSpecStarted(createJasmineResult('next test', file, 'passed'), file)
+          })
+          const reported = reporter.specDone(result).then(nextTest)
+          await clock.tickAsync(0)
+          sinon.assert.notCalled(nextTest)
+
+          finishReplay()
+          await clock.tickAsync(0)
+          sinon.assert.notCalled(nextTest)
+          sinon.assert.calledTwice(browser.takeScreenshot)
+          if (completion === 'capture timeout') {
+            await clock.tickAsync(4999)
+            sinon.assert.notCalled(nextTest)
+            await clock.tickAsync(1)
+          } else {
+            finishCapture()
+            await clock.tickAsync(0)
+          }
+          sinon.assert.calledOnce(nextTest)
+          await reported
+          sinon.assert.calledOnce(exporter.uploadTestVideo)
+          const frames = fs.readdirSync(directories[0]).filter(file => file.endsWith('.png'))
+          assert.strictEqual(frames.length, completion === 'capture timeout' ? 1 : 2)
+          assert.strictEqual(spans.length, 2)
+          assert.strictEqual(spans[0].context()._isFinished, false)
+          exporter.uploadTestVideo.firstCall.args[1]()
+          assert.strictEqual(spans[0].context()._isFinished, true)
+        } finally {
+          for (const recorder of recorders) {
+            recorder.finish(false, () => {}, () => {})
+            recorder.cancel()
+          }
+          // @ts-expect-error CiPlugin's type omits the base plugin's supported boolean configuration.
+          plugin.configure(false)
+          if (originalBrowser === undefined) delete globalThis.browser
+          else globalThis.browser = originalBrowser
+          clock.restore()
+          for (const directory of [...directories, outputDirectory]) {
+            fs.rmSync(directory, { recursive: true, force: true })
+          }
+        }
+      })
+    }
+  }
+
   it('installs Failed Test Replay on the first Jasmine failure after a passing attempt', () => {
     const { plugin } = createJasminePlugin({
       earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 2 }),
