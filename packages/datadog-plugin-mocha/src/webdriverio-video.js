@@ -339,7 +339,8 @@ class WebdriverioVideo {
       size: this.#sizes[index],
     }
     this.#cancelEncoding = encodeVideo(recording, error => {
-      if (this.#finished) return
+      // Cancellation may try cleanup while FFmpeg still holds files open on Windows.
+      if (this.#finished) return this.#cleanup(undefined, () => {})
       if (error) return next(error)
       try {
         upload(filePath, index, next)

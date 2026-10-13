@@ -724,6 +724,75 @@ describe('WebdriverIO video recording', () => {
     })
   }
 
+  for (const cleanup of ['success', 'locked until close', 'permanent failure']) {
+    for (const code of [0, 1]) {
+      it(`retries cancelled encoder cleanup after exit ${code}: ${cleanup}`, async () => {
+        const encoder = Object.assign(new EventEmitter(), {
+          kill: sinon.stub().returns(true),
+          unref: sinon.spy(),
+        })
+        encode.onFirstCall().returns(encoder)
+        const frame = Buffer.alloc(200 * 1024 * 1024)
+        Buffer.from(PNG, 'base64').copy(frame)
+        const screenshot = frame.toString('base64')
+        // Account for the full frame without writing 200 MiB to disk in each case.
+        writeFrame.callsFake((filePath, data) => fs.writeFileSync(filePath, data.subarray(0, 24)))
+        const locked = Object.assign(new Error('encoder output is locked'), { code: 'EBUSY' })
+        if (cleanup !== 'success') removeFrames.onFirstCall().throws(locked)
+        if (cleanup === 'permanent failure') removeFrames.onSecondCall().throws(locked)
+        browser.takeScreenshot.resolves(screenshot)
+        const recorder = start()
+        browser.takeScreenshot.rejects(new Error('session closed before final capture'))
+        const upload = sinon.spy()
+        const complete = sinon.spy()
+        recorder.finish(true, upload, complete)
+        await clock.tickAsync(0)
+
+        recorder.cancel()
+        recorder.cancel()
+        sinon.assert.calledOnceWithExactly(complete, 'error')
+        sinon.assert.calledOnceWithExactly(encoder.kill, 'SIGKILL')
+        sinon.assert.calledOnce(encoder.unref)
+        sinon.assert.calledOnce(removeFrames)
+        assert.strictEqual(fs.existsSync(directories[0]), cleanup !== 'success')
+
+        encoder.emit('close', code)
+        await clock.tickAsync(0)
+        sinon.assert.calledOnce(complete)
+        sinon.assert.notCalled(upload)
+        assert.strictEqual(fs.existsSync(directories[0]), cleanup === 'permanent failure')
+        if (cleanup !== 'success') sinon.assert.calledTwice(removeFrames)
+
+        // A later watch run can use the entire budget only once deletion succeeds.
+        browser.takeScreenshot.resolves(screenshot)
+        const recovered = start()
+        browser.takeScreenshot.rejects(new Error('session closed before final capture'))
+        const next = sinon.spy()
+        recovered.finish(true, upload, next)
+        await clock.tickAsync(0)
+        if (cleanup === 'permanent failure') {
+          sinon.assert.calledOnceWithExactly(next, 'error')
+          sinon.assert.notCalled(upload)
+          return
+        }
+        sinon.assert.calledOnce(upload)
+        sinon.assert.notCalled(next)
+
+        // Repeated cleanup must not release the same bytes twice and inflate the budget.
+        browser.takeScreenshot.resolves(PNG)
+        const rejected = sinon.spy()
+        start().finish(true, upload, rejected)
+        await clock.tickAsync(0)
+        sinon.assert.calledOnceWithExactly(rejected, 'error')
+        sinon.assert.calledOnce(upload)
+        upload.firstCall.args[2]()
+        sinon.assert.calledOnceWithExactly(next, 'uploaded')
+        sinon.assert.calledOnce(complete)
+        assert.ok(directories.every(directory => !fs.existsSync(directory)))
+      })
+    }
+  }
+
   it('does not start a cancelled encoder whose queue microtask is already scheduled', async () => {
     const encoders = []
     encode.callsFake(() => {
