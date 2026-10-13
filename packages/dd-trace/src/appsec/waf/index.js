@@ -132,7 +132,7 @@ function run (data, req, raspRule, rootSpan) {
   }
 
   const wafContext = waf.wafManager.getWAFContext(req)
-  const result = wafContext.run(data, raspRule, req, rootSpan)
+  const result = wafContext?.run(data, raspRule, req, rootSpan)
 
   if (result?.keep) {
     if (limiter.isAllowed()) {

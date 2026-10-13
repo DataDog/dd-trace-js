@@ -37,7 +37,11 @@ describe('WAF Manager', () => {
     DDWAF = sinon.stub()
     DDWAF.version = sinon.stub().returns('1.2.3')
     DDWAF.prototype.dispose = sinon.stub()
-    DDWAF.prototype.createContext = sinon.stub()
+    DDWAF.prototype.createContext = sinon.stub().returns({
+      run: sinon.stub(),
+      dispose: sinon.stub(),
+      disposed: false,
+    })
     DDWAF.prototype.diagnostics = {
       ruleset_version: '1.0.0',
       rules: {
@@ -119,6 +123,15 @@ describe('WAF Manager', () => {
   })
 
   describe('run', () => {
+    it('skips evaluation and disposal when there is no active ruleset', () => {
+      DDWAF.prototype.createContext.returns(null)
+      waf.init(rules, config.appsec)
+      const req = {}
+      assert.strictEqual(waf.run({ persistent: { 'server.request.body': 'ordinary' } }, req), undefined)
+      waf.disposeContext(req)
+      sinon.assert.notCalled(Reporter.reportMetrics)
+    })
+
     it('should call wafManager.run with raspRuleType', () => {
       const run = sinon.stub()
       WAFManager.prototype.getWAFContext = sinon.stub().returns({ run })
