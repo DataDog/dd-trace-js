@@ -1510,6 +1510,7 @@ for (const version of versions) {
 
           const scenario = framework === 'jasmine' ? 'failedTestReplayBothAndImpacted' : 'failedTestReplayAndImpacted'
           await runScenario(scenario, 1, payloads => {
+            assertFailureVideos(payloads)
             const tests = getEvents(payloads)
               .filter(event => event.type === 'test')
               .map(event => event.content)
@@ -1545,8 +1546,30 @@ for (const version of versions) {
             }
           }, {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
             _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
           })
+        })
+
+        it('uploads the terminal failure video with Failed Test Replay and no teardown hooks', async () => {
+          receiver.setSettings({
+            di_enabled: true,
+            flaky_test_retries_count: 1,
+            flaky_test_retries_enabled: true,
+          })
+          await runScenario('atrAlwaysFails', 1, payloads => {
+            assertFailureVideos(payloads)
+            const tests = getEvents(payloads).filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+            assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+            const finalRetry = tests.find(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(finalRetry.meta[TEST_FINAL_STATUS], 'fail')
+            assert.strictEqual(finalRetry.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
+          }, {
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          }, 1)
         })
 
         it('falls back safely when policy requests fail', async () => {

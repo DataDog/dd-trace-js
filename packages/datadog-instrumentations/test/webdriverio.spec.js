@@ -4250,6 +4250,102 @@ describe('webdriverio instrumentation', () => {
     })
   }
 
+  for (const boundary of ['shutdown', 'the next test']) {
+    for (const status of ['fail', 'pass']) {
+      for (const replay of ['success', 'rejection', 'timeout']) {
+        it(`finishes a terminal Mocha retry video before ${boundary} (${status}, replay=${replay})`, async () => {
+          const clock = sinon.useFakeTimers()
+          const recorders = []
+          const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+            './webdriverio-video': () => {
+              const recorder = {
+                capture: sinon.spy(),
+                finish: sinon.spy((failed, upload, done) => done(failed ? 'uploaded' : undefined)),
+                waitForCapture: callback => callback(),
+              }
+              recorders.push(recorder)
+              return recorder
+            },
+            '../../dd-trace/src/config/helper': { getValueFromEnvSources: () => true },
+          })
+          const config = { isTestFailureVideosEnabled: true, earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy() }
+          const exporter = { canUploadTestVideos: () => true, flush: sinon.spy(onDone => onDone()) }
+          const { plugin, spans } = createJasminePlugin(config, {
+            Plugin, exporter, testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+          })
+          let resolveReplay
+          let rejectReplay
+          /** @type {Promise<void>} */
+          const replayPromise = new Promise((resolve, reject) => {
+            resolveReplay = resolve
+            rejectReplay = reject
+          })
+          const diWaitCh = channel('ci:mocha:test:di:wait')
+          const onDiWait = ({ promises }) => {
+            promises.hitBreakpointPromise = replayPromise
+          }
+          const retryCh = channel('ci:mocha:test:retry')
+          const onRetry = ({ test }) => { test._ddShouldWaitForHitProbe = true }
+          class Runner extends MochaRunner {}
+          patchFailedTestReplayHookUp(Runner)
+          const suite = new MochaSuite('terminal video retry', new MochaContext())
+          suite.retries(1)
+          const test = new MochaTest('attempt', function () {
+            if (this.test.currentRetry() === 0 || status === 'fail') throw new Error('retry me')
+          })
+          test.file = __filename
+          suite.addTest(test)
+          if (boundary === 'the next test') {
+            const next = new MochaTest('next test', () => {})
+            next.file = __filename
+            suite.addTest(next)
+          }
+          const runner = new Runner(suite)
+          runner.on('test', getOnTestHandler(false))
+          runner.on('test end', getOnTestEndHandler(config))
+          runner.on('fail', getOnFailHandler(false, config))
+          runner.on('retry', getOnTestRetryHandler(config))
+          const completed = sinon.spy()
+          // Drive the real runner synchronously so shutdown deterministically races the blocked DI wait.
+          // @ts-expect-error Mocha omits its hook scheduler from its public types.
+          const immediately = sinon.stub(MochaRunner, 'immediately').callsFake(callback => callback())
+          diWaitCh.subscribe(onDiWait)
+          retryCh.subscribe(onRetry)
+          try {
+            runner.run(() => channel('ci:mocha:worker:finish').publish({ onDone: completed }))
+            await clock.tickAsync(0)
+            assert.strictEqual(recorders.length, 2)
+            sinon.assert.notCalled(recorders[1].finish)
+            sinon.assert.notCalled(completed)
+            if (replay === 'rejection') rejectReplay(new Error('DI unavailable'))
+            else if (replay === 'timeout') {
+              setTimeout(resolveReplay, 2000)
+              await clock.tickAsync(1999)
+              sinon.assert.notCalled(completed)
+              await clock.tickAsync(1)
+            } else resolveReplay()
+            await clock.tickAsync(0)
+            sinon.assert.calledOnce(recorders[1].finish)
+            assert.strictEqual(recorders[1].finish.firstCall.args[0], status === 'fail')
+            assert.strictEqual(spans[1].context().getTags()[TEST_STATUS], status)
+            assert.strictEqual(spans[1].context()._isFinished, true)
+            assert.strictEqual(recorders.length, boundary === 'the next test' ? 3 : 2)
+            sinon.assert.calledOnce(completed)
+          } finally {
+            resolveReplay()
+            await clock.tickAsync(0)
+            immediately.restore()
+            runner.dispose()
+            diWaitCh.unsubscribe(onDiWait)
+            retryCh.unsubscribe(onRetry)
+            plugin.configure(false)
+            clock.restore()
+          }
+        })
+      }
+    }
+  }
+
   for (const capturePending of [false, true]) {
     for (const completion of ['capture', 'capture timeout', 'replay rejection']) {
       it(`waits for Jasmine video after replay with capture pending=${capturePending} (${completion})`, async () => {

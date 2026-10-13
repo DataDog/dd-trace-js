@@ -928,24 +928,33 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
       finalAttemptHandlers?.onStart?.(test)
     }
 
+    const finish = () => {
+      if (shouldFinishTest) {
+        test._ddTestFinishPublished = true
+        testFinishCh.publish({
+          status,
+          hasBeenRetried: isMochaRetry(test),
+          isLastRetry: getIsLastRetry(test),
+          ...testFinishInfo,
+          ...ctx.currentStore,
+        })
+      }
+
+      if (isFinalAttempt) {
+        finalAttemptHandlers?.onFinish?.(test)
+      }
+    }
+
     if (shouldWaitForHitProbe) {
-      await waitForHitProbe()
+      const waitForHitProbePromise = waitForHitProbe()
+      if (shouldFinishTest && config.isTestFailureVideosEnabled && !test.isPending()) {
+        // Mocha does not await test-end listeners. Its hookUp continuation must wait even without teardown hooks.
+        test._ddDeferredHookEnd = { waitForHitProbePromise, publishTestFinish: finish }
+        return
+      }
+      await waitForHitProbePromise
     }
-
-    if (shouldFinishTest) {
-      test._ddTestFinishPublished = true
-      testFinishCh.publish({
-        status,
-        hasBeenRetried: isMochaRetry(test),
-        isLastRetry: getIsLastRetry(test),
-        ...testFinishInfo,
-        ...ctx.currentStore,
-      })
-    }
-
-    if (isFinalAttempt) {
-      finalAttemptHandlers?.onFinish?.(test)
-    }
+    finish()
   }
 }
 
