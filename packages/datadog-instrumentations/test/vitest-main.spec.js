@@ -413,7 +413,7 @@ describe('vitest main instrumentation', () => {
         return this.env
       }
 
-      on () {/* empty */}
+      on () { /* empty */ }
     }
     class ThreadsPoolWorker extends ForksPoolWorker {}
     const vitestV5IndexHook = hooks.find(({ target }) =>

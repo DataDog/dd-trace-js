@@ -204,9 +204,11 @@ describe('webdriverio instrumentation', () => {
     testStartCh.subscribe(onTestStart)
     try {
       resetRunState({ tests: [], suites: [] })
-      getOnFailHandler(false, {})(failingHook, new Error('suite hook failed'))
-      getOnTestHandler(false)(skippedTest)
-      getOnTestHandler(false)(siblingTest)
+      const onFail = getOnFailHandler(false, {})
+      const onTest = getOnTestHandler(false)
+      onFail(failingHook, new Error('suite hook failed'))
+      onTest(skippedTest)
+      onTest(siblingTest)
 
       assert.strictEqual(skippedTest._ddTestFinishPublished, true)
       assert.strictEqual(siblingTest._ddTestFinishPublished, undefined)
