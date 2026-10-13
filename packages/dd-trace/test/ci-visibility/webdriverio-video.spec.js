@@ -35,7 +35,7 @@ describe('WebdriverIO video recording', () => {
       queueMicrotask(() => encoder.emit('close', 0))
       return encoder
     })
-    checkFfmpeg = sinon.stub().returns({ status: 0 })
+    checkFfmpeg = sinon.stub().returns({ status: 0, stdout: ' V....D libvpx               libvpx VP8 (codec vp8)\n' })
     removeFrames = sinon.stub().callsFake(fs.rmSync)
     writeFrame = sinon.stub().callsFake(fs.writeFileSync)
     log = { error: sinon.spy(), warn: sinon.spy() }
@@ -982,11 +982,13 @@ describe('WebdriverIO video recording', () => {
     assert.strictEqual(fs.existsSync(directories[0]), false)
   })
 
-  for (const failure of ['missing executable', 'nonzero status', 'startup throw']) {
+  for (const failure of ['missing executable', 'nonzero status', 'startup throw', 'missing libvpx', 'VP9 only']) {
     it(`disables recording safely after FFmpeg preflight ${failure}`, () => {
       if (failure === 'missing executable') checkFfmpeg.returns({ error: new Error('ENOENT'), status: null })
       if (failure === 'nonzero status') checkFfmpeg.returns({ status: 1 })
       if (failure === 'startup throw') checkFfmpeg.throws(new Error('startup failed'))
+      if (failure === 'missing libvpx') checkFfmpeg.returns({ status: 0, stdout: 'Encoders:\n' })
+      if (failure === 'VP9 only') checkFfmpeg.returns({ status: 0, stdout: ' V....D libvpx-vp9 libvpx VP9\n' })
       assert.strictEqual(start(), undefined)
       sinon.assert.notCalled(browser.takeScreenshot)
       sinon.assert.notCalled(encode)
@@ -1001,8 +1003,8 @@ describe('WebdriverIO video recording', () => {
   it('checks FFmpeg only once per WDIO process with a bounded preflight', () => {
     start()
     start()
-    sinon.assert.calledOnceWithExactly(checkFfmpeg, 'ffmpeg', ['-version'], {
-      timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, stdio: 'ignore',
+    sinon.assert.calledOnceWithExactly(checkFfmpeg, 'ffmpeg', ['-hide_banner', '-encoders'], {
+      timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
     })
   })
 

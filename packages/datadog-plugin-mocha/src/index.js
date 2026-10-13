@@ -749,6 +749,9 @@ class MochaPlugin extends CiPlugin {
       const flush = () => {
         clearTimeout(this.#webdriverioVideoFlushTimer)
         this.#webdriverioVideoFlushTimer = undefined
+        if (isWebdriverioWorker && this.libraryConfig?.isTestFailureVideosEnabled) {
+          sendWebdriverioWorkerMessage({ name: VIDEO_UPLOAD_FLUSH, content: { complete: true } })
+        }
         this.tracer._exporter.flush(onDone)
       }
       if (this._pendingWebdriverioMediaUploads === 0) {

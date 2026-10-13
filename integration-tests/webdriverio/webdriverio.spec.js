@@ -519,6 +519,30 @@ for (const version of versions) {
       }
 
       const browserTest = process.env.WEBDRIVERIO_REAL_BROWSER === 'true' ? it : it.skip
+      for (const retry of [false, true]) {
+        browserTest(`waits for final Chrome captures without teardown hooks (retry=${retry})`, async () => {
+          await runScenario('videosBrowserNoHooks', 0, ({ media, tests }) => {
+            const failures = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+            assert.strictEqual(failures.length, retry ? 2 : 1)
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+            assert.strictEqual(media.length, failures.length)
+            for (const failure of failures) {
+              assert.match(failure.meta['error.message'], /failure without teardown hooks/)
+              assert.strictEqual(failure.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+              const video = media.find(({ media }) => media.traceId === failure.trace_id.toString()).media
+              const pixels = execFileSync('ffmpeg', [
+                '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
+                '-vf', 'crop=1:1:10:500:exact=1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1',
+              ], { input: video.content })
+              const [red, green, blue] = pixels.subarray(-3)
+              assert.ok(green > 200 && red < 40 && blue < 40, 'final frame must show the failed green page')
+            }
+          }, 1, {
+            env: { ...videoEnv, WEBDRIVERIO_CLASSIC: 'true', WEBDRIVERIO_VIDEO_RETRY: String(retry) },
+          })
+        })
+      }
+
       for (const multiremote of [false, true]) {
         browserTest(`disables real Chrome video after an unsafe reload (multiremote=${multiremote})`, async () => {
           await runScenario('videosBrowserReload', 0, ({ media, tests }) => {

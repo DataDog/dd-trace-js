@@ -1682,6 +1682,13 @@ function handleWorkerMessage (state, workerRecord, message) {
     return
   }
 
+  if (message.name === WORKER_READY || message.name === CONFIGURATION_REQUEST) {
+    // Watch mode reuses the worker. Keep old requests cancelled while the new run gets a fresh signal.
+    clearTimeout(workerRecord.videoFlushTimer)
+    workerRecord.videoFlushTimer = undefined
+    workerRecord.videoController?.abort(new Error('WebdriverIO video run completed'))
+    workerRecord.videoController = undefined
+  }
   if (message.name === WORKER_READY) {
     initializeCoordinator(state, configuration => {
       if (state.testFrameworkAdapter === JASMINE_FRAMEWORK_ADAPTER) {
@@ -1703,6 +1710,13 @@ function handleWorkerMessage (state, workerRecord, message) {
     return
   }
   if (message.name === VIDEO_UPLOAD_FLUSH) {
+    if (message.content?.complete) {
+      clearTimeout(workerRecord.videoFlushTimer)
+      workerRecord.videoFlushTimer = undefined
+      // The worker may have reached its own deadline before the coordinator's timer fires.
+      workerRecord.videoController?.abort(new Error('WebdriverIO video flush completed'))
+      return
+    }
     const controller = workerRecord.videoController ??= new AbortController()
     workerRecord.videoFlushTimer ??= setTimeout(() => {
       controller.abort(createFinalFlushTimeoutError())

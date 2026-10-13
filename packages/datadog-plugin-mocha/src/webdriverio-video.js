@@ -394,10 +394,10 @@ function isFfmpegAvailable () {
   if (ffmpegAvailable !== undefined) return ffmpegAvailable
   ffmpegAvailable = false
   try {
-    const result = spawnSync('ffmpeg', ['-version'], {
-      timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, stdio: 'ignore',
+    const result = spawnSync('ffmpeg', ['-hide_banner', '-encoders'], {
+      timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
     })
-    ffmpegAvailable = !result.error && result.status === 0
+    ffmpegAvailable = !result.error && result.status === 0 && /^[ \t]*V\S{5}[ \t]+libvpx[ \t]/m.test(result.stdout)
   } catch (error) {
     log.error('Error checking WebdriverIO video FFmpeg availability: %s', error.message)
   }

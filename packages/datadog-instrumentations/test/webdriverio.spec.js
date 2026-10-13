@@ -359,12 +359,15 @@ describe('webdriverio instrumentation', () => {
   }
 
   for (const canUpload of [undefined, false, true]) {
-    for (const hasFfmpeg of [false, true]) {
+    for (const hasFfmpeg of [false, true, 'without libvpx']) {
       it(`gates video prompt handling on upload=${canUpload} and FFmpeg=${hasFfmpeg}`, async () => {
         require('../src/webdriverio')
         const previous = process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
         process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
-        const probe = sinon.stub().returns({ status: hasFfmpeg ? 0 : 1 })
+        const probe = sinon.stub().returns({
+          status: hasFfmpeg ? 0 : 1,
+          stdout: hasFfmpeg === true ? ' V....D libvpx libvpx VP8\n' : ' V....D libvpx-vp9 libvpx VP9\n',
+        })
         const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
           'node:child_process': { spawnSync: probe },
         })
@@ -386,7 +389,7 @@ describe('webdriverio instrumentation', () => {
         try {
           const { Runner } = await import(pathToFileURL(outputPath))
           const runner = new Runner()
-          const expected = canUpload && hasFfmpeg ? 'ignore' : undefined
+          const expected = canUpload && hasFfmpeg === true ? 'ignore' : undefined
           const caps = await runner._startSession({ framework: 'mocha' }, {})
           assert.strictEqual(caps.unhandledPromptBehavior, expected)
           runner._isMultiremote = true
@@ -3049,7 +3052,7 @@ describe('webdriverio instrumentation', () => {
       return encoder
     })
     const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
-      'node:child_process': { spawn, spawnSync: () => ({ status: 0 }) },
+      'node:child_process': { spawn, spawnSync: () => ({ status: 0, stdout: ' V....D libvpx libvpx VP8\n' }) },
       'node:fs': {
         mkdtempSync: prefix => {
           const directory = fs.mkdtempSync(prefix)
@@ -3123,6 +3126,47 @@ describe('webdriverio instrumentation', () => {
       fakeTimeout.restore()
       clock.restore()
       for (const directory of directories) fs.rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('reports completed video flushes to the coordinator before releasing a reused worker', () => {
+    const recorder = { capture: sinon.spy(), finish: sinon.spy(), waitForCapture: callback => callback() }
+    const send = sinon.spy()
+    const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+      './webdriverio-video': () => recorder,
+      '../../datadog-instrumentations/src/mocha/webdriverio-protocol': { sendWebdriverioWorkerMessage: send },
+      '../../dd-trace/src/config/helper': {
+        getValueFromEnvSources: () => true,
+        getEnvironmentVariable: name => name === WEBDRIVERIO_WORKER_ENV ? 'true' : undefined,
+      },
+    })
+    const { plugin } = createJasminePlugin({ isTestFailureVideosEnabled: true }, {
+      Plugin,
+      exporter: { canUploadTestVideos: () => true, flush: callback => callback() },
+      testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'video-flush.spec.js')
+    const result = {
+      ...createJasmineResult('failure', file, 'failed'),
+      failedExpectations: [{ message: 'failed' }],
+    }
+    const onDone = sinon.spy()
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result], self: { _specs: [file] },
+      })
+      channel('ci:mocha:worker:finish').publish({ onDone })
+      sinon.assert.calledOnceWithExactly(send, { name: VIDEO_UPLOAD_FLUSH })
+      sinon.assert.notCalled(onDone)
+      recorder.finish.firstCall.args[2]('uploaded')
+      sinon.assert.calledTwice(send)
+      assert.deepStrictEqual(send.secondCall.args, [{ name: VIDEO_UPLOAD_FLUSH, content: { complete: true } }])
+      sinon.assert.calledOnce(onDone)
+      sinon.assert.callOrder(send, onDone)
+    } finally {
+      // @ts-expect-error CiPlugin's type omits the base plugin's supported boolean configuration.
+      plugin.configure(false)
     }
   })
 
@@ -3210,6 +3254,56 @@ describe('webdriverio instrumentation', () => {
   it('allows the WebdriverIO screenshot IPC response to outlive the exporter upload deadline', () => {
     assert.strictEqual(SCREENSHOT_UPLOAD_TIMEOUT_MS, FINAL_FLUSH_TIMEOUT + 5000)
   })
+
+  for (const boundary of [WORKER_READY, CONFIGURATION_REQUEST]) {
+    for (const expires of [false, true]) {
+      it(`resets video flush state across ${boundary} after expiry=${expires}`, () => {
+        const clock = sinon.useFakeTimers()
+        const finishCh = channel('ci:mocha:test:finish')
+        const uploadCh = channel('ci:webdriverio:video:upload')
+        const uploads = []
+        const onFinish = () => {}
+        const onUpload = request => uploads.push(request)
+        finishCh.subscribe(onFinish)
+        uploadCh.subscribe(onUpload)
+        try {
+          require('../src/webdriverio')
+          const runner = { config: { framework: 'mocha', rootDir: process.cwd() } }
+          const worker = createWorker()
+          registerWorker(runner, worker, 'watch.spec.js')
+          worker.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'first' } })
+          worker.emit('message', { name: VIDEO_UPLOAD_FLUSH })
+          if (expires) clock.tick(FINAL_FLUSH_TIMEOUT)
+          else uploads[0].onDone()
+          worker.emit('message', { name: VIDEO_UPLOAD_FLUSH, content: { complete: true } })
+          assert.strictEqual(clock.countTimers(), 0)
+          clock.tick(FINAL_FLUSH_TIMEOUT)
+          assert.strictEqual(uploads[0].signal.aborted, true)
+          worker.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'late-first' } })
+          assert.strictEqual(uploads.at(-1).signal.aborted, true)
+          worker.emit('message', { name: boundary, content: { requestId: 'next-run' } })
+          assert.strictEqual(uploads[0].signal.aborted, true)
+          worker.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'second' } })
+          const second = uploads.at(-1)
+          assert.notStrictEqual(second.signal, uploads[0].signal)
+          assert.strictEqual(second.signal.aborted, false)
+          worker.emit('message', { name: VIDEO_UPLOAD_FLUSH })
+          // Finishing an old request must not cancel or clear the new run's deadline.
+          if (expires) uploads[0].onDone()
+          clock.tick(FINAL_FLUSH_TIMEOUT - 1)
+          assert.strictEqual(second.signal.aborted, false)
+          clock.tick(1)
+          assert.strictEqual(second.signal.aborted, true)
+          assert.strictEqual(second.signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+          worker.emit('exit', { exitCode: 1 })
+        } finally {
+          finishCh.unsubscribe(onFinish)
+          uploadCh.unsubscribe(onUpload)
+          clock.restore()
+        }
+      })
+    }
+  }
 
   it('shares one response dispatcher across concurrent screenshot upload requests', () => {
     const originalConnected = process.connected
@@ -3928,7 +4022,7 @@ describe('webdriverio instrumentation', () => {
         const recorders = []
         const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
           'node:child_process': {
-            spawnSync: () => ({ status: 0 }),
+            spawnSync: () => ({ status: 0, stdout: ' V....D libvpx libvpx VP8\n' }),
             spawn: () => {
               const encoder = new EventEmitter()
               queueMicrotask(() => encoder.emit('close', 0))
