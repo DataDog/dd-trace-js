@@ -25,6 +25,7 @@ const pureIntegrations = {
 
 const subscriberOnlyIntegrations = {
   'claude-agent-sdk': ['@anthropic-ai/claude-agent-sdk'],
+  'aws-durable-execution-sdk-js': ['@aws/durable-execution-sdk-js'],
 }
 
 describe('plugin fixture discovery', () => {
