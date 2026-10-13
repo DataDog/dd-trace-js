@@ -1504,9 +1504,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * Jest fails the run on unmatched or obsolete snapshots even when no test failed.
      *
      * @param {object} test
-     * @param {string} status
      */
-    ignoreQuarantinedSnapshotResults (test, status) {
+    ignoreQuarantinedSnapshotResults (test) {
       const ctx = testContexts.get(test)
       const unmatchedBeforeTest = ctx?.unmatchedSnapshotsBeforeTest
       const unmatchedSnapshots = ctx?.unmatchedSnapshots
@@ -1522,10 +1521,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       } else if (snapshotState.unmatched > unmatchedBeforeTest) {
         snapshotState.unmatched = unmatchedBeforeTest
       }
-      // Jest only marks the snapshots of failed tests as checked, and it no longer sees this test as failed.
-      if (status === 'fail') {
-        snapshotState.markSnapshotsAsCheckedForTest?.(getRawJestTestName(test))
-      }
+      // Unused snapshots can fail the run even when the quarantined test passed.
+      snapshotState.markSnapshotsAsCheckedForTest?.(getRawJestTestName(test))
     }
 
     // This function returns an array if the known tests are valid and null otherwise.
@@ -2374,7 +2371,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             event.test.errors = []
           }
         }
-        this.ignoreQuarantinedSnapshotResults(event.test, status)
+        this.ignoreQuarantinedSnapshotResults(event.test)
 
         // Quarantine must consume terminal failures before we save errors for Jest's final result.
         if (dynamicAtrCount !== undefined && failedAllTests && event.test.errors?.length) {

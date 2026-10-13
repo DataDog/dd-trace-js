@@ -13,7 +13,12 @@ describe('mixed snapshots', () => {
     expect('received').toMatchSnapshot()
   })
 
+  it('quarantined unused snapshot', () => {
+    expect(true).toBe(true)
+  })
+
   it('ordinary snapshot', () => {
+    if (process.env.SKIP_ORDINARY_SNAPSHOT) return
     expect(process.env.FAIL_ORDINARY_SNAPSHOT ? 'received' : 'stored').toMatchSnapshot()
   })
 

@@ -2,4 +2,6 @@
 
 exports[`mixed snapshots quarantined snapshot 1`] = `"stored"`;
 
+exports[`mixed snapshots quarantined unused snapshot 1`] = `"stored"`;
+
 exports[`mixed snapshots ordinary snapshot 1`] = `"stored"`;

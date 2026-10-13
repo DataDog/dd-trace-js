@@ -29,4 +29,8 @@ describe('quarantine snapshot', () => {
   it('can pass normally', () => {
     expect('stored').toMatchSnapshot()
   })
+
+  it('passes with an unused snapshot', () => {
+    expect('stored').toMatchSnapshot()
+  })
 })

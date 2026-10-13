@@ -7,3 +7,7 @@ exports[`quarantine snapshot fails a snapshot 1`] = `"stored"`;
 exports[`quarantine snapshot fails a snapshot before passing 1`] = `"stored"`;
 
 exports[`quarantine snapshot fails before a snapshot 1`] = `"stored"`;
+
+exports[`quarantine snapshot passes with an unused snapshot 1`] = `"stored"`;
+
+exports[`quarantine snapshot passes with an unused snapshot 2`] = `"stored"`;
