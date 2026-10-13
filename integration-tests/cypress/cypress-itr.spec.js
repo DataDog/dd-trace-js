@@ -18,6 +18,7 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
+  TEST_SUITE,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED,
@@ -138,6 +139,52 @@ moduleTypes.forEach(({
     })
 
     context('intelligent test runner', () => {
+      for (const isItrEnabled of [true, false]) {
+        it(`reports suite TIA test skip counts (TIA ${isItrEnabled ? 'enabled' : 'disabled'})`, async () => {
+          const expectedCount = isItrEnabled ? 2 : 0
+          const suite = 'cypress/e2e/tia-skip-count.js'
+          receiver.setSettings({ itr_enabled: isItrEnabled, code_coverage: false, tests_skipping: isItrEnabled })
+          receiver.setSuitesToSkip(['TIA skip one', 'TIA skip two'].map(name => ({
+            type: 'test', attributes: { suite, name: `suite ${name}` },
+          })))
+          const command = version === '6.7.0'
+            ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${suite}"`
+            : testCommand
+          childProcess = exec(command, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              SPEC_PATTERN: suite,
+            },
+          })
+          let output = ''
+          childProcess.stdout.on('data', chunk => { output += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { output += chunk.toString() })
+          await gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const suites = events.filter(event => event.type === 'test_suite_end')
+            assert.strictEqual(suites.length, 1, output)
+            const suite = suites[0].content
+            if (isItrEnabled) {
+              assert.strictEqual(suite.metrics[TEST_ITR_SKIPPING_COUNT], expectedCount)
+              assert.strictEqual(suite.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+            } else {
+              assert.strictEqual(Object.hasOwn(suite.metrics, TEST_ITR_SKIPPING_COUNT), false)
+              assert.strictEqual(Object.hasOwn(suite.meta, TEST_ITR_TESTS_SKIPPED), false)
+            }
+            const tests = events.filter(event => event.type === 'test')
+            assert.strictEqual(tests.length, 4)
+            const skippedTests = tests.filter(event => event.content.meta[TEST_SKIPPED_BY_ITR] === 'true')
+            assert.strictEqual(skippedTests.length, expectedCount)
+            const session = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(session.metrics[TEST_ITR_SKIPPING_COUNT], expectedCount)
+            assert.strictEqual(session.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+          })
+          assert.strictEqual(childProcess.exitCode, isItrEnabled ? 0 : 2, output)
+        })
+      }
+
       it('can report git metadata', async () => {
         const searchCommitsRequestPromise = receiver.payloadReceived(
           ({ url }) => url.endsWith('/api/v2/git/repository/search_commits'),
@@ -322,6 +369,13 @@ moduleTypes.forEach(({
           assert.strictEqual(skippedTestInOtherSpec.meta[TEST_STATUS], 'skip')
           assert.strictEqual(skippedTestInOtherSpec.meta[TEST_SKIPPED_BY_ITR], 'true')
 
+          const suites = events.filter(event => event.type === 'test_suite_end')
+          assert.strictEqual(suites.length, 2)
+          for (const { content } of suites) {
+            assert.strictEqual(content.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+            assert.strictEqual(content.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          }
+
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 2)
 
@@ -342,6 +396,7 @@ moduleTypes.forEach(({
       it('does not skip tests if test skipping is disabled by the API', async () => {
         let hasRequestedSkippable = false
         receiver.setSettings({
+          itr_enabled: true,
           code_coverage: true,
           tests_skipping: false,
         })
@@ -379,6 +434,9 @@ moduleTypes.forEach(({
           )
           assert.ok(notSkippedTest)
           assert.strictEqual(notSkippedTest.content.meta[TEST_STATUS], 'pass')
+          const suite = events.find(event => event.type === 'test_suite_end').content
+          assert.strictEqual(suite.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+          assert.strictEqual(suite.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         })
 
         await receiverPromise
@@ -387,6 +445,7 @@ moduleTypes.forEach(({
 
       it('does not skip tests if suite is marked as unskippable', async () => {
         receiver.setSettings({
+          itr_enabled: true,
           code_coverage: true,
           tests_skipping: true,
         })
@@ -423,6 +482,14 @@ moduleTypes.forEach(({
 
         const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const suites = events.filter(event => event.type === 'test_suite_end')
+          assert.strictEqual(suites.length, 2)
+          for (const { content } of suites) {
+            const count = content.meta[TEST_SUITE] === 'cypress/e2e/other.cy.js' ? 1 : 0
+            assert.strictEqual(content.metrics[TEST_ITR_SKIPPING_COUNT], count)
+            assert.strictEqual(content.meta[TEST_ITR_TESTS_SKIPPED], count > 0 ? 'true' : 'false')
+          }
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           const testModule = events.find(event => event.type === 'test_module_end').content

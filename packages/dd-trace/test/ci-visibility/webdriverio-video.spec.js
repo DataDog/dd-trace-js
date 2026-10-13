@@ -143,21 +143,23 @@ describe('WebdriverIO video recording', () => {
   })
 
   for (const unsafeSession of ['first', 'second']) {
-    it(`disables multiremote video when ${unsafeSession} could handle prompts`, () => {
-      const sessions = Object.fromEntries(['first', 'second'].map(name => [name, {
-        capabilities: { unhandledPromptBehavior: name === unsafeSession ? 'dismiss and notify' : 'ignore' },
-        takeScreenshot: sinon.stub().resolves(PNG),
-      }]))
-      Object.assign(browser, {
-        isMultiremote: true,
-        instances: ['first', 'second'],
-        getInstance: name => sessions[name],
+    for (const flag of ['isMultiremote', 'isMultiRemote']) {
+      it(`disables multiremote video when ${unsafeSession} could handle prompts (${flag})`, () => {
+        const sessions = Object.fromEntries(['first', 'second'].map(name => [name, {
+          capabilities: { unhandledPromptBehavior: name === unsafeSession ? 'dismiss and notify' : 'ignore' },
+          takeScreenshot: sinon.stub().resolves(PNG),
+        }]))
+        Object.assign(browser, {
+          [flag]: true,
+          instances: ['first', 'second'],
+          getInstance: name => sessions[name],
+        })
+        assert.strictEqual(start(), undefined)
+        sinon.assert.notCalled(sessions.first.takeScreenshot)
+        sinon.assert.notCalled(sessions.second.takeScreenshot)
+        sinon.assert.calledOnce(log.warn)
       })
-      assert.strictEqual(start(), undefined)
-      sinon.assert.notCalled(sessions.first.takeScreenshot)
-      sinon.assert.notCalled(sessions.second.takeScreenshot)
-      sinon.assert.calledOnce(log.warn)
-    })
+    }
   }
 
   it('keeps attempt files isolated while an earlier upload is pending', async () => {
@@ -766,33 +768,35 @@ describe('WebdriverIO video recording', () => {
     assert.ok(directories.every(directory => !fs.existsSync(directory)))
   })
 
-  it('uses the standard screenshot command for mixed Classic and BiDi multiremote sessions', async () => {
-    const classic = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }
-    const bidi = {
-      capabilities: browser.capabilities,
-      isBidi: true,
-      browsingContextCaptureScreenshot: sinon.stub().throws(new Error('capture lost its context during navigation')),
-      takeScreenshot: sinon.stub().resolves(PNG),
-    }
-    Object.assign(browser, {
-      isMultiremote: true,
-      // Multiremote properties can be command wrappers, not the single-session boolean.
-      isBidi: () => [false, true],
-      instances: ['classic', 'bidi'],
-      getInstance: name => name === 'classic' ? classic : bidi,
+  for (const flag of ['isMultiremote', 'isMultiRemote']) {
+    it(`uses the standard screenshot command for mixed Classic and BiDi multiremote sessions (${flag})`, async () => {
+      const classic = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }
+      const bidi = {
+        capabilities: browser.capabilities,
+        isBidi: true,
+        browsingContextCaptureScreenshot: sinon.stub().throws(new Error('capture lost its context during navigation')),
+        takeScreenshot: sinon.stub().resolves(PNG),
+      }
+      Object.assign(browser, {
+        [flag]: true,
+        // Multiremote properties can be command wrappers, not the single-session boolean.
+        isBidi: () => [false, true],
+        instances: ['classic', 'bidi'],
+        getInstance: name => name === 'classic' ? classic : bidi,
+      })
+      const recorder = start()
+      const complete = sinon.spy()
+      const upload = sinon.spy((filePath, index, callback) => callback())
+      recorder.finish(true, upload, complete)
+      await clock.tickAsync(0)
+      sinon.assert.calledTwice(classic.takeScreenshot)
+      sinon.assert.calledTwice(bidi.takeScreenshot)
+      sinon.assert.notCalled(browser.takeScreenshot)
+      sinon.assert.notCalled(bidi.browsingContextCaptureScreenshot)
+      sinon.assert.calledTwice(upload)
+      sinon.assert.calledOnceWithExactly(complete, 'uploaded')
     })
-    const recorder = start()
-    const complete = sinon.spy()
-    const upload = sinon.spy((filePath, index, callback) => callback())
-    recorder.finish(true, upload, complete)
-    await clock.tickAsync(0)
-    sinon.assert.calledTwice(classic.takeScreenshot)
-    sinon.assert.calledTwice(bidi.takeScreenshot)
-    sinon.assert.notCalled(browser.takeScreenshot)
-    sinon.assert.notCalled(bidi.browsingContextCaptureScreenshot)
-    sinon.assert.calledTwice(upload)
-    sinon.assert.calledOnceWithExactly(complete, 'uploaded')
-  })
+  }
 
   for (const capture of ['single', 'consecutive', 'multiremote']) {
     for (const bytes of [200 * 1024 * 1024, 200 * 1024 * 1024 + 1]) {

@@ -185,7 +185,7 @@ class WebdriverioVideo {
         this.#browser.removeListener?.('result', this.#onResult)
         return complete()
       }
-      if (this.#browser.isMultiremote) {
+      if (this.#browser.isMultiremote || this.#browser.isMultiRemote) {
         const names = this.#browser.instances
         if (!names.length) return complete(new Error('WebdriverIO returned no browser sessions'))
         const browsers = names.map(name => this.#browser.getInstance(name))
@@ -374,7 +374,9 @@ class WebdriverioVideo {
 
 /** @param {object} browser - Current WebdriverIO browser or multiremote browser */
 function hasSafePromptPolicy (browser) {
-  const sessions = browser.isMultiremote ? browser.instances.map(name => browser.getInstance(name)) : [browser]
+  const sessions = (browser.isMultiremote || browser.isMultiRemote)
+    ? browser.instances.map(name => browser.getInstance(name))
+    : [browser]
   for (const session of sessions) {
     const behavior = session.capabilities?.unhandledPromptBehavior
     if (behavior === 'ignore' || (behavior?.default === 'ignore' &&

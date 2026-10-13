@@ -25,9 +25,14 @@ const { detectRum, stopRumSession, stopRumSessionAndReportActivity } = require('
 const {
   adjustRunnerFailuresForTestOptimization,
   efdTests,
+  getOnFailHandler,
   getOnTestHandler,
+  getOnTestEndHandler,
   getOnTestRetryHandler,
   patchFailedTestReplayHookUp,
+  resetRunState,
+  runnableWrapper,
+  wrapFailedTestReplayHookUpCallback,
 } = require('../src/mocha/utils')
 const {
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
@@ -184,6 +189,173 @@ async function cleanupPendingRumTest () {
 }
 
 describe('webdriverio instrumentation', () => {
+  it('suppresses tests only below the suite with a failing suite hook', () => {
+    const testStartCh = channel('ci:mocha:test:start')
+    const starts = []
+    const onTestStart = ctx => starts.push(ctx)
+    const failedSuite = { parent: null }
+    const childSuite = { parent: failedSuite }
+    const siblingSuite = { parent: null }
+    const failingHook = {
+      file: path.join(process.cwd(), 'suite-hook.spec.js'),
+      parent: failedSuite,
+      type: 'hook',
+    }
+    const skippedTest = {
+      file: failingHook.file,
+      parent: childSuite,
+    }
+    const siblingTest = {
+      file: failingHook.file,
+      fn () {},
+      fullTitle: () => 'sibling test',
+      parent: siblingSuite,
+      title: 'sibling test',
+    }
+
+    testStartCh.subscribe(onTestStart)
+    try {
+      resetRunState({ tests: [], suites: [] })
+      const onFail = getOnFailHandler(false, {})
+      const onTest = getOnTestHandler(false)
+      onFail(failingHook, new Error('suite hook failed'))
+      onTest(skippedTest)
+      onTest(siblingTest)
+
+      assert.strictEqual(skippedTest._ddTestFinishPublished, true)
+      assert.strictEqual(siblingTest._ddTestFinishPublished, undefined)
+      assert.strictEqual(starts.length, 1)
+      assert.strictEqual(starts[0].testName, 'sibling test')
+    } finally {
+      testStartCh.unsubscribe(onTestStart)
+      resetRunState({ tests: [], suites: [] })
+    }
+  })
+
+  it('waits for failed test replay setup before running a retried Mocha runnable', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const onTestFinish = () => {}
+    const runOrder = []
+    let resolveReplay
+    class Runnable {
+      run () {
+        runOrder.push('run')
+        return 'done'
+      }
+    }
+    const replayPromise = new Promise(resolve => {
+      resolveReplay = resolve
+    })
+    const retriedTest = { _ddFailedTestReplayPromise: replayPromise }
+    const runnable = new Runnable()
+    runnable.type = 'test'
+    runnable.parent = { _beforeEach: [], _afterEach: [] }
+    runnable.fn = () => {}
+    runnable._retriedTest = retriedTest
+
+    testFinishCh.subscribe(onTestFinish)
+    try {
+      runnableWrapper(Runnable, {})
+      const resultPromise = runnable.run()
+
+      assert.deepStrictEqual(runOrder, [])
+      assert.strictEqual(retriedTest._ddFailedTestReplayPromise, undefined)
+
+      resolveReplay()
+      assert.strictEqual(await resultPromise, 'done')
+      assert.deepStrictEqual(runOrder, ['run'])
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+    }
+  })
+
+  for (const videos of [false, true]) {
+    it(`suppresses Mocha hook-affected test lifecycles with videos=${videos}`, async () => {
+      const testStartCh = channel('ci:mocha:test:start')
+      const testFinishCh = channel('ci:mocha:test:finish')
+      const errorCh = channel('ci:mocha:test:error')
+      const starts = []
+      const finishes = []
+      const errors = []
+      const onTestStart = ctx => starts.push(ctx)
+      const onTestFinish = ctx => finishes.push(ctx)
+      const onTestError = ctx => errors.push(ctx)
+      const suite = {
+        parent: null,
+        _beforeEach: [],
+        _afterEach: [],
+      }
+      const testFn = () => {}
+      const createTest = () => ({
+        file: path.join(process.cwd(), 'hook-affected.spec.js'),
+        fn: testFn,
+        fullTitle: () => 'hook affected test',
+        isFailed () {
+          return this.state === 'failed'
+        },
+        isPending: () => false,
+        parent: suite,
+        retries: () => 0,
+        title: 'hook affected test',
+        _currentRetry: 0,
+        _ddIsNew: true,
+        _retries: 0,
+      })
+      const test = createTest()
+      const hookAffectedTest = createTest()
+      const beforeEachHook = {
+        ctx: { currentTest: test },
+        file: test.file,
+        fullTitle: () => '"before each" hook for "hook affected test"',
+        parent: suite,
+        type: 'hook',
+      }
+      suite._beforeEach.push(beforeEachHook)
+
+      testStartCh.subscribe(onTestStart)
+      testFinishCh.subscribe(onTestFinish)
+      errorCh.subscribe(onTestError)
+      try {
+        resetRunState({ tests: [], suites: [] })
+        const config = {
+          isTestFailureVideosEnabled: videos,
+          earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy(),
+        }
+        const onTest = getOnTestHandler(false)
+        const onFail = getOnFailHandler(false, config)
+        const onTestEnd = getOnTestEndHandler(config)
+
+        onTest(test)
+        onFail(beforeEachHook, new Error('beforeEach failed'))
+
+        test.state = 'failed'
+        onTest(test)
+        onFail(test, new Error('synthetic hook affected failure'))
+        await onTestEnd(test)
+
+        hookAffectedTest.state = 'failed'
+        onTest(hookAffectedTest)
+        onFail(hookAffectedTest, new Error('synthetic remaining hook affected failure'))
+        await onTestEnd(hookAffectedTest)
+
+        assert.strictEqual(finishes.length, videos ? 0 : 1)
+        const finishTeardown = wrapFailedTestReplayHookUpCallback(() => {}, test, undefined)
+        finishTeardown()
+
+        assert.strictEqual(starts.length, 1)
+        assert.strictEqual(errors.length, 1)
+        assert.strictEqual(finishes.length, 1)
+        assert.strictEqual(finishes[0].status, 'fail')
+        assert.strictEqual(Object.values(efdTests)[0].length, 2)
+      } finally {
+        testStartCh.unsubscribe(onTestStart)
+        testFinishCh.unsubscribe(onTestFinish)
+        errorCh.unsubscribe(onTestError)
+        resetRunState({ tests: [], suites: [] })
+      }
+    })
+  }
+
   it('detects RUM before its initialization configuration is available', () => {
     const previousWindow = global.window
     global.window = {
@@ -343,13 +515,16 @@ describe('webdriverio instrumentation', () => {
           const frozenResult = await runner._startSession(config, frozen)
           assert.strictEqual(frozenResult.unhandledPromptBehavior, expected)
           assert.deepStrictEqual(frozen, {})
-          runner._isMultiremote = true
-          const multi = await runner._startSession(config, {
-            first: { capabilities: { browserName: 'chrome' } },
-            second: { capabilities: { browserName: 'firefox', unhandledPromptBehavior: 'dismiss' } },
-          })
-          assert.strictEqual(multi.first.capabilities.unhandledPromptBehavior, expected)
-          assert.strictEqual(multi.second.capabilities.unhandledPromptBehavior, 'dismiss')
+          for (const flag of ['_isMultiremote', '_isMultiRemote']) {
+            runner[flag] = true
+            const multi = await runner._startSession(config, {
+              first: { capabilities: { browserName: 'chrome' } },
+              second: { capabilities: { browserName: 'firefox', unhandledPromptBehavior: 'dismiss' } },
+            })
+            assert.strictEqual(multi.first.capabilities.unhandledPromptBehavior, expected)
+            assert.strictEqual(multi.second.capabilities.unhandledPromptBehavior, 'dismiss')
+            delete runner[flag]
+          }
         } finally {
           if (previous === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
           else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = previous
@@ -4600,6 +4775,93 @@ describe('webdriverio instrumentation', () => {
 
       assert.strictEqual(spec.pend.callCount, 1)
       assert.strictEqual(spec.pend.firstCall.args[0], 'Skipped by Datadog Test Management')
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('starts disabled modern Jasmine specs from startedEvent results', () => {
+    const file = path.join(process.cwd(), 'modern-started-event.spec.js')
+    const testName = 'modern started event'
+    const { plugin } = createJasminePlugin({
+      isTestManagementTestsEnabled: true,
+      testManagementTests: {
+        mocha: {
+          suites: {
+            'modern-started-event.spec.js': {
+              tests: {
+                [testName]: { properties: { disabled: true } },
+              },
+            },
+          },
+        },
+      },
+    })
+    const spec = {
+      id: testName,
+      pend: sinon.spy(),
+      queueableFn: { fn () {} },
+      startedEvent: () => ({
+        description: testName,
+        filename: pathToFileURL(file).href,
+        fullName: testName,
+        id: testName,
+      }),
+    }
+    const executeContext = {
+      arguments: [spec, () => {}],
+      self: {},
+    }
+
+    try {
+      channel('tracing:orchestrion:jasmine-core:Spec_execute:start').runStores(executeContext, () => {})
+
+      assert.strictEqual(spec.pend.callCount, 1)
+      assert.strictEqual(spec.pend.firstCall.args[0], 'Skipped by Datadog Test Management')
+      assert.strictEqual(plugin._webdriverioJasmineState.tests.get(testName).testSuiteAbsolutePath, file)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('starts disabled modern Jasmine specs from spec metadata without a result', () => {
+    const file = path.join(process.cwd(), 'modern-metadata.spec.js')
+    const testName = 'modern metadata'
+    const { plugin } = createJasminePlugin({
+      isTestManagementTestsEnabled: true,
+      testManagementTests: {
+        mocha: {
+          suites: {
+            'modern-metadata.spec.js': {
+              tests: {
+                [testName]: { properties: { disabled: true } },
+              },
+            },
+          },
+        },
+      },
+    })
+    const spec = {
+      description: 'unused description',
+      filename: pathToFileURL(file).href,
+      getFullName: () => testName,
+      id: testName,
+      parentSuiteId: 'suite-1',
+      pend: sinon.spy(),
+      queueableFn: { fn () {} },
+    }
+    const executeContext = {
+      arguments: [spec, () => {}],
+      self: {},
+    }
+
+    try {
+      channel('tracing:orchestrion:jasmine-core:Spec_execute:start').runStores(executeContext, () => {})
+
+      assert.strictEqual(spec.pend.callCount, 1)
+      assert.strictEqual(spec.pend.firstCall.args[0], 'Skipped by Datadog Test Management')
+      assert.strictEqual(plugin._webdriverioJasmineState.tests.get(testName).testName, testName)
+      assert.strictEqual(plugin._webdriverioJasmineState.tests.get(testName).testSuiteAbsolutePath, file)
     } finally {
       plugin.configure(false)
     }

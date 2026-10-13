@@ -204,6 +204,11 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
+    app.post('/dogstatsd/v2/proxy', express.text({ type: () => true }), (req, res) => {
+      res.status(200).send('OK')
+      this.emit('message', { headers: req.headers, payload: req.body, url: req.url })
+    })
+
     // It can be slowed down with setWaitingTime
     app.post(['/api/v2/citestcycle', '/evp_proxy/:version/api/v2/citestcycle'], (req, res) => {
       this.waitingTimeoutId = setTimeout(() => {

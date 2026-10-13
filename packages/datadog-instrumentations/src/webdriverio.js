@@ -1974,7 +1974,7 @@ function waitForRumCleanupBeforeSessionEnd (context) {
  *
  * @param {{
  *   arguments: [{framework?: string, sessionId?: string, automationProtocol?: string}, object],
- *   self: {_isMultiremote?: boolean}
+ *   self: {_isMultiremote?: boolean, _isMultiRemote?: boolean}
  * }} context
  */
 function configureVideoPromptBehavior (context) {
@@ -1991,7 +1991,7 @@ function configureVideoPromptBehavior (context) {
       ? { ...caps, unhandledPromptBehavior: 'ignore' }
       : caps
     // Prepare every session before replacing the argument, so a read failure cannot leave partial defaults.
-    context.arguments[1] = context.self._isMultiremote
+    context.arguments[1] = (context.self._isMultiremote || context.self._isMultiRemote)
       ? Object.fromEntries(Object.entries(capabilities).map(([name, options]) => {
         const session = { ...options }
         session.capabilities = withDefault(session.capabilities)

@@ -6,7 +6,9 @@ const { browser } = require('@wdio/globals')
 
 describe('WebdriverIO browser videos', () => {
   beforeEach(() => {
-    const sessions = browser.isMultiremote ? browser.instances.map(name => browser.getInstance(name)) : [browser]
+    const sessions = (browser.isMultiremote || browser.isMultiRemote)
+      ? browser.instances.map(name => browser.getInstance(name))
+      : [browser]
     for (const session of sessions) {
       assert.strictEqual(session.isBidi, process.env.WEBDRIVERIO_CLASSIC !== 'true')
       assert.strictEqual(session.capabilities.unhandledPromptBehavior, 'ignore')
@@ -18,7 +20,9 @@ describe('WebdriverIO browser videos', () => {
   })
 
   it('preserves dialogs during command-triggered and periodic captures', async () => {
-    const sessions = browser.isMultiremote ? browser.instances.map(name => browser.getInstance(name)) : [browser]
+    const sessions = (browser.isMultiremote || browser.isMultiRemote)
+      ? browser.instances.map(name => browser.getInstance(name))
+      : [browser]
     for (const session of sessions) {
       // WDIO's BiDi dialog manager otherwise dismisses dialogs itself when no listener is registered.
       const onDialog = () => {}
