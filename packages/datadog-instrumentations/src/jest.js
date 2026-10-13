@@ -1523,16 +1523,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       } else if (snapshotState.unmatched > unmatchedBeforeTest) {
         snapshotState.unmatched = unmatchedBeforeTest
       }
-      // Unused snapshots can fail the run even when the quarantined test passed.
-      const testName = getRawJestTestName(test)
-      snapshotState.markSnapshotsAsCheckedForTest?.(testName)
-      const keys = snapshotState.getUncheckedKeys?.()
+      // Jest's name-based marker can consume other tests' keys, so delete only keys owned by this test.
+      const keys = snapshotState._uncheckedKeys
       const testNames = this.#snapshotTestNames
-      if (!keys || !testNames) return
+      if (!keys?.delete || !testNames) return
+      const testName = getRawJestTestName(test)
       const hintPrefix = `${testName}: `
       for (const key of keys) {
-        if (!key.startsWith(hintPrefix)) continue
         const snapshotName = key.slice(0, key.lastIndexOf(' '))
+        if (snapshotName !== testName && !snapshotName.startsWith(hintPrefix)) continue
         let belongsToAnotherTest = false
         // A hinted snapshot key can also name another test; prefer the longer registered test name.
         for (const name of testNames) {
@@ -1542,7 +1541,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             break
           }
         }
-        if (!belongsToAnotherTest) snapshotState.markSnapshotsAsCheckedForTest?.(snapshotName)
+        if (!belongsToAnotherTest) keys.delete(key)
       }
     }
 

@@ -65,6 +65,7 @@ const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
 const supportsImportedGlobals = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=26.0.0')
+const supportsConcurrentSnapshots = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=28.0.0')
 // Jest resets the snapshot state of retried tests since 24.9.0
 const itIfRetriesResetSnapshots = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=24.9.0') ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
@@ -2506,7 +2507,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           { ...mode, mixed: false },
           { ...mode, mixed: true },
         ])) {
-          const modeIt = injectGlobals || supportsImportedGlobals ? it : it.skip
+          const modeIt = (injectGlobals || supportsImportedGlobals) && (!mixed || supportsConcurrentSnapshots)
+            ? it
+            : it.skip
           const mode = `parallel=${parallel}, injectGlobals=${injectGlobals}, mixed=${mixed}`
           modeIt(`ignores quarantined snapshots (${mode})`, async () => {
             receiver.setSettings({ test_management: { enabled: true } })
@@ -2545,17 +2548,19 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }
 
         for (const { parallel, injectGlobals } of snapshotModes) {
-          const modeIt = injectGlobals || supportsImportedGlobals ? it : it.skip
-          for (const ordinaryFailure of ['none', 'serial', 'concurrent', 'obsolete']) {
+          const modeIt = supportsConcurrentSnapshots && (injectGlobals || supportsImportedGlobals) ? it : it.skip
+          for (const ordinaryFailure of ['none', 'serial', 'concurrent', 'obsolete', 'prefixed-obsolete']) {
             const mode = `parallel=${parallel}, injectGlobals=${injectGlobals}, ordinaryFailure=${ordinaryFailure}`
             modeIt(`reports serial snapshot quarantine in mixed files (${mode})`, async () => {
               receiver.setSettings({ test_management: { enabled: true } })
               const { exitCode, stdout } = await runSnapshotTests({
                 TESTS_TO_RUN: 'test-management/test-mixed-snapshot-quarantine',
+                MIXED_SNAPSHOT_SUITE: 'true',
                 DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
                 FAIL_ORDINARY_SNAPSHOT: ordinaryFailure === 'serial' ? 'true' : undefined,
                 FAIL_CONCURRENT_SNAPSHOT: ordinaryFailure === 'concurrent' ? 'true' : undefined,
                 SKIP_ORDINARY_SNAPSHOT: ordinaryFailure === 'obsolete' ? 'true' : undefined,
+                SKIP_PREFIXED_SNAPSHOT: ordinaryFailure === 'prefixed-obsolete' ? 'true' : undefined,
                 ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
               }, (testSession, executions) => {
                 assert.strictEqual(testSession.meta[TEST_STATUS], ordinaryFailure === 'none' ? 'pass' : 'fail')
@@ -2570,8 +2575,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                 })
               })
               assert.strictEqual(exitCode, ordinaryFailure === 'none' ? 0 : 1, stdout)
-              if (ordinaryFailure === 'obsolete') {
-                assert.match(stdout, /3 snapshots obsolete/)
+              if (ordinaryFailure === 'obsolete' || ordinaryFailure === 'prefixed-obsolete') {
+                const obsoleteCount = ordinaryFailure === 'obsolete' ? 3 : 2
+                assert.match(stdout, new RegExp(`${obsoleteCount} snapshots obsolete`))
                 assert.doesNotMatch(stdout, /snapshots? failed/)
               } else if (ordinaryFailure !== 'none') {
                 assert.match(stdout, /1 snapshot failed/)
@@ -2615,7 +2621,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             {
               TESTS_TO_RUN: 'test-management/test-snapshot-quarantine',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
-              MIXED_SNAPSHOT_SUITE: 'true',
+              MIXED_SNAPSHOT_SUITE: supportsConcurrentSnapshots ? 'true' : undefined,
             },
             (testSession, executions) => {
               assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
@@ -2624,7 +2630,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                 'quarantine snapshot fails before a snapshot': [['fail', 'true'], ['fail', 'true'], ['fail', 'true']],
                 'quarantine snapshot fails a snapshot before passing': [['fail', 'true'], ['pass', 'true']],
                 'quarantine snapshot can pass normally': [['pass', undefined]],
-                'quarantine snapshot concurrent passing sibling': [['pass', undefined]],
+                ...(supportsConcurrentSnapshots
+                  ? { 'quarantine snapshot concurrent passing sibling': [['pass', undefined]] }
+                  : {}),
                 'quarantine snapshot passes with an unused snapshot': [['pass', 'true']],
               })
             }
@@ -2639,22 +2647,27 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           receiver.setSettings({ test_management: { enabled: false } })
 
           const { exitCode, stdout } = await runSnapshotTests(
-            { TESTS_TO_RUN: 'test-management/test-snapshot-quarantine' },
+            {
+              TESTS_TO_RUN: 'test-management/test-mixed-snapshot-quarantine',
+              MIXED_SNAPSHOT_SUITE: supportsConcurrentSnapshots ? 'true' : undefined,
+            },
             (testSession, executions) => {
               assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
               assert.deepStrictEqual(executions, {
-                'quarantine snapshot fails a snapshot': [['fail', undefined]],
-                'quarantine snapshot fails before a snapshot': [['fail', undefined]],
-                'quarantine snapshot fails a snapshot before passing': [['fail', undefined]],
-                'quarantine snapshot can pass normally': [['pass', undefined]],
-                'quarantine snapshot passes with an unused snapshot': [['pass', undefined]],
+                'mixed snapshots quarantined snapshot': [['fail', undefined]],
+                'mixed snapshots quarantined unused snapshot': [['pass', undefined]],
+                'mixed snapshots quarantined unused snapshot: ordinary': [['pass', undefined]],
+                'mixed snapshots ordinary snapshot': [['pass', undefined]],
+                ...(supportsConcurrentSnapshots
+                  ? { 'mixed snapshots concurrent sibling': [['pass', undefined]] }
+                  : {}),
               })
             }
           )
 
           assert.strictEqual(exitCode, 1)
-          assert.match(stdout, /2 snapshots failed/)
-          assert.match(stdout, /5 snapshots obsolete/)
+          assert.match(stdout, /1 snapshot failed/)
+          assert.match(stdout, /4 snapshots obsolete/)
         })
       })
     })
