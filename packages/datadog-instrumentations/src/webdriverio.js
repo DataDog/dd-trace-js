@@ -1986,12 +1986,18 @@ function configureVideoPromptBehavior (context) {
     const videoCapabilities = {}
     videoCapabilitiesCh.publish(videoCapabilities)
     if (!videoCapabilities.enabled) return
-    const sessions = context.self._isMultiremote
-      ? Object.values(capabilities).map(options => options.capabilities)
-      : [capabilities]
-    for (const caps of sessions) {
-      if (caps && caps.unhandledPromptBehavior === undefined) caps.unhandledPromptBehavior = 'ignore'
-    }
+    /** @param {{unhandledPromptBehavior?: unknown}} caps - Capabilities for one browser session. */
+    const withDefault = caps => caps && caps.unhandledPromptBehavior === undefined
+      ? { ...caps, unhandledPromptBehavior: 'ignore' }
+      : caps
+    // Prepare every session before replacing the argument, so a read failure cannot leave partial defaults.
+    context.arguments[1] = context.self._isMultiremote
+      ? Object.fromEntries(Object.entries(capabilities).map(([name, options]) => {
+        const session = { ...options }
+        session.capabilities = withDefault(session.capabilities)
+        return [name, session]
+      }))
+      : withDefault(capabilities)
   } catch (error) {
     log.error('Error configuring WebdriverIO video prompt handling: %s', error.message)
   }

@@ -339,7 +339,10 @@ describe('webdriverio instrumentation', () => {
           for (const extra of [{ sessionId: 'existing' }, { automationProtocol: './protocol-stub.js' }]) {
             assert.deepStrictEqual(await runner._startSession({ ...config, ...extra }, {}), {})
           }
-          assert.deepStrictEqual(await runner._startSession(config, Object.freeze({})), {})
+          const frozen = Object.freeze({})
+          const frozenResult = await runner._startSession(config, frozen)
+          assert.strictEqual(frozenResult.unhandledPromptBehavior, expected)
+          assert.deepStrictEqual(frozen, {})
           runner._isMultiremote = true
           const multi = await runner._startSession(config, {
             first: { capabilities: { browserName: 'chrome' } },
@@ -347,6 +350,70 @@ describe('webdriverio instrumentation', () => {
           })
           assert.strictEqual(multi.first.capabilities.unhandledPromptBehavior, expected)
           assert.strictEqual(multi.second.capabilities.unhandledPromptBehavior, 'dismiss')
+        } finally {
+          if (previous === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+          else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = previous
+          finishCh.unsubscribe(onFinish)
+          capabilitiesCh.unsubscribe(onCapabilities)
+          fs.rmSync(directory, { recursive: true, force: true })
+        }
+      })
+    }
+  }
+
+  for (const kind of ['frozen', 'sealed', 'non-writable', 'inherited getter', 'throwing getter']) {
+    for (const immutableFirst of [false, true]) {
+      it(`defaults multiremote prompts atomically with ${kind} capabilities first=${immutableFirst}`, async () => {
+        require('../src/webdriverio')
+        const previous = process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+        process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
+        const finishCh = channel('ci:mocha:test:finish')
+        const capabilitiesCh = channel('ci:webdriverio:video:capabilities')
+        const onFinish = () => {}
+        const onCapabilities = ctx => { ctx.enabled = true }
+        finishCh.subscribe(onFinish)
+        capabilitiesCh.subscribe(onCapabilities)
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-prompt-atomic-'))
+        const outputPath = path.join(directory, 'index.mjs')
+        const source = fs.readFileSync(runnerFixturePath, 'utf8')
+        const rewrittenSource = /** @type {string} */ (rewriter.rewrite(source, runnerFixtureModulePath, 'module'))
+        fs.writeFileSync(outputPath, rewrittenSource)
+        try {
+          const { Runner } = await import(pathToFileURL(outputPath).href)
+          const runner = new Runner()
+          runner._isMultiremote = true
+          const immutable = { browserName: 'firefox' }
+          if (kind === 'frozen') Object.freeze(immutable)
+          if (kind === 'sealed') Object.seal(immutable)
+          if (kind === 'non-writable') Object.defineProperty(immutable, 'unhandledPromptBehavior', { value: undefined })
+          if (kind === 'inherited getter') {
+            Object.setPrototypeOf(immutable, { get unhandledPromptBehavior () { return undefined } })
+          }
+          if (kind === 'throwing getter') {
+            Object.defineProperty(immutable, 'unhandledPromptBehavior', {
+              get: () => { throw new Error('getter failed') },
+            })
+          }
+          const mutable = { browserName: 'chrome' }
+          const explicit = { browserName: 'chrome', unhandledPromptBehavior: 'accept' }
+          const input = Object.freeze({
+            first: Object.freeze({ capabilities: immutableFirst ? immutable : mutable, port: 4444 }),
+            second: Object.freeze({ capabilities: immutableFirst ? mutable : immutable, port: 4445 }),
+            explicit: Object.freeze({ capabilities: explicit, port: 4446 }),
+          })
+          const descriptors = Object.getOwnPropertyDescriptors(immutable)
+          const result = await runner._startSession({ framework: 'mocha' }, input)
+          assert.deepStrictEqual(mutable, { browserName: 'chrome' })
+          assert.deepStrictEqual(Object.getOwnPropertyDescriptors(immutable), descriptors)
+          assert.strictEqual(explicit.unhandledPromptBehavior, 'accept')
+          if (kind === 'throwing getter') {
+            assert.strictEqual(result, input)
+          } else {
+            assert.strictEqual(result.first.capabilities.unhandledPromptBehavior, 'ignore')
+            assert.strictEqual(result.second.capabilities.unhandledPromptBehavior, 'ignore')
+            assert.strictEqual(result.explicit.capabilities.unhandledPromptBehavior, 'accept')
+            assert.deepStrictEqual(Object.values(result).map(options => options.port), [4444, 4445, 4446])
+          }
         } finally {
           if (previous === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
           else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = previous

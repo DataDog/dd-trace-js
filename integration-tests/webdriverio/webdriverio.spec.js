@@ -472,7 +472,7 @@ for (const version of versions) {
       for (const framework of ['mocha', 'jasmine']) {
         for (const [classic, multiremote] of [[true, false], [false, false], [true, true]]) {
           const browserTest = process.env.WEBDRIVERIO_REAL_BROWSER === 'true' ? it : it.skip
-          const protocol = multiremote ? 'Classic multiremote' : classic ? 'Classic' : 'BiDi'
+          const protocol = multiremote ? 'Classic multiremote with frozen capabilities' : classic ? 'Classic' : 'BiDi'
           browserTest(`records playable ${framework} video in real Chrome (${protocol})`, async () => {
             await runScenario('videosBrowser', 0, ({ media, tests }) => {
               const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
@@ -512,6 +512,7 @@ for (const version of versions) {
                 ...videoEnv,
                 WEBDRIVERIO_CLASSIC: String(classic),
                 WEBDRIVERIO_REAL_MULTIREMOTE: String(multiremote),
+                WEBDRIVERIO_FREEZE_LAST_CAPABILITIES: String(multiremote),
               },
             })
           })

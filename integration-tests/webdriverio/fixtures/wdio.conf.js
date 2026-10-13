@@ -26,6 +26,15 @@ const baseConfig = {
   services: [],
   framework,
   reporters: [],
+  /**
+   * @param {object} config
+   * @param {Record<string, {capabilities: object}>} capabilities
+   */
+  beforeSession (config, capabilities) {
+    if (process.env.WEBDRIVERIO_FREEZE_LAST_CAPABILITIES === 'true') {
+      Object.freeze(Object.values(capabilities).at(-1).capabilities)
+    }
+  },
   before () {
     if (process.env.WEBDRIVERIO_FAKE_DATE === 'true') {
       fakeClock = require('@sinonjs/fake-timers').install({ toFake: ['Date'] })
