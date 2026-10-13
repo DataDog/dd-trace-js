@@ -6,7 +6,7 @@
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
-const { URL } = require('url') // Older Cypress runtimes cannot resolve node: specifiers in require().
+const { URL } = require('url')
 const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
