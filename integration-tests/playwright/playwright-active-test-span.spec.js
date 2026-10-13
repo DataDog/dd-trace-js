@@ -171,7 +171,7 @@ versions.forEach((version) => {
 
       // Playwright 1.64 builds hook step stacks from hook.location. The afterEach hook injected by Test
       // Optimization used to have no location, which crashed the worker when the trace was retained.
-      const itWhenHookStackIsRecorded = version === latest ? it : global.it.skip
+      const itWhenHookStackIsRecorded = satisfies(version, '>=1.64.0') || version === 'latest' ? it : global.it.skip
 
       itWhenHookStackIsRecorded('does not crash when the injected hook has a retained trace', async (receiver, run) => {
         const receiverPromise = receiver
