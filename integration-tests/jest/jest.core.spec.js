@@ -2571,6 +2571,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     this.timeout(60_000)
 
     receiver.setSettings({ flaky_test_retries_enabled: true })
+    receiver.setFlakyTests({ data: [] })
 
     let outputWithTracer = ''
     const command = 'node ./node_modules/jest/bin/jest --config ./jest/dd-trace-transform-repro.config.js --coverage'
@@ -2590,6 +2591,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ...getCiVisAgentlessConfig(receiver.port),
           DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
           DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
+          DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES: 'true',
         },
       }
     )

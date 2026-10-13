@@ -24,8 +24,8 @@ module.exports = {
     }
 
     const configString = configOrTransformOptions.configString ?? legacyTransformOptions?.configString
-    if (configString && /"_dd(?:IsDynamicAtrEnabled|DynamicAtrBuckets)"/.test(configString)) {
-      throw new Error('dynamic ATR options leaked into the transform cache key')
+    if (configString && /"_dd(?:IsDynamicAtrEnabled|DynamicAtrBuckets|FlakyTests)"/.test(configString)) {
+      throw new Error('ATR options leaked into the transform cache key')
     }
 
     return babelJestTransformer.process.apply(babelJestTransformer, arguments)

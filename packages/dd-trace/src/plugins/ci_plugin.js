@@ -81,6 +81,7 @@ const {
   getSessionRequestErrorTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_FLAKY_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   getSessionItrSkippingEnabledTags,
@@ -227,6 +228,10 @@ module.exports = class CiPlugin extends Plugin {
           this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS, err)
         } else {
           this.libraryConfig = effectiveLibraryConfig
+          if (effectiveLibraryConfig?.flakyTestsError) {
+            this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_FLAKY_TESTS,
+              new Error(effectiveLibraryConfig.flakyTestsError))
+          }
           setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
         }
 

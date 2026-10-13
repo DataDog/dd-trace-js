@@ -43,6 +43,7 @@ const {
   getProvidedContext,
   realpath,
   isFlakyTestRetriesEnabledForTask,
+  isFlakyTestRetriesConfiguredForTask,
   getVitestTestProperties,
 } = require('./vitest-util')
 
@@ -537,7 +538,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
-  shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (task) {
+  shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (
+    /** @type {object} */ task
+  ) {
     const testName = getTestName(task)
 
     const providedContext = getProvidedContext()
@@ -551,6 +554,17 @@ function wrapVitestTestRunner (VitestTestRunner) {
     } = providedContext
     const testProperties = getVitestTestProperties(providedContext, task.file.filepath, testName)
     taskToTestProperties.set(task, testProperties)
+    // Only remove a retry ceiling installed by Test Optimization.
+    if (providedContext.flakyTests !== undefined &&
+      isFlakyTestRetriesConfiguredForTask(providedContext, task) &&
+      !isFlakyTestRetriesEnabledForTask(providedContext, task) &&
+      task.retry?.__ddTestOptAtr) {
+      disableFrameworkRetries(task)
+    }
+    if (task.retry?.__ddTestOptAtr && !providedContext.isDynamicAtrEnabled) {
+      // Vitest <4.1 only accepts numbers during execution; retain ownership until tasks have inherited retries.
+      task.retry = task.retry.count
+    }
 
     if (isTestManagementTestsEnabled) {
       const {

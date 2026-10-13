@@ -17,7 +17,7 @@ const MAX_OUTPUT_SUITES = 1000
 const MAX_OUTPUT_TESTS = 2000
 const MAX_OUTPUT_STRING_BYTES = 64 * 1024
 const MAX_SAMPLED_EVENTS_PER_PROCESS = 11
-const INPUT_NAMES = new Set(['known_tests', 'settings', 'skippable_tests', 'test_management'])
+const INPUT_NAMES = new Set(['flaky_tests', 'known_tests', 'settings', 'skippable_tests', 'test_management'])
 const EVENT_TYPES = new Set(['test', 'test_module_end', 'test_session_end', 'test_suite_end'])
 const META_FIELDS = new Set([
   'test.command',

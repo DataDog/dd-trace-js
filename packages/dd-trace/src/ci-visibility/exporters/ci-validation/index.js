@@ -55,6 +55,10 @@ class CiValidationExporter extends CiVisibilityExporter {
   getLibraryConfiguration (testConfiguration, callback) {
     super.getLibraryConfiguration(testConfiguration, (err, configuration) => {
       this._sink.writeInputResult('settings', err)
+      if (configuration?.flakyTestsError) {
+        this._sink.writeInputResult('flaky_tests', new Error(configuration.flakyTestsError))
+        process.exitCode = 1
+      }
       if (err) process.exitCode = 1
       callback(err, configuration)
     })

@@ -16,6 +16,8 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let isModifiedTest = false
 let isTestIsolationEnabled = false
+let flakyTestsForSuite
+let nativeRetryCount = 0
 let isDynamicAtrEnabled = false
 let isTextTerminal = false
 let hasWarnedMissingBeforeEachTaskResult = false
@@ -374,7 +376,13 @@ function getDynamicAtrTestKey (test) {
 }
 
 /**
- * @param {{ id: string, _retries: number }} test
+ * @param {{
+ *   id: string, _retries: number, fullTitle: () => string,
+ *   _testConfig?: {
+ *     retries?: number | { runMode?: number },
+ *     unverifiedTestConfig?: { retries?: number | { runMode?: number } }
+ *   }
+ * }} test
  */
 function configureTestRetries (test) {
   if (shouldDisableFrameworkRetries(test)) {
@@ -383,6 +391,15 @@ function configureTestRetries (test) {
   }
 
   if (!isTextTerminal) return
+  if (flakyTestsForSuite && !flakyTestsForSuite.has(test.fullTitle())) {
+    // Cypress resolves inherited suite overrides into each test's unverifiedTestConfig before running it.
+    const overrides = test._testConfig && (test._testConfig.unverifiedTestConfig || test._testConfig)
+    const retries = overrides && overrides.retries
+    test._retries = typeof retries === 'number'
+      ? retries
+      : (retries && typeof retries.runMode === 'number' ? retries.runMode : nativeRetryCount)
+    return
+  }
 
   const dynamicAtrRetryCount = dynamicAtrRetryCountByTest.get(getDynamicAtrTestKey(test))
   if (Number.isSafeInteger(dynamicAtrRetryCount)) {
@@ -470,9 +487,13 @@ before(function () {
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
+      flakyTestsForSuite = Array.isArray(suiteConfig.flakyTestsForSuite)
+        ? new Set(suiteConfig.flakyTestsForSuite)
+        : undefined
+      nativeRetryCount = suiteConfig.nativeRetryCount
       isDynamicAtrEnabled = suiteConfig.isDynamicAtrEnabled
       isTextTerminal = suiteConfig.isTextTerminal
-      if (isDynamicAtrEnabled && isTextTerminal) {
+      if ((isDynamicAtrEnabled || flakyTestsForSuite) && isTextTerminal) {
         // The first test event can precede this task, and an earlier user hook can skip our beforeEach.
         Cypress.mocha.getRootSuite().eachTest(configureTestRetries)
       }

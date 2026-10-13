@@ -108,6 +108,62 @@ describe('CI Visibility Exporter', () => {
     sinon.restore()
   })
 
+  describe('known-flakes-only retries', () => {
+    for (const [name, remote, allowed, onlyKnown] of [
+      ['disabled remotely', false, true, true],
+      ['disabled locally', true, false, true],
+      ['opted out', true, true, false],
+    ]) {
+      it(`does not request flaky tests when ${name}`, async () => {
+        const exporter = new CiVisibilityExporter({
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: allowed,
+            DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES: onlyKnown,
+          },
+        })
+        const scope = nock(url).post('/api/v2/libraries/tests/services/setting')
+          .reply(200, { data: { attributes: { flaky_test_retries_enabled: remote } } })
+        exporter._resolveCanUseCiVisProtocol(true)
+        const config = await new Promise((resolve, reject) => {
+          exporter.getLibraryConfiguration({}, (err, config) => err ? reject(err) : resolve(config))
+        })
+        assert.ok(scope.isDone())
+        assert.strictEqual(config.flakyTests, undefined)
+        assert.strictEqual(config.flakyTestsError, undefined)
+        assert.strictEqual(config.isFlakyTestRetriesEnabled, remote && allowed)
+      })
+    }
+
+    for (const { name, response, failed } of [
+      { name: 'empty', response: { data: [] }, failed: false },
+      { name: 'malformed', response: { data: {} }, failed: true },
+      { name: 'partial', response: { data: [{ attributes: { suite: 'suite', name: 'test' } }] }, failed: true },
+    ]) {
+      it(`retains ATR and distinguishes ${name} flaky data`, async () => {
+        const exporter = new CiVisibilityExporter({
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+            DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES: true,
+          },
+        })
+        const scope = nock(url).post('/api/v2/libraries/tests/services/setting')
+          .reply(200, { data: { attributes: { flaky_test_retries_enabled: true } } })
+          .post('/api/v2/ci/libraries/tests/flaky').reply(200, response)
+        exporter._resolveCanUseCiVisProtocol(true)
+        const config = await new Promise((resolve, reject) => {
+          exporter.getLibraryConfiguration({}, (err, config) => err ? reject(err) : resolve(config))
+        })
+        assert.ok(scope.isDone())
+        assert.strictEqual(config.isFlakyTestRetriesEnabled, true)
+        assert.strictEqual(config.flakyTests === undefined, failed)
+        assert.strictEqual(typeof config.flakyTestsError === 'string', failed)
+        assert.ok(Object.isFrozen(config))
+      })
+    }
+  })
+
   describe('filterConfiguration', () => {
     const testOptimization = {
       DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: true,

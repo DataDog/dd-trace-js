@@ -408,6 +408,34 @@ describe('CI validation exporter', () => {
     })
   })
 
+  for (const [enabled, atr] of [[true, true], [false, true], [true, false]]) {
+    it(`reports unavailable flaky-test input only when filtering is enabled (${enabled}, ATR=${atr})`, async () => {
+      const config = createExporterConfig()
+      config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES = enabled
+      config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED = atr
+      const exporter = new CiValidationExporter(config)
+      let settings
+      try {
+        settings = await new Promise((resolve, reject) => {
+          exporter.getLibraryConfiguration({}, (err, settings) => err ? reject(err) : resolve(settings))
+        })
+        exporter._sink.writeSummary()
+      } finally {
+        process.removeListener('exit', exporter._finalizeValidation)
+        globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(exporter._finalizeValidation)
+      }
+
+      assert.strictEqual(settings.isFlakyTestRetriesEnabled, atr)
+      assert.strictEqual(settings.flakyTests, undefined)
+      assert.strictEqual(process.exitCode, enabled && atr ? 1 : undefined)
+      assert(networkStubs.every(stub => stub.notCalled))
+      const { summary } = readOfflineOutput(outputRoot)
+      assert.deepStrictEqual(summary.inputs.settings, { status: 'loaded' })
+      assert.deepStrictEqual(summary.inputs.flaky_tests, enabled && atr ? { status: 'error' } : undefined)
+      assert.deepStrictEqual(summary.errors, enabled && atr ? ['invalid_flaky_tests'] : [])
+    })
+  }
+
   it('does not call the common request helper when loading cache inputs', () => {
     const exporterPath = require.resolve('../../../src/ci-visibility/exporters/ci-validation')
     const requestPath = require.resolve('../../../src/ci-visibility/requests/request')

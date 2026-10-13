@@ -4,6 +4,7 @@ const { performance } = require('node:perf_hooks')
 const { fileURLToPath } = require('node:url')
 
 const { channel } = require('dc-polyfill')
+const { isKnownFlakyTest } = require('../../dd-trace/src/ci-visibility/known-flaky-tests')
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
@@ -1032,6 +1033,7 @@ class MochaPlugin extends CiPlugin {
       hasEfdRetries(this.libraryConfig.earlyFlakeDetectionRetryPolicy) &&
       !isAttemptToFix && !isDisabled && (isNew || isModified)
     const isAtr = this.libraryConfig?.isFlakyTestRetriesEnabled &&
+      isKnownFlakyTest(this.libraryConfig.flakyTests, 'mocha', testSuite, testName) &&
       !isAttemptToFix && !isEarlyFlakeDetection
     let retryCount = 0
     if (isAttemptToFix) {

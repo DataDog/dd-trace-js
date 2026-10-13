@@ -58,6 +58,8 @@ class FakeCiVisIntake extends FakeAgent {
   #gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
   #infoResponse = DEFAULT_INFO_RESPONSE
   #correlationId = DEFAULT_CORRELATION_ID
+  #flakyTests = { data: [] }
+  #flakyTestsStatusCode = 200
   #knownTests = DEFAULT_KNOWN_TESTS
   #knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
   #waitingTime = 0
@@ -73,6 +75,11 @@ class FakeCiVisIntake extends FakeAgent {
       meta.coverage = this.#skippableCoverage
     }
     return { data: this.#suitesToSkip, meta }
+  }
+
+  setFlakyTests (response, statusCode = 200) {
+    this.#flakyTests = response
+    this.#flakyTestsStatusCode = statusCode
   }
 
   setKnownTestsResponseCode (statusCode) {
@@ -369,6 +376,14 @@ class FakeCiVisIntake extends FakeAgent {
         payload: req.body,
         url: req.url,
       })
+    })
+
+    app.post([
+      '/api/v2/ci/libraries/tests/flaky',
+      '/evp_proxy/:version/api/v2/ci/libraries/tests/flaky',
+    ], express.json(), (req, res) => {
+      res.status(this.#flakyTestsStatusCode).send(this.#flakyTests)
+      this.emit('message', { headers: req.headers, payload: req.body, url: req.url })
     })
 
     app.post([

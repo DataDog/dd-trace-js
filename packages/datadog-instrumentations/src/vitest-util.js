@@ -2,6 +2,7 @@
 
 const fs = require('node:fs')
 
+const { isKnownFlakyTest } = require('../../dd-trace/src/ci-visibility/known-flaky-tests')
 const log = require('../../dd-trace/src/log')
 const {
   EMPTY_EFD_RETRY_POLICY,
@@ -177,6 +178,7 @@ function getProvidedContext () {
       _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
       _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
+      _ddFlakyTests: flakyTests,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
       _ddIsDynamicAtrEnabled: isDynamicAtrEnabled,
       _ddDynamicAtrBuckets: dynamicAtrBuckets,
@@ -206,6 +208,7 @@ function getProvidedContext () {
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
       isFlakyTestRetriesEnabled,
+      flakyTests,
       flakyTestRetriesCount: flakyTestRetriesCount ?? 0,
       isDynamicAtrEnabled,
       dynamicAtrBuckets,
@@ -254,6 +257,16 @@ function getProvidedContext () {
 }
 
 function isFlakyTestRetriesEnabledForTask (providedContext, task) {
+  if (!isFlakyTestRetriesConfiguredForTask(providedContext, task)) return false
+  const testSuite = providedContext.testPropertiesByFilepath?.[task.file?.filepath]?.testSuite
+  return isKnownFlakyTest(providedContext.flakyTests, 'vitest', testSuite, getTestName(task))
+}
+
+/**
+ * @param {object} providedContext
+ * @param {object} task
+ */
+function isFlakyTestRetriesConfiguredForTask (providedContext, task) {
   if (!providedContext.isFlakyTestRetriesEnabled) return false
   if (providedContext.isDynamicAtrEnabled && !task.retry?.__ddTestOptAtr) return false
 
@@ -340,5 +353,6 @@ module.exports = {
   parseProvidedContextValue,
   getProvidedContext,
   isFlakyTestRetriesEnabledForTask,
+  isFlakyTestRetriesConfiguredForTask,
   getVitestTestProperties,
 }
