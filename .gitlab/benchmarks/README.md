@@ -51,13 +51,19 @@ no `strategy`, so it finishes after dispatch, and `allow_failure: true` keeps a
 failed dispatch from failing PR checks. The downstream lookup/build/publish job is
 also allowed to fail. Results are collected by the deployed Lambda pool afterward.
 
-The job runs only in `external_pull_request_event` pipelines, passing the GitHub
-PR source commit and branch for API lookup. GitLab also creates a branch pipeline
-for a push to an open PR; excluding that pipeline prevents duplicate dispatches
-for the same update. Branch, tag, native GitLab MR, scheduled, manual, and
-`graphite-base/*` runs do not launch this job. No PR number is hardcoded or inferred
-from a GitLab MR IID. Missing open PRs skip; ambiguous matches and API errors remain
-visible in the optional downstream job.
+Codesync creates `push` pipelines for this mirror. The job runs on non-default
+branch pushes, forwarding `CI_COMMIT_SHA` and `CI_COMMIT_BRANCH` for GitHub API
+lookup. It also passes `UPSTREAM_GITHUB_SOURCE_REPOSITORY=DataDog/dd-trace-js`, so
+the lookup accepts only PRs whose source branch is in that repository, excluding
+fork PRs. Every subsequent mirrored branch push can dispatch another measurement.
+
+Default-branch, tag, external-PR, native GitLab MR, scheduled, manual, and
+`graphite-base/*` pipelines do not launch this job. Selecting only push pipelines
+avoids dispatching twice if an external-PR integration is enabled later. No PR
+number is hardcoded or inferred from a GitLab MR IID. Pushes without a matching
+open PR skip downstream before building; ambiguous matches and API errors remain
+visible in the optional downstream job. Opening a PR without a new codesync push
+pipeline does not itself dispatch a benchmark; a subsequent push can do so.
 
 `SLS_PR_BENCHMARK_CI_BRANCH` selects the serverless-tools branch/tag for this feature
 and defaults to its `main` branch. Merge the downstream publisher before enabling

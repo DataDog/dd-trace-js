@@ -177,6 +177,7 @@ benchmark-serverless-pr-performance:
     PR_BENCHMARK_ONLY: "true"
     UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
     UPSTREAM_PROJECT_URL: $CI_PROJECT_URL
+    UPSTREAM_GITHUB_SOURCE_REPOSITORY: DataDog/dd-trace-js
     UPSTREAM_PIPELINE_ID: $CI_PIPELINE_ID
     UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
     UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
@@ -184,11 +185,8 @@ benchmark-serverless-pr-performance:
   rules:
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
-    # GitHub PR updates also create a branch pipeline; dispatch only from the PR pipeline.
+    # Codesync creates push pipelines; serverless-tools resolves the open GitHub PR.
     - if: >-
-        $CI_PIPELINE_SOURCE == "external_pull_request_event" &&
-        $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_SHA && $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_NAME
-      variables:
-        UPSTREAM_COMMIT_SHA: $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_SHA
-        UPSTREAM_COMMIT_BRANCH: $CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_NAME
+        $CI_PIPELINE_SOURCE == "push" &&
+        $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
     - when: never
