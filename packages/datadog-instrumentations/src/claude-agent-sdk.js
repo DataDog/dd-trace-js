@@ -2,7 +2,6 @@
 
 const { tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, getHooks } = require('./helpers/instrument')
 const queryChannel = tracingChannel('orchestrion:@anthropic-ai/claude-agent-sdk:query')
 
 const stepCh = tracingChannel('apm:claude-agent-sdk:step')
@@ -638,28 +637,15 @@ function wrapQueryAsyncIterator (asyncIterator, ctx) {
   }
 }
 
-let querySubscribed = false
+queryChannel.subscribe({
+  start: onQueryStart,
+  end (ctx) {
+    if (!ctx.claudeAgentSdkTracing) return
 
-for (const hook of getHooks('@anthropic-ai/claude-agent-sdk').values()) {
-  hook.file = null
+    const { result } = ctx
 
-  addHook(hook, exports => {
-    if (!querySubscribed) {
-      querySubscribed = true
-      queryChannel.subscribe({
-        start: onQueryStart,
-        end (ctx) {
-          if (!ctx.claudeAgentSdkTracing) return
+    ctx.streamResolved = false
 
-          const { result } = ctx
-
-          ctx.streamResolved = false
-
-          shimmer.wrap(result, Symbol.asyncIterator, asyncIterator => wrapQueryAsyncIterator(asyncIterator, ctx))
-        },
-      })
-    }
-
-    return exports
-  })
-}
+    shimmer.wrap(result, Symbol.asyncIterator, asyncIterator => wrapQueryAsyncIterator(asyncIterator, ctx))
+  },
+})
