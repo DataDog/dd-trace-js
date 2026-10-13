@@ -469,7 +469,10 @@ addHook({
     const onRunDone = args[0]
     if (isWebdriverioWorker && typeof onRunDone === 'function') {
       args[0] = (...onRunDoneArgs) => {
-        finishWebdriverioWorker(this, () => onRunDone(...onRunDoneArgs))
+        const adjustedFailures = Number.isFinite(this.failures)
+          ? Math.max(0, this.failures)
+          : onRunDoneArgs[0]
+        finishWebdriverioWorker(this, () => onRunDone(adjustedFailures, ...onRunDoneArgs.slice(1)))
       }
     } else {
       // Flush after the worker finishes its Mocha run, including grouped spec files.
