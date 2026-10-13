@@ -13,6 +13,7 @@ const { AgentlessCiVisibilityEncoder } = require('../../src/encode/agentless-ci-
 const {
   TEST_ITR_SKIPPING_COUNT,
   TEST_ITR_TESTS_SKIPPED,
+  TEST_SKIPPED_BY_ITR,
   TEST_SUITE,
   getTestModuleCommonTags,
   getTestSessionCommonTags,
@@ -195,21 +196,55 @@ describe('Cypress suite Test Impact Analysis skip reporting', () => {
       })
     }
 
-    it('does not fail skip tasks when the suite could not be instrumented', () => {
-      plugin.testsToSkip = [{ suite: 'missing.js', name: 'one' }]
-      assert.deepStrictEqual(skip('missing.js', 'one'), { shouldSkip: true })
-      assert.strictEqual(plugin.skippedTests.length, 1)
-    })
-
-    for (const method of ['context', 'setTag']) {
-      it(`preserves test skipping and session counting when suite ${method} throws`, () => {
-        const span = startSuite('suite.js')
-        plugin.testsToSkip = [{ suite: 'suite.js', name: 'one' }]
-        sinon.stub(span, method).throws(new Error('instrumentation failed'))
-        assert.deepStrictEqual(skip('suite.js', 'one'), { shouldSkip: true })
-        assert.strictEqual(plugin.skippedTests.length, 1)
-        assert.strictEqual(plugin.isTestsSkipped, true)
+    for (const recovery of ['late suite start', 'after:spec fallback']) {
+      it(`preserves recorded skips through ${recovery}`, async () => {
+        plugin.testsToSkip = [
+          { suite: 'missing.js', name: 'one' },
+          { suite: 'missing.js', name: 'two' },
+          { suite: 'other.js', name: 'one' },
+        ]
+        assert.deepStrictEqual(skip('other.js', 'one'), { shouldSkip: true })
+        assert.deepStrictEqual(skip('missing.js', 'one'), { shouldSkip: true })
+        skip('missing.js', 'one')
+        if (recovery === 'late suite start') startSuite('missing.js')
+        skip('missing.js', 'two')
+        skip('missing.js', 'two')
+        await plugin.afterSpec({ relative: 'missing.js', absolute: path.join(root, 'missing.js') }, {
+          tests: ['one', 'two', 'framework skip'].map(name => ({ title: [name], state: 'pending' })),
+          stats: { tests: 3, pending: 3, failures: 0 },
+        })
+        plugin._isInit = true
+        await plugin.afterRun({ totalTests: 4, totalPending: 4 })
+        const reported = events()
+        assertSuite(reported.find(event => event.type === 'test_suite_end'), 2)
+        const session = reported.find(event => event.type === 'test_session_end').content
+        assert.strictEqual(session.metrics[TEST_ITR_SKIPPING_COUNT], 3)
+        assert.strictEqual(session.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+        const tests = reported.filter(event => event.type === 'test')
+        assert.strictEqual(tests.length, 3)
+        assert.strictEqual(tests.filter(event => event.content.meta[TEST_SKIPPED_BY_ITR] === 'true').length, 2)
       })
     }
+
+    it('clears recorded suite counts when resetting the run', () => {
+      plugin.testsToSkip = [{ suite: 'suite.js', name: 'one' }]
+      skip('suite.js', 'one')
+      finishSession(plugin)
+      plugin.resetRunState()
+      plugin.isItrEnabled = true
+      const span = startSuite('suite.js')
+      span.finish()
+      assertSuite(events().find(event => event.type === 'test_suite_end'), 0)
+      assert.strictEqual(plugin.skippedTests.length, 0)
+    })
+
+    it('preserves test skipping and session counting when suite setTag throws', () => {
+      const span = startSuite('suite.js')
+      plugin.testsToSkip = [{ suite: 'suite.js', name: 'one' }]
+      sinon.stub(span, 'setTag').throws(new Error('instrumentation failed'))
+      assert.deepStrictEqual(skip('suite.js', 'one'), { shouldSkip: true })
+      assert.strictEqual(plugin.skippedTests.length, 1)
+      assert.strictEqual(plugin.isTestsSkipped, true)
+    })
   })
 })
