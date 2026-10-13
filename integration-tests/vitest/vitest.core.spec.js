@@ -3585,3 +3585,113 @@ for (const version of ['4.0.5', 'latest']) {
     }
   })
 }
+
+// Vite's loader can notify ESM hooks more than once for the same runner.
+// Cover the original reproducer and the latest supported Vitest release.
+// Vitest 4 requires Node >=20; Vitest 5 requires Node >=22.
+for (const version of ['4.1.10', 'latest']) {
+  let describeRunnerReuse = describe
+  if (NODE_MAJOR < 20 || (version === 'latest' && NODE_MAJOR < 22)) {
+    describeRunnerReuse = describe.skip
+  }
+
+  describeRunnerReuse(`vitest@${version} runner reuse`, () => {
+    let cwd, receiver, childProcess, output
+    useSandbox([`vitest@${version}`, 'jsdom@26.1.0', '@testing-library/jest-dom@6.9.1'])
+
+    before(() => {
+      cwd = sandboxCwd()
+    })
+    beforeEach(async () => {
+      output = ''
+      receiver = await new FakeCiVisIntake().start()
+    })
+    afterEach(async () => {
+      childProcess?.kill()
+      await receiver.stop()
+    })
+
+    for (const pool of ['forks', 'threads']) {
+      for (const feature of ['atr', 'efd', 'atf']) {
+        for (const passAttempt of [2, 3]) {
+          const title = `reports each ${feature} attempt once when attempt ${passAttempt} passes with jsdom and ${pool}`
+          it(title, async () => {
+            receiver.setSettings({
+              itr_enabled: false,
+              tests_skipping: false,
+              code_coverage: false,
+              flaky_test_retries_enabled: feature === 'atr',
+              test_management: { enabled: feature === 'atf', attempt_to_fix_retries: 2 },
+              known_tests_enabled: feature === 'efd',
+              early_flake_detection: { enabled: feature === 'efd', slow_test_retries: { '5s': 2 } },
+            })
+            receiver.setKnownTests({ vitest: {} })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/efd-retries.mjs': {
+                    tests: { 'EFD retries': { properties: { attempt_to_fix: true } } },
+                  },
+                },
+              },
+            })
+            childProcess = exec('./node_modules/.bin/vitest run --environment jsdom', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                TEST_DIR: 'ci-visibility/vitest-tests/efd-retries.mjs',
+                EFD_PASS_ATTEMPT: String(passAttempt),
+                POOL_CONFIG: pool,
+                VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/runner-reuse-setup.mjs',
+              },
+            })
+            childProcess.stdout.on('data', data => { output += data })
+            childProcess.stderr.on('data', data => { output += data })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url === '/api/v2/citestcycle',
+              payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events
+                  .filter(event => event.type === 'test').map(event => event.content)
+                  .sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)
+                const attempts = feature === 'atr' ? passAttempt : 3
+                const expected = Array.from({ length: attempts }, (_, index) => {
+                  return index + 1 === passAttempt ? 'pass' : 'fail'
+                })
+                assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), expected, output)
+                assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], feature === 'atf' ? 'fail' : 'pass')
+                assert.strictEqual(tests[0].meta[TEST_IS_RETRY], undefined)
+                for (const test of tests.slice(1)) {
+                  assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES[feature])
+                }
+
+                const suites = events.filter(event => event.type === 'test_suite_end')
+                assert.strictEqual(suites.length, 1, output)
+                const suite = suites[0].content
+                assert.strictEqual(suite.meta[TEST_STATUS], feature === 'atf' ? 'fail' : 'pass')
+                if (feature === 'atf') {
+                  const failedAttempt = passAttempt === 3 ? tests[0] : tests.at(-1)
+                  for (const field of [ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK]) {
+                    assert.ok(failedAttempt.meta[field], output)
+                    assert.strictEqual(suite.meta[field], failedAttempt.meta[field], output)
+                  }
+                }
+                if (tests.at(-1).meta[TEST_STATUS] === 'pass') {
+                  for (const field of [ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK]) {
+                    assert.strictEqual(tests.at(-1).meta[field], undefined, output)
+                  }
+                }
+              }
+            )
+            const [[code, signal]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(signal, null, output)
+            assert.strictEqual(code, feature === 'atf' ? 1 : 0, output)
+          })
+        }
+      }
+    }
+  })
+}

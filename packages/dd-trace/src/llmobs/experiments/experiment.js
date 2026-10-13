@@ -2,7 +2,17 @@
 
 const id = require('../../id')
 const log = require('../../log')
+const { validateAssessment, validateReasoning } = require('../eval-metric')
 
+const {
+  BaseEvaluator,
+  BaseSummaryEvaluator,
+  EvaluatorContext,
+  EvaluatorResult,
+  MultiEvaluatorResult,
+  SummaryEvaluatorContext,
+} = require('./evaluator')
+const { RemoteEvaluator, RemoteEvaluatorError } = require('./remote-evaluator')
 const { Row, ExperimentResult, ExperimentRun } = require('./result')
 const {
   buildSpanMetadata,
@@ -69,7 +79,17 @@ function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
 
 // One metric per evaluator per row or summary evaluator.
 function toMetric (
-  label, value, errorMessage, spanId, traceId, timestampMs, experimentId, userTags, source = 'custom', ids = {}
+  label,
+  value,
+  errorMessage,
+  spanId,
+  traceId,
+  timestampMs,
+  experimentId,
+  userTags,
+  source = 'custom',
+  ids = {},
+  extras = {}
 ) {
   const metric = {
     metric_source: source,
@@ -77,17 +97,30 @@ function toMetric (
     span_id: spanId,
     trace_id: traceId,
     timestamp_ms: timestampMs,
-    tags: buildTags(userTags, {
+    tags: buildTags({ ...userTags, ...extras.tags }, {
       experiment_id: experimentId,
       run_id: ids.runId,
       run_iteration: ids.runIteration,
+      project_name: userTags.project_name,
     }),
     experiment_id: experimentId,
   }
 
+  if (extras.reasoning !== undefined) {
+    validateReasoning(extras.reasoning)
+    metric.reasoning = extras.reasoning
+  }
+  if (extras.assessment !== undefined) {
+    validateAssessment(extras.assessment)
+    metric.assessment = extras.assessment
+  }
+  if (extras.metadata !== undefined) metric.metadata = extras.metadata
+  if (extras.status !== undefined) metric.status = extras.status
+  if (extras.evalSourceType !== undefined) metric.eval_source_type = extras.evalSourceType
+
   if (errorMessage !== null) {
     metric.metric_type = 'categorical'
-    metric.error = { message: errorMessage }
+    metric.error = extras.error ?? { message: errorMessage }
     return metric
   }
 
@@ -98,6 +131,31 @@ function toMetric (
   else if (type === 'json') metric.json_value = normalizeJsonMetricValue(value)
   else metric.categorical_value = stringify(value)
   return metric
+}
+
+/**
+ * @param {unknown} result
+ * @param {string} label
+ * @returns {Array<{label: string, value: unknown, extras: object}>}
+ */
+function extractEvaluatorResults (result, label) {
+  if (!(result instanceof MultiEvaluatorResult)) {
+    return [{
+      label,
+      value: result instanceof EvaluatorResult ? result.value : result,
+      extras: result instanceof EvaluatorResult ? result : {},
+    }]
+  }
+
+  const results = []
+  for (const [key, value] of Object.entries(result.values)) {
+    results.push({
+      label: result.prefix ? `${label}-${key}` : key,
+      value: value instanceof EvaluatorResult ? value.value : value,
+      extras: value instanceof EvaluatorResult ? value : {},
+    })
+  }
+  return results
 }
 
 function createFallbackSpanContext (startNs) {
@@ -543,13 +601,15 @@ class Experiment {
     const metrics = []
     const evaluatorResults = {}
     let hasRowError = false
-    for (const [label] of this.#evaluators) evaluatorResults[label] = []
 
     for (let i = 0; i < results.length; i++) {
       const result = results[i]
       const row = result.row
       rows[i] = row
-      for (const [label] of this.#evaluators) {
+      for (const label of Object.keys(result.evaluatorValues)) {
+        if (!Object.hasOwn(evaluatorResults, label)) evaluatorResults[label] = new Array(i).fill(null)
+      }
+      for (const label of Object.keys(evaluatorResults)) {
         const value = Object.hasOwn(result.evaluatorValues, label) ? result.evaluatorValues[label] : null
         evaluatorResults[label].push(value)
       }
@@ -671,8 +731,13 @@ class Experiment {
 
     const evaluatorResults = await Promise.all(pending)
     for (const result of evaluatorResults) {
-      if (result.metric !== null) metrics.push(result.metric)
-      evaluatorValues[result.label] = result.value
+      for (const value of result.values) {
+        if (Object.hasOwn(evaluatorValues, value.label)) {
+          throw new Error(`Evaluator metric label '${value.label}' was emitted more than once`)
+        }
+        if (value.metric !== null) metrics.push(value.metric)
+        evaluatorValues[value.label] = value.value
+      }
       if (result.error !== undefined && firstError === undefined) firstError = result.error
     }
     if (firstError !== undefined) throw firstError
@@ -703,64 +768,101 @@ class Experiment {
       row.evaluationErrors[label] = TASK_ERROR_MESSAGE
       return {
         label,
-        value: null,
-        metric: toMetric(
+        values: [{
           label,
-          null,
-          TASK_ERROR_MESSAGE,
-          row.spanId,
-          row.traceId,
-          timestampMs,
-          experimentId,
-          this.#tags,
-          'custom',
-          { runId, runIteration }
-        ),
+          value: null,
+          metric: toMetric(
+            label,
+            null,
+            TASK_ERROR_MESSAGE,
+            row.spanId,
+            row.traceId,
+            timestampMs,
+            experimentId,
+            this.#tags,
+            'custom',
+            { runId, runIteration }
+          ),
+        }],
+        error: undefined,
       }
     }
 
+    const isRemoteEvaluator = evaluator instanceof RemoteEvaluator
     try {
-      const value = await limit(() => this.#runWithRetries(
-        () => evaluator(record.input, row.output, record.expectedOutput),
-        maxRetries,
-        retryDelay
-      ), throwOnErrors)
-      row.evaluations[label] = value
-      return {
-        label,
-        value,
-        metric: toMetric(
-          label,
-          value,
-          null,
-          row.spanId,
-          row.traceId,
-          timestampMs,
-          experimentId,
-          this.#tags,
-          'custom',
-          { runId, runIteration }
-        ),
+      let evaluate
+      if (evaluator instanceof BaseEvaluator) {
+        const context = new EvaluatorContext({
+          inputData: record.input,
+          outputData: row.output,
+          expectedOutput: record.expectedOutput,
+          metadata: buildSpanMetadata(record.metadata, this.#config),
+          spanId: row.spanId,
+          traceId: row.traceId,
+        })
+        evaluate = isRemoteEvaluator
+          ? () => evaluator.evaluate(context, this.#client)
+          : () => evaluator.evaluate(context)
+      } else {
+        evaluate = () => evaluator(record.input, row.output, record.expectedOutput)
       }
+      const result = await limit(() => this.#runWithRetries(evaluate, maxRetries, retryDelay), throwOnErrors)
+      const values = []
+      for (const evaluatorResult of extractEvaluatorResults(result, label)) {
+        row.evaluations[evaluatorResult.label] = evaluatorResult.value
+        values.push({
+          label: evaluatorResult.label,
+          value: evaluatorResult.value,
+          metric: toMetric(
+            evaluatorResult.label,
+            evaluatorResult.value,
+            null,
+            row.spanId,
+            row.traceId,
+            timestampMs,
+            experimentId,
+            this.#tags,
+            'custom',
+            { runId, runIteration },
+            evaluatorResult.extras
+          ),
+        })
+      }
+      return { label, values, error: undefined }
     } catch (err) {
       if (throwOnErrors) throw err
-      const msg = err.message ?? String(err)
+      const backendError = err instanceof RemoteEvaluatorError && hasEntries(err.backendError)
+        ? err.backendError
+        : undefined
+      const msg = backendError?.message ?? err.message ?? String(err)
       row.evaluationErrors[label] = msg
+      const extras = isRemoteEvaluator
+        ? {
+            error: backendError,
+            status: err.status ?? 'ERROR',
+            evalSourceType: 'managed',
+          }
+        : {}
       return {
         label,
-        value: null,
-        metric: toMetric(
+        values: [{
           label,
-          null,
-          msg,
-          row.spanId,
-          row.traceId,
-          timestampMs,
-          experimentId,
-          this.#tags,
-          'custom',
-          { runId, runIteration }
-        ),
+          value: null,
+          metric: toMetric(
+            label,
+            null,
+            msg,
+            row.spanId,
+            row.traceId,
+            timestampMs,
+            experimentId,
+            this.#tags,
+            'custom',
+            { runId, runIteration },
+            extras
+          ),
+        }],
+        error: undefined,
       }
     }
   }
@@ -892,7 +994,6 @@ class Experiment {
     const summaryEvaluations = {}
     const timestampMs = Date.now()
     const pending = new Array(this.#summaryEvaluators.length)
-    let firstError
 
     for (let i = 0; i < this.#summaryEvaluators.length; i++) {
       const [label, evaluator] = this.#summaryEvaluators[i]
@@ -917,14 +1018,14 @@ class Experiment {
       throw err
     }
     for (const result of results) {
-      if (result.error !== undefined) {
-        if (firstError === undefined) firstError = result.error
-        continue
+      for (const value of result.values) {
+        if (Object.hasOwn(summaryEvaluations, value.label)) {
+          throw new Error(`Summary evaluator metric label '${value.label}' was emitted more than once`)
+        }
+        summaryEvaluations[value.label] = value.evaluation
+        options.metrics.push(value.metric)
       }
-      summaryEvaluations[result.label] = result.evaluation
-      options.metrics.push(result.metric)
     }
-    if (firstError !== undefined) throw firstError
 
     return summaryEvaluations
   }
@@ -941,45 +1042,67 @@ class Experiment {
     options,
   }) {
     try {
-      const value = await options.limit(() => this.#runWithRetries(
-        () => evaluator(inputs, outputs, expectedOutputs, evaluatorResults, metadata),
+      const context = new SummaryEvaluatorContext({
+        inputs,
+        outputs,
+        expectedOutputs,
+        evaluationResults: evaluatorResults,
+        metadata,
+      })
+      const evaluate = evaluator instanceof BaseSummaryEvaluator
+        ? () => evaluator.evaluate(context)
+        : () => evaluator(inputs, outputs, expectedOutputs, evaluatorResults, metadata)
+      const result = await options.limit(() => this.#runWithRetries(
+        evaluate,
         options.maxRetries,
         options.retryDelay
       ), options.throwOnErrors)
-      return {
-        label,
-        evaluation: { value, error: null },
-        metric: toMetric(
-          label,
-          value,
-          null,
-          '',
-          '',
-          timestampMs,
-          options.experimentId,
-          this.#tags,
-          'summary',
-          { runId: options.runId, runIteration: options.runIteration }
-        ),
+      const values = []
+      for (const evaluatorResult of extractEvaluatorResults(result, label)) {
+        const evaluation = { value: evaluatorResult.value, error: null }
+        if (evaluatorResult.extras.reasoning !== undefined) evaluation.reasoning = evaluatorResult.extras.reasoning
+        if (evaluatorResult.extras.assessment !== undefined) evaluation.assessment = evaluatorResult.extras.assessment
+        if (evaluatorResult.extras.metadata !== undefined) evaluation.metadata = evaluatorResult.extras.metadata
+        if (evaluatorResult.extras.tags !== undefined) evaluation.tags = evaluatorResult.extras.tags
+        values.push({
+          label: evaluatorResult.label,
+          evaluation,
+          metric: toMetric(
+            evaluatorResult.label,
+            evaluatorResult.value,
+            null,
+            '',
+            '',
+            timestampMs,
+            options.experimentId,
+            this.#tags,
+            'summary',
+            { runId: options.runId, runIteration: options.runIteration },
+            evaluatorResult.extras
+          ),
+        })
       }
+      return { values }
     } catch (err) {
       if (options.throwOnErrors) throw err
       const msg = err.message ?? String(err)
       return {
-        label,
-        evaluation: { value: null, error: msg },
-        metric: toMetric(
+        values: [{
           label,
-          null,
-          msg,
-          '',
-          '',
-          timestampMs,
-          options.experimentId,
-          this.#tags,
-          'summary',
-          { runId: options.runId, runIteration: options.runIteration }
-        ),
+          evaluation: { value: null, error: msg },
+          metric: toMetric(
+            label,
+            null,
+            msg,
+            '',
+            '',
+            timestampMs,
+            options.experimentId,
+            this.#tags,
+            'summary',
+            { runId: options.runId, runIteration: options.runIteration }
+          ),
+        }],
       }
     }
   }

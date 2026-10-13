@@ -3,13 +3,9 @@
 const assert = require('node:assert/strict')
 
 const { beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 require('../../setup/mocha')
 
-const {
-  compile,
-  compileSegments,
-  templateRequiresEvaluation,
-} = require('../../../src/debugger/devtools_client/condition')
 const {
   literals,
   references,
@@ -23,6 +19,14 @@ const {
   membershipAndMatching,
   typeAndDefinitionChecks,
 } = require('./condition-test-cases')
+
+const {
+  compile,
+  compileSegments,
+  getRedactionError,
+  getSegmentRedactionErrors,
+  templateRequiresEvaluation,
+} = loadCondition()
 
 // Each test case is either a tuple of [ast, vars, expected] where:
 // - `ast` is the abstract syntax tree to be compiled
@@ -154,7 +158,107 @@ describe('Expression language', function () {
       )
     })
   })
+
+  describe('template redaction', function () {
+    const redactedExpressions = [
+      ['password', { ref: 'password' }],
+      ['user.password', { getmember: [{ ref: 'user' }, 'password'] }],
+      ['user["password"]', { index: [{ ref: 'user' }, 'password'] }],
+      ['headers["X-Auth-Token"]', { index: [{ ref: 'headers' }, 'X-Auth-Token'] }],
+      ['user.apiKey', { getmember: [{ ref: 'user' }, 'apiKey'] }],
+      ['user[password]', { index: [{ ref: 'user' }, { ref: 'password' }] }],
+      ['password.length', { getmember: [{ ref: 'password' }, 'length'] }],
+      ['len(password)', { len: { ref: 'password' } }],
+      ['substring(user.password, 0, 4)', { substring: [{ getmember: [{ ref: 'user' }, 'password'] }, 0, 4] }],
+      [
+        'any(users, {@it.password == "hunter2"})',
+        { any: [{ ref: 'users' }, { eq: [{ getmember: [{ ref: '@it' }, 'password'] }, 'hunter2'] }] }],
+    ]
+
+    const evaluatedExpressions = [
+      ['user.name', { getmember: [{ ref: 'user' }, 'name'] }],
+      ['name == "password"', { eq: [{ ref: 'name' }, 'password'] }],
+      ['any(users, {isEmpty(@it)})', { any: [{ ref: 'users' }, { isEmpty: { ref: '@it' } }] }],
+    ]
+
+    for (const [dsl, json] of redactedExpressions) {
+      it(`should not evaluate a segment reading a redacted identifier: ${dsl}`, function () {
+        assert.strictEqual(compileSegments([{ str: 'value: ' }, { dsl, json }]), '["value: ","{redacted}"]')
+      })
+    }
+
+    for (const [dsl, json] of evaluatedExpressions) {
+      it(`should evaluate a segment not reading a redacted identifier: ${dsl}`, function () {
+        assert.ok(compileSegments([{ dsl, json }]).includes(`const result = ${compile(json)}`))
+      })
+    }
+
+    it('should leave malformed references for the compiler to reject', function () {
+      assert.throws(() => compileSegments([{ dsl: '42', json: { ref: 42 } }]), {
+        name: 'SyntaxError',
+        message: 'Illegal identifier: 42',
+      })
+    })
+
+    it('should honor the configured redacted and excluded identifiers', function () {
+      const { compileSegments } = loadCondition({
+        DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo'],
+        DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['password'],
+      })
+
+      assert.strictEqual(compileSegments([{ dsl: 'foo', json: { ref: 'foo' } }]), '["{redacted}"]')
+      assert.ok(compileSegments([{ dsl: 'password', json: { ref: 'password' } }]).includes('const result = password'))
+    })
+
+    describe('getRedactionError', function () {
+      it('should return undefined if the expression does not read a redacted identifier', function () {
+        assert.strictEqual(getRedactionError('name', { ref: 'name' }), undefined)
+      })
+
+      it('should return an evaluation error if the expression reads a redacted identifier', function () {
+        assert.deepStrictEqual(getRedactionError('pw', { getmember: [{ ref: 'user' }, 'password'] }), {
+          expr: 'pw',
+          message: "Could not evaluate the expression because 'password' was redacted",
+        })
+      })
+    })
+
+    describe('getSegmentRedactionErrors', function () {
+      it('should return undefined if no segment reads a redacted identifier', function () {
+        assert.strictEqual(getSegmentRedactionErrors([{ str: 'password: ' }, { dsl: 'foo', json: { ref: 'foo' } }]),
+          undefined)
+      })
+
+      it('should return an evaluation error for each segment reading a redacted identifier', function () {
+        assert.deepStrictEqual(getSegmentRedactionErrors([
+          { str: 'a: ' },
+          { dsl: 'user.password', json: { getmember: [{ ref: 'user' }, 'password'] } },
+          { str: ', b: ' },
+          { dsl: 'foo', json: { ref: 'foo' } },
+          { str: ', c: ' },
+          { dsl: 'len(token)', json: { len: { ref: 'token' } } },
+        ]), [
+          { expr: 'user.password', message: "Could not evaluate the expression because 'password' was redacted" },
+          { expr: 'len(token)', message: "Could not evaluate the expression because 'token' was redacted" },
+        ])
+      })
+    })
+  })
 })
+
+/**
+ * @param {object} [dynamicInstrumentation] - The `dynamicInstrumentation` config to load the redaction list from
+ */
+function loadCondition (dynamicInstrumentation = {
+  DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: [],
+  DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: [],
+}) {
+  const load = proxyquire.noCallThru()
+  const redaction = load('../../../src/debugger/devtools_client/snapshot/redaction', {
+    '../config': { dynamicInstrumentation },
+  })
+  return load('../../../src/debugger/devtools_client/condition', { './snapshot/redaction': redaction })
+}
 
 function generateTestCaseName (ast, dataOrSuffix, expected) {
   const code = typeof dataOrSuffix === 'string'

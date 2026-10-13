@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 const { coerce, major, maxSatisfying } = require('semver')
 
+const externals = require('./externals')
 const {
   brokenVersionReason,
   getVersionList,
@@ -168,6 +169,48 @@ describe('resolvePluginVersions', () => {
     const result = resolvePluginVersions({
       name: 'mongodb',
       declarations: [{ versions: ['>=2 <5'] }],
+      honourEnvRange: false,
+      env: { PACKAGE_VERSION_RANGE: '>=3 <4' },
+    })
+
+    assert.deepEqual(versionKeys(result), ['2.0.0', '2', '3', '4'])
+    assert.equal(result.unversioned, '>=2 <5')
+  })
+
+  it('honours PACKAGE_VERSION_RANGE for the Supabase test package', () => {
+    const result = resolvePluginVersions({
+      name: '@supabase/supabase-js',
+      declarations: externals.supabase,
+      honourEnvRange: false,
+      env: { PACKAGE_VERSION_RANGE: '=2.115.0' },
+    })
+
+    assert.deepEqual(versionKeys(result), ['2.115.0'])
+    assert.equal(result.unversioned, '=2.115.0')
+  })
+
+  for (const [nodeVersion, expected] of [['22.11.999', '4.29.1'], ['22.12.0', '5.12.5']]) {
+    it(`selects a compatible Fastify fixture for light-my-request on Node.js ${nodeVersion}`, () => {
+      const result = resolvePluginVersions({
+        name: 'fastify',
+        declarations: externals['light-my-request'].filter(({ name }) => name === 'fastify'),
+        nodeVersion,
+        honourEnvRange: false,
+        env: { PACKAGE_VERSION_RANGE: '6' },
+      })
+
+      assert.equal(maxSatisfying(['4.29.1', '5.12.5'], result.unversioned), expected)
+    })
+  }
+
+  it('ignores the PACKAGE_VERSION_RANGE opt-in of a declaration outside the Node.js range', () => {
+    const result = resolvePluginVersions({
+      name: 'mongodb',
+      declarations: [
+        { versions: ['>=2 <5'] },
+        { versions: ['>=5'], node: '>=22', honourEnvRange: true },
+      ],
+      nodeVersion: '21.999.999',
       honourEnvRange: false,
       env: { PACKAGE_VERSION_RANGE: '>=3 <4' },
     })

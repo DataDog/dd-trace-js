@@ -135,6 +135,19 @@ describe('LLMObs Experiments facade', () => {
 
     it('returns a working facade when enabled and credentialed', () => {
       const exp = createExperiments(enabledConfig())
+      for (const name of [
+        'BaseEvaluator',
+        'BaseSummaryEvaluator',
+        'EvaluatorContext',
+        'SummaryEvaluatorContext',
+        'EvaluatorResult',
+        'MultiEvaluatorResult',
+        'RemoteEvaluator',
+        'RemoteEvaluatorError',
+      ]) {
+        assert.equal(typeof exp[name], 'function')
+      }
+
       const dataset = exp.createDataset('d', {
         description: 'desc',
         records: [{ inputData: 'in', expectedOutput: 'out', metadata: { source: 'test' } }],

@@ -18,6 +18,7 @@ module.exports = {
   INTEGRATION: '_ml_obs.integration',
   METADATA: '_ml_obs.meta.metadata',
   COST_TAGS: '_ml_obs.meta.metadata._dd.cost_tags',
+  AGENT_MANIFEST: '_ml_obs.meta.metadata._dd.agent_manifest',
   METRICS: '_ml_obs.metrics',
   TOOL_DEFINITIONS: '_ml_obs.meta.tool_definitions',
   ML_APP: '_ml_obs.meta.ml_app',
@@ -54,11 +55,13 @@ module.exports = {
   DEFAULT_MODEL: 'custom',
 
   INPUT_DOCUMENTS: '_ml_obs.meta.input.documents',
+  EXPERIMENT_INPUT: '_ml_obs.meta.input',
   INPUT_MESSAGES: '_ml_obs.meta.input.messages',
   INPUT_VALUE: '_ml_obs.meta.input.value',
   INPUT_PROMPT: '_ml_obs.meta.input.prompt',
 
   OUTPUT_DOCUMENTS: '_ml_obs.meta.output.documents',
+  EXPERIMENT_OUTPUT: '_ml_obs.meta.output',
   OUTPUT_MESSAGES: '_ml_obs.meta.output.messages',
   OUTPUT_VALUE: '_ml_obs.meta.output.value',
 

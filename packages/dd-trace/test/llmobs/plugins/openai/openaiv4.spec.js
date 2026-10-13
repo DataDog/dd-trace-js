@@ -1028,6 +1028,184 @@ describe('integrations', () => {
         })
       })
 
+      it('keeps submitting response spans after a streamed response is aborted', async function () {
+        // openai v4 uses node-fetch, which still delivers already-buffered chunks after an abort
+        if (semifies(realVersion, '<5.0.0')) {
+          this.skip()
+        }
+
+        const request = {
+          model: 'gpt-4o-mini',
+          input: 'Stream this please',
+          max_output_tokens: 50,
+          temperature: 0,
+          stream: true,
+        }
+
+        // Abort before reading: the SDK ends the stream quietly without delivering any chunk
+        const controller = new AbortController()
+        const abortedStream = await openai.responses.create(request, { signal: controller.signal })
+        controller.abort()
+        for await (const part of abortedStream) {
+          assert.fail(`unexpected chunk after abort: ${inspect(part)}`)
+        }
+
+        const stream = await openai.responses.create(request)
+        for await (const part of stream) {
+          assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
+        }
+
+        const { llmobsSpans } = await getEvents(2)
+        const [abortedSpan, nextSpan] = llmobsSpans
+
+        assert.deepStrictEqual(abortedSpan.meta.input.messages, [{ role: 'user', content: 'Stream this please' }])
+        assert.deepStrictEqual(abortedSpan.meta.output.messages, [{ content: '', role: '' }])
+        assert.strictEqual(nextSpan.meta.output.messages[0].role, 'assistant')
+        assert.ok(nextSpan.meta.output.messages[0].content)
+      })
+
+      // The cassettes below were recorded through the testagent, then truncated before `response.completed`.
+      // The testagent buffers the full upstream response while recording, so a stream that ends early (as when the
+      // caller aborts mid-stream) cannot be recorded directly.
+      describe('streamed response that ends early', function () {
+        beforeEach(function () {
+          if (semifies(realVersion, '<4.87.0')) {
+            this.skip()
+          }
+        })
+
+        // openai_responses_post_0ad13443.json is truncated after `response.in_progress`
+        it('submits the input with an empty output when no output was streamed', async () => {
+          const stream = await openai.responses.create({
+            model: 'gpt-4o-mini',
+            input: 'Say hello in one sentence',
+            stream: true,
+          })
+          for await (const part of stream) {
+            assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createResponse',
+            inputMessages: [{ role: 'user', content: 'Say hello in one sentence' }],
+            modelName: 'gpt-4o-mini-2024-07-18',
+            modelProvider: 'openai',
+            metadata: {
+              stream: true,
+              temperature: 1,
+              top_p: 1,
+              tool_choice: 'auto',
+              truncation: 'disabled',
+              text: { format: { type: 'text' }, verbosity: 'medium' },
+            },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+          assert.strictEqual(llmobsSpans[0].meta.output?.messages, undefined)
+        })
+
+        // openai_responses_post_45a20fff.json is truncated after the third text delta
+        it('submits the text streamed before the stream ended', async () => {
+          const stream = await openai.responses.create({
+            model: 'gpt-4o-mini',
+            input: 'Write a haiku about the ocean',
+            stream: true,
+          })
+          const parts = []
+          for await (const part of stream) {
+            parts.push(part)
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createResponse',
+            inputMessages: [{ role: 'user', content: 'Write a haiku about the ocean' }],
+            outputMessages: [{ role: 'assistant', content: 'Waves whisper' }],
+            modelName: 'gpt-4o-mini-2024-07-18',
+            modelProvider: 'openai',
+            metadata: {
+              stream: true,
+              temperature: 1,
+              top_p: 1,
+              tool_choice: 'auto',
+              truncation: 'disabled',
+              text: { format: { type: 'text' }, verbosity: 'medium' },
+            },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+
+          // the chunks delivered to the application are left untouched
+          const addedItem = parts.find(part => part.type === 'response.output_item.added').item
+          assert.deepStrictEqual(addedItem.content, [])
+        })
+
+        // openai_responses_post_c17a3c24.json is truncated after the second tool call's arguments, before it is done
+        it('submits completed items and the tool call streamed before the stream ended', async () => {
+          const stream = await openai.responses.create({
+            model: 'gpt-4o-mini',
+            input: 'What is the weather in Paris and Tokyo?',
+            tools: [{
+              type: 'function',
+              name: 'get_weather',
+              description: 'Get the current weather for a city',
+              parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+            }],
+            stream: true,
+          })
+          const parts = []
+          for await (const part of stream) {
+            parts.push(part)
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createResponse',
+            inputMessages: [{ role: 'user', content: 'What is the weather in Paris and Tokyo?' }],
+            outputMessages: [
+              {
+                role: 'assistant',
+                tool_calls: [{
+                  tool_id: MOCK_STRING,
+                  name: 'get_weather',
+                  arguments: { city: 'Paris' },
+                  type: 'function_call',
+                }],
+              },
+              {
+                role: 'assistant',
+                tool_calls: [{
+                  tool_id: MOCK_STRING,
+                  name: 'get_weather',
+                  arguments: { city: 'Tokyo' },
+                  type: 'function_call',
+                }],
+              },
+            ],
+            modelName: 'gpt-4o-mini-2024-07-18',
+            modelProvider: 'openai',
+            metadata: {
+              stream: true,
+              temperature: 1,
+              top_p: 1,
+              tool_choice: 'auto',
+              truncation: 'disabled',
+              text: { format: { type: 'text' }, verbosity: 'medium' },
+            },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+
+          // the chunks delivered to the application are left untouched
+          const toolCallItem = parts.find(part => part.item?.type === 'function_call').item
+          assert.strictEqual(toolCallItem.arguments, '')
+        })
+      })
+
       describe('prompts', function () {
         beforeEach(function () {
           if (semifies(realVersion, '<4.87.0')) {

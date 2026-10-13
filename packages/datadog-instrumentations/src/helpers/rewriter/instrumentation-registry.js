@@ -17,10 +17,10 @@ const registry = [
   { instrumentations: require('./instrumentations/modelcontextprotocol-sdk') },
   { instrumentations: require('./instrumentations/openai-agents') },
   { instrumentations: require('./instrumentations/playwright') },
-  { instrumentations: require('./instrumentations/postgres') },
+  { activate: true, instrumentations: require('./instrumentations/postgres') },
   { instrumentations: require('./instrumentations/webdriverio') },
   { instrumentations: require('./instrumentations/aws-durable-execution-sdk-js') },
-  { instrumentations: require('./instrumentations/supabase') },
+  { activate: true, instrumentations: require('./instrumentations/supabase') },
 ]
 
 const activatedModules = new Set()

@@ -165,8 +165,6 @@ ${build.initialOptions.banner.js}`
     log.warn('No git metadata available - skipping injection')
   }
 
-  // first time is intercepted, proxy should be created, next time the original should be loaded
-  const interceptedESMModules = new Set()
   let resolver
 
   build.onEnd(async () => {
@@ -217,11 +215,18 @@ ${build.initialOptions.banner.js}`
 
     const internal = builtins.has(args.path)
 
+    // Only the generated wrapper module, and the real module importing itself, must reach the real module unwrapped.
+    // Every other importer must get the wrapper regardless of whether it has already been loaded: onLoad runs
+    // concurrently with onResolve, so tracking loaded modules makes which importer sees the wrapper depend on timing,
+    // leaving some bindings uninstrumented. Routing a self-import to the wrapper would create a wrapper -> original ->
+    // wrapper cycle that can hit the wrapper's exports in their temporal dead zone.
+    const isInterceptedImporter = args.importer.endsWith(ESM_INTERCEPTED_SUFFIX) || args.importer === fullPathToModule
+
     if (args.namespace === 'file' && (
       modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
     ) {
       // Internal module like http/fs is imported and the build output is ESM
-      if (internal && args.kind === 'import-statement' && esmBuild && !interceptedESMModules.has(fullPathToModule)) {
+      if (internal && args.kind === 'import-statement' && esmBuild && !isInterceptedImporter) {
         fullPathToModule = `${INTERNAL_ESM_INTERCEPTED_PREFIX}${fullPathToModule}${ESM_INTERCEPTED_SUFFIX}`
 
         return {
@@ -263,7 +268,7 @@ ${build.initialOptions.banner.js}`
         const packageJson = JSON.parse(fs.readFileSync(/** @type {string} */(pathToPackageJson)).toString())
 
         const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
-        if (isESM && !interceptedESMModules.has(fullPathToModule)) {
+        if (isESM && !isInterceptedImporter) {
           fullPathToModule += ESM_INTERCEPTED_SUFFIX
         }
 
@@ -321,8 +326,6 @@ ${build.initialOptions.banner.js}`
           if (data.internal) {
             args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
           }
-
-          interceptedESMModules.add(args.path)
 
           resolver ??= createEsmResolver()
           const setters = await processModule({

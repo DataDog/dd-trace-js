@@ -94,8 +94,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     if (!methodName) return // we will not trace all openai methods for llmobs
 
     const inputs = ctx.args[0] // completion, chat completion, and embeddings take one argument
-    const response = ctx.result?.data // no result if error
-    const error = !!span.context().getTag('error')
+    const response = ctx.result?.data // no result if error, or if a stream ended before any response arrived
+    const error = !!span.context().getTag('error') || response == null
 
     const operation = getOperation(methodName)
 

@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert/strict')
 const http = require('node:http')
 const https = require('node:https')
 
@@ -228,6 +228,33 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(typeof otlpSpan.parentSpanId, 'string', 'parentSpanId must be a string')
       assert.strictEqual(otlpSpan.parentSpanId.length, 16, 'parentSpanId must be 16 hex chars (8 bytes)')
     })
+
+    it('exports W3C tracestate and the sampled flag as first-class OTLP fields', () => {
+      const transformer = new OtlpTraceTransformer({})
+      const traceState = 'dd=s:1,ot=rv:ef284ace7a91e1;th:e6666666666668'
+      const span = createMockSpan({
+        trace_state: traceState,
+        metrics: { _sampling_priority_v1: 1 },
+      })
+
+      const decoded = decodePayload(transformer.transformSpans([span]))
+      const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+      assert.strictEqual(otlpSpan.traceState, traceState)
+      assert.strictEqual(otlpSpan.flags, 1)
+    })
+
+    for (const priority of [-1, 0, 1, 2, undefined]) {
+      it(`exports the sampled flag for priority ${priority}`, () => {
+        const transformer = new OtlpTraceTransformer({})
+        const span = createMockSpan({ metrics: { _sampling_priority_v1: priority } })
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.flags, priority === undefined ? undefined : Number(priority > 0))
+        assert.strictEqual(otlpSpan.traceState, undefined)
+      })
+    }
 
     it('maps span kind correctly', () => {
       const transformer = new OtlpTraceTransformer({})

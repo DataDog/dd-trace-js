@@ -2,7 +2,6 @@
 
 const assert = require('node:assert')
 const path = require('node:path')
-const Axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
@@ -12,6 +11,7 @@ const { wafRunFinished } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
 const getConfig = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
+const HttpRequest = require('../../setup/helpers/http-client')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {
@@ -25,7 +25,7 @@ describe('RASP - sql_injection', () => {
           database: 'postgres',
           application_name: 'test',
         }
-        let server, axios, app, pg
+        let server, httpRequest, app, pg
 
         before(() => {
           return agent.load(['express', 'http', 'pg'], { client: false })
@@ -50,7 +50,7 @@ describe('RASP - sql_injection', () => {
 
           server = expressApp.listen(0, () => {
             const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-            axios = Axios.create({
+            httpRequest = HttpRequest.create({
               baseURL: `http://localhost:${port}`,
             })
             done()
@@ -86,7 +86,7 @@ describe('RASP - sql_injection', () => {
               })
             }
 
-            axios.get('/?param=1')
+            httpRequest.get('/?param=1')
 
             await checkRaspExecutedAndNotThreat(agent)
           })
@@ -102,7 +102,7 @@ describe('RASP - sql_injection', () => {
             }
 
             try {
-              await axios.get('/?param=\' OR 1 = 1 --')
+              await httpRequest.get('/?param=\' OR 1 = 1 --')
             } catch {
               return await checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
             }
@@ -123,7 +123,7 @@ describe('RASP - sql_injection', () => {
             }
 
             try {
-              await axios.get('/?param=\' OR 1 = 1 --')
+              await httpRequest.get('/?param=\' OR 1 = 1 --')
             } catch {
               return checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
             }
@@ -150,7 +150,7 @@ describe('RASP - sql_injection', () => {
               })
             }
 
-            axios.get('/?param=1')
+            httpRequest.get('/?param=1')
 
             await checkRaspExecutedAndNotThreat(agent)
           })
@@ -166,7 +166,7 @@ describe('RASP - sql_injection', () => {
             }
 
             try {
-              await axios.get('/?param=\' OR 1 = 1 --')
+              await httpRequest.get('/?param=\' OR 1 = 1 --')
             } catch {
               return checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
             }
@@ -187,7 +187,7 @@ describe('RASP - sql_injection', () => {
             }
 
             try {
-              await axios.get('/?param=\' OR 1 = 1 --')
+              await httpRequest.get('/?param=\' OR 1 = 1 --')
             } catch {
               return checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
             }
@@ -221,7 +221,7 @@ describe('RASP - sql_injection', () => {
                 res.end()
               }
 
-              await axios.get('/')
+              await httpRequest.get('/')
 
               assert.equal(run.args.filter(arg => arg[1]?.type === 'sql_injection').length, 1)
             })
@@ -234,7 +234,7 @@ describe('RASP - sql_injection', () => {
                 res.end()
               }
 
-              await axios.get('/')
+              await httpRequest.get('/')
 
               assert.equal(run.args.filter(arg => arg[1]?.type === 'sql_injection').length, 2)
             })
@@ -256,7 +256,7 @@ describe('RASP - sql_injection', () => {
                 res.end()
               }
 
-              await axios.get('/')
+              await httpRequest.get('/')
 
               assert.equal(run.args.filter(arg => arg[1]?.type === 'sql_injection').length, 2)
             })
@@ -278,7 +278,7 @@ describe('RASP - sql_injection', () => {
                 res.end()
               }
 
-              await axios.get('/')
+              await httpRequest.get('/')
 
               assert.equal(run.args.filter(arg => arg[1]?.type === 'sql_injection').length, 1)
             })

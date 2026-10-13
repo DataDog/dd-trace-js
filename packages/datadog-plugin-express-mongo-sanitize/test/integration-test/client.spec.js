@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const axios = require('axios')
 const {
   sandboxCwd,
   useSandbox,
@@ -11,6 +10,7 @@ const {
   stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../../dd-trace/test/setup/helpers/http-client')
 
 withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
   describe('ESM', () => {
@@ -38,7 +38,7 @@ withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
     for (const variant of Object.keys(variants)) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
-        const response = await axios.get(`${proc.url}/?param=paramvalue`)
+        const response = await httpRequest.get(`${proc.url}/?param=paramvalue`)
         assert.equal(response.headers['x-counter'], '1')
       })
     }
