@@ -7,7 +7,7 @@ const sinon = require('sinon')
 
 const { storage: llmobsStorage } = require('../../../../src/llmobs/storage')
 const {
-  MODEL, EPOCH, OUTPUT, event, pcm, record, fixture, speech,
+  MODEL, EPOCH, INPUT, OUTPUT, event, pcm, record, fixture, speech,
 } = require('../../../../../datadog-instrumentations/test/nova-sonic/helpers')
 const { useLlmObs, assertLlmObsSpanEvent } = require('../../util')
 const { withVersions } = require('../../../setup/mocha')
@@ -178,6 +178,136 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
       })
       return transport
     }
+
+    for (const kind of ['empty-error', 'tool-only', 'input-only', 'output-only', 'invalid-input', 'invalid-output',
+      'oversized-output', 'empty-input', 'empty-output']) {
+      it(`uses audio placeholders only for observed audio (${kind})`, async () => {
+        const records = []
+        const hasInput = kind === 'input-only' || kind === 'invalid-input' || kind === 'empty-input'
+        const hasOutput = kind.endsWith('output') || kind === 'output-only'
+        if (hasInput) {
+          records.push(
+            record('contentStart', {
+              contentName: 'mic', role: 'USER', type: 'AUDIO', audioInputConfiguration: INPUT,
+            }, 0, true),
+            record('audioInput', {
+              contentName: 'mic',
+              content: kind === 'empty-input' ? '' : kind === 'invalid-input' ? 'invalid!' : pcm(100),
+            }, 1, true))
+        }
+        if (hasOutput) {
+          records.push(
+            record('contentStart', {
+              contentId: 'audio', role: 'ASSISTANT', type: 'AUDIO', audioOutputConfiguration: OUTPUT,
+            }, 100),
+            record('audioOutput', {
+              contentId: 'audio',
+              content: kind === 'empty-output'
+                ? ''
+                : kind === 'invalid-output' ? 'invalid!' : pcm(kind === 'oversized-output' ? 70_000 : 100),
+            }, 110),
+            record('contentEnd', { contentId: 'audio', stopReason: 'END_TURN' }, 120))
+        } else if (kind !== 'empty-error') {
+          records.push(
+            record('contentStart', { contentId: 'tool', role: 'TOOL', type: 'TOOL' }, 100),
+            record('toolUse', { contentId: 'tool', toolName: 'weather', toolUseId: 'call', content: '{}' }, 110),
+            record('contentEnd', { contentId: 'tool', stopReason: 'TOOL_USE' }, 120))
+        }
+        const failure = new Error('stream failed')
+        await assert.rejects(async () => drain(await client.send(command(records, { failure }).request)),
+          error => error === failure)
+        const count = kind === 'output-only' || kind === 'oversized-output' ? 3 : 2
+        const { llmobsSpans } = await getEvents(count)
+        const { llm } = tree(llmobsSpans)
+        assert.equal(llm.meta.input.messages[0].content, hasInput && kind !== 'empty-input' ? '[audio]' : '')
+        assert.equal(llm.meta.output.messages[0].content, hasOutput && kind !== 'empty-output' ? '[audio]' : '')
+        assert.equal(llm.meta['error.message'], failure.message)
+        if (!hasOutput && kind !== 'empty-error') {
+          assert.deepEqual(llm.meta.output.messages[0].tool_calls, [{
+            name: 'weather', arguments: {}, tool_id: 'call', type: 'function',
+          }])
+        }
+        if (kind === 'invalid-output' || kind === 'oversized-output') {
+          assert.equal(llm.meta.output.messages[0].audio_parts, undefined)
+        }
+      })
+    }
+
+    for (const kind of [
+      'text-only', 'partial-text', 'empty-audio', 'partial-audio', 'audio', 'late-final', 'interrupted',
+    ]) {
+      it(`uses the correct response completion boundary (${kind})`, async () => {
+        const records = [
+          record('contentStart', { contentId: 'text', role: 'ASSISTANT', type: 'TEXT' }, 100),
+          record('textOutput', { contentId: 'text', content: 'hello' }, 110),
+          record('contentEnd', {
+            contentId: 'text', stopReason: kind === 'partial-text' ? 'PARTIAL_TURN' : 'END_TURN',
+          }, 120),
+        ]
+        if (kind !== 'text-only' && kind !== 'partial-text') {
+          records.push(record('contentStart', {
+            contentId: 'audio', role: 'ASSISTANT', type: 'AUDIO', audioOutputConfiguration: OUTPUT,
+          }, 130))
+          if (kind !== 'empty-audio') {
+            records.push(record('audioOutput', { contentId: 'audio', content: pcm(100) }, 140))
+          }
+          if (kind === 'audio' || kind === 'late-final' || kind === 'interrupted') {
+            records.push(record('contentEnd', {
+              contentId: 'audio', stopReason: kind === 'interrupted' ? 'INTERRUPTED' : 'END_TURN',
+            }, 160))
+          }
+          if (kind === 'late-final' || kind === 'interrupted') {
+            records.push(
+              record('contentStart', {
+                contentId: 'final',
+                role: 'ASSISTANT',
+                type: 'TEXT',
+                additionalModelFields: { generationStage: 'FINAL' },
+              }, 170),
+              record('textOutput', { contentId: 'final', content: 'hello' }, 180),
+              record('contentEnd', { contentId: 'final', stopReason: 'END_TURN' }, 190))
+          }
+        }
+        records.push(record('completionEnd', {}, 10_100))
+        await drain(await client.send(command(records).request))
+        const audio = !['text-only', 'partial-text', 'empty-audio'].includes(kind)
+        const { llmobsSpans } = await getEvents(audio ? 3 : 2)
+        const { llm, root } = tree(llmobsSpans)
+        const partial = !['text-only', 'audio', 'late-final'].includes(kind)
+        const end = kind === 'text-only' ? 120 : kind === 'interrupted' || !partial ? 160 : 10_100
+        assert.equal(llm.start_ns + llm.duration, (EPOCH + end) * MS)
+        assert.equal(llm.meta.metadata.partial, partial)
+        const playbackEnd = kind === 'interrupted' ? 160 : audio ? 240 : 0
+        assert.equal(root.start_ns + root.duration, (EPOCH + Math.max(end, playbackEnd)) * MS)
+        assert.equal(llm.meta.output.messages[0].content, 'hello')
+        assert.equal(llm.meta.input.messages[0].content, '')
+      })
+    }
+
+    it('keeps consecutive text-only exchanges separate after terminal text', async () => {
+      const records = []
+      for (let index = 0; index < 2; index++) {
+        for (const role of ['USER', 'ASSISTANT']) {
+          const contentId = `${role}${index}`
+          const at = index * 200 + (role === 'USER' ? 0 : 100)
+          records.push(
+            record('contentStart', { contentId, role, type: 'TEXT' }, at),
+            record('textOutput', { contentId, content: `${role}${index}` }, at + 10),
+            record('contentEnd', { contentId, stopReason: 'END_TURN' }, at + 20))
+        }
+      }
+      records.push(record('completionEnd', {}, 10_100))
+      await drain(await client.send(command(records).request))
+      const { llmobsSpans } = await getEvents(4)
+      assert.equal(llmobsSpans.length, 4)
+      for (let index = 0; index < 2; index++) {
+        const { llm } = tree(llmobsSpans, index)
+        assert.equal(llm.meta.input.messages[0].content, `USER${index}`)
+        assert.equal(llm.meta.output.messages[0].content, `ASSISTANT${index}`)
+        assert.equal(llm.start_ns + llm.duration, (EPOCH + index * 200 + 120) * MS)
+        assert.equal(llm.meta.metadata.partial, false)
+      }
+    })
 
     it('serializes the exact hierarchy, WAV placement, and receipt-based TTFA', async () => {
       const records = speech()

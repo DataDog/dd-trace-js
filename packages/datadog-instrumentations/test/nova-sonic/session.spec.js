@@ -120,8 +120,40 @@ describe('Nova Sonic protocol', () => {
   it('retains phase timing when input format is unusable', () => {
     const [{ turn }] = replay(speech({ input: { ...INPUT, sampleSizeBits: 8 } }))
     assert.equal(turn.inputPcm, undefined)
+    assert.equal(turn.inputAudioObserved, true)
     assert.equal(turn.inputEnd, EPOCH + 2500)
     assert.equal(turn.output.start - turn.inputEnd, 500)
+  })
+
+  it('does not leak observed audio from a previous turn into a text-only turn', () => {
+    const turns = replay([
+      ...speech(),
+      record('contentStart', { contentId: 'user2', role: 'USER', type: 'TEXT' }, 4000),
+      record('textOutput', { contentId: 'user2', content: 'next question' }, 4010),
+      record('contentEnd', { contentId: 'user2', stopReason: 'END_TURN' }, 4020),
+      record('contentStart', { contentId: 'answer2', role: 'ASSISTANT', type: 'TEXT' }, 4100),
+      record('textOutput', { contentId: 'answer2', content: 'next answer' }, 4110),
+      record('contentEnd', { contentId: 'answer2', stopReason: 'END_TURN' }, 4120),
+    ])
+    assert.equal(turns.length, 2)
+    assert.equal(turns[0].turn.inputAudioObserved, true)
+    assert.equal(turns[0].turn.outputAudioObserved, true)
+    assert.equal(turns[1].turn.inputAudioObserved, false)
+    assert.equal(turns[1].turn.outputAudioObserved, false)
+  })
+
+  it('does not treat a user text ending as response completion', () => {
+    const [result] = replay([
+      record('contentStart', { contentId: 'assistant', role: 'ASSISTANT', type: 'TEXT' }, 100),
+      record('textOutput', { contentId: 'assistant', content: 'partial' }, 110),
+      record('contentEnd', { contentId: 'assistant', stopReason: 'PARTIAL_TURN' }, 120),
+      record('contentStart', { contentId: 'user', role: 'USER', type: 'TEXT' }, 200),
+      record('textOutput', { contentId: 'user', content: 'late user transcript' }, 210),
+      record('contentEnd', { contentId: 'user', stopReason: 'END_TURN' }, 220),
+      record('completionEnd', {}, 1000),
+    ])
+    assert.equal(result.responseEnd, EPOCH + 1000)
+    assert.equal(result.metadata.partial, true)
   })
 
   it('supports TOOL-role calls and correlates outbound tool results without splitting the response', () => {

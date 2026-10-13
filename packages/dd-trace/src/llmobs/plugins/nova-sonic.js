@@ -59,8 +59,8 @@ class SonicLLMObsPlugin extends LLMObsPlugin {
       return
     }
 
-    const input = { role: 'user', content: turn.userText || AUDIO_FALLBACK }
-    const output = { role: 'assistant', content: text || AUDIO_FALLBACK }
+    const input = { role: 'user', content: turn.userText || (turn.inputAudioObserved ? AUDIO_FALLBACK : '') }
+    const output = { role: 'assistant', content: text || (turn.outputAudioObserved ? AUDIO_FALLBACK : '') }
     if (turn.tools.length) output.toolCalls = turn.tools
     const inputs = [...history, input, ...turn.toolResults]
     const outputs = [output]

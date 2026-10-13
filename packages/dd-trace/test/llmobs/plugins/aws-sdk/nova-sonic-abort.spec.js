@@ -109,8 +109,11 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
             const llm = llmobsSpans.find(span => span.name === 'nova sonic response')
             assert.equal(llm.status, phase === 'complete' ? 'ok' : 'error')
             if (phase !== 'complete') assert.equal(llm.meta['error.type'], 'AbortError')
+            assert.equal(llm.meta.input.messages[0].content, '')
             if (phase === 'complete' || phase === 'streaming') {
               assert.equal(llm.meta.output.messages[0].content, 'partial answer')
+            } else {
+              assert.equal(llm.meta.output.messages[0].content, '')
             }
           })
         }

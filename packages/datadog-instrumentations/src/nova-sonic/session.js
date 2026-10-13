@@ -24,9 +24,13 @@ class Turn {
   inputRate = 0
   inputStart
   inputEnd
+  inputAudioObserved = false
+  outputAudioObserved = false
+  audioStarted = false
   output = new OutputAudio()
   started
   generationEnd
+  textEnd
   completionId
   metrics = { input_tokens: 0, output_tokens: 0, total_tokens: 0 }
   missingAudioMetrics = new Set()
@@ -36,6 +40,13 @@ class Turn {
 /** @param {Turn} turn */
 function hasInput (turn) {
   return turn.windows.length || turn.userText || turn.toolResults.length
+}
+
+/** @param {Turn} turn */
+function completionTime (turn) {
+  // Text can finish before audio starts. Keep its boundary as a fallback, without completing
+  // an unfinished or interrupted audio response when its final transcript arrives.
+  return turn.generationEnd ?? (!turn.audioStarted && turn.output.interrupted === undefined ? turn.textEnd : undefined)
 }
 
 /** @param {unknown} value */
@@ -146,7 +157,10 @@ class SonicSession {
         break
       case 'audioInput': {
         const block = this.#outbound.get(key)
-        if (block?.type === 'AUDIO' && block.role === 'USER') this.#audio.append(data.content, now)
+        if (block?.type === 'AUDIO' && block.role === 'USER') {
+          if (typeof data.content === 'string' && data.content.length) this.#pending.inputAudioObserved = true
+          this.#audio.append(data.content, now)
+        }
         break
       }
       case 'textInput': {
@@ -244,6 +258,7 @@ class SonicSession {
         const offset = data.inputAudioOffsetMs
         if (!Number.isFinite(offset) || offset < 0 || this.#pending.windows.length >= MAX_BLOCKS) return
         this.#pending.windows.push({ start_ms: offset })
+        this.#pending.inputAudioObserved = true
         this.#pending.inputEnd = undefined
         this.#pending.inputStart ??= this.#audio.anchor === undefined
           ? now
@@ -270,10 +285,11 @@ class SonicSession {
         if (data.role === 'ASSISTANT' || data.type === 'TOOL') {
           turn = stage === 'FINAL' && this.#current ? this.#current : this.#startResponse(data, now)
         } else {
-          turn = hasInput(this.#pending) || !this.#current || this.#current.generationEnd !== undefined
+          turn = hasInput(this.#pending) || !this.#current || completionTime(this.#current) !== undefined
             ? this.#pending
             : this.#current
         }
+        if (data.role === 'ASSISTANT' && data.type === 'AUDIO') turn.audioStarted = true
         this.#blocks.set(key, { data, stage, turn, text: '', control: false })
         this.#bound(this.#blocks)
         break
@@ -312,6 +328,7 @@ class SonicSession {
         block.text = (block.text + data.content).slice(0, MAX_TEXT)
       }
     } else if (name === 'audioOutput' && block.data.role === 'ASSISTANT') {
+      if (typeof data.content === 'string' && data.content.length) turn.outputAudioObserved = true
       turn.output.append(data.content, block.data.audioOutputConfiguration ?? this.#outputConfiguration, now)
     } else if (name === 'toolUse' && turn.tools.length < MAX_TOOLS) {
       const args = typeof data.content === 'string' && data.content.length <= MAX_TOOL_TEXT ? parse(data.content) : {}
@@ -325,6 +342,8 @@ class SonicSession {
       this.#text(block)
       if (data.stopReason === 'INTERRUPTED') turn.output.interrupt(now)
       if (block.data.type === 'AUDIO' && data.stopReason === 'END_TURN') turn.generationEnd = now
+      if (block.data.role === 'ASSISTANT' && block.data.type === 'TEXT' &&
+          !block.control && data.stopReason === 'END_TURN') turn.textEnd = now
       this.#blocks.delete(key)
       this.#completed.add(key)
       if (this.#completed.size > MAX_BLOCKS) this.#completed.delete(this.#completed.values().next().value)
@@ -386,7 +405,8 @@ class SonicSession {
       this.#snapshotInput(turn)
       const start = turn.inputStart ?? turn.started ?? now
       const llmStart = turn.inputEnd ?? turn.started ?? start
-      const responseEnd = Math.max(llmStart, turn.generationEnd ?? turn.output.interrupted ?? now)
+      const completed = completionTime(turn)
+      const responseEnd = Math.max(llmStart, completed ?? turn.output.interrupted ?? now)
       this.#emit({
         turn,
         error,
@@ -403,7 +423,7 @@ class SonicSession {
           ttfa_boundary: 'speech_end_event_receipt',
           output_timing: 'projected_playback',
           interrupted: turn.output.interrupted !== undefined,
-          partial: turn.generationEnd === undefined,
+          partial: completed === undefined,
           transcript_stage: turn.finalText ? 'FINAL' : 'SPECULATIVE',
           usage_attribution: 'event_receipt',
           generated_output_bytes: turn.output.generatedBytes,
