@@ -11,6 +11,7 @@ const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const bodyParserReadCh = dc.channel('datadog:fastify:body-parser:finish')
+const BODY_SIZE_BYTES = 32 * 1024 * 1024
 
 describe('Plugin', () => {
   describe('fastify', () => {
@@ -34,7 +35,7 @@ describe('Plugin', () => {
             bodyParserReadCh.subscribe(onBody)
 
             const fastify = getExport()
-            app = fastify()
+            app = fastify({ bodyLimit: BODY_SIZE_BYTES * 2 })
 
             if (semver.intersects(version, '>=3')) {
               await app.register(require('../../../versions/middie').get())
@@ -56,7 +57,7 @@ describe('Plugin', () => {
           })
 
           it('publishes a string body once without enumerating its characters', async () => {
-            const body = '"' + 'A'.repeat(32 * 1024 * 1024) + '"'
+            const body = '"' + 'A'.repeat(BODY_SIZE_BYTES) + '"'
 
             const res = await httpRequest.post(url, body, { headers: { 'content-type': 'application/json' } })
 
@@ -66,7 +67,7 @@ describe('Plugin', () => {
           })
 
           it('publishes a binary body once without enumerating its bytes', async () => {
-            const body = Buffer.alloc(32 * 1024 * 1024)
+            const body = Buffer.alloc(BODY_SIZE_BYTES)
 
             const res = await httpRequest.post(url, body, { headers: { 'content-type': 'application/octet-stream' } })
 
@@ -77,7 +78,7 @@ describe('Plugin', () => {
           })
 
           it('does not publish an empty body', async () => {
-            const res = await httpRequest.post(url, '', { headers: { 'content-type': 'application/json' } })
+            const res = await httpRequest.post(url)
 
             assert.strictEqual(res.status, 200)
             assert.deepStrictEqual(bodies, [])
