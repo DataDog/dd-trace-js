@@ -5,6 +5,7 @@ const { execFile } = require('node:child_process')
 const { Readable } = require('node:stream')
 const nodeVm = require('node:vm')
 const sinon = require('sinon')
+const jsonpath = require('../../../../vendor/dist/jsonpath-plus').JSONPath
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
   PAYLOAD_TAG_RESPONSE_PREFIX,
@@ -1388,7 +1389,8 @@ describe('Safe payload capture', () => {
       const tags = computeTags(safeConfig, { Body: Buffer.from('abc') }, responseOpts)
 
       assert.strictEqual(tags['aws.response.body.Body'], 'abc')
-      assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
+      // The pooled source Buffer loses its original offset and backing length.
+      assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
     })
 
     it('should keep the typed-array per-index tag format below the binary budget', () => {
@@ -1482,6 +1484,178 @@ describe('Safe payload capture', () => {
       assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
     })
 
+    describe('binary metadata completeness', () => {
+      const kinds = /** @type {const} */ (['Uint8Array', 'Uint16Array', 'DataView', 'Buffer'])
+      /** @typedef {[string, () => ArrayBuffer | SharedArrayBuffer, string, boolean]} StorageCase */
+      /** @typedef {new (size: number, options: { maxByteLength: number }) => ArrayBuffer} ResizableBuffer */
+
+      /**
+       * @param {typeof kinds[number]} kind
+       * @param {ArrayBuffer | SharedArrayBuffer} backing
+       * @param {number} byteOffset
+       * @param {number} byteLength
+       * @returns {Uint8Array | Uint16Array | DataView | Buffer}
+       */
+      function makeView (kind, backing, byteOffset, byteLength) {
+        if (kind === 'Buffer') return Buffer.from(backing, byteOffset, byteLength)
+        if (kind === 'DataView') return new DataView(backing, byteOffset, byteLength)
+        if (kind === 'Uint16Array') return new Uint16Array(backing, byteOffset, byteLength / 2)
+        return new Uint8Array(backing, byteOffset, byteLength)
+      }
+
+      for (const kind of kinds) {
+        for (const [name, offset, length, expression] of /** @type {Array<[string, number, number, string]>} */ ([
+          ['nonzero offset', 2, 2, '@.bytes.byteOffset > 0'],
+          ['spare backing bytes', 0, 2, '@.bytes.buffer.byteLength > 2'],
+          ['empty view over nonempty storage', 0, 0, '@.bytes.buffer.byteLength > 0'],
+        ])) {
+          for (const phase of /** @type {const} */ (['request', 'response'])) {
+            it(`suppresses ${phase} metadata predicates for ${kind} with ${name}`, () => {
+              const backing = new ArrayBuffer(4)
+              new Uint8Array(backing).set([97, 98, 99, 100])
+              const bytes = makeView(kind, backing, offset, length)
+              const item = { bytes, secret: 'customer-secret', encoded: '{"secret":"encoded-secret"}' }
+              const input = { items: [item] }
+              const opts = phase === 'request' ? requestOpts : responseOpts
+              const rule = `$.items[?(${expression})].secret`
+              assert.deepStrictEqual(jsonpath({ path: rule, json: input }), ['customer-secret'])
+
+              assert.deepStrictEqual(computeTags({ ...safeConfig, [phase]: [rule] }, input, opts), {})
+              assert.deepStrictEqual(computeTags({
+                ...safeConfig,
+                expand: [`$.items[?(${expression})].encoded`],
+                [phase]: ['$.items[*].encoded.secret'],
+              }, input, opts), {})
+
+              const snapshot = createSafeSnapshot(input)
+              const items = /** @type {{ items: Array<{ bytes: Uint8Array | DataView }> }} */ (snapshot.value).items
+              const copy = items[0].bytes
+              assert.strictEqual(snapshot.incomplete, true)
+              assert.strictEqual(copy.byteOffset, 0)
+              assert.strictEqual(copy.byteLength, length)
+              assert.strictEqual(copy.buffer.byteLength, length)
+              assert.notStrictEqual(copy.buffer, backing)
+              assert.deepStrictEqual(
+                Array.from(new Uint8Array(copy.buffer)), [97, 98, 99, 100].slice(offset, offset + length)
+              )
+
+              const tags = computeTags({ ...safeConfig, [phase]: ['$.items[*].secret'] }, input, opts)
+              assert.strictEqual(tags[`${opts.prefix}.items.0.secret`], 'redacted')
+              assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
+              assert.strictEqual(item.secret, 'customer-secret')
+              assert.strictEqual(item.encoded, '{"secret":"encoded-secret"}')
+              assert.deepStrictEqual(Array.from(new Uint8Array(backing)), [97, 98, 99, 100])
+            })
+          }
+        }
+
+        for (const length of [0, 2]) {
+          it(`keeps full-range ${kind} metadata complete with ${length} bytes`, () => {
+            const backing = new ArrayBuffer(length)
+            const bytes = makeView(kind, backing, 0, length)
+            const input = { items: [{ bytes, secret: 'customer-secret' }] }
+            const rule = `$.items[?(@.bytes.byteOffset === 0 && @.bytes.buffer.byteLength === ${length})].secret`
+
+            const snapshot = createSafeSnapshot(input)
+            assert.strictEqual(snapshot.incomplete, false)
+            const items = /** @type {{ items: Array<{ bytes: Uint8Array | DataView }> }} */ (snapshot.value).items
+            const copy = items[0].bytes
+            assert.notStrictEqual(copy.buffer, backing)
+            const tags = computeTags({ ...safeConfig, response: [rule] }, input, responseOpts)
+            assert.strictEqual(tags['aws.response.body.items.0.secret'], 'redacted')
+            assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
+            assert.strictEqual(input.items[0].secret, 'customer-secret')
+          })
+        }
+
+        for (const [name, makeBacking, expression, supported] of /** @type {StorageCase[]} */ ([
+          ['shared', () => new SharedArrayBuffer(2), '@.bytes.buffer.growable === false',
+            typeof Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'growable')?.get === 'function'],
+          [
+            'resizable',
+            // The factory runs only when the native resizable getter exists.
+            // eslint-disable-next-line n/no-unsupported-features/es-syntax
+            () => new (/** @type {ResizableBuffer} */ (ArrayBuffer))(2, { maxByteLength: 4 }),
+            '@.bytes.buffer.resizable',
+            typeof Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'resizable')?.get === 'function',
+          ],
+        ])) {
+          const test = supported ? it : it.skip
+          test(`suppresses metadata predicates for full-range ${kind} over ${name} storage`, () => {
+            const backing = makeBacking()
+            const bytes = makeView(kind, backing, 0, 2)
+            const input = { items: [{ bytes, secret: 'customer-secret' }] }
+            const rule = `$.items[?(${expression})].secret`
+            assert.deepStrictEqual(jsonpath({ path: rule, json: input }), ['customer-secret'])
+
+            assert.deepStrictEqual(computeTags({ ...safeConfig, response: [rule] }, input, responseOpts), {})
+            assert.strictEqual(createSafeSnapshot(input).incomplete, true)
+            assert.strictEqual(input.items[0].secret, 'customer-secret')
+          })
+        }
+
+        for (const key of ['byteOffset', 'byteLength', 'buffer', 'length']) {
+          it(`marks discarded own ${kind}.${key} metadata incomplete without reading it`, () => {
+            const backing = new ArrayBuffer(2)
+            const bytes = makeView(kind, backing, 0, 2)
+            let reads = 0
+            Object.defineProperty(bytes, key, {
+              get () {
+                reads++
+                throw new Error('metadata getter must not run')
+              },
+            })
+            const input = { items: [{ bytes, secret: 'customer-secret' }] }
+
+            const snapshot = createSafeSnapshot(input)
+            assert.strictEqual(snapshot.incomplete, true)
+            assert.deepStrictEqual(computeTags({
+              ...safeConfig, response: ['$.items[?(@.bytes.byteLength > 0)].secret'],
+            }, input, responseOpts), {})
+            assert.strictEqual(reads, 0)
+            const items = /** @type {{ items: Array<{ bytes: Uint8Array | DataView }> }} */ (snapshot.value).items
+            const copy = items[0].bytes
+            assert.deepStrictEqual(Array.from(new Uint8Array(copy.buffer)), [0, 0])
+          })
+        }
+      }
+
+      it('marks inherited metadata overrides incomplete without invoking them', () => {
+        let reads = 0
+        class CustomBytes extends Uint8Array {
+          get byteOffset () {
+            reads++
+            return 1
+          }
+        }
+        const input = { items: [{ bytes: new CustomBytes([97, 98]), secret: 'customer-secret' }] }
+
+        assert.deepStrictEqual(computeTags({
+          ...safeConfig, response: ['$.items[?(@.bytes.byteOffset > 0)].secret'],
+        }, input, responseOpts), {})
+        assert.strictEqual(createSafeSnapshot(input).incomplete, true)
+        assert.strictEqual(reads, 0)
+      })
+
+      it('marks discarded backing metadata incomplete without invoking its getters', () => {
+        const backing = new ArrayBuffer(2)
+        let reads = 0
+        Object.defineProperty(backing, 'byteLength', {
+          get () {
+            reads++
+            return 4
+          },
+        })
+        const input = { items: [{ bytes: new Uint8Array(backing), secret: 'customer-secret' }] }
+
+        assert.deepStrictEqual(computeTags({
+          ...safeConfig, response: ['$.items[?(@.bytes.buffer.byteLength > 2)].secret'],
+        }, input, responseOpts), {})
+        assert.strictEqual(createSafeSnapshot(input).incomplete, true)
+        assert.strictEqual(reads, 0)
+      })
+    })
+
     it('should copy only the visible range of a view with a nonzero offset', () => {
       const backing = new Uint8Array([1, 2, 3, 4, 5])
       const view = backing.subarray(2)
@@ -1494,6 +1668,7 @@ describe('Safe payload capture', () => {
         'aws.request.body.Body.0': '0',
         'aws.request.body.Body.1': '4',
         'aws.request.body.Body.2': '5',
+        '_dd.payload_tags_incomplete': true,
       })
       assert.deepStrictEqual(Array.from(backing), [1, 2, 3, 4, 5])
     })
@@ -1506,7 +1681,7 @@ describe('Safe payload capture', () => {
         const snapshot = createSafeSnapshot({ Body: view })
         const copy = /** @type {{ Body: DataView }} */ (snapshot.value).Body
 
-        assert.strictEqual(snapshot.incomplete, false)
+        assert.strictEqual(snapshot.incomplete, true)
         assert.ok(copy instanceof DataView)
         assert.notStrictEqual(copy.buffer, backing.buffer)
         assert.strictEqual(copy.byteOffset, 0)
@@ -1578,7 +1753,7 @@ describe('Safe payload capture', () => {
 
             const snapshot = createSafeSnapshot({ Body: body, Ok: 'sib' })
 
-            assert.strictEqual(snapshot.incomplete, false)
+            assert.strictEqual(snapshot.incomplete, true)
             assert.strictEqual(probe.getterReads, 0)
             assert.strictEqual(probe.speciesGets, 0)
             assert.strictEqual(probe.speciesCalls, 0)
@@ -1605,7 +1780,7 @@ describe('Safe payload capture', () => {
 
         const snapshot = createSafeSnapshot({ Body: body, Ok: 'sib' })
 
-        assert.strictEqual(snapshot.incomplete, false)
+        assert.strictEqual(snapshot.incomplete, true)
         assert.strictEqual(probe.speciesCalls, 0)
         assert.deepStrictEqual(Array.from(new Uint8Array(backing)), [97, 98, 99])
         const copy = /** @type {{ Body: DataView }} */ (snapshot.value).Body
@@ -1623,7 +1798,7 @@ describe('Safe payload capture', () => {
 
         const snapshot = createSafeSnapshot({ Body: body })
 
-        assert.strictEqual(snapshot.incomplete, false)
+        assert.strictEqual(snapshot.incomplete, true)
         assert.strictEqual(probe.speciesCalls, 0)
         assert.deepStrictEqual(Array.from(new Uint8Array(backing)), [97, 98, 99])
         const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
@@ -1645,7 +1820,7 @@ describe('Safe payload capture', () => {
 
         const snapshot = createSafeSnapshot({ Body: body })
 
-        assert.strictEqual(snapshot.incomplete, false)
+        assert.strictEqual(snapshot.incomplete, true)
         assert.strictEqual(probe.speciesCalls, 0)
         assert.deepStrictEqual(Array.from(new Uint8Array(backing)), [97, 98, 99])
         const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
@@ -1738,7 +1913,8 @@ describe('Safe payload capture', () => {
       const snapshot = createSafeSnapshot({ Body: body })
 
       assert.strictEqual(calls, 0)
-      assert.strictEqual(snapshot.incomplete, false)
+      // Normalizing the subclass drops its prototype and inherited metadata.
+      assert.strictEqual(snapshot.incomplete, true)
       const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
       // The copy must be the native kind, not the payload-defined subclass.
       assert.strictEqual(copy.constructor, Uint8Array)
@@ -1805,7 +1981,7 @@ describe('Safe payload capture', () => {
 
       const snapshot = createSafeSnapshot({ Body: body })
 
-      assert.strictEqual(snapshot.incomplete, false)
+      assert.strictEqual(snapshot.incomplete, true)
       const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
       assert.deepStrictEqual(Array.from(copy), [97, 98, 99])
     })
@@ -1823,7 +1999,7 @@ describe('Safe payload capture', () => {
 
       const snapshot = createSafeSnapshot({ Body: view })
 
-      assert.strictEqual(snapshot.incomplete, false)
+      assert.strictEqual(snapshot.incomplete, true)
       const copy = /** @type {{ Body: DataView }} */ (snapshot.value).Body
       assert.strictEqual(copy.byteLength, 2)
       assert.strictEqual(copy.getUint8(0), 2)
@@ -1844,7 +2020,7 @@ describe('Safe payload capture', () => {
       const snapshot = createSafeSnapshot({ Body: body })
 
       assert.strictEqual(reads, 0)
-      assert.strictEqual(snapshot.incomplete, false)
+      assert.strictEqual(snapshot.incomplete, true)
       assert.strictEqual(/** @type {{ Body: Uint8Array }} */ (snapshot.value).Body.constructor, Uint8Array)
     })
 
@@ -1926,7 +2102,7 @@ describe('Safe payload capture', () => {
 
       const snapshot = createSafeSnapshot({ Body: view })
 
-      assert.strictEqual(snapshot.incomplete, false)
+      assert.strictEqual(snapshot.incomplete, true)
       const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
       assert.strictEqual(copy.byteLength, 3)
       assert.notStrictEqual(copy.buffer, backing.buffer)
