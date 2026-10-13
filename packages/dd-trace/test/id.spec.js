@@ -5,7 +5,6 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const { channel } = require('dc-polyfill')
 
 require('./setup/core')
 
@@ -178,7 +177,7 @@ describe('id', () => {
     it('should generate a different id after reseed', () => {
       const before = freshId().toString()
 
-      channel('datadog:identity:update').publish({ tags: {} })
+      freshId.reseed()
       const after = freshId().toString()
 
       assert.notStrictEqual(after, before)
@@ -191,7 +190,7 @@ describe('id', () => {
       freshId()
       randomFillSyncStub.resetHistory()
 
-      channel('datadog:identity:update').publish({ tags: {} })
+      freshId.reseed()
       // After reseed, batch = 0, so the next call must refill from randomFillSync
       freshId()
 
@@ -199,7 +198,7 @@ describe('id', () => {
     })
 
     it('should force a fresh randomFillSync() call on the very next id() after reseed', () => {
-      channel('datadog:identity:update').publish({ tags: {} })
+      freshId.reseed()
       randomFillSyncStub.resetHistory()
 
       freshId()
@@ -208,8 +207,8 @@ describe('id', () => {
     })
 
     it('should be safe to call repeatedly', () => {
-      channel('datadog:identity:update').publish({ tags: {} })
-      channel('datadog:identity:update').publish({ tags: {} })
+      freshId.reseed()
+      freshId.reseed()
       randomFillSyncStub.resetHistory()
 
       freshId()
@@ -217,14 +216,15 @@ describe('id', () => {
       sinon.assert.calledOnce(randomFillSyncStub)
     })
 
-    it('should reseed when datadog:identity:update is published', () => {
-      freshId()
-      randomFillSyncStub.resetHistory()
+    it('should preserve existing identifiers after reseeding', () => {
+      const existing = freshId()
+      const before = existing.toString()
 
-      channel('datadog:identity:update').publish({ tags: {} })
+      freshId.reseed()
       freshId()
 
-      sinon.assert.calledOnce(randomFillSyncStub)
+      assert.strictEqual(existing.toString(), before)
+      assert.strictEqual(Buffer.from(existing.toBuffer()).toString('hex'), before)
     })
   })
 })

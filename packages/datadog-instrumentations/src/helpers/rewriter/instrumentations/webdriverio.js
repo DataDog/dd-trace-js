@@ -495,7 +495,7 @@ module.exports = [
   {
     module: {
       name: 'jasmine-core',
-      versionRange: '>=5.0.0 <6.0.0',
+      versionRange: '>=5.0.0 <7.0.0',
       filePath: 'lib/jasmine-core/jasmine.js',
     },
     astQuery: 'AssignmentExpression[left.object.object.name="Spec"]' +
@@ -508,7 +508,7 @@ module.exports = [
   {
     module: {
       name: 'jasmine-core',
-      versionRange: '>=5.0.0 <6.0.0',
+      versionRange: '>=5.0.0 <7.0.0',
       filePath: 'lib/jasmine-core/jasmine.js',
     },
     astQuery: 'AssignmentExpression[left.object.object.name="Spec"]' +
@@ -521,7 +521,20 @@ module.exports = [
   {
     module: {
       name: 'jasmine-core',
-      versionRange: '>=5.0.0 <6.0.0',
+      versionRange: '>=5.0.0 <7.0.0',
+      filePath: 'lib/jasmine-core/jasmine.js',
+    },
+    functionQuery: {
+      className: 'Spec',
+      methodName: 'status',
+      kind: 'Sync',
+    },
+    channelName: 'Spec_attemptDone',
+  },
+  {
+    module: {
+      name: 'jasmine-core',
+      versionRange: '>=5.0.0 <7.0.0',
       filePath: 'lib/jasmine-core/jasmine.js',
     },
     functionQuery: {
@@ -534,7 +547,7 @@ module.exports = [
   {
     module: {
       name: 'jasmine-core',
-      versionRange: '>=5.0.0 <6.0.0',
+      versionRange: '>=5.0.0 <7.0.0',
       filePath: 'lib/jasmine-core/jasmine.js',
     },
     functionQuery: {

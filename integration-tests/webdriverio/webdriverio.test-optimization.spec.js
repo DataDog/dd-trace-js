@@ -1232,6 +1232,9 @@ for (const version of versions) {
                     'WebdriverIO ATR fails every retry': {
                       properties: { quarantined: true },
                     },
+                    'WebdriverIO ATR always fails fails every retry': {
+                      properties: { quarantined: true },
+                    },
                   },
                 },
                 'managed-hook-fail.e2e.js': {
