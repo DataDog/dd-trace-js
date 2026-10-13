@@ -455,7 +455,6 @@ function getFinalStatus ({
 
 class CypressPlugin {
   #pendingTestSuiteSpans = new Map()
-  #skippedTestCountsBySuite = new Map()
 
   _isInit = false
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
@@ -555,7 +554,6 @@ class CypressPlugin {
    */
   resetRunState () {
     this.#pendingTestSuiteSpans.clear()
-    this.#skippedTestCountsBySuite.clear()
     this._isInit = false
     this.finishedTestsByFile = {}
     this.hasTestsReported = false
@@ -1050,9 +1048,8 @@ class CypressPlugin {
     }
 
     if (this.isItrEnabled) {
-      const count = this.#skippedTestCountsBySuite.get(testSuite) || 0
-      testSuiteSpanMetadata[TEST_ITR_SKIPPING_COUNT] = count
-      testSuiteSpanMetadata[TEST_ITR_TESTS_SKIPPED] = count > 0 ? 'true' : 'false'
+      testSuiteSpanMetadata[TEST_ITR_SKIPPING_COUNT] = 0
+      testSuiteSpanMetadata[TEST_ITR_TESTS_SKIPPED] = 'false'
     }
 
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
@@ -2102,12 +2099,11 @@ class CypressPlugin {
           if (!this.skippedTestIds.has(skippedTestId)) {
             this.skippedTestIds.add(skippedTestId)
             this.skippedTests.push(test)
-            const count = (this.#skippedTestCountsBySuite.get(testSuite) || 0) + 1
-            this.#skippedTestCountsBySuite.set(testSuite, count)
             const testSuiteSpan = this.#pendingTestSuiteSpans.get(testSuite)
             if (this.isItrEnabled && testSuiteSpan) {
               try {
-                testSuiteSpan.setTag(TEST_ITR_SKIPPING_COUNT, count)
+                const count = testSuiteSpan.context().getTag(TEST_ITR_SKIPPING_COUNT) || 0
+                testSuiteSpan.setTag(TEST_ITR_SKIPPING_COUNT, count + 1)
                 testSuiteSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
               } catch (error) {
                 log.error('Could not report Test Impact Analysis skips for suite %s: %s', testSuite, error)

@@ -139,9 +139,8 @@ moduleTypes.forEach(({
     })
 
     context('intelligent test runner', () => {
-      for (const suiteStartMode of ['normal', 'late', 'missing', 'TIA disabled']) {
-        it(`reports suite TIA test skip counts (${suiteStartMode})`, async () => {
-          const isItrEnabled = suiteStartMode !== 'TIA disabled'
+      for (const isItrEnabled of [true, false]) {
+        it(`reports suite TIA test skip counts (TIA ${isItrEnabled ? 'enabled' : 'disabled'})`, async () => {
           const expectedCount = isItrEnabled ? 2 : 0
           const suite = 'cypress/e2e/tia-skip-count.js'
           receiver.setSettings({ itr_enabled: isItrEnabled, code_coverage: false, tests_skipping: isItrEnabled })
@@ -157,7 +156,6 @@ moduleTypes.forEach(({
               ...getCiVisAgentlessConfig(receiver.port),
               CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: suite,
-              CYPRESS_DD_SUITE_START_MODE: suiteStartMode,
             },
           })
           let output = ''
@@ -184,12 +182,6 @@ moduleTypes.forEach(({
             assert.strictEqual(session.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
           })
           assert.strictEqual(childProcess.exitCode, isItrEnabled ? 0 : 2, output)
-          if (suiteStartMode === 'late' || suiteStartMode === 'missing') {
-            assert.ok(output.includes(`Suppressing suite start (${suiteStartMode})`), output)
-          }
-          if (suiteStartMode === 'late') {
-            assert.ok(output.includes('Restored suite start'), output)
-          }
         })
       }
 
