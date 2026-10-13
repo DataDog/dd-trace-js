@@ -133,12 +133,13 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
     }
 
     // Keep the SDK serializer, signer and decoder, replacing only its HTTP transport.
-    function serializedClient (respond, config = {}) {
+    function serializedClient (respond, config = {}, model = MODEL) {
       const requestHandler = {
         metadata: { handlerProtocol: 'h2' },
         async handle (request) {
           assert.equal(request.method, 'POST')
           assert.match(request.path, /\/invoke-with-bidirectional-stream$/)
+          assert.equal(decodeURIComponent(request.path), `/model/${model}/invoke-with-bidirectional-stream`)
           assert.match(request.headers.authorization, /^AWS4-HMAC-SHA256/)
           const marshaller = transport.config.eventStreamMarshaller
           const dependencies = require(`../../../../../../versions/@aws-sdk/client-bedrock-runtime@${version}`)
@@ -258,6 +259,45 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
         transport.destroy()
       }
     })
+
+    for (const model of [
+      MODEL,
+      `arn:aws:bedrock:us-east-1::foundation-model/${MODEL}`,
+      `arn:aws-us-gov:bedrock:us-gov-west-1::foundation-model/${MODEL}`,
+      `arn:aws-cn:bedrock:cn-north-1::foundation-model/${MODEL}`,
+    ]) {
+      it(`normalizes the captured model without changing the serialized identifier (${model})`, async () => {
+        const records = speech()
+        const outbound = records.filter(r => r.outbound)
+        const body = (async function * () {
+          for (const r of outbound) yield r.value
+        })()
+        const input = { modelId: model, body }
+        const request = new AWS.InvokeModelWithBidirectionalStreamCommand(input)
+        const transport = serializedClient(accepted => {
+          assert.deepEqual(accepted, outbound.map(r => JSON.parse(r.value.chunk.bytes)))
+          return (async function * () {
+            for (const r of records.filter(r => !r.outbound)) {
+              clock.setSystemTime(EPOCH + r.at)
+              yield r.value
+            }
+          })()
+        }, {}, model)
+        try {
+          await drain(await transport.send(request))
+          assert.equal(request.input, input)
+          assert.equal(input.modelId, model)
+          const { apmSpans, llmobsSpans } = await getEvents(4)
+          const { llm } = tree(llmobsSpans)
+          assert.equal(llm.meta.model_name, MODEL)
+          const sonicSpans = apmSpans.filter(span => span.name === 'aws.bedrockruntime.sonic')
+          assert.equal(sonicSpans.length, 4)
+          for (const span of sonicSpans) assert.equal(span.meta['aws.bedrock.request.model'], MODEL)
+        } finally {
+          transport.destroy()
+        }
+      })
+    }
 
     for (const kind of ['user', 'speculative', 'final']) {
       for (const closed of [false, true]) {
@@ -674,11 +714,47 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
       })
     }
 
-    for (const mode of ['disabled', 'original-model']) {
+    for (const model of [
+      'amazon.nova-sonic-v1:0',
+      'amazon.nova-2-5-sonic',
+      'amazon.nova-2-sonic-v2:0',
+      `us.${MODEL}`,
+      `global.${MODEL}`,
+      'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-2-5-sonic',
+      `arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/${MODEL}`,
+      `arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.${MODEL}`,
+      `arn:aws:bedrock:us-east-1:123456789012:custom-model/${MODEL}`,
+      `arn:aws:bedrock:us-east-1:123456789012:foundation-model/${MODEL}`,
+      `arn:aws:sagemaker:us-east-1::foundation-model/${MODEL}`,
+      `arn:aws:bedrock:::foundation-model/${MODEL}`,
+      `prefix:arn:aws:bedrock:us-east-1::foundation-model/${MODEL}`,
+      `arn:aws:bedrock:us-east-1::foundation-model/${MODEL}/extra`,
+      `arn:aws:bedrock:us-east-1::foundation-model/${MODEL}\n`,
+      `arn:aws:bedrock:us-east-1::foundation-model/${'x'.repeat(2048)}`,
+      undefined, null, 42, {},
+    ]) {
+      it(`passes through unsupported or malformed model identifiers (${JSON.stringify(model)})`, async () => {
+        const run = command(speech())
+        run.request.input.modelId = model
+        const input = run.request.input
+        const response = await client.send(run.request)
+        assert.deepEqual(await drain(response), speech().filter(r => !r.outbound).map(r => r.value))
+        assert.equal(run.request.input, input)
+        assert.equal(input.modelId, model)
+        tracer.llmobs.trace({ kind: 'workflow', name: 'sentinel' }, () => {})
+        const { llmobsSpans } = await getEvents(1)
+        assert.deepEqual(llmobsSpans.map(span => span.name), ['sentinel'])
+      })
+    }
+
+    for (const mode of ['disabled', 'disabled-arn', 'original-model']) {
       it(`passes through unchanged when ${mode}`, async () => {
-        if (mode === 'disabled') tracer.use('aws-sdk', { llmobs: false })
+        if (mode.startsWith('disabled')) tracer.use('aws-sdk', { llmobs: false })
         try {
-          const run = command(speech(), { model: mode === 'original-model' ? 'amazon.nova-sonic-v1:0' : MODEL })
+          const model = mode === 'original-model'
+            ? 'amazon.nova-sonic-v1:0'
+            : mode === 'disabled-arn' ? `arn:aws:bedrock:us-east-1::foundation-model/${MODEL}` : MODEL
+          const run = command(speech(), { model })
           const original = run.request.input
           run.request.middlewareStack.addRelativeTo(next => async args => {
             assert.equal(args.input, original)

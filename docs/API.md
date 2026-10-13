@@ -104,7 +104,11 @@ tracer.use('openai', {
 <h5 id="aws-sdk"></h5>
 
 Amazon Nova 2 Sonic LLM Observability supports `InvokeModelWithBidirectionalStreamCommand` in
-`@aws-sdk/client-bedrock-runtime >=3.785.0` with model `amazon.nova-2-sonic-v1:0`.
+`@aws-sdk/client-bedrock-runtime >=3.785.0` with model `amazon.nova-2-sonic-v1:0`, supplied as a model ID
+or a foundation-model ARN such as `arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-2-sonic-v1:0`.
+Spans use the canonical model ID; the identifier sent to AWS is unchanged. Inference-profile identifiers,
+cross-region prefixes, other model versions (including Nova 2.5 Sonic), and malformed ARNs pass through
+without Nova capture. The integration does not perform model-resolution API calls.
 Initialize the tracer with LLM Observability enabled before loading the AWS SDK. Each logical response
 creates a `nova sonic audio turn` workflow with a `nova sonic response` LLM child and, when timing is
 available, `user speech` and `agent speech` workflow children. Turns inherit the invocation's application

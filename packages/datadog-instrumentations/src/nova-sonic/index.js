@@ -9,18 +9,30 @@ const SonicSession = require('./session')
 const captureChannel = dc.channel('dd-trace:aws:bedrockruntime:sonic:capture-context')
 const spanChannel = dc.tracingChannel('apm:aws:bedrockruntime:sonic:span')
 const MODEL = 'amazon.nova-2-sonic-v1:0'
+const FOUNDATION_MODEL_ARN = /^arn:aws(?:-[a-z0-9]+)*:bedrock:[a-z0-9-]{1,20}::foundation-model\/([^/]+)$/
 const sessionStorage = storage('nova-sonic')
 const instrumentedClients = new WeakSet()
 
 function noop () {}
 
+/** @param {unknown} identifier */
+function resolveModel (identifier) {
+  if (identifier === MODEL) return identifier
+  if (typeof identifier !== 'string' || identifier.length > 2048) return
+  // Only foundation-model ARNs directly identify a model. Profile IDs need a service lookup,
+  // and the bidirectional API currently rejects them. Never infer a model from an ARN suffix.
+  const model = FOUNDATION_MODEL_ARN.exec(identifier)?.[1]
+  if (model === MODEL) return model
+}
+
 /**
  * @param {object} descriptor
  * @param {(fn: () => void) => void} runInContext
+ * @param {string} model
  */
-function emitTurn (descriptor, runInContext) {
+function emitTurn (descriptor, runInContext, model) {
   const { turn } = descriptor
-  const common = { descriptor, model: MODEL }
+  const common = { descriptor, model }
   runInContext(() => {
     spanChannel.traceSync(() => {
       if (turn.inputStart !== undefined && turn.inputEnd !== undefined && turn.inputEnd >= turn.inputStart) {
@@ -136,12 +148,14 @@ function instrumentInput (client) {
 function sendSonic (send, client, command, args) {
   const instrumented = instrumentInput(client)
   const passthrough = () => sessionStorage.run(undefined, () => send.call(client, command, ...args))
-  if (!instrumented || command.input?.modelId !== MODEL || !captureChannel.hasSubscribers) return passthrough()
+  if (!instrumented || !captureChannel.hasSubscribers) return passthrough()
+  const model = resolveModel(command.input?.modelId)
+  if (!model) return passthrough()
   const context = {}
   captureChannel.publish(context)
   // Only the LLMObs plugin enables capture; the tracing plugin alone does not buffer conversations.
   if (!context.enabled || !context.runInContext) return passthrough()
-  const session = new SonicSession(descriptor => emitTurn(descriptor, context.runInContext))
+  const session = new SonicSession(descriptor => emitTurn(descriptor, context.runInContext, model))
   const signal = args[0] !== null && typeof args[0] === 'object' ? args[0]?.abortSignal : undefined
   // Smithy's legacy AbortSignal only exposes onabort; leave that slot to the SDK's transport.
   const hasListeners = typeof signal?.addEventListener === 'function' &&
