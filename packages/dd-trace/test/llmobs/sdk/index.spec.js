@@ -1099,7 +1099,7 @@ describe('sdk', () => {
         assert.ok(!emittedTags('agent').includes('agent_version:1.0.0'))
       })
 
-      for (const version of ['', 1.1, 0, { major: 1 }]) {
+      for (const version of ['', 1.1, 0, { major: 1 }, 'release,canary']) {
         it(`ignores an unreportable version (${inspect(version)})`, () => {
           llmobs.trace({ kind: 'agent', name: 'agent', version }, () => {})
 

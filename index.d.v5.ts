@@ -5071,7 +5071,7 @@ declare namespace tracer {
      * (`undefined`, `null`, `''`, `[]`) leave what an earlier annotation declared in place.
      */
     interface Agent {
-      /** The version of the agent. */
+      /** The version of the agent. Must not contain a comma. */
       version?: string,
       /** The agent's name. Defaults to the agent span's name. */
       name?: string,
@@ -5233,8 +5233,8 @@ declare namespace tracer {
 
       /**
        * The version of the agent, set as an `agent_version` tag on the agent span and its child spans within the
-       * same process. Only used on `agent` spans, and wins over a version declared by an enclosing
-       * `annotationContext`.
+       * same process. Must not contain a comma. Only used on `agent` spans, and wins over a version declared by an
+       * enclosing `annotationContext`.
        */
       version?: string,
     }

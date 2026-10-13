@@ -64,6 +64,12 @@ describe('agent manifest', () => {
       })
     }
 
+    it('warns when dropping a version that contains a comma', () => {
+      assert.strictEqual(buildAgentDeclaration({ version: 'release,canary', name: 'a' }).version, undefined)
+
+      sinon.assert.calledOnceWithExactly(log.warn, 'Dropping the agent version, it must not contain a comma.')
+    })
+
     for (const version of [undefined, null, '']) {
       it(`ignores an unset version without a warning (${inspect(version)})`, () => {
         buildAgentDeclaration({ version, name: 'a' })

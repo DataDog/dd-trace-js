@@ -108,11 +108,16 @@ function buildAgentManifest (agent) {
 
 /**
  * Unset values (`undefined`, `null`, `''`) are ignored without a warning, so they leave an earlier version in place.
+ * A comma is rejected because intake splits tags on it.
  *
  * @param {unknown} version
  */
 function toAgentVersion (version) {
-  if (typeof version === 'string' && version !== '') return version
+  if (typeof version === 'string' && version !== '') {
+    if (!version.includes(',')) return version
+    log.warn('Dropping the agent version, it must not contain a comma.')
+    return
+  }
   if (!isUnset(version)) log.warn('Dropping the agent version, it must be a string.')
 }
 
