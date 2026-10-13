@@ -19,7 +19,7 @@ describe('quarantine snapshot', () => {
 
   it('fails before a snapshot', () => {
     assert.strictEqual(1 + 2, 4)
-    expect('stored').toMatchSnapshot()
+    expect('stored').toMatchSnapshot('response')
   })
 
   it('fails a snapshot before passing', () => {

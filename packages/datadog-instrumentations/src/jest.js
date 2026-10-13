@@ -673,6 +673,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     #pendingPre30ConcurrentTests
     /** @type {(() => void)|undefined} */
     #restoreSnapshotState
+    /** @type {Set<string>|undefined} */
+    #snapshotTestNames
 
     constructor (config, context) {
       super(config, context)
@@ -1522,7 +1524,26 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         snapshotState.unmatched = unmatchedBeforeTest
       }
       // Unused snapshots can fail the run even when the quarantined test passed.
-      snapshotState.markSnapshotsAsCheckedForTest?.(getRawJestTestName(test))
+      const testName = getRawJestTestName(test)
+      snapshotState.markSnapshotsAsCheckedForTest?.(testName)
+      const keys = snapshotState.getUncheckedKeys?.()
+      const testNames = this.#snapshotTestNames
+      if (!keys || !testNames) return
+      const hintPrefix = `${testName}: `
+      for (const key of keys) {
+        if (!key.startsWith(hintPrefix)) continue
+        const snapshotName = key.slice(0, key.lastIndexOf(' '))
+        let belongsToAnotherTest = false
+        // A hinted snapshot key can also name another test; prefer the longer registered test name.
+        for (const name of testNames) {
+          if (name.length > testName.length &&
+            (snapshotName === name || snapshotName.startsWith(`${name}: `))) {
+            belongsToAnotherTest = true
+            break
+          }
+        }
+        if (!belongsToAnotherTest) snapshotState.markSnapshotsAsCheckedForTest?.(snapshotName)
+      }
     }
 
     // This function returns an array if the known tests are valid and null otherwise.
@@ -1899,6 +1920,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (event.concurrent) {
         this.hasConcurrentTests = true
       }
+      const registeredTest = getTestEntries(state.currentDescribeBlock)?.at(-1)
+      if (registeredTest && this.testManagementTestsForThisSuite?.quarantined?.length) {
+        this.#snapshotTestNames ??= new Set()
+        this.#snapshotTestNames.add(getRawJestTestName(registeredTest))
+      }
       if (event.failing) {
         return
       }
@@ -1907,7 +1933,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const concurrentTestContexts = this.concurrentTestContexts.get(testFullName)
       const concurrentTestState = this.concurrentTestStates.get(event.fn) ||
         concurrentTestContexts?.at(-1)?.concurrentTestState
-      const registeredTest = getTestEntries(state.currentDescribeBlock)?.at(-1)
       if (concurrentTestState && registeredTest?.fn === event.fn) {
         testContexts.set(registeredTest, concurrentTestState.ctx)
       }

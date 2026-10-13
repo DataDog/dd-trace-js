@@ -22,6 +22,12 @@ describe('mixed snapshots', () => {
     expect(process.env.FAIL_ORDINARY_SNAPSHOT ? 'received' : 'stored').toMatchSnapshot()
   })
 
+  it('quarantined unused snapshot: ordinary', () => {
+    if (process.env.SKIP_ORDINARY_SNAPSHOT) return
+    expect('stored').toMatchSnapshot()
+    expect('stored').toMatchSnapshot('response')
+  })
+
   it.concurrent('concurrent sibling', () => {
     if (process.env.FAIL_CONCURRENT_SNAPSHOT) {
       const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'

@@ -2562,6 +2562,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                 assert.deepStrictEqual(executions, {
                   'mixed snapshots quarantined snapshot': [['fail', 'true']],
                   'mixed snapshots quarantined unused snapshot': [['pass', 'true']],
+                  'mixed snapshots quarantined unused snapshot: ordinary': [['pass', undefined]],
                   'mixed snapshots ordinary snapshot': [[ordinaryFailure === 'serial' ? 'fail' : 'pass', undefined]],
                   'mixed snapshots concurrent sibling': [
                     [ordinaryFailure === 'concurrent' ? 'fail' : 'pass', undefined],
@@ -2570,7 +2571,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               })
               assert.strictEqual(exitCode, ordinaryFailure === 'none' ? 0 : 1, stdout)
               if (ordinaryFailure === 'obsolete') {
-                assert.match(stdout, /1 snapshot obsolete/)
+                assert.match(stdout, /3 snapshots obsolete/)
                 assert.doesNotMatch(stdout, /snapshots? failed/)
               } else if (ordinaryFailure !== 'none') {
                 assert.match(stdout, /1 snapshot failed/)
@@ -2653,7 +2654,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           assert.strictEqual(exitCode, 1)
           assert.match(stdout, /2 snapshots failed/)
-          assert.match(stdout, /1 snapshot obsolete/)
+          assert.match(stdout, /5 snapshots obsolete/)
         })
       })
     })
