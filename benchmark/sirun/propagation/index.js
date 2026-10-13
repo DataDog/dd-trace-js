@@ -1,7 +1,5 @@
 'use strict'
 
-// eslint-disable-next-line import/order -- The startup guard must run before every other require.
-const guard = require('../startup-guard')
 const assert = require('node:assert/strict')
 
 const { channel } = require('dc-polyfill')
@@ -17,6 +15,7 @@ const {
 const SpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../../../packages/dd-trace/src/opentracing/propagation/text_map')
 const TraceState = require('../../../packages/dd-trace/src/opentracing/propagation/tracestate')
+const guard = require('../startup-guard')
 
 const { VARIANT } = process.env
 
