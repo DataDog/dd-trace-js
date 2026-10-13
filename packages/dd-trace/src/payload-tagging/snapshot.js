@@ -1,7 +1,7 @@
 'use strict'
 
 const { Stream } = require('node:stream')
-const { isDataView, isDate, isMap, isSet } = require('node:util').types
+const { isDataView, isDate, isMap, isSet, isSharedArrayBuffer } = require('node:util').types
 
 const { maxValueLength, truncated } = require('./constants')
 
@@ -42,6 +42,11 @@ const getTypedArrayBuffer = getterOf(typedArrayProto, 'buffer')
 const getDataViewByteLength = getterOf(DataView.prototype, 'byteLength')
 const getDataViewByteOffset = getterOf(DataView.prototype, 'byteOffset')
 const getDataViewBuffer = getterOf(DataView.prototype, 'buffer')
+const getArrayBufferByteLength = getterOf(ArrayBuffer.prototype, 'byteLength')
+const getArrayBufferResizable = getterOf(ArrayBuffer.prototype, 'resizable')
+const viewMetadataKeys = ['buffer', 'byteLength', 'byteOffset', 'length', 'BYTES_PER_ELEMENT', 'offset', 'parent',
+  'constructor', Symbol.toStringTag]
+const backingMetadataKeys = ['byteLength', 'maxByteLength', 'resizable', 'detached', 'constructor', Symbol.toStringTag]
 
 // Opaque leaves must also be isolated from downstream JSONPath mutations.
 // Native brands and metadata operations avoid cross-realm instanceof checks
@@ -242,6 +247,38 @@ function visibleByteLength (value, kind) {
 }
 
 /**
+ * Detect metadata lost when a binary view is normalized into fresh storage.
+ * Native reads and bounded own-property checks never execute payload getters.
+ * Unknown prototypes and shadowed metadata are conservatively incomplete:
+ * predicates could observe values that the native copy does not preserve.
+ *
+ * @param {Buffer | TypedArray | DataView} value
+ * @param {Buffer | TypedArray | DataView} copy
+ * @param {string} kind trusted kind from `binaryKind`
+ */
+function binaryMetadataChanged (value, copy, kind) {
+  if (Object.getPrototypeOf(value) !== Object.getPrototypeOf(copy)) return true
+  for (const key of viewMetadataKeys) {
+    if (Object.hasOwn(value, key)) return true
+  }
+
+  const getBuffer = kind === 'DataView' ? getDataViewBuffer : getTypedArrayBuffer
+  const backing = getBuffer?.call(value)
+  // Shared storage becomes an ArrayBuffer, changing metadata such as growable.
+  if (isSharedArrayBuffer(backing)) return true
+  const copyBacking = getBuffer?.call(copy)
+  if (Object.getPrototypeOf(backing) !== Object.getPrototypeOf(copyBacking)) return true
+  for (const key of backingMetadataKeys) {
+    if (Object.hasOwn(backing, key)) return true
+  }
+
+  const getByteOffset = kind === 'DataView' ? getDataViewByteOffset : getTypedArrayByteOffset
+  return getByteOffset?.call(value) !== getByteOffset?.call(copy) ||
+    getArrayBufferByteLength?.call(backing) !== getArrayBufferByteLength?.call(copyBacking) ||
+    getArrayBufferResizable?.call(backing) === true
+}
+
+/**
  * Copy a Buffer or ArrayBuffer view into fresh writable storage so that later
  * redaction of the snapshot can never mutate application-owned bytes. Only the
  * view's visible byte range is copied, never its entire backing buffer. The
@@ -331,6 +368,8 @@ function createSnapshotBudget () {
  * - Buffers and ArrayBuffer views are copied into fresh storage within the
  *   binary budget so path-based redaction cannot mutate caller-owned bytes.
  *   An over-budget Buffer keeps only the prefix its string tag renders.
+ *   Changes to view offsets, backing-storage metadata, prototypes or shadowed
+ *   metadata mark capture incomplete so predicates cannot lose their matches.
  * - Repeated non-circular references are copied per occurrence so path-based
  *   redaction rules keep matching each path independently.
  * - Own enumerable string-keyed properties of plain objects and class
@@ -391,6 +430,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       }
     }
     const copy = copyBinary(view, kind, copyLength)
+    if (!incomplete && binaryMetadataChanged(view, copy, kind)) incomplete = true
     budget.binaryBytes -= copyLength
     return copy
   }
