@@ -4,8 +4,6 @@
 //       version with an instrumentation.
 // TODO: Fix `import-in-the-middle` so that it doesn't interfere with the global
 //       object or switch to our own internal loader and remove the dependency.
-// TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
-
 const { join } = require('node:path')
 
 const { CopyRspackPlugin, SwcJsMinimizerRspackPlugin } = require('@rspack/core')
@@ -40,6 +38,10 @@ module.exports = {
     // ESM-only default exports being wrapped in a namespace by rspack's interop,
     // which would break patterns like `require('esquery').parse`.
     mainFields: ['main', 'module'],
+    alias: {
+      './patch-channel-store-methods.js': join(__dirname, 'patches/dc-polyfill/patch-channel-store-methods.js'),
+      './patch-garbage-collection-bug.js': join(__dirname, 'patches/dc-polyfill/patch-garbage-collection-bug.js'),
+    },
   },
   optimization: {
     // Here we used `named` instead of the default of `deterministic` since the
@@ -71,6 +73,9 @@ module.exports = {
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
       excludedPackageTest: packageName => !include.has(packageName),
+      licenseFileOverrides: {
+        'dc-polyfill': 'LICENSE.txt',
+      },
       renderLicenses: modules => modules[0].licenseText,
       stats: {
         warnings: false,

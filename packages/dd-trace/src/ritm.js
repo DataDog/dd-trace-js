@@ -4,7 +4,7 @@ const path = require('path')
 const fs = require('fs')
 const Module = require('module')
 
-const dc = require('dc-polyfill')
+const dc = require('../../../vendor/dist/dc-polyfill')
 
 const parse = require('../../../vendor/dist/module-details-from-path')
 const {

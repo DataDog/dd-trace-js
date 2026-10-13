@@ -1,7 +1,7 @@
 'use strict'
 
 const path = require('path')
-const dc = require('dc-polyfill')
+const dc = require('../../../../../../vendor/dist/dc-polyfill')
 const { storage } = require('../../../../../datadog-core')
 const shimmer = require('../../../../../datadog-shimmer')
 const log = require('../../../log')

@@ -1,7 +1,7 @@
 'use strict'
 
 const { EventEmitter } = require('events')
-const dc = require('dc-polyfill')
+const dc = require('../../../../vendor/dist/dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
 const { buildProfilingRuntime, getProfilingTags } = require('./config')

@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('dc-polyfill')
+const dc = require('../../../../vendor/dist/dc-polyfill')
 
 const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
 const log = require('../../../dd-trace/src/log')

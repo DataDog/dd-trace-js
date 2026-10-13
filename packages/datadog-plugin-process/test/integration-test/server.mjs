@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import process from 'node:process'
 import express from 'express'
-import dc from 'dc-polyfill'
 
 const startCh = dc.channel('datadog:process:setUncaughtExceptionCaptureCallback:start')
 let counter = 0

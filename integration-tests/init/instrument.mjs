@@ -1,5 +1,5 @@
 import http from 'http'
-import dc from 'dc-polyfill'
+import dc from 'dd-trace/vendor/dist/dc-polyfill/index.js'
 
 let gotEvent = false
 dc.subscribe('apm:http:client:request:start', (event) => {

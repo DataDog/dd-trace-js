@@ -1,6 +1,6 @@
 'use strict'
 
-const { tracingChannel } = require('dc-polyfill')
+const { tracingChannel } = require('../../../vendor/dist/dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, getHooks } = require('./helpers/instrument')
 const queryChannel = tracingChannel('orchestrion:@anthropic-ai/claude-agent-sdk:query')

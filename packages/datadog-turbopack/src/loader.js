@@ -83,7 +83,10 @@ module.exports = function loader (source, inputSourceMap) {
       return
     }
 
-    const dcModule = relativeImport(path.dirname(nativeResourcePath), require.resolve('dc-polyfill'))
+    const dcModule = relativeImport(
+      path.dirname(nativeResourcePath),
+      require.resolve('../../../vendor/dist/dc-polyfill')
+    )
     let code = source
     let sourceMap = inputSourceMap
     let rewritten = false

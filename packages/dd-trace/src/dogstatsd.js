@@ -4,7 +4,7 @@ const dgram = require('dgram')
 const isIP = require('net').isIP
 const { performance } = require('node:perf_hooks')
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../vendor/dist/dc-polyfill')
 
 const tracerVersion = require('../../../package.json').version
 const { storage } = require('../../datadog-core')

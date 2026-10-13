@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import express from 'express'
 import expressSession from 'express-session'
-import dc from 'dc-polyfill'
 
 const sessionMiddlewareCh = dc.channel('datadog:express-session:middleware:finish')
 let counter = 0

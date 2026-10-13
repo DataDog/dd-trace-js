@@ -1,6 +1,6 @@
 'use strict'
 
-const vertexaiTracingChannel = require('dc-polyfill').tracingChannel('apm:vertexai:request')
+const vertexaiTracingChannel = require('../../../vendor/dist/dc-polyfill').tracingChannel('apm:vertexai:request')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
 

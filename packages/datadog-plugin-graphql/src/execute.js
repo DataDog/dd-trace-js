@@ -2,7 +2,7 @@
 
 const { AsyncResource } = require('node:async_hooks')
 
-const dc = require('dc-polyfill')
+const dc = require('../../../vendor/dist/dc-polyfill')
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')

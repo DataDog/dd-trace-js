@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const { URL, format } = require('node:url')
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../vendor/dist/dc-polyfill')
 
 const exporters = require('../../../../ext/exporters')
 const createRfdc = require('../../../../vendor/dist/rfdc')

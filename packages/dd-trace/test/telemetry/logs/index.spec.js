@@ -40,7 +40,7 @@ describe('telemetry logs', () => {
   describe('start', () => {
     it('should be enabled by default and subscribe', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc,
+        '../../../../../vendor/dist/dc-polyfill': dc,
       })
 
       logs.start(defaultConfig)
@@ -50,7 +50,7 @@ describe('telemetry logs', () => {
 
     it('should be subscribe only once', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc,
+        '../../../../../vendor/dist/dc-polyfill': dc,
       })
 
       logs.start(defaultConfig)
@@ -62,7 +62,7 @@ describe('telemetry logs', () => {
 
     it('should be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc,
+        '../../../../../vendor/dist/dc-polyfill': dc,
       })
 
       defaultConfig.telemetry.DD_TELEMETRY_LOG_COLLECTION_ENABLED = false
@@ -75,7 +75,7 @@ describe('telemetry logs', () => {
   describe('stop', () => {
     it('should unsubscribe configured listeners', () => {
       const logs = proxyquire('../../../src/telemetry/logs', {
-        'dc-polyfill': dc,
+        '../../../../../vendor/dist/dc-polyfill': dc,
       })
       logs.start(defaultConfig)
 

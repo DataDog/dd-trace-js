@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../vendor/dist/dc-polyfill')
 const { USER_KEEP } = require('../../../../ext/priority')
 const TraceSourcePrioritySampler = require('./tracesource_priority_sampler')
 const { hasTraceSourcePropagationTag } = require('./tracesource')

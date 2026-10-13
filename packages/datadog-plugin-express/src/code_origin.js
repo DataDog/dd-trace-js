@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('dc-polyfill')
+const dc = require('../../../vendor/dist/dc-polyfill')
 
 const { entryTags } = require('../../datadog-code-origin')
 const Plugin = require('../../dd-trace/src/plugins/plugin')

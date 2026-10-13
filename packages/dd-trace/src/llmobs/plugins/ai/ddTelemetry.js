@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../../../vendor/dist/dc-polyfill')
 const BaseLLMObsPlugin = require('../base')
 const { getModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
 

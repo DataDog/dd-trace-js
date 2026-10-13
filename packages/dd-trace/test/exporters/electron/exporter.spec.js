@@ -28,7 +28,7 @@ describe('ElectronExporter', () => {
     normalizeSpan = sinon.stub().callsFake(s => s)
 
     Exporter = proxyquire('../../../src/exporters/electron', {
-      'dc-polyfill': { channel: sinon.stub().returns(traceChannel) },
+      '../../../../../vendor/dist/dc-polyfill': { channel: sinon.stub().returns(traceChannel) },
       '../../encode/tags-processors': { truncateSpan, normalizeSpan },
     })
 

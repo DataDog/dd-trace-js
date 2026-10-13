@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import express from 'express'
-import dc from 'dc-polyfill'
 import lib from 'node-serialize'
 
 const nodeUnserializeCh = dc.channel('datadog:node-serialize:unserialize:start')

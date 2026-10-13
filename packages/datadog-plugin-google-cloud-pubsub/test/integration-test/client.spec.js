@@ -19,8 +19,8 @@ describe('esm', () => {
   let proc
   // test against later versions because server.mjs uses newer package syntax
   withVersions('google-cloud-pubsub', '@google-cloud/pubsub', '>=4.0.0', version => {
-    useSandbox([`'@google-cloud/pubsub@${version}'`], false, ['./packages/dd-trace/src/id.js',
-      './packages/datadog-plugin-google-cloud-pubsub/test/integration-test/*'])
+    useSandbox([`'@google-cloud/pubsub@${version}'`], false,
+      ['./packages/datadog-plugin-google-cloud-pubsub/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()

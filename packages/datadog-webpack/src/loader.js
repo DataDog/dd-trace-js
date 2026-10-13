@@ -1,6 +1,7 @@
 'use strict'
 
 const CHANNEL = 'dd-trace:bundler:load'
+const DC_POLYFILL_PATH = require.resolve('../../../vendor/dist/dc-polyfill')
 
 /**
  * Webpack loader that appends a dc-polyfill channel publish to a CJS module.
@@ -15,7 +16,7 @@ module.exports = function loader (source) {
   return (
     source +
     '\n;{\n' +
-    '  const __dd_dc = require(\'dc-polyfill\');\n' +
+    `  const __dd_dc = require(${JSON.stringify(DC_POLYFILL_PATH)});\n` +
     `  const __dd_ch = __dd_dc.channel('${CHANNEL}');\n` +
     '  const __dd_mod = module.exports;\n' +
     `  const __dd_payload = { module: __dd_mod, version: '${version}', package: '${pkg}', path: '${pkgPath}' };\n` +

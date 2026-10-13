@@ -73,7 +73,7 @@ describe('Disabled APM Tracing or Standalone', () => {
     it('should unsubscribe before subscribing', () => {
       const channels = {}
       const standalone = proxyquire('../../src/standalone', {
-        'dc-polyfill': {
+        '../../../../vendor/dist/dc-polyfill': {
           channel: (name) => {
             channels[name] = {
               subscribe: sinon.stub(),

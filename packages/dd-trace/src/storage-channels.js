@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('dc-polyfill')
+const dc = require('../../../vendor/dist/dc-polyfill')
 const { storage } = require('../../datadog-core')
 
 // Channels that surface tracer-storage events to interested consumers

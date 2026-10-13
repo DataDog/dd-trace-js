@@ -131,7 +131,7 @@ describe('Plugin', () => {
 
       const loadDatadogTracingHelper = proxyquire.noPreserveCache()
       return loadDatadogTracingHelper('../src/datadog-tracing-helper', {
-        'dc-polyfill': {
+        '../../../vendor/dist/dc-polyfill': {
           tracingChannel: () => channel,
         },
       })

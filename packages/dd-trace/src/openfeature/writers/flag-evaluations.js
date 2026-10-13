@@ -2,7 +2,7 @@
 
 const { join } = require('node:path')
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../../vendor/dist/dc-polyfill')
 
 const { FLAG_EVALUATION_FLUSH_INTERVAL, FLAG_EVALUATION_QUEUE_CAP } = require('../constants/constants')
 const { EVP_PROXY_PATH_V2 } = require('../../evp_proxy/constants')

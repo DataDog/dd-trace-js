@@ -1,5 +1,5 @@
 /* eslint-disable */
-const { channel } = require('dc-polyfill')
+const { channel } = require('node:diagnostics_channel')
 const tracer = require('dd-trace')
 
 const assert = require('assert/strict')

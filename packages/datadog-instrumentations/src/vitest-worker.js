@@ -7,7 +7,7 @@ const { fileURLToPath } = require('node:url')
 const { deserialize } = require('node:v8')
 const { isMainThread, parentPort } = require('node:worker_threads')
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../vendor/dist/dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const {

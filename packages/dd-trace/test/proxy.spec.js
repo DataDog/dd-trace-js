@@ -1419,7 +1419,7 @@ describe('TracerProxy', () => {
         './flare': flare,
         './openfeature': openfeature,
         './openfeature/flagging_provider': OpenFeatureProvider,
-        'dc-polyfill': diagnosticsChannelMock,
+        '../../../vendor/dist/dc-polyfill': diagnosticsChannelMock,
         '../../../vendor/dist/crypto-randomuuid': uuidStub,
       }))()
 

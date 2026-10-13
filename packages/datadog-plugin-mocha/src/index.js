@@ -3,7 +3,7 @@
 const { performance } = require('node:perf_hooks')
 const { fileURLToPath } = require('node:url')
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../vendor/dist/dc-polyfill')
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')

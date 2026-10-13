@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../vendor/dist/dc-polyfill')
 const log = require('../log')
 const ExposuresWriter = require('./writers/exposures')
 const { setEventDeliveryStrategy } = require('./writers/util')

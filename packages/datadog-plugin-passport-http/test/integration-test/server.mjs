@@ -1,8 +1,8 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import express from 'express'
 import passport from 'passport'
 import passportHttp from 'passport-http'
-import dc from 'dc-polyfill'
 
 const passportVerifyChannel = dc.channel('datadog:passport:verify:finish')
 let counter = 0

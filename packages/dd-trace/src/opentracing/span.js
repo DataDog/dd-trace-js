@@ -4,7 +4,7 @@
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
 const util = require('util')
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../vendor/dist/dc-polyfill')
 const id = require('../id')
 const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')

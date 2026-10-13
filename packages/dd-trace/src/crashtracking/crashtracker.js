@@ -6,7 +6,7 @@ const { EOL, platform } = require('node:os')
 const libdatadogExtras = require('@datadog/libdatadog-extras')
 const binding = libdatadogExtras.load('crashtracker')
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../vendor/dist/dc-polyfill')
 const { getEnvironmentVariable } = require('../config/helper')
 const log = require('../log')
 const pkg = require('../../../../package.json')

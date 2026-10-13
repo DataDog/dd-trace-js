@@ -1,8 +1,24 @@
 'use strict'
 
+const VENDORED_DC_MODULE = 'dd-trace/vendor/dist/dc-polyfill'
+
+function resolveDcPolyfill () {
+  try {
+    return require.resolve('../../../../vendor/dist/dc-polyfill')
+  } catch {
+    try {
+      // A bundled tracer no longer has this file's source-relative layout,
+      // but can still resolve the installed package that owns the bundle.
+      return require.resolve(VENDORED_DC_MODULE)
+    } catch {
+      return 'node:diagnostics_channel'
+    }
+  }
+}
+
 module.exports = `
 version: 1
-dc_module: dc-polyfill
+dc_module: ${JSON.stringify(resolveDcPolyfill())}
 instrumentations:
   - module_name: "@langchain/core"
     version_range: ">=0.1.0"

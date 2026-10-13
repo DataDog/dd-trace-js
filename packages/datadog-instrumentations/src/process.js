@@ -2,7 +2,7 @@
 
 const { syncBuiltinESMExports } = require('node:module')
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../vendor/dist/dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 
 const startSetUncaughtExceptionCaptureCallback = channel('datadog:process:setUncaughtExceptionCaptureCallback:start')

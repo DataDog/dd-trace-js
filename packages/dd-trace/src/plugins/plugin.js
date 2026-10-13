@@ -2,7 +2,7 @@
 
 // TODO: move anything related to tracing to TracingPlugin instead
 
-const dc = require('dc-polyfill')
+const dc = require('../../../../vendor/dist/dc-polyfill')
 const logger = require('../log')
 const { storage } = require('../../../datadog-core')
 

@@ -12,7 +12,7 @@ if (globalThis.fetch) {
   }
 
   function wrapRealFetch () {
-    const { channel, tracingChannel } = require('dc-polyfill')
+    const { channel, tracingChannel } = require('../../../vendor/dist/dc-polyfill')
     const { createWrapFetch } = require('./helpers/fetch')
 
     const ch = tracingChannel('apm:fetch:request')

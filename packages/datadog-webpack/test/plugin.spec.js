@@ -68,7 +68,7 @@ describe('loader', () => {
     // in `source` would be more error-prone than this `startsWith` check.
     // eslint-disable-next-line eslint-rules/eslint-prefer-assert-match
     assert.ok(result.startsWith(source), 'result should start with original source')
-    assert.ok(result.includes("require('dc-polyfill')"), 'result should require dc-polyfill')
+    assert.ok(result.includes(require.resolve('../../../vendor/dist/dc-polyfill')), 'result should require dc-polyfill')
     assert.ok(result.includes("'dd-trace:bundler:load'"), 'result should use the bundler channel')
     assert.ok(result.includes("version: '1.2.3'"), 'result should contain the version')
     assert.ok(result.includes("package: 'mypackage'"), 'result should contain the package name')

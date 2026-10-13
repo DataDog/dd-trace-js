@@ -104,7 +104,7 @@ describe('session-propagation', () => {
   beforeEach(() => {
     childProcessChannel = createTracingChannel()
     sessionPropagation = proxyquire('../../src/telemetry/session-propagation', {
-      'dc-polyfill': {
+      '../../../../vendor/dist/dc-polyfill': {
         tracingChannel () {
           return childProcessChannel
         },

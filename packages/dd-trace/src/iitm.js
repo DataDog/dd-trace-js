@@ -1,7 +1,7 @@
 'use strict'
 
 const { addHook } = require('import-in-the-middle')
-const dc = require('dc-polyfill')
+const dc = require('../../../vendor/dist/dc-polyfill')
 
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 addHook((name, namespace) => {

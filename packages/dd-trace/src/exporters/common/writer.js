@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../../vendor/dist/dc-polyfill')
 
 const log = require('../../log')
 const { MAX_SIZE: MAX_CHUNK_SIZE } = require('../../msgpack')

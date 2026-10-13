@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../vendor/dist/dc-polyfill')
 const { DogStatsDClient, createMetricsAggregationClient } = require('../dogstatsd')
 const processTags = require('../process-tags')
 

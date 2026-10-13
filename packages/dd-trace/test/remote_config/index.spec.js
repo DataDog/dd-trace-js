@@ -1220,7 +1220,7 @@ describe('RemoteConfig', () => {
       uuidStub.onSecondCall().returns('new-client-id-uuid')
 
       RemoteConfigWithId = proxyquire('../../src/remote_config', {
-        'dc-polyfill': {
+        '../../../../vendor/dist/dc-polyfill': {
           channel: sinon.stub().returns({
             subscribe: (listener) => { refreshIdentity = listener },
           }),

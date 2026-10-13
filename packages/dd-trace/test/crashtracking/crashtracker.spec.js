@@ -52,7 +52,7 @@ describeNotWindows('crashtracker', () => {
     sinon.stub(binding, 'reportUncaughtExceptionMonitor')
 
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
-      'dc-polyfill': { channel: sinon.stub().returns(identityRefreshChannel) },
+      '../../../../vendor/dist/dc-polyfill': { channel: sinon.stub().returns(identityRefreshChannel) },
       '../log': log,
       '../telemetry/agentless-url': getAgentlessTelemetryUrl,
     })

@@ -1,6 +1,6 @@
 'use strict'
 
-const tracingChannel = require('dc-polyfill').tracingChannel
+const tracingChannel = require('../../../vendor/dist/dc-polyfill').tracingChannel
 
 const shimmer = require('../../datadog-shimmer')
 const {
