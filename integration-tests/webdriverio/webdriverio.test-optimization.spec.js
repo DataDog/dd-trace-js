@@ -1277,12 +1277,7 @@ for (const version of versions) {
             assert.strictEqual(quarantined.meta[TEST_STATUS], 'fail')
             assert.strictEqual(quarantined.meta[TEST_FINAL_STATUS], 'skip')
             assert.strictEqual(quarantined.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-            let expectedStatuses = ['fail', 'pass']
-            if (framework === 'jasmine') {
-              expectedStatuses = ['fail', 'pass', 'pass']
-            } else if (version === 'latest') {
-              expectedStatuses = ['fail', 'fail', 'pass']
-            }
+            const expectedStatuses = framework === 'jasmine' ? ['fail', 'pass', 'pass'] : ['fail', 'pass']
             assert.strictEqual(earlyFlakeDetectionTests.length, expectedStatuses.length)
             assert.deepStrictEqual(
               earlyFlakeDetectionTests.map(test => test.meta[TEST_STATUS]).sort(),

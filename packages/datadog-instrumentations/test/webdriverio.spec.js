@@ -25,6 +25,7 @@ const {
   efdTests,
   getOnFailHandler,
   getOnTestHandler,
+  getOnTestEndHandler,
   resetRunState,
   runnableWrapper,
 } = require('../src/mocha/utils')
@@ -254,6 +255,86 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(runOrder, ['run'])
     } finally {
       testFinishCh.unsubscribe(onTestFinish)
+    }
+  })
+
+  it('suppresses Mocha hook-affected test lifecycles after a hook failure was published', async () => {
+    const testStartCh = channel('ci:mocha:test:start')
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const errorCh = channel('ci:mocha:test:error')
+    const starts = []
+    const finishes = []
+    const errors = []
+    const onTestStart = ctx => starts.push(ctx)
+    const onTestFinish = ctx => finishes.push(ctx)
+    const onTestError = ctx => errors.push(ctx)
+    const suite = {
+      parent: null,
+      _beforeEach: [],
+      _afterEach: [],
+    }
+    const testFn = () => {}
+    const createTest = () => ({
+      file: path.join(process.cwd(), 'hook-affected.spec.js'),
+      fn: testFn,
+      fullTitle: () => 'hook affected test',
+      isFailed () {
+        return this.state === 'failed'
+      },
+      isPending: () => false,
+      parent: suite,
+      retries: () => 0,
+      title: 'hook affected test',
+      _currentRetry: 0,
+      _ddIsNew: true,
+      _retries: 0,
+    })
+    const test = createTest()
+    const hookAffectedTest = createTest()
+    const beforeEachHook = {
+      ctx: { currentTest: test },
+      file: test.file,
+      fullTitle: () => '"before each" hook for "hook affected test"',
+      parent: suite,
+      type: 'hook',
+    }
+    suite._beforeEach.push(beforeEachHook)
+
+    testStartCh.subscribe(onTestStart)
+    testFinishCh.subscribe(onTestFinish)
+    errorCh.subscribe(onTestError)
+    try {
+      resetRunState({ tests: [], suites: [] })
+      const config = {
+        earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy(),
+      }
+      const onTest = getOnTestHandler(false)
+      const onFail = getOnFailHandler(false, config)
+      const onTestEnd = getOnTestEndHandler(config)
+
+      onTest(test)
+      onFail(beforeEachHook, new Error('beforeEach failed'))
+
+      test.state = 'failed'
+      onTest(test)
+      onFail(test, new Error('synthetic hook affected failure'))
+      await onTestEnd(test)
+
+      hookAffectedTest.state = 'failed'
+      onTest(hookAffectedTest)
+      onFail(hookAffectedTest, new Error('synthetic remaining hook affected failure'))
+      await onTestEnd(hookAffectedTest)
+
+      assert.strictEqual(starts.length, 1)
+      assert.strictEqual(errors.length, 1)
+      assert.strictEqual(finishes.length, 1)
+      assert.strictEqual(finishes[0].status, 'fail')
+      assert.strictEqual(Object.values(efdTests)[0].length, 2)
+    } finally {
+      testStartCh.unsubscribe(onTestStart)
+      testFinishCh.unsubscribe(onTestFinish)
+      errorCh.unsubscribe(onTestError)
+      resetRunState({ tests: [], suites: [] })
     }
   })
 
