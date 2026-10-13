@@ -5,15 +5,11 @@ const { isDataView, isDate, isMap, isSet, isSharedArrayBuffer } = require('node:
 
 const { maxValueLength, truncated } = require('./constants')
 
-// Payload-controlled objects must not be able to influence how their binary
-// values are copied, identified, or measured: an overridden `slice`, a custom
-// `Symbol.species`, or a spoofed `byteLength` could otherwise mutate caller
-// bytes or bypass the copy budget. Everything below is captured once at module
-// initialization from this realm's intrinsics and invoked directly on the
-// payload value, so payload-defined methods, constructors, species, and
-// metadata properties are never consulted. Defending against arbitrary
-// replacement of the global intrinsics themselves before module load is out of
-// scope: only payload-controlled object behavior is hardened here.
+// Intrinsics captured once at module load and invoked directly on payload
+// values, so overridden `slice` methods, custom `Symbol.species`, or spoofed
+// metadata such as `byteLength` can neither mutate caller bytes nor bypass
+// the copy budget. Hardening covers payload-controlled behavior only;
+// replacement of global intrinsics before module load is out of scope.
 
 /**
  * @param {object} object
@@ -24,21 +20,18 @@ function getterOf (object, key) {
   return Object.getOwnPropertyDescriptor(object, key)?.get
 }
 
-// The element-kind, byteLength, byteOffset and buffer getters live on
-// `%TypedArray%.prototype`, which every typed array (including Buffers and
-// subclasses) inherits. Calling them directly yields intrinsic metadata even
-// when the payload defines own spoofed properties.
+// Typed-array metadata getters inherited from %TypedArray%.prototype; calling
+// them directly bypasses payload-spoofed own properties.
 const typedArrayProto = Object.getPrototypeOf(Uint8Array.prototype)
 const getTypedArrayKind = getterOf(typedArrayProto, Symbol.toStringTag)
 const getTypedArrayByteLength = getterOf(typedArrayProto, 'byteLength')
 const getTypedArrayByteOffset = getterOf(typedArrayProto, 'byteOffset')
 const getTypedArrayBuffer = getterOf(typedArrayProto, 'buffer')
 
-// Captured native DataView brand check: observes only the [[DataView]]
-// internal slot, so it identifies genuine DataViews in any realm without the
-// realm-sensitive `instanceof` and without consulting payload-defined
-// properties. DataView.prototype[Symbol.toStringTag] is a data property rather
-// than an accessor, so it cannot be used as a brand check.
+// Intrinsic DataView metadata getters, used only after the isDataView brand
+// check; they avoid realm-sensitive instanceof and payload-defined properties.
+// DataView.prototype[Symbol.toStringTag] is a data property, not a getter, so
+// it cannot serve as a brand check.
 const getDataViewByteLength = getterOf(DataView.prototype, 'byteLength')
 const getDataViewByteOffset = getterOf(DataView.prototype, 'byteOffset')
 const getDataViewBuffer = getterOf(DataView.prototype, 'buffer')
@@ -48,8 +41,7 @@ const viewMetadataKeys = ['buffer', 'byteLength', 'byteOffset', 'length', 'BYTES
   'constructor', Symbol.toStringTag]
 const backingMetadataKeys = ['byteLength', 'maxByteLength', 'resizable', 'detached', 'constructor', Symbol.toStringTag]
 
-// Opaque leaves must also be isolated from downstream JSONPath mutations.
-// Native brands and metadata operations avoid cross-realm instanceof checks
+// Native brands and metadata for opaque leaves avoid cross-realm instanceof
 // and payload-defined constructors, conversion hooks, getters, and iterators.
 const getDateTime = Date.prototype.getTime
 const getMapSize = getterOf(Map.prototype, 'size')
@@ -69,9 +61,8 @@ const maxStreamPrototypeDepth = 100
  *   TypedArrayConstructor
  */
 
-// Closed map of trusted native constructors, used to wrap fresh copies in the
-// payload value's native element kind. Payload-defined subclasses and species
-// are never consulted, so a payload cannot choose the copy's type or storage.
+// Trusted native constructors for wrapping fresh copies in the value's
+// element kind; payload-defined subclasses and species are never consulted.
 const typedArrayConstructors = new Map(/** @type {Array<[string, TypedArrayConstructor]>} */ ([
   ['Int8Array', Int8Array],
   ['Uint8Array', Uint8Array],
@@ -85,35 +76,28 @@ const typedArrayConstructors = new Map(/** @type {Array<[string, TypedArrayConst
   ['BigInt64Array', BigInt64Array],
   ['BigUint64Array', BigUint64Array],
 ]))
-// Optional numeric format: only added when the runtime exposes it, keeping the
-// module loadable on runtimes without this typed array.
+// Only set when the runtime exposes it, keeping the module loadable elsewhere.
 if (typeof globalThis.Float16Array === 'function') {
   typedArrayConstructors.set(
     'Float16Array', /** @type {TypedArrayConstructor} */ (/** @type {unknown} */ (globalThis.Float16Array))
   )
 }
 
-// Snapshot limits are independent of the configured output max depth: payload
-// capture must stay bounded no matter how deep the caller asks tags to go.
+// Independent of the configured output max depth: capture must stay bounded.
 const maxDepth = 100
 const maxEntries = 10_000
 const maxArrayLength = 10_000
 
-// Aggregate budget for copies of binary values (Buffers and typed-array views)
-// across every `createSafeSnapshot` call sharing one budget. Copying keeps later
-// JSONPath redaction from mutating application-owned bytes; the shared budget
-// keeps the total copy work bounded no matter how many binary values a payload
-// carries. A typed array or DataView that does not fit in the remaining budget
-// is replaced with the `truncated` sentinel; an over-budget Buffer keeps its
-// rendered prefix when that prefix still fits.
+// Aggregate byte budget for binary copies shared by every `createSafeSnapshot`
+// call given the same budget. Copying keeps later JSONPath redaction from
+// mutating application-owned bytes; over-budget views become `truncated`,
+// except a Buffer that keeps its rendered prefix.
 const maxBinaryCopyBytes = 1_000_000
 
-// Buffers render as their UTF-8 decoding cut to `maxValueLength` code units.
-// Each code unit consumes at most three bytes (a malformed sequence decodes to
-// one U+FFFD per maximal subpart of up to three bytes), so the first
-// `maxValueLength * 3` bytes always decode to the rendered units; four extra
-// bytes are a defensive margin. A prefix of this size therefore renders the
-// same tag value as the full Buffer.
+// A Buffer's tag renders its UTF-8 decoding cut to `maxValueLength` code
+// units. Each code unit consumes at most 3 bytes (malformed sequences decode
+// to one U+FFFD per maximal subpart), so a prefix of this size plus a small
+// margin renders the same tag value as the full Buffer.
 const maxBufferPrefixBytes = maxValueLength * 3 + 4
 
 /**
@@ -124,19 +108,16 @@ const maxBufferPrefixBytes = maxValueLength * 3 + 4
  */
 
 /**
- * Detect native streams and descriptor-backed getReader methods without
- * executing payload accessors. Accessor-only duck types are ordinary payloads,
- * not stream evidence. Streams are never enumerated, cloned, drained, or locked:
- * their internals hold circular references (sockets, parsers, readable state),
- * and consuming them would corrupt the application's own use of the payload.
+ * Detect native streams and descriptor-backed getReader functions without
+ * executing payload accessors. Streams are never enumerated, cloned, drained,
+ * or locked: consuming one would corrupt the application's own use of the
+ * payload.
  *
  * @param {object} value
  */
 function isStream (value) {
-  // Inspect the effective descriptor without executing an accessor outside
-  // admitted copying. Own nonfunctions/accessors shadow inherited methods.
-  // Native prototype recognition shares this bound, rather than using an
-  // unbounded instanceof walk through a payload-controlled prototype chain.
+  // Inspect effective descriptors without executing accessors; the walk is
+  // bounded rather than an unbounded instanceof through a controlled chain.
   let current = value
   let descriptor
   for (let depth = 0; current !== null && depth < maxStreamPrototypeDepth; depth++) {
@@ -148,8 +129,7 @@ function isStream (value) {
   // An exhausted inspection bound is ambiguous, so truncate conservatively.
   if (current !== null) return true
   if (descriptor && getStreamLocked) {
-    // A foreign native stream may shadow getReader. Check its native brand
-    // without calling getReader or inspecting a brand-check exception.
+    // A foreign stream may shadow getReader; check the native brand instead.
     try {
       getStreamLocked.call(value)
       return true
@@ -183,8 +163,7 @@ function hasAncestor (ancestors, value) {
 
 /**
  * Assign `value` to `container[key]`, keeping `__proto__` a plain data
- * property so hostile payloads cannot mutate prototypes through the snapshot
- * copy.
+ * property so the snapshot cannot mutate prototypes.
  *
  * @param {Record<string, unknown> | unknown[] | null} container
  * @param {string | null} key
@@ -209,12 +188,9 @@ function assign (container, key, value, root) {
 }
 
 /**
- * Identify a genuine Buffer or ArrayBuffer view by its native kind using only
- * intrinsic brand checks, returning `null` when the value is a genuine view of
- * an unsupported kind. Brand detection never consults payload-defined
- * properties and never throws, which keeps it separate from metadata
- * validation: `visibleByteLength` reads view metadata and may throw for
- * detached storage, which truncates only that leaf.
+ * Identify a genuine Buffer or ArrayBuffer view using only intrinsic brand
+ * checks, returning `null` for unsupported kinds. Never consults
+ * payload-defined properties and never throws.
  *
  * @param {Buffer | TypedArray | DataView} value
  * @returns {string | null} 'buffer', 'DataView', or a trusted typed-array kind
@@ -231,10 +207,8 @@ function binaryKind (value) {
 }
 
 /**
- * Read the visible byte length of a genuine Buffer or ArrayBuffer view using
- * only intrinsic getters. Never consults payload-defined metadata properties.
- * Unlike brand detection, this validation reads view metadata and the DataView
- * getter throws for detached storage; the caller truncates only that leaf.
+ * Read the visible byte length using only intrinsic getters. May throw for
+ * detached storage; the caller truncates only that leaf.
  *
  * @param {Buffer | TypedArray | DataView} value
  * @param {string} kind trusted kind from `binaryKind`
@@ -247,10 +221,10 @@ function visibleByteLength (value, kind) {
 }
 
 /**
- * Detect metadata lost when a binary view is normalized into fresh storage.
- * Native reads and bounded own-property checks never execute payload getters.
- * Unknown prototypes and shadowed metadata are conservatively incomplete:
- * predicates could observe values that the native copy does not preserve.
+ * Detect metadata lost when a binary view is normalized into fresh storage,
+ * using native reads and bounded own-property checks that never execute
+ * payload getters. Unknown prototypes and shadowed metadata are
+ * conservatively incomplete.
  *
  * @param {Buffer | TypedArray | DataView} value
  * @param {Buffer | TypedArray | DataView} copy
@@ -279,19 +253,15 @@ function binaryMetadataChanged (value, copy, kind) {
 }
 
 /**
- * Copy a Buffer or ArrayBuffer view into fresh writable storage so that later
- * redaction of the snapshot can never mutate application-owned bytes. Only the
- * view's visible byte range is copied, never its entire backing buffer. The
- * element type is preserved so existing tag formats stay stable: Buffers keep
- * their string tag and typed arrays keep their per-index tags.
+ * Copy a Buffer or ArrayBuffer view into fresh writable storage so later
+ * redaction cannot mutate application-owned bytes. Only the visible byte
+ * range is copied; the element type is preserved so tag formats stay stable
+ * (Buffers keep their string tag, typed arrays their per-index tags).
  *
- * Copying relies solely on the intrinsics captured at module initialization:
- * payload-defined methods, constructors, species, `Symbol.toStringTag`, and
- * metadata properties are never consulted. `kind` and `byteLength` must come
- * from the same trusted source used for budget admission. Native construction
- * of the source view rejects detached ArrayBuffers for every visible byte
- * length, including zero, without consulting backing-buffer constructors or
- * species; the caller truncates only that leaf.
+ * Uses only the intrinsics captured at module load; `kind` and `byteLength`
+ * must come from the same trusted source used for budget admission. Native
+ * construction rejects detached storage, including zero-byte views, without
+ * consulting payload hooks; the caller truncates only that leaf.
  *
  * @param {Buffer | TypedArray | DataView} value
  * @param {string} kind trusted kind from `binaryKind`
@@ -302,8 +272,7 @@ function binaryMetadataChanged (value, copy, kind) {
 function copyBinary (value, kind, byteLength) {
   const getBuffer = kind === 'DataView' ? getDataViewBuffer : getTypedArrayBuffer
   const getByteOffset = kind === 'DataView' ? getDataViewByteOffset : getTypedArrayByteOffset
-  // Native construction validates even zero-byte views without consulting
-  // payload-defined hooks, backing-buffer constructors, or species.
+  // Native construction validates even zero-byte views without payload hooks.
   const source = new Uint8Array(
     /** @type {ArrayBuffer} */ (getBuffer?.call(value)),
     /** @type {number} */ (getByteOffset?.call(value)),
@@ -323,11 +292,9 @@ function copyBinary (value, kind, byteLength) {
 }
 
 /**
- * One container whose children are still being captured. The frame owns a
- * cursor over the source container's own keys, so values are read (and getters
- * run) only when their work is admitted against the entry budget; siblings
- * beyond the budget are never read. Pending frames are bounded by the depth
- * limit because each nested container adds exactly one frame.
+ * One container whose children are still being captured. Values are read only
+ * when their work is admitted against the entry budget; frames are bounded by
+ * the depth limit, since each nested container adds exactly one.
  *
  * @typedef {{
  *   source: object,
@@ -355,42 +322,34 @@ function createSnapshotBudget () {
 /**
  * Produce a bounded, acyclic, stream-safe snapshot of an arbitrary payload.
  *
- * - Streams become `truncated` without being read.
- * - Cyclic back-references become `truncated`.
- * - Traversal depth, total admitted values, and aggregate binary copy bytes
- *   are bounded; over-limit values become `truncated` and mark the snapshot
- *   incomplete.
+ * - Streams and cyclic back-references become `truncated` without being read.
+ * - Depth, admitted entries and aggregate binary copy bytes are bounded;
+ *   over-limit values become `truncated` and mark the snapshot incomplete.
  * - Dates, Maps and Sets become isolated native leaves without attached
- *   properties. Dates retain their time value; collection entries are not
- *   traversed. Discarded enumerable fields and nonempty collections mark the
- *   snapshot incomplete so predicates cannot silently change redaction or
- *   expansion decisions after their data is omitted.
+ *   properties. Discarded fields or nonempty collections mark the snapshot
+ *   incomplete, so predicates cannot silently change redaction or expansion
+ *   decisions after their data is omitted.
  * - Buffers and ArrayBuffer views are copied into fresh storage within the
- *   binary budget so path-based redaction cannot mutate caller-owned bytes.
- *   An over-budget Buffer keeps only the prefix its string tag renders.
- *   Changes to view offsets, backing-storage metadata, prototypes or shadowed
- *   metadata mark capture incomplete so predicates cannot lose their matches.
- * - Repeated non-circular references are copied per occurrence so path-based
- *   redaction rules keep matching each path independently.
+ *   binary budget so redaction cannot mutate caller-owned bytes. An
+ *   over-budget Buffer keeps the prefix its string tag renders; view offsets,
+ *   backing-storage metadata, prototypes or shadowed metadata the copy does
+ *   not preserve mark capture incomplete.
+ * - Repeated non-circular references are copied per occurrence so redaction
+ *   rules keep matching each path independently.
  * - Own enumerable string-keyed properties of plain objects and class
- *   instances are captured, matching the surface the previous deep clone
- *   walked; getters are read at most once, and only when admitted.
+ *   instances are captured; getters are read at most once, and only when
+ *   admitted.
  *
- * Entry counting: the root and every admitted descendant each count as one
- * entry against `maxEntries`. Once the budget is exhausted, traversal stops
- * without reading or materializing anything else; the snapshot is marked
- * incomplete instead of allocating a placeholder per omitted property.
+ * The root and every admitted descendant each count one entry against
+ * `maxEntries`; once exhausted, traversal stops without reading or
+ * materializing anything else and the snapshot is marked incomplete. Passing
+ * the same `budget` to several calls bounds their combined work.
  *
- * Budget sharing: passing the same `budget` to several calls bounds their
- * combined entry and binary copy work, which keeps a payload plus all of its
- * expanded values within one set of limits.
- *
- * Known limitation: `Object.keys` still enumerates and allocates one entry per
- * own key of every expanded container, so raw key enumeration grows with
- * container width. Standard JavaScript offers no lazy own-key enumeration
- * primitive that is compatible with the repository's prohibition on `for-in`.
- * The avoidable work (value reads, getter side effects, copied entries,
- * pending frames, and downstream tag growth) is bounded by `maxEntries`.
+ * Known limitation: `Object.keys` still enumerates one entry per own key of
+ * every expanded container; JavaScript offers no lazy own-key enumeration
+ * primitive compatible with the repository's `for-in` prohibition. The
+ * avoidable work (value reads, getter side effects, copied entries, pending
+ * frames, tag growth) is bounded by `maxEntries`.
  *
  * @param {unknown} input
  * @param {SnapshotBudget} [budget] remaining work, consumed in place
@@ -404,8 +363,8 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
 
   /**
    * Copy a genuine Buffer or ArrayBuffer view within the binary budget, or
-   * return the `truncated` sentinel for unsupported or over-budget views. Throws
-   * for detached storage; the budget is only debited after a successful copy.
+   * return `truncated` for unsupported or over-budget views. Throws for
+   * detached storage; the budget is debited only after a successful copy.
    *
    * @param {Buffer | TypedArray | DataView} view
    * @returns {Buffer | TypedArray | DataView | string}
@@ -419,10 +378,8 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     const byteLength = visibleByteLength(view, kind)
     let copyLength = byteLength
     if (byteLength > budget.binaryBytes) {
-      // An over-budget Buffer keeps the prefix its string tag renders. The
-      // shortened copy changes data such as its length, so the snapshot is
-      // marked incomplete and data-dependent rules stay suppressed. Typed
-      // arrays render one tag per element and are never shortened.
+      // The over-budget Buffer keeps the prefix its tag renders; the changed
+      // length marks the snapshot incomplete. Typed arrays are never shortened.
       copyLength = kind === 'buffer' ? Math.min(byteLength, maxBufferPrefixBytes) : byteLength
       incomplete = true
       if (copyLength > budget.binaryBytes) {
@@ -456,8 +413,8 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       try {
         copy = captureBinary(/** @type {Buffer | TypedArray | DataView} */ (value))
       } catch {
-        // Intrinsic metadata reads and native construction reject detached
-        // storage. Only this leaf is lost; never inspect the caught value.
+        // Native reads reject detached storage; only this leaf is lost. Never
+        // inspect the caught value.
         incomplete = true
         copy = truncated
       }
@@ -466,7 +423,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     }
 
     // Opaque leaves discard arbitrary fields: key enumeration detects lost
-    // predicate data without ever reading getters or traversing their values.
+    // predicate data without reading getters.
     /* eslint-disable no-restricted-syntax */
     if (isDate(value)) {
       if (Object.keys(value).length !== 0) incomplete = true
@@ -526,8 +483,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     }
 
     if (budget.entries <= 0) {
-      // Budget exhausted: stop reading values entirely. Remaining properties
-      // are neither read nor materialized; the snapshot is marked incomplete.
+      // Budget exhausted: stop without reading or materializing anything else.
       incomplete = true
       break
     }
@@ -535,8 +491,8 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     const key = frame.keys[frame.index]
     frame.index++
     budget.entries--
-    // The value is read only once its work is admitted, so getter side
-    // effects cannot grow with omitted siblings.
+    // Read only once admitted, so getter side effects cannot grow with
+    // omitted siblings.
     admit(frame.copy, key, frame.source[key], frame.childDepth, frame.ancestors)
   }
 

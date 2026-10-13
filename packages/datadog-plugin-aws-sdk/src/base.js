@@ -122,9 +122,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
           const requestTags = tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
           span.addTags(requestTags)
         } catch {
-          // Last line of defense: a payload capture failure must never disable
-          // the plugin or mark the operation itself as failed. Never inspect the
-          // caught value: payload-controlled getters can throw during logging.
+          // A capture failure must not disable the plugin or fail the
+          // operation. Never inspect the caught value: payload getters can
+          // throw while logging it.
           log.error('Error attaching request payload tags; omitting payload tags for this operation')
         }
       }
@@ -263,9 +263,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         const responseTags = tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })
         span.addTags(responseTags)
       } catch {
-        // Last line of defense: a payload capture failure must never skip the
-        // rest of response tagging or span completion. Never inspect the caught
-        // value: payload-controlled getters can throw during logging.
+        // A capture failure must not skip remaining response tagging or span
+        // completion. Never inspect the caught value: payload getters can
+        // throw while logging it.
         log.error('Error attaching response payload tags; omitting payload tags for this operation')
       }
     }
