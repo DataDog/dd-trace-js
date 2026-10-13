@@ -7,6 +7,12 @@ const { describe, it, expect } = globalThis.expect ? globalThis : require('@jest
 let flakyAttempts = 0
 
 describe('quarantine snapshot', () => {
+  if (process.env.MIXED_SNAPSHOT_SUITE) {
+    it.concurrent('concurrent passing sibling', () => {
+      expect(true).toBe(true)
+    })
+  }
+
   it('fails a snapshot', () => {
     expect('received').toMatchSnapshot()
   })

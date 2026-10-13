@@ -2441,6 +2441,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                     'snapshot can match': { properties: { quarantined: true } },
                   },
                 },
+                'ci-visibility/test-management/test-mixed-snapshot-quarantine.js': {
+                  tests: {
+                    'mixed snapshots quarantined snapshot': { properties: { quarantined: true } },
+                  },
+                },
+                'ci-visibility/test-management/test-mixed-snapshot-overlap.js': {
+                  tests: {
+                    'overlapping snapshots quarantined snapshot': { properties: { quarantined: true } },
+                  },
+                },
               },
             },
           })
@@ -2499,6 +2509,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               {
                 TESTS_TO_RUN: 'test-management/test-snapshot-(quarantine|image)',
                 DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                MIXED_SNAPSHOT_SUITE: 'true',
                 ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
               },
               (testSession, executions) => {
@@ -2508,7 +2519,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                   'quarantine snapshot fails before a snapshot': [['fail', 'true']],
                   'quarantine snapshot fails a snapshot before passing': [['fail', 'true']],
                   'quarantine snapshot can pass normally': [['pass', undefined]],
+                  'quarantine snapshot concurrent passing sibling': [['pass', undefined]],
                   'snapshot can match': [['fail', 'true']],
+                  'snapshot concurrent passing sibling': [['pass', undefined]],
                 })
               }
             )
@@ -2518,6 +2531,60 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.doesNotMatch(stdout, /snapshots? failed/)
             assert.doesNotMatch(stdout, /obsolete/)
           })
+        }
+
+        for (const { parallel, injectGlobals } of snapshotModes) {
+          const modeIt = injectGlobals || supportsImportedGlobals ? it : it.skip
+          for (const ordinaryFailure of ['none', 'serial', 'concurrent']) {
+            const mode = `parallel=${parallel}, injectGlobals=${injectGlobals}, ordinaryFailure=${ordinaryFailure}`
+            modeIt(`reports serial snapshot quarantine in mixed files (${mode})`, async () => {
+              receiver.setSettings({ test_management: { enabled: true } })
+              const { exitCode, stdout } = await runSnapshotTests({
+                TESTS_TO_RUN: 'test-management/test-mixed-snapshot-quarantine',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                FAIL_ORDINARY_SNAPSHOT: ordinaryFailure === 'serial' ? 'true' : undefined,
+                FAIL_CONCURRENT_SNAPSHOT: ordinaryFailure === 'concurrent' ? 'true' : undefined,
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              }, (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], ordinaryFailure === 'none' ? 'pass' : 'fail')
+                assert.deepStrictEqual(executions, {
+                  'mixed snapshots quarantined snapshot': [['fail', 'true']],
+                  'mixed snapshots ordinary snapshot': [[ordinaryFailure === 'serial' ? 'fail' : 'pass', undefined]],
+                  'mixed snapshots concurrent sibling': [
+                    [ordinaryFailure === 'concurrent' ? 'fail' : 'pass', undefined],
+                  ],
+                })
+              })
+              assert.strictEqual(exitCode, ordinaryFailure === 'none' ? 0 : 1, stdout)
+              if (ordinaryFailure !== 'none') {
+                assert.match(stdout, /1 snapshot failed/)
+              } else {
+                assert.doesNotMatch(stdout, /snapshots? failed/)
+              }
+              assert.doesNotMatch(stdout, /obsolete/)
+            })
+          }
+
+          // Before Jest 30, concurrent bodies can run while a serial test is awaiting.
+          const overlapIt = (JEST_VERSION !== 'latest' && satisfies(JEST_VERSION, '<30.0.0')) ? modeIt : it.skip
+          overlapIt(`preserves overlapping snapshots (parallel=${parallel}, injectGlobals=${injectGlobals})`,
+            async () => {
+              receiver.setSettings({ test_management: { enabled: true } })
+              const { exitCode, stdout } = await runSnapshotTests({
+                TESTS_TO_RUN: 'test-management/test-mixed-snapshot-overlap',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              }, (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+                assert.deepStrictEqual(executions, {
+                  'overlapping snapshots quarantined snapshot': [['fail', 'true']],
+                  'overlapping snapshots ordinary concurrent image snapshot': [['fail', undefined]],
+                })
+              })
+              assert.strictEqual(exitCode, 1, stdout)
+              assert.match(stdout, /1 snapshot failed/)
+              assert.doesNotMatch(stdout, /obsolete/)
+            })
         }
 
         itIfRetriesResetSnapshots('does not fail the run when ATR retries quarantined snapshot tests', async () => {
@@ -2530,6 +2597,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             {
               TESTS_TO_RUN: 'test-management/test-snapshot-quarantine',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+              MIXED_SNAPSHOT_SUITE: 'true',
             },
             (testSession, executions) => {
               assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
@@ -2538,6 +2606,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                 'quarantine snapshot fails before a snapshot': [['fail', 'true'], ['fail', 'true'], ['fail', 'true']],
                 'quarantine snapshot fails a snapshot before passing': [['fail', 'true'], ['pass', 'true']],
                 'quarantine snapshot can pass normally': [['pass', undefined]],
+                'quarantine snapshot concurrent passing sibling': [['pass', undefined]],
               })
             }
           )

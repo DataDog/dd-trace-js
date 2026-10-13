@@ -1,0 +1,31 @@
+'use strict'
+
+const path = require('node:path')
+
+const { toMatchImageSnapshot } = require('jest-image-snapshot')
+
+const { describe, it, expect } = globalThis.expect ? globalThis : require('@jest/globals')
+
+expect.extend({ toMatchImageSnapshot })
+
+describe('mixed snapshots', () => {
+  it('quarantined snapshot', () => {
+    expect('received').toMatchSnapshot()
+  })
+
+  it('ordinary snapshot', () => {
+    expect(process.env.FAIL_ORDINARY_SNAPSHOT ? 'received' : 'stored').toMatchSnapshot()
+  })
+
+  it.concurrent('concurrent sibling', () => {
+    if (process.env.FAIL_CONCURRENT_SNAPSHOT) {
+      const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
+      expect(Buffer.from(b64, 'base64')).toMatchImageSnapshot({
+        customSnapshotsDir: path.join(__dirname, '__image_snapshots__'),
+        customSnapshotIdentifier: 'test-snapshot-image-js-snapshot-can-match-1-snap',
+      })
+    } else {
+      expect(true).toBe(true)
+    }
+  })
+})

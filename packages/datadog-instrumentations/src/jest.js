@@ -10,6 +10,7 @@ const { performance } = require('node:perf_hooks')
 const path = require('path')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
+const { storage } = require('../../datadog-core')
 const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
@@ -88,6 +89,8 @@ const testSkippedCh = channel('ci:jest:test:skip')
 const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 const testFnCh = channel('ci:jest:test:fn')
+const snapshotStorage = storage('ci:jest:snapshots')
+let activeSnapshotTrackers = 0
 const testSuiteHookFnCh = channel('ci:jest:test-suite:hook:fn')
 const consoleLogSubmissionCh = channel('ci:log-submission:console')
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
@@ -668,6 +671,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     #efdRetryGatesByName
     #expect
     #pendingPre30ConcurrentTests
+    /** @type {(() => void)|undefined} */
+    #restoreSnapshotState
 
     constructor (config, context) {
       super(config, context)
@@ -1451,6 +1456,49 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     /**
+     * Attributes snapshot increments to the executing test when serial and concurrent bodies can overlap.
+     * Both Jest and image snapshot matchers write this shared counter directly.
+     */
+    #trackQuarantinedSnapshots () {
+      if (!this.hasConcurrentTests || !this.testManagementTestsForThisSuite?.quarantined?.length) return
+
+      const snapshotState = this.getSnapshotState()
+      const descriptor = snapshotState && Object.getOwnPropertyDescriptor(snapshotState, 'unmatched')
+      if (!descriptor?.configurable || typeof descriptor.value !== 'number') return
+
+      let unmatched = descriptor.value
+      try {
+        Object.defineProperty(snapshotState, 'unmatched', {
+          configurable: true,
+          enumerable: descriptor.enumerable,
+          get () { return unmatched },
+          /** @param {number} value */
+          set (value) {
+            const ctx = /** @type {{ unmatchedSnapshots?: number }|undefined} */ (snapshotStorage.getStore())
+            if (ctx?.unmatchedSnapshots !== undefined && value > unmatched) {
+              ctx.unmatchedSnapshots += value - unmatched
+            }
+            unmatched = value
+          },
+        })
+      } catch (error) {
+        log.error('Could not track quarantined Jest snapshots: %s', error)
+        return
+      }
+
+      if (activeSnapshotTrackers++ === 0) testFnCh.bindStore(snapshotStorage)
+      this.#restoreSnapshotState = () => {
+        try {
+          Object.defineProperty(snapshotState, 'unmatched', { ...descriptor, value: unmatched })
+        } catch (error) {
+          log.error('Could not restore Jest snapshot state: %s', error)
+        } finally {
+          if (--activeSnapshotTrackers === 0) testFnCh.unbindStore(snapshotStorage)
+        }
+      }
+    }
+
+    /**
      * Keeps the snapshot results of a quarantined test from failing the run.
      *
      * Jest fails the run on unmatched or obsolete snapshots even when no test failed.
@@ -1459,14 +1507,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @param {string} status
      */
     ignoreQuarantinedSnapshotResults (test, status) {
-      const unmatchedBeforeTest = testContexts.get(test)?.unmatchedSnapshotsBeforeTest
+      const ctx = testContexts.get(test)
+      const unmatchedBeforeTest = ctx?.unmatchedSnapshotsBeforeTest
+      const unmatchedSnapshots = ctx?.unmatchedSnapshots
       // Jest retries the attempts that still have errors and resets their snapshot results itself.
-      if (unmatchedBeforeTest === undefined || test.errors?.length) return
+      if ((unmatchedBeforeTest === undefined && unmatchedSnapshots === undefined) || test.errors?.length) return
 
       const snapshotState = this.getSnapshotState()
       if (!snapshotState) return
 
-      if (snapshotState.unmatched > unmatchedBeforeTest) {
+      if (unmatchedSnapshots !== undefined) {
+        snapshotState.unmatched -= unmatchedSnapshots
+        ctx.unmatchedSnapshots = 0
+      } else if (snapshotState.unmatched > unmatchedBeforeTest) {
         snapshotState.unmatched = unmatchedBeforeTest
       }
       // Jest only marks the snapshots of failed tests as checked, and it no longer sees this test as failed.
@@ -1955,6 +2008,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       if (event.name === 'run_start') {
+        this.#trackQuarantinedSnapshots()
         const registerResultHandler = dynamicAtrResultHandlerRegistrations.get(this)
         dynamicAtrResultHandlerRegistrations.delete(this)
         registerResultHandler?.()
@@ -2075,8 +2129,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           ctx.concurrentTestState = concurrentTestState
           concurrentTestState.ctx = ctx
         }
-        if (isQuarantined && !isAttemptToFix && !this.hasConcurrentTests) {
-          ctx.unmatchedSnapshotsBeforeTest = this.getSnapshotState()?.unmatched
+        if (isQuarantined && !isAttemptToFix && !event.test.concurrent && !ctx.concurrentTestState) {
+          if (this.#restoreSnapshotState) {
+            ctx.unmatchedSnapshots = 0
+          } else if (!this.hasConcurrentTests) {
+            ctx.unmatchedSnapshotsBeforeTest = this.getSnapshotState()?.unmatched
+          }
         }
         testContexts.set(event.test, ctx)
 
@@ -2394,6 +2452,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           ctx.currentStore = undefined
         }
       } else if (event.name === 'run_finish') {
+        this.#restoreSnapshotState?.()
+        this.#restoreSnapshotState = undefined
         this.removeDiscardedEfdRetries()
         for (const [test, errors] of atrSuppressedErrors) {
           // Do not restore errors for non-ATF quarantined tests — they should stay suppressed
@@ -2563,6 +2623,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     teardown () {
+      this.#restoreSnapshotState?.()
+      this.#restoreSnapshotState = undefined
       if (this._globalProxy?.propertyToValue) {
         for (const [key] of this._globalProxy.propertyToValue) {
           if (typeof key === 'string' && key.startsWith('_dd')) {
