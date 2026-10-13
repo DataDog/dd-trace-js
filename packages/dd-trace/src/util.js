@@ -12,8 +12,13 @@ const path = require('path')
  * @param {object | undefined} obj
  */
 function isEmpty (obj) {
-  // `for-in` materializes every index key of arrays and typed arrays up front, so use `length` instead.
-  if (Array.isArray(obj) || ArrayBuffer.isView(obj)) return obj.length === 0
+  if (Array.isArray(obj) || ArrayBuffer.isView(obj)) {
+    // `for-in` materializes every index key up front, so skip it when there are elements. Empty ones have no index
+    // keys to materialize, so check their own keys, which still detects named properties without walking a Buffer's
+    // enumerable prototype methods.
+    // eslint-disable-next-line no-restricted-syntax
+    return !(obj.length > 0) && Object.keys(obj).length === 0
+  }
   // eslint-disable-next-line no-unreachable-loop
   for (const _ in obj) return false
   return true

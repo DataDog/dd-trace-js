@@ -126,6 +126,11 @@ describe('util', () => {
     assert.strictEqual(isEmpty(new Uint8Array(0)), true)
     assert.strictEqual(isEmpty(new Uint8Array(1)), false)
     assert.strictEqual(isEmpty(Buffer.alloc(64 * 1024 * 1024)), false)
+    assert.strictEqual(isEmpty(new DataView(new ArrayBuffer(0))), true)
+    assert.strictEqual(isEmpty(new DataView(new ArrayBuffer(1))), true)
+    assert.strictEqual(isEmpty(Object.assign([], { key: 'value' })), false)
+    assert.strictEqual(isEmpty(Object.assign(new Uint8Array(0), { key: 'value' })), false)
+    assert.strictEqual(isEmpty(new Array(1)), false)
   })
 
   describe('getSegment', () => {
