@@ -281,6 +281,33 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
   })
 
+  it('waits for coordinator configuration before completing Mocha adapter initialization', async () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8').replaceAll('JasmineAdapter', 'MochaAdapter')
+    const modulePath = jasmineFixtureModulePath.replace('jasmine-framework', 'mocha-framework')
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-mocha-init-'))
+    const outputPath = path.join(directory, 'index.mjs')
+    fs.writeFileSync(outputPath, rewriter.rewrite(source, modulePath, 'module'))
+    const initCh = tracingChannel('orchestrion:@wdio/mocha-framework:MochaAdapter_init')
+    let release
+    const onInit = context => { context.resolveCallback = onDone => { release = onDone } }
+    initCh.asyncEnd.subscribe(onInit)
+    try {
+      const { MochaAdapter } = await import(pathToFileURL(outputPath))
+      const adapter = new MochaAdapter([])
+      const completed = sinon.spy()
+      const initialized = adapter.init().then(completed)
+      await new Promise(setImmediate)
+      assert.strictEqual(typeof release, 'function')
+      sinon.assert.notCalled(completed)
+      release()
+      await initialized
+      sinon.assert.calledOnceWithExactly(completed, adapter)
+    } finally {
+      initCh.asyncEnd.unsubscribe(onInit)
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
   for (const framework of ['mocha', 'jasmine', 'cucumber']) {
     for (const enabled of [undefined, 'false', 'true']) {
       it(`defaults video prompt handling for ${framework} with videos=${enabled}`, async () => {
@@ -291,6 +318,9 @@ describe('webdriverio instrumentation', () => {
         const onFinish = () => {}
         const finishCh = channel('ci:mocha:test:finish')
         finishCh.subscribe(onFinish)
+        const capabilitiesCh = channel('ci:webdriverio:video:capabilities')
+        const onCapabilities = ctx => { ctx.enabled = true }
+        capabilitiesCh.subscribe(onCapabilities)
         const source = fs.readFileSync(runnerFixturePath, 'utf8')
         const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-prompt-policy-'))
         const outputPath = path.join(directory, 'index.mjs')
@@ -321,11 +351,88 @@ describe('webdriverio instrumentation', () => {
           if (previous === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
           else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = previous
           finishCh.unsubscribe(onFinish)
+          capabilitiesCh.unsubscribe(onCapabilities)
           fs.rmSync(directory, { recursive: true, force: true })
         }
       })
     }
   }
+
+  for (const canUpload of [undefined, false, true]) {
+    for (const hasFfmpeg of [false, true]) {
+      it(`gates video prompt handling on upload=${canUpload} and FFmpeg=${hasFfmpeg}`, async () => {
+        require('../src/webdriverio')
+        const previous = process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+        process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
+        const probe = sinon.stub().returns({ status: hasFfmpeg ? 0 : 1 })
+        const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
+          'node:child_process': { spawnSync: probe },
+        })
+        const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+          './webdriverio-video': createVideo,
+          '../../dd-trace/src/config/helper': {
+            getValueFromEnvSources: () => true,
+            getEnvironmentVariable: name => name === WEBDRIVERIO_WORKER_ENV ? 'true' : undefined,
+          },
+        })
+        const { plugin } = createJasminePlugin({ isTestFailureVideosEnabled: canUpload }, {
+          Plugin,
+          testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+        })
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-video-availability-'))
+        const outputPath = path.join(directory, 'index.mjs')
+        const source = fs.readFileSync(runnerFixturePath, 'utf8')
+        fs.writeFileSync(outputPath, rewriter.rewrite(source, runnerFixtureModulePath, 'module'))
+        try {
+          const { Runner } = await import(pathToFileURL(outputPath))
+          const runner = new Runner()
+          const expected = canUpload && hasFfmpeg ? 'ignore' : undefined
+          const caps = await runner._startSession({ framework: 'mocha' }, {})
+          assert.strictEqual(caps.unhandledPromptBehavior, expected)
+          runner._isMultiremote = true
+          const multi = await runner._startSession({ framework: 'jasmine' }, {
+            first: { capabilities: {} },
+            second: { capabilities: { unhandledPromptBehavior: 'accept' } },
+          })
+          assert.strictEqual(multi.first.capabilities.unhandledPromptBehavior, expected)
+          assert.strictEqual(multi.second.capabilities.unhandledPromptBehavior, 'accept')
+          if (canUpload) sinon.assert.calledOnce(probe)
+          else sinon.assert.notCalled(probe)
+        } finally {
+          plugin.configure(false)
+          if (previous === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+          else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = previous
+          fs.rmSync(directory, { recursive: true, force: true })
+        }
+      })
+    }
+  }
+
+  it('checks only upload support in the coordinator without probing the worker encoder', () => {
+    const probe = sinon.stub()
+    const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
+      'node:child_process': { spawnSync: probe },
+    })
+    const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+      './webdriverio-video': createVideo,
+      '../../dd-trace/src/config/helper': {
+        getValueFromEnvSources: () => true,
+        getEnvironmentVariable: () => undefined,
+      },
+    })
+    const plugin = new Plugin({ _exporter: { canUploadTestVideos: () => true } }, {
+      testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+    })
+    plugin.configure({ enabled: true, tracing: {} })
+    try {
+      const capabilities = {}
+      channel('ci:webdriverio:video:capabilities').publish(capabilities)
+      assert.strictEqual(capabilities.enabled, true)
+      sinon.assert.notCalled(probe)
+    } finally {
+      plugin.configure(false)
+    }
+  })
 
   it('rewrites the ESM WebdriverIO test-function wrapper', () => {
     const source = fs.readFileSync(utilsFixturePath, 'utf8')

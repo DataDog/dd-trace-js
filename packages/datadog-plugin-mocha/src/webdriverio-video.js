@@ -389,6 +389,24 @@ function hasSafePromptPolicy (browser) {
   return true
 }
 
+/** Checks FFmpeg once in the worker, before configuring browser sessions or recording attempts. */
+function isFfmpegAvailable () {
+  if (ffmpegAvailable !== undefined) return ffmpegAvailable
+  ffmpegAvailable = false
+  try {
+    const result = spawnSync('ffmpeg', ['-version'], {
+      timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, stdio: 'ignore',
+    })
+    ffmpegAvailable = !result.error && result.status === 0
+  } catch (error) {
+    log.error('Error checking WebdriverIO video FFmpeg availability: %s', error.message)
+  }
+  if (!ffmpegAvailable) {
+    log.warn('WebdriverIO failure video recording requires FFmpeg on PATH with the libvpx encoder.')
+  }
+  return ffmpegAvailable
+}
+
 /**
  * Creates a recorder when a browser is available. The encoder is loaded only for failed attempts.
  *
@@ -398,17 +416,7 @@ function hasSafePromptPolicy (browser) {
 function createWebdriverioVideo (browser) {
   if (typeof browser?.takeScreenshot !== 'function') return
   try {
-    if (!hasSafePromptPolicy(browser)) return
-    if (ffmpegAvailable === undefined) {
-      const result = spawnSync('ffmpeg', ['-version'], {
-        timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, stdio: 'ignore',
-      })
-      ffmpegAvailable = !result.error && result.status === 0
-      if (!ffmpegAvailable) {
-        log.warn('WebdriverIO failure video recording requires FFmpeg on PATH with the libvpx encoder.')
-      }
-    }
-    if (!ffmpegAvailable) return
+    if (ffmpegAvailable === false || !hasSafePromptPolicy(browser) || !isFfmpegAvailable()) return
     return new WebdriverioVideo(browser)
   } catch (error) {
     log.error('Error starting WebdriverIO video recording: %s', error.message)
@@ -416,3 +424,4 @@ function createWebdriverioVideo (browser) {
 }
 
 module.exports = createWebdriverioVideo
+module.exports.isFfmpegAvailable = isFfmpegAvailable

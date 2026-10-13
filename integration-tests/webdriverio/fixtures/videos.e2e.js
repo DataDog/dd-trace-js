@@ -6,6 +6,9 @@ const { browser } = require('@wdio/globals')
 
 describe('WebdriverIO videos', () => {
   beforeEach(async () => {
+    if (process.env.WEBDRIVERIO_EXPECT_PROMPT_BEHAVIOR) {
+      assert.strictEqual(browser.capabilities.unhandledPromptBehavior, process.env.WEBDRIVERIO_EXPECT_PROMPT_BEHAVIOR)
+    }
     await browser.url('http://example.test/before')
     if (process.env.WEBDRIVERIO_VIDEO_HOOK === 'beforeEach') throw new Error('video beforeEach failure')
   })

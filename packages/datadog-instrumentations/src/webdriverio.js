@@ -65,6 +65,7 @@ const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
 const jasmineAdapterInitCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
+const mochaAdapterInitCh = tracingChannel('orchestrion:@wdio/mocha-framework:MochaAdapter_init')
 const baseReporterWaitForSyncCh = tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync')
 const runnerRunCh = tracingChannel('orchestrion:@wdio/runner:Runner_run')
 const runnerStartSessionCh = tracingChannel('orchestrion:@wdio/runner:Runner_startSession')
@@ -87,7 +88,7 @@ const TEST_FRAMEWORK = 'webdriverio'
 const SET_RUM_COOKIE_SCRIPT = 'cookie => { globalThis.document.cookie = cookie }'
 const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
-let jasmineWorkerRequestId = 0
+let workerRequestId = 0
 
 const loadCh = channel('dd-trace:instrumentation:load')
 if (loadCh.hasSubscribers) {
@@ -1042,22 +1043,23 @@ function createWorkerConfiguration () {
 }
 
 /**
- * Configures a Jasmine worker and waits for its coordinator-owned optimization settings.
+ * Configures a framework worker before browser session creation using its coordinator-owned settings.
  *
  * @param {{_jrunner?: {env?: {addReporter?: (reporter: object) => void}}, _specs?: string[]}} adapter
  * @param {{
  *   resolveCallback?: (onDone: () => void) => void,
  *   rejectCallback?: (onDone: () => void) => void
  * }} context
+ * @param {'mocha'|'jasmine'} testFrameworkAdapter
  */
-function initializeJasmineWorker (adapter, context) {
+function initializeFrameworkWorker (adapter, context, testFrameworkAdapter) {
   if (!isWebdriverioWorker) {
     return
   }
 
   const specs = adapter?._specs || []
 
-  if (jasmineDoneCh.hasSubscribers) {
+  if (testFrameworkAdapter === JASMINE_FRAMEWORK_ADAPTER && jasmineDoneCh.hasSubscribers) {
     adapter?._jrunner?.env?.addReporter?.({
       /**
        * Publishes run-level failures that are absent from suiteDone.
@@ -1076,11 +1078,11 @@ function initializeJasmineWorker (adapter, context) {
    * @param {() => void} onDone
    */
   const waitForCoordinator = onDone => {
-    const requestId = `${process.pid}-${++jasmineWorkerRequestId}`
+    const requestId = `${process.pid}-${++workerRequestId}`
     let finished = false
 
     /**
-     * Releases Jasmine initialization exactly once.
+     * Releases framework initialization exactly once.
      *
      * @param {object} [configuration]
      */
@@ -1097,7 +1099,7 @@ function initializeJasmineWorker (adapter, context) {
         repositoryRoot: configuration.repositoryRoot,
         specs,
         testFramework: TEST_FRAMEWORK,
-        testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
+        testFrameworkAdapter,
       })
       onDone()
     }
@@ -1121,7 +1123,7 @@ function initializeJasmineWorker (adapter, context) {
       name: WORKER_READY,
       content: {
         requestId,
-        testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
+        testFrameworkAdapter,
       },
     }, error => {
       if (error) {
@@ -1967,6 +1969,9 @@ function configureVideoPromptBehavior (context) {
   if (!SUPPORTED_FRAMEWORK_ADAPTERS.has(config?.framework) || 'sessionId' in config ||
     config.automationProtocol === './protocol-stub.js') return
   try {
+    const videoCapabilities = {}
+    videoCapabilitiesCh.publish(videoCapabilities)
+    if (!videoCapabilities.enabled) return
     const sessions = context.self._isMultiremote
       ? Object.values(capabilities).map(options => options.capabilities)
       : [capabilities]
@@ -2039,7 +2044,17 @@ executeAsyncCh.subscribe({
 // @ts-expect-error See the partial tracing-channel subscriber above.
 jasmineAdapterInitCh.subscribe({
   asyncEnd (context) {
-    initializeJasmineWorker(context.result || context.self, context)
+    initializeFrameworkWorker(context.result || context.self, context, JASMINE_FRAMEWORK_ADAPTER)
+  },
+})
+
+// @ts-expect-error See the partial tracing-channel subscriber above.
+mochaAdapterInitCh.subscribe({
+  asyncEnd (context) {
+    // Mocha normally receives worker settings in run(), after WebdriverIO creates its browser session.
+    if (getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true) {
+      initializeFrameworkWorker(context.result || context.self, context, MOCHA_FRAMEWORK_ADAPTER)
+    }
   },
 })
 

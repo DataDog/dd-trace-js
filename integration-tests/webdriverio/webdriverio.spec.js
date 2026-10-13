@@ -611,6 +611,8 @@ for (const version of versions) {
           symlinkSync(process.execPath, join(nodeOnlyPath, process.platform === 'win32' ? 'node.exe' : 'node'))
           await runScenario('videos', 1, ({ media, tests }) => {
             const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assert.match(failed.meta['error.message'], /video test failure/)
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
             assertFailureScreenshotUploaded(failed, media)
             assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
             assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
@@ -619,6 +621,8 @@ for (const version of versions) {
             env: {
               ...videoEnv,
               DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+              WEBDRIVERIO_EXPECT_PROMPT_BEHAVIOR: 'dismiss and notify',
+              WEBDRIVERIO_CLASSIC: 'true',
               // Keep Node available even when it shares an installation directory with FFmpeg.
               PATH: nodeOnlyPath,
             },

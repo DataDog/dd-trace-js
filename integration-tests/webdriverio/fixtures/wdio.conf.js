@@ -13,6 +13,7 @@ const baseConfig = {
   maxInstances: 2,
   capabilities: [{
     browserName: 'chrome',
+    ...(process.env.WEBDRIVERIO_CLASSIC === 'true' ? { 'wdio:enforceWebDriverClassic': true } : {}),
     ...(process.env.WEBDRIVERIO_PROMPT_BEHAVIOR
       ? { unhandledPromptBehavior: process.env.WEBDRIVERIO_PROMPT_BEHAVIOR, 'wdio:enforceWebDriverClassic': true }
       : {}),

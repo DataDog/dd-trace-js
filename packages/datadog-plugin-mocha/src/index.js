@@ -320,7 +320,9 @@ class MochaPlugin extends CiPlugin {
           ctx.enabled = Boolean(
             shouldRecordWebdriverioVideos &&
             this._tracerConfig.testOptimization?.DD_TEST_FAILURE_VIDEOS_ENABLED &&
-            this.tracer._exporter?.canUploadTestVideos?.()
+            (isWebdriverioWorker
+              ? this.libraryConfig?.isTestFailureVideosEnabled && createWebdriverioVideo.isFfmpegAvailable()
+              : this.tracer._exporter?.canUploadTestVideos?.())
           )
         }
       ))

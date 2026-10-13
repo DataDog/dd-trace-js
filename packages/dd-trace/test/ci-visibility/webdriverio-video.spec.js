@@ -992,11 +992,9 @@ describe('WebdriverIO video recording', () => {
       sinon.assert.notCalled(encode)
       assert.deepStrictEqual(directories, [])
       sinon.assert.calledOnce(failure === 'startup throw' ? log.error : log.warn)
-      if (failure !== 'startup throw') {
-        assert.strictEqual(start(), undefined)
-        sinon.assert.calledOnce(checkFfmpeg)
-        sinon.assert.calledOnce(log.warn)
-      }
+      assert.strictEqual(start(), undefined)
+      sinon.assert.calledOnce(checkFfmpeg)
+      sinon.assert.calledOnce(log.warn)
     })
   }
 
