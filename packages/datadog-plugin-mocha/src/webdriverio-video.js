@@ -109,6 +109,9 @@ class WebdriverioVideo {
   #sizes = []
   #bytes = 0
   #capturing = false
+  #finalCapture = false
+  #completeCapture
+  #disabled = false
   #stopped = false
   #captureTimeout
   #interval
@@ -139,46 +142,65 @@ class WebdriverioVideo {
 
   /** Captures at most one in-flight screenshot, including all multiremote sessions. */
   capture () {
-    if (this.#stopped || this.#capturing || this.#error ||
+    if ((this.#stopped && !this.#finalCapture) || this.#capturing || this.#error || this.#disabled ||
         pendingCaptures.has(this.#browser) || captureOwners.get(this.#browser) !== this) return
+    this.#finalCapture = false
     this.#capturing = true
     let completed = false
     const complete = (error, screenshots) => {
       if (completed || this.#finished) return
       completed = true
-      clearTimeout(this.#captureTimeout)
       this.#capturing = false
       if (error) {
         log.error('Error capturing WebdriverIO video frame: %s', error.message)
-      } else if (captureOwners.get(this.#browser) === this) {
+      } else if (!this.#disabled && captureOwners.get(this.#browser) === this) {
         try {
           this.#writeFrames(screenshots)
         } catch (error) {
           this.#error = error
         }
       }
+      if (this.#finalCapture) {
+        this.capture()
+        if (this.#capturing) return
+      }
+      this.#finalCapture = false
+      clearTimeout(this.#captureTimeout)
+      this.#captureTimeout = undefined
+      this.#completeCapture = undefined
       const onCapture = this.#onCapture
       this.#onCapture = undefined
       onCapture?.()
     }
-    this.#captureTimeout = setTimeout(() => {
-      complete(new Error('WebdriverIO video screenshot capture timed out'))
+    this.#completeCapture = complete
+    // An overlapping capture and its fresh final frame share the existing five-second deadline.
+    this.#captureTimeout ??= setTimeout(() => {
+      this.#completeCapture?.(new Error('WebdriverIO video screenshot capture timed out'))
     }, CAPTURE_TIMEOUT_MS)
     this.#captureTimeout.unref?.()
     try {
+      if (!hasSafePromptPolicy(this.#browser)) {
+        this.#disabled = true
+        clearInterval(this.#interval)
+        this.#browser.removeListener?.('result', this.#onResult)
+        return complete()
+      }
       if (this.#browser.isMultiremote) {
         const names = this.#browser.instances
         if (!names.length) return complete(new Error('WebdriverIO returned no browser sessions'))
         const browsers = names.map(name => this.#browser.getInstance(name))
         const frames = new Array(names.length)
         let pending = names.length
+        let captureError
         pendingCaptures.add(this.#browser)
         for (let index = 0; index < names.length; index++) {
           this.#captureBrowser(browsers[index], (error, frame) => {
-            if (--pending === 0) pendingCaptures.delete(this.#browser)
-            if (error) return complete(error)
+            captureError ||= error
             frames[index] = frame
-            if (pending === 0) complete(undefined, frames)
+            if (--pending === 0) {
+              pendingCaptures.delete(this.#browser)
+              complete(captureError, frames)
+            }
           })
         }
       } else {
@@ -252,13 +274,16 @@ class WebdriverioVideo {
   finish (failed, upload, onDone) {
     if (this.#stopped) return
     this.#onDone = onDone
-    if (failed) this.capture()
+    if (failed) {
+      if (this.#capturing) this.#finalCapture = true
+      else this.capture()
+    }
     this.#stopped = true
     clearInterval(this.#interval)
     this.#browser.removeListener?.('result', this.#onResult)
     const finish = () => {
       if (this.#finished) return
-      if (!failed) return this.#cleanup(undefined, onDone)
+      if (!failed || this.#disabled) return this.#cleanup(undefined, onDone)
       if (this.#error || !this.#frames.length) {
         log.error('Error recording WebdriverIO failure video: %s', this.#error?.message || 'No frames captured')
         return this.#cleanup(VIDEO_UPLOAD_RESULT_ERROR, onDone)
@@ -332,6 +357,7 @@ class WebdriverioVideo {
     this.#finished = true
     if (captureOwners.get(this.#browser) === this) captureOwners.delete(this.#browser)
     clearTimeout(this.#captureTimeout)
+    this.#completeCapture = undefined
     const onCapture = this.#onCapture
     this.#onCapture = undefined
     onCapture?.()
@@ -346,6 +372,23 @@ class WebdriverioVideo {
   }
 }
 
+/** @param {object} browser - Current WebdriverIO browser or multiremote browser */
+function hasSafePromptPolicy (browser) {
+  const sessions = browser.isMultiremote ? browser.instances.map(name => browser.getInstance(name)) : [browser]
+  for (const session of sessions) {
+    const behavior = session.capabilities?.unhandledPromptBehavior
+    if (behavior === 'ignore' || (behavior?.default === 'ignore' &&
+      Object.values(behavior).every(value => value === 'ignore'))) continue
+    if (!unsafePromptBrowsers.has(browser)) {
+      unsafePromptBrowsers.add(browser)
+      log.warn('WebdriverIO failure video recording is disabled: every session must use %s to preserve open dialogs.',
+        'unhandledPromptBehavior: "ignore"')
+    }
+    return false
+  }
+  return true
+}
+
 /**
  * Creates a recorder when a browser is available. The encoder is loaded only for failed attempts.
  *
@@ -355,18 +398,7 @@ class WebdriverioVideo {
 function createWebdriverioVideo (browser) {
   if (typeof browser?.takeScreenshot !== 'function') return
   try {
-    const sessions = browser.isMultiremote ? browser.instances.map(name => browser.getInstance(name)) : [browser]
-    for (const session of sessions) {
-      const behavior = session.capabilities?.unhandledPromptBehavior
-      if (behavior === 'ignore' || (behavior?.default === 'ignore' &&
-        Object.values(behavior).every(value => value === 'ignore'))) continue
-      if (!unsafePromptBrowsers.has(browser)) {
-        unsafePromptBrowsers.add(browser)
-        log.warn('WebdriverIO failure video recording is disabled: every session must use %s to preserve open dialogs.',
-          'unhandledPromptBehavior: "ignore"')
-      }
-      return
-    }
+    if (!hasSafePromptPolicy(browser)) return
     if (ffmpegAvailable === undefined) {
       const result = spawnSync('ffmpeg', ['-version'], {
         timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, stdio: 'ignore',

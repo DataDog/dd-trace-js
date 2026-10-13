@@ -175,6 +175,98 @@ describe('WebdriverIO video recording', () => {
     assert.strictEqual(fs.existsSync(directories[0]), false)
   })
 
+  for (const multiremote of [false, true]) {
+    for (const trigger of ['command', 'interval', 'finish']) {
+      it(`disables a reloaded unsafe session during ${trigger} capture (multiremote=${multiremote})`, async () => {
+        const session = multiremote
+          ? { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }
+          : browser
+        if (multiremote) {
+          Object.assign(browser, { isMultiremote: true, instances: ['reloaded'], getInstance: () => session })
+        }
+        const recorder = start()
+        await clock.tickAsync(0)
+        session.capabilities = { unhandledPromptBehavior: 'dismiss and notify' }
+        if (trigger === 'command') browser.emit('result', { command: 'reloadSession' })
+        if (trigger === 'interval') await clock.tickAsync(500)
+        const complete = sinon.spy()
+        recorder.finish(true, () => assert.fail('unsafe session must not upload'), complete)
+        await clock.tickAsync(500)
+        sinon.assert.calledOnce(session.takeScreenshot)
+        sinon.assert.notCalled(encode)
+        sinon.assert.calledOnceWithExactly(complete, undefined)
+        sinon.assert.calledOnce(log.warn)
+        assert.strictEqual(browser.listenerCount('result'), 0)
+        assert.strictEqual(fs.existsSync(directories[0]), false)
+      })
+    }
+
+    for (const outcome of ['resolve', 'reject', 'earlier rejection', 'timeout', 'cancel']) {
+      it(`waits for a fresh final capture after overlap: ${outcome} (multiremote=${multiremote})`, async () => {
+        const recorder = start()
+        await clock.tickAsync(0)
+        const pending = []
+        browser.takeScreenshot.callsFake(() => new Promise((resolve, reject) => { pending.push({ resolve, reject }) }))
+        const other = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }
+        if (outcome === 'earlier rejection') {
+          other.takeScreenshot.onFirstCall().rejects(new Error('earlier screenshot failed'))
+        }
+        if (multiremote) {
+          Object.assign(browser, {
+            isMultiremote: true,
+            instances: ['first', 'second'],
+            getInstance: name => name === 'first' ? other : browser,
+          })
+        }
+        recorder.capture()
+        await clock.tickAsync(100)
+        const upload = sinon.spy()
+        const complete = sinon.spy()
+        const ready = sinon.spy()
+        recorder.finish(true, upload, complete)
+        recorder.waitForCapture(ready)
+        await clock.tickAsync(100)
+        sinon.assert.notCalled(ready)
+        sinon.assert.notCalled(encode)
+        if (outcome === 'earlier rejection' && !multiremote) {
+          pending[0].reject(new Error('earlier screenshot failed'))
+        } else {
+          pending[0].resolve(PNG)
+        }
+        await clock.tickAsync(0)
+        assert.strictEqual(pending.length, 2, 'a fresh screenshot must follow the outstanding request')
+        sinon.assert.notCalled(ready)
+        sinon.assert.notCalled(encode)
+        if (outcome === 'cancel') recorder.cancel()
+        else if (outcome === 'timeout') {
+          await clock.tickAsync(4799)
+          sinon.assert.notCalled(ready)
+          await clock.tickAsync(1)
+        } else if (outcome === 'reject') pending[1].reject(new Error('final screenshot failed'))
+        else pending[1].resolve(PNG)
+        await clock.tickAsync(0)
+        sinon.assert.calledOnce(ready)
+        if (outcome === 'cancel') {
+          sinon.assert.notCalled(encode)
+          sinon.assert.calledOnceWithExactly(complete, 'error')
+        } else {
+          sinon.assert.calledOnce(encode)
+          const args = encode.firstCall.args[1]
+          assert.strictEqual(Number(args[args.indexOf('-frames:v') + 1]), outcome === 'resolve' ? 3 : 2)
+          sinon.assert.notCalled(complete)
+          upload.firstCall.args[2]()
+          await clock.tickAsync(0)
+          if (multiremote) upload.secondCall.args[2]()
+          sinon.assert.calledOnceWithExactly(complete, 'uploaded')
+        }
+        pending[1].resolve(PNG)
+        await clock.tickAsync(0)
+        sinon.assert.calledOnce(ready)
+        assert.strictEqual(fs.existsSync(directories[0]), false)
+      })
+    }
+  }
+
   for (const outcome of ['resolve', 'reject', 'timeout']) {
     it(`serializes pending screenshots across attempts after ${outcome}`, async () => {
       const first = start()
@@ -413,13 +505,16 @@ describe('WebdriverIO video recording', () => {
       const firstFrame = Buffer.alloc(100 * 1024 * 1024)
       Buffer.from(PNG, 'base64').copy(firstFrame)
       browser.takeScreenshot.resolves(firstFrame.toString('base64'))
-      start().finish(true, upload, complete)
+      const first = start()
+      browser.takeScreenshot.rejects(new Error('session closed before final capture'))
+      first.finish(true, upload, complete)
       await clock.tickAsync(0)
 
       const secondFrame = Buffer.alloc(bytes - firstFrame.length)
       firstFrame.copy(secondFrame)
       browser.takeScreenshot.resolves(secondFrame.toString('base64'))
       const second = start()
+      browser.takeScreenshot.rejects(new Error('session closed before final capture'))
       second.finish(true, upload, complete)
       await clock.tickAsync(0)
       const accepted = bytes === 200 * 1024 * 1024
@@ -431,7 +526,10 @@ describe('WebdriverIO video recording', () => {
       if (accepted) second.cancel()
       else encoders[0].emit('close', 0)
       await clock.tickAsync(0)
-      start().finish(true, upload, complete)
+      browser.takeScreenshot.resolves(secondFrame.toString('base64'))
+      const next = start()
+      browser.takeScreenshot.rejects(new Error('session closed before final capture'))
+      next.finish(true, upload, complete)
       await clock.tickAsync(0)
       assert.strictEqual(fs.existsSync(directories[2]), true)
 
@@ -457,6 +555,7 @@ describe('WebdriverIO video recording', () => {
         const upload = sinon.spy()
         const complete = sinon.spy()
         const recorder = start()
+        browser.takeScreenshot.rejects(new Error('session closed before final capture'))
         recorder.finish(true, upload, complete)
         await clock.tickAsync(0)
         sinon.assert.calledOnce(upload)
@@ -489,7 +588,9 @@ describe('WebdriverIO video recording', () => {
 
         browser.takeScreenshot.resolves(screenshots)
         const next = sinon.spy()
-        start().finish(true, (filePath, index, uploaded) => uploaded(), next)
+        const recovered = start()
+        browser.takeScreenshot.rejects(new Error('session closed before final capture'))
+        recovered.finish(true, (filePath, index, uploaded) => uploaded(), next)
         await clock.tickAsync(0)
         sinon.assert.calledOnceWithExactly(next, 'uploaded')
         assert.ok(directories.every(directory => !fs.existsSync(directory)))
@@ -685,8 +786,8 @@ describe('WebdriverIO video recording', () => {
     const upload = sinon.spy((filePath, index, callback) => callback())
     recorder.finish(true, upload, complete)
     await clock.tickAsync(0)
-    sinon.assert.calledOnce(classic.takeScreenshot)
-    sinon.assert.calledOnce(bidi.takeScreenshot)
+    sinon.assert.calledTwice(classic.takeScreenshot)
+    sinon.assert.calledTwice(bidi.takeScreenshot)
     sinon.assert.notCalled(browser.takeScreenshot)
     sinon.assert.notCalled(bidi.browsingContextCaptureScreenshot)
     sinon.assert.calledTwice(upload)
@@ -701,10 +802,15 @@ describe('WebdriverIO video recording', () => {
         firstFrame.copy(frame)
         const screenshot = frame.toString('base64')
         browser.takeScreenshot.resolves(screenshot)
+        if (capture === 'single') {
+          browser.takeScreenshot.onSecondCall().rejects(new Error('session closed before final capture'))
+        }
         if (capture === 'consecutive') browser.takeScreenshot.onFirstCall().resolves(PNG)
         if (capture === 'multiremote') {
           const first = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }
           const second = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(screenshot) }
+          first.takeScreenshot.onSecondCall().rejects(new Error('session closed before final capture'))
+          second.takeScreenshot.onSecondCall().rejects(new Error('session closed before final capture'))
           Object.assign(browser, {
             isMultiremote: true,
             instances: ['first', 'second'],

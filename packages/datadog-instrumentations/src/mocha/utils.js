@@ -1111,7 +1111,7 @@ function getOnTestRetryHandler (config) {
       test._retries = dynamicCount
     }
 
-    if (config.isFlakyTestRetriesEnabled && getAfterEachHooks(test).length) {
+    if ((config.isFlakyTestRetriesEnabled || config.isTestFailureVideosEnabled) && getAfterEachHooks(test).length) {
       // Mocha queues retries before afterEach; a hook failure can still cancel the retry.
       test._ddPendingRetry = () => publishTestRetry(test, err, config)
       return

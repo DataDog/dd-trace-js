@@ -378,8 +378,17 @@ const scenarioConfig = {
   },
 }
 
+scenarioConfig.videosBrowserReload = {
+  ...scenarioConfig.videosBrowser,
+  specs: ['./videos-browser-reload.e2e.js'],
+}
+scenarioConfig.videosBrowserRetry = {
+  ...scenarioConfig.videosBrowser,
+  specs: ['./videos-browser-retry.e2e.js'],
+  mochaOpts: { retries: 1 },
+}
 const selectedScenario = scenarioConfig[scenario]
-if (scenario === 'videosBrowser' && process.env.WEBDRIVERIO_REAL_MULTIREMOTE === 'true') {
+if (scenario.startsWith('videosBrowser') && process.env.WEBDRIVERIO_REAL_MULTIREMOTE === 'true') {
   const [capabilities] = selectedScenario.capabilities
   selectedScenario.capabilities = {
     first: { capabilities: { ...capabilities } },

@@ -518,6 +518,51 @@ for (const version of versions) {
         }
       }
 
+      const browserTest = process.env.WEBDRIVERIO_REAL_BROWSER === 'true' ? it : it.skip
+      for (const multiremote of [false, true]) {
+        browserTest(`disables real Chrome video after an unsafe reload (multiremote=${multiremote})`, async () => {
+          await runScenario('videosBrowserReload', 0, ({ media, tests }) => {
+            assert.strictEqual(tests.length, 1)
+            assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+            assert.match(tests[0].meta['error.message'], /intentional failure after verifying the dialog is preserved/)
+            assert.strictEqual(tests[0].meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.strictEqual(tests[0].meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+            assert.strictEqual(media.length, 0)
+          }, 1, {
+            env: {
+              ...videoEnv,
+              WEBDRIVERIO_CLASSIC: 'true',
+              WEBDRIVERIO_REAL_MULTIREMOTE: String(multiremote),
+            },
+          })
+        })
+      }
+
+      for (const hookFails of [false, true]) {
+        browserTest(`includes real Chrome teardown in native retry video (hookFails=${hookFails})`, async () => {
+          await runScenario('videosBrowserRetry', 0, ({ media, tests }) => {
+            assert.strictEqual(tests.length, hookFails ? 1 : 2)
+            const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assert.ok(failed)
+            assert.match(failed.meta['error.message'], hookFails ? /teardown failed/ : /retry this failure/)
+            assert.strictEqual(media.length, 1)
+            assert.strictEqual(media[0].media.traceId, failed.trace_id.toString())
+            const pixels = execFileSync('ffmpeg', [
+              '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
+              '-vf', 'crop=1:1:10:500:exact=1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1',
+            ], { input: media[0].media.content })
+            const [red, green, blue] = pixels.subarray(-3)
+            assert.ok(green > 200 && red < 40 && blue < 40, 'final frame must show the green teardown page')
+          }, hookFails ? 1 : 0, {
+            env: {
+              ...videoEnv,
+              WEBDRIVERIO_CLASSIC: 'true',
+              WEBDRIVERIO_VIDEO_HOOK: hookFails ? 'afterEach' : '',
+            },
+          })
+        })
+      }
+
       for (const framework of ['mocha', 'jasmine']) {
         for (const hook of ['', 'beforeEach', 'afterEach']) {
           it(`uploads ${framework} videos for ${hook || 'test'} failures`, async () => {

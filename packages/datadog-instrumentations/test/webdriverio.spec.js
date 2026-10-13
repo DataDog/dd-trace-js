@@ -9,7 +9,7 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { promisify } = require('node:util')
 
-const { Runner: MochaRunner, Suite: MochaSuite } = require('mocha')
+const { Context: MochaContext, Runner: MochaRunner, Suite: MochaSuite } = require('mocha')
 const MochaTest = require('mocha/lib/test')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -25,6 +25,8 @@ const { detectRum, stopRumSession, stopRumSessionAndReportActivity } = require('
 const {
   adjustRunnerFailuresForTestOptimization,
   efdTests,
+  getOnTestHandler,
+  getOnTestRetryHandler,
   patchFailedTestReplayHookUp,
 } = require('../src/mocha/utils')
 const {
@@ -3737,6 +3739,42 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  for (const videos of [false, true]) {
+    it(`publishes native retries after teardown when videos=${videos}`, async () => {
+      const events = []
+      class Runner extends MochaRunner {}
+      patchFailedTestReplayHookUp(Runner)
+      const suite = new MochaSuite('native video retry', new MochaContext())
+      suite.retries(1)
+      const test = new MochaTest('attempt', function () {
+        events.push(`test ${this.test.currentRetry()}`)
+        if (this.test.currentRetry() === 0) throw new Error('retry me')
+      })
+      test.file = __filename
+      suite.addTest(test)
+      suite.afterEach('teardown', async function () {
+        events.push('teardown start')
+        await Promise.resolve()
+        events.push('teardown end')
+      })
+      const runner = new Runner(suite)
+      runner.on('test', getOnTestHandler(false))
+      runner.on('retry', getOnTestRetryHandler({ isTestFailureVideosEnabled: videos }))
+      const retryCh = channel('ci:mocha:test:retry')
+      const onRetry = () => events.push('publish retry')
+      retryCh.subscribe(onRetry)
+      try {
+        const failures = await new Promise(resolve => runner.run(resolve))
+        assert.strictEqual(failures, 0)
+        assert.deepStrictEqual(events, videos
+          ? ['test 0', 'teardown start', 'teardown end', 'publish retry', 'test 1', 'teardown start', 'teardown end']
+          : ['test 0', 'publish retry', 'teardown start', 'teardown end', 'test 1', 'teardown start', 'teardown end'])
+      } finally {
+        retryCh.unsubscribe(onRetry)
+      }
+    })
+  }
+
   for (const capturePending of [false, true]) {
     for (const completion of ['capture', 'capture timeout', 'replay rejection']) {
       it(`waits for Jasmine video after replay with capture pending=${capturePending} (${completion})`, async () => {
@@ -3825,7 +3863,7 @@ describe('webdriverio instrumentation', () => {
           await reported
           sinon.assert.calledOnce(exporter.uploadTestVideo)
           const frames = fs.readdirSync(directories[0]).filter(file => file.endsWith('.png'))
-          assert.strictEqual(frames.length, completion === 'capture timeout' ? 1 : 2)
+          assert.strictEqual(frames.length, completion === 'capture timeout' ? 1 : capturePending ? 3 : 2)
           assert.strictEqual(spans.length, 2)
           assert.strictEqual(spans[0].context()._isFinished, false)
           exporter.uploadTestVideo.firstCall.args[1]()

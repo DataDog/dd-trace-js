@@ -630,8 +630,9 @@ No WebdriverIO video reporter or additional dd-trace npm dependency is required.
 process and only for failed attempts. If FFmpeg is unavailable, recording is disabled and a warning is logged.
 When videos are enabled, dd-trace defaults new sessions to `unhandledPromptBehavior: 'ignore'` so background
 screenshots preserve open dialogs. Explicit prompt policies are preserved. Recording is disabled with a warning
-if any session's negotiated policy allows screenshots to accept or dismiss dialogs. Tests must handle their dialogs;
-other WebDriver commands no longer automatically dismiss them under the `ignore` policy.
+if any session's negotiated policy allows screenshots to accept or dismiss dialogs. Policies are checked before
+each capture; reloading a session with an unsafe policy discards the active recording. Tests must handle their
+dialogs; other WebDriver commands no longer automatically dismiss them under the `ignore` policy.
 
 WebdriverIO recordings are screenshot sequences encoded as WebM, using the approach of
 [wdio-video-reporter](https://webdriver.io/docs/wdio-video-reporter/). They capture browser command results
