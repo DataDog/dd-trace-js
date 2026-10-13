@@ -3,8 +3,9 @@
 // Loop timer and operations reporter. Call loopStart() immediately before the
 // measured loop and done() immediately after it.
 // Sirun also excludes everything before loopStart() from its timing and
-// instruction metrics. A full GC immediately before the ready signal gives every
-// iteration a consistent post-warmup heap state.
+// instruction metrics. Request a synchronous major GC before the ready signal so
+// setup and warmup garbage is less likely to trigger an early measured-loop GC.
+// This excludes the main collection pause, though concurrent sweeping may continue.
 //
 //   const guard = require('../startup-guard')
 //   // ...requires, setup...
