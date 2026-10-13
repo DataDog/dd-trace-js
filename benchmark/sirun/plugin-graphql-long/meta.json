@@ -10,7 +10,8 @@
       "iterations": 7,
       "operations_by_node": {
         "20": "1280",
-        "24": "2550"
+        "24": "2550",
+        "26": "2250"
       },
       "env": {
         "DEPTH": "0",
@@ -45,7 +46,7 @@
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule --require ../noop-request.js index.js\"",
       "operations_by_node": {
         "20": "310",
-        "24": "450"
+        "24": "400"
       },
       "env": {
         "COLLAPSE": "0",
