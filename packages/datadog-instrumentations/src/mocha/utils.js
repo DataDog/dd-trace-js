@@ -54,7 +54,7 @@ const testsQuarantined = new Set()
 const testsStatuses = new Map()
 const efdRetryCountByTestFullName = new Map()
 const efdSlowAbortedTests = new Set()
-const suiteHookFailureFiles = new Set()
+const suiteHookFailureSuites = new Set()
 let dynamicAtrRetryCountByTest = new WeakMap()
 const attemptToFixExecutions = new Map()
 const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
@@ -344,7 +344,7 @@ function resetRunState (rootSuite) {
   testsStatuses.clear()
   efdRetryCountByTestFullName.clear()
   efdSlowAbortedTests.clear()
-  suiteHookFailureFiles.clear()
+  suiteHookFailureSuites.clear()
   dynamicAtrRetryCountByTest = new WeakMap()
   attemptToFixExecutions.clear()
   loggedAttemptToFixTests.clear()
@@ -588,7 +588,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
 
 function getOnTestHandler (isMain) {
   return function (test) {
-    if (suiteHookFailureFiles.has(test.file)) {
+    if (isInFailedSuite(test.parent)) {
       test._ddTestFinishPublished = true
       return
     }
@@ -670,6 +670,14 @@ function getOnTestHandler (isMain) {
     testToContext.set(test.fn, ctx)
     testStartCh.runStores(ctx, () => {})
   }
+}
+
+function isInFailedSuite (suite) {
+  while (suite) {
+    if (suiteHookFailureSuites.has(suite)) return true
+    suite = suite.parent
+  }
+  return false
 }
 
 function getFinalStatus ({
@@ -1054,8 +1062,8 @@ function getOnFailHandler (isMain, config) {
     const isHook = testOrHook.type === 'hook'
     const isTestHook = isHook &&
       (testOrHook.parent?._beforeEach?.includes(testOrHook) || testOrHook.parent?._afterEach?.includes(testOrHook))
-    if (isHook && !isTestHook && testFile) {
-      suiteHookFailureFiles.add(testFile)
+    if (isHook && !isTestHook && testOrHook.parent) {
+      suiteHookFailureSuites.add(testOrHook.parent)
     }
     if (isHook && testOrHook.ctx) {
       test = testOrHook.ctx.currentTest

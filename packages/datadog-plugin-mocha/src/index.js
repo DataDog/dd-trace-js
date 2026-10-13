@@ -1,7 +1,6 @@
 'use strict'
 
 const { performance } = require('node:perf_hooks')
-const { fileURLToPath } = require('node:url')
 
 const { channel } = require('dc-polyfill')
 
@@ -128,7 +127,7 @@ const BASE64_RE = /^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$
  * @returns {string|undefined}
  */
 function normalizeJasmineFile (file) {
-  return file?.startsWith('file://') ? fileURLToPath(file) : file
+  return file?.startsWith('file://') ? require('node:url').fileURLToPath(file) : file
 }
 
 function getWebdriverioJasmineSpecResult (spec) {
