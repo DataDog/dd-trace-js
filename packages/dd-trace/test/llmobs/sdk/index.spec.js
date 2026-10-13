@@ -1977,13 +1977,17 @@ describe('sdk', () => {
         })
       }
 
-      it('emits the declared version over a user tag of the same name, and leaves the tag on other spans', () => {
+      it('emits the declared version over a user tag on the agent and its children, not on spans outside it', () => {
         llmobs.annotationContext({ tags: { agent_version: 'from_tags' }, agent: { version: 'from_agent' } }, () => {
           llmobs.trace({ kind: 'workflow', name: 'workflow' }, () => {})
-          llmobs.trace({ kind: 'agent', name: 'agent' }, () => {})
+          llmobs.trace({ kind: 'agent', name: 'agent' }, () => {
+            llmobs.trace({ kind: 'tool', name: 'tool' }, () => {})
+          })
         })
 
         assert.ok(emittedEvent('agent').tags.includes('agent_version:from_agent'))
+        assert.ok(emittedEvent('tool').tags.includes('agent_version:from_agent'))
+        assert.ok(!emittedEvent('tool').tags.includes('agent_version:from_tags'))
         assert.ok(emittedEvent('workflow').tags.includes('agent_version:from_tags'))
       })
 
