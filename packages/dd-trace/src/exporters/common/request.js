@@ -3,11 +3,10 @@
 // TODO: Add test with slow or unresponsive agent.
 // TODO: Add telemetry for things like dropped requests, errors, etc.
 
-const { URL } = require('node:url')
-
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
+const { URL } = require('url') // Older Cypress runtimes cannot resolve node: specifiers in require().
 const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
