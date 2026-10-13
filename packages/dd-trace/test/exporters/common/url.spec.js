@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
+const sinon = require('sinon')
 
 require('../../setup/core')
 
@@ -110,5 +111,33 @@ describe('exporters/common/url parseUrl', () => {
       assert.strictEqual(url.hostname, 'localhost')
       assert.strictEqual(String(url.port), '8126')
     })
+  })
+})
+
+describe('exporters/common/url with a mocked global URL', () => {
+  it('parses a string URL while the global constructor is replaced', () => {
+    const mock = sinon.stub(globalThis, 'URL').value({})
+
+    try {
+      const url = parseUrl('https://localhost:8126/path?query=value')
+
+      assert.strictEqual(url.protocol, 'https:')
+      assert.strictEqual(url.hostname, 'localhost')
+      assert.strictEqual(String(url.port), '8126')
+      assert.strictEqual(url.path, '/path?query=value')
+    } finally {
+      mock.restore()
+    }
+  })
+
+  it('creates an intake URL while the global constructor is replaced', () => {
+    const mock = sinon.stub(globalThis, 'URL').value({})
+
+    try {
+      assert.strictEqual(createSiteUrl('datadoghq.com', 'debugger-intake')?.href,
+        'https://debugger-intake.datadoghq.com/')
+    } finally {
+      mock.restore()
+    }
   })
 })

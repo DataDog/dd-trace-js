@@ -1028,6 +1028,38 @@ describe('dogstatsd', () => {
   })
 
   describe('CustomMetrics', () => {
+    it('flushes telemetry over HTTP on its timer with a mocked global URL', async () => {
+      const clock = sinon.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+      const now = sinon.stub(performance, 'now').returns(0)
+      const handlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+      const previousHandlers = new Set(handlers)
+      const mock = sinon.stub(globalThis, 'URL').value({})
+
+      try {
+        client = new CustomMetrics({
+          dogstatsd: { hostname: '127.0.0.1', port: 8125 },
+          lookup: dns.lookup,
+          url: `http://127.0.0.1:${httpPort}`,
+        })
+        const received = waitForHttpRequest()
+
+        now.returns(10_000)
+        clock.tick(10_000)
+
+        const telemetry = (await received).toString()
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics:0\|c\|/)
+        assert.match(telemetry, /client_transport:http/)
+        sinon.assert.notCalled(udp4.send)
+      } finally {
+        mock.restore()
+        now.restore()
+        clock.restore()
+        for (const handler of handlers) {
+          if (!previousHandlers.has(handler)) handlers.delete(handler)
+        }
+      }
+    })
+
     it('registers its aggregated metrics flush with the telemetry lifecycle', () => {
       udp4.send = sinon.stub().callsFake((_buffer, _offset, _length, _port, _host, done) => done())
       client = createCustomMetrics()
