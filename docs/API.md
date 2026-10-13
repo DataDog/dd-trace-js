@@ -628,6 +628,10 @@ Install [FFmpeg](https://ffmpeg.org/download.html) with the `libvpx` encoder and
 available on the WDIO worker's `PATH`. Check the installation with `ffmpeg -version` and `ffmpeg -encoders`.
 No WebdriverIO video reporter or additional dd-trace npm dependency is required. Encoding runs in a separate
 process and only for failed attempts. If FFmpeg is unavailable, recording is disabled and a warning is logged.
+When videos are enabled, dd-trace defaults new sessions to `unhandledPromptBehavior: 'ignore'` so background
+screenshots preserve open dialogs. Explicit prompt policies are preserved. Recording is disabled with a warning
+if any session's negotiated policy allows screenshots to accept or dismiss dialogs. Tests must handle their dialogs;
+other WebDriver commands no longer automatically dismiss them under the `ignore` policy.
 
 WebdriverIO recordings are screenshot sequences encoded as WebM, using the approach of
 [wdio-video-reporter](https://webdriver.io/docs/wdio-video-reporter/). They capture browser command results

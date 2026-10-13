@@ -279,6 +279,52 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
   })
 
+  for (const framework of ['mocha', 'jasmine', 'cucumber']) {
+    for (const enabled of [undefined, 'false', 'true']) {
+      it(`defaults video prompt handling for ${framework} with videos=${enabled}`, async () => {
+        require('../src/webdriverio')
+        const previous = process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+        if (enabled === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+        else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = enabled
+        const onFinish = () => {}
+        const finishCh = channel('ci:mocha:test:finish')
+        finishCh.subscribe(onFinish)
+        const source = fs.readFileSync(runnerFixturePath, 'utf8')
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-prompt-policy-'))
+        const outputPath = path.join(directory, 'index.mjs')
+        fs.writeFileSync(outputPath, rewriter.rewrite(source, runnerFixtureModulePath, 'module'))
+        const expected = enabled === 'true' && framework !== 'cucumber' ? 'ignore' : undefined
+        try {
+          const { Runner } = await import(pathToFileURL(outputPath))
+          const runner = new Runner()
+          const config = { framework }
+          const caps = await runner._startSession(config, { browserName: 'chrome' })
+          assert.strictEqual(caps.unhandledPromptBehavior, expected)
+          for (const policy of ['dismiss and notify', 'accept', 'ignore', { default: 'ignore', prompt: 'accept' }]) {
+            const explicit = await runner._startSession(config, { unhandledPromptBehavior: policy })
+            assert.strictEqual(explicit.unhandledPromptBehavior, policy)
+          }
+          for (const extra of [{ sessionId: 'existing' }, { automationProtocol: './protocol-stub.js' }]) {
+            assert.deepStrictEqual(await runner._startSession({ ...config, ...extra }, {}), {})
+          }
+          assert.deepStrictEqual(await runner._startSession(config, Object.freeze({})), {})
+          runner._isMultiremote = true
+          const multi = await runner._startSession(config, {
+            first: { capabilities: { browserName: 'chrome' } },
+            second: { capabilities: { browserName: 'firefox', unhandledPromptBehavior: 'dismiss' } },
+          })
+          assert.strictEqual(multi.first.capabilities.unhandledPromptBehavior, expected)
+          assert.strictEqual(multi.second.capabilities.unhandledPromptBehavior, 'dismiss')
+        } finally {
+          if (previous === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+          else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = previous
+          finishCh.unsubscribe(onFinish)
+          fs.rmSync(directory, { recursive: true, force: true })
+        }
+      })
+    }
+  }
+
   it('rewrites the ESM WebdriverIO test-function wrapper', () => {
     const source = fs.readFileSync(utilsFixturePath, 'utf8')
     const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
@@ -2880,6 +2926,7 @@ describe('webdriverio instrumentation', () => {
     const clock = sinon.useFakeTimers()
     const originalBrowser = globalThis.browser
     globalThis.browser = Object.assign(new EventEmitter(), {
+      capabilities: { unhandledPromptBehavior: 'ignore' },
       takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
     })
     const encoders = []
@@ -3695,7 +3742,10 @@ describe('webdriverio instrumentation', () => {
       it(`waits for Jasmine video after replay with capture pending=${capturePending} (${completion})`, async () => {
         const clock = sinon.useFakeTimers()
         const originalBrowser = globalThis.browser
-        const browser = Object.assign(new EventEmitter(), { takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT) })
+        const browser = Object.assign(new EventEmitter(), {
+          capabilities: { unhandledPromptBehavior: 'ignore' },
+          takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
+        })
         globalThis.browser = browser
         const directories = []
         const recorders = []

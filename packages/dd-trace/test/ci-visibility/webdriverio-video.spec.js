@@ -26,7 +26,10 @@ describe('WebdriverIO video recording', () => {
     clock = sinon.useFakeTimers()
     directories = []
     recorders = []
-    browser = Object.assign(new EventEmitter(), { takeScreenshot: sinon.stub().resolves(PNG) })
+    browser = Object.assign(new EventEmitter(), {
+      capabilities: { unhandledPromptBehavior: 'ignore' },
+      takeScreenshot: sinon.stub().resolves(PNG),
+    })
     encode = sinon.stub().callsFake(() => {
       const encoder = new EventEmitter()
       queueMicrotask(() => encoder.emit('close', 0))
@@ -117,6 +120,46 @@ describe('WebdriverIO video recording', () => {
     assert.strictEqual(browser.listenerCount('result'), 0)
   })
 
+  for (const policy of [undefined, 'dismiss', 'accept', 'dismiss and notify', 'accept and notify',
+    { default: 'ignore', alert: 'dismiss' }]) {
+    it(`disables video when screenshots could handle prompts: ${JSON.stringify(policy)}`, () => {
+      browser.capabilities = { unhandledPromptBehavior: policy }
+      assert.strictEqual(start(), undefined)
+      assert.strictEqual(start(), undefined)
+      sinon.assert.notCalled(browser.takeScreenshot)
+      sinon.assert.notCalled(checkFfmpeg)
+      sinon.assert.calledOnce(log.warn)
+      assert.match(log.warn.firstCall.args.join(' '), /unhandledPromptBehavior/)
+      assert.deepStrictEqual(directories, [])
+    })
+  }
+
+  it('accepts a prompt-handler map that ignores every dialog type', async () => {
+    browser.capabilities = { unhandledPromptBehavior: { default: 'ignore', alert: 'ignore' } }
+    start()
+    await clock.tickAsync(0)
+    sinon.assert.calledOnce(browser.takeScreenshot)
+    sinon.assert.notCalled(log.warn)
+  })
+
+  for (const unsafeSession of ['first', 'second']) {
+    it(`disables multiremote video when ${unsafeSession} could handle prompts`, () => {
+      const sessions = Object.fromEntries(['first', 'second'].map(name => [name, {
+        capabilities: { unhandledPromptBehavior: name === unsafeSession ? 'dismiss and notify' : 'ignore' },
+        takeScreenshot: sinon.stub().resolves(PNG),
+      }]))
+      Object.assign(browser, {
+        isMultiremote: true,
+        instances: ['first', 'second'],
+        getInstance: name => sessions[name],
+      })
+      assert.strictEqual(start(), undefined)
+      sinon.assert.notCalled(sessions.first.takeScreenshot)
+      sinon.assert.notCalled(sessions.second.takeScreenshot)
+      sinon.assert.calledOnce(log.warn)
+    })
+  }
+
   it('keeps attempt files isolated while an earlier upload is pending', async () => {
     const first = start()
     const firstUpload = sinon.spy()
@@ -160,8 +203,8 @@ describe('WebdriverIO video recording', () => {
   }
 
   it('keeps a multiremote capture locked until every session settles after a rejection', async () => {
-    const first = { takeScreenshot: sinon.stub().resolves(PNG) }
-    const second = { takeScreenshot: sinon.stub().resolves(PNG) }
+    const first = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }
+    const second = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }
     /** @type {((value: string) => void)|undefined} */
     let resolveCapture
     first.takeScreenshot.onSecondCall().rejects(new Error('navigation interrupted'))
@@ -321,7 +364,7 @@ describe('WebdriverIO video recording', () => {
           Object.assign(browser, {
             isMultiremote: true,
             instances: ['first', 'second'],
-            getInstance: () => ({ takeScreenshot: sinon.stub().resolves(PNG) }),
+            getInstance: () => ({ capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }),
           })
         }
         const rejected = start()
@@ -623,8 +666,9 @@ describe('WebdriverIO video recording', () => {
   })
 
   it('uses the standard screenshot command for mixed Classic and BiDi multiremote sessions', async () => {
-    const classic = { takeScreenshot: sinon.stub().resolves(PNG) }
+    const classic = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }
     const bidi = {
+      capabilities: browser.capabilities,
       isBidi: true,
       browsingContextCaptureScreenshot: sinon.stub().throws(new Error('capture lost its context during navigation')),
       takeScreenshot: sinon.stub().resolves(PNG),
@@ -659,8 +703,8 @@ describe('WebdriverIO video recording', () => {
         browser.takeScreenshot.resolves(screenshot)
         if (capture === 'consecutive') browser.takeScreenshot.onFirstCall().resolves(PNG)
         if (capture === 'multiremote') {
-          const first = { takeScreenshot: sinon.stub().resolves(PNG) }
-          const second = { takeScreenshot: sinon.stub().resolves(screenshot) }
+          const first = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }
+          const second = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(screenshot) }
           Object.assign(browser, {
             isMultiremote: true,
             instances: ['first', 'second'],
@@ -771,8 +815,8 @@ describe('WebdriverIO video recording', () => {
   }
 
   it('preserves every multiremote recording when one session rejects its final capture', async () => {
-    const first = { takeScreenshot: sinon.stub().resolves(PNG) }
-    const second = { takeScreenshot: sinon.stub().resolves(PNG) }
+    const first = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }
+    const second = { capabilities: browser.capabilities, takeScreenshot: sinon.stub().resolves(PNG) }
     first.takeScreenshot.onSecondCall().rejects(new Error('session closed'))
     Object.assign(browser, {
       isMultiremote: true,

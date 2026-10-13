@@ -87,7 +87,8 @@ function startWebDriverServer () {
   let sessionCount = 0
   let screenshotCount = 0
   const server = http.createServer((request, response) => {
-    request.resume()
+    let body = ''
+    request.on('data', chunk => { body += chunk })
     request.once('end', () => {
       const isNewSession = request.method === 'POST' && request.url === '/session'
       let value = null
@@ -100,6 +101,8 @@ function startWebDriverServer () {
             browserName: 'chrome',
             browserVersion: 'test',
             platformName: process.platform,
+            unhandledPromptBehavior: JSON.parse(body).capabilities.alwaysMatch.unhandledPromptBehavior ??
+              'dismiss and notify',
           },
         }
       } else if (request.method === 'GET' && request.url === '/status') {
@@ -467,15 +470,19 @@ for (const version of versions) {
       })
 
       for (const framework of ['mocha', 'jasmine']) {
-        for (const classic of [true, false]) {
+        for (const [classic, multiremote] of [[true, false], [false, false], [true, true]]) {
           const browserTest = process.env.WEBDRIVERIO_REAL_BROWSER === 'true' ? it : it.skip
-          const protocol = classic ? 'Classic' : 'BiDi'
+          const protocol = multiremote ? 'Classic multiremote' : classic ? 'Classic' : 'BiDi'
           browserTest(`records playable ${framework} video in real Chrome (${protocol})`, async () => {
             await runScenario('videosBrowser', 0, ({ media, tests }) => {
               const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
               assert.ok(failed, 'expected a failed browser test; check WebdriverIO output for startup errors')
               assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
-              assert.strictEqual(media.length, 1)
+              assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 1)
+              const dialogs = tests.find(test => test.meta['test.name'].endsWith(
+                'preserves dialogs during command-triggered and periodic captures'))
+              assert.strictEqual(dialogs?.meta[TEST_STATUS], 'pass')
+              assert.strictEqual(media.length, multiremote ? 2 : 1)
               const video = media[0].media
               assert.strictEqual(video.traceId, failed.trace_id.toString())
               assert.strictEqual(video.contentType, 'video/webm')
@@ -497,11 +504,15 @@ for (const version of versions) {
               if (process.env.WEBDRIVERIO_VIDEO_ARTIFACTS) {
                 mkdirSync(process.env.WEBDRIVERIO_VIDEO_ARTIFACTS, { recursive: true })
                 writeFileSync(join(process.env.WEBDRIVERIO_VIDEO_ARTIFACTS,
-                  `${framework}-${classic ? 'classic' : 'bidi'}.webm`), video.content)
+                  `${framework}-${protocol.replaceAll(' ', '-')}.webm`), video.content)
               }
             }, 1, {
               framework,
-              env: { ...videoEnv, WEBDRIVERIO_CLASSIC: String(classic) },
+              env: {
+                ...videoEnv,
+                WEBDRIVERIO_CLASSIC: String(classic),
+                WEBDRIVERIO_REAL_MULTIREMOTE: String(multiremote),
+              },
             })
           })
         }
@@ -537,6 +548,17 @@ for (const version of versions) {
             })
           })
         }
+
+        it(`preserves an explicit ${framework} prompt policy and disables videos`, async () => {
+          await runScenario('videos', 1, ({ media, tests }) => {
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 1)
+            assert.strictEqual(media.length, 0)
+          }, 1, {
+            framework,
+            env: { ...videoEnv, WEBDRIVERIO_PROMPT_BEHAVIOR: 'dismiss and notify' },
+            expectedScreenshots: 0,
+          })
+        })
 
         it(`keeps ${framework} test results and screenshots when FFmpeg is missing`, async () => {
           const nodeOnlyPath = join(cwd, `node-only-${framework}`)

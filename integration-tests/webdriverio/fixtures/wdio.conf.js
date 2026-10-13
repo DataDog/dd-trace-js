@@ -13,6 +13,9 @@ const baseConfig = {
   maxInstances: 2,
   capabilities: [{
     browserName: 'chrome',
+    ...(process.env.WEBDRIVERIO_PROMPT_BEHAVIOR
+      ? { unhandledPromptBehavior: process.env.WEBDRIVERIO_PROMPT_BEHAVIOR, 'wdio:enforceWebDriverClassic': true }
+      : {}),
   }],
   protocol: 'http',
   hostname: '127.0.0.1',
@@ -376,6 +379,13 @@ const scenarioConfig = {
 }
 
 const selectedScenario = scenarioConfig[scenario]
+if (scenario === 'videosBrowser' && process.env.WEBDRIVERIO_REAL_MULTIREMOTE === 'true') {
+  const [capabilities] = selectedScenario.capabilities
+  selectedScenario.capabilities = {
+    first: { capabilities: { ...capabilities } },
+    second: { capabilities: { ...capabilities } },
+  }
+}
 if (!selectedScenario) {
   throw new Error(`Unknown WebdriverIO integration scenario: ${scenario}`)
 }

@@ -23,6 +23,7 @@ const { queueMicrotask } = globalThis
 const captureOwners = new WeakMap()
 // A local timeout does not cancel the WebDriver request; keep its slot until it actually settles.
 const pendingCaptures = new WeakSet()
+const unsafePromptBrowsers = new WeakSet()
 
 let ffmpegAvailable
 // PNGs remain charged through encoding and upload, until their temporary files are removed.
@@ -354,6 +355,18 @@ class WebdriverioVideo {
 function createWebdriverioVideo (browser) {
   if (typeof browser?.takeScreenshot !== 'function') return
   try {
+    const sessions = browser.isMultiremote ? browser.instances.map(name => browser.getInstance(name)) : [browser]
+    for (const session of sessions) {
+      const behavior = session.capabilities?.unhandledPromptBehavior
+      if (behavior === 'ignore' || (behavior?.default === 'ignore' &&
+        Object.values(behavior).every(value => value === 'ignore'))) continue
+      if (!unsafePromptBrowsers.has(browser)) {
+        unsafePromptBrowsers.add(browser)
+        log.warn('WebdriverIO failure video recording is disabled: every session must use %s to preserve open dialogs.',
+          'unhandledPromptBehavior: "ignore"')
+      }
+      return
+    }
     if (ffmpegAvailable === undefined) {
       const result = spawnSync('ffmpeg', ['-version'], {
         timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, stdio: 'ignore',

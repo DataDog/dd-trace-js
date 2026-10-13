@@ -99,6 +99,8 @@ function startWebDriverServer () {
             browserVersion: 'test',
             'goog:chromeOptions': {},
             platformName: process.platform,
+            unhandledPromptBehavior: body.capabilities.alwaysMatch.unhandledPromptBehavior ??
+              'dismiss and notify',
           },
         }
       } else if (request.method === 'GET' && request.url?.endsWith('/screenshot')) {

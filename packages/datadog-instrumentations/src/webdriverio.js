@@ -67,6 +67,7 @@ const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 const jasmineAdapterInitCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
 const baseReporterWaitForSyncCh = tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync')
 const runnerRunCh = tracingChannel('orchestrion:@wdio/runner:Runner_run')
+const runnerStartSessionCh = tracingChannel('orchestrion:@wdio/runner:Runner_startSession')
 const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
 const launcherStartInstanceCh = tracingChannel('orchestrion:@wdio/cli:Launcher_startInstance')
 const configParserShardCh = tracingChannel('orchestrion:@wdio/config:ConfigParser_shard')
@@ -1951,6 +1952,35 @@ function waitForLogSubmissionAtWorkerExit (context) {
 function waitForRumCleanupBeforeSessionEnd (context) {
   context.rumCleanupCallback = cleanupAllRumBrowsers
 }
+
+/**
+ * Opted-in background screenshots must not dismiss dialogs. Preserve explicit customer policies.
+ *
+ * @param {{
+ *   arguments: [{framework?: string, sessionId?: string, automationProtocol?: string}, object],
+ *   self: {_isMultiremote?: boolean}
+ * }} context
+ */
+function configureVideoPromptBehavior (context) {
+  if (!testFinishCh.hasSubscribers || getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) !== true) return
+  const [config, capabilities] = context.arguments
+  if (!SUPPORTED_FRAMEWORK_ADAPTERS.has(config?.framework) || 'sessionId' in config ||
+    config.automationProtocol === './protocol-stub.js') return
+  try {
+    const sessions = context.self._isMultiremote
+      ? Object.values(capabilities).map(options => options.capabilities)
+      : [capabilities]
+    for (const caps of sessions) {
+      if (caps && caps.unhandledPromptBehavior === undefined) caps.unhandledPromptBehavior = 'ignore'
+    }
+  } catch (error) {
+    log.error('Error configuring WebdriverIO video prompt handling: %s', error.message)
+  }
+}
+
+runnerStartSessionCh.start.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (configureVideoPromptBehavior)
+)
 
 baseReporterWaitForSyncCh.asyncEnd.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForLogSubmissionAtWorkerExit)

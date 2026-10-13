@@ -6,11 +6,46 @@ const { browser } = require('@wdio/globals')
 
 describe('WebdriverIO browser videos', () => {
   beforeEach(() => {
-    assert.strictEqual(browser.isBidi, process.env.WEBDRIVERIO_CLASSIC !== 'true')
+    const sessions = browser.isMultiremote ? browser.instances.map(name => browser.getInstance(name)) : [browser]
+    for (const session of sessions) {
+      assert.strictEqual(session.isBidi, process.env.WEBDRIVERIO_CLASSIC !== 'true')
+      assert.strictEqual(session.capabilities.unhandledPromptBehavior, 'ignore')
+    }
   })
 
   it('discards a passing recording', async () => {
     await browser.url('data:text/html,<body style="background:white">Passing attempt</body>')
+  })
+
+  it('preserves dialogs during command-triggered and periodic captures', async () => {
+    const sessions = browser.isMultiremote ? browser.instances.map(name => browser.getInstance(name)) : [browser]
+    for (const session of sessions) {
+      // WDIO's BiDi dialog manager otherwise dismisses dialogs itself when no listener is registered.
+      const onDialog = () => {}
+      session.on('dialog', onDialog)
+      try {
+        for (const type of ['alert', 'confirm', 'prompt']) {
+          const html = `<button onclick="window.dialogResult=${type}('${type}')">Open dialog</button>`
+          await session.url(`data:text/html,${encodeURIComponent(html)}`)
+          await session.$('button').click()
+          await session.pause(700)
+          assert.strictEqual(await session.getAlertText(), type)
+          if (type === 'prompt') await session.sendAlertText('answer')
+          await session.acceptAlert()
+          if (type !== 'alert') {
+            const result = await session.execute(() => globalThis.dialogResult)
+            assert.strictEqual(result, type === 'confirm' ? true : 'answer')
+          }
+        }
+        // The dialog opens after the command completes, while background captures remain active.
+        await session.execute(() => { setTimeout(() => globalThis.alert('delayed'), 100) })
+        await session.pause(700)
+        assert.strictEqual(await session.getAlertText(), 'delayed')
+        await session.dismissAlert()
+      } finally {
+        session.off('dialog', onDialog)
+      }
+    }
   })
 
   it('records navigation, commands, idle periods and the failed page', async () => {

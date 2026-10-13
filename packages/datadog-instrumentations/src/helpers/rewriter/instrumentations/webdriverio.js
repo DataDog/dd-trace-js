@@ -86,6 +86,19 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
+    functionQuery: {
+      className: 'Runner',
+      methodName: '_startSession',
+      kind: 'Async',
+    },
+    channelName: 'Runner_startSession',
+  },
+  {
+    module: {
+      name: '@wdio/runner',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
     astQuery: 'VariableDeclarator[id.name="Runner"] > ClassExpression > ClassBody > ' +
       'MethodDefinition[key.name="run"] IfStatement[test.operator="!"]' +
       '[test.argument.object.name="args"][test.argument.property.name="watch"], ' +
