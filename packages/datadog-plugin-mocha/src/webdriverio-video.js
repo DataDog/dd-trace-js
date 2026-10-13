@@ -326,8 +326,10 @@ class WebdriverioVideo {
     const filePath = join(this.#directory, `${index}.webm`)
     let completed = false
     const next = error => {
-      if (completed || this.#finished) return
+      if (completed) return
       completed = true
+      // Cancellation may try cleanup while encoding or upload still holds files open.
+      if (this.#finished) return this.#cleanup(undefined, () => {})
       if (error) log.error('Error uploading WebdriverIO failure video: %s', error.message)
       this.#encode(index + 1, upload, hasError || Boolean(error), onDone)
     }
@@ -339,9 +341,7 @@ class WebdriverioVideo {
       size: this.#sizes[index],
     }
     this.#cancelEncoding = encodeVideo(recording, error => {
-      // Cancellation may try cleanup while FFmpeg still holds files open on Windows.
-      if (this.#finished) return this.#cleanup(undefined, () => {})
-      if (error) return next(error)
+      if (this.#finished || error) return next(error)
       try {
         upload(filePath, index, next)
       } catch (error) {
