@@ -2454,6 +2454,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                     'overlapping snapshots quarantined snapshot': { properties: { quarantined: true } },
                   },
                 },
+                'ci-visibility/test-management/test-snapshot-ownership.js': {
+                  tests: {
+                    'snapshot ownership ordinary: quarantined': { properties: { quarantined: true } },
+                  },
+                },
               },
             },
           })
@@ -2548,6 +2553,36 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }
 
         for (const { parallel, injectGlobals } of snapshotModes) {
+          const ownershipIt = injectGlobals || supportsImportedGlobals ? it : it.skip
+          for (const unused of [false, true]) {
+            const mode = `parallel=${parallel}, injectGlobals=${injectGlobals}, unused=${unused}`
+            ownershipIt(`preserves snapshots shared with shorter ordinary names (${mode})`, async () => {
+              receiver.setSettings({ test_management: { enabled: true } })
+
+              const { exitCode, stdout } = await runSnapshotTests({
+                TESTS_TO_RUN: 'test-management/test-snapshot-(ownership|image)',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                SKIP_ORDINARY_HINT: unused ? 'true' : undefined,
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              }, (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], unused ? 'fail' : 'pass')
+                assert.deepStrictEqual(executions, {
+                  'snapshot ownership ordinary: quarantined': [['pass', 'true']],
+                  'snapshot ownership ordinary': [['pass', undefined]],
+                  'snapshot can match': [['fail', 'true']],
+                })
+              })
+
+              assert.strictEqual(exitCode, unused ? 1 : 0, stdout)
+              assert.doesNotMatch(stdout, /snapshots? failed/)
+              if (unused) {
+                assert.match(stdout, /3 snapshots obsolete/)
+              } else {
+                assert.doesNotMatch(stdout, /obsolete/)
+              }
+            })
+          }
+
           const modeIt = supportsConcurrentSnapshots && (injectGlobals || supportsImportedGlobals) ? it : it.skip
           for (const ordinaryFailure of ['none', 'serial', 'concurrent', 'obsolete', 'prefixed-obsolete']) {
             const mode = `parallel=${parallel}, injectGlobals=${injectGlobals}, ordinaryFailure=${ordinaryFailure}`

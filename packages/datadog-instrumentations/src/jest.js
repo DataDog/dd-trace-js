@@ -1533,9 +1533,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const snapshotName = key.slice(0, key.lastIndexOf(' '))
         if (snapshotName !== testName && !snapshotName.startsWith(hintPrefix)) continue
         let belongsToAnotherTest = false
-        // A hinted snapshot key can also name another test; prefer the longer registered test name.
+        // Snapshot names do not identify their owner when another registered name matches the same key.
         for (const name of testNames) {
-          if (name.length > testName.length &&
+          if (name !== testName &&
             (snapshotName === name || snapshotName.startsWith(`${name}: `))) {
             belongsToAnotherTest = true
             break
