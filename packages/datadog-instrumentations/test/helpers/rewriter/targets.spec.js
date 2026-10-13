@@ -32,11 +32,28 @@ describe('rewriter targets', () => {
   it('distinguishes rewrite-activated integrations from hybrid rewrite targets', () => {
     assert.equal(isRewriteActivationEnabled('@langchain/core'), true)
     assert.equal(isRewriteActivationEnabled('mercurius'), true)
-    assert.equal(isRewriteActivationEnabled('@wdio/runner'), false)
+    assert.equal(isRewriteActivationEnabled('@wdio/utils'), true)
+    assert.equal(isRewriteActivationEnabled('graphql'), false)
     assert.deepStrictEqual(
-      getRewriteTarget('file:///app/node_modules/@wdio/runner/build/index.js'),
-      { moduleName: '@wdio/runner', filePath: 'build/index.js' }
+      getRewriteTarget('file:///app/node_modules/@wdio/utils/build/index.js'),
+      { moduleName: '@wdio/utils', filePath: 'build/index.js', activate: true }
     )
+  })
+
+  it('keeps shared WebdriverIO dependencies as rewrite-only targets', () => {
+    for (const [moduleName, filePath] of [
+      ['@wdio/config', 'build/node/index.js'],
+      ['@wdio/runner', 'build/index.js'],
+      ['webdriver', 'build/index.js'],
+      ['webdriver', 'build/node.js'],
+      ['jasmine-core', 'lib/jasmine-core/jasmine.js'],
+    ]) {
+      assert.equal(isRewriteActivationEnabled(moduleName), false)
+      assert.deepStrictEqual(
+        getRewriteTarget(`file:///app/node_modules/${moduleName}/${filePath}`),
+        { moduleName, filePath }
+      )
+    }
   })
 
   it('ignores application files and dependencies without targets', () => {
