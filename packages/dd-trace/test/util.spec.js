@@ -119,6 +119,13 @@ describe('util', () => {
     assert.strictEqual(isEmpty(Object.assign(Object.create({ inherited: 1 }), { own: 2 })), false)
     // `for-in` walks inherited enumerable keys, so a prototype-only object counts as non-empty.
     assert.strictEqual(isEmpty(Object.create({ inherited: 1 })), false)
+    assert.strictEqual(isEmpty([]), true)
+    assert.strictEqual(isEmpty([1]), false)
+    assert.strictEqual(isEmpty(Buffer.alloc(0)), true)
+    assert.strictEqual(isEmpty(Buffer.from('a')), false)
+    assert.strictEqual(isEmpty(new Uint8Array(0)), true)
+    assert.strictEqual(isEmpty(new Uint8Array(1)), false)
+    assert.strictEqual(isEmpty(Buffer.alloc(64 * 1024 * 1024)), false)
   })
 
   describe('getSegment', () => {
