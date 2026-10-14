@@ -87,6 +87,7 @@ typings/
 
 # Output of 'npm pack'
 *.tgz
+!integration-tests/lambda-shim-compat/assets/datadog-lambda-js-12.143.0.tgz
 
 # Yarn Integrity file
 .yarn-integrity

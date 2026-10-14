@@ -8,6 +8,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 
 const instrumentations = require('../../../datadog-instrumentations/src/helpers/instrumentations')
+const { WRAPPED } = require('../../../datadog-instrumentations/src/aws-lambda')
 
 const oldEnv = process.env
 
@@ -33,6 +34,7 @@ describe('lambda', () => {
       process.env = { ...oldEnv }
       delete process.env.DD_LAMBDA_HANDLER
       delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+      delete process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS
       // Drop cached `runtime/patch` so its module-level `addHook` calls run
       // against the test's current env (each test sets its own
       // `DD_LAMBDA_HANDLER`).
@@ -91,14 +93,29 @@ describe('lambda', () => {
       assert.throws(loadLambdaWithHookSpy, { message: 'Malformed handler name: handler' })
     })
 
-    it('does not register a hook when lambda is in DD_TRACE_DISABLED_INSTRUMENTATIONS', () => {
+    // The hook check and the plugin check previously disagreed: this one matched `lambda` with no
+    // trim, the other trimmed but rejected `aws-lambda`. Both now share one helper, so the same
+    // spelling has the same effect on both.
+    for (const value of ['http,lambda,fs', 'lambda', 'aws-lambda', 'http, aws-lambda', ' lambda ']) {
+      it(`does not register a hook for DD_TRACE_DISABLED_INSTRUMENTATIONS=${JSON.stringify(value)}`, () => {
+        process.env.LAMBDA_TASK_ROOT = '/var/task'
+        process.env.DD_LAMBDA_HANDLER = 'handler.handler'
+        process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = value
+
+        const { hookCalls } = loadLambdaWithHookSpy()
+
+        assert.strictEqual(hookCalls.length, 0)
+      })
+    }
+
+    it('still registers a hook when another integration is disabled', () => {
       process.env.LAMBDA_TASK_ROOT = '/var/task'
       process.env.DD_LAMBDA_HANDLER = 'handler.handler'
-      process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'http,lambda,fs'
+      process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'http,express'
 
       const { hookCalls } = loadLambdaWithHookSpy()
 
-      assert.strictEqual(hookCalls.length, 0)
+      assert.strictEqual(hookCalls.length, 1)
     })
 
     it('wraps the registered handler key when the lambda Hook callback fires', () => {
@@ -128,6 +145,100 @@ describe('lambda', () => {
       assert.notStrictEqual(fakeModule.datadog, datadogOriginal)
       // Exercise the inner wrapper produced by `patchDatadogLambdaHandler`.
       assert.strictEqual(typeof fakeModule.datadog(() => 'user'), 'function')
+    })
+
+    it('adds timeout monitoring but no span by default (transition double-wrap gate)', () => {
+      process.env.LAMBDA_TASK_ROOT = '/var/task'
+
+      const { hookCalls } = loadLambdaWithHookSpy()
+
+      const userHandler = () => 'user'
+      const fakeModule = { datadog: handler => handler }
+      hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
+
+      // Two independent concerns. Timeout monitoring always applies - it is what dd-trace's
+      // Lambda support did before the migration, and dropping it would delete the feature.
+      // Span creation is what the gate withholds: the released shim already owns the invocation
+      // span, so a second one is two roots in two traces.
+      const instrumented = fakeModule.datadog(userHandler)
+      assert.notStrictEqual(instrumented, userHandler, 'timeout monitor must still wrap')
+      assert.strictEqual(instrumented[WRAPPED], undefined, 'no span-creating wrapper')
+    })
+
+    it('dd-wraps the shim handler when DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS is set', () => {
+      process.env.LAMBDA_TASK_ROOT = '/var/task'
+      process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
+
+      const { hookCalls } = loadLambdaWithHookSpy()
+
+      const userHandler = () => 'user'
+      const fakeModule = { datadog: handler => handler }
+      hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
+
+      const wrapped = fakeModule.datadog(userHandler)
+      assert.notStrictEqual(wrapped, userHandler)
+      // The span-creating wrapper marks itself; that marker is the discriminator between
+      // monitor-only and monitor-plus-span.
+      assert.strictEqual(wrapped[WRAPPED], wrapped)
+    })
+
+    it('is idempotent across repeated patching', () => {
+      // Each re-patch must return the same instrumented function. When the monitor did not
+      // memoize, `wrapHandler` received a fresh inner closure every time, its marker could not
+      // match, and the wrappers stacked - three invocation-start publications for one invoke.
+      process.env.LAMBDA_TASK_ROOT = '/var/task'
+      process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
+
+      const { hookCalls } = loadLambdaWithHookSpy()
+
+      const userHandler = () => 'user'
+      const fakeModule = { datadog: handler => handler }
+      hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
+
+      const first = fakeModule.datadog(userHandler)
+      const second = fakeModule.datadog(userHandler)
+      assert.strictEqual(first, second)
+      assert.strictEqual(fakeModule.datadog(first), first)
+    })
+
+    for (const gate of [false, true]) {
+      it(`preserves npm wrapper configuration, receiver, and extra arguments with span gate ${gate}`, () => {
+        process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = String(gate)
+        const { hookCalls } = loadLambdaWithHookSpy()
+        const userHandler = () => 'user'
+        const config = { traceExtractor: () => ({}), enhancedMetrics: false }
+        const extra = {}
+        const receiver = {}
+        const fakeModule = {
+          datadog (handler, actualConfig, actualExtra) {
+            assert.strictEqual(this, receiver)
+            assert.notStrictEqual(handler, userHandler)
+            assert.strictEqual(actualConfig, config)
+            assert.strictEqual(actualExtra, extra)
+            return handler
+          },
+        }
+        hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
+        assert.strictEqual(typeof fakeModule.datadog.call(receiver, userHandler, config, extra), 'function')
+      })
+    }
+
+    it('monitors timeouts on the DD_LAMBDA_HANDLER path too, not just the shim module path', () => {
+      // The gate originally covered only the datadog-lambda-js module hook, so the layer path -
+      // the one customers actually run - kept creating a second span. Both branches must agree.
+      process.env.LAMBDA_TASK_ROOT = '/var/task'
+      process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
+
+      const { hookCalls } = loadLambdaWithHookSpy()
+      const fixturePath = `${path.resolve('/var/task', '', 'handler')}.js`
+
+      const userHandler = () => 'original'
+      const fakeModule = { myEntry: userHandler }
+      hookCalls[0].onrequire(fakeModule, fixturePath, undefined, '0.0.0')
+
+      assert.notStrictEqual(fakeModule.myEntry, userHandler, 'timeout monitor must wrap')
+      assert.strictEqual(fakeModule.myEntry[WRAPPED], undefined, 'no span with the gate off')
+      delete instrumentations[fixturePath]
     })
 
     it('logs hook errors without unwinding the loop', () => {
