@@ -82,26 +82,41 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // TODO: remove once `@datadog/openfeature-node-server` unrefs this timer itself.
     this.initController?.timeoutId?.unref?.()
 
-    // Only observes the outcome for logging; `promise` itself is returned unmodified below.
-    // Guarded so a logger failure can never leave the derived promise unhandled.
-    promise.then(
-      () => {
-        try {
-          log.debug('Feature Flags: provider initialized successfully')
-        } catch { /* logging failure must not crash the process */ }
-      },
-      (error) => {
-        try {
-          // errorWithoutTelemetry avoids inflating telemetry volume for every routine init timeout.
-          log.errorWithoutTelemetry(
-            'Feature Flags: provider failed to initialize: %s',
-            error instanceof Error ? error.message : String(error)
-          )
-        } catch { /* logging failure must not crash the process */ }
-      }
-    )
+    if (this.getConfiguration()) this.#logInitialConfiguration()
 
     return promise
+  }
+
+  /**
+   * @param {Parameters<DatadogNodeServerProvider['setConfiguration']>[0]} configuration
+   */
+  setConfiguration (configuration) {
+    const isInitializing = this.initController?.isInitializing()
+    super.setConfiguration(configuration)
+    if (isInitializing) this.#logInitialConfiguration()
+  }
+
+  /**
+   * @param {unknown} error
+   */
+  setError (error) {
+    const isInitializing = this.initController?.isInitializing()
+    super.setError(error)
+    if (!isInitializing) return
+
+    try {
+      // Avoid inflating telemetry volume for routine initialization timeouts.
+      log.errorWithoutTelemetry(
+        'Feature Flags: provider failed to initialize: %s',
+        error instanceof Error ? error.message : String(error)
+      )
+    } catch { /* logging failure must not affect initialization */ }
+  }
+
+  #logInitialConfiguration () {
+    try {
+      log.debug('Feature Flags: initial configuration available')
+    } catch { /* logging failure must not affect initialization */ }
   }
 
   /**
