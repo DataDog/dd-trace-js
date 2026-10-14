@@ -159,7 +159,7 @@ class WebdriverioVideo {
     this.#finalCapture = false
     this.#capturing = true
     let completed = false
-    const complete = (error, screenshots) => {
+    const complete = (error, screenshots, capturedAt) => {
       if (completed || this.#finished) return
       completed = true
       this.#capturing = false
@@ -167,7 +167,7 @@ class WebdriverioVideo {
         log.error('Error capturing WebdriverIO video frame: %s', error.message)
       } else if (!this.#disabled && captureOwners.get(this.#browser) === this) {
         try {
-          this.#writeFrames(screenshots)
+          this.#writeFrames(screenshots, capturedAt)
         } catch (error) {
           this.#error = error
         }
@@ -202,24 +202,26 @@ class WebdriverioVideo {
         if (!names.length) return complete(new Error('WebdriverIO returned no browser sessions'))
         const browsers = names.map(name => this.#browser.getInstance(name))
         const frames = new Array(names.length)
+        const captureTimes = new Array(names.length)
         let pending = names.length
         let captureError
         pendingCaptures.add(this.#browser)
         for (let index = 0; index < names.length; index++) {
-          this.#captureBrowser(browsers[index], (error, frame) => {
+          this.#captureBrowser(browsers[index], (error, frame, capturedAt) => {
             captureError ||= error
             frames[index] = frame
+            captureTimes[index] = capturedAt
             if (--pending === 0) {
               pendingCaptures.delete(this.#browser)
-              complete(captureError, frames)
+              complete(captureError, frames, captureTimes)
             }
           })
         }
       } else {
         pendingCaptures.add(this.#browser)
-        this.#captureBrowser(this.#browser, (error, frame) => {
+        this.#captureBrowser(this.#browser, (error, frame, capturedAt) => {
           pendingCaptures.delete(this.#browser)
-          complete(error, frame)
+          complete(error, frame, capturedAt)
         })
       }
     } catch (error) {
@@ -229,21 +231,24 @@ class WebdriverioVideo {
 
   /**
    * @param {object} browser - A single WebDriver session, including sessions with BiDi enabled
-   * @param {(error?: Error, frame?: string) => void} onDone
+   * @param {(error?: Error, frame?: string, capturedAt?: number) => void} onDone
    */
   #captureBrowser (browser, onDone) {
     try {
       // Use the session's WebDriver screenshot command. Direct BiDi captures can lose their
       // browsing context during concurrent navigation and never return a frame.
-      browser.takeScreenshot().then(result => onDone(undefined, result), onDone)
+      // Timestamp each session before waiting for the rest of a multiremote batch.
+      browser.takeScreenshot().then(result => onDone(undefined, result, performance.now()), onDone)
     } catch (error) {
       onDone(error)
     }
   }
 
-  /** @param {string|string[]} screenshots - Base64 PNG screenshots, in session order */
-  #writeFrames (screenshots) {
-    const capturedAt = performance.now()
+  /**
+   * @param {string|string[]} screenshots - Base64 PNG screenshots, in session order
+   * @param {number|number[]} capturedAt - Completion timestamps in the same session order
+   */
+  #writeFrames (screenshots, capturedAt) {
     const frames = Array.isArray(screenshots) ? screenshots : [screenshots]
     if (!frames.length) throw new Error('WebdriverIO returned no video frames')
     for (let index = 0; index < frames.length; index++) {
@@ -274,7 +279,7 @@ class WebdriverioVideo {
       frameBytes += frame.length
       this.#bytes += frame.length
       writeFileSync(join(this.#directory, `${index}-${frameNumber}.png`), frame)
-      timestamps.push(capturedAt)
+      timestamps.push(Array.isArray(capturedAt) ? capturedAt[index] : capturedAt)
     }
   }
 

@@ -125,6 +125,43 @@ describe('WebdriverIO video recording', () => {
     upload.firstCall.args[2]()
   })
 
+  for (const slowSession of [0, 1]) {
+    for (const finishDuringCapture of [false, true]) {
+      it(`timestamps each session independently (slow=${slowSession}, overlapping finish=${finishDuringCapture})`,
+        async () => {
+          const sessions = [0, 1].map(index => {
+            const takeScreenshot = sinon.stub()
+            // Reverse completion order in the final batch to check both ends of each interval.
+            const delays = index === slowSession ? [3900, 50] : [100, 300]
+            for (const [call, delay] of delays.entries()) {
+              takeScreenshot.onCall(call).callsFake(() => new Promise(resolve => setTimeout(() => resolve(PNG), delay)))
+            }
+            return { capabilities: browser.capabilities, takeScreenshot }
+          })
+          Object.assign(browser, {
+            isMultiremote: true,
+            instances: ['first', 'second'],
+            getInstance: name => sessions[name === 'first' ? 0 : 1],
+          })
+          const recorder = start()
+          // Finish between periodic ticks when exercising the non-overlapping capture path.
+          await clock.tickAsync(finishDuringCapture ? 100 : 3900)
+          const durations = []
+          const complete = sinon.spy()
+          recorder.finish(true, (filePath, index, uploaded) => {
+            const manifest = fs.readFileSync(join(dirname(filePath), `${index}.ffconcat`), 'utf8')
+            durations[index] = [...manifest.matchAll(/^duration (.+)$/gm)].map(match => Number(match[1]))
+            uploaded()
+          }, complete)
+          await clock.tickAsync(finishDuringCapture ? 4100 : 300)
+          assert.deepStrictEqual(durations[1 - slowSession], [4.1, 0.04])
+          assert.deepStrictEqual(durations[slowSession], [0.05, 0.04])
+          for (const session of sessions) sinon.assert.calledTwice(session.takeScreenshot)
+          sinon.assert.calledOnceWithExactly(complete, 'uploaded')
+        })
+    }
+  }
+
   it('cleans up and releases the encoding queue when the timing manifest cannot be written', async () => {
     writeFrame.withArgs(sinon.match(/\.ffconcat$/)).throws(new Error('disk full'))
     const complete = sinon.spy()
