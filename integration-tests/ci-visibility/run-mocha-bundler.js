@@ -1,5 +1,7 @@
 'use strict'
 
+const { dirname, join } = require('node:path')
+
 const MochaPackage = require('mocha')
 const { version } = require('mocha/package.json')
 const Mocha = MochaPackage.default ?? MochaPackage
@@ -21,9 +23,12 @@ for (const [file, module] of [
 ]) {
   loadChannel.publish({ package: 'mocha', path: `mocha/lib/${file}.${extension}`, version, module })
 }
+let mocha
+if (process.env.MOCHA_BUNDLER_METADATA_AFTER_UI === 'true') mocha = new Mocha()
 // The ordinary loader can subsequently observe the same constructor.
 require('mocha')
+require(join(dirname(require.resolve('mocha/package.json')), 'lib', `mocha.${extension}`))
 
-const mocha = new Mocha()
+mocha ??= new Mocha()
 for (const file of process.argv.slice(2)) mocha.addFile(file)
 mocha.run(failures => { process.exitCode = failures ? 1 : 0 })

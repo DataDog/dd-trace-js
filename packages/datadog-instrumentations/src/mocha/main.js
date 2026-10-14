@@ -2,7 +2,7 @@
 
 const { AsyncResource } = require('node:async_hooks')
 const { realpathSync } = require('node:fs')
-const { sep } = require('node:path')
+const { resolve, sep } = require('node:path')
 const { fileURLToPath } = require('node:url')
 
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
@@ -1130,12 +1130,11 @@ function runMochaRunner (run, runner, args) {
 /**
  * @param {Function} Mocha
  * @param {string} frameworkVersion
- * @param {string | undefined} moduleBaseDir
+ * @param {import('./common').MochaHookMeta} hookMeta
  * @returns {Function}
  */
-function wrapMochaRun (Mocha, frameworkVersion, moduleBaseDir) {
+function wrapMochaRun (Mocha, frameworkVersion, hookMeta) {
   warnDeprecatedMochaVersion(frameworkVersion)
-  const mochaPathPrefix = moduleBaseDir && moduleBaseDir + sep
 
   // Shimmer is required to attach listeners to the root suite created by each Mocha instance.
   shimmer.wrap(Mocha.prototype, 'ui', ui => function (...args) {
@@ -1155,6 +1154,8 @@ function wrapMochaRun (Mocha, frameworkVersion, moduleBaseDir) {
         const hook = createHook.apply(this, args)
         if (file && !hook.file) {
           try {
+            const { moduleBaseDir } = hookMeta
+            const mochaPathPrefix = moduleBaseDir && moduleBaseDir + sep
             for (const site of getCallSites(createHookWithFile)) {
               const source = site.getFileName()
               if (!source || source.startsWith('node:')) continue
@@ -1197,7 +1198,7 @@ function wrapMochaRun (Mocha, frameworkVersion, moduleBaseDir) {
     this.files.forEach((path) => {
       const isUnskippable = isMarkedAsUnskippable({ path })
       if (isUnskippable) {
-        unskippableSuites.push(path)
+        unskippableSuites.push(resolve(path))
       }
     })
 

@@ -11,14 +11,16 @@ const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 const patched = new WeakSet()
 
+/** @typedef {{ moduleBaseDir?: string }} MochaHookMeta */
+
 /**
  * Registers every Mocha package view that can expose the constructor.
  *
  * @param {string[]} versions
- * @param {(Mocha: Function, frameworkVersion: string, moduleBaseDir: string | undefined) => Function} wrapMochaRun
+ * @param {(Mocha: Function, frameworkVersion: string, hookMeta: MochaHookMeta) => Function} wrapMochaRun
  */
 function addMochaRunHooks (versions, wrapMochaRun) {
-  const patchedMochaConstructors = new WeakSet()
+  const patchedMochaConstructors = new WeakMap()
 
   /**
    * @param {Function} Mocha
@@ -28,9 +30,15 @@ function addMochaRunHooks (versions, wrapMochaRun) {
    * @returns {Function}
    */
   function wrapMochaOnce (Mocha, frameworkVersion, isIitm, hookMeta) {
-    if (patchedMochaConstructors.has(Mocha)) return Mocha
-    patchedMochaConstructors.add(Mocha)
-    return wrapMochaRun(Mocha, frameworkVersion, hookMeta?.moduleBaseDir)
+    let metadata = patchedMochaConstructors.get(Mocha)
+    if (metadata) {
+      // A bundler can expose the constructor before an ordinary loader supplies its package directory.
+      metadata.moduleBaseDir ??= hookMeta?.moduleBaseDir
+      return Mocha
+    }
+    metadata = { moduleBaseDir: hookMeta?.moduleBaseDir }
+    patchedMochaConstructors.set(Mocha, metadata)
+    return wrapMochaRun(Mocha, frameworkVersion, metadata)
   }
 
   /**

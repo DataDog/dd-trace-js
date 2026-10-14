@@ -3611,7 +3611,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     describe('TIA skipping root-level tests', () => {
-      const fixtureRoot = 'ci-visibility/mocha-plugin-tests/'
+      const defaultFixtureRoot = 'ci-visibility/mocha-plugin-tests/'
 
       for (const scenario of [
         {
@@ -3647,6 +3647,23 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           skippedFiles: ['top-level-it-no-describe.js'],
           expectedTests: 1,
         },
+        ...['relative', 'absolute'].flatMap(programmatic => [
+          {
+            name: `preserves programmatic ${programmatic}-path unskippable root tests and hooks`,
+            files: ['top-level-it-no-describe.js', 'top-level-it-unskippable.js'],
+            skippedFiles: ['top-level-it-no-describe.js'],
+            expectedTests: 1,
+            programmatic,
+          },
+          {
+            name: `preserves programmatic ${programmatic}-path unskippable nested tests`,
+            files: ['test-to-skip.js', 'test-unskippable.js'],
+            fixtureRoot: 'ci-visibility/unskippable-test/',
+            skippedFiles: ['test-to-skip.js'],
+            expectedTests: 1,
+            programmatic,
+          },
+        ]),
         ...['before', 'after', 'beforeEach', 'afterEach'].flatMap(hookType => [
           {
             name: `removes ${hookType} hooks from skipped files`,
@@ -3741,10 +3758,38 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           expectedTests: 2,
           bundled: true,
         },
+        ...['before', 'after', 'beforeEach', 'afterEach'].flatMap(hookType => [
+          ...[false, true].map(metadataAfterUi => ({
+            name: `bundled Mocha removes ${hookType} hooks with metadata after UI=${metadataAfterUi}`,
+            files: ['top-level-it-skippable-hook.js', 'top-level-it-mixed2.js'],
+            skippedFiles: ['top-level-it-skippable-hook.js'],
+            expectedTests: 2,
+            hookType,
+            bundled: true,
+            metadataAfterUi,
+          })),
+          {
+            name: `bundled Mocha preserves ${hookType} hooks from retained files`,
+            files: ['top-level-it-skippable-hook.js', 'top-level-it-mixed2.js'],
+            skippedFiles: ['top-level-it-mixed2.js'],
+            expectedTests: 2,
+            hookType,
+            expectedHooks: hookType.endsWith('Each') ? 2 : 1,
+            bundled: true,
+          },
+        ]),
+        {
+          name: 'preserves shared helper hooks in bundled Mocha',
+          files: ['top-level-it-shared-hooks.js', 'top-level-it-shared-hooks-retained.js'],
+          skippedFiles: ['top-level-it-shared-hooks.js'],
+          expectedTests: 2,
+          bundled: true,
+        },
       ]) {
         const {
           name, files, skippedFiles, expectedTests = 0, args = '', esm = false,
           hookType, expectedHooks = 0, rootHookPlugin = false, latePluginMode, symlinkTarget, bundled = false,
+          metadataAfterUi = false, programmatic, fixtureRoot = defaultFixtureRoot,
         } = scenario
         // Mocha added native ES module loading in 7.1.0.
         const unsupportedEsm = esm && MOCHA_VERSION !== 'latest' && !satisfies(MOCHA_VERSION, '>=7.1.0')
@@ -3786,10 +3831,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               }
             }
           )
-          const testFiles = files.map(file => `./${fixtureRoot}${file}`).join(' ')
+          const testFiles = files.map(file => programmatic === 'absolute'
+            ? path.join(fs.realpathSync(cwd), fixtureRoot, file)
+            : `./${fixtureRoot}${file}`).join(' ')
           const command = latePluginMode
             ? 'node ./ci-visibility/run-mocha-late-plugin.js'
-            : bundled ? 'node ./ci-visibility/run-mocha-bundler.js' : 'node node_modules/mocha/bin/mocha'
+            : bundled
+              ? 'node ./ci-visibility/run-mocha-bundler.js'
+              : programmatic
+                ? 'node ./ci-visibility/run-mocha-tia-programmatic.js'
+                : 'node node_modules/mocha/bin/mocha'
           const env = getCiVisAgentlessConfig(receiver.port)
           if (latePluginMode || bundled) env.NODE_OPTIONS = undefined
           childProcess = exec(`${command} ${testFiles}${args}`, {
@@ -3797,6 +3848,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             env: {
               ...env,
               MOCHA_LATE_PLUGIN_MODE: latePluginMode,
+              MOCHA_BUNDLER_METADATA_AFTER_UI: String(metadataAfterUi),
               ROOT_HOOK_TYPE: hookType,
               ROOT_HOOK_FAIL: String(expectedHooks === 0),
             },
