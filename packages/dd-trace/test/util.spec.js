@@ -131,6 +131,9 @@ describe('util', () => {
     assert.strictEqual(isEmpty(Object.assign([], { key: 'value' })), false)
     assert.strictEqual(isEmpty(Object.assign(new Uint8Array(0), { key: 'value' })), false)
     assert.strictEqual(isEmpty(new Array(1)), false)
+    assert.strictEqual(isEmpty(''), true)
+    assert.strictEqual(isEmpty('a'), false)
+    assert.strictEqual(isEmpty('a'.repeat(32 * 1024 * 1024)), false)
   })
 
   describe('getSegment', () => {
