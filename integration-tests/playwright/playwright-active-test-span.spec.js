@@ -28,6 +28,7 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_VERSION,
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
@@ -171,9 +172,7 @@ versions.forEach((version) => {
 
       // Playwright 1.64 builds hook step stacks from hook.location. The afterEach hook injected by Test
       // Optimization used to have no location, which crashed the worker when the trace was retained.
-      const itWhenHookStackIsRecorded = satisfies(version, '>=1.64.0') || version === 'latest' ? it : global.it.skip
-
-      itWhenHookStackIsRecorded('does not crash when the injected hook has a retained trace', async (receiver, run) => {
+      it('does not crash when the injected hook has a retained trace', async (receiver, run) => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -181,7 +180,7 @@ versions.forEach((version) => {
 
             assert.strictEqual(tests.length, 2)
             for (const test of tests) {
-              assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass', test.meta[ERROR_MESSAGE])
             }
           })
 
@@ -192,6 +191,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: './ci-visibility/playwright-tests-hook-location',
+              PLAYWRIGHT_WORKERS: '1',
             },
           }
         )
