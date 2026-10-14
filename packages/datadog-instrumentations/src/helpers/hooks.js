@@ -136,7 +136,6 @@ module.exports = {
   'pino-pretty': () => require('../pino'),
   playwright: () => require('../playwright'),
   'playwright-core': () => require('../playwright'),
-  postgres: { esmFirst: true, fn: () => require('../postgres') },
   'promise-js': () => require('../promise-js'),
   promise: () => require('../promise'),
   protobufjs: () => require('../protobufjs'),

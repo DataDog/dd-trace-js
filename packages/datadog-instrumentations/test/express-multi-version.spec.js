@@ -4,11 +4,11 @@ const assert = require('node:assert/strict')
 const { existsSync } = require('node:fs')
 const { join } = require('node:path')
 
-const axios = require('axios')
 const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 const express4Dir = join(__dirname, '..', '..', '..', 'versions', 'express@4')
 const express5Dir = join(__dirname, '..', '..', '..', 'versions', 'express@5')
@@ -88,8 +88,8 @@ describeOrSkip('express path-to-regexp dialect across versions', () => {
     ])
 
     await Promise.all([
-      axios.get(`http://localhost:${port5}/anything/here`),
-      axios.get(`http://localhost:${port4}/users`),
+      httpRequest.get(`http://localhost:${port5}/anything/here`),
+      httpRequest.get(`http://localhost:${port4}/users`),
     ])
 
     const fromExpress5 = enterEvents.filter(e => e.kind === 'router')

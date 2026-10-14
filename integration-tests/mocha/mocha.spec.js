@@ -246,6 +246,122 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     await receiver.stop()
   })
 
+  for (const scenario of [
+    {
+      name: 'native retries',
+      file: 'mocha-hooks/retries-with-hooks.js',
+      run: retryEventsIt,
+      exitCode: 1,
+      expected: {
+        'mocha-test-retries-with-hooks will be retried and pass': ['fail', 'fail', 'pass'],
+        'mocha-test-retries-with-hooks will be retried and fail': ['fail', 'fail', 'fail', 'fail', 'fail'],
+      },
+    },
+    {
+      name: 'beforeEach and afterEach failures',
+      file: 'mocha-plugin-tests/hook-async-error.js',
+      run: it,
+      exitCode: 5,
+      expected: {
+        'mocha-fail-hook-async will run but be reported as failed': ['fail'],
+        'mocha-fail-hook-async-other will run and be reported as passed': ['pass'],
+        'mocha-fail-hook-async-other-before will not run and be reported as failed': ['fail'],
+        'mocha-fail-hook-async-other-second-after will run and be reported as failed': ['fail'],
+        'mocha-fail-test-after-each-passes will fail and be reported as failed': ['fail'],
+      },
+    },
+  ]) {
+    scenario.run(`finishes ${scenario.name} when failure videos are enabled outside WebdriverIO`, async () => {
+      receiver.setSettings({ itr_enabled: false, flaky_test_retries_enabled: false, di_enabled: false })
+      childProcess = exec(`node node_modules/mocha/bin/mocha ci-visibility/${scenario.file}`, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_INJECT_FORCE: 'true',
+          DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+          DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
+          DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
+        },
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, Object.values(scenario.expected).flat().length, testOutput)
+          assert.strictEqual(new Set(tests.map(test => test.span_id.toString())).size, tests.length)
+          for (const [name, statuses] of Object.entries(scenario.expected)) {
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+            assert.deepStrictEqual(attempts.map(test => test.meta[TEST_STATUS]), statuses, name)
+            for (const [index, attempt] of attempts.entries()) {
+              if (statuses[index] === 'fail') assert.ok(attempt.meta[ERROR_STACK], name)
+              if (index > 0) {
+                assert.strictEqual(attempt.meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(attempt.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              }
+            }
+          }
+          for (const type of ['test_suite_end', 'test_module_end', 'test_session_end']) {
+            const matching = events.filter(event => event.type === type)
+            assert.strictEqual(matching.length, 1, type)
+            assert.strictEqual(matching[0].content.meta[TEST_STATUS], 'fail', type)
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, scenario.exitCode, testOutput)
+    })
+  }
+
+  for (const status of ['pass', 'fail']) {
+    it(`reports a ${status}ing test when the global URL is mocked during a DogStatsD flush`, async () => {
+      receiver.setSettings({ itr_enabled: false })
+      childProcess = exec('node node_modules/mocha/bin/mocha ci-visibility/mocha-plugin-tests/mocked-url.js', {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          DD_INJECT_FORCE: 'true',
+          DD_TRACE_AGENT_URL: `http://127.0.0.1:${receiver.port}`,
+          DD_RUNTIME_METRICS_ENABLED: 'false',
+          MOCKED_URL_TEST_FAIL: status === 'fail' ? '1' : '0',
+        },
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle') || url === '/dogstatsd/v2/proxy',
+        payloads => {
+          const metrics = payloads.filter(({ url }) => url === '/dogstatsd/v2/proxy')
+          assert.ok(metrics.length, `expected DogStatsD telemetry: ${testOutput}`)
+          assert.match(metrics[0].payload, /datadog\.dogstatsd\.client\.metrics:0\|c/)
+
+          const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+            .flatMap(({ payload }) => payload.events)
+          for (const type of ['test', 'test_suite_end', 'test_module_end', 'test_session_end']) {
+            const matching = events.filter(event => event.type === type)
+            assert.strictEqual(matching.length, 1, `expected one ${type}: ${testOutput}`)
+            assert.strictEqual(matching[0].content.meta[TEST_STATUS], status, testOutput)
+          }
+          const test = events.find(event => event.type === 'test').content
+          if (status === 'fail') {
+            assert.strictEqual(test.meta[ERROR_TYPE], 'Error')
+            assert.strictEqual(test.meta[ERROR_MESSAGE], 'expected test failure')
+          } else {
+            assert.strictEqual(test.error, 0)
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, status === 'fail' ? 1 : 0, testOutput)
+      assert.doesNotMatch(testOutput, /URL is not a constructor/)
+    })
+  }
+
   for (const { mode, args, reason, exitCode: expectedExitCode } of [
     { mode: 'skip-tests', args: '', reason: 'all_tests_skipped', exitCode: 0 },
     { mode: 'skip-suite', args: '', reason: 'all_tests_skipped', exitCode: 0 },

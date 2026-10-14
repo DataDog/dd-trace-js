@@ -4,13 +4,13 @@ const assert = require('node:assert/strict')
 
 const path = require('node:path')
 
-const Axios = require('axios')
 const { describe, it, beforeEach, before, after } = require('mocha')
 
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { withVersions } = require('../../setup/mocha')
+const HttpRequest = require('../../setup/helpers/http-client')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 function noop () {}
@@ -19,7 +19,7 @@ const NON_ROUTABLE_HOST = '192.0.2.1'
 
 describe('RASP - ssrf', () => {
   withVersions('express', 'express', expressVersion => {
-    let app, server, axios
+    let app, server, httpRequest
 
     before(() => {
       require('events').defaultMaxListeners = 7
@@ -44,7 +44,7 @@ describe('RASP - ssrf', () => {
 
       server = expressApp.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({
+        httpRequest = HttpRequest.create({
           baseURL: `http://localhost:${port}`,
         })
         done()
@@ -60,7 +60,7 @@ describe('RASP - ssrf', () => {
     describe('ssrf', () => {
       async function testBlockingRequest () {
         const assertPromise = checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
-        const blockingRequestPromise = axios.get('/?host=localhost/ifconfig.pro').then(() => {
+        const blockingRequestPromise = httpRequest.get('/?host=localhost/ifconfig.pro').then(() => {
           assert.fail('Request should be blocked')
         }).catch(e => {
           if (!e.response) {
@@ -92,7 +92,7 @@ describe('RASP - ssrf', () => {
 
             await Promise.all([
               checkRaspExecutedAndNotThreat(agent),
-              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
+              httpRequest.get(`/?host=${NON_ROUTABLE_HOST}`),
             ])
           })
 
@@ -160,7 +160,7 @@ describe('RASP - ssrf', () => {
             }
 
             await Promise.all([
-              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
+              httpRequest.get(`/?host=${NON_ROUTABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })
@@ -218,7 +218,7 @@ describe('RASP - ssrf', () => {
             }
 
             await Promise.all([
-              axios.get(`/?host=${NON_ROUTABLE_HOST}`),
+              httpRequest.get(`/?host=${NON_ROUTABLE_HOST}`),
               checkRaspExecutedAndNotThreat(agent),
             ])
           })
@@ -249,7 +249,7 @@ describe('RASP - ssrf', () => {
   })
 
   describe('without express', () => {
-    let app, server, axios
+    let app, server, httpRequest
 
     before(() => {
       return agent.load(['http'], { client: false })
@@ -275,7 +275,7 @@ describe('RASP - ssrf', () => {
 
       server.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({
+        httpRequest = HttpRequest.create({
           baseURL: `http://localhost:${port}`,
         })
 
@@ -311,7 +311,7 @@ describe('RASP - ssrf', () => {
         })
       }
 
-      const response = await axios.get('/', {
+      const response = await httpRequest.get('/', {
         headers: {
           host: 'localhost/ifconfig.pro',
         },

@@ -2,13 +2,13 @@
 
 const assert = require('assert/strict')
 
-const axios = require('axios')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 withVersions('hono', 'hono', version => {
   describe('hono instrumentation', () => {
@@ -90,14 +90,14 @@ withVersions('hono', 'hono', version => {
     })
 
     it('should publish to handleChannel on request', async () => {
-      const res = await axios.get(`http://localhost:${port}/test`)
+      const res = await httpRequest.get(`http://localhost:${port}/test`)
 
       assert.strictEqual(res.data, 'OK')
       sinon.assert.called(handleChannelCb)
     })
 
     it('should publish to middleware channels', async () => {
-      const res = await axios.get(`http://localhost:${port}/test`)
+      const res = await httpRequest.get(`http://localhost:${port}/test`)
 
       sinon.assert.called(routeChannelCb)
       sinon.assert.calledOnce(middlewareCalled)
@@ -127,7 +127,7 @@ withVersions('hono', 'hono', version => {
 
     it('should publish to errorChannel when middleware throws', async () => {
       try {
-        await axios.get(`http://localhost:${port}/error`)
+        await httpRequest.get(`http://localhost:${port}/error`)
       } catch {
         // Expected to fail
       }

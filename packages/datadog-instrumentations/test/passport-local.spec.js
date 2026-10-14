@@ -6,10 +6,10 @@ const dc = require('dc-polyfill')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const axios = require('axios').create({ validateStatus: null })
 const agent = require('../../dd-trace/test/plugins/agent')
 const { getActiveRequest } = require('../../dd-trace/src/appsec/store')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client').create({ validateStatus: null })
 
 withVersions('passport-local', 'passport-local', version => {
   describe('passport-local instrumentation', () => {
@@ -114,14 +114,14 @@ withVersions('passport-local', 'passport-local', version => {
     })
 
     it('should not call subscriber when an error occurs', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, { username: 'error', password: '1234' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { username: 'error', password: '1234' })
 
       assert.strictEqual(res.status, 500)
       sinon.assert.notCalled(subscriberStub)
     })
 
     it('should call subscriber with proper arguments on success', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'Granted')
@@ -135,7 +135,7 @@ withVersions('passport-local', 'passport-local', version => {
     })
 
     it('should call subscriber with proper arguments on success with passReqToCallback set to true', async () => {
-      const res = await axios.post(`http://localhost:${port}/req`, { username: 'test', password: '1234' })
+      const res = await httpRequest.post(`http://localhost:${port}/req`, { username: 'test', password: '1234' })
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'Granted')
@@ -149,7 +149,7 @@ withVersions('passport-local', 'passport-local', version => {
     })
 
     it('should call subscriber with proper arguments on failure', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { username: 'test', password: '1' })
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'Denied')
@@ -169,7 +169,7 @@ withVersions('passport-local', 'passport-local', version => {
         abortController.abort()
       })
 
-      const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
 
       assert.strictEqual(res.status, 403)
       assert.strictEqual(res.data, 'Blocked')
