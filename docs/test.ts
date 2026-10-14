@@ -311,14 +311,17 @@ const lambdaHandler = lambda.wrap(async (event: { value: string }) => event.valu
   enhancedMetrics: false,
 });
 lambdaHandler({ value: 'ok' });
-lambda.sendDistributionMetric('example.metric', 1, 'tag:value');
-lambda.sendDistributionMetricWithDate('example.metric', 1, new Date(), 'tag:value');
 const lambdaTraceHeaders: Record<string, string> = lambda.getTraceHeaders();
-const initFailureReported: Promise<void> = lambda.reportInitFailure({
-  error: new Error('load failed'),
-  functionName: 'my-function',
-  startTime: Date.now(),
-});
+// Type-check the reserved APIs without executing their migration stubs.
+function checkLambdaMetricsTypes () {
+  lambda.sendDistributionMetric('example.metric', 1, 'tag:value');
+  lambda.sendDistributionMetricWithDate('example.metric', 1, new Date(), 'tag:value');
+  const initFailureReported: Promise<void> = lambda.reportInitFailure({
+    error: new Error('load failed'),
+    functionName: 'my-function',
+    startTime: Date.now(),
+  });
+}
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', { llmobs: false });
 tracer.use('aws-sdk', awsSdkOptions);

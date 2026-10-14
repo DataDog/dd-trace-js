@@ -160,23 +160,23 @@ dd-trace must consume the resulting context consistently when task and layer loa
 
 ### Closure and exception removal
 
-1. Reproduce the affected cases with the frozen shim and a freshly run control. The diagnostic
-   `--filter repeat-wrap`, `--filter timeout`, or `--filter custom-config` options select these
-   families; omit `--ci` for filtered runs. Record runtime, architecture, artifact hashes and raw
-   results. A filtered run is not full release evidence.
-2. Add the owning regression tests and run the full candidate/control matrix on actual v5/v6
-   backports. Every case associated with the closing ID must pass all assertions; a released
-   control may still fail. Keep unrelated known failures visible.
-3. In the fix change, remove only that ID's expectation from `scripts/gate.cjs` and its affected
-   entries from the inventory test. Keep the behavioral probes and assertions. Update this record
-   to **FIXED** with fixing commit/PR, backport/release references and passing report locations;
-   do not delete its historical ID.
-4. If the fix requires a new shim, retain the frozen baseline until a separate, explicit baseline
-   update/retirement decision. A final-preview pass alone cannot close the old-shim defect or
-   justify deleting its exception. Track legacy and migrated verification separately.
-5. At PR16, require all three contracts to pass with the actual final-preview shim and candidate
-   tracer before removing the transition gate. Do not carry these exceptions into that pairing.
-   Local process success does not replace candidate goldens, required CI or deployed release checks.
+1.  Reproduce the affected cases with the frozen shim and a freshly run control. The diagnostic
+    `--filter repeat-wrap`, `--filter timeout`, or `--filter custom-config` options select these
+    families; omit `--ci` for filtered runs. Record runtime, architecture, artifact hashes and raw
+    results. A filtered run is not full release evidence.
+2.  Add the owning regression tests and run the full candidate/control matrix on actual v5/v6
+    backports. Every case associated with the closing ID must pass all assertions; a released
+    control may still fail. Keep unrelated known failures visible.
+3.  In the fix change, remove only that ID's expectation from `scripts/gate.cjs` and its affected
+    entries from the inventory test. Keep the behavioral probes and assertions. Update this record
+    to **FIXED** with fixing commit/PR, backport/release references and passing report locations;
+    do not delete its historical ID.
+4.  If the fix requires a new shim, retain the frozen baseline until a separate, explicit baseline
+    update/retirement decision. A final-preview pass alone cannot close the old-shim defect or
+    justify deleting its exception. Track legacy and migrated verification separately.
+5.  At PR16, require all three contracts to pass with the actual final-preview shim and candidate
+    tracer before removing the transition gate. Do not carry these exceptions into that pairing.
+    Local process success does not replace candidate goldens, required CI or deployed release checks.
 
 ## Local use
 
