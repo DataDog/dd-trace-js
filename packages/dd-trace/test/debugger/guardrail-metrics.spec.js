@@ -26,7 +26,7 @@ describe('debugger/guardrail-metrics', () => {
   })
 
   it('should use the telemetry namespace shared with the other tracers', () => {
-    assert.strictEqual(TELEMETRY_NAMESPACE, 'live_debugger')
+    assert.strictEqual(TELEMETRY_NAMESPACE, 'debugger')
   })
 
   it('should create a shared buffer', () => {

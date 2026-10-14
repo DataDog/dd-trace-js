@@ -20,7 +20,7 @@ describe('Dynamic Instrumentation/Live Debugger pause duration telemetry', funct
       const exited = once(t.proc, 'exit')
       const received = t.agent.assertTelemetryReceived({
         requestType: 'sketches',
-        namespace: 'live_debugger',
+        namespace: 'debugger',
         fn: ({ payload }) => {
           const [series] = payload.payload.series
           assert.strictEqual(series.metric, 'execution.pause.duration')
