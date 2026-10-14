@@ -7,7 +7,6 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox,
   stopProc,

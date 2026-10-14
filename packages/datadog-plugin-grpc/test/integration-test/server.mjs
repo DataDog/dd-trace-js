@@ -43,7 +43,7 @@ function buildClient (service, callback) {
   })
 }
 
-const client = await buildClient({
+await buildClient({
   getUnary: (_, callback) => callback(),
 })
 
