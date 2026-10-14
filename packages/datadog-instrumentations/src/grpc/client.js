@@ -246,6 +246,8 @@ function patch (hasPeer = false) {
   return function patch (grpc) {
     const proto = grpc.Client.prototype
 
+    if (instances.has(proto)) return grpc
+
     instances.set(proto, grpc)
 
     shimmer.wrap(proto, 'makeBidiStreamRequest', createWrapMakeRequest(types.bidi, hasPeer))
