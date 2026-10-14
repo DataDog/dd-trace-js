@@ -1,7 +1,7 @@
 'use strict'
 
 const { Stream } = require('node:stream')
-const { isDataView, isDate, isMap, isSet, isSharedArrayBuffer } = require('node:util').types
+const { isDataView, isDate, isMap, isSet } = require('node:util').types
 
 const { maxValueLength, truncated } = require('./constants')
 
@@ -35,17 +35,10 @@ const getTypedArrayBuffer = getterOf(typedArrayProto, 'buffer')
 const getDataViewByteLength = getterOf(DataView.prototype, 'byteLength')
 const getDataViewByteOffset = getterOf(DataView.prototype, 'byteOffset')
 const getDataViewBuffer = getterOf(DataView.prototype, 'buffer')
-const getArrayBufferByteLength = getterOf(ArrayBuffer.prototype, 'byteLength')
-const getArrayBufferResizable = getterOf(ArrayBuffer.prototype, 'resizable')
-const viewMetadataKeys = ['buffer', 'byteLength', 'byteOffset', 'length', 'BYTES_PER_ELEMENT', 'offset', 'parent',
-  'constructor', Symbol.toStringTag]
-const backingMetadataKeys = ['byteLength', 'maxByteLength', 'resizable', 'detached', 'constructor', Symbol.toStringTag]
 
 // Native brands and metadata for opaque leaves avoid cross-realm instanceof
 // and payload-defined constructors, conversion hooks, getters, and iterators.
 const getDateTime = Date.prototype.getTime
-const getMapSize = getterOf(Map.prototype, 'size')
-const getSetSize = getterOf(Set.prototype, 'size')
 // Available in Node 18, despite the experimental label on older LTS lines.
 // eslint-disable-next-line n/no-unsupported-features/node-builtins
 const webStreamPrototype = globalThis.ReadableStream?.prototype
@@ -221,38 +214,6 @@ function visibleByteLength (value, kind) {
 }
 
 /**
- * Detect metadata lost when a binary view is normalized into fresh storage,
- * using native reads and bounded own-property checks that never execute
- * payload getters. Unknown prototypes and shadowed metadata are
- * conservatively incomplete.
- *
- * @param {Buffer | TypedArray | DataView} value
- * @param {Buffer | TypedArray | DataView} copy
- * @param {string} kind trusted kind from `binaryKind`
- */
-function binaryMetadataChanged (value, copy, kind) {
-  if (Object.getPrototypeOf(value) !== Object.getPrototypeOf(copy)) return true
-  for (const key of viewMetadataKeys) {
-    if (Object.hasOwn(value, key)) return true
-  }
-
-  const getBuffer = kind === 'DataView' ? getDataViewBuffer : getTypedArrayBuffer
-  const backing = getBuffer?.call(value)
-  // Shared storage becomes an ArrayBuffer, changing metadata such as growable.
-  if (isSharedArrayBuffer(backing)) return true
-  const copyBacking = getBuffer?.call(copy)
-  if (Object.getPrototypeOf(backing) !== Object.getPrototypeOf(copyBacking)) return true
-  for (const key of backingMetadataKeys) {
-    if (Object.hasOwn(backing, key)) return true
-  }
-
-  const getByteOffset = kind === 'DataView' ? getDataViewByteOffset : getTypedArrayByteOffset
-  return getByteOffset?.call(value) !== getByteOffset?.call(copy) ||
-    getArrayBufferByteLength?.call(backing) !== getArrayBufferByteLength?.call(copyBacking) ||
-    getArrayBufferResizable?.call(backing) === true
-}
-
-/**
  * Copy a Buffer or ArrayBuffer view into fresh writable storage so later
  * redaction cannot mutate application-owned bytes. Only the visible byte
  * range is copied; the element type is preserved so tag formats stay stable
@@ -326,14 +287,15 @@ function createSnapshotBudget () {
  * - Depth, admitted entries and aggregate binary copy bytes are bounded;
  *   over-limit values become `truncated` and mark the snapshot incomplete.
  * - Dates, Maps and Sets become isolated native leaves without attached
- *   properties. Discarded fields or nonempty collections mark the snapshot
- *   incomplete, so predicates cannot silently change redaction or expansion
- *   decisions after their data is omitted.
+ *   properties. Their data is never inspected or rendered, so they always
+ *   mark the snapshot incomplete and predicates cannot silently change
+ *   redaction or expansion decisions after their data is omitted.
  * - Buffers and ArrayBuffer views are copied into fresh storage within the
  *   binary budget so redaction cannot mutate caller-owned bytes. An
- *   over-budget Buffer keeps the prefix its string tag renders; view offsets,
- *   backing-storage metadata, prototypes or shadowed metadata the copy does
- *   not preserve mark capture incomplete.
+ *   over-budget Buffer keeps the prefix its string tag renders. Normalization
+ *   always drops metadata the tag format cannot carry (view offsets, backing
+ *   storage, prototypes, shadowed properties), so every binary value marks
+ *   the capture incomplete instead of proving the loss harmless.
  * - Repeated non-circular references are copied per occurrence so redaction
  *   rules keep matching each path independently.
  * - Own enumerable string-keyed properties of plain objects and class
@@ -381,13 +343,17 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       // The over-budget Buffer keeps the prefix its tag renders; the changed
       // length marks the snapshot incomplete. Typed arrays are never shortened.
       copyLength = kind === 'buffer' ? Math.min(byteLength, maxBufferPrefixBytes) : byteLength
-      incomplete = true
       if (copyLength > budget.binaryBytes) {
+        incomplete = true
         return truncated
       }
     }
     const copy = copyBinary(view, kind, copyLength)
-    if (!incomplete && binaryMetadataChanged(view, copy, kind)) incomplete = true
+    // Normalization always changes or drops metadata the tag format cannot
+    // carry (view offsets, backing storage, prototypes, shadowed properties).
+    // Rather than prove the loss harmless, mark every binary value incomplete
+    // so data-dependent rules cannot decide redaction from the copy.
+    incomplete = true
     budget.binaryBytes -= copyLength
     return copy
   }
@@ -422,25 +388,25 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       return
     }
 
-    // Opaque leaves discard arbitrary fields: key enumeration detects lost
-    // predicate data without reading getters.
-    /* eslint-disable no-restricted-syntax */
+    // Opaque leaves render no payload tags, so anything they hold is lost:
+    // marking the snapshot incomplete keeps predicates from silently changing
+    // redaction or expansion decisions after that data is omitted, without
+    // reading getters or iterating contents.
     if (isDate(value)) {
-      if (Object.keys(value).length !== 0) incomplete = true
+      incomplete = true
       assign(container, key, new Date(getDateTime.call(value)), root)
       return
     }
     if (isMap(value)) {
-      if (getMapSize?.call(value) !== 0 || Object.keys(value).length !== 0) incomplete = true
+      incomplete = true
       assign(container, key, new Map(), root)
       return
     }
     if (isSet(value)) {
-      if (getSetSize?.call(value) !== 0 || Object.keys(value).length !== 0) incomplete = true
+      incomplete = true
       assign(container, key, new Set(), root)
       return
     }
-    /* eslint-enable no-restricted-syntax */
 
     if (
       // Reject omitted work before even inspecting stream descriptors.

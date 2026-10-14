@@ -14,11 +14,11 @@ const { createSafeSnapshot, createSnapshotBudget } = require('./snapshot')
 const { truncated } = require('./constants')
 
 // JSONPath constructs that select on data values (predicates, script
-// expressions, type, parent and property-name selectors). On a truncated
+// expressions, type, parent and property-name selectors). On an incomplete
 // capture their matches can differ from the full payload, possibly missing a
-// sensitive value. Truncated captures are suppressed when any rule uses one;
-// structural paths, wildcards, indexes and recursive descent stay safe because
-// truncation only removes content.
+// sensitive value. Incomplete captures are suppressed when any rule uses
+// one; structural paths, wildcards, indexes and recursive descent stay safe
+// because incompleteness only removes or normalizes content.
 const dataDependentRulePattern = /[?()@^~:`]/
 
 // Remaining cumulative string length (UTF-16 code units) available for
@@ -61,7 +61,9 @@ function assignSafe (parent, parentProperty, value) {
 
 /**
  * Work shared by every expansion of one payload: the snapshot budget left by
- * capture and the remaining parse budget, both consumed in place.
+ * capture and the remaining parse budget, both consumed in place. The
+ * incomplete flag records any normalization or truncation encountered so far,
+ * whether during initial capture or expansion.
  *
  * @typedef {{
  *   incomplete: boolean,
@@ -186,7 +188,7 @@ function computeBoundedTags (config, object, opts) {
   ) {
     // Fixed, payload-safe diagnostic: no payload values or rule text included.
     log.debug(
-      'Omitting payload tags: the snapshot was truncated and the rules are data-dependent'
+      'Omitting payload tags: the capture was incomplete and the rules are data-dependent'
     )
     return {}
   }
@@ -200,7 +202,7 @@ function computeBoundedTags (config, object, opts) {
     (hasDataDependentRules(redactionRules) || hasDataDependentRules(expansionRules))
   ) {
     log.debug(
-      'Omitting payload tags: expansion was truncated and the rules are data-dependent'
+      'Omitting payload tags: expansion was incomplete and the rules are data-dependent'
     )
     return {}
   }
