@@ -90,6 +90,7 @@ const parallelRunners = new WeakSet()
 const wrappedRunnerEmitPrototypes = new WeakSet()
 const rootSuitesWithHookFiles = new WeakSet()
 const ROOT_HOOK_NAMES = ['_beforeAll', '_afterAll', '_beforeEach', '_afterEach']
+const ROOT_SUITE_ARRAY_NAMES = ['tests', 'suites', '_onlyTests', '_onlySuites', ...ROOT_HOOK_NAMES]
 let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
@@ -933,6 +934,17 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       return
     }
 
+    if (runner._opts?.cleanReferencesAfterRun === false) {
+      const rootSuite = runner.suite
+      const originalArrays = ROOT_SUITE_ARRAY_NAMES.map(name => rootSuite[name])
+      // Restore definitions before completion callbacks can start another run, including with the plugin disabled.
+      runner.prependOnceListener('end', () => {
+        for (let index = 0; index < ROOT_SUITE_ARRAY_NAMES.length; index++) {
+          rootSuite[ROOT_SUITE_ARRAY_NAMES[index]] = originalArrays[index]
+        }
+      })
+    }
+
     // We remove the suites that we skip through ITR
     // Mocha normally applies exclusivity after this asynchronous configuration step.
     if (typeof runner.suite.hasOnly === 'function') {
@@ -1117,7 +1129,7 @@ function wrapMochaRun (Mocha, frameworkVersion) {
   shimmer.wrap(Mocha.prototype, 'ui', ui => function (...args) {
     const result = ui.apply(this, args)
     const suite = this.suite
-    if (testFinishCh.hasSubscribers && !rootSuitesWithHookFiles.has(suite)) {
+    if (!rootSuitesWithHookFiles.has(suite)) {
       rootSuitesWithHookFiles.add(suite)
       let hookCounts
       suite.prependListener('pre-require', () => {
@@ -1262,7 +1274,7 @@ addHook({
       runnerFrameworkErrors.delete(this)
     }
 
-    const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
+    let { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
     // Root-level tests (direct children of root, no describe wrapper) keyed by file.
     // Populated during the root 'suite' event so the normal finish path can include them
     // in mixed-file status calculation.
@@ -1445,6 +1457,12 @@ addHook({
     this.prependListener('pending', getOnPendingHandler())
 
     this.prependListener('suite', function (suite) {
+      if (suite.root) {
+        // TIA and .only() have now selected the suites that can finish during this run.
+        const selectedSuites = getSuitesByTestFile(suite)
+        suitesByTestFile = selectedSuites.suitesByTestFile
+        numSuitesByTestFile = selectedSuites.numSuitesByTestFile
+      }
       if (suite.root || !suite.tests.length) {
         // This branch can be triggered when we have top level it(...) inside test files.
         // In that case, they all (even if they are from different files) are going to be

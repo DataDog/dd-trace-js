@@ -3664,6 +3664,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             expectedHooks: hookType.endsWith('Each') ? 2 : 1,
           },
         ]),
+        ...['plugins-false', 'use-false'].flatMap(latePluginMode =>
+          ['before', 'after', 'beforeEach', 'afterEach'].map(hookType => ({
+            name: `removes ${hookType} hooks after late plugin enablement (${latePluginMode})`,
+            files: ['top-level-it-skippable-hook.js', 'top-level-it-mixed2.js'],
+            skippedFiles: ['top-level-it-skippable-hook.js'],
+            expectedTests: 2,
+            hookType,
+            latePluginMode,
+          }))
+        ),
         {
           name: 'removes a failing hook from a file containing only root-level tests',
           files: ['top-level-it-with-failing-hook.js', 'top-level-it-no-describe2.js'],
@@ -3705,7 +3715,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ]) {
         const {
           name, files, skippedFiles, expectedTests = 0, args = '', esm = false,
-          hookType, expectedHooks = 0, rootHookPlugin = false,
+          hookType, expectedHooks = 0, rootHookPlugin = false, latePluginMode,
         } = scenario
         // Mocha added native ES module loading in 7.1.0.
         const unsupportedEsm = esm && MOCHA_VERSION !== 'latest' && !satisfies(MOCHA_VERSION, '>=7.1.0')
@@ -3747,10 +3757,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             }
           )
           const testFiles = files.map(file => `./${fixtureRoot}${file}`).join(' ')
-          childProcess = exec(`node node_modules/mocha/bin/mocha ${testFiles}${args}`, {
+          const command = latePluginMode
+            ? 'node ./ci-visibility/run-mocha-late-plugin.js'
+            : 'node node_modules/mocha/bin/mocha'
+          const env = getCiVisAgentlessConfig(receiver.port)
+          if (latePluginMode) env.NODE_OPTIONS = undefined
+          childProcess = exec(`${command} ${testFiles}${args}`, {
             cwd,
             env: {
-              ...getCiVisAgentlessConfig(receiver.port),
+              ...env,
+              MOCHA_LATE_PLUGIN_MODE: latePluginMode,
               ROOT_HOOK_TYPE: hookType,
               ROOT_HOOK_FAIL: String(expectedHooks === 0),
             },
@@ -3773,6 +3789,83 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             }
           }
         })
+      }
+    })
+
+    describe('TIA skipping on reused Mocha instances', () => {
+      // Reuse requires cleanReferencesAfterRun(false), unavailable on Mocha 5.2.
+      const reuseIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.0.0') ? it : it.skip
+      const fixtureRoot = 'ci-visibility/mocha-plugin-tests/'
+
+      for (const mode of ['changed-skip-list', 'disabled-plugin']) {
+        for (const hookType of ['before', 'after', 'beforeEach', 'afterEach', 'exclusive']) {
+          reuseIt(`restores root tests and ${hookType} hooks for ${mode}`, async () => {
+            const exclusive = hookType === 'exclusive'
+            const file = fixtureRoot + (exclusive
+              ? 'top-level-it-reusable-exclusive.js'
+              : 'top-level-it-skippable-hook.js')
+            const retainedFile = fixtureRoot + 'top-level-it-mixed2.js'
+            receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
+            receiver.setSuitesToSkip([{ type: 'suite', attributes: { suite: file } }])
+
+            childProcess = fork('./ci-visibility/run-mocha-tia-rerun.js', [file, retainedFile], {
+              cwd,
+              silent: true,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                MOCHA_TIA_RERUN_MODE: mode,
+                ROOT_HOOK_TYPE: hookType,
+                ROOT_HOOK_FAIL: 'false',
+              },
+            })
+            childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+            childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+            const firstRunPromise = once(childProcess, 'message').then(([failures]) => {
+              assert.strictEqual(failures, 0, testOutput)
+              receiver.setSuitesToSkip([])
+              childProcess.send('run again')
+            })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const firstTests = exclusive ? 0 : 2
+                const secondTests = exclusive ? 1 : 4
+                const expectedTests = firstTests + (mode === 'changed-skip-list' ? secondTests : 0)
+                assert.strictEqual(tests.length, expectedTests, testOutput)
+                assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'), testOutput)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                const restoredSuites = suites.filter(suite => suite.meta[TEST_SUITE] === file)
+                assert.deepStrictEqual(restoredSuites.map(suite => suite.meta[TEST_STATUS]),
+                  mode === 'changed-skip-list' ? ['skip', 'pass'] : ['skip'], testOutput)
+                for (const type of ['test_session_end', 'test_module_end']) {
+                  const sessions = events.filter(event => event.type === type).map(event => event.content)
+                  assert.strictEqual(sessions.length, mode === 'changed-skip-list' ? 2 : 1, testOutput)
+                  assert.strictEqual(sessions[0].metrics[TEST_ITR_SKIPPING_COUNT], 1)
+                  if (mode === 'changed-skip-list') {
+                    assert.strictEqual(sessions[1].meta[TEST_STATUS], 'pass', testOutput)
+                    assert.strictEqual(sessions[1].metrics[TEST_ITR_SKIPPING_COUNT], 0)
+                  }
+                }
+              }
+            )
+            const [[exitCode]] = await Promise.all([once(childProcess, 'close'), eventsPromise, firstRunPromise])
+            assert.strictEqual(exitCode, 0, testOutput)
+            assert.match(testOutput, exclusive ? /1 passing/ : /4 passing/)
+            assert.match(testOutput, /SECOND RUN FAILURES: 0/)
+            if (exclusive) {
+              for (const type of ['before', 'after', 'beforeEach', 'afterEach']) {
+                assert.strictEqual(testOutput.split(`exclusive ${type} hook`).length - 1, 1, testOutput)
+              }
+            } else {
+              const expectedHooks = hookType.endsWith('Each') ? 4 : 1
+              assert.strictEqual(testOutput.split(`file-owned ${hookType} hook`).length - 1,
+                expectedHooks, testOutput)
+            }
+          })
+        }
       }
     })
 
