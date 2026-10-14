@@ -28,7 +28,7 @@ runs:
     - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_coverage == 'true'
       id: upload
       continue-on-error: true
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: coverage-${{ inputs.flags }}__${{ github.job }}-${{ strategy.job-index }}
         path: ${{ inputs.report-dir }}/**/lcov.info
@@ -39,7 +39,7 @@ runs:
     # A failed finalize can reserve the artifact name without making it available to `overwrite`.
     # Use a name per run attempt; download-artifacts selects the newest artifact.
     - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_coverage == 'true' && steps.upload.outcome == 'failure'
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: coverage-${{ inputs.flags }}__${{ github.job }}-${{ strategy.job-index }}-retry-${{ github.run_attempt }}
         path: ${{ inputs.report-dir }}/**/lcov.info
