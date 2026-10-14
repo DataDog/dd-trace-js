@@ -10,7 +10,8 @@ Node.js counterpart of the Python `benchmarks/kafka_throughput` workload
 
 - `kafka_throughput.js` -- the workload: `NUM_WORKERS` (default 1) parallel
   workers, each producing 1000 messages (5 headers each) to its own topic,
-  then synchronously consuming and committing all 1000 back. No
+  then consuming all 1000 back with a synchronous offset commit every
+  `COMMIT_EVERY` (default 100) messages and after the last one. No
   tracer-specific code -- DSM is toggled purely via environment.
 - `run_timeit.js` -- timing harness (5 warmup + 25 timed iterations by
   default), emits a JSON artifact compatible with `steps/compare-results.py`.
@@ -40,6 +41,7 @@ DD_TRACE_ENABLED=true DD_DATA_STREAMS_ENABLED=true \
 
 | Var | Default | Purpose |
 |---|---|---|
+| `COMMIT_EVERY` | `100` | Consume-phase commit mode: synchronously commit (last consumed offset + 1) after every N consumed messages and always after the last (10 commits per run at 100). `1` is the per-message sync commit, an on-demand diagnostic. Must be an integer >= 1. Recorded as `config.commit_every` in the results JSON and as `commit every N` at the end of the summary line. |
 | `NUM_WORKERS` | `1` | Produce/consume workers. Single-worker by default so the measurement reflects instrumentation cost rather than event-loop/IPC contention; raise only for a deliberate contention diagnostic. |
 | `KAFKA_TOPIC` | `benchmark-topic` | Base topic name (per-run/per-worker suffixes appended) |
 | `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Broker address |
