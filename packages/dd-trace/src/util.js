@@ -19,6 +19,8 @@ function isEmpty (obj) {
     // eslint-disable-next-line no-restricted-syntax
     return !(obj.length > 0) && Object.keys(obj).length === 0
   }
+  // `for-in` over a string also materializes every index key, so large raw string bodies need the same shortcut.
+  if (typeof obj === 'string') return obj.length === 0
   // eslint-disable-next-line no-unreachable-loop
   for (const _ in obj) return false
   return true
