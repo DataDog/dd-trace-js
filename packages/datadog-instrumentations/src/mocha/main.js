@@ -88,6 +88,8 @@ const runnerRecoveryStates = new WeakMap()
 const runnersWithPendingCoverageReset = new WeakSet()
 const parallelRunners = new WeakSet()
 const wrappedRunnerEmitPrototypes = new WeakSet()
+const rootSuitesWithHookFiles = new WeakSet()
+const ROOT_HOOK_NAMES = ['_beforeAll', '_afterAll', '_beforeEach', '_afterEach']
 let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
@@ -958,6 +960,9 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     areAllSuitesSkipped = isSuitesSkipped && numTestsToRun > 0 && runner.grepTotal(runner.suite) === 0
 
     skippedSuites = [...new Set([...filteredSuites.skippedSuites, ...filteredRootTests.skippedSuites])]
+    for (const name of ROOT_HOOK_NAMES) {
+      runner.suite[name] = runner.suite[name].filter(hook => !hook.file || !skippedSuites.includes(getSuitePath(hook)))
+    }
     suitesToSkip = [...new Set([...suitesToSkipForRun, ...filteredRootTests.suitesToSkipForRun])]
     skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
     writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
@@ -1107,6 +1112,29 @@ function runMochaRunner (run, runner, args) {
  */
 function wrapMochaRun (Mocha, frameworkVersion) {
   warnDeprecatedMochaVersion(frameworkVersion)
+
+  // Shimmer is required to attach listeners to the root suite created by each Mocha instance.
+  shimmer.wrap(Mocha.prototype, 'ui', ui => function (...args) {
+    const result = ui.apply(this, args)
+    const suite = this.suite
+    if (testFinishCh.hasSubscribers && !rootSuitesWithHookFiles.has(suite)) {
+      rootSuitesWithHookFiles.add(suite)
+      let hookCounts
+      suite.prependListener('pre-require', () => {
+        hookCounts = ROOT_HOOK_NAMES.map(name => suite[name].length)
+      })
+      suite.on('post-require', (context, file) => {
+        // Mocha gives root hooks no file. Keep hooks registered outside test-file loading global.
+        for (let index = 0; index < ROOT_HOOK_NAMES.length; index++) {
+          const hooks = suite[ROOT_HOOK_NAMES[index]]
+          for (let hookIndex = hookCounts[index]; hookIndex < hooks.length; hookIndex++) {
+            hooks[hookIndex].file ??= file
+          }
+        }
+      })
+    }
+    return result
+  })
 
   // Shimmer is required because run must return its Runner while execution is paused and resumed after configuration.
   shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {

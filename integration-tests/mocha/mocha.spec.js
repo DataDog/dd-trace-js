@@ -3613,7 +3613,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     describe('TIA skipping root-level tests', () => {
       const fixtureRoot = 'ci-visibility/mocha-plugin-tests/'
 
-      for (const { name, files, skippedFiles, expectedTests = 0, args = '', esm = false } of [
+      for (const scenario of [
         {
           name: 'skips a file containing only root-level tests',
           files: ['top-level-it-no-describe.js'],
@@ -3647,6 +3647,37 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           skippedFiles: ['top-level-it-no-describe.js'],
           expectedTests: 1,
         },
+        ...['before', 'after', 'beforeEach', 'afterEach'].flatMap(hookType => [
+          {
+            name: `removes ${hookType} hooks from skipped files`,
+            files: ['top-level-it-skippable-hook.js', 'top-level-it-mixed2.js'],
+            skippedFiles: ['top-level-it-skippable-hook.js'],
+            expectedTests: 2,
+            hookType,
+          },
+          {
+            name: `preserves ${hookType} hooks from retained files`,
+            files: ['top-level-it-skippable-hook.js', 'top-level-it-mixed2.js'],
+            skippedFiles: ['top-level-it-mixed2.js'],
+            expectedTests: 2,
+            hookType,
+            expectedHooks: hookType.endsWith('Each') ? 2 : 1,
+          },
+        ]),
+        {
+          name: 'removes a failing hook from a file containing only root-level tests',
+          files: ['top-level-it-with-failing-hook.js', 'top-level-it-no-describe2.js'],
+          skippedFiles: ['top-level-it-with-failing-hook.js'],
+          expectedTests: 2,
+        },
+        {
+          name: 'preserves global root hook plugins when skipping a file',
+          files: ['top-level-it-no-describe.js', 'top-level-it-mixed2.js'],
+          skippedFiles: ['top-level-it-no-describe.js'],
+          expectedTests: 2,
+          args: ' --require ./ci-visibility/mocha-plugin-tests/root-hook-plugin.js',
+          rootHookPlugin: true,
+        },
         {
           name: 'skips root-level tests selected by grep',
           files: ['top-level-it-mixed-failing.js'],
@@ -3664,9 +3695,22 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           skippedFiles: ['top-level-it-skippable.mjs'],
           esm: true,
         },
+        {
+          name: 'removes root hooks from an ES module while retaining other tests',
+          files: ['top-level-it-skippable.mjs', 'top-level-it-mixed2.js'],
+          skippedFiles: ['top-level-it-skippable.mjs'],
+          expectedTests: 2,
+          esm: true,
+        },
       ]) {
+        const {
+          name, files, skippedFiles, expectedTests = 0, args = '', esm = false,
+          hookType, expectedHooks = 0, rootHookPlugin = false,
+        } = scenario
         // Mocha added native ES module loading in 7.1.0.
-        const runTest = esm && MOCHA_VERSION !== 'latest' && !satisfies(MOCHA_VERSION, '>=7.1.0') ? it.skip : it
+        const unsupportedEsm = esm && MOCHA_VERSION !== 'latest' && !satisfies(MOCHA_VERSION, '>=7.1.0')
+        // Root hook plugins were introduced in Mocha 8.0.0.
+        const runTest = unsupportedEsm || (rootHookPlugin && mochaMajor < 8) ? it.skip : it
         runTest(name, async () => {
           const suitesToSkip = files.filter(file => skippedFiles.includes(file) || file.includes('unskippable'))
           receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
@@ -3705,13 +3749,29 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const testFiles = files.map(file => `./${fixtureRoot}${file}`).join(' ')
           childProcess = exec(`node node_modules/mocha/bin/mocha ${testFiles}${args}`, {
             cwd,
-            env: getCiVisAgentlessConfig(receiver.port),
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              ROOT_HOOK_TYPE: hookType,
+              ROOT_HOOK_FAIL: String(expectedHooks === 0),
+            },
           })
           childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
           childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
           const [, [exitCode]] = await Promise.all([eventsPromise, once(childProcess, 'close')])
           assert.strictEqual(exitCode, 0, testOutput)
           assert.strictEqual(testOutput.includes(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE), expectedTests === 0)
+          if (hookType) {
+            assert.strictEqual(testOutput.split(`file-owned ${hookType} hook`).length - 1, expectedHooks, testOutput)
+          }
+          for (const hook of ['before', 'after', 'beforeEach', 'afterEach']) {
+            if (files.includes('top-level-it-unskippable.js')) {
+              assert.strictEqual(testOutput.split(`unskippable ${hook} hook`).length - 1, 1, testOutput)
+            }
+            if (args.includes('root-hook-plugin')) {
+              const expectedCount = hook.endsWith('Each') ? expectedTests : 1
+              assert.strictEqual(testOutput.split(`global ${hook} hook`).length - 1, expectedCount, testOutput)
+            }
+          }
         })
       }
     })
