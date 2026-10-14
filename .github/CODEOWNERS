@@ -444,6 +444,7 @@
 /AGENTS.md @DataDog/dd-trace-js @DataDog/lang-platform-js
 /openfeature.d.ts @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /openfeature.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
+/openfeature/ @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 
 /.github/CODEOWNERS @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/dependabot.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities

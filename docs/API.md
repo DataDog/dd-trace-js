@@ -24,6 +24,40 @@ best-effort formatted `console.warn` and `console.error` calls made with an acti
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 `DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
 
+<h2 id="feature-flag-configuration">Feature Flag Configuration for SSR</h2>
+
+Use `dd-trace/openfeature/rules-based` to fetch rules and serialize configuration for browser initialization.
+These helpers do not initialize the tracer, register a provider, or enable tracking.
+The rules decoder is loaded only when this entrypoint is imported, not by `dd-trace/openfeature`
+or normal tracer or provider imports.
+
+```javascript
+import { fetchRulesConfiguration, configurationToString } from 'dd-trace/openfeature/rules-based.js'
+
+export async function getServerSideProps () {
+  const configuration = await fetchRulesConfiguration({
+    distributionChannel: 'client',
+    clientToken: process.env.DD_CLIENT_TOKEN,
+    env: process.env.DD_ENV,
+  })
+
+  return { props: { flagsConfiguration: configurationToString(configuration) } }
+}
+```
+
+The browser can parse `flagsConfiguration` with `configurationFromString` from
+`@datadog/openfeature-browser/rules-based` and pass the result to `DatadogCoreProvider.setConfiguration()`.
+Use your framework's safe SSR data serialization; do not interpolate the string directly into HTML or a script.
+
+**Only forward client-distributed configuration to browsers.** The fetch helper defaults to the `server` distribution
+channel, which requires `apiKey` instead of `clientToken`. Serialization does not remove server-only flags.
+The helper accepts explicit `env`, optional `site`, `timeoutMs` (default 5000), `signal`, and custom `fetch` options;
+it does not inherit tracer configuration or read environment variables automatically.
+Catch `ConfigurationFetchError` to handle loading failures using its `code` and optional HTTP `status`.
+
+Use `require('dd-trace/openfeature/rules-based')` for CommonJS or named imports from
+`dd-trace/openfeature/rules-based.js` for native Node.js ESM.
+
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 
 The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
