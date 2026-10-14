@@ -386,6 +386,27 @@ Playwright (1.38.0 or later) and Cypress. Playwright uses <code>only-on-failure<
 unless the project already captures failures; existing capture options are preserved. Cypress enables
 <code>screenshotOnRunFailure</code> or <code>video</code>. Setting either flag to <code>false</code> disables that upload without modifying the
 framework's capture settings. The flags operate independently. Only automatic failure media is uploaded.</p>
+<p>For WebdriverIO 9 and later with the Mocha or Jasmine adapter, explicitly set
+<code>DD_TEST_FAILURE_VIDEOS_ENABLED=true</code> to record and upload failure videos automatically.
+Install <a href="https://ffmpeg.org/download.html">FFmpeg</a> with the <code>libvpx</code> encoder and make the <code>ffmpeg</code> executable
+available on the WDIO worker's <code>PATH</code>. Check the installation with <code>ffmpeg -version</code> and <code>ffmpeg -encoders</code>.
+No WebdriverIO video reporter or additional dd-trace npm dependency is required. Encoding runs in a separate
+process and only for failed attempts. If FFmpeg is unavailable, recording is disabled and a warning is logged.
+When videos are enabled and both FFmpeg and video uploads are available, dd-trace defaults new sessions to
+<code>unhandledPromptBehavior: 'ignore'</code> so background screenshots preserve open dialogs. Explicit prompt policies
+are preserved. Recording is disabled with a warning
+if any session's negotiated policy allows screenshots to accept or dismiss dialogs. Policies are checked before
+each capture; reloading a session with an unsafe policy discards the active recording. Tests must handle their
+dialogs; other WebDriver commands no longer automatically dismiss them under the <code>ignore</code> policy.</p>
+<p>WebdriverIO recordings are screenshot sequences encoded as WebM, using the approach of
+<a href="https://webdriver.io/docs/wdio-video-reporter/">wdio-video-reporter</a>. They capture browser command results
+and sample idle periods every 500ms; browser dialogs and native UI outside screenshots are not recorded.
+Each failed attempt, including retries and test hook failures, gets its own upload. Passing and skipped
+attempts are discarded. Multiremote sessions produce separate videos for the same attempt.
+Videos are limited to 1280×720 pixels and use two frames per second. Temporary frames and videos are
+removed after completion. Raw frames share a 200 MiB budget per WDIO worker across capturing, encoding, and
+uploading attempts, released after file cleanup, with a limit of 16 megapixels per screenshot. Capture,
+encoding, or upload failures do not fail the test run.</p>
 <p>Set <code>DD_CODE_COVERAGE_FLAGS</code> to a comma-separated list of flags to attach to uploaded code coverage
 reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
 accepted; if more are provided, the report is uploaded without flags.</p>

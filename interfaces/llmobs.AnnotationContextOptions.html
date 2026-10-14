@@ -11,9 +11,9 @@
 <li><a href="../modules/llmobs.html">llmobs</a></li>
 <li><a href="" aria-current="page">AnnotationContextOptions</a></li></ul>
 <h1>Interface AnnotationContextOptions</h1></div>
-<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AnnotationContextOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#costtags">costTags</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#name">name</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#prompt">prompt</a><span class="tsd-signature-symbol">?:</span> <a href="llmobs.Prompt.html" class="tsd-signature-type tsd-kind-interface">Prompt</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tags">tags</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">any</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AnnotationContextOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#agent">agent</a><span class="tsd-signature-symbol">?:</span> <a href="llmobs.Agent.html" class="tsd-signature-type tsd-kind-interface">Agent</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#costtags">costTags</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#name">name</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#prompt">prompt</a><span class="tsd-signature-symbol">?:</span> <a href="llmobs.Prompt.html" class="tsd-signature-type tsd-kind-interface">Prompt</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tags">tags</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">any</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f3517f33400a7e5cce8f1c691fd54355ed63c206/index.d.ts#L4864">index.d.ts:4864</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3fba13ce668a3eea0c6abfdacac3ab660220b16b/index.d.ts#L4945">index.d.ts:4945</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -21,7 +21,8 @@
 <div class="tsd-accordion-details">
 <section class="tsd-index-section">
 <h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<div class="tsd-index-list"><a href="#costtags" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>cost<wbr/>Tags?</span></a>
+<div class="tsd-index-list"><a href="#agent" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>agent?</span></a>
+<a href="#costtags" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>cost<wbr/>Tags?</span></a>
 <a href="#name" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>name?</span></a>
 <a href="#prompt" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>prompt?</span></a>
 <a href="#tags" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tags?</span></a>
@@ -30,6 +31,15 @@
 <h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
 <section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="agent"><code class="tsd-tag">Optional</code><span>agent</span><a href="#agent" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">agent</span><span class="tsd-signature-symbol">?:</span> <a href="llmobs.Agent.html" class="tsd-signature-type tsd-kind-interface">Agent</a></div>
+<div class="tsd-comment tsd-typography"><p>Declares the agent running in this context, read when the context is entered. The manifest is
+reported on every <code>agent</code> span in the context, nested ones included. Use <code>annotate</code> on a nested agent
+span to declare its own agent.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3fba13ce668a3eea0c6abfdacac3ab660220b16b/index.d.ts#L4973">index.d.ts:4973</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="costtags"><code class="tsd-tag">Optional</code><span>cost<wbr/>Tags</span><a href="#costtags" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">costTags</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p>List of tag keys to propagate to LLM Observability cost and token metrics emitted from each span
@@ -37,28 +47,28 @@ in the context.
 Each key must already be present in <code>tags</code> on the span when it starts.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f3517f33400a7e5cce8f1c691fd54355ed63c206/index.d.ts#L4875">index.d.ts:4875</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3fba13ce668a3eea0c6abfdacac3ab660220b16b/index.d.ts#L4956">index.d.ts:4956</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="name"><code class="tsd-tag">Optional</code><span>name</span><a href="#name" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">name</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Set to override the span name for any spans annotated within the returned context.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f3517f33400a7e5cce8f1c691fd54355ed63c206/index.d.ts#L4880">index.d.ts:4880</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3fba13ce668a3eea0c6abfdacac3ab660220b16b/index.d.ts#L4961">index.d.ts:4961</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="prompt"><code class="tsd-tag">Optional</code><span>prompt</span><a href="#prompt" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">prompt</span><span class="tsd-signature-symbol">?:</span> <a href="llmobs.Prompt.html" class="tsd-signature-type tsd-kind-interface">Prompt</a></div>
 <div class="tsd-comment tsd-typography"><p>A Prompt object that represents the prompt used for an LLM call. Only used on <code>llm</code> spans.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f3517f33400a7e5cce8f1c691fd54355ed63c206/index.d.ts#L4885">index.d.ts:4885</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3fba13ce668a3eea0c6abfdacac3ab660220b16b/index.d.ts#L4966">index.d.ts:4966</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tags"><code class="tsd-tag">Optional</code><span>tags</span><a href="#tags" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tags</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">any</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>Dictionary of JSON serializable key-value tag pairs to set or update on the LLMObs span regarding the span's context.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f3517f33400a7e5cce8f1c691fd54355ed63c206/index.d.ts#L4868">index.d.ts:4868</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3fba13ce668a3eea0c6abfdacac3ab660220b16b/index.d.ts#L4949">index.d.ts:4949</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -73,7 +83,7 @@ Each key must already be present in <code>tags</code> on the span when it starts
 <h3>On This Page</h3></summary>
 <div class="tsd-accordion-details">
 <details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
-<div><a href="#costtags"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>cost<wbr/>Tags</span></a><a href="#name"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>name</span></a><a href="#prompt"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>prompt</span></a><a href="#tags"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tags</span></a></div></details></div></details></div>
+<div><a href="#agent"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>agent</span></a><a href="#costtags"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>cost<wbr/>Tags</span></a><a href="#name"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>name</span></a><a href="#prompt"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>prompt</span></a><a href="#tags"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>tags</span></a></div></details></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="../modules.html">dd-trace</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
