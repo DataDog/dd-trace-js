@@ -2,9 +2,10 @@
 
 const assert = require('node:assert/strict')
 
+const { describe, it } = require('mocha')
 const semver = require('semver')
 
-const instrumentations = require('../src/helpers/instrumentations')
+const instrumentations = require('../../src/helpers/instrumentations')
 
 function noop () {}
 
@@ -183,7 +184,7 @@ function get (object, path) {
 describe('hooks for CommonJS exports shared with ESM namespaces', () => {
   for (const { name, file = name, version, create, methods } of cases) {
     it(`does not wrap ${name} twice and still wraps a second copy`, () => {
-      require(`../src/${file}`)
+      require(`../../src/${file}`)
       const hooks = instrumentations[name].filter(({ versions, file, filePattern }) =>
         !file && !filePattern && versions.some(range => semver.satisfies(version, range)))
       assert.ok(hooks.length > 0)
@@ -212,7 +213,7 @@ describe('hooks for CommonJS exports shared with ESM namespaces', () => {
   }
 
   it('patches a distinct tedious BulkLoad even when its Connection was already patched', () => {
-    require('../src/tedious')
+    require('../../src/tedious')
     const [{ hook }] = instrumentations.tedious
     const Connection = withMethods(['makeRequest'])
     const first = { Connection, BulkLoad: withMethods(['getRowStream']) }
@@ -228,7 +229,7 @@ describe('hooks for CommonJS exports shared with ESM namespaces', () => {
   })
 
   it('patches a distinct protobufjs Type even when its Root was already patched', () => {
-    require('../src/protobufjs')
+    require('../../src/protobufjs')
     const [{ hook }] = instrumentations.protobufjs
     const Root = Object.assign(withMethods(['load', 'loadSync']), { fromJSON: noop })
     const first = { Root, Type: Object.assign(withMethods(['fromObject']), { fromJSON: noop }) }
@@ -243,7 +244,7 @@ describe('hooks for CommonJS exports shared with ESM namespaces', () => {
   })
 
   it('patches a distinct pubsub Topic without wrapping a shared Subscription again', () => {
-    require('../src/google-cloud-pubsub')
+    require('../../src/google-cloud-pubsub')
     const hooks = instrumentations['@google-cloud/pubsub'].filter(({ file }) => !file)
     const first = cases.find(({ name }) => name === '@google-cloud/pubsub').create()
     for (const { hook } of hooks) hook(first, '5.0.0')
@@ -262,7 +263,7 @@ describe('hooks for CommonJS exports shared with ESM namespaces', () => {
     { name: 'durable-functions', file: 'azure-durable-functions', version: '3.5.0' },
   ]) {
     it(`leaves ${name} without an app unchanged`, () => {
-      require(`../src/${file}`)
+      require(`../../src/${file}`)
       const [{ hook }] = instrumentations[name].filter(({ file }) => !file)
       const exports = {}
       assert.strictEqual(hook(exports, version), exports)
