@@ -3712,6 +3712,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           expectedTests: 2,
           esm: true,
         },
+        {
+          name: 'preserves shared helper hooks when skipping their first importer',
+          files: ['top-level-it-shared-hooks.js', 'top-level-it-shared-hooks-retained.js'],
+          skippedFiles: ['top-level-it-shared-hooks.js'],
+          expectedTests: 2,
+        },
       ]) {
         const {
           name, files, skippedFiles, expectedTests = 0, args = '', esm = false,
@@ -3788,7 +3794,54 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               assert.strictEqual(testOutput.split(`global ${hook} hook`).length - 1, expectedCount, testOutput)
             }
           }
+          if (files.includes('top-level-it-shared-hooks.js')) {
+            assert.strictEqual(testOutput.split('shared afterEach hook').length - 1, 2, testOutput)
+            assert.strictEqual(testOutput.split('shared after hook').length - 1, 1, testOutput)
+          }
         })
+      }
+    })
+
+    describe('TIA root hooks with cross-file exclusivity', () => {
+      const fixtureRoot = 'ci-visibility/mocha-plugin-tests/'
+      for (const exclusiveFile of ['top-level-it-reusable-exclusive.js', 'top-level-suite-retained-exclusive.js']) {
+        for (const hookType of ['before', 'after', 'beforeEach', 'afterEach']) {
+          it(`removes ${hookType} hooks while retaining ${exclusiveFile}`, async () => {
+            const skippedFile = fixtureRoot + 'top-level-it-skippable-hook.js'
+            receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
+            receiver.setSuitesToSkip([{ type: 'suite', attributes: { suite: skippedFile } }])
+            childProcess = exec(`node node_modules/mocha/bin/mocha ./${skippedFile} ./${fixtureRoot}${exclusiveFile}`, {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                ROOT_HOOK_TYPE: hookType,
+                ROOT_HOOK_FAIL: 'true',
+              },
+            })
+            childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+            childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                for (const type of ['test', 'test_suite_end', 'test_module_end', 'test_session_end']) {
+                  const matching = events.filter(event => event.type === type)
+                  assert.strictEqual(matching.length, 1, testOutput)
+                  assert.strictEqual(matching[0].content.meta[TEST_STATUS], 'pass', testOutput)
+                }
+                const test = events.find(event => event.type === 'test').content
+                assert.strictEqual(test.meta[TEST_SUITE], fixtureRoot + exclusiveFile)
+                const session = events.find(event => event.type === 'test_session_end').content
+                assert.strictEqual(session.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+                assert.strictEqual(session.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+              }
+            )
+            const [[exitCode]] = await Promise.all([once(childProcess, 'close'), eventsPromise])
+            assert.strictEqual(exitCode, 0, testOutput)
+            assert.doesNotMatch(testOutput, /file-owned .* hook/)
+          })
+        }
       }
     })
 

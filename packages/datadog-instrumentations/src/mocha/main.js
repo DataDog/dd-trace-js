@@ -1,6 +1,8 @@
 'use strict'
 
 const { AsyncResource } = require('node:async_hooks')
+const { sep } = require('node:path')
+const { fileURLToPath } = require('node:url')
 
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../../vendor/dist/semifies')
@@ -16,6 +18,7 @@ const { EMPTY_EFD_RETRY_POLICY } = require('../../../dd-trace/src/ci-visibility/
 const { writeCoverageBackfillToCache } = require('../../../dd-trace/src/ci-visibility/test-optimization-cache')
 const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
+const { getCallSites } = require('../../../dd-trace/src/plugins/util/stacktrace')
 const {
   getTestSuitePath,
   MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
@@ -945,6 +948,12 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       })
     }
 
+    // Root hooks must be selected before .only() removes other files from the test tree.
+    for (const name of ROOT_HOOK_NAMES) {
+      runner.suite[name] = runner.suite[name].filter(hook => !hook.file ||
+        !suitesToSkip.includes(getSuitePath(hook)) || unskippableSuites.includes(hook.file))
+    }
+
     // We remove the suites that we skip through ITR
     // Mocha normally applies exclusivity after this asynchronous configuration step.
     if (typeof runner.suite.hasOnly === 'function') {
@@ -972,9 +981,6 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     areAllSuitesSkipped = isSuitesSkipped && numTestsToRun > 0 && runner.grepTotal(runner.suite) === 0
 
     skippedSuites = [...new Set([...filteredSuites.skippedSuites, ...filteredRootTests.skippedSuites])]
-    for (const name of ROOT_HOOK_NAMES) {
-      runner.suite[name] = runner.suite[name].filter(hook => !hook.file || !skippedSuites.includes(getSuitePath(hook)))
-    }
     suitesToSkip = [...new Set([...suitesToSkipForRun, ...filteredRootTests.suitesToSkipForRun])]
     skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
     writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
@@ -1120,10 +1126,12 @@ function runMochaRunner (run, runner, args) {
 /**
  * @param {Function} Mocha
  * @param {string} frameworkVersion
+ * @param {string} moduleBaseDir
  * @returns {Function}
  */
-function wrapMochaRun (Mocha, frameworkVersion) {
+function wrapMochaRun (Mocha, frameworkVersion, moduleBaseDir) {
   warnDeprecatedMochaVersion(frameworkVersion)
+  const mochaPathPrefix = moduleBaseDir + sep
 
   // Shimmer is required to attach listeners to the root suite created by each Mocha instance.
   shimmer.wrap(Mocha.prototype, 'ui', ui => function (...args) {
@@ -1131,18 +1139,32 @@ function wrapMochaRun (Mocha, frameworkVersion) {
     const suite = this.suite
     if (!rootSuitesWithHookFiles.has(suite)) {
       rootSuitesWithHookFiles.add(suite)
-      let hookCounts
-      suite.prependListener('pre-require', () => {
-        hookCounts = ROOT_HOOK_NAMES.map(name => suite[name].length)
+      let file
+      suite.prependListener('pre-require', (context, testFile) => {
+        file = testFile
       })
-      suite.on('post-require', (context, file) => {
-        // Mocha gives root hooks no file. Keep hooks registered outside test-file loading global.
-        for (let index = 0; index < ROOT_HOOK_NAMES.length; index++) {
-          const hooks = suite[ROOT_HOOK_NAMES[index]]
-          for (let hookIndex = hookCounts[index]; hookIndex < hooks.length; hookIndex++) {
-            hooks[hookIndex].file ??= file
+      suite.on('post-require', () => {
+        file = undefined
+      })
+      // Hook objects are created at runtime; inspect the caller while registration is still on the stack.
+      shimmer.wrap(suite, '_createHook', createHook => function createHookWithFile (...args) {
+        const hook = createHook.apply(this, args)
+        if (file && !hook.file) {
+          try {
+            for (const site of getCallSites(createHookWithFile)) {
+              const source = site.getFileName()
+              if (!source || source.startsWith('node:')) continue
+              const sourceFile = source.startsWith('file:') ? fileURLToPath(source) : source
+              if (sourceFile.startsWith(mochaPathPrefix)) continue
+              // Helpers register shared setup; only direct declarations belong to the loading test file.
+              if (sourceFile === file) hook.file = file
+              break
+            }
+          } catch (error) {
+            log.debug('Error capturing Mocha root hook source: %s', error)
           }
         }
+        return hook
       })
     }
     return result
