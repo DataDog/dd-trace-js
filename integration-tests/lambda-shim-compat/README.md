@@ -45,6 +45,12 @@ resolve at install time; their generated locks are retained with the reports. Th
 a pinned-shim gate, not a claim that every input is immutable. Dependency installation uses
 `--ignore-scripts`: optional native installation behavior is outside this test's coverage.
 
+Every dependency-install container provisions `yarn@1.22.22` through `npm exec`; it does not
+assume the runtime image bundles Yarn. This matters for standalone Node 26 CI jobs: a local
+multi-runtime run that installs under Node 22 first does not exercise Node 26 installation.
+Candidate and control use the same pinned installer, recorded in provenance; the control still
+uses `--frozen-lockfile`, and all behavioral test containers still run without network access.
+
 For v5 comparisons, both candidate and control resolve `@aws-sdk/types` to `3.965.0`, which satisfies
 the shim dependency ranges and supports Node 18. The unbounded transitive range otherwise resolves
 to `3.974.6`, requiring Node 20 and preventing the v5 Node 18 leg from even starting. This fixture

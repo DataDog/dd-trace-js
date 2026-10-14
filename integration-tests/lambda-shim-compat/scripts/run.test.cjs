@@ -7,7 +7,7 @@ const path = require('node:path')
 const { test } = require('node:test')
 const { select } = require('../assets/fixture/matrix.cjs')
 const { compare } = require('./compare.cjs')
-const { parseArgs, checkAssets } = require('./run.cjs')
+const { parseArgs, checkAssets, dependencyInstallCommand } = require('./run.cjs')
 
 const row = (scenario, passed, signature = 'same error') => ({ entry: 'npm', scenario, passed, signature })
 const report = rows => ({
@@ -18,6 +18,16 @@ const report = rows => ({
   fixtureSha256: 'same-fixtures',
   rows,
 })
+
+for (const frozenLockfile of [false, true]) {
+  test(`bootstraps pinned Yarn for ${frozenLockfile ? 'locked control' : 'candidate'} dependencies`, () => {
+    assert.deepEqual(dependencyInstallCommand(frozenLockfile), [
+      'npm', 'exec', '--yes', '--package=yarn@1.22.22', '--',
+      'yarn', 'install', '--non-interactive', '--ignore-scripts', '--network-timeout', '60000',
+      ...(frozenLockfile ? ['--frozen-lockfile'] : []),
+    ])
+  })
+}
 
 test('classifies new failures independently of aggregate pass counts', () => {
   const actual = compare(report([row('new', false), row('fixed', true), row('shared', false),

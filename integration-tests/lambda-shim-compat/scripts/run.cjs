@@ -11,6 +11,7 @@ const { compare } = require('./compare.cjs')
 const { gate } = require('./gate.cjs')
 
 const assets = path.resolve(__dirname, '../assets')
+const yarnPackage = 'yarn@1.22.22'
 const hash = value => crypto.createHash('sha256').update(value).digest('hex')
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'))
 const writeJson = (file, value) => fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n')
@@ -58,6 +59,15 @@ function checkAssets (root = assets) {
     assert.equal(hash(fs.readFileSync(path.join(root, file))), sha, `Frozen baseline checksum mismatch: ${file}`)
   }
   return baseline
+}
+
+/** @param {boolean} frozenLockfile */
+function dependencyInstallCommand (frozenLockfile) {
+  // Node images do not all bundle Yarn. Bootstrap the same version for both artifacts without
+  // changing the image, fixture dependencies, or the frozen control lockfile.
+  return ['npm', 'exec', '--yes', `--package=${yarnPackage}`, '--',
+    'yarn', 'install', '--non-interactive', '--ignore-scripts', '--network-timeout', '60000',
+    ...(frozenLockfile ? ['--frozen-lockfile'] : [])]
 }
 
 /**
@@ -165,6 +175,7 @@ function main (argv) {
     options,
     baseline,
     fixtureSha256,
+    packageManager: yarnPackage,
     candidate: { version: pkg.version, commit, dirty: !!status, status, diffSha256 },
     images: {},
     host: { node: process.version, platform: process.platform, architecture: process.arch },
@@ -256,9 +267,9 @@ function main (argv) {
       writeJson(path.join(dir, 'metadata.json'), metadata)
       writeJson(path.join(dir, 'layer-task/metadata.json'), metadata)
       console.log(`Installing ${kind} ${metadata.version} with frozen shim ${baseline.shim.version}`)
+      const [installer, ...installArgs] = dependencyInstallCommand(!!lockedControl)
       loggedCommand(['run', '--rm', ...platform, '--mount', `type=bind,src=${dir},dst=/var/task`,
-        '-w', '/var/task', '--entrypoint', 'yarn', installImage, 'install', '--non-interactive', '--ignore-scripts',
-        '--network-timeout', '60000', ...(lockedControl ? ['--frozen-lockfile'] : [])],
+        '-w', '/var/task', '--entrypoint', installer, installImage, ...installArgs],
       path.join(options.output, `install-${kind}.log`))
       provenance[kind + 'LockSha256'] = hash(fs.readFileSync(path.join(dir, 'yarn.lock')))
       loggedCommand(['run', '--rm', '--network', 'none', ...platform,
@@ -330,7 +341,7 @@ function main (argv) {
   }
 }
 
-module.exports = { parseArgs, checkAssets, reportMarkdown, main }
+module.exports = { parseArgs, checkAssets, dependencyInstallCommand, reportMarkdown, main }
 if (require.main === module) {
   try { process.exitCode = main(process.argv.slice(2)) } catch (error) {
     console.error(error.stack)
