@@ -41,6 +41,7 @@ describe('WebdriverIO video recording', () => {
     log = { error: sinon.spy(), warn: sinon.spy() }
     createVideo = proxyquire('../../../datadog-plugin-mocha/src/webdriverio-video', {
       'node:child_process': { spawn: encode, spawnSync: checkFfmpeg },
+      'node:perf_hooks': { performance: { now: () => clock.performance.now() } },
       'node:fs': {
         rmSync: removeFrames,
         writeFileSync: writeFrame,
@@ -69,6 +70,77 @@ describe('WebdriverIO video recording', () => {
     return recorder
   }
 
+  for (const multiremote of [false, true]) {
+    it(`preserves command, idle and retry timing (multiremote=${multiremote})`, async () => {
+      if (multiremote) {
+        Object.assign(browser, {
+          isMultiremote: true,
+          instances: ['first', 'second'],
+          getInstance: () => ({ capabilities: browser.capabilities, takeScreenshot: browser.takeScreenshot }),
+        })
+      }
+      for (const elapsed of [1000, 2000]) {
+        const recorder = start()
+        await clock.tickAsync(0)
+        for (let command = 0; command < 3; command++) {
+          await clock.tickAsync(100)
+          browser.emit('result', { command: 'getElementText' })
+          await clock.tickAsync(0)
+        }
+        // Changes to the customer's wall clock must not change playback timing.
+        clock.setSystemTime(-86_400_000)
+        await clock.tickAsync(elapsed - 300)
+        const upload = sinon.spy()
+        recorder.finish(true, upload, () => {})
+        await clock.tickAsync(0)
+        for (let index = 0; index < (multiremote ? 2 : 1); index++) {
+          const [filePath, , uploaded] = upload.args[index]
+          const manifest = fs.readFileSync(join(dirname(filePath), `${index}.ffconcat`), 'utf8')
+          const durations = [...manifest.matchAll(/^duration (.+)$/gm)].map(match => Number(match[1]))
+          assert.deepStrictEqual(durations.slice(0, 4), [0.1, 0.1, 0.1, 0.2])
+          assert.strictEqual(durations.reduce((sum, duration) => sum + duration, 0), elapsed / 1000 + 0.04)
+          assert.match(manifest, new RegExp(`duration 0.040000\\nfile ${index}-\\d+\\.png\\n$`))
+          uploaded()
+          await clock.tickAsync(0)
+        }
+      }
+    })
+  }
+
+  it('preserves gaps while screenshots are pending', async () => {
+    const recorder = start()
+    await clock.tickAsync(0)
+    let resolveCapture
+    browser.takeScreenshot.onSecondCall().callsFake(() => new Promise(resolve => { resolveCapture = resolve }))
+    await clock.tickAsync(100)
+    browser.emit('result', { command: 'getElementText' })
+    await clock.tickAsync(1200)
+    resolveCapture(PNG)
+    await clock.tickAsync(0)
+    const upload = sinon.spy()
+    recorder.finish(true, upload, () => {})
+    await clock.tickAsync(0)
+    const manifest = fs.readFileSync(join(directories[0], '0.ffconcat'), 'utf8')
+    assert.match(manifest, /file 0-0\.png\nduration 1.300000\n/)
+    upload.firstCall.args[2]()
+  })
+
+  it('cleans up and releases the encoding queue when the timing manifest cannot be written', async () => {
+    writeFrame.withArgs(sinon.match(/\.ffconcat$/)).throws(new Error('disk full'))
+    const complete = sinon.spy()
+    start().finish(true, () => assert.fail('unexpected upload'), complete)
+    await clock.tickAsync(0)
+    sinon.assert.calledOnceWithExactly(complete, 'error')
+    sinon.assert.notCalled(encode)
+    assert.strictEqual(fs.existsSync(directories[0]), false)
+    writeFrame.resetBehavior()
+    writeFrame.callsFake(fs.writeFileSync)
+    start().finish(true, (filePath, index, uploaded) => uploaded(), complete)
+    await clock.tickAsync(0)
+    assert.deepStrictEqual(complete.args, [['error'], ['uploaded']])
+    sinon.assert.calledOnce(encode)
+  })
+
   it('captures commands and idle periods without recursively recording screenshots', async () => {
     const recorder = start()
     await clock.tickAsync(0)
@@ -90,14 +162,14 @@ describe('WebdriverIO video recording', () => {
     sinon.assert.notCalled(complete)
     const [filePath, index, uploaded] = upload.firstCall.args
     assert.strictEqual(index, 0)
-    assert.strictEqual(fs.readdirSync(dirname(filePath)).length, 4)
+    assert.strictEqual(fs.readdirSync(dirname(filePath)).length, 5)
     assert.strictEqual(browser.listenerCount('result'), 0)
     assert.strictEqual(encode.firstCall.args[0], 'ffmpeg')
     assert.deepStrictEqual(encode.firstCall.args[2], { windowsHide: true, stdio: 'ignore' })
     const args = encode.firstCall.args[1]
-    assert.strictEqual(args[args.indexOf('-i') + 1], join(directories[0], '0-%d.png'))
+    assert.strictEqual(args[args.indexOf('-i') + 1], join(directories[0], '0.ffconcat'))
     assert.strictEqual(args[args.indexOf('-c:v') + 1], 'libvpx')
-    assert.strictEqual(args[args.indexOf('-framerate') + 1], '2')
+    assert.strictEqual(args[args.indexOf('-f') + 1], 'concat')
     assert.strictEqual(args[args.indexOf('-vf') + 1], 'scale=2:2,setsar=1')
     assert.strictEqual(args.at(-1), filePath)
     uploaded()
@@ -254,7 +326,7 @@ describe('WebdriverIO video recording', () => {
         } else {
           sinon.assert.calledOnce(encode)
           const args = encode.firstCall.args[1]
-          assert.strictEqual(Number(args[args.indexOf('-frames:v') + 1]), outcome === 'resolve' ? 3 : 2)
+          assert.strictEqual(Number(args[args.indexOf('-frames:v') + 1]), outcome === 'resolve' ? 4 : 3)
           sinon.assert.notCalled(complete)
           upload.firstCall.args[2]()
           await clock.tickAsync(0)
@@ -290,7 +362,7 @@ describe('WebdriverIO video recording', () => {
       sinon.assert.calledThrice(browser.takeScreenshot)
       second.finish(true, upload, complete)
       await clock.tickAsync(0)
-      assert.deepStrictEqual(encode.args.map(([, args]) => Number(args[args.indexOf('-frames:v') + 1])), [1, 2])
+      assert.deepStrictEqual(encode.args.map(([, args]) => Number(args[args.indexOf('-frames:v') + 1])), [2, 3])
       sinon.assert.calledTwice(upload)
       assert.deepStrictEqual(complete.args, [['uploaded'], ['uploaded']])
     })
@@ -321,7 +393,7 @@ describe('WebdriverIO video recording', () => {
     await clock.tickAsync(500)
     sinon.assert.calledThrice(first.takeScreenshot)
     sinon.assert.calledThrice(second.takeScreenshot)
-    assert.deepStrictEqual(encode.args.map(([, args]) => Number(args[args.indexOf('-frames:v') + 1])), [1, 1])
+    assert.deepStrictEqual(encode.args.map(([, args]) => Number(args[args.indexOf('-frames:v') + 1])), [2, 2])
   })
 
   it('keeps capture, encoding deadlines and queue progress independent of replaced global clocks', async () => {
@@ -736,7 +808,8 @@ describe('WebdriverIO video recording', () => {
         Buffer.from(PNG, 'base64').copy(frame)
         const screenshot = frame.toString('base64')
         // Account for the full frame without writing 200 MiB to disk in each case.
-        writeFrame.callsFake((filePath, data) => fs.writeFileSync(filePath, data.subarray(0, 24)))
+        writeFrame.callsFake((filePath, data) => fs.writeFileSync(filePath,
+          Buffer.isBuffer(data) ? data.subarray(0, 24) : data))
         const locked = Object.assign(new Error('video file is locked'), { code: 'EBUSY' })
         if (cleanup !== 'success') removeFrames.onFirstCall().throws(locked)
         if (cleanup === 'permanent failure') removeFrames.onSecondCall().throws(locked)
@@ -1001,7 +1074,7 @@ describe('WebdriverIO video recording', () => {
 
         sinon.assert.calledOnce(encode)
         const args = encode.firstCall.args[1]
-        assert.strictEqual(Number(args[args.indexOf('-frames:v') + 1]), finalCapture ? 1 : 2)
+        assert.strictEqual(Number(args[args.indexOf('-frames:v') + 1]), finalCapture ? 2 : 3)
         sinon.assert.calledOnceWithExactly(complete, 'uploaded')
         sinon.assert.calledOnce(log.error)
         resolveCapture?.(PNG)
@@ -1028,7 +1101,7 @@ describe('WebdriverIO video recording', () => {
     recorder.finish(true, upload, complete)
     await clock.tickAsync(0)
     const frames = encode.args.map(([, args], index) => [index, Number(args[args.indexOf('-frames:v') + 1])])
-    assert.deepStrictEqual(frames, [[0, 1], [1, 1]])
+    assert.deepStrictEqual(frames, [[0, 2], [1, 2]])
     sinon.assert.calledTwice(upload)
     sinon.assert.calledOnceWithExactly(complete, 'uploaded')
     assert.strictEqual(fs.existsSync(directories[0]), false)
@@ -1131,7 +1204,7 @@ describe('WebdriverIO video recording', () => {
     await clock.tickAsync(0)
     const args = encode.firstCall.args[1]
     assert.strictEqual(args[args.indexOf('-vf') + 1], 'scale=2:4,setsar=1')
-    assert.strictEqual(args[args.indexOf('-frames:v') + 1], '2')
+    assert.strictEqual(args[args.indexOf('-frames:v') + 1], '3')
   })
 
   it('does no work before the browser exists', () => {

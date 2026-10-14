@@ -4,6 +4,7 @@ const { spawn, spawnSync } = require('node:child_process')
 const { mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
+const { performance } = require('node:perf_hooks')
 const { clearInterval, clearTimeout, setInterval, setTimeout } = require('node:timers')
 
 const {
@@ -35,7 +36,7 @@ const encodingQueue = []
 /**
  * Runs one encoder at a time across all attempts in this WDIO process. Uploads do not hold the slot.
  *
- * @param {{ directory: string, index: number, frames: number, filePath: string, size: number[] }} recording
+ * @param {{ directory: string, index: number, frames: number[], filePath: string, size: number[] }} recording
  * @param {(error?: Error) => void} onDone
  */
 function encodeVideo (recording, onDone) {
@@ -59,10 +60,21 @@ function encodeVideo (recording, onDone) {
     if (encoder || !encodingQueue.includes(start)) return
     try {
       const { directory, index, frames, filePath, size: [width, height] } = recording
+      const manifestPath = join(directory, `${index}.ffconcat`)
+      let manifest = 'ffconcat version 1.0\n'
+      for (let frame = 0; frame < frames.length; frame++) {
+        // Command captures are irregular: fixed 2 fps stretches assertion polling into long videos.
+        const duration = frame + 1 < frames.length ? (frames[frame + 1] - frames[frame]) / 1000 : 0.04
+        manifest += `file ${index}-${frame}.png\nduration ${duration.toFixed(6)}\n`
+      }
+      // The PNG demuxer uses 25 Hz timestamps. Repeat the final image one tick later so it survives
+      // rounding when the last two captures are less than 40 ms apart. WebM preserves variable timing.
+      manifest += `file ${index}-${frames.length - 1}.png\n`
+      writeFileSync(manifestPath, manifest)
       encoder = spawn('ffmpeg', [
         '-hide_banner', '-loglevel', 'error', '-nostdin', '-y',
-        '-threads', '1', '-framerate', '2', '-i', join(directory, `${index}-%d.png`),
-        '-frames:v', String(frames), '-an', '-c:v', 'libvpx', '-deadline', 'realtime',
+        '-threads', '1', '-f', 'concat', '-i', manifestPath,
+        '-frames:v', String(frames.length + 1), '-an', '-c:v', 'libvpx', '-deadline', 'realtime',
         '-threads', '1', '-filter_threads', '1', '-pix_fmt', 'yuv420p',
         '-vf', `scale=${width}:${height},setsar=1`, filePath,
       ], { windowsHide: true, stdio: 'ignore' })
@@ -231,6 +243,7 @@ class WebdriverioVideo {
 
   /** @param {string|string[]} screenshots - Base64 PNG screenshots, in session order */
   #writeFrames (screenshots) {
+    const capturedAt = performance.now()
     const frames = Array.isArray(screenshots) ? screenshots : [screenshots]
     if (!frames.length) throw new Error('WebdriverIO returned no video frames')
     for (let index = 0; index < frames.length; index++) {
@@ -255,12 +268,13 @@ class WebdriverioVideo {
           Math.max(2, Math.floor(height * scale / 2) * 2),
         ]
       }
-      const frameNumber = this.#frames[index] || 0
+      const timestamps = this.#frames[index] ||= []
+      const frameNumber = timestamps.length
       // Reserve before writing so a partial write stays accounted for until cleanup.
       frameBytes += frame.length
       this.#bytes += frame.length
       writeFileSync(join(this.#directory, `${index}-${frameNumber}.png`), frame)
-      this.#frames[index] = frameNumber + 1
+      timestamps.push(capturedAt)
     }
   }
 

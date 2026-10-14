@@ -486,6 +486,12 @@ for (const version of versions) {
               const video = media[0].media
               assert.strictEqual(video.traceId, failed.trace_id.toString())
               assert.strictEqual(video.contentType, 'video/webm')
+              const duration = Number(execFileSync('ffprobe', [
+                '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', 'pipe:0',
+              ], { input: video.content, encoding: 'utf8' }))
+              // Allow the final screenshot to settle, but command bursts must not inflate playback.
+              assert.ok(duration > 0 && duration < failed.duration / 1e9 + 1,
+                `video duration ${duration}s exceeds test duration ${failed.duration / 1e9}s`)
               // Decode every frame and inspect a pixel in the solid background below the text.
               const pixels = execFileSync('ffmpeg', [
                 '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
