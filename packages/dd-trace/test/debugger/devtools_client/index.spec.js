@@ -287,6 +287,7 @@ describe('onPause', function () {
     }
 
     assert(thrown instanceof Error)
+    assert.strictEqual(thrown.name, 'Error')
     assert.strictEqual(thrown.message, 'Unexpected Debugger.paused reason: OOM')
     assert.ok('reason' in thrown)
     assert.strictEqual(thrown.reason, 'unexpected_pause_reason')
