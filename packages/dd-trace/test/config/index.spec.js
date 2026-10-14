@@ -455,7 +455,6 @@ describe('Config', () => {
         encodeAuthorizerContext: true,
         enhancedMetrics: true,
         fipsMode: false,
-        localTesting: false,
         logForwarding: false,
         mergeXrayTraces: false,
         minColdStartTraceDurationMs: 3,
@@ -476,7 +475,6 @@ describe('Config', () => {
         DD_FLUSH_TO_LOG: 'true',
         DD_KMS_API_KEY: 'kms-ciphertext',
         DD_LAMBDA_FIPS_MODE: 'true',
-        DD_LOCAL_TESTING: 'true',
         DD_MERGE_XRAY_TRACES: 'true',
         DD_MIN_COLD_START_DURATION: '7',
         DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: 'false',
@@ -497,7 +495,6 @@ describe('Config', () => {
         encodeAuthorizerContext: false,
         enhancedMetrics: false,
         fipsMode: true,
-        localTesting: true,
         logForwarding: true,
         mergeXrayTraces: true,
         minColdStartTraceDurationMs: 7,
@@ -507,6 +504,22 @@ describe('Config', () => {
       assert.strictEqual(config.getOrigin('lambda.captureLambdaPayloadMaxDepth'), 'env_var')
       assert.strictEqual(config.getOrigin('lambda.fipsMode'), 'env_var')
     })
+
+    for (const ddMajor of [5, 6, 7]) {
+      for (const value of ['true', '1']) {
+        it(`ignores retired localTesting options on v${ddMajor} with DD_LOCAL_TESTING=${value}`, () => {
+          process.env.DD_LOCAL_TESTING = value
+          const config = getConfig({ lambda: { localTesting: true } }, { ddMajor })
+
+          assert.ok(!Object.hasOwn(config.lambda, 'localTesting'))
+          assert.ok(!updateConfig.firstCall.args[0].some(entry =>
+            entry.name === 'DD_LOCAL_TESTING' || entry.name === 'lambda.localTesting'
+          ))
+          // An existing shim may still read this flag; dd-trace must leave it alone.
+          assert.strictEqual(process.env.DD_LOCAL_TESTING, value)
+        })
+      }
+    }
 
     it('calculates FIPS mode for GovCloud unless the user explicitly overrides it', () => {
       process.env.AWS_REGION = 'us-gov-west-1'

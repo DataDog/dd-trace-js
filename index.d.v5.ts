@@ -1399,13 +1399,6 @@ declare namespace tracer {
       fipsMode?: boolean,
 
       /**
-       * Whether to bypass the Lambda extension and talk to the Datadog API directly.
-       * @default false
-       * @env DD_LOCAL_TESTING
-       */
-      localTesting?: boolean,
-
-      /**
        * Whether to emit metrics as log records for the log forwarder instead of over DogStatsD.
        * @default false
        * @env DD_FLUSH_TO_LOG
@@ -2686,8 +2679,6 @@ declare namespace tracer {
       coldStartTraceSkipLib?: string;
       /** @default false @env DD_FLUSH_TO_LOG */
       logForwarding?: boolean;
-      /** @default false @env DD_LOCAL_TESTING */
-      localTesting?: boolean;
       /** Defaults to true in AWS GovCloud regions. @env DD_LAMBDA_FIPS_MODE */
       fipsMode?: boolean;
       /** @env DD_KMS_API_KEY */

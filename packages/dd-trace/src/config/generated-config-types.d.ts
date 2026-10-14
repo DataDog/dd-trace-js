@@ -470,7 +470,6 @@ export interface GeneratedConfig {
     encodeAuthorizerContext: boolean;
     enhancedMetrics: boolean;
     fipsMode: boolean;
-    localTesting: boolean;
     logForwarding: boolean;
     mergeXrayTraces: boolean;
     minColdStartTraceDurationMs: number;
@@ -807,7 +806,6 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_PROMPTS_TIMEOUT: number;
   DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS: number;
   DD_LLMOBS_SAMPLE_RATE: number;
-  DD_LOCAL_TESTING: boolean;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
   DD_LOGS_OTEL_ENABLED: boolean;

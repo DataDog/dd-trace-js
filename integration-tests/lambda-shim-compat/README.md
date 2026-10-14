@@ -83,6 +83,22 @@ in their owning change, add regression coverage, and remove the corresponding ex
 control starts passing, a failing candidate is immediately red. Unknown shared failures and changed
 failure shapes are also red; aggregate pass counts never override an individual regression.
 
+### Intentionally retired migration configuration
+
+`DD_LOCAL_TESTING` / `localTesting` is not part of dd-trace's Lambda configuration and must not
+be listed as a supported dd-trace option in the configuration dashboard. It was a legacy
+extension-local testing switch for an explicit `POST /lambda/flush`, not a direct-API metrics
+mode. The [original shim change](https://github.com/DataDog/datadog-lambda-js/pull/454) stopped
+calling that endpoint in normal operation because the Telemetry API supplies invocation
+completion; it retained the switch only for local testing that the library did not intend to
+support further. The current Rust extension does not expose that endpoint.
+
+This is an intentional non-port, not deferred metrics work or a CI failure exception. The
+existing shim and frozen baseline remain unchanged, and dd-trace leaves the environment variable
+untouched for an existing shim to consume. The migration parity ledger records the retirement;
+PR12 must not reintroduce the flush request. Retirement of the shim's exported constant and config
+field is a separate PR16 conversion concern, not a reason to add an inert dd-trace setting.
+
 ### Legacy defect register
 
 These are repository-local follow-up records, **not GitHub issue numbers or assigned tickets**.
