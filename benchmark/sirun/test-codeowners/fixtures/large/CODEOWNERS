@@ -193,60 +193,60 @@
 /packages/**/*.dsm.spec.js @DataDog/data-streams-monitoring
 
 # API SDK Capabilities
-/eslint-rules/ @DataDog/apm-sdk-capabilities-js
+/eslint-rules/ @DataDog/apm-sdk-capabilities
 
-/benchmark/sirun/propagation/ @DataDog/apm-sdk-capabilities-js
-/benchmark/sirun/spans/ @DataDog/apm-sdk-capabilities-js
+/benchmark/sirun/propagation/ @DataDog/apm-sdk-capabilities
+/benchmark/sirun/spans/ @DataDog/apm-sdk-capabilities
 /benchmark/sirun/test-codeowners/ @DataDog/ci-app-libraries
 
-/integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities-js
-/integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities-js
-/integration-tests/opentelemetry-logs.spec.js @DataDog/apm-sdk-capabilities-js
-/integration-tests/opentelemetry-traces.spec.js @DataDog/apm-sdk-capabilities-js
-/integration-tests/opentelemetry.spec.js @DataDog/apm-sdk-capabilities-js
-/integration-tests/remote_config.spec.js @DataDog/apm-sdk-capabilities-js
-/integration-tests/telemetry.spec.js @DataDog/apm-sdk-capabilities-js
+/integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities
+/integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities
+/integration-tests/opentelemetry-logs.spec.js @DataDog/apm-sdk-capabilities
+/integration-tests/opentelemetry-traces.spec.js @DataDog/apm-sdk-capabilities
+/integration-tests/opentelemetry.spec.js @DataDog/apm-sdk-capabilities
+/integration-tests/remote_config.spec.js @DataDog/apm-sdk-capabilities
+/integration-tests/telemetry.spec.js @DataDog/apm-sdk-capabilities
 
-/packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/config/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/config/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/opentracing/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/remote_config/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/baggage.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/baggage.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/sampler.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/sampler.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/priority_sampler.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/priority_sampler.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/ramdom_sampler.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/rate_limiter.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/sampling_rule.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/sampling_rule.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/span_sampler.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/analytics_sampler.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/custom-metrics.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/process-tags.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/runtime_metrics/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/runtime_metrics.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/scope.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/span_format.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/span_processor.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/span_stats.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/span_sampler.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/startup-log.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/tagger.spec.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/tracer.spec.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/src/config/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/config/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/opentracing/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/remote_config/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/src/baggage.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/baggage.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/src/sampler.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/sampler.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/src/priority_sampler.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/priority_sampler.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/ramdom_sampler.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/rate_limiter.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/src/sampling_rule.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/sampling_rule.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/src/span_sampler.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/analytics_sampler.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/custom-metrics.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/process-tags.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/src/runtime_metrics/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/runtime_metrics.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/scope.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/span_format.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/span_processor.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/span_stats.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/span_sampler.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/startup-log.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/tagger.spec.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/tracer.spec.js @DataDog/apm-sdk-capabilities
 
-/scripts/generate-config-types.js @DataDog/apm-sdk-capabilities-js
-/scripts/generate-supported-integrations.js @DataDog/apm-sdk-capabilities-js
-/scripts/verify-exercised-tests.js @DataDog/apm-sdk-capabilities-js
-/supported_versions_output.json @DataDog/apm-sdk-capabilities-js
-/supported_versions_table.csv @DataDog/apm-sdk-capabilities-js
+/scripts/generate-config-types.js @DataDog/apm-sdk-capabilities
+/scripts/generate-supported-integrations.js @DataDog/apm-sdk-capabilities
+/scripts/verify-exercised-tests.js @DataDog/apm-sdk-capabilities
+/supported_versions_output.json @DataDog/apm-sdk-capabilities
+/supported_versions_table.csv @DataDog/apm-sdk-capabilities
 
 # Feature Flagging
 /integration-tests/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
@@ -270,7 +270,7 @@
 /.github/workflows/stale.yml @Datadog/lang-platform-js
 /scripts/check-no-mcr-images.js @Datadog/lang-platform-js
 
-/.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
+/.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js
 /.github/workflows/aiguard.yml @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
@@ -367,4 +367,4 @@
 /scripts/** @DataDog/lang-platform-js
 
 # Multiple teams
-/eslint-rules/* @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js
+/eslint-rules/* @DataDog/apm-sdk-capabilities @DataDog/lang-platform-js
