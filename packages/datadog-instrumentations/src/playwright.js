@@ -2657,11 +2657,14 @@ function instrumentWorkerMainMethods (workerMain) {
       }
 
       // In cases where there is no afterEach hook with _ddHook, we need to add one
+      // Playwright 1.64 builds the hook step stack from hook.location, so an undefined
+      // location ends up as [undefined] and breaks trace writing
       if (!existAfterEachHook) {
         test.parent._hooks.push({
           type: 'afterEach',
           fn: cleanupRumPages,
           title: 'afterEach hook',
+          location: test.location,
           _ddHook: true,
         })
       }
