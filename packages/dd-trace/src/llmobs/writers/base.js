@@ -250,8 +250,6 @@ class BaseLLMObsWriter {
     const pendingFlushes = this.#pendingFlushes
     this.#pendingFlushes = []
     for (const done of pendingFlushes) this.flush(done)
-    // Appends may have requested a flush before discovery selected a route.
-    if (IS_STANDARD_AWS_LAMBDA) this.flush()
   }
 
   _getUrlAndPath () {

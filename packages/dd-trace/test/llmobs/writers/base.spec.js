@@ -188,49 +188,6 @@ describe('BaseLLMObsWriter', () => {
       assert.strictEqual(request.getCall(0).args[0], '{"events":[{"foo":"bar"}]}')
       assert.strictEqual(writer._buffer.events.length, 0)
     })
-
-    for (const agentless of [false, true]) {
-      it(`sends buffered events after discovering the ${agentless ? 'agentless' : 'agent proxy'} route`, () => {
-        writer = new BaseLLMObsWriter(options)
-        writer.makePayload = (events) => ({ events })
-        const events = [{ foo: 'first' }, { foo: 'second' }]
-        for (const event of events) writer.append(event)
-        writer.append({ foo: 'tenant' }, { apiKey: 'key-a', site: 'site-a.com' })
-
-        sinon.assert.notCalled(request)
-        writer.setAgentless(agentless)
-
-        sinon.assert.calledTwice(request)
-        assert.deepStrictEqual(JSON.parse(request.firstCall.args[0]), { events })
-        assert.strictEqual(request.firstCall.args[1].url.href,
-          agentless ? 'https://intake.site.com/' : 'http://localhost:8126/')
-        assert.strictEqual(request.firstCall.args[1].path,
-          agentless ? '/endpoint' : '/evp_proxy/v2/endpoint')
-        assert.deepStrictEqual(JSON.parse(request.secondCall.args[0]), { events: [{ foo: 'tenant' }] })
-        assert.strictEqual(request.secondCall.args[1].headers['DD-API-KEY'], 'key-a')
-
-        clock.tick(1000)
-        sinon.assert.calledTwice(request)
-      })
-    }
-
-    it('does not send an empty buffer after route discovery', () => {
-      writer = new BaseLLMObsWriter(options)
-      writer.setAgentless(false)
-
-      sinon.assert.notCalled(request)
-    })
-  })
-
-  it('keeps periodic batching after route discovery outside standard Lambda', () => {
-    writer = new BaseLLMObsWriter(options)
-    writer.makePayload = (events) => ({ events })
-    writer.append({ foo: 'bar' })
-    writer.setAgentless(false)
-
-    sinon.assert.notCalled(request)
-    clock.tick(1000)
-    sinon.assert.calledOnce(request)
   })
 
   it('does not append an event if the buffer is full', () => {
