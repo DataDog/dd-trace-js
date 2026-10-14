@@ -15,7 +15,7 @@ const patched = new WeakSet()
  * Registers every Mocha package view that can expose the constructor.
  *
  * @param {string[]} versions
- * @param {(Mocha: Function, frameworkVersion: string, moduleBaseDir: string) => Function} wrapMochaRun
+ * @param {(Mocha: Function, frameworkVersion: string, moduleBaseDir: string | undefined) => Function} wrapMochaRun
  */
 function addMochaRunHooks (versions, wrapMochaRun) {
   const patchedMochaConstructors = new WeakSet()
@@ -24,20 +24,20 @@ function addMochaRunHooks (versions, wrapMochaRun) {
    * @param {Function} Mocha
    * @param {string} frameworkVersion
    * @param {boolean | undefined} isIitm
-   * @param {{ moduleBaseDir: string }} hookMeta
+   * @param {{ moduleBaseDir: string } | undefined} hookMeta
    * @returns {Function}
    */
   function wrapMochaOnce (Mocha, frameworkVersion, isIitm, hookMeta) {
     if (patchedMochaConstructors.has(Mocha)) return Mocha
     patchedMochaConstructors.add(Mocha)
-    return wrapMochaRun(Mocha, frameworkVersion, hookMeta.moduleBaseDir)
+    return wrapMochaRun(Mocha, frameworkVersion, hookMeta?.moduleBaseDir)
   }
 
   /**
    * @param {object|Function} MochaPackage
    * @param {string} frameworkVersion
    * @param {boolean | undefined} isIitm
-   * @param {{ moduleBaseDir: string }} hookMeta
+   * @param {{ moduleBaseDir: string } | undefined} hookMeta
    * @returns {object|Function}
    */
   function wrapMochaPackage (MochaPackage, frameworkVersion, isIitm, hookMeta) {

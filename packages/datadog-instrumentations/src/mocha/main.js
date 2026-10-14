@@ -1,6 +1,7 @@
 'use strict'
 
 const { AsyncResource } = require('node:async_hooks')
+const { realpathSync } = require('node:fs')
 const { sep } = require('node:path')
 const { fileURLToPath } = require('node:url')
 
@@ -978,6 +979,9 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     if (runner.suite._onlyTests.length) {
       runner.suite._onlyTests = runner.suite.tests
     }
+    if (runner.suite._onlySuites.length) {
+      runner.suite._onlySuites = runner.suite._onlySuites.filter(suite => suitesToRun.includes(suite))
+    }
     areAllSuitesSkipped = isSuitesSkipped && numTestsToRun > 0 && runner.grepTotal(runner.suite) === 0
 
     skippedSuites = [...new Set([...filteredSuites.skippedSuites, ...filteredRootTests.skippedSuites])]
@@ -1126,12 +1130,12 @@ function runMochaRunner (run, runner, args) {
 /**
  * @param {Function} Mocha
  * @param {string} frameworkVersion
- * @param {string} moduleBaseDir
+ * @param {string | undefined} moduleBaseDir
  * @returns {Function}
  */
 function wrapMochaRun (Mocha, frameworkVersion, moduleBaseDir) {
   warnDeprecatedMochaVersion(frameworkVersion)
-  const mochaPathPrefix = moduleBaseDir + sep
+  const mochaPathPrefix = moduleBaseDir && moduleBaseDir + sep
 
   // Shimmer is required to attach listeners to the root suite created by each Mocha instance.
   shimmer.wrap(Mocha.prototype, 'ui', ui => function (...args) {
@@ -1155,9 +1159,9 @@ function wrapMochaRun (Mocha, frameworkVersion, moduleBaseDir) {
               const source = site.getFileName()
               if (!source || source.startsWith('node:')) continue
               const sourceFile = source.startsWith('file:') ? fileURLToPath(source) : source
-              if (sourceFile.startsWith(mochaPathPrefix)) continue
+              if (mochaPathPrefix && sourceFile.startsWith(mochaPathPrefix)) continue
               // Helpers register shared setup; only direct declarations belong to the loading test file.
-              if (sourceFile === file) hook.file = file
+              if (sourceFile === file || realpathSync(sourceFile) === realpathSync(file)) hook.file = file
               break
             }
           } catch (error) {

@@ -3663,6 +3663,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             hookType,
             expectedHooks: hookType.endsWith('Each') ? 2 : 1,
           },
+          {
+            name: `removes ${hookType} hooks from symlinked skipped files`,
+            files: [`top-level-it-skippable-${hookType}-link.js`, 'top-level-it-mixed2.js'],
+            skippedFiles: [`top-level-it-skippable-${hookType}-link.js`],
+            symlinkTarget: 'top-level-it-skippable-hook.js',
+            expectedTests: 2,
+            hookType,
+          },
         ]),
         ...['plugins-false', 'use-false'].flatMap(latePluginMode =>
           ['before', 'after', 'beforeEach', 'afterEach'].map(hookType => ({
@@ -3718,16 +3726,32 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           skippedFiles: ['top-level-it-shared-hooks.js'],
           expectedTests: 2,
         },
+        {
+          name: 'removes root hooks from a symlinked ES module while retaining other tests',
+          files: ['top-level-it-skippable-link.mjs', 'top-level-it-mixed2.js'],
+          skippedFiles: ['top-level-it-skippable-link.mjs'],
+          symlinkTarget: 'top-level-it-skippable.mjs',
+          expectedTests: 2,
+          esm: true,
+        },
+        {
+          name: 'runs bundled Mocha without module metadata and skips root-level tests',
+          files: ['top-level-it-no-describe.js', 'top-level-it-mixed2.js'],
+          skippedFiles: ['top-level-it-no-describe.js'],
+          expectedTests: 2,
+          bundled: true,
+        },
       ]) {
         const {
           name, files, skippedFiles, expectedTests = 0, args = '', esm = false,
-          hookType, expectedHooks = 0, rootHookPlugin = false, latePluginMode,
+          hookType, expectedHooks = 0, rootHookPlugin = false, latePluginMode, symlinkTarget, bundled = false,
         } = scenario
         // Mocha added native ES module loading in 7.1.0.
         const unsupportedEsm = esm && MOCHA_VERSION !== 'latest' && !satisfies(MOCHA_VERSION, '>=7.1.0')
         // Root hook plugins were introduced in Mocha 8.0.0.
         const runTest = unsupportedEsm || (rootHookPlugin && mochaMajor < 8) ? it.skip : it
         runTest(name, async () => {
+          if (symlinkTarget) fs.symlinkSync(symlinkTarget, path.join(cwd, fixtureRoot, files[0]))
           const suitesToSkip = files.filter(file => skippedFiles.includes(file) || file.includes('unskippable'))
           receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
           receiver.setSuitesToSkip(suitesToSkip.map(file => ({
@@ -3765,9 +3789,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const testFiles = files.map(file => `./${fixtureRoot}${file}`).join(' ')
           const command = latePluginMode
             ? 'node ./ci-visibility/run-mocha-late-plugin.js'
-            : 'node node_modules/mocha/bin/mocha'
+            : bundled ? 'node ./ci-visibility/run-mocha-bundler.js' : 'node node_modules/mocha/bin/mocha'
           const env = getCiVisAgentlessConfig(receiver.port)
-          if (latePluginMode) env.NODE_OPTIONS = undefined
+          if (latePluginMode || bundled) env.NODE_OPTIONS = undefined
           childProcess = exec(`${command} ${testFiles}${args}`, {
             cwd,
             env: {
@@ -3845,18 +3869,56 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       }
     })
 
+    for (const [exclusiveFile, retainedFiles] of [
+      ['top-level-it-exclusive.js', []],
+      ['top-level-it-mixed-only.js', []],
+      ['top-level-it-mixed-only.js', ['top-level-suite-retained-exclusive.js']],
+    ]) {
+      it(`cleans skipped exclusivity references for ${exclusiveFile} with ${retainedFiles.length} retained files`,
+        async () => {
+          const fixtureRoot = 'ci-visibility/mocha-plugin-tests/'
+          const skippedFile = fixtureRoot + exclusiveFile
+          receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
+          receiver.setSuitesToSkip([{ type: 'suite', attributes: { suite: skippedFile } }])
+          const files = [exclusiveFile, ...retainedFiles].map(file => fixtureRoot + file).join(' ')
+          childProcess = exec(`node ./ci-visibility/run-mocha-tia-cleanup.js ${files}`, {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, retainedFiles.length, testOutput)
+              assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'))
+              const suite = events.find(event => event.type === 'test_suite_end' &&
+                event.content.meta[TEST_SUITE] === skippedFile)?.content
+              assert.ok(suite, testOutput)
+              assert.strictEqual(suite.meta[TEST_STATUS], 'skip')
+            }
+          )
+          const [[exitCode]] = await Promise.all([once(childProcess, 'close'), eventsPromise])
+          assert.strictEqual(exitCode, 0, testOutput)
+          assert.match(testOutput, /EXCLUSIVITY REFERENCES CLEANED/)
+        })
+    }
+
     describe('TIA skipping on reused Mocha instances', () => {
       // Reuse requires cleanReferencesAfterRun(false), unavailable on Mocha 5.2.
       const reuseIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.0.0') ? it : it.skip
       const fixtureRoot = 'ci-visibility/mocha-plugin-tests/'
 
       for (const mode of ['changed-skip-list', 'disabled-plugin']) {
-        for (const hookType of ['before', 'after', 'beforeEach', 'afterEach', 'exclusive']) {
+        for (const hookType of ['before', 'after', 'beforeEach', 'afterEach', 'exclusive', 'exclusive-suite']) {
           reuseIt(`restores root tests and ${hookType} hooks for ${mode}`, async () => {
-            const exclusive = hookType === 'exclusive'
-            const file = fixtureRoot + (exclusive
-              ? 'top-level-it-reusable-exclusive.js'
-              : 'top-level-it-skippable-hook.js')
+            const exclusive = hookType.startsWith('exclusive')
+            const file = fixtureRoot + (hookType === 'exclusive-suite'
+              ? 'top-level-suite-retained-exclusive.js'
+              : exclusive ? 'top-level-it-reusable-exclusive.js' : 'top-level-it-skippable-hook.js')
             const retainedFile = fixtureRoot + 'top-level-it-mixed2.js'
             receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
             receiver.setSuitesToSkip([{ type: 'suite', attributes: { suite: file } }])
@@ -3909,8 +3971,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.match(testOutput, exclusive ? /1 passing/ : /4 passing/)
             assert.match(testOutput, /SECOND RUN FAILURES: 0/)
             if (exclusive) {
-              for (const type of ['before', 'after', 'beforeEach', 'afterEach']) {
-                assert.strictEqual(testOutput.split(`exclusive ${type} hook`).length - 1, 1, testOutput)
+              if (hookType === 'exclusive') {
+                for (const type of ['before', 'after', 'beforeEach', 'afterEach']) {
+                  assert.strictEqual(testOutput.split(`exclusive ${type} hook`).length - 1, 1, testOutput)
+                }
               }
             } else {
               const expectedHooks = hookType.endsWith('Each') ? 4 : 1
