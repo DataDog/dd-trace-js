@@ -2,8 +2,8 @@
 
 const assert = require('node:assert/strict')
 const path = require('path')
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../integration-tests/helpers')
+const HttpRequest = require('../setup/helpers/http-client')
 
 describe('RASP - downstream request integration', () => {
   let cwd, appFile
@@ -31,8 +31,8 @@ describe('RASP - downstream request integration', () => {
         ...envOverrides,
       },
     })
-    const axios = Axios.create({ baseURL: proc.url })
-    return { agent, proc, axios }
+    const httpRequest = HttpRequest.create({ baseURL: proc.url })
+    return { agent, proc, httpRequest }
   }
 
   async function teardownTest (agent, proc) {
@@ -131,7 +131,7 @@ describe('RASP - downstream request integration', () => {
 
   describe('Downstream configuration', () => {
     describe('with body sampling enabled', () => {
-      let agent, proc, axios
+      let agent, proc, httpRequest
 
       beforeEach(async function () {
         this.timeout(60000)
@@ -141,7 +141,7 @@ describe('RASP - downstream request integration', () => {
         })
         agent = setup.agent
         proc = setup.proc
-        axios = setup.axios
+        httpRequest = setup.httpRequest
       })
 
       afterEach(async () => {
@@ -152,7 +152,7 @@ describe('RASP - downstream request integration', () => {
         await Promise.all([
           assertMessage(agent),
           assertTelemetry(agent),
-          axios.post('/with-body'),
+          httpRequest.post('/with-body'),
         ])
       })
 
@@ -160,7 +160,7 @@ describe('RASP - downstream request integration', () => {
         await Promise.all([
           assertMessage(agent),
           assertTelemetry(agent),
-          axios.post('/with-readable'),
+          httpRequest.post('/with-readable'),
         ])
       })
 
@@ -168,7 +168,7 @@ describe('RASP - downstream request integration', () => {
         await Promise.all([
           assertMessage(agent),
           assertTelemetry(agent),
-          axios.post('/with-async-iterator'),
+          httpRequest.post('/with-async-iterator'),
         ])
       })
 
@@ -176,7 +176,7 @@ describe('RASP - downstream request integration', () => {
         await Promise.all([
           assertMessage(agent),
           assertTelemetry(agent),
-          axios.post('/with-body-form'),
+          httpRequest.post('/with-body-form'),
         ])
       })
 
@@ -184,7 +184,7 @@ describe('RASP - downstream request integration', () => {
         await Promise.all([
           assertMessage(agent, true, false),
           assertTelemetry(agent),
-          axios.post('/with-body-text'),
+          httpRequest.post('/with-body-text'),
         ])
       })
 
@@ -192,13 +192,13 @@ describe('RASP - downstream request integration', () => {
         await Promise.all([
           assertMessage(agent, true, true, 2),
           assertTelemetry(agent),
-          axios.post('/with-redirect'),
+          httpRequest.post('/with-redirect'),
         ])
       })
     })
 
     describe('with body sampling disabled', () => {
-      let agent, proc, axios
+      let agent, proc, httpRequest
 
       beforeEach(async function () {
         this.timeout(60000)
@@ -208,7 +208,7 @@ describe('RASP - downstream request integration', () => {
         })
         agent = setup.agent
         proc = setup.proc
-        axios = setup.axios
+        httpRequest = setup.httpRequest
       })
 
       afterEach(async () => {
@@ -220,13 +220,13 @@ describe('RASP - downstream request integration', () => {
         await Promise.all([
           assertMessage(agent, true, false),
           assertTelemetry(agent),
-          axios.post('/with-body'),
+          httpRequest.post('/with-body'),
         ])
       })
     })
 
     describe('with zero max count limit', () => {
-      let agent, proc, axios
+      let agent, proc, httpRequest
 
       beforeEach(async function () {
         this.timeout(60000)
@@ -236,7 +236,7 @@ describe('RASP - downstream request integration', () => {
         })
         agent = setup.agent
         proc = setup.proc
-        axios = setup.axios
+        httpRequest = setup.httpRequest
       })
 
       afterEach(async () => {
@@ -248,7 +248,7 @@ describe('RASP - downstream request integration', () => {
         await Promise.all([
           assertMessage(agent, true, false),
           assertTelemetry(agent),
-          axios.post('/with-body'),
+          httpRequest.post('/with-body'),
         ])
       })
     })

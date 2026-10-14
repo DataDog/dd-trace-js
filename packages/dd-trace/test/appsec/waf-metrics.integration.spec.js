@@ -4,11 +4,11 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { DDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../integration-tests/helpers')
+const HttpRequest = require('../setup/helpers/http-client')
 describe('WAF Metrics', () => {
-  let axios, cwd, appFile
+  let httpRequest, cwd, appFile
 
   useSandbox(
     ['express'],
@@ -35,7 +35,7 @@ describe('WAF Metrics', () => {
           DD_APPSEC_WAF_TIMEOUT: '0.1',
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -50,7 +50,7 @@ describe('WAF Metrics', () => {
         name: 'hey',
       }
 
-      await axios.post('/', body)
+      await httpRequest.post('/', body)
 
       const checkMessages = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.enabled'], 1)
@@ -101,7 +101,7 @@ describe('WAF Metrics', () => {
           DD_APPSEC_WAF_TIMEOUT: '1',
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -113,7 +113,7 @@ describe('WAF Metrics', () => {
       let appsecTelemetryMetricsReceived = false
 
       const complexPayload = createComplexPayload()
-      await axios.post('/', { complexPayload })
+      await httpRequest.post('/', { complexPayload })
 
       const checkMessages = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.enabled'], 1)
@@ -157,7 +157,7 @@ describe('WAF Metrics', () => {
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -168,7 +168,7 @@ describe('WAF Metrics', () => {
     it('should report waf.duration and waf.duration_ext once per request as distribution metrics', async () => {
       let appsecDistributionsReceived = false
 
-      await axios.post('/', { name: 'hey' })
+      await httpRequest.post('/', { name: 'hey' })
 
       const checkTelemetryDistributions = agent.assertTelemetryReceived({
         fn: ({ payload }) => {
@@ -210,7 +210,7 @@ describe('WAF Metrics', () => {
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -222,7 +222,7 @@ describe('WAF Metrics', () => {
       let appsecTelemetryMetricsReceived = false
 
       const complexPayload = createComplexPayload()
-      await axios.post('/', { complexPayload })
+      await httpRequest.post('/', { complexPayload })
 
       const checkMessages = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.enabled'], 1)

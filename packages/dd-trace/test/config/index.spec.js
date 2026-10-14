@@ -1268,6 +1268,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 50,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: undefined,
         DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
       },
@@ -1353,7 +1354,7 @@ describe('Config', () => {
     assert.deepStrictEqual(config.serviceMapping, {})
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
     assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
-    assert.strictEqual(config.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP.length, 626)
+    assert.strictEqual(config.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP.length, 837)
     assert.strictEqual(config.appsec.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP.length, 190)
     assert.strictEqual(config.appsec.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP.length, 578)
 
@@ -1408,6 +1409,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_PORT', value: 8125, origin: 'default' },
       { name: 'DD_DATA_STREAMS_ENABLED', value: false, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 50, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: null, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: '', origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: '', origin: 'default' },
@@ -1626,6 +1628,7 @@ describe('Config', () => {
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '20'
     process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
@@ -1761,6 +1764,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 20,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes.json',
         DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo', 'bar'],
         DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['a', 'b', 'c'],
@@ -1897,6 +1901,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_HOST', value: 'dsd-agent', origin: 'env_var' },
       { name: 'DD_DOGSTATSD_PORT', value: 5218, origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: true, origin: 'env_var' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 20, origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: 'probes.json', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: 'foo,bar', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'env_var' },
@@ -2122,6 +2127,41 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.pollInterval, -Infinity)
   })
 
+  it('should reject non-finite dynamic instrumentation evaluation timeouts', () => {
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = 'Infinity'
+
+    const config = getConfig({
+      dynamicInstrumentation: {
+        evaluationTimeoutMs: -Infinity,
+      },
+    })
+
+    assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 50)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: Infinity for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS (source: env_var), picked default'
+    )
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: -Infinity for dynamicInstrumentation.evaluationTimeoutMs (source: code), picked default'
+    )
+  })
+
+  it('should accept a zero dynamic instrumentation evaluation timeout and reject a negative one', () => {
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '0'
+
+    assert.strictEqual(getConfig().dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 0)
+    sinon.assert.notCalled(log.warn)
+
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '-1'
+
+    assert.strictEqual(getConfig().dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 50)
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'Invalid value: -1 for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS (source: env_var), picked default'
+    )
+  })
+
   it('should ignore undefined programmatic option values', () => {
     const config = getConfig({ startupLogs: undefined })
 
@@ -2301,6 +2341,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: true,
+        evaluationTimeoutMs: 30,
         probeFile: 'probes.json',
         redactedIdentifiers: ['foo', 'bar'],
         redactionExcludedIdentifiers: ['a', 'b', 'c'],
@@ -2414,6 +2455,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 30,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes.json',
         DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 0.1,
       },
@@ -2568,6 +2610,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_HOST', value: 'agent-dsd', origin: 'code' },
       { name: 'DD_DOGSTATSD_PORT', value: '5218', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: true, origin: 'code' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 30, origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: 'probes.json', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: 'foo,bar', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'code' },
@@ -2885,6 +2928,7 @@ describe('Config', () => {
     process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '20'
     process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
@@ -2979,6 +3023,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: false,
+        evaluationTimeoutMs: 30,
         probeFile: 'probes2.json',
         redactedIdentifiers: ['foo2', 'bar2'],
         redactionExcludedIdentifiers: ['a2', 'b2'],
@@ -3086,6 +3131,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 30,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes2.json',
         DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo2', 'bar2'],
         DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['a2', 'b2'],

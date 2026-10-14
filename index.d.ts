@@ -43,6 +43,21 @@ declare const BaseSummaryEvaluator: {
   new (name?: string): tracer.llmobs.BaseSummaryEvaluator
 }
 
+declare const RemoteEvaluatorError: {
+  new (message: string, options?: {
+    status?: string
+    backendError?: Record<string, tracer.llmobs.JSONType>
+  }): tracer.llmobs.RemoteEvaluatorError
+}
+
+declare const RemoteEvaluator: {
+  new (options: {
+    evalName: string
+    transformFn?: (context: tracer.llmobs.EvaluatorContext) => Record<string, tracer.llmobs.JSONType>
+  }): tracer.llmobs.RemoteEvaluator
+}
+
+
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
  */
@@ -1403,6 +1418,16 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       captureTimeoutMs?: number
+
+      /**
+       * Time budget in milliseconds for evaluating a probe's condition, log message template and capture expressions.
+       * An evaluation that exceeds the budget is reported as an evaluation error and the probe is not evaluated again
+       * for a while.
+       * @default 50
+       * @env DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      evaluationTimeoutMs?: number
 
       /**
        * Interval in seconds between uploads of probe data.
@@ -3912,12 +3937,6 @@ declare namespace tracer {
        * `DD_API_KEY` / `DD_APP_KEY` to be set.
        */
       experiments: Experiments,
-      BaseEvaluator: typeof BaseEvaluator,
-      BaseSummaryEvaluator: typeof BaseSummaryEvaluator,
-      EvaluatorContext: typeof EvaluatorContext,
-      SummaryEvaluatorContext: typeof SummaryEvaluatorContext,
-      EvaluatorResult: typeof EvaluatorResult,
-      MultiEvaluatorResult: typeof MultiEvaluatorResult,
 
       /** Prompt Management API. */
       prompts: Prompts,
@@ -3996,7 +4015,8 @@ declare namespace tracer {
 
       /**
        * Sets inputs, outputs, tags, metadata, and metrics as provided for a given LLM Observability span.
-       * Note that with the exception of tags, this method will override any existing values for the provided fields.
+       * Note that with the exception of tags and agent, this method will override any existing values for the provided fields.
+       * Agent fields update earlier agent annotations one top-level field at a time.
        *
        * For example:
        * ```javascript
@@ -4021,7 +4041,7 @@ declare namespace tracer {
        * ```
        *
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
-       * @param options An object containing the inputs, outputs, tags, metadata, tool definitions, and metrics to set on the span.
+       * @param options An object containing the inputs, outputs, tags, metadata, tool definitions, metrics, and agent to set on the span.
        */
       annotate (options: llmobs.AnnotationOptions): void
       annotate (span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
@@ -4298,6 +4318,14 @@ declare namespace tracer {
       prefix: boolean
     }
 
+    /** Error returned by a managed evaluator configured in Datadog. */
+    interface RemoteEvaluatorError extends Error {
+      status: string
+      backendError: Record<string, JSONType>
+    }
+
+    /** Evaluator that references an LLM-as-a-judge evaluator configured in Datadog. */
+    interface RemoteEvaluator extends BaseEvaluator {}
     interface ExperimentSummaryEvaluation extends EvaluatorResultOptions {
       value: any
       error: string | null
@@ -4576,6 +4604,14 @@ declare namespace tracer {
     }
 
     interface Experiments {
+      BaseEvaluator: typeof BaseEvaluator
+      BaseSummaryEvaluator: typeof BaseSummaryEvaluator
+      EvaluatorContext: typeof EvaluatorContext
+      SummaryEvaluatorContext: typeof SummaryEvaluatorContext
+      EvaluatorResult: typeof EvaluatorResult
+      MultiEvaluatorResult: typeof MultiEvaluatorResult
+      RemoteEvaluator: typeof RemoteEvaluator
+      RemoteEvaluatorError: typeof RemoteEvaluatorError
       /** Create a local dataset buffer; pushed on the first experiment run. */
       createDataset (name: string, description?: string): Dataset
       createDataset (name: string, options?: CreateDatasetOptions): Dataset
@@ -4596,12 +4632,12 @@ declare namespace tracer {
       /**
        * The input content associated with the span.
        */
-      input: { content: string, role?: string }[]
+      input: { content: JSONType, role?: string }[]
 
       /**
        * The output content associated with the span.
        */
-      output: { content: string, role?: string }[]
+      output: { content: JSONType, role?: string }[]
 
       /**
        * Get a tag from the span.
@@ -4931,6 +4967,81 @@ declare namespace tracer {
       version? : string
     }
 
+    interface AgentToolParameter {
+      type?: string,
+      required?: boolean
+    }
+
+    /**
+     * A plain JSON Schema object with `type: 'object'`, which is how it is told apart from a parameter map.
+     * Schema-library objects (for example Zod schemas) must be converted first, for example with
+     * `z.toJSONSchema()`, or they are dropped.
+     */
+    interface AgentToolJsonSchema {
+      type: 'object',
+      properties: { [param: string]: { type?: string, [key: string]: unknown } },
+      required?: string[]
+    }
+
+    interface AgentTool {
+      name: string,
+      description?: string,
+      /**
+       * Parameters as `{ [param]: { type, required } }`, or a JSON Schema object, which is flattened to the
+       * same shape.
+       */
+      parameters?: { [param: string]: AgentToolParameter } | AgentToolJsonSchema
+    }
+
+    /**
+     * Inference parameters reported in an agent manifest. Keys are accepted in snake_case or camelCase and
+     * reported in snake_case. Other keys are dropped, since provider-specific settings can carry secrets.
+     */
+    interface AgentModelSettings {
+      frequency_penalty?: number,
+      frequencyPenalty?: number,
+      logit_bias?: { [token: string]: number },
+      logitBias?: { [token: string]: number },
+      logprobs?: boolean,
+      max_tokens?: number,
+      maxTokens?: number,
+      parallel_tool_calls?: boolean,
+      parallelToolCalls?: boolean,
+      presence_penalty?: number,
+      presencePenalty?: number,
+      seed?: number,
+      stop_sequences?: string[],
+      stopSequences?: string[],
+      temperature?: number,
+      timeout?: number,
+      tool_choice?: string,
+      toolChoice?: string,
+      top_k?: number,
+      topK?: number,
+      top_logprobs?: number,
+      topLogprobs?: number,
+      top_p?: number,
+      topP?: number
+    }
+
+    /**
+     * Declares the agent an `agent` span represents, reported as the agent's manifest. Only applies to
+     * `agent` spans. Unreportable values are dropped with a warning, and unset values (`undefined`, `null`,
+     * `''`, `[]`) leave what an earlier annotation declared in place.
+     */
+    interface Agent {
+      /** The agent's name. Defaults to the agent span's name. */
+      name?: string,
+      /** The system instructions the agent runs with. */
+      instructions?: string,
+      /** The model the agent is configured to call. */
+      model?: string,
+      /** Inference parameters. Replaces the settings an earlier annotation declared as a whole. */
+      modelSettings?: AgentModelSettings,
+      /** The tools the agent can call. Replaces tools declared by an earlier annotation. */
+      tools?: AgentTool[]
+    }
+
     /**
      * Annotation options for LLM Observability spans.
      */
@@ -4981,7 +5092,12 @@ declare namespace tracer {
        * A list of ToolDefinition object that represents the tools available to the LLM for this span
        * Each definition requires a `name` and optionally accepts `description`, `schema`, and `version`.
        * */
-      toolDefinitions?: ToolDefinition[]
+      toolDefinitions?: ToolDefinition[],
+
+      /**
+       * Declares the agent this span represents. Only used on `agent` spans.
+       */
+      agent?: Agent
     }
 
     interface AnnotationContextOptions {
@@ -5006,6 +5122,13 @@ declare namespace tracer {
        * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
        */
       prompt?: Prompt,
+
+      /**
+       * Declares the agent running in this context, read when the context is entered. The manifest is
+       * reported on every `agent` span in the context, nested ones included. Use `annotate` on a nested agent
+       * span to declare its own agent.
+       */
+      agent?: Agent,
     }
 
     interface RoutingContextOptions {

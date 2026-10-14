@@ -3,7 +3,7 @@
 const { INCOMPLETE_REASON } = require('../../guardrail-metrics')
 const { LARGE_OBJECT_SKIP_THRESHOLD } = require('./constants')
 const { collectionSizeSym, largeCollectionSkipThresholdSym, fieldCountSym, timeBudgetSym } = require('./symbols')
-const { normalizeName, REDACTED_IDENTIFIERS } = require('./redaction')
+const { isRedactedIdentifier } = require('./redaction')
 
 module.exports = {
   processRawState: processProperties,
@@ -347,21 +347,16 @@ function arrayBufferToString (bytes, size) {
 }
 
 function shouldRedactProperty (prop) {
-  return REDACTED_IDENTIFIERS.has(getNormalizedNameFromProp(prop))
+  return isRedactedIdentifier(prop.name, prop.symbol !== undefined)
 }
 
 function shouldRedactMapValue (key) {
   const isSymbol = key.value.type === 'symbol'
   if (!isSymbol && key.value.type !== 'string') return false // WeakMaps uses objects as keys
-  const name = normalizeName(
+  return isRedactedIdentifier(
     isSymbol ? key.value.description : key.value.value,
     isSymbol
   )
-  return REDACTED_IDENTIFIERS.has(name)
-}
-
-function getNormalizedNameFromProp (prop) {
-  return normalizeName(prop.name, prop.symbol !== undefined)
 }
 
 function setNotCaptureReasonOnCollection (result, collection, incomplete) {

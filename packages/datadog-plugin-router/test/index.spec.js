@@ -4,11 +4,11 @@ const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const http = require('node:http')
 
-const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
@@ -81,7 +81,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/parent/child/123`)
               .catch(done)
           })
@@ -145,7 +145,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/parent/child/123`)
               .catch(done)
           })
@@ -170,7 +170,7 @@ describe('Plugin', () => {
           const httpd = server(router).listen(0, 'localhost')
           await once(httpd, 'listening')
           const port = httpd.address().port
-          const reqPromise = axios.get(`http://localhost:${port}/foo`)
+          const reqPromise = httpRequest.get(`http://localhost:${port}/foo`)
 
           return Promise.all([agentPromise, reqPromise])
         })
@@ -194,7 +194,7 @@ describe('Plugin', () => {
           const httpd = server(router, (req, res) => err => res.end()).listen(0, 'localhost')
           await once(httpd, 'listening')
           const port = httpd.address().port
-          const reqPromise = axios.get(`http://localhost:${port}/foo`)
+          const reqPromise = httpRequest.get(`http://localhost:${port}/foo`)
 
           return Promise.all([agentPromise, reqPromise])
         })

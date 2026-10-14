@@ -70,7 +70,7 @@ describe('getDebuggerConfig', function () {
 })
 
 describe('Debugger worker config', () => {
-  it('converts the canonical capture timeout to nanoseconds on initialization and update', () => {
+  it('converts the capture and evaluation timeouts to nanoseconds on initialization and update', () => {
     /** @type {((config: NonNullable<ReturnType<import('../../src/debugger/config')>>) => void) | undefined} */
     let onMessage
     const configPort = {
@@ -89,6 +89,7 @@ describe('Debugger worker config', () => {
             url: 'http://localhost:8126',
             dynamicInstrumentation: {
               DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: 15,
+              DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 50,
             },
           },
           parentThreadId: 42,
@@ -103,14 +104,17 @@ describe('Debugger worker config', () => {
     })
 
     assert.strictEqual(config.dynamicInstrumentation.captureTimeoutNs, 15_000_000n)
+    assert.strictEqual(config.dynamicInstrumentation.evaluationTimeoutNs, 50_000_000n)
     assert.ok(onMessage)
     onMessage({
       url: 'http://localhost:8126',
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: 30,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 20,
       },
     })
     assert.strictEqual(config.dynamicInstrumentation.captureTimeoutNs, 30_000_000n)
+    assert.strictEqual(config.dynamicInstrumentation.evaluationTimeoutNs, 20_000_000n)
     sinon.assert.calledOnce(processTags.initialize)
   })
 })

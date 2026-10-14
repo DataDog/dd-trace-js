@@ -5,8 +5,6 @@ const { execSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const axios = require('axios')
-
 const {
   FakeAgent,
   checkSpansForServiceName,
@@ -15,6 +13,7 @@ const {
   stopProc,
   useSandbox,
 } = require('../helpers')
+const httpRequest = require('../../packages/dd-trace/test/setup/helpers/http-client')
 
 for (const nextVersion of ['15.5.0', 'latest']) {
   describe(`Turbopack integration with Next.js ${nextVersion}`, () => {
@@ -66,7 +65,7 @@ for (const nextVersion of ['15.5.0', 'latest']) {
       }, 10_000, 1, true)
 
       const [response] = await Promise.all([
-        axios.get(`${proc.url}/api/cjs`),
+        httpRequest.get(`${proc.url}/api/cjs`),
         assertCommonJsTrace,
       ])
       assert.deepStrictEqual(response.data, { value: 'extensionless' })
@@ -77,7 +76,7 @@ for (const nextVersion of ['15.5.0', 'latest']) {
       }, 10_000, 1, true)
 
       const [esmResponse] = await Promise.all([
-        axios.get(`${proc.url}/api/esm`),
+        httpRequest.get(`${proc.url}/api/esm`),
         assertEsmTrace,
       ])
       assert.deepStrictEqual(esmResponse.data, { text: 'ok' })

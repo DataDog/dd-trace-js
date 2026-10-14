@@ -5,12 +5,11 @@ const { once } = require('node:events')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
-const Axios = require('axios')
-
+const HttpRequest = require('../packages/dd-trace/test/setup/helpers/http-client')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('./helpers')
 
 describe('Remote config client id', () => {
-  let axios, cwd, appFile
+  let httpRequest, cwd, appFile
 
   useSandbox(
     ['express'],
@@ -34,7 +33,7 @@ describe('Remote config client id', () => {
           DD_TRACE_AGENT_PORT: agent.port,
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -43,7 +42,7 @@ describe('Remote config client id', () => {
     })
 
     it('should add client_id tag when remote config is enabled', async () => {
-      await axios.get('/')
+      await httpRequest.get('/')
 
       return agent.assertMessageReceived(({ payload }) => {
         assert.ok(payload[0][0].meta['_dd.rc.client_id'])
@@ -53,7 +52,7 @@ describe('Remote config client id', () => {
     it('should include process tags in remote config requests', async () => {
       const request = once(agent, 'remote-config-request')
       // Trigger a request to ensure remote config is polled
-      await axios.get('/')
+      await httpRequest.get('/')
       const [{ client }] = await request
 
       assert.ok(client, 'client should exist in remote config request')
@@ -83,7 +82,7 @@ describe('Remote config client id', () => {
           DD_REMOTE_CONFIGURATION_ENABLED: 'false',
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -92,7 +91,7 @@ describe('Remote config client id', () => {
     })
 
     it('should not add client_id tag when remote config is disbaled', async () => {
-      await axios.get('/')
+      await httpRequest.get('/')
 
       return agent.assertMessageReceived(({ payload }) => {
         assert.ok(

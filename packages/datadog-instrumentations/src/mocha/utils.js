@@ -26,6 +26,7 @@ const shimmer = require('../../../datadog-shimmer')
 const testStartCh = channel('ci:mocha:test:start')
 const testFinishCh = channel('ci:mocha:test:finish')
 const testDiWaitCh = channel('ci:mocha:test:di:wait')
+const testAfterEachFinishCh = channel('ci:mocha:after-each:finish')
 // after a test has failed, we'll publish to this channel
 const testRetryCh = channel('ci:mocha:test:retry')
 const errorCh = channel('ci:mocha:test:error')
@@ -54,6 +55,7 @@ const testsQuarantined = new Set()
 const testsStatuses = new Map()
 const efdRetryCountByTestFullName = new Map()
 const efdSlowAbortedTests = new Set()
+const suiteHookFailureSuites = new Set()
 let dynamicAtrRetryCountByTest = new WeakMap()
 const attemptToFixExecutions = new Map()
 const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
@@ -343,6 +345,7 @@ function resetRunState (rootSuite) {
   testsStatuses.clear()
   efdRetryCountByTestFullName.clear()
   efdSlowAbortedTests.clear()
+  suiteHookFailureSuites.clear()
   dynamicAtrRetryCountByTest = new WeakMap()
   attemptToFixExecutions.clear()
   loggedAttemptToFixTests.clear()
@@ -379,7 +382,9 @@ function resetRunState (rootSuite) {
       delete test._ddTestFinishPublished
       delete test._ddIsFinalAttempt
       delete test._ddHookFailed
+      delete test._ddSuppressSyntheticTestLifecycle
       delete test._ddPendingRetry
+      delete test._ddPendingHookFailureFinish
       delete test._ddReporterStartFailed
       delete test._ddReporterTerminalFailed
       originalTests.push(test)
@@ -439,6 +444,21 @@ function recordTestAttempt (testsByFullName, test) {
   }
 }
 
+function recordRetryTrackedAttempt (test) {
+  const {
+    _ddIsAttemptToFix: isAttemptToFix,
+    _ddIsModified: isModified,
+    _ddIsNew: isNew,
+  } = test
+
+  if (isNew) {
+    recordTestAttempt(newTests, test)
+  }
+  if (!isAttemptToFix && (isNew || isModified)) {
+    recordTestAttempt(efdTests, test)
+  }
+}
+
 function getTestStatus (test) {
   if (test.isPending()) {
     return 'skip'
@@ -474,6 +494,15 @@ function startTestFinish (test) {
 
   test._ddTestFinishStarted = true
   return true
+}
+
+function hasHandledHookFailure (test) {
+  return test._ddHookFailed && (test._ddTestFinishPublished || test._ddPendingHookFailureFinish)
+}
+
+function suppressSyntheticTestLifecycle (test) {
+  test._ddSuppressSyntheticTestLifecycle = true
+  test._ddTestFinishPublished = true
 }
 
 /**
@@ -571,6 +600,14 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       }
     }
 
+    const failedTestReplayPromise = (isTestHook || this.type === 'test') &&
+      test._retriedTest?._ddFailedTestReplayPromise
+    if (failedTestReplayPromise) {
+      delete test._retriedTest._ddFailedTestReplayPromise
+      const runRunnable = () => run.apply(this, args)
+      return failedTestReplayPromise.then(runRunnable, runRunnable)
+    }
+
     return run.apply(this, args)
   })
   return RunnablePackage
@@ -578,6 +615,8 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
 
 function getOnTestHandler (isMain) {
   return function (test) {
+    if (test._ddSuppressSyntheticTestLifecycle || hasHandledHookFailure(test)) return
+
     const testStartLine = testToStartLine.get(test)
 
     // This may be a retry. If this is the case, `test.fn` is already wrapped,
@@ -585,6 +624,12 @@ function getOnTestHandler (isMain) {
     restoreRunnableFunction(test)
 
     inheritDatadogPropertiesFromRetriedTest(test)
+
+    if (isInFailedSuite(test.parent)) {
+      recordRetryTrackedAttempt(test)
+      suppressSyntheticTestLifecycle(test)
+      return
+    }
 
     const {
       file: testSuiteAbsolutePath,
@@ -636,13 +681,8 @@ function getOnTestHandler (isMain) {
         loggedAttemptToFixTests
       )
     }
-    // We want to store the result of the new tests
-    if (isNew) {
-      recordTestAttempt(newTests, test)
-    }
-    if (!isAttemptToFix && (isNew || isModified)) {
-      recordTestAttempt(efdTests, test)
-    }
+    // Keep retry accounting aligned with Mocha's runner failure counts.
+    recordRetryTrackedAttempt(test)
 
     if (!isAttemptToFix && isDisabled) {
       if (!originalPendingByTest.has(test)) {
@@ -655,6 +695,14 @@ function getOnTestHandler (isMain) {
     testToContext.set(test.fn, ctx)
     testStartCh.runStores(ctx, () => {})
   }
+}
+
+function isInFailedSuite (suite) {
+  while (suite) {
+    if (suiteHookFailureSuites.has(suite)) return true
+    suite = suite.parent
+  }
+  return false
 }
 
 function getFinalStatus ({
@@ -842,7 +890,7 @@ function getTestFinishInfo (test, status, config, error) {
 
 function getOnTestEndHandler (config, finalAttemptHandlers) {
   return async function (test) {
-    if (test._ddShouldSkipEfdRetry) {
+    if (test._ddShouldSkipEfdRetry || test._ddSuppressSyntheticTestLifecycle || hasHandledHookFailure(test)) {
       return
     }
     const shouldWaitForHitProbe = test._retriedTest?._ddShouldWaitForHitProbe
@@ -880,24 +928,33 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
       finalAttemptHandlers?.onStart?.(test)
     }
 
+    const finish = () => {
+      if (shouldFinishTest) {
+        test._ddTestFinishPublished = true
+        testFinishCh.publish({
+          status,
+          hasBeenRetried: isMochaRetry(test),
+          isLastRetry: getIsLastRetry(test),
+          ...testFinishInfo,
+          ...ctx.currentStore,
+        })
+      }
+
+      if (isFinalAttempt) {
+        finalAttemptHandlers?.onFinish?.(test)
+      }
+    }
+
     if (shouldWaitForHitProbe) {
-      await waitForHitProbe()
+      const waitForHitProbePromise = waitForHitProbe()
+      if (shouldFinishTest && config.isTestFailureVideosEnabled && !test.isPending()) {
+        // Mocha does not await test-end listeners. Its hookUp continuation must wait even without teardown hooks.
+        test._ddDeferredHookEnd = { waitForHitProbePromise, publishTestFinish: finish }
+        return
+      }
+      await waitForHitProbePromise
     }
-
-    if (shouldFinishTest) {
-      test._ddTestFinishPublished = true
-      testFinishCh.publish({
-        status,
-        hasBeenRetried: isMochaRetry(test),
-        isLastRetry: getIsLastRetry(test),
-        ...testFinishInfo,
-        ...ctx.currentStore,
-      })
-    }
-
-    if (isFinalAttempt) {
-      finalAttemptHandlers?.onFinish?.(test)
-    }
+    finish()
   }
 }
 
@@ -978,17 +1035,30 @@ function finishDeferredHookEnd (test) {
  * @returns {unknown}
  */
 function runFailedTestReplayHookUpCallback (fn, test, failedTestReplayPromise, hookThis, args) {
+  if (test._ddPendingHookFailureFinish) {
+    // Mocha restarts teardown at the failed suite's parent. Only the last hookUp completes the attempt.
+    const failedSuite = /** @type {import('mocha').Suite|undefined} */ (args[1])
+    if (args[0] && failedSuite?.parent) return fn.apply(hookThis, /** @type {unknown[]} */ (args))
+    const finish = test._ddPendingHookFailureFinish
+    delete test._ddPendingHookFailureFinish
+    finish()
+  }
   const pendingRetry = test._ddPendingRetry
   if (pendingRetry) {
     delete test._ddPendingRetry
     failedTestReplayPromise = pendingRetry()
   }
+  const continueAfterCapture = () => {
+    const context = { onDone: () => fn.apply(hookThis, args), isWaiting: false }
+    testAfterEachFinishCh.publish(context)
+    return context.isWaiting ? undefined : context.onDone()
+  }
   const continueAfterProbe = () => {
     const deferredHookEndPromise = finishDeferredHookEnd(test)
     if (deferredHookEndPromise) {
-      return deferredHookEndPromise.then(() => fn.apply(hookThis, args), () => fn.apply(hookThis, args))
+      return deferredHookEndPromise.then(continueAfterCapture, continueAfterCapture)
     }
-    return fn.apply(hookThis, args)
+    return continueAfterCapture()
   }
 
   if (failedTestReplayPromise) {
@@ -1037,15 +1107,23 @@ function getOnFailHandler (isMain, config) {
     const testFile = testOrHook.file
     let test = testOrHook
     const isHook = testOrHook.type === 'hook'
+    const isBeforeEachHook = isHook && testOrHook.parent?._beforeEach?.includes(testOrHook)
+    const isAfterEachHook = isHook && testOrHook.parent?._afterEach?.includes(testOrHook)
+    const isTestHook = isBeforeEachHook || isAfterEachHook
+    if (isHook && !isTestHook && testOrHook.parent) {
+      suiteHookFailureSuites.add(testOrHook.parent)
+    }
     if (isHook && testOrHook.ctx) {
       test = testOrHook.ctx.currentTest
     }
     let testContext
     if (test) {
+      if (!isHook && (test._ddSuppressSyntheticTestLifecycle || hasHandledHookFailure(test))) return
+
       testContext = getTestContext(test)
     }
     if (testContext) {
-      if (isHook && startTestFinish(test)) {
+      if (isTestHook && startTestFinish(test)) {
         delete test._ddPendingRetry
         const hookError = new Error(`${testOrHook.fullTitle()}: ${err.message}`, { cause: err })
         hookError.name = err.name
@@ -1054,17 +1132,27 @@ function getOnFailHandler (isMain, config) {
         errorCh.runStores(testContext, () => {})
         // Mocha marks the hook failed, so record the test failure before computing final metadata.
         test._ddHookFailed = true
-        const testFinishInfo = getTestFinishInfo(test, 'fail', config, hookError)
-        if (testFinishInfo.finalStatus !== undefined) {
-          test._ddIsFinalAttempt = true
+        if (isBeforeEachHook && testOrHook.parent) {
+          suiteHookFailureSuites.add(testOrHook.parent)
         }
-        test._ddTestFinishPublished = true
-        testFinishCh.publish({
-          status: 'fail',
-          hasBeenRetried: isMochaRetry(test),
-          ...testFinishInfo,
-          ...testContext.currentStore,
-        })
+        const finish = () => {
+          const testFinishInfo = getTestFinishInfo(test, 'fail', config, testContext.err)
+          if (testFinishInfo.finalStatus !== undefined) {
+            test._ddIsFinalAttempt = true
+          }
+          test._ddTestFinishPublished = true
+          testFinishCh.publish({
+            status: 'fail',
+            hasBeenRetried: isMochaRetry(test),
+            ...testFinishInfo,
+            ...testContext.currentStore,
+          })
+        }
+        if (config.isTestFailureVideosEnabled) {
+          test._ddPendingHookFailureFinish = finish
+        } else {
+          finish()
+        }
       } else {
         testContext.err = err
         errorCh.runStores(testContext, () => {})
@@ -1105,7 +1193,7 @@ function getOnTestRetryHandler (config) {
       test._retries = dynamicCount
     }
 
-    if (config.isFlakyTestRetriesEnabled && getAfterEachHooks(test).length) {
+    if ((config.isFlakyTestRetriesEnabled || config.isTestFailureVideosEnabled) && getAfterEachHooks(test).length) {
       // Mocha queues retries before afterEach; a hook failure can still cancel the retry.
       test._ddPendingRetry = () => publishTestRetry(test, err, config)
       return
