@@ -554,6 +554,32 @@ describe('Safe payload capture', () => {
     assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
   })
 
+  it('suppresses data-dependent rules for binary and opaque payloads while keeping structural tags', () => {
+    const input = {
+      Body: Buffer.from('abc'),
+      at: new Date(1234),
+      pairs: new Map(),
+      ETag: '"etag"',
+      token: 's3cret',
+    }
+    const structural = { expand: [], request: [], response: ['$.token'] }
+    const dependent = { expand: [], request: [], response: ['$..[?(@.token)]'] }
+
+    // Binary and opaque leaves mark the capture incomplete even when nothing
+    // is discarded, so data-dependent rules suppress and only structural
+    // rules keep partial tags. Date, Map and Set leaves render no tags.
+    assert.deepStrictEqual(computeTags(structural, input, responseOpts), {
+      'aws.response.body.Body': 'abc',
+      'aws.response.body.ETag': '"etag"',
+      'aws.response.body.token': 'redacted',
+      '_dd.payload_tags_incomplete': true,
+    })
+    assert.deepStrictEqual(computeTags(dependent, input, responseOpts), {})
+    assert.strictEqual(input.Body.toString('hex'), '616263')
+    assert.strictEqual(input.at.getTime(), 1234)
+    assert.strictEqual(input.pairs.size, 0)
+  })
+
   it('should bound traversal depth independently of the output max depth', () => {
     let deep = /** @type {unknown} */ ({ leaf: true })
     for (let i = 0; i < 150; i++) {
@@ -1273,7 +1299,9 @@ describe('Safe payload capture', () => {
           const snapshot = createSafeSnapshot({ a: leaf, b: leaf })
           const { a, b } = /** @type {Record<string, object>} */ (snapshot.value)
 
-          assert.strictEqual(snapshot.incomplete, false)
+          // An opaque leaf always marks the capture incomplete, even with no
+          // discarded fields or contents.
+          assert.strictEqual(snapshot.incomplete, true)
           assert.notStrictEqual(a, leaf)
           assert.notStrictEqual(b, leaf)
           assert.notStrictEqual(a, b)
@@ -1302,7 +1330,7 @@ describe('Safe payload capture', () => {
       const snapshot = createSafeSnapshot(date)
       assert.notStrictEqual(snapshot.value, date)
       assert.ok(Number.isNaN(Date.prototype.getTime.call(snapshot.value)))
-      assert.strictEqual(snapshot.incomplete, false)
+      assert.strictEqual(snapshot.incomplete, true)
     })
 
     for (const name of ['Map', 'Set']) {
@@ -1399,15 +1427,18 @@ describe('Safe payload capture', () => {
       assert.deepStrictEqual(tags, {
         'aws.response.body.Body.0': '104',
         'aws.response.body.Body.1': '105',
+        '_dd.payload_tags_incomplete': true,
       })
     })
 
-    it('should accept a binary value at the last byte of the copy budget', () => {
+    it('should accept a binary value at the last byte of the copy budget and flag incompleteness', () => {
       const body = Buffer.alloc(1_000_000, 120)
       const tags = computeTags(safeConfig, { Body: body }, responseOpts)
 
       assert.strictEqual(tags['aws.response.body.Body'], 'x'.repeat(5000))
-      assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
+      // A within-budget copy still normalizes the value, so the capture is
+      // incomplete under the simplified completeness contract.
+      assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
     })
 
     it('should keep the rendered prefix of a Buffer at the first byte beyond the copy budget', () => {
@@ -1550,20 +1581,24 @@ describe('Safe payload capture', () => {
         }
 
         for (const length of [0, 2]) {
-          it(`keeps full-range ${kind} metadata complete with ${length} bytes`, () => {
+          it(`suppresses metadata predicates for full-range ${kind} with ${length} bytes`, () => {
             const backing = new ArrayBuffer(length)
             const bytes = makeView(kind, backing, 0, length)
             const input = { items: [{ bytes, secret: 'customer-secret' }] }
             const rule = `$.items[?(@.bytes.byteOffset === 0 && @.bytes.buffer.byteLength === ${length})].secret`
 
+            // Every binary normalization marks the capture incomplete, so a
+            // metadata predicate on the copy can no longer decide redaction.
             const snapshot = createSafeSnapshot(input)
-            assert.strictEqual(snapshot.incomplete, false)
+            assert.strictEqual(snapshot.incomplete, true)
             const items = /** @type {{ items: Array<{ bytes: Uint8Array | DataView }> }} */ (snapshot.value).items
             const copy = items[0].bytes
             assert.notStrictEqual(copy.buffer, backing)
-            const tags = computeTags({ ...safeConfig, response: [rule] }, input, responseOpts)
+            assert.deepStrictEqual(computeTags({ ...safeConfig, response: [rule] }, input, responseOpts), {})
+            // Structural rules still produce partial tags with the flag.
+            const tags = computeTags({ ...safeConfig, response: ['$.items[*].secret'] }, input, responseOpts)
             assert.strictEqual(tags['aws.response.body.items.0.secret'], 'redacted')
-            assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
+            assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
             assert.strictEqual(input.items[0].secret, 'customer-secret')
           })
         }
@@ -2033,7 +2068,7 @@ describe('Safe payload capture', () => {
 
       const snapshot = createSafeSnapshot({ Body: body })
 
-      assert.strictEqual(snapshot.incomplete, false)
+      assert.strictEqual(snapshot.incomplete, true)
       const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
       assert.strictEqual(copy.byteLength, 3)
       assert.deepStrictEqual(Array.from(copy), [97, 98, 99])
@@ -2076,7 +2111,7 @@ describe('Safe payload capture', () => {
 
         const snapshot = createSafeSnapshot({ Body: body })
 
-        assert.strictEqual(snapshot.incomplete, false, Kind.name)
+        assert.strictEqual(snapshot.incomplete, true, Kind.name)
         const copy = /** @type {{ Body: Uint8Array }} */ (snapshot.value).Body
         assert.strictEqual(copy.constructor, Kind, Kind.name)
         assert.deepStrictEqual(Array.from(copy), Array.from(body), Kind.name)
@@ -2089,7 +2124,7 @@ describe('Safe payload capture', () => {
 
       const snapshot = createSafeSnapshot({ Body: body })
 
-      assert.strictEqual(snapshot.incomplete, false)
+      assert.strictEqual(snapshot.incomplete, true)
       const copy = /** @type {{ Body: BigUint64Array }} */ (snapshot.value).Body
       assert.strictEqual(copy.constructor, BigUint64Array)
       assert.deepStrictEqual(Array.from(copy), [0n, 0xffff_ffff_ffff_ffffn])
@@ -2258,9 +2293,9 @@ describe('Safe payload capture', () => {
 
   describe('suppression diagnostics', () => {
     const snapshotMessage =
-      'Omitting payload tags: the snapshot was truncated and the rules are data-dependent'
+      'Omitting payload tags: the capture was incomplete and the rules are data-dependent'
     const expansionMessage =
-      'Omitting payload tags: expansion was truncated and the rules are data-dependent'
+      'Omitting payload tags: expansion was incomplete and the rules are data-dependent'
 
     afterEach(() => {
       sinon.restore()
