@@ -600,6 +600,50 @@ describe('webdriverio instrumentation', () => {
     }
   }
 
+  for (const error of [null, undefined, 'capability failure']) {
+    it(`preserves capabilities when prompt handling throws ${error}`, async () => {
+      require('../src/webdriverio')
+      const previous = process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+      process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
+      const finishCh = channel('ci:mocha:test:finish')
+      const capabilitiesCh = channel('ci:webdriverio:video:capabilities')
+      const onFinish = () => {}
+      const onCapabilities = ctx => { ctx.enabled = true }
+      finishCh.subscribe(onFinish)
+      capabilitiesCh.subscribe(onCapabilities)
+      const logError = sinon.stub(log, 'error')
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-prompt-error-'))
+      const outputPath = path.join(directory, 'index.mjs')
+      const source = fs.readFileSync(runnerFixturePath, 'utf8')
+      fs.writeFileSync(outputPath, rewriter.rewrite(source, runnerFixtureModulePath, 'module'))
+      try {
+        const { Runner } = await import(pathToFileURL(outputPath))
+        const getter = Object.defineProperty({}, 'unhandledPromptBehavior', { get () { throw error } })
+        const proxy = new Proxy({}, { ownKeys () { throw error } })
+        for (const caps of [getter, proxy]) {
+          for (const flag of [undefined, '_isMultiremote', '_isMultiRemote']) {
+            const runner = new Runner()
+            const mutable = { browserName: 'chrome' }
+            const input = flag ? { first: { capabilities: mutable }, second: { capabilities: caps } } : caps
+            if (flag) runner[flag] = true
+            logError.resetHistory()
+            assert.strictEqual(await runner._startSession({ framework: 'mocha' }, input), input)
+            assert.deepStrictEqual(mutable, { browserName: 'chrome' })
+            sinon.assert.calledOnceWithExactly(logError,
+              'Error configuring WebdriverIO video prompt handling: %s', String(error))
+          }
+        }
+      } finally {
+        if (previous === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+        else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = previous
+        finishCh.unsubscribe(onFinish)
+        capabilitiesCh.unsubscribe(onCapabilities)
+        logError.restore()
+        fs.rmSync(directory, { recursive: true, force: true })
+      }
+    })
+  }
+
   for (const canUpload of [undefined, false, true]) {
     for (const hasFfmpeg of [false, true, 'without libvpx']) {
       it(`gates video prompt handling on upload=${canUpload} and FFmpeg=${hasFfmpeg}`, async () => {

@@ -1999,7 +1999,7 @@ function configureVideoPromptBehavior (context) {
       }))
       : withDefault(capabilities)
   } catch (error) {
-    log.error('Error configuring WebdriverIO video prompt handling: %s', error.message)
+    log.error('Error configuring WebdriverIO video prompt handling: %s', error?.message || String(error))
   }
 }
 
