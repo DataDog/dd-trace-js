@@ -354,12 +354,11 @@
 
 /scripts/generate-config-types.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /scripts/generate-supported-integrations.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
+/scripts/generate-supported-integrations.spec.mjs @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /scripts/helpers/test-file-index.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /scripts/helpers/test-file-index.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /scripts/verify-exercised-tests.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /scripts/verify-exercised-tests.spec.mjs @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
-/supported_versions_output.json @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
-/supported_versions_table.csv @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 
 # Feature Flagging
 /integration-tests/esbuild/*openfeature* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
