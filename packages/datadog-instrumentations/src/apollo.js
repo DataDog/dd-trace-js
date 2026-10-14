@@ -18,6 +18,7 @@ const CHANNELS = {
 }
 
 const generalErrorCh = channel('apm:apollo:gateway:general:error')
+const patchedGateways = new WeakSet()
 
 function wrapApolloGateway (ApolloGateway) {
   class ApolloGatewayWrapper extends ApolloGateway {
@@ -96,6 +97,8 @@ addHook({ name: '@apollo/gateway', file: 'dist/utilities/opentelemetry.js', vers
   })
 
 addHook({ name: '@apollo/gateway', versions: ['>=2.3.0'] }, (gateway) => {
+  if (patchedGateways.has(gateway.ApolloGateway)) return gateway
   shimmer.wrap(gateway, 'ApolloGateway', wrapApolloGateway)
+  patchedGateways.add(gateway.ApolloGateway)
   return gateway
 })

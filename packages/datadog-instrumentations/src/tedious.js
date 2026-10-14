@@ -14,6 +14,8 @@ const {
 // moved to AsyncLocalStorage. tedious' own internal listeners are attached before `getRowStream`
 // returns, so only caller listeners are bound.
 const ROW_STREAM_LISTENER_METHODS = ['addListener', 'on', 'once', 'prependListener', 'prependOnceListener']
+const patchedConnections = new WeakSet()
+const patchedBulkLoads = new WeakSet()
 
 function bindRowStreamListeners (rowStream) {
   for (const method of ROW_STREAM_LISTENER_METHODS) {
@@ -28,52 +30,59 @@ function bindRowStreamListeners (rowStream) {
 }
 
 addHook({ name: 'tedious', versions: ['>=1.0.0'] }, tedious => {
+  const connectionProto = tedious.Connection.prototype
+
   const startCh = channel('apm:tedious:request:start')
   const finishCh = channel('apm:tedious:request:finish')
   const errorCh = channel('apm:tedious:request:error')
 
-  if (typeof tedious.BulkLoad?.prototype?.getRowStream === 'function') {
-    shimmer.wrap(tedious.BulkLoad.prototype, 'getRowStream', getRowStream => function () {
+  const bulkLoadProto = tedious.BulkLoad?.prototype
+  if (typeof bulkLoadProto?.getRowStream === 'function' && !patchedBulkLoads.has(bulkLoadProto)) {
+    patchedBulkLoads.add(bulkLoadProto)
+    shimmer.wrap(bulkLoadProto, 'getRowStream', getRowStream => function () {
       return bindRowStreamListeners(getRowStream.apply(this, arguments))
     })
   }
 
-  shimmer.wrap(tedious.Connection.prototype, 'makeRequest', makeRequest => function (request) {
-    if (!startCh.hasSubscribers) {
-      return makeRequest.apply(this, arguments)
-    }
+  if (!patchedConnections.has(connectionProto)) {
+    patchedConnections.add(connectionProto)
+    shimmer.wrap(connectionProto, 'makeRequest', makeRequest => function (request) {
+      if (!startCh.hasSubscribers) {
+        return makeRequest.apply(this, arguments)
+      }
 
-    const [queryOrProcedure, queryParent, queryField] = getQueryOrProcedure(request)
+      const [queryOrProcedure, queryParent, queryField] = getQueryOrProcedure(request)
 
-    if (!queryOrProcedure) {
-      return makeRequest.apply(this, arguments)
-    }
+      if (!queryOrProcedure) {
+        return makeRequest.apply(this, arguments)
+      }
 
-    const connectionConfig = this.config
-    const ctx = { queryOrProcedure, connectionConfig }
+      const connectionConfig = this.config
+      const ctx = { queryOrProcedure, connectionConfig }
 
-    return startCh.runStores(ctx, () => {
-      queryParent[queryField] = ctx.sql
+      return startCh.runStores(ctx, () => {
+        queryParent[queryField] = ctx.sql
 
-      const cb = request.callback
-      request.callback = function (error, ...args) {
-        if (error) {
+        const cb = request.callback
+        request.callback = function (error, ...args) {
+          if (error) {
+            ctx.error = error
+            errorCh.publish(ctx)
+          }
+          return finishCh.runStores(ctx, cb, this, error, ...args)
+        }
+
+        try {
+          return makeRequest.apply(this, arguments)
+        } catch (error) {
           ctx.error = error
           errorCh.publish(ctx)
+
+          throw error
         }
-        return finishCh.runStores(ctx, cb, this, error, ...args)
-      }
-
-      try {
-        return makeRequest.apply(this, arguments)
-      } catch (error) {
-        ctx.error = error
-        errorCh.publish(ctx)
-
-        throw error
-      }
+      })
     })
-  })
+  }
 
   return tedious
 })

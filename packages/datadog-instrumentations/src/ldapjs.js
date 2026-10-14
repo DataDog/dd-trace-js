@@ -7,6 +7,8 @@ const {
   AsyncResource,
 } = require('./helpers/instrument')
 
+const patched = new WeakSet()
+
 function isString (value) {
   // eslint-disable-next-line unicorn/no-instanceof-builtins
   return typeof value === 'string' || value instanceof String
@@ -54,10 +56,15 @@ function wrapEmitter (corkedEmitter) {
   shimmer.wrap(corkedEmitter, 'removeListener', removeListener)
 }
 
+// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
+  const proto = ldapjs.Client.prototype
+  if (patched.has(proto)) return ldapjs
+  patched.add(proto)
+
   const ldapSearchCh = channel('datadog:ldapjs:client:search')
 
-  shimmer.wrap(ldapjs.Client.prototype, 'search', search => function (base, options) {
+  shimmer.wrap(proto, 'search', search => function (base, options) {
     if (ldapSearchCh.hasSubscribers) {
       let filter
       if (isString(options)) {
@@ -71,7 +78,7 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
     return search.apply(this, arguments)
   })
 
-  shimmer.wrap(ldapjs.Client.prototype, '_send', _send => function (...args) {
+  shimmer.wrap(proto, '_send', _send => function (...args) {
     const callbackIndex = getCallbackArgIndex(args)
     if (callbackIndex > -1) {
       const callback = args[callbackIndex]
@@ -87,7 +94,7 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
     return _send.apply(this, args)
   })
 
-  shimmer.wrap(ldapjs.Client.prototype, 'bind', bind => function (dn, password, controls, callback) {
+  shimmer.wrap(proto, 'bind', bind => function (dn, password, controls, callback) {
     if (typeof controls === 'function') {
       arguments[2] = AsyncResource.bind(controls)
     } else if (typeof callback === 'function') {

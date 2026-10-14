@@ -12,9 +12,17 @@ const errorCh = channel('apm:cassandra-driver:query:error')
 const connectCh = channel('apm:cassandra-driver:query:connect')
 
 let startCtx = {}
+const patchedBatch = new WeakSet()
+const patchedExecute = new WeakSet()
+const patchedInnerExecute = new WeakSet()
 
+// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
-  shimmer.wrap(cassandra.Client.prototype, 'batch', batch => function (queries, options, callback) {
+  const proto = cassandra.Client.prototype
+  if (patchedBatch.has(proto)) return cassandra
+  patchedBatch.add(proto)
+
+  shimmer.wrap(proto, 'batch', batch => function (queries, options, callback) {
     if (!startCh.hasSubscribers) {
       return batch.apply(this, arguments)
     }
@@ -48,8 +56,13 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
   return cassandra
 })
 
+// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'cassandra-driver', versions: ['>=4.4'], patchDefault: false }, (cassandra) => {
-  shimmer.wrap(cassandra.Client.prototype, '_execute', _execute => function (query, params, execOptions, callback) {
+  const proto = cassandra.Client.prototype
+  if (patchedExecute.has(proto)) return cassandra
+  patchedExecute.add(proto)
+
+  shimmer.wrap(proto, '_execute', _execute => function (query, params, execOptions, callback) {
     if (!startCh.hasSubscribers) {
       return _execute.apply(this, arguments)
     }
@@ -71,8 +84,13 @@ const isValid = (args) => {
   return args.length === 4 || typeof args[3] === 'function'
 }
 
+// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'], patchDefault: false }, (cassandra) => {
-  shimmer.wrap(cassandra.Client.prototype, '_innerExecute', _innerExecute =>
+  const proto = cassandra.Client.prototype
+  if (patchedInnerExecute.has(proto)) return cassandra
+  patchedInnerExecute.add(proto)
+
+  shimmer.wrap(proto, '_innerExecute', _innerExecute =>
     function (query, params, execOptions, callback) {
       if (!startCh.hasSubscribers) {
         return _innerExecute.apply(this, arguments)

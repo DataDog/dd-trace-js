@@ -13,9 +13,13 @@ const azureDurableFunctionsChannel = dc.tracingChannel('datadog:azure:durable-fu
 
 const ORCHESTRATION_TRIGGER_TYPE = 'orchestrationTrigger'
 const ORCHESTRATOR_COMPLETED_EVENT_TYPE = 13
+const patchedApps = new WeakSet()
 
+// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (azureFunction) => {
   const { app } = azureFunction
+  if (!app || patchedApps.has(app)) return azureFunction
+  patchedApps.add(app)
 
   // Http triggers
   shimmer.wrap(app, 'deleteRequest', wrapHandler)

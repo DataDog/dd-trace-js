@@ -1,11 +1,11 @@
 'use strict'
 
-// Loads one Node builtin through every view named on the command line (`cjs:url`,
-// `esm:node:url`), exercises each once, and reports the result as JSON on stdout.
+// Loads one module through every view named on the command line (`cjs:url`,
+// `esm:node:url`, `esm:tedious`), exercises each once, and reports the result as JSON on stdout.
 
 const { channel } = require('../../../src/helpers/instrument')
 
-const builtins = {
+const modules = {
   crypto: {
     channel: 'datadog:crypto:hashing:start',
     probe: 'createHash',
@@ -30,11 +30,26 @@ const builtins = {
     probe: 'gzip',
     exercise: (view) => new Promise((resolve) => view.gzip(Buffer.from('hello'), resolve)),
   },
+  tedious: {
+    channel: 'apm:tedious:request:start',
+    probe: 'Connection',
+    exercise: view => new view.Connection().makeRequest({
+      parameters: [],
+      parametersByName: {},
+      sqlTextOrProcedure: 'SELECT 1',
+      callback () {},
+    }),
+  },
+  cookie: {
+    channel: 'datadog:cookie:parse:finish',
+    probe: 'parse',
+    exercise: view => view.parse('a=b'),
+  },
 }
 
 async function main () {
   const requests = process.argv.slice(2)
-  const { channel: channelName, getterChannel, probe, exercise } = builtins[requests[0].split(':').at(-1)]
+  const { channel: channelName, getterChannel, probe, exercise } = modules[requests[0].split(':').at(-1)]
 
   let publishes = 0
   let getterPublishes = 0

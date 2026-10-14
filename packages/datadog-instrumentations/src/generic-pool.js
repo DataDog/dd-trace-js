@@ -2,6 +2,7 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { addHook, AsyncResource } = require('./helpers/instrument')
+const patched = new WeakSet()
 
 function createWrapAcquire () {
   return function wrapAcquire (acquire) {
@@ -34,8 +35,13 @@ function createWrapPool () {
 addHook({
   name: 'generic-pool',
   versions: ['^2.4'],
+// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 }, genericPool => {
-  shimmer.wrap(genericPool.Pool.prototype, 'acquire', createWrapAcquire())
+  const proto = genericPool.Pool.prototype
+  if (patched.has(proto)) return genericPool
+  patched.add(proto)
+
+  shimmer.wrap(proto, 'acquire', createWrapAcquire())
   return genericPool
 })
 

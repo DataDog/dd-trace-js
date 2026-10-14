@@ -28,6 +28,11 @@ const messageStoreCh = channel('apm:google-cloud-pubsub:message:store')
 
 // WeakMap for passing context between LeaseManager._dispense and LeaseManager.remove
 const messageContexts = new WeakMap()
+const patchedSubscriptions = new WeakSet()
+const patchedTopics = new WeakSet()
+const patchedPublishers = new WeakSet()
+const patchedSubscribers = new WeakSet()
+const patchedSchemas = new WeakSet()
 
 const publisherMethods = [
   'createTopic',
@@ -134,14 +139,18 @@ function massWrap (obj, methods, wrapper) {
   }
 }
 
+// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   const Subscription = obj.Subscription
+  const proto = Subscription.prototype
+  if (patchedSubscriptions.has(proto)) return obj
+  patchedSubscriptions.add(proto)
 
   /**
    * PULL: Intercept 'message' events and propagate async context via runStores.
    * This ensures the consumer plugin creates spans in the correct context.
    */
-  shimmer.wrap(Subscription.prototype, 'emit', emit => function (eventName, message) {
+  shimmer.wrap(proto, 'emit', emit => function (eventName, message) {
     if (eventName !== 'message' || !message) return emit.apply(this, arguments)
 
     const ctx = { message }
@@ -233,9 +242,12 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
  */
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   if (!obj.Topic?.prototype) return obj
+  const proto = obj.Topic.prototype
+  if (patchedTopics.has(proto)) return obj
+  patchedTopics.add(proto)
 
-  if (typeof obj.Topic.prototype.publishMessage === 'function') {
-    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => {
+  if (typeof proto.publishMessage === 'function') {
+    shimmer.wrap(proto, 'publishMessage', publishMessage => {
       return function (data, attributesOrCallback, callback) {
         if (data && typeof data === 'object') {
           if (!data.attributes) data.attributes = {}
@@ -250,8 +262,8 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
     })
   }
 
-  if (typeof obj.Topic.prototype.publish === 'function') {
-    shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (buffer, attributesOrCallback, callback) {
+  if (typeof proto.publish === 'function') {
+    shimmer.wrap(proto, 'publish', publish => function (buffer, attributesOrCallback, callback) {
       if (typeof attributesOrCallback === 'function' || !attributesOrCallback) {
         arguments[1] = {}
         arguments[2] = attributesOrCallback
@@ -274,10 +286,17 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   const { PublisherClient, SchemaServiceClient, SubscriberClient } = obj.v1
 
-  massWrap(PublisherClient.prototype, publisherMethods, wrapMethod)
-  massWrap(SubscriberClient.prototype, subscriberMethods, wrapMethod)
+  if (!patchedPublishers.has(PublisherClient.prototype)) {
+    patchedPublishers.add(PublisherClient.prototype)
+    massWrap(PublisherClient.prototype, publisherMethods, wrapMethod)
+  }
+  if (!patchedSubscribers.has(SubscriberClient.prototype)) {
+    patchedSubscribers.add(SubscriberClient.prototype)
+    massWrap(SubscriberClient.prototype, subscriberMethods, wrapMethod)
+  }
 
-  if (SchemaServiceClient) {
+  if (SchemaServiceClient && !patchedSchemas.has(SchemaServiceClient.prototype)) {
+    patchedSchemas.add(SchemaServiceClient.prototype)
     massWrap(SchemaServiceClient.prototype, schemaServiceMethods, wrapMethod)
   }
 

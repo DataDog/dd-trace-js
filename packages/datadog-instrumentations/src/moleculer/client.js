@@ -6,6 +6,7 @@ const shimmer = require('../../../datadog-shimmer')
 const startChannel = channel('apm:moleculer:call:start')
 const finishChannel = channel('apm:moleculer:call:finish')
 const errorChannel = channel('apm:moleculer:call:error')
+const patched = new WeakSet()
 
 function wrapCall (call) {
   return function (actionName, params, opts) {
@@ -37,8 +38,13 @@ function wrapCall (call) {
   }
 }
 
+// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'moleculer', versions: ['>=0.14'] }, moleculer => {
-  shimmer.wrap(moleculer.ServiceBroker.prototype, 'call', wrapCall)
+  const proto = moleculer.ServiceBroker.prototype
+  if (patched.has(proto)) return moleculer
+  patched.add(proto)
+
+  shimmer.wrap(proto, 'call', wrapCall)
 
   return moleculer
 })

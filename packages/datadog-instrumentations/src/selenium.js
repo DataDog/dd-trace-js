@@ -12,6 +12,7 @@ const log = require('../../dd-trace/src/log')
 const { addHook, channel } = require('./helpers/instrument')
 
 const ciSeleniumDriverGetStartCh = channel('ci:selenium:driver:get')
+const patched = new WeakSet()
 
 const RUM_STOP_SESSION_SCRIPT = `
 if (window.DD_RUM && window.DD_RUM.stopSession) {
@@ -29,9 +30,14 @@ const DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS = getValueFromEnvSources('DD_CIVISIB
 addHook({
   name: 'selenium-webdriver',
   versions: ['>=4.11.0'],
+// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 }, (seleniumPackage, seleniumVersion) => {
+  const proto = seleniumPackage.WebDriver.prototype
+  if (patched.has(proto)) return seleniumPackage
+  patched.add(proto)
+
   // TODO: do not turn this into async. Use promises
-  shimmer.wrap(seleniumPackage.WebDriver.prototype, 'get', get => async function () {
+  shimmer.wrap(proto, 'get', get => async function () {
     if (!ciSeleniumDriverGetStartCh.hasSubscribers) {
       return get.apply(this, arguments)
     }
@@ -81,7 +87,7 @@ addHook({
     return getResult
   })
 
-  shimmer.wrap(seleniumPackage.WebDriver.prototype, 'quit', quit => async function () {
+  shimmer.wrap(proto, 'quit', quit => async function () {
     if (!ciSeleniumDriverGetStartCh.hasSubscribers) {
       return quit.apply(this, arguments)
     }
