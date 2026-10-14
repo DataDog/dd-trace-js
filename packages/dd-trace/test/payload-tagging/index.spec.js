@@ -580,6 +580,58 @@ describe('Safe payload capture', () => {
     assert.strictEqual(input.pairs.size, 0)
   })
 
+  it('suppresses all rules when structural and data-dependent rules are mixed', () => {
+    const input = { items: [{ secret: 's3cret', safe: 'ok' }] }
+    const structural = '$.items[*].safe'
+    const dependent = '$.items[?(@.secret)].secret'
+    const snapshot = createSafeSnapshot(input)
+
+    // A complete capture applies both rules. An incomplete capture must
+    // suppress every rule, because the structural rule could expose a value
+    // the skipped predicate would have redacted.
+    assert.strictEqual(snapshot.incomplete, false)
+    assert.deepStrictEqual(computeTags({
+      expand: [], request: [structural, dependent], response: [],
+    }, input, { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX }), {
+      'aws.request.body.items.0.secret': 'redacted',
+      // Both rules are redaction rules, so both matches are redacted.
+      'aws.request.body.items.0.safe': 'redacted',
+    })
+
+    const binaryInput = { items: [{ secret: 's3cret', safe: 'ok', Body: Buffer.from('abc') }] }
+    assert.deepStrictEqual(computeTags({
+      expand: [], request: [structural, dependent], response: [],
+    }, binaryInput, { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX }), {})
+    // Expansion rules follow the same classifier, but the expansion gate
+    // suppresses only when expansion itself was incomplete: a complete
+    // capture with fully applied expansion safely runs every rule. The
+    // expansion-truncation suppression cases are pinned in the expansion
+    // suppression boundary tests.
+    assert.deepStrictEqual(computeTags({
+      expand: [structural, dependent], request: ['$.items[*].safe'], response: [],
+    }, input, { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX }), {
+      'aws.request.body.items.0.safe': 'redacted',
+      'aws.request.body.items.0.secret': 's3cret',
+    })
+  })
+
+  it('proves a full binary copy at the last byte of the copy budget', () => {
+    const body = Buffer.alloc(1_000_000, 120)
+
+    // The incomplete flag no longer distinguishes an accepted full copy from
+    // a truncated prefix, so the boundary must assert the retained length.
+    const snapshot = createSafeSnapshot({ Body: body })
+    const copy = /** @type {{ Body: Buffer }} */ (snapshot.value).Body
+    assert.ok(Buffer.isBuffer(copy))
+    assert.strictEqual(copy.byteLength, 1_000_000)
+
+    const firstBeyond = Buffer.alloc(1_000_001, 120)
+    const overSnapshot = createSafeSnapshot({ Body: firstBeyond })
+    const overCopy = /** @type {{ Body: Buffer }} */ (overSnapshot.value).Body
+    assert.ok(Buffer.isBuffer(overCopy))
+    assert.strictEqual(overCopy.byteLength, 15_004)
+  })
+
   it('should bound traversal depth independently of the output max depth', () => {
     let deep = /** @type {unknown} */ ({ leaf: true })
     for (let i = 0; i < 150; i++) {
