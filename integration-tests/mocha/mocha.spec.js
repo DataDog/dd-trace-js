@@ -3573,7 +3573,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     it('does not say TIA skipped all tests when a root-level test still runs', async () => {
-      const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js'
+      const suiteFile = 'ci-visibility/test/ci-visibility-test.js'
+      const rootFile = 'ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js'
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: false,
@@ -3588,12 +3589,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          assert.strictEqual(tests.length, 1)
-          assert.strictEqual(tests[0].meta[TEST_NAME], 'top-level passing test')
+          assert.strictEqual(tests.length, 2)
+          assert.ok(tests.every(test => test.meta[TEST_SUITE] === rootFile))
         })
 
       childProcess = exec(
-        `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+        `node node_modules/mocha/bin/mocha ./${suiteFile} ./${rootFile}`,
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
@@ -3607,6 +3608,112 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ])
       assert.strictEqual(exitCode, 0)
       assert.strictEqual(testOutput.includes(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE), false, testOutput)
+    })
+
+    describe('TIA skipping root-level tests', () => {
+      const fixtureRoot = 'ci-visibility/mocha-plugin-tests/'
+
+      for (const { name, files, skippedFiles, expectedTests = 0, args = '', esm = false } of [
+        {
+          name: 'skips a file containing only root-level tests',
+          files: ['top-level-it-no-describe.js'],
+          skippedFiles: ['top-level-it-no-describe.js'],
+        },
+        {
+          name: 'skips root-level tests in multiple files',
+          files: ['top-level-it-no-describe.js', 'top-level-it-no-describe2.js'],
+          skippedFiles: ['top-level-it-no-describe.js', 'top-level-it-no-describe2.js'],
+        },
+        {
+          name: 'preserves root-level tests from files not selected for skipping',
+          files: ['top-level-it-no-describe.js', 'top-level-it-no-describe2.js'],
+          skippedFiles: ['top-level-it-no-describe.js'],
+          expectedTests: 2,
+        },
+        {
+          name: 'skips root-level and nested tests in the same file once',
+          files: ['top-level-it-mixed-failing.js'],
+          skippedFiles: ['top-level-it-mixed-failing.js'],
+        },
+        {
+          name: 'preserves nested and root-level tests in other files',
+          files: ['top-level-it-mixed-failing.js', 'top-level-it-mixed2.js'],
+          skippedFiles: ['top-level-it-mixed-failing.js'],
+          expectedTests: 2,
+        },
+        {
+          name: 'preserves unskippable root-level tests',
+          files: ['top-level-it-no-describe.js', 'top-level-it-unskippable.js'],
+          skippedFiles: ['top-level-it-no-describe.js'],
+          expectedTests: 1,
+        },
+        {
+          name: 'skips root-level tests selected by grep',
+          files: ['top-level-it-mixed-failing.js'],
+          skippedFiles: ['top-level-it-mixed-failing.js'],
+          args: " --grep 'top-level'",
+        },
+        {
+          name: 'skips exclusive root-level tests without restoring them',
+          files: ['top-level-it-exclusive.js'],
+          skippedFiles: ['top-level-it-exclusive.js'],
+        },
+        {
+          name: 'skips root-level tests in an ES module',
+          files: ['top-level-it-skippable.mjs'],
+          skippedFiles: ['top-level-it-skippable.mjs'],
+          esm: true,
+        },
+      ]) {
+        // Mocha added native ES module loading in 7.1.0.
+        const runTest = esm && MOCHA_VERSION !== 'latest' && !satisfies(MOCHA_VERSION, '>=7.1.0') ? it.skip : it
+        runTest(name, async () => {
+          const suitesToSkip = files.filter(file => skippedFiles.includes(file) || file.includes('unskippable'))
+          receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
+          receiver.setSuitesToSkip(suitesToSkip.map(file => ({
+            type: 'suite',
+            attributes: { suite: fixtureRoot + file },
+          })))
+
+          const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, expectedTests)
+              assert.ok(tests.every(test => !skippedFiles.includes(test.meta[TEST_SUITE].slice(fixtureRoot.length))))
+              const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.strictEqual(suites.length, files.length)
+              for (const file of files) {
+                const suite = suites.find(suite => suite.meta[TEST_SUITE] === fixtureRoot + file)
+                assert.ok(suite, file)
+                assert.strictEqual(suite.meta[TEST_STATUS], skippedFiles.includes(file) ? 'skip' : 'pass')
+                assert.strictEqual(suite.meta[TEST_SKIPPED_BY_ITR], skippedFiles.includes(file) ? 'true' : undefined)
+                if (file.includes('unskippable')) {
+                  assert.strictEqual(suite.meta[TEST_ITR_UNSKIPPABLE], 'true')
+                  assert.strictEqual(suite.meta[TEST_ITR_FORCED_RUN], 'true')
+                }
+              }
+              for (const type of ['test_session_end', 'test_module_end']) {
+                const event = events.find(event => event.type === type).content
+                assert.strictEqual(event.meta[TEST_STATUS], expectedTests ? 'pass' : 'skip')
+                assert.strictEqual(event.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+                assert.strictEqual(event.metrics[TEST_ITR_SKIPPING_COUNT], skippedFiles.length)
+              }
+            }
+          )
+          const testFiles = files.map(file => `./${fixtureRoot}${file}`).join(' ')
+          childProcess = exec(`node node_modules/mocha/bin/mocha ${testFiles}${args}`, {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+          const [, [exitCode]] = await Promise.all([eventsPromise, once(childProcess, 'close')])
+          assert.strictEqual(exitCode, 0, testOutput)
+          assert.strictEqual(testOutput.includes(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE), expectedTests === 0)
+        })
+      }
     })
 
     it('says TIA skipped all tests when grep excludes the remaining root-level test', async () => {

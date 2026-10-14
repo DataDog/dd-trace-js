@@ -940,17 +940,25 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
     const numTestsToRun = runner.grepTotal(runner.suite)
     const filteredSuites = getFilteredSuites(runner.suite.suites)
+    // Root tests share a Mocha suite across files, but TIA still selects them by file.
+    const filteredRootTests = getFilteredSuites(runner.suite.tests)
     const { suitesToRun, suitesToSkipForRun } = filteredSuites
 
-    isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
+    isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length ||
+      filteredRootTests.suitesToRun.length !== runner.suite.tests.length
 
     log.debug('%d out of %d suites are going to run.', suitesToRun.length, runner.suite.suites.length)
 
     runner.suite.suites = suitesToRun
+    runner.suite.tests = filteredRootTests.suitesToRun
+    // Mocha reapplies exclusivity when the delayed runner resumes.
+    if (runner.suite._onlyTests.length) {
+      runner.suite._onlyTests = runner.suite.tests
+    }
     areAllSuitesSkipped = isSuitesSkipped && numTestsToRun > 0 && runner.grepTotal(runner.suite) === 0
 
-    skippedSuites = [...filteredSuites.skippedSuites]
-    suitesToSkip = suitesToSkipForRun
+    skippedSuites = [...new Set([...filteredSuites.skippedSuites, ...filteredRootTests.skippedSuites])]
+    suitesToSkip = [...new Set([...suitesToSkipForRun, ...filteredRootTests.suitesToSkipForRun])]
     skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
     writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
 
