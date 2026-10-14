@@ -18,8 +18,9 @@
  *   - kafkajs has no synchronous per-message poll like confluent-kafka, so
  *     produce is a single batched `producer.send()` call (the analog of
  *     "produce all, then flush") and consume drives kafkajs's `eachMessage`
- *     callback with `autoCommit: false`, manually committing offsets after
- *     each message to mirror the synchronous per-message commit in Python.
+ *     callback with `autoCommit: false`, manually awaiting
+ *     `consumer.commitOffsets()` after every COMMIT_EVERY-th message and after
+ *     the last one (see below).
  *
  * `runWorker`'s returned `produceMs`/`consumeMs` are the only timed region:
  * topic creation, producer/consumer connect, and the consumer-group join are
@@ -38,8 +39,12 @@
  *     deliberate contention diagnostic. Note the .NET counterpart uses 5
  *     threads, so cross-language comparisons must state the worker count.
  *   - Each worker produces MESSAGE_COUNT (1000) messages, each carrying 5
- *     headers, to its own topic, then synchronously consumes and commits all
- *     1000 messages back.
+ *     headers, to its own topic, then consumes all 1000 messages back,
+ *     synchronously committing (last consumed offset + 1) after every
+ *     COMMIT_EVERY (default 100) consumed messages and always after the last
+ *     one -- 10 commits per run at the default. COMMIT_EVERY=1 is the
+ *     per-message sync commit, kept as an on-demand diagnostic. Commits stay
+ *     inside the timed consume phase in every scenario.
  *
  * Tracing/DSM are controlled purely by environment (`-r dd-trace/init` +
  * DD_DATA_STREAMS_ENABLED); this module contains no tracer-specific code, so
@@ -52,6 +57,19 @@ const BOOTSTRAP_SERVERS = process.env.KAFKA_BOOTSTRAP_SERVERS || 'localhost:9092
 const CONSUMER_GROUP_ID = 'benchmark-consumer-group'
 const MESSAGE_COUNT = 1000
 const NUM_HEADERS = 5
+const COMMIT_EVERY = parseCommitEvery(process.env.COMMIT_EVERY)
+
+/**
+ * @param {string | undefined} raw COMMIT_EVERY env value; unset or empty means the default (100).
+ */
+function parseCommitEvery (raw) {
+  if (raw === undefined || raw === '') return 100
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`COMMIT_EVERY must be an integer >= 1, got ${JSON.stringify(raw)}`)
+  }
+  return value
+}
 
 function buildHeaders () {
   const headers = {}
@@ -100,10 +118,13 @@ async function runWorker (kafka, topic, groupId) {
       autoCommit: false,
       eachMessage: async ({ topic: msgTopic, partition, message }) => {
         try {
-          await consumer.commitOffsets([
-            { topic: msgTopic, partition, offset: (Number(message.offset) + 1).toString() }
-          ])
-          consumed++
+          const position = consumed + 1
+          if (position % COMMIT_EVERY === 0 || position >= MESSAGE_COUNT) {
+            await consumer.commitOffsets([
+              { topic: msgTopic, partition, offset: (Number(message.offset) + 1).toString() }
+            ])
+          }
+          consumed = position
           if (consumed >= MESSAGE_COUNT) {
             consumeMs = Number(process.hrtime.bigint() - consumeStart) / 1e6
             resolveConsumed()
@@ -128,9 +149,10 @@ async function runWorker (kafka, topic, groupId) {
     await producer.send({ topic, messages, acks: -1 })
     const produceMs = Number(process.hrtime.bigint() - produceStart) / 1e6
 
-    // Phase 2 (timed): consume and commit all messages synchronously (one at
-    // a time, matching the Python/.NET per-message commit). The group is
-    // already joined, so this measures fetch + per-message commit only.
+    // Phase 2 (timed): consume all messages, synchronously committing every
+    // COMMIT_EVERY messages and after the last (COMMIT_EVERY=1 is the
+    // per-message commit). The group is already joined, so this measures
+    // fetch + commits only.
     let timeoutHandle
     consumeStart = process.hrtime.bigint()
     const timeout = new Promise((resolve, reject) => {
@@ -191,7 +213,7 @@ async function runBenchmark (runId = 0) {
   return { produceMs: meanProduceMs, consumeMs: meanConsumeMs }
 }
 
-module.exports = { runBenchmark }
+module.exports = { runBenchmark, COMMIT_EVERY }
 
 if (require.main === module) {
   runBenchmark().then((phases) => {

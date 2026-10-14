@@ -16,7 +16,8 @@
  *         "process.internal_duration_ms.median": <ms>,
  *         "process.internal_duration_ms.std_err": <ms>,
  *         "process.rss_bytes.median": <bytes>,
- *         "process.iteration_wall_ms.median": <ms>
+ *         "process.iteration_wall_ms.median": <ms>,
+ *         "config.commit_every": <COMMIT_EVERY>
  *       }
  *     }
  *   ]
@@ -33,10 +34,14 @@
  * cross-language analog of Python's psutil RSS and .NET's
  * `runtime.dotnet.mem.committed`. Medians are used for robustness against
  * outliers, matching the Python/.NET gate.
+ *
+ * `config.commit_every` records the consume-phase commit mode (COMMIT_EVERY,
+ * default 100; 1 = per-message sync commit) so results from different modes
+ * are never compared unknowingly.
  */
 
 const fs = require('fs')
-const { runBenchmark } = require('./kafka_throughput')
+const { runBenchmark, COMMIT_EVERY } = require('./kafka_throughput')
 
 function median (values) {
   const sorted = [...values].sort((a, b) => a - b)
@@ -99,7 +104,9 @@ async function main () {
         'process.iteration_wall_ms.median': iterationWallMedian,
         // Diagnostic breakdown (not gated) -- localizes DSM cost by phase.
         'phase.produce_ms.median': produceMedian,
-        'phase.consume_ms.median': consumeMedian
+        'phase.consume_ms.median': consumeMedian,
+        // Consume-phase commit mode: sync commit every N messages and after the last.
+        'config.commit_every': COMMIT_EVERY
       }
     }
   ]
@@ -112,7 +119,8 @@ async function main () {
     `produce median: ${produceMedian.toFixed(3)} ms | ` +
     `consume+commit median: ${consumeMedian.toFixed(3)} ms | ` +
     `iteration wall median (incl. setup/teardown, not gated): ${iterationWallMedian.toFixed(3)} ms | ` +
-    `runs: ${count} (warmup ${warmup})`
+    `runs: ${count} (warmup ${warmup}) | ` +
+    `commit every ${COMMIT_EVERY}`
   )
 }
 
