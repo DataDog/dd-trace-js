@@ -2239,8 +2239,6 @@ addHook({
   versions: ['>=5.0.0'],
   filePattern: 'dist/chunks/index.*',
 }, (vitestPackage, frameworkVersion) => {
-  if (!getVitestExport(vitestPackage)) return vitestPackage
-
   wrapVitestInternals(vitestPackage, frameworkVersion)
 
   const typecheckPoolWorker = getTypecheckPoolWorkerExport(vitestPackage)

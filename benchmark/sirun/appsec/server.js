@@ -28,7 +28,7 @@ function onResponseFinish () {
     assertReplayValidated()
     guard.loopStart()
   } else if (responsesFinished === reqs + warmup) {
-    guard.done(0.1)
+    guard.done()
     server.close()
   }
 }

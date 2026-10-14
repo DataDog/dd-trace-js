@@ -246,6 +246,52 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     await receiver.stop()
   })
 
+  for (const status of ['pass', 'fail']) {
+    it(`reports a ${status}ing test when the global URL is mocked during a DogStatsD flush`, async () => {
+      receiver.setSettings({ itr_enabled: false })
+      childProcess = exec('node node_modules/mocha/bin/mocha ci-visibility/mocha-plugin-tests/mocked-url.js', {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          DD_INJECT_FORCE: 'true',
+          DD_TRACE_AGENT_URL: `http://127.0.0.1:${receiver.port}`,
+          DD_RUNTIME_METRICS_ENABLED: 'false',
+          MOCKED_URL_TEST_FAIL: status === 'fail' ? '1' : '0',
+        },
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle') || url === '/dogstatsd/v2/proxy',
+        payloads => {
+          const metrics = payloads.filter(({ url }) => url === '/dogstatsd/v2/proxy')
+          assert.ok(metrics.length, `expected DogStatsD telemetry: ${testOutput}`)
+          assert.match(metrics[0].payload, /datadog\.dogstatsd\.client\.metrics:0\|c/)
+
+          const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+            .flatMap(({ payload }) => payload.events)
+          for (const type of ['test', 'test_suite_end', 'test_module_end', 'test_session_end']) {
+            const matching = events.filter(event => event.type === type)
+            assert.strictEqual(matching.length, 1, `expected one ${type}: ${testOutput}`)
+            assert.strictEqual(matching[0].content.meta[TEST_STATUS], status, testOutput)
+          }
+          const test = events.find(event => event.type === 'test').content
+          if (status === 'fail') {
+            assert.strictEqual(test.meta[ERROR_TYPE], 'Error')
+            assert.strictEqual(test.meta[ERROR_MESSAGE], 'expected test failure')
+          } else {
+            assert.strictEqual(test.error, 0)
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, status === 'fail' ? 1 : 0, testOutput)
+      assert.doesNotMatch(testOutput, /URL is not a constructor/)
+    })
+  }
+
   for (const { mode, args, reason, exitCode: expectedExitCode } of [
     { mode: 'skip-tests', args: '', reason: 'all_tests_skipped', exitCode: 0 },
     { mode: 'skip-suite', args: '', reason: 'all_tests_skipped', exitCode: 0 },
