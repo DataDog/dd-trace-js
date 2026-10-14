@@ -416,7 +416,7 @@ function wrapMochaRun (Mocha, frameworkVersion) {
         })
       }
       filterSkippedFiles(runner, skippedFiles)
-      if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled) {
+      if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled || config.isTestFailureVideosEnabled) {
         patchFailedTestReplayHookUp(runner.constructor)
       }
       configurationReady = true
@@ -453,7 +453,7 @@ addHook({
     if (!workerFinishCh.hasSubscribers) {
       return run.apply(this, args)
     }
-    if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled) {
+    if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled || config.isTestFailureVideosEnabled) {
       patchFailedTestReplayHookUp(Runner)
     }
     if (isWebdriverioWorker) {
