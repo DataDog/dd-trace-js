@@ -38,7 +38,6 @@ const TELEMETRY_APP_CLOSING_CHANNEL = 'datadog:telemetry:app-closing'
 const WORKER_FILENAME = join(__dirname, 'devtools_client', 'index.js')
 
 let worker = null
-let workerEntryPointMissing = false
 let configChannel = null
 let ackId = 0
 let rcAckCallbacks = null
@@ -72,13 +71,13 @@ function isStarted () {
  * Start the Debugger worker thread.
  * Creates a worker thread, sets up message channels, and registers
  * the LIVE_DEBUGGING product handler with remote config.
- * Does nothing if the worker is already started, or if a previous worker could not load its entry point.
+ * Does nothing if the worker is already started.
  *
  * @param {Config} config - The tracer configuration object
  * @param {RemoteConfig} rcInstance - The RemoteConfig instance
  */
 function start (config, rcInstance) {
-  if (worker !== null || workerEntryPointMissing) return
+  if (worker !== null) return
   if (config.DD_AGENTLESS_ENABLED && getDebuggerConfig(config) === undefined) {
     log.error('[debugger] Invalid DD_SITE for agentless Dynamic Instrumentation: %s', config.site)
     return
@@ -199,7 +198,6 @@ function onWorkerError (error) {
   // than one of its dependencies. This happens when the dd-trace files are not on disk where dd-trace expects them,
   // e.g. because dd-trace was bundled into the application, or because some of its files were not deployed.
   if (error.code === 'MODULE_NOT_FOUND' && Array.isArray(error.requireStack) && error.requireStack.length === 0) {
-    workerEntryPointMissing = true
     logGenericError(
       `Dynamic Instrumentation is disabled, because its worker thread could not load ${WORKER_FILENAME}. ` +
       'Make sure dd-trace is installed as regular files on disk and is not bundled into the application.'

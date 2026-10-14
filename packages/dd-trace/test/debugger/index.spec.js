@@ -191,7 +191,7 @@ describe('debugger/index', () => {
       assert.strictEqual(DynamicInstrumentation.isStarted(), false)
     })
 
-    it('should explain and stop restarting a worker that cannot load its entry point', async () => {
+    it('should explain a worker that cannot load its entry point', async () => {
       const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
       const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
       const [workerFilename, { execArgv, env }] = Worker.lastCall.args
@@ -210,14 +210,9 @@ describe('debugger/index', () => {
       sinon.assert.calledOnceWithExactly(logGenericError,
         `Dynamic Instrumentation is disabled, because its worker thread could not load ${workerFilename}. ` +
         'Make sure dd-trace is installed as regular files on disk and is not bundled into the application.')
-
-      DynamicInstrumentation.start(config, rc)
-
-      sinon.assert.calledOnce(Worker)
-      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
     })
 
-    it('should restart a worker after one of its dependencies could not be loaded', async () => {
+    it('should not explain a missing worker dependency as a missing entry point', async () => {
       const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
       const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
       const { execArgv, env } = Worker.lastCall.args[1]
@@ -234,11 +229,6 @@ describe('debugger/index', () => {
         '[debugger] worker thread exited unexpectedly exit_code=1',
       ])
       sinon.assert.notCalled(logGenericError)
-
-      DynamicInstrumentation.start(config, rc)
-
-      sinon.assert.calledTwice(Worker)
-      assert.strictEqual(DynamicInstrumentation.isStarted(), true)
     })
 
     it('should report a rejected probe without terminating the worker', () => {
