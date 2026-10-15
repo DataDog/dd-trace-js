@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { execFile } = require('node:child_process')
-const { readFileSync } = require('node:fs')
+const { mkdirSync, readFileSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 const { promisify } = require('node:util')
 
@@ -14,6 +14,7 @@ const execFileAsync = promisify(execFile)
 
 // The last pnpm release that fails every command while an asynchronous loader hook is registered.
 const PNPM_VERSION = '11.20.0'
+const PACKAGE_MANAGER_ENTRY_POINTS = ['bin/pnpm.mjs', 'bin/pnpx.mjs', 'bin/corepack.mjs', 'corepack/dist/pnpm.js']
 
 describe('package managers', () => {
   let cwd, pnpmEngines
@@ -23,6 +24,11 @@ describe('package managers', () => {
   before(() => {
     cwd = sandboxCwd()
     pnpmEngines = JSON.parse(readFileSync(path.join(cwd, 'node_modules/pnpm/package.json'), 'utf8')).engines.node
+
+    // Corepack's Windows shims run its `dist` files directly. `dist` is gitignored, so create one here.
+    const corepackDist = path.join(cwd, 'package-managers/corepack/dist')
+    mkdirSync(corepackDist, { recursive: true })
+    writeFileSync(path.join(corepackDist, 'pnpm.js'), "import('../../missing-import.mjs')\n")
   })
 
   /**
@@ -39,9 +45,9 @@ describe('package managers', () => {
 
   for (const entryPoint of ['dd-trace/register.js', 'dd-trace/initialize.mjs']) {
     describe(`with --import ${entryPoint}`, () => {
-      for (const packageManager of ['pnpm', 'pnpx', 'corepack']) {
-        it(`does not register the loader hooks in bin/${packageManager}`, async () => {
-          const stdout = await run(entryPoint, [`package-managers/bin/${packageManager}.mjs`])
+      for (const packageManager of PACKAGE_MANAGER_ENTRY_POINTS) {
+        it(`does not register the loader hooks in ${packageManager}`, async () => {
+          const stdout = await run(entryPoint, [`package-managers/${packageManager}`])
 
           assert.deepStrictEqual(JSON.parse(stdout), { code: 'ERR_MODULE_NOT_FOUND', isNativeError: true })
         })

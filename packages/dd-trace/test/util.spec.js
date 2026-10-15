@@ -153,6 +153,12 @@ describe('util', () => {
         'C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\pnpm\\bin\\pnpm.cjs',
         // `corepack pnpm` runs pnpm inside the corepack process.
         '/usr/local/bin/corepack',
+        '/usr/local/lib/node_modules/corepack/dist/pnpm.js',
+        // Targets of the Windows shims that Node.js installs and that `corepack enable` generates.
+        'C:\\Program Files\\nodejs\\node_modules\\corepack\\dist\\corepack.js',
+        'C:\\Program Files\\nodejs\\node_modules\\corepack\\dist\\pnpm.js',
+        'C:\\Program Files\\nodejs\\node_modules\\corepack\\dist\\pnpx.js',
+        'C:\\Program Files\\nodejs\\node_modules\\corepack\\dist\\yarn.js',
       ]
 
       for (const entryPoint of entryPoints) {
@@ -188,6 +194,9 @@ describe('util', () => {
         '/app/sbin/npm',
         '/project/node_modules/.bin/npm-run-all',
         '/project/node_modules/pnpm-sync/bin/index.js',
+        '/app/dist/pnpm.js',
+        '/app/corepack/dist/server.js',
+        'C:\\app\\corepack\\dist\\pnpm-helper.js',
       ]
 
       for (const entryPoint of entryPoints) {

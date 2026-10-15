@@ -3,9 +3,11 @@
 const path = require('path')
 
 // A package manager CLI file in a `bin` or `.bin` directory, such as `/usr/local/bin/npm`,
-// `npm/bin/npm-cli.js`, `node_modules/.bin/pnpm` or `pnpm/bin/pnpm.cjs`. Corepack and pnpx run a
-// package manager in their own process, so they count as one too.
-const PACKAGE_MANAGER_ENTRY_POINT = /(?:^|[\\/])\.?bin[\\/](?:npm(?:-cli)?|yarn|yarnpkg|pnpm|pnpx|corepack)(?:\.[cm]?js)?$/
+// `npm/bin/npm-cli.js`, `node_modules/.bin/pnpm` or `pnpm/bin/pnpm.cjs`. Corepack's Windows shims
+// run its `dist` files instead, such as `node_modules\corepack\dist\pnpm.js`. Corepack and pnpx run
+// a package manager in their own process, so they count as one too.
+const PACKAGE_MANAGER_ENTRY_POINT =
+  /(?:^|[\\/])(?:\.?bin|corepack[\\/]dist)[\\/](?:npm(?:-cli)?|yarn|yarnpkg|pnpm|pnpx|corepack)(?:\.[cm]?js)?$/
 
 /**
  * `for-in` with an early return is the only allocation-free shape for
