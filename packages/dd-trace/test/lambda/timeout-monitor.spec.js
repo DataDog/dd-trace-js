@@ -10,6 +10,10 @@ const { datadog } = require('../../src/lambda/handler')
 
 const HANDLER_STREAMING = Symbol.for('aws.lambda.runtime.handler.streaming')
 
+function notCaptured () {
+  assert.fail('The handler did not capture its completion callback')
+}
+
 describe('Lambda timeout monitor', () => {
   let clock
   let originalTracer
@@ -62,7 +66,8 @@ describe('Lambda timeout monitor', () => {
     const event = {}
     const callbackReceiver = {}
     const callback = sinon.stub().returns('callback result')
-    let complete
+    /** @type {Function} */
+    let complete = notCaptured
     const handler = datadog(function (actualEvent, actualContext, cb) {
       assert.strictEqual(this, receiver)
       assert.strictEqual(actualEvent, event)
@@ -112,7 +117,8 @@ describe('Lambda timeout monitor', () => {
   for (const error of [null, new Error('callback failure'), '', 0, false]) {
     it(`cancels the timer on callback completion with ${String(error)}`, () => {
       const callback = sinon.spy()
-      let complete
+      /** @type {Function} */
+      let complete = notCaptured
       const handler = datadog((_event, _context, cb) => { complete = cb })
       handler({}, context, callback)
       assert.strictEqual(clock.countTimers(), 1)
@@ -182,8 +188,10 @@ describe('Lambda timeout monitor', () => {
   }
 
   it('does not let an earlier invocation clear a later invocation timer', async () => {
-    let resolveFirst
-    let resolveSecond
+    /** @type {Function} */
+    let resolveFirst = notCaptured
+    /** @type {Function} */
+    let resolveSecond = notCaptured
     const firstHandler = datadog(() => new Promise(resolve => { resolveFirst = resolve }))
     const secondHandler = datadog(() => new Promise(resolve => { resolveSecond = resolve }))
     const first = firstHandler({}, context)
@@ -207,8 +215,10 @@ describe('Lambda timeout monitor', () => {
 
   for (const winner of ['callback', 'promise']) {
     it(`cleans up when the ${winner} wins a race and isolates late completion from a warm invocation`, async () => {
-      let complete
-      let resolvePromise
+      /** @type {Function} */
+      let complete = notCaptured
+      /** @type {Function} */
+      let resolvePromise = notCaptured
       const promise = new Promise(resolve => { resolvePromise = resolve })
       const handler = datadog((_event, _context, cb) => {
         complete = cb
@@ -219,7 +229,8 @@ describe('Lambda timeout monitor', () => {
       else { resolvePromise('promise'); await result }
       assert.strictEqual(clock.countTimers(), 0)
 
-      let nextComplete
+      /** @type {Function} */
+      let nextComplete = notCaptured
       const next = datadog((_event, _context, cb) => { nextComplete = cb })
       next({}, context, () => {})
       if (winner === 'callback') {

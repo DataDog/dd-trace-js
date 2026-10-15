@@ -143,8 +143,10 @@ function isCallbackCompletion (handler, result, contextIndex) {
   if (handler[HANDLER_STREAMING] === 'response') return false
   if ((handler.length >= 3 && contextIndex !== 2) || result === undefined) return true
   return result !== null && typeof result === 'object' && (
-    (typeof result.listen === 'function' && typeof result.close === 'function') ||
-    (typeof result.on === 'function' && typeof result.emit === 'function') ||
+    (typeof (/** @type {{ listen?: unknown }} */ (result)).listen === 'function' &&
+      typeof (/** @type {{ close?: unknown }} */ (result)).close === 'function') ||
+    (typeof (/** @type {{ on?: unknown }} */ (result)).on === 'function' &&
+      typeof (/** @type {{ emit?: unknown }} */ (result)).emit === 'function') ||
     result instanceof EventEmitter ||
     (result.constructor && /Server|Socket|Emitter/i.test(result.constructor.name))
   )
