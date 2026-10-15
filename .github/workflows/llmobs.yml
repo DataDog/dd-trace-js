@@ -343,7 +343,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
+      # @typesafe-ai/sdk 0.7.0 requires Node.js >=22
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: npm run test:plugins:ci
       - run: npm run test:llmobs:plugins:ci
