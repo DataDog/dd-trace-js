@@ -2,12 +2,12 @@
 
 const assert = require('node:assert/strict')
 
+const { describe, before, after, it } = require('mocha')
+
 const { NODE_MAJOR } = require('../../../version')
 
 // @typesafe-ai/sdk 0.7.0 requires Node.js >=22 (its image assets rely on the global `crypto`).
 if (NODE_MAJOR < 22) return
-
-const { describe, before, after, it } = require('mocha')
 
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
