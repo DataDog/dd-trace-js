@@ -937,6 +937,17 @@
         "default": "false"
       }
     ],
+    "DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLE_EVALUATION_TELEMETRY_OPT_OUT_PARAMETER": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "namespace": "featureFlags",
+        "configurationNames": [
+          "experimental.flaggingProvider.enableEvaluationTelemetryOptOutParameter"
+        ],
+        "default": "false"
+      }
+    ],
     "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE": [
       {
         "implementation": "A",

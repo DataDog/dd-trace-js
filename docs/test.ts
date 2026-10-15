@@ -79,6 +79,14 @@ let traceparent: string;
 let promise: Promise<void>;
 
 ddTrace.init();
+const evaluationTelemetryOptOutOption: TracerOptions = {
+  experimental: {
+    flaggingProvider: {
+      // @ts-expect-error The activation option must be a boolean.
+      enableEvaluationTelemetryOptOutParameter: 'true'
+    }
+  }
+};
 tracer.init({
   apmTracingEnabled: false,
   logInjection: true,
@@ -88,7 +96,10 @@ tracer.init({
   url: 'http://localhost',
   runtimeMetrics: true,
   experimental: {
-    exporter: 'log'
+    exporter: 'log',
+    flaggingProvider: {
+      enableEvaluationTelemetryOptOutParameter: true
+    }
   },
   iast: true,
   hostname: 'agent',

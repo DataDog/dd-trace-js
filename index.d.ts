@@ -895,6 +895,13 @@ declare namespace tracer {
        */
       flaggingProvider?: {
         /**
+         * Allow boolean true in dd_evaluation_telemetry_opt_out to suppress evaluation events, metrics, and span tags.
+         * Exposure events and flag evaluation results remain unchanged. Captured when the provider is constructed.
+         * @default false
+         * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLE_EVALUATION_TELEMETRY_OPT_OUT_PARAMETER
+         */
+        enableEvaluationTelemetryOptOutParameter?: boolean
+        /**
          * Legacy feature flagging provider switch.
          * When the stable Feature Flags configuration is unset, true selects Agent Remote Config and false disables
          * the provider.

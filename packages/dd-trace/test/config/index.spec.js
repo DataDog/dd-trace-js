@@ -6096,6 +6096,22 @@ rules:
       assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'flaggingProvider'), false)
     })
 
+    it('disables evaluation telemetry opt-out by default and accepts the provider option', () => {
+      const name = 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLE_EVALUATION_TELEMETRY_OPT_OUT_PARAMETER'
+      assert.strictEqual(getConfig().featureFlags[name], false)
+      process.env[name] = 'true'
+      assert.strictEqual(getConfig().featureFlags[name], true)
+      const config = getConfig({
+        experimental: { flaggingProvider: { enableEvaluationTelemetryOptOutParameter: false } },
+      })
+      assert.strictEqual(config.featureFlags[name], false)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'code')
+      delete process.env[name]
+      assert.strictEqual(getConfig({
+        experimental: { flaggingProvider: { enableEvaluationTelemetryOptOutParameter: true } },
+      }).featureFlags[name], true)
+    })
+
     it('reads the configuration source environment variable', () => {
       process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
 
