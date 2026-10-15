@@ -643,6 +643,59 @@ describe('Safe payload capture', () => {
         assert.strictEqual(receivers[0], holder)
       })
 
+      it(`invokes accessors intrinsically without consulting a spoofed call property for ${prefix}`, () => {
+        let callReads = 0
+        let getterReads = 0
+        /** @type {unknown[]} */
+        const receivers = []
+        const getter = function () {
+          getterReads++
+          receivers.push(this)
+          return 'intrinsic'
+        }
+        getter.call = function () {
+          callReads++
+          return 'spoofed'
+        }
+        const holder = {}
+        Object.defineProperty(holder, 'computed', {
+          enumerable: true,
+          get: getter,
+        })
+
+        const snapshot = createSafeSnapshot({ holder })
+        assert.strictEqual(snapshot.incomplete, false)
+        assert.deepStrictEqual(snapshot.value, { holder: { computed: 'intrinsic' } })
+        assert.strictEqual(getterReads, 1)
+        assert.strictEqual(callReads, 0)
+        assert.strictEqual(receivers.length, 1)
+        assert.strictEqual(receivers[0], holder)
+      })
+
+      it(`never reads a spoofed call accessor on an accessor getter for ${prefix}`, () => {
+        let getterReads = 0
+        const getter = function () {
+          getterReads++
+          return 'intrinsic'
+        }
+        Object.defineProperty(getter, 'call', {
+          enumerable: true,
+          get () {
+            throw new Error('spoofed call accessor')
+          },
+        })
+        const holder = {}
+        Object.defineProperty(holder, 'computed', {
+          enumerable: true,
+          get: getter,
+        })
+
+        const snapshot = createSafeSnapshot({ holder })
+        assert.strictEqual(snapshot.incomplete, false)
+        assert.deepStrictEqual(snapshot.value, { holder: { computed: 'intrinsic' } })
+        assert.strictEqual(getterReads, 1)
+      })
+
       it(`leaves caller state unchanged when ${prefix} rules target a function's attached data`, () => {
         const callback = () => {}
         callback.values = ['original']

@@ -3,6 +3,10 @@
 const { Stream } = require('node:stream')
 const { isDataView, isDate, isMap, isSet } = require('node:util').types
 
+// Intrinsic used to invoke accessor getters, so a payload-defined `call`
+// property on a getter (data or accessor) is never consulted.
+const { apply: reflectApply } = Reflect
+
 const { maxValueLength, truncated } = require('./constants')
 
 // Intrinsics captured once at module load and invoked directly on payload
@@ -501,9 +505,14 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       incomplete = true
       continue
     }
-    const value = 'value' in descriptor
-      ? descriptor.value
-      : descriptor.get?.call(frame.source)
+    let value
+    if ('value' in descriptor) {
+      value = descriptor.value
+    } else if (descriptor.get !== undefined) {
+      // Invoke the getter as an intrinsic: an ordinary property access never
+      // consults a payload-defined `call` property on the getter.
+      value = reflectApply(descriptor.get, frame.source, [])
+    }
     admit(frame.copy, key, value, frame.childDepth, frame.ancestors)
   }
 
