@@ -11,6 +11,8 @@ require('./setup/core')
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../ext/priority')
 const id = require('../src/id')
 const SpanContext = require('../src/opentracing/span_context')
+const TextMapPropagator = require('../src/opentracing/propagation/text_map')
+const { getConfigFresh } = require('./helpers/config')
 
 const TRACE_ID_HEX = '0102030405060708090a0b0c0d0e0f10'
 const SPAN_ID_HEX = '1112131415161718'
@@ -346,7 +348,7 @@ describe('otel-thread-ctx', () => {
       sinon.assert.calledOnceWithExactly(setActive, context)
     })
 
-    it('writes the ids of every identifier shape the tracer produces byte-for-byte as toTraceId/toSpanId', () => {
+    it('writes the ids and local root id of every identifier shape the tracer produces as toTraceId/toSpanId', () => {
       // Local root with the 128-bit high half in _dd.p.tid (two different values,
       // to cover the memo), 64-bit without _dd.p.tid (high half zero), a 128-bit
       // identifier that wins over _dd.p.tid, Datadog decimal ids, and shapes the
@@ -363,6 +365,10 @@ describe('otel-thread-ctx', () => {
         { traceId: 'aabbccddeeff0017', traceTags: { '_dd.p.tid': '' } },
         { traceId: '0102030405060708090a0b0c0d0e0f1011', spanId: '0102030405060708090a' },
         { traceId: 'aabbccddeeff0018', traceTags: { '_dd.p.tid': '640cfd8d00000000' } },
+        { traceId: 'aabbccddeeff0019', spanId: id() },
+        { traceId: 'aabbccddeeff001a', spanId: '0' },
+        { traceId: 'aabbccddeeff001b', spanId: 'f' },
+        { traceId: 'aabbccddeeff001c', spanId: 'ffffffffffffffff' },
       ]
       for (const fields of cases) {
         constructedContexts = []
@@ -374,6 +380,29 @@ describe('otel-thread-ctx', () => {
           Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex')), `trace id ${label}`)
         assert.deepEqual(constructedContexts[0].spanId,
           Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex')), `span id ${label}`)
+        assert.equal(constructedContexts[0].attributes[0], spanContext.toSpanId(true), `local root id ${label}`)
+      }
+    })
+
+    it('writes the ids and local root id of propagated contexts as toTraceId/toSpanId', () => {
+      const propagator = new TextMapPropagator(getConfigFresh())
+      const carriers = [
+        { 'x-datadog-trace-id': '123', 'x-datadog-parent-id': '456' },
+        { 'x-datadog-trace-id': '123', 'x-datadog-parent-id': '456', 'x-datadog-tags': '_dd.p.tid=640cfd8d00000000' },
+        { traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01' },
+        { traceparent: '00-00000000000000000000000000000001-0000000000000001-00' },
+      ]
+      for (const carrier of carriers) {
+        const spanContext = propagator.extract(carrier)
+        constructedContexts = []
+        activeSpan = { context: () => spanContext }
+        enterCh.publish()
+        const label = JSON.stringify(carrier)
+        assert.deepEqual(constructedContexts[0].traceId,
+          Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex')), `trace id ${label}`)
+        assert.deepEqual(constructedContexts[0].spanId,
+          Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex')), `span id ${label}`)
+        assert.equal(constructedContexts[0].attributes[0], spanContext.toSpanId(true), `local root id ${label}`)
       }
     })
 

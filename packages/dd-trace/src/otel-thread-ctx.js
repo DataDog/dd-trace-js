@@ -20,8 +20,9 @@
 // and the OTel ContextManager activates spans via
 // storage('legacy').run({ span: ddSpan }, ...), so the active span
 // our writer reads from legacy storage is the same DatadogSpan in
-// both cases. The OTel-visible trace/span IDs come from the same
-// _ddContext.toTraceId/toSpanId calls we use here.
+// both cases. The record's trace/span IDs are read from the same
+// Identifier bytes (and _dd.p.tid) behind _ddContext.toTraceId/toSpanId,
+// and the spec pins them byte-for-byte to those methods.
 
 const { isMainThread, threadId } = require('worker_threads')
 
@@ -175,6 +176,20 @@ function getSpanIdBytes (spanContext) {
   return spanIdBytes
 }
 
+const HEX_CODES = Uint8Array.from(Buffer.from('0123456789abcdef'))
+
+// Same string as toSpanId(true), without the per-trace Buffer hex round trip.
+function localRootSpanIdHex (rootContext) {
+  const b = rootContext._spanId.toBuffer()
+  if (b.length !== 8) return rootContext.toSpanId(true)
+  return String.fromCharCode(
+    HEX_CODES[b[0] >> 4], HEX_CODES[b[0] & 15], HEX_CODES[b[1] >> 4], HEX_CODES[b[1] & 15],
+    HEX_CODES[b[2] >> 4], HEX_CODES[b[2] & 15], HEX_CODES[b[3] >> 4], HEX_CODES[b[3] & 15],
+    HEX_CODES[b[4] >> 4], HEX_CODES[b[4] & 15], HEX_CODES[b[5] >> 4], HEX_CODES[b[5] & 15],
+    HEX_CODES[b[6] >> 4], HEX_CODES[b[6] & 15], HEX_CODES[b[7] >> 4], HEX_CODES[b[7] & 15]
+  )
+}
+
 function getOrBuildContext (span) {
   let cached = span[CachedSym]
   if (cached !== undefined && cached.context !== undefined) return cached.context
@@ -191,7 +206,7 @@ function getOrBuildContext (span) {
   const webTags = webTagsCache.getCachedWebTags(span)
   const endpoint = finalEndpoint(webTags)
   const attrs = []
-  attrs[LOCAL_ROOT_SPAN_ID_IDX] = rootContext.toSpanId(true)
+  attrs[LOCAL_ROOT_SPAN_ID_IDX] = localRootSpanIdHex(rootContext)
   if (endpoint !== undefined) attrs[ENDPOINT_IDX] = endpoint
   attrs[THREAD_NAME_IDX] = THREAD_NAME
   attrs[THREAD_ID_IDX] = THREAD_ID
