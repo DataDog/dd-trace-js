@@ -2,6 +2,10 @@
 
 // Loop timer and operations reporter. Call loopStart() immediately before the
 // measured loop and done() immediately after it.
+// Sirun also excludes everything before loopStart() from its timing and
+// instruction metrics. Request a synchronous major GC before the ready signal so
+// setup and warmup garbage is less likely to trigger an early measured-loop GC.
+// This excludes the main collection pause, though concurrent sweeping may continue.
 //
 //   const guard = require('../startup-guard')
 //   // ...requires, setup...
@@ -10,6 +14,7 @@
 //   guard.done()
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const path = require('node:path')
 
 const OPERATIONS = Number(process.env.OPERATIONS)
@@ -18,9 +23,16 @@ let loopStartedAt
 let statsd
 
 function loopStart () {
+  const readyFd = process.env.SIRUN_READY_FD
+  if (process.env.SIRUN_STATSD_PORT !== undefined) {
+    assert.ok(readyFd, 'SIRUN_READY_FD is required; install Sirun 0.1.12 or newer')
+    assert.strictEqual(typeof global.gc, 'function', 'Sirun benchmarks must run Node.js with --expose-gc')
+  }
+
+  global.gc?.()
   loopStartedAt = process.hrtime.bigint()
-  if (process.env.SIRUN_READY_FD) {
-    require('fs').writeSync(parseInt(process.env.SIRUN_READY_FD, 10), 'x')
+  if (readyFd) {
+    fs.writeSync(Number.parseInt(readyFd, 10), 'x')
   } else {
     process.stderr.write('sirun benchmark: SIRUN_READY_FD is not set, startup time will be included in measurements\n')
   }

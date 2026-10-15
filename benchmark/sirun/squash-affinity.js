@@ -16,17 +16,27 @@ const path = require('path')
  * @property {Record<string, BenchmarkMeta>} [variants]
  */
 
-const metaJson = require(path.join(process.cwd(), 'meta.json'))
-const nodeMajor = process.env.MAJOR_VERSION ?? process.versions.node.split('.')[0]
-
-prepareMeta(metaJson)
-
 /**
  * Resolves runner-only metadata before Sirun reads the generated file.
  *
  * @param {BenchmarkMeta} meta
+ * @param {object} [options]
+ * @param {boolean} [options.enableAffinity]
+ * @param {string} [options.nodeMajor]
  */
-function prepareMeta (meta) {
+function prepareMeta (meta, options = {}) {
+  const nodeMajor = options.nodeMajor ?? process.env.MAJOR_VERSION ?? process.versions.node.split('.')[0]
+  const enableAffinity = options.enableAffinity ?? Boolean(process.env.ENABLE_AFFINITY)
+
+  prepareNestedMeta(meta, nodeMajor, enableAffinity)
+}
+
+/**
+ * @param {BenchmarkMeta} meta
+ * @param {string} nodeMajor
+ * @param {boolean} enableAffinity
+ */
+function prepareNestedMeta (meta, nodeMajor, enableAffinity) {
   const operations = meta.operations_by_node?.[nodeMajor]
   if (operations !== undefined) {
     meta.env ??= {}
@@ -34,13 +44,24 @@ function prepareMeta (meta) {
   }
   delete meta.operations_by_node
 
-  if (process.env.ENABLE_AFFINITY) {
+  meta.run = addExposeGc(meta.run)
+  meta.run_with_affinity = addExposeGc(meta.run_with_affinity)
+
+  if (enableAffinity) {
     squashAffinity(meta)
   }
 
   for (const variant of Object.values(meta.variants ?? {})) {
-    prepareMeta(variant)
+    prepareNestedMeta(variant, nodeMajor, enableAffinity)
   }
+}
+
+/**
+ * @param {string} [command]
+ */
+function addExposeGc (command) {
+  if (command === undefined || command.includes('--expose-gc')) return command
+  return command.replace(/(^|\s)node(?=\s)/, '$1node --expose-gc')
 }
 
 /**
@@ -60,4 +81,12 @@ function squashAffinity (meta) {
   }
 }
 
-fs.writeFileSync(path.join(process.cwd(), 'meta-temp.json'), JSON.stringify(metaJson, null, 2))
+function prepareMetaFile () {
+  const metaJson = require(path.join(process.cwd(), 'meta.json'))
+  prepareMeta(metaJson)
+  fs.writeFileSync(path.join(process.cwd(), 'meta-temp.json'), JSON.stringify(metaJson, null, 2))
+}
+
+if (require.main === module) prepareMetaFile()
+
+module.exports = { addExposeGc, prepareMeta, prepareMetaFile }
