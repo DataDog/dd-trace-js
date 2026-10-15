@@ -1,19 +1,20 @@
 'use strict'
 
-const log = require('../log')
+const { EventEmitter } = require('node:events')
+
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
+const log = require('../log')
 const { ImpendingTimeout } = require('./runtime/errors')
 const { extractContext } = require('./context')
 
+const HANDLER_STREAMING = Symbol.for('aws.lambda.runtime.handler.streaming')
 const timeoutChannel = channel('apm:aws:lambda:timeout')
 // Always crash the flushes when a message is received
 // from this channel.
 timeoutChannel.subscribe(_ => {
   crashFlush()
 })
-
-let __lambdaTimeout
 
 /**
  * Publishes to the `apm:aws:lambda:timeout` channel when
@@ -23,11 +24,12 @@ let __lambdaTimeout
  */
 function checkTimeout (context) {
   const remainingTimeInMillis = context.getRemainingTimeInMillis()
-  const apmFlushDeadline = global._ddtrace._tracer._config.DD_APM_FLUSH_DEADLINE_MILLISECONDS
+  const apmFlushDeadline = global._ddtrace?._tracer?._config?.DD_APM_FLUSH_DEADLINE_MILLISECONDS
+  if (!Number.isFinite(remainingTimeInMillis) || !Number.isFinite(apmFlushDeadline)) return
 
-  __lambdaTimeout = setTimeout(() => {
+  return setTimeout(() => {
     timeoutChannel.publish()
-  }, remainingTimeInMillis - apmFlushDeadline)
+  }, Math.max(0, remainingTimeInMillis - apmFlushDeadline))
 }
 
 /**
@@ -58,26 +60,92 @@ function crashFlush () {
 }
 
 /**
- * Patches your AWS Lambda handler function to add some tracing support.
+ * Monitors an AWS Lambda handler for impending timeouts without creating a span.
  *
  * @param {Function} lambdaHandler a Lambda handler function.
  */
 exports.datadog = function datadog (lambdaHandler) {
-  return (...args) => {
+  function monitored (...args) {
     const context = extractContext(args)
+    if (!context) return lambdaHandler.apply(this, args)
 
-    if (context) {
-      checkTimeout(context)
+    const timeout = checkTimeout(context)
+    if (!timeout) return lambdaHandler.apply(this, args)
+
+    let completed = false
+    const contextMethods = []
+    const clear = () => {
+      if (completed) return
+      completed = true
+      clearTimeout(timeout)
+      for (const [name, original, wrapped] of contextMethods) {
+        if (context[name] === wrapped) context[name] = original
+      }
     }
 
-    const result = lambdaHandler.apply(this, args)
-    if (result && typeof result.then === 'function') {
-      return result.then((res) => {
-        clearTimeout(__lambdaTimeout)
-        return res
-      })
+    const contextIndex = args.indexOf(context)
+    if (contextIndex !== 2 && typeof args[2] === 'function') {
+      args[2] = onCompletion(args[2], clear)
     }
-    clearTimeout(__lambdaTimeout)
-    return result
+    for (const name of ['done', 'succeed', 'fail']) {
+      if (typeof context[name] !== 'function') continue
+      const original = context[name]
+      const wrapped = onCompletion(original, clear)
+      contextMethods.push([name, original, wrapped])
+      context[name] = wrapped
+    }
+
+    try {
+      const result = lambdaHandler.apply(this, args)
+      if (result && typeof result.then === 'function') {
+        return result.then(value => {
+          clear()
+          return value
+        }, error => {
+          clear()
+          throw error
+        })
+      }
+      // Match the shim's callback/context completion contract, including incidental server returns.
+      if (!isCallbackCompletion(lambdaHandler, result, contextIndex)) clear()
+      return result
+    } catch (error) {
+      clear()
+      throw error
+    }
   }
+
+  // The shim uses arity and the runtime's streaming marker to choose how to invoke the handler.
+  Object.defineProperty(monitored, 'length', { value: lambdaHandler.length })
+  if (lambdaHandler[HANDLER_STREAMING] !== undefined) {
+    monitored[HANDLER_STREAMING] = lambdaHandler[HANDLER_STREAMING]
+  }
+  return monitored
+}
+
+/**
+ * @param {Function} callback
+ * @param {() => void} clear
+ */
+function onCompletion (callback, clear) {
+  return function (...args) {
+    clear()
+    return callback.apply(this, args)
+  }
+}
+
+/**
+ * @param {Function} handler
+ * @param {unknown} result
+ * @param {number} contextIndex
+ */
+function isCallbackCompletion (handler, result, contextIndex) {
+  if (handler[HANDLER_STREAMING] === 'response') return false
+  if ((handler.length >= 3 && contextIndex !== 2) || result === undefined) return true
+  return result !== null && typeof result === 'object' && (
+    (typeof result.listen === 'function' && typeof result.close === 'function') ||
+    (typeof result.on === 'function' && typeof result.emit === 'function') ||
+    result instanceof EventEmitter ||
+    (result.constructor && /Server|Socket|Emitter/i.test(result.constructor.name))
+  )
 }
