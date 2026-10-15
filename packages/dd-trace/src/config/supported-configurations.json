@@ -937,7 +937,7 @@
         "default": "false"
       }
     ],
-    "DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_OPT_OUT_ENABLED": [
+    "DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

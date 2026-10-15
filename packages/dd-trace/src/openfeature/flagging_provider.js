@@ -38,7 +38,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     })
 
     const enableOptOut =
-      config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_OPT_OUT_ENABLED === true
+      config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED === true
     /** @param {import('@openfeature/server-sdk').Hook} hook */
     const telemetryHook = hook => enableOptOut ? new EvaluationTelemetryOptOutHook(hook) : hook
 
