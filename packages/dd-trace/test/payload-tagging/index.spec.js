@@ -307,16 +307,6 @@ describe('Safe payload capture', () => {
     return stream
   }
 
-  function deepFreeze (value) {
-    if (value !== null && typeof value === 'object') {
-      for (const key of Object.keys(value)) {
-        deepFreeze(value[key])
-      }
-      Object.freeze(value)
-    }
-    return value
-  }
-
   describe('SLES-3026 regressions', () => {
     for (const prefix of [PAYLOAD_TAG_REQUEST_PREFIX, PAYLOAD_TAG_RESPONSE_PREFIX]) {
       const opts = { maxDepth: 10, prefix }
@@ -1146,7 +1136,10 @@ describe('Safe payload capture', () => {
   })
 
   it('should not mutate the input payload', () => {
-    const input = deepFreeze({ a: { b: 'keep' }, list: ['x'] })
+    const input = Object.freeze({
+      a: Object.freeze({ b: 'keep' }),
+      list: Object.freeze(['x']),
+    })
     const config = { expand: [], request: [], response: ['$.a.b'] }
 
     const tags = computeTags(config, input, responseOpts)

@@ -358,28 +358,25 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
    * @returns {Buffer | TypedArray | DataView | string}
    */
   function captureBinary (view) {
-    const kind = binaryKind(view)
-    if (kind === null) {
-      incomplete = true
-      return truncated
-    }
-    const byteLength = visibleByteLength(view, kind)
-    let copyLength = byteLength
-    if (byteLength > budget.binaryBytes) {
-      // The over-budget Buffer keeps the prefix its tag renders; the changed
-      // length marks the snapshot incomplete. Typed arrays are never shortened.
-      copyLength = kind === 'buffer' ? Math.min(byteLength, maxBufferPrefixBytes) : byteLength
-      if (copyLength > budget.binaryBytes) {
-        incomplete = true
-        return truncated
-      }
-    }
-    const copy = copyBinary(view, kind, copyLength)
     // Normalization always changes or drops metadata the tag format cannot
     // carry (view offsets, backing storage, prototypes, shadowed properties).
     // Rather than prove the loss harmless, mark every binary value incomplete
     // so data-dependent rules cannot decide redaction from the copy.
     incomplete = true
+    const kind = binaryKind(view)
+    if (kind === null) {
+      return truncated
+    }
+    let copyLength = visibleByteLength(view, kind)
+    if (kind === 'buffer' && copyLength > budget.binaryBytes) {
+      // The over-budget Buffer keeps the prefix its tag renders.
+      // Typed arrays are never shortened.
+      copyLength = Math.min(copyLength, maxBufferPrefixBytes)
+    }
+    if (copyLength > budget.binaryBytes) {
+      return truncated
+    }
+    const copy = copyBinary(view, kind, copyLength)
     budget.binaryBytes -= copyLength
     return copy
   }
