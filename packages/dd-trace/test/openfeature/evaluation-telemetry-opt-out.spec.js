@@ -49,8 +49,11 @@ describe('evaluation telemetry opt-out', () => {
   let onExposure
   let span
   let customFinally
+  let originalOptOutEnvironment
 
   beforeEach(() => {
+    originalOptOutEnvironment = process.env[option]
+    delete process.env[option]
     clock = sinon.useFakeTimers({ now: 1_792_022_400_000 })
     providers = []
     requests = []
@@ -94,6 +97,8 @@ describe('evaluation telemetry opt-out', () => {
   })
 
   afterEach(async () => {
+    if (originalOptOutEnvironment === undefined) delete process.env[option]
+    else process.env[option] = originalOptOutEnvironment
     for (const provider of providers) provider.onClose()
     await OpenFeature.clearProviders()
     OpenFeature.clearHooks()
@@ -149,6 +154,42 @@ describe('evaluation telemetry opt-out', () => {
       value: true, variant: 'on', reason: 'STATIC',
     })
     assert.deepStrictEqual(signals(), { evaluations: 0, metrics: 0, spanTags: 0, exposures: 1, customerHooks: 1 })
+  })
+
+  for (const { environment, explicit, suppressed } of [
+    { environment: undefined, explicit: undefined, suppressed: false },
+    { environment: 'true', explicit: undefined, suppressed: true },
+    { environment: 'false', explicit: undefined, suppressed: false },
+    { environment: 'invalid', explicit: undefined, suppressed: false },
+    { environment: 'true', explicit: false, suppressed: false },
+    { environment: 'false', explicit: true, suppressed: true },
+  ]) {
+    it(`resolves per-subject configuration env=${environment}, code=${explicit}`, async () => {
+      if (environment !== undefined) process.env[option] = environment
+      // Config tracks precedence at module scope; isolate each simulated process configuration.
+      const Config = proxyquire('../../src/config', {})
+      const resolved = new Config({
+        experimental: { flaggingProvider: { enableEvaluationTelemetryOptOutParameter: explicit } },
+      })
+      const { client } = await register(resolved.featureFlags[option])
+      const result = await client.getBooleanDetails('flag', false, { targetingKey: 'subject', [parameter]: true })
+      assert.deepStrictEqual({ value: result.value, variant: result.variant, reason: result.reason }, {
+        value: true, variant: 'on', reason: 'STATIC',
+      })
+      const count = suppressed ? 0 : 1
+      assert.deepStrictEqual(signals(), {
+        evaluations: count, metrics: count, spanTags: count * 2, exposures: 1, customerHooks: 1,
+      })
+    })
+  }
+
+  it('requires a subject opt-out even when the environment enables support', async () => {
+    process.env[option] = 'true'
+    const Config = proxyquire('../../src/config', {})
+    const resolved = new Config()
+    const { client } = await register(resolved.featureFlags[option])
+    await client.getBooleanValue('flag', false, { targetingKey: 'subject' })
+    assert.deepStrictEqual(signals(), { evaluations: 1, metrics: 1, spanTags: 2, exposures: 1, customerHooks: 1 })
   })
 
   it('preserves all supported flag types while suppressing evaluation telemetry', async () => {
