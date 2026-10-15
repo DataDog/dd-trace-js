@@ -21,6 +21,7 @@ const TEST_OPTIMIZATION_PLUGINS = new Set([
 ])
 
 const loadChannel = channel('dd-trace:instrumentation:load')
+const { listDisablesLambda } = require('./lambda/integration-names')
 
 const DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')
 
@@ -45,9 +46,29 @@ loadChannel.subscribe(({ name }) => {
 
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
-if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
-  // instrument lambda environment
+
+function enableLambdaEnvironment () {
+  if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') === undefined) return
+
+  if (DD_TRACE_DISABLED_PLUGINS === undefined) {
+    const { disabledPlugins: lambdaDisabledPlugins } = require('../../datadog-plugin-aws-lambda/src/defaults')
+    for (const plugin of lambdaDisabledPlugins) {
+      disabledPlugins.add(plugin)
+      if (pluginClasses[plugin]) pluginClasses[plugin] = null
+    }
+  }
+
+  // `DD_TRACE_DISABLED_PLUGINS` is matched against the plugin id below, so the legacy `lambda`
+  // spelling would otherwise be ignored. Normalize it to the id before that check runs.
+  if (listDisablesLambda(DD_TRACE_DISABLED_PLUGINS)) disabledPlugins.add('aws-lambda')
+
+  // Register the handler hook only after Config observes the Lambda environment.
+  // This also avoids freezing the decision when dd-trace is imported for its facade.
   require('./lambda')
+  // Disabling the instrumentation disables the span too: there is no hook left to carry it.
+  if (!listDisablesLambda(getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS'))) {
+    maybeEnable(plugins['aws-lambda'])
+  }
 }
 
 function maybeEnable (Plugin) {
@@ -154,6 +175,7 @@ module.exports = class PluginManager {
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   configure (config) {
+    enableLambdaEnvironment()
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
 
@@ -182,6 +204,7 @@ module.exports = class PluginManager {
   #getSharedConfig (name) {
     const {
       logInjection,
+      lambda,
       serviceMapping,
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       site,
@@ -210,6 +233,9 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       tracing,
       DD_TRACE_RESOURCE_RENAMING_ENABLED,
+      DD_APM_FLUSH_DEADLINE_MILLISECONDS,
+      DD_API_KEY,
+      DD_TRACE_AWS_ADD_SPAN_POINTERS,
     } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
 
     const sharedConfig = {
@@ -268,6 +294,14 @@ module.exports = class PluginManager {
       sharedConfig.depth = DD_TRACE_GRAPHQL_DEPTH
       sharedConfig.variables = DD_TRACE_GRAPHQL_VARIABLES
       sharedConfig.errorExtensions = DD_TRACE_GRAPHQL_ERROR_EXTENSIONS
+    } else if (name === 'aws-lambda') {
+      Object.assign(sharedConfig, lambda, {
+        addSpanPointers: DD_TRACE_AWS_ADD_SPAN_POINTERS,
+        apiKey: DD_API_KEY,
+        apmFlushDeadlineMs: DD_APM_FLUSH_DEADLINE_MILLISECONDS,
+        dataStreamsEnabled: dsmEnabled,
+        logInjection,
+      })
     }
 
     return sharedConfig

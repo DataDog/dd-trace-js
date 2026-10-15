@@ -22,7 +22,7 @@ const handler = async (_event, _context) => {
 const callbackHandler = (_event, _context, callback) => {
   const response = sampleResponse
 
-  callback('', response) // eslint-disable-line n/no-callback-literal
+  callback(null, response)
 }
 
 const timeoutHandler = async (...args) => {

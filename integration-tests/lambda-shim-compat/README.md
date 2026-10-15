@@ -5,26 +5,13 @@ It installs a real, frozen `datadog-lambda-js` package alongside a tarball built
 checkout and runs the same process probes against a pinned released tracer control. No tracer,
 shim, or timeout timer is mocked. Test containers have no network access.
 
-## Staged rollout
+## CI and release branches
 
-This infrastructure-only change adds the frozen fixtures, runner, comparison policy and unit
-tests. It does not change shipped Lambda code. CI currently runs harness unit tests only; it does
-not claim that the unchanged tracer passes the full compatibility gate. The lifecycle change
-later in this stack enables the full gate and adds its workflow-contract test without broadening
-the known-failure exceptions. Configuration is introduced separately between those changes.
-
-The backport results below are historical evidence for the explicitly identified combined
-migration snapshot, not validation of this infrastructure-only checkout. The configuration
-retirement section describes the intended migration contract, not a configuration change here.
-
-## Full gate rollout and release branches
-
-The unit-only `.github/workflows/lambda-shim-compat.yml` runs on PRs targeting `master`, `v6.x`, or `v5.x`, pushes
+`.github/workflows/lambda-shim-compat.yml` runs on PRs targeting `master`, `v6.x`, or `v5.x`, pushes
 to those branches and their configured merge-queue branches, and manual dispatch. There is no
 new nightly or notification job. The existing Serverless workflow is unchanged.
 
-Once enabled by the lifecycle change, the full workflow builds the checkout once and tests that exact tarball.
-It never checks out unchanged
+The workflow builds the checkout once and tests that exact tarball. It never checks out unchanged
 release heads and calls that backport coverage. Cherry-pick the implementation **and this gate**
 to each release line; each backport PR tests its own merge revision. Require the stable
 `lambda-shim-compat` job in branch protection/rulesets on all three branches; adding this file

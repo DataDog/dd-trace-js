@@ -2,11 +2,14 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { channel } = require('dc-polyfill')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const agent = require('../plugins/agent')
 const Hook = require('../../src/ritm')
+const { assertExactlyOneLambdaSpan } = require('./helpers')
 
 const oldEnv = process.env
 
@@ -22,7 +25,9 @@ function setupEnv () {
 
 function loadAgent () {
   require('../../src/lambda')
-  return agent.load([], [], { experimental: { exporter: 'agent' } })
+  // The shared agent harness disables plugins globally; opt the Lambda lifecycle
+  // back in so this suite exercises the same plugin that the Lambda bootstrap enables.
+  return agent.load('aws-lambda', {}, { experimental: { exporter: 'agent' } })
 }
 
 async function closeAgent () {
@@ -83,6 +88,10 @@ describe('lambda', () => {
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
+      // dd-trace is timeout-monitoring only unless DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS is set, so
+      // it does not promisify the handler and the caller's callback is the one that fires. When
+      // the gate is on, `promisifiedHandler` intercepts the callback instead and the result
+      // arrives through the returned promise.
       let result
       const wrappedHandler = datadog(app.callbackHandler)
       wrappedHandler(_event, _context, (_error, response) => {
@@ -142,6 +151,51 @@ describe('lambda', () => {
           assert.strictEqual(trace.error, 0)
         }
       })
+    })
+
+    // AppSec invocation publishing lands with the AppSec port (migration PR 13); this pins only the
+    // generic invocation boundary that the lifecycle owns.
+    it('publishes exactly one generic invocation boundary for HTTP events', async () => {
+      process.env.DD_LAMBDA_HANDLER = 'handler.handler'
+      // The boundary channels come from the aws-lambda plugin, which only creates the span when
+      // dd-trace owns it.
+      process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
+      const tracer = await loadAgent()
+      const traces = []
+      const exporter = sinon.stub(tracer._tracer._exporter, 'export').callsFake(trace => traces.push(trace))
+
+      const starts = []
+      const ends = []
+      const subscriptions = [
+        [channel('datadog:aws-lambda:invocation:start'), message => starts.push(message)],
+        [channel('datadog:aws-lambda:invocation:end'), message => ends.push(message)],
+      ]
+      for (const [invocationChannel, handler] of subscriptions) invocationChannel.subscribe(handler)
+
+      try {
+        const app = require(path.resolve(__dirname, './fixtures/handler.js'))
+        const event = {
+          body: JSON.stringify({ hello: 'world' }),
+          headers: { 'Content-Type': 'application/json' },
+          httpMethod: 'POST',
+          path: '/resource',
+          requestContext: { identity: { sourceIp: '127.0.0.1' } },
+        }
+        const context = { getRemainingTimeInMillis: () => 150 }
+
+        // The plugin owns this invocation; do not wrap it in the old span-owning shim as well.
+        await app.handler(event, context)
+        assertExactlyOneLambdaSpan(traces)
+
+        assert.strictEqual(starts.length, 1)
+        assert.strictEqual(ends.length, 1)
+        assert.strictEqual(starts[0], ends[0])
+        assert.strictEqual(starts[0].event, event)
+        assert.strictEqual(starts[0].context, context)
+      } finally {
+        exporter.restore()
+        for (const [invocationChannel, handler] of subscriptions) invocationChannel.unsubscribe(handler)
+      }
     })
 
     it('doesnt patch lambda when instrumentation is disabled', async () => {
