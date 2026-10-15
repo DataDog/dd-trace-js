@@ -56,53 +56,53 @@ function wrapEmitter (corkedEmitter) {
   shimmer.wrap(corkedEmitter, 'removeListener', removeListener)
 }
 
-// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
   const proto = ldapjs.Client.prototype
-  if (patched.has(proto)) return ldapjs
-  patched.add(proto)
+  if (!patched.has(proto)) {
+    patched.add(proto)
 
-  const ldapSearchCh = channel('datadog:ldapjs:client:search')
+    const ldapSearchCh = channel('datadog:ldapjs:client:search')
 
-  shimmer.wrap(proto, 'search', search => function (base, options) {
-    if (ldapSearchCh.hasSubscribers) {
-      let filter
-      if (isString(options)) {
-        filter = options
-      } else if (options !== null && typeof options === 'object' && options.filter && isString(options.filter)) {
-        filter = options.filter
-      }
-      ldapSearchCh.publish({ base, filter })
-    }
-
-    return search.apply(this, arguments)
-  })
-
-  shimmer.wrap(proto, '_send', _send => function (...args) {
-    const callbackIndex = getCallbackArgIndex(args)
-    if (callbackIndex > -1) {
-      const callback = args[callbackIndex]
-      // eslint-disable-next-line n/handle-callback-err
-      args[callbackIndex] = shimmer.wrapFunction(callback, callback => function (err, corkedEmitter) {
-        if (corkedEmitter !== null && typeof corkedEmitter === 'object' && typeof corkedEmitter.on === 'function') {
-          wrapEmitter(corkedEmitter)
+    shimmer.wrap(proto, 'search', search => function (base, options) {
+      if (ldapSearchCh.hasSubscribers) {
+        let filter
+        if (isString(options)) {
+          filter = options
+        } else if (options !== null && typeof options === 'object' && options.filter && isString(options.filter)) {
+          filter = options.filter
         }
-        callback.apply(this, arguments)
-      })
-    }
+        ldapSearchCh.publish({ base, filter })
+      }
 
-    return _send.apply(this, args)
-  })
+      return search.apply(this, arguments)
+    })
 
-  shimmer.wrap(proto, 'bind', bind => function (dn, password, controls, callback) {
-    if (typeof controls === 'function') {
-      arguments[2] = AsyncResource.bind(controls)
-    } else if (typeof callback === 'function') {
-      arguments[3] = AsyncResource.bind(callback)
-    }
+    shimmer.wrap(proto, '_send', _send => function (...args) {
+      const callbackIndex = getCallbackArgIndex(args)
+      if (callbackIndex > -1) {
+        const callback = args[callbackIndex]
+        // eslint-disable-next-line n/handle-callback-err
+        args[callbackIndex] = shimmer.wrapFunction(callback, callback => function (err, corkedEmitter) {
+          if (corkedEmitter !== null && typeof corkedEmitter === 'object' && typeof corkedEmitter.on === 'function') {
+            wrapEmitter(corkedEmitter)
+          }
+          callback.apply(this, arguments)
+        })
+      }
 
-    return bind.apply(this, arguments)
-  })
+      return _send.apply(this, args)
+    })
+
+    shimmer.wrap(proto, 'bind', bind => function (dn, password, controls, callback) {
+      if (typeof controls === 'function') {
+        arguments[2] = AsyncResource.bind(controls)
+      } else if (typeof callback === 'function') {
+        arguments[3] = AsyncResource.bind(callback)
+      }
+
+      return bind.apply(this, arguments)
+    })
+  }
 
   return ldapjs
 })

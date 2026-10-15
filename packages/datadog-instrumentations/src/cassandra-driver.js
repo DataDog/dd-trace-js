@@ -16,67 +16,67 @@ const patchedBatch = new WeakSet()
 const patchedExecute = new WeakSet()
 const patchedInnerExecute = new WeakSet()
 
-// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
   const proto = cassandra.Client.prototype
-  if (patchedBatch.has(proto)) return cassandra
-  patchedBatch.add(proto)
+  if (!patchedBatch.has(proto)) {
+    patchedBatch.add(proto)
 
-  shimmer.wrap(proto, 'batch', batch => function (queries, options, callback) {
-    if (!startCh.hasSubscribers) {
-      return batch.apply(this, arguments)
-    }
-    const lastIndex = arguments.length - 1
-    const cb = arguments[lastIndex]
-
-    startCtx = { keyspace: this.keyspace, query: queries, contactPoints: this.options && this.options.contactPoints }
-    return startCh.runStores(startCtx, () => {
-      if (typeof cb === 'function') {
-        arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
+    shimmer.wrap(proto, 'batch', batch => function (queries, options, callback) {
+      if (!startCh.hasSubscribers) {
+        return batch.apply(this, arguments)
       }
+      const lastIndex = arguments.length - 1
+      const cb = arguments[lastIndex]
 
-      try {
-        const res = batch.apply(this, arguments)
-        if (typeof res === 'function') {
-          return wrapCallback(finishCh, errorCh, startCtx, res)
+      startCtx = { keyspace: this.keyspace, query: queries, contactPoints: this.options && this.options.contactPoints }
+      return startCh.runStores(startCtx, () => {
+        if (typeof cb === 'function') {
+          arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
         }
-        if (!res) {
-          return res
+
+        try {
+          const res = batch.apply(this, arguments)
+          if (typeof res === 'function') {
+            return wrapCallback(finishCh, errorCh, startCtx, res)
+          }
+          if (!res) {
+            return res
+          }
+          return res.then(
+            () => finish(finishCh, errorCh, startCtx),
+            err => finish(finishCh, errorCh, startCtx, err)
+          )
+        } catch (e) {
+          finish(finishCh, errorCh, startCtx, e)
+          throw e
         }
-        return res.then(
-          () => finish(finishCh, errorCh, startCtx),
-          err => finish(finishCh, errorCh, startCtx, err)
-        )
-      } catch (e) {
-        finish(finishCh, errorCh, startCtx, e)
-        throw e
-      }
+      })
     })
-  })
+  }
   return cassandra
 })
 
-// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'cassandra-driver', versions: ['>=4.4'], patchDefault: false }, (cassandra) => {
   const proto = cassandra.Client.prototype
-  if (patchedExecute.has(proto)) return cassandra
-  patchedExecute.add(proto)
+  if (!patchedExecute.has(proto)) {
+    patchedExecute.add(proto)
 
-  shimmer.wrap(proto, '_execute', _execute => function (query, params, execOptions, callback) {
-    if (!startCh.hasSubscribers) {
-      return _execute.apply(this, arguments)
-    }
-    startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
-    return startCh.runStores(startCtx, () => {
-      const promise = _execute.apply(this, arguments)
+    shimmer.wrap(proto, '_execute', _execute => function (query, params, execOptions, callback) {
+      if (!startCh.hasSubscribers) {
+        return _execute.apply(this, arguments)
+      }
+      startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
+      return startCh.runStores(startCtx, () => {
+        const promise = _execute.apply(this, arguments)
 
-      promise.then(
-        () => finish(finishCh, errorCh, startCtx),
-        err => finish(finishCh, errorCh, startCtx, err)
-      )
-      return promise
+        promise.then(
+          () => finish(finishCh, errorCh, startCtx),
+          err => finish(finishCh, errorCh, startCtx, err)
+        )
+        return promise
+      })
     })
-  })
+  }
   return cassandra
 })
 
@@ -84,39 +84,39 @@ const isValid = (args) => {
   return args.length === 4 || typeof args[3] === 'function'
 }
 
-// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'], patchDefault: false }, (cassandra) => {
   const proto = cassandra.Client.prototype
-  if (patchedInnerExecute.has(proto)) return cassandra
-  patchedInnerExecute.add(proto)
+  if (!patchedInnerExecute.has(proto)) {
+    patchedInnerExecute.add(proto)
 
-  shimmer.wrap(proto, '_innerExecute', _innerExecute =>
-    function (query, params, execOptions, callback) {
-      if (!startCh.hasSubscribers) {
-        return _innerExecute.apply(this, arguments)
-      }
-      if (!isValid(arguments)) {
-        return _innerExecute.apply(this, arguments)
-      }
-
-      startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
-      return startCh.runStores(startCtx, () => {
-        const lastIndex = arguments.length - 1
-        const cb = arguments[lastIndex]
-
-        if (typeof cb === 'function') {
-          arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
-        }
-
-        try {
+    shimmer.wrap(proto, '_innerExecute', _innerExecute =>
+      function (query, params, execOptions, callback) {
+        if (!startCh.hasSubscribers) {
           return _innerExecute.apply(this, arguments)
-        } catch (e) {
-          finish(finishCh, errorCh, startCtx, e)
-          throw e
         }
-      })
-    }
-  )
+        if (!isValid(arguments)) {
+          return _innerExecute.apply(this, arguments)
+        }
+
+        startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
+        return startCh.runStores(startCtx, () => {
+          const lastIndex = arguments.length - 1
+          const cb = arguments[lastIndex]
+
+          if (typeof cb === 'function') {
+            arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
+          }
+
+          try {
+            return _innerExecute.apply(this, arguments)
+          } catch (e) {
+            finish(finishCh, errorCh, startCtx, e)
+            throw e
+          }
+        })
+      }
+    )
+  }
   return cassandra
 })
 

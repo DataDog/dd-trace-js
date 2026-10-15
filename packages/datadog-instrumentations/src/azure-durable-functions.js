@@ -18,14 +18,14 @@ for (const hook of getHooks('durable-functions').values()) {
   addHook(hook, exports => exports)
 }
 
-// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'durable-functions', versions: ['>=3'], patchDefault: false }, (df) => {
   const { app } = df
-  if (!app || patchedApps.has(app)) return df
-  patchedApps.add(app)
+  if (app && !patchedApps.has(app)) {
+    patchedApps.add(app)
 
-  shimmer.wrap(app, 'entity', entityWrapper)
-  shimmer.wrap(app, 'activity', activityHandler)
+    shimmer.wrap(app, 'entity', entityWrapper)
+    shimmer.wrap(app, 'activity', activityHandler)
+  }
 
   return df
 })

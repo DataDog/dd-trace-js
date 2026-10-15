@@ -30,85 +30,86 @@ const DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS = getValueFromEnvSources('DD_CIVISIB
 addHook({
   name: 'selenium-webdriver',
   versions: ['>=4.11.0'],
-// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 }, (seleniumPackage, seleniumVersion) => {
   const proto = seleniumPackage.WebDriver.prototype
-  if (patched.has(proto)) return seleniumPackage
-  patched.add(proto)
 
-  // TODO: do not turn this into async. Use promises
-  shimmer.wrap(proto, 'get', get => async function () {
-    if (!ciSeleniumDriverGetStartCh.hasSubscribers) {
-      return get.apply(this, arguments)
-    }
-    const getResult = await get.apply(this, arguments)
+  if (!patched.has(proto)) {
+    patched.add(proto)
 
-    let isRumActive
-    try {
-      isRumActive = await this.executeScript(IS_RUM_ACTIVE_SCRIPT)
-    } catch (error) {
-      log.error('Selenium RUM detection error', error)
-    }
+    // TODO: do not turn this into async. Use promises
+    shimmer.wrap(proto, 'get', get => async function () {
+      if (!ciSeleniumDriverGetStartCh.hasSubscribers) {
+        return get.apply(this, arguments)
+      }
+      const getResult = await get.apply(this, arguments)
 
-    let browserName
-    let browserVersion
-    try {
-      const capabilities = await this.getCapabilities()
-      browserName = capabilities.getBrowserName()
-      browserVersion = capabilities.getBrowserVersion()
-    } catch (error) {
-      log.error('Selenium browser metadata error', error)
-    }
-
-    const context = {
-      seleniumVersion,
-      browserName,
-      browserVersion,
-      isRumActive,
-      testExecutionId: undefined,
-    }
-    try {
-      ciSeleniumDriverGetStartCh.publish(context)
-    } catch (error) {
-      log.error('Selenium RUM correlation channel error', error)
-    }
-
-    if (context.testExecutionId && isRumActive) {
+      let isRumActive
       try {
-        await this.manage().addCookie({
-          name: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
-          value: context.testExecutionId,
-        })
+        isRumActive = await this.executeScript(IS_RUM_ACTIVE_SCRIPT)
       } catch (error) {
-        log.error('Selenium RUM correlation cookie error', error)
+        log.error('Selenium RUM detection error', error)
       }
-    }
 
-    return getResult
-  })
+      let browserName
+      let browserVersion
+      try {
+        const capabilities = await this.getCapabilities()
+        browserName = capabilities.getBrowserName()
+        browserVersion = capabilities.getBrowserVersion()
+      } catch (error) {
+        log.error('Selenium browser metadata error', error)
+      }
 
-  shimmer.wrap(proto, 'quit', quit => async function () {
-    if (!ciSeleniumDriverGetStartCh.hasSubscribers) {
+      const context = {
+        seleniumVersion,
+        browserName,
+        browserVersion,
+        isRumActive,
+        testExecutionId: undefined,
+      }
+      try {
+        ciSeleniumDriverGetStartCh.publish(context)
+      } catch (error) {
+        log.error('Selenium RUM correlation channel error', error)
+      }
+
+      if (context.testExecutionId && isRumActive) {
+        try {
+          await this.manage().addCookie({
+            name: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
+            value: context.testExecutionId,
+          })
+        } catch (error) {
+          log.error('Selenium RUM correlation cookie error', error)
+        }
+      }
+
+      return getResult
+    })
+
+    shimmer.wrap(proto, 'quit', quit => async function () {
+      if (!ciSeleniumDriverGetStartCh.hasSubscribers) {
+        return quit.apply(this, arguments)
+      }
+      try {
+        const isRumActive = await this.executeScript(RUM_STOP_SESSION_SCRIPT)
+
+        if (isRumActive) {
+          // We'll have time for RUM to flush the events (there's no callback to know when it's done)
+          await new Promise(resolve => {
+            realSetTimeout(() => {
+              resolve()
+            }, DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS)
+          })
+          await this.manage().deleteCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME)
+        }
+      } catch (error) {
+        log.error('Selenium RUM cleanup error', error)
+      }
+
       return quit.apply(this, arguments)
-    }
-    try {
-      const isRumActive = await this.executeScript(RUM_STOP_SESSION_SCRIPT)
-
-      if (isRumActive) {
-        // We'll have time for RUM to flush the events (there's no callback to know when it's done)
-        await new Promise(resolve => {
-          realSetTimeout(() => {
-            resolve()
-          }, DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS)
-        })
-        await this.manage().deleteCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME)
-      }
-    } catch (error) {
-      log.error('Selenium RUM cleanup error', error)
-    }
-
-    return quit.apply(this, arguments)
-  })
+    })
+  }
 
   return seleniumPackage
 })

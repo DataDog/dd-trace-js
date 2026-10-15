@@ -139,29 +139,30 @@ function massWrap (obj, methods, wrapper) {
   }
 }
 
-// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   const Subscription = obj.Subscription
   const proto = Subscription.prototype
-  if (patchedSubscriptions.has(proto)) return obj
-  patchedSubscriptions.add(proto)
 
-  /**
-   * PULL: Intercept 'message' events and propagate async context via runStores.
-   * This ensures the consumer plugin creates spans in the correct context.
-   */
-  shimmer.wrap(proto, 'emit', emit => function (eventName, message) {
-    if (eventName !== 'message' || !message) return emit.apply(this, arguments)
+  if (!patchedSubscriptions.has(proto)) {
+    patchedSubscriptions.add(proto)
 
-    const ctx = { message }
-    try {
-      return messageStoreCh.runStores(ctx, emit, this, ...arguments)
-    } catch (err) {
-      ctx.error = err
-      receiveErrorCh.publish(ctx)
-      throw err
-    }
-  })
+    /**
+     * PULL: Intercept 'message' events and propagate async context via runStores.
+     * This ensures the consumer plugin creates spans in the correct context.
+     */
+    shimmer.wrap(proto, 'emit', emit => function (eventName, message) {
+      if (eventName !== 'message' || !message) return emit.apply(this, arguments)
+
+      const ctx = { message }
+      try {
+        return messageStoreCh.runStores(ctx, emit, this, ...arguments)
+      } catch (err) {
+        ctx.error = err
+        receiveErrorCh.publish(ctx)
+        throw err
+      }
+    })
+  }
 
   return obj
 })

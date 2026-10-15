@@ -84,64 +84,66 @@ addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', vers
   return redis
 })
 
-// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
   const proto = redis.RedisClient.prototype
-  if (patchedLegacyClients.has(proto)) return redis
-  patchedLegacyClients.add(proto)
 
-  shimmer.wrap(proto, 'internal_send_command', internalSendCommand => function (options) {
-    if (!startCh.hasSubscribers) return internalSendCommand.apply(this, arguments)
+  if (!patchedLegacyClients.has(proto)) {
+    patchedLegacyClients.add(proto)
+    shimmer.wrap(proto, 'internal_send_command', internalSendCommand => function (options) {
+      if (!startCh.hasSubscribers) return internalSendCommand.apply(this, arguments)
 
-    if (!options.callback) return internalSendCommand.apply(this, arguments)
+      if (!options.callback) return internalSendCommand.apply(this, arguments)
 
-    const ctx = getStartCtx(this, options.command, options.args)
-    return startCh.runStores(ctx, () => {
-      options.callback = wrapCallback(finishCh, errorCh, ctx, options.callback)
+      const ctx = getStartCtx(this, options.command, options.args)
+      return startCh.runStores(ctx, () => {
+        options.callback = wrapCallback(finishCh, errorCh, ctx, options.callback)
 
-      try {
-        return internalSendCommand.apply(this, arguments)
-      } catch (err) {
-        errorCh.publish(err)
+        try {
+          return internalSendCommand.apply(this, arguments)
+        } catch (err) {
+          errorCh.publish(err)
 
-        throw err
-      }
+          throw err
+        }
+      })
     })
-  })
+  }
+
   return redis
 })
 
-// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
   const proto = redis.RedisClient.prototype
-  if (patchedLegacyClients.has(proto)) return redis
-  patchedLegacyClients.add(proto)
 
-  shimmer.wrap(proto, 'send_command', sendCommand => function (command, args, callback) {
-    if (!startCh.hasSubscribers) {
-      return sendCommand.apply(this, arguments)
-    }
-
-    const ctx = getStartCtx(this, command, args)
-    return startCh.runStores(ctx, () => {
-      if (typeof callback === 'function') {
-        arguments[2] = wrapCallback(finishCh, errorCh, ctx, callback)
-      } else if (Array.isArray(args) && typeof args.at(-1) === 'function') {
-        args[args.length - 1] = wrapCallback(finishCh, errorCh, ctx, args.at(-1))
-      } else {
-        arguments[2] = wrapCallback(finishCh, errorCh, ctx)
-      }
-
-      try {
+  if (!patchedLegacyClients.has(proto)) {
+    patchedLegacyClients.add(proto)
+    shimmer.wrap(proto, 'send_command', sendCommand => function (command, args, callback) {
+      if (!startCh.hasSubscribers) {
         return sendCommand.apply(this, arguments)
-      } catch (err) {
-        ctx.error = err
-        errorCh.publish(ctx)
-
-        throw err
       }
+
+      const ctx = getStartCtx(this, command, args)
+      return startCh.runStores(ctx, () => {
+        if (typeof callback === 'function') {
+          arguments[2] = wrapCallback(finishCh, errorCh, ctx, callback)
+        } else if (Array.isArray(args) && typeof args.at(-1) === 'function') {
+          args[args.length - 1] = wrapCallback(finishCh, errorCh, ctx, args.at(-1))
+        } else {
+          arguments[2] = wrapCallback(finishCh, errorCh, ctx)
+        }
+
+        try {
+          return sendCommand.apply(this, arguments)
+        } catch (err) {
+          ctx.error = err
+          errorCh.publish(ctx)
+
+          throw err
+        }
+      })
     })
-  })
+  }
+
   return redis
 })
 

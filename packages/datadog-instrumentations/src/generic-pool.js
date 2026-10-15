@@ -35,13 +35,13 @@ function createWrapPool () {
 addHook({
   name: 'generic-pool',
   versions: ['^2.4'],
-// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 }, genericPool => {
   const proto = genericPool.Pool.prototype
-  if (patched.has(proto)) return genericPool
-  patched.add(proto)
+  if (!patched.has(proto)) {
+    patched.add(proto)
+    shimmer.wrap(proto, 'acquire', createWrapAcquire())
+  }
 
-  shimmer.wrap(proto, 'acquire', createWrapAcquire())
   return genericPool
 })
 

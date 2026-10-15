@@ -52,13 +52,13 @@ function createMiddleware () {
   }
 }
 
-// eslint-disable-next-line sonarjs/no-invariant-returns -- Both views must keep the same exports after deduplication.
 addHook({ name: 'moleculer', versions: ['>=0.14'] }, moleculer => {
   const proto = moleculer.ServiceBroker.prototype
-  if (patched.has(proto)) return moleculer
-  patched.add(proto)
 
-  shimmer.wrap(proto, 'registerMiddlewares', wrapRegisterMiddlewares)
+  if (!patched.has(proto)) {
+    patched.add(proto)
+    shimmer.wrap(proto, 'registerMiddlewares', wrapRegisterMiddlewares)
+  }
 
   return moleculer
 })
