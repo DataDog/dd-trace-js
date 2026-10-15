@@ -36,6 +36,12 @@ const JSON_STATE_OUTPUT =
   '85,"2":0.13}}}'
 const STRING_STATE_METRICS = { input_tokens: 403, output_tokens: 69, total_tokens: 472 }
 const JSON_STATE_METRICS = { input_tokens: 417, output_tokens: 69, total_tokens: 486 }
+const STUB_RESPONSE = {
+  model: MODEL,
+  answers: { damaged: { type: 'noul', noul: 0.9 } },
+  usage: { input_tokens: 10, output_tokens: 1 },
+}
+const IMAGE_REFERENCE = '<image:[0-9a-f]+>'
 
 describe('Plugin', () => {
   const { getEvents } = useLlmObs({ plugin: 'typesafe' })
@@ -53,6 +59,19 @@ describe('Plugin', () => {
         baseURL: 'http://127.0.0.1:9126/vcr/typesafe',
         compression: false,
         retry: { maxRetries: 0 },
+      })
+    }
+
+    // Requests with image assets are multipart with a random boundary and random image references, so a
+    // cassette keyed on the request body cannot replay them; these tests answer from a canned response instead.
+    function createStubbedClient () {
+      return new sdk.TypeSafeClient({
+        apiKey: 'not-a-real-key',
+        retry: { maxRetries: 0 },
+        fetch: () => Promise.resolve(new Response(JSON.stringify(STUB_RESPONSE), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })),
       })
     }
 
@@ -140,6 +159,72 @@ describe('Plugin', () => {
           },
           tags: { ml_app: 'test', integration: 'typesafe' },
         })
+      })
+
+      it('records validation errors raised before any request is sent', async () => {
+        await assert.rejects(
+          async () => createClient().systemOne({ state: STATE, questions: {}, model: MODEL }),
+          error => error instanceof sdk.TypeSafeError
+        )
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assert.equal(apmSpans.length, 1)
+        assert.equal(apmSpans[0].meta['error.type'], 'TypeSafeError')
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'typesafe.request',
+          modelName: MODEL,
+          modelProvider: 'typesafe',
+          inputMessages: [{ role: 'user', content: STATE }],
+          outputMessages: [{ content: '', role: '' }],
+          metadata: { questions: {} },
+          error: { type: 'TypeSafeError', message: MOCK_STRING, stack: MOCK_STRING },
+          tags: { ml_app: 'test', integration: 'typesafe' },
+        })
+      })
+
+      it('records the request as it was when sent, even if the caller reuses the object', async () => {
+        const request = { state: STATE, questions: questions(), model: MODEL }
+        const promise = createStubbedClient().systemOne(request)
+        request.state = 'A different message'
+        await promise
+
+        const { llmobsSpans } = await getEvents()
+        assert.deepEqual(llmobsSpans[0].meta.input.messages, [{ role: 'user', content: STATE }])
+      })
+    })
+
+    describe('image assets', () => {
+      before(function () {
+        if (!sdk.withAssets) this.skip() // image assets were added in 0.7.0
+      })
+
+      it('records an image in a question by its reference, not its bytes', async () => {
+        const photo = sdk.image(new Uint8Array(200_000).fill(255))
+        await createStubbedClient().systemOne({
+          state: 'A seller uploaded a listing photo.',
+          questions: { damaged: sdk.noul(sdk.withAssets`Is ${photo} damaged?`) },
+          model: MODEL,
+        })
+
+        const { llmobsSpans } = await getEvents()
+        const { instructions } = llmobsSpans[0].meta.metadata.questions.damaged
+        assert.match(instructions, new RegExp(`^Is ${IMAGE_REFERENCE} damaged\\?$`))
+        assert.ok(JSON.stringify(llmobsSpans[0]).length < 10_000, 'image bytes must not reach the span')
+      })
+
+      it('records text with assets as the text that was sent', async () => {
+        const photo = sdk.image(new Uint8Array(1_000).fill(255))
+        await createStubbedClient().systemOne({
+          state: sdk.withAssets`Compare ${photo} with the listing.`,
+          questions: { damaged: sdk.noul('Is the item damaged?') },
+          model: MODEL,
+        })
+
+        const { llmobsSpans } = await getEvents()
+        const [{ content }] = llmobsSpans[0].meta.input.messages
+        assert.match(content, new RegExp(`^Compare ${IMAGE_REFERENCE} with the listing\\.$`))
       })
     })
   })

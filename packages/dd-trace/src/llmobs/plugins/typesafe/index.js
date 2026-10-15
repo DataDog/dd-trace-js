@@ -10,6 +10,18 @@ class TypeSafeLLMObsPlugin extends LLMObsPlugin {
   static id = 'typesafe'
   static prefix = 'tracing:apm:typesafe:request'
 
+  start (ctx) {
+    // Captured at call time, when the SDK serializes the request: the caller may reuse and change the object
+    // before the response arrives.
+    if (this._llmobsEnabledFor(ctx)) {
+      ctx.llmobsRequest = {
+        state: toWireValue(ctx.request?.state),
+        questions: toWireValue(ctx.request?.questions),
+      }
+    }
+    super.start(ctx)
+  }
+
   getLLMObsSpanRegisterOptions (ctx) {
     return {
       kind: 'llm',
@@ -30,10 +42,10 @@ class TypeSafeLLMObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const { request, result } = ctx
-    const inputMessages = [{ role: 'user', content: stringify(request?.state) }]
+    const { llmobsRequest, result } = ctx
+    const inputMessages = [{ role: 'user', content: stringify(llmobsRequest?.state) }]
 
-    if (request?.questions) this._tagger.tagMetadata(span, { questions: request.questions })
+    if (llmobsRequest?.questions) this._tagger.tagMetadata(span, { questions: llmobsRequest.questions })
 
     if (ctx.error || !result) {
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
@@ -81,6 +93,21 @@ function extractMetrics (result) {
     metrics.totalTokens = (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0)
   }
   return metrics
+}
+
+/**
+ * Converts a request value to the JSON the SDK sends. Image assets serialize to their `<image:…>` reference and
+ * text with assets to its text through their `toJSON`, which the span processor's object copy would otherwise skip,
+ * copying image bytes onto the span one index at a time.
+ *
+ * @param {unknown} value
+ */
+function toWireValue (value) {
+  if (value === undefined) return
+  try {
+    // eslint-disable-next-line unicorn/prefer-structured-clone -- structuredClone skips toJSON and copies the bytes
+    return JSON.parse(JSON.stringify(value))
+  } catch {}
 }
 
 /**

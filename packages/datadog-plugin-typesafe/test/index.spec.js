@@ -93,6 +93,24 @@ describe('Plugin', () => {
 
         await tracesPromise
       })
+
+      it('records validation errors raised before any request is sent', async () => {
+        const tracesPromise = agent.assertSomeTraces(traces => {
+          assert.equal(traces.length, 1)
+          const span = traces[0][0]
+
+          assert.equal(span.name, 'typesafe.request')
+          assert.equal(span.error, 1)
+          assert.equal(span.meta['error.type'], 'TypeSafeError')
+        })
+
+        await assert.rejects(
+          async () => createClient().systemOne({ state: STATE, questions: {}, model: MODEL }),
+          error => error instanceof sdk.TypeSafeError
+        )
+
+        await tracesPromise
+      })
     })
   })
 })
