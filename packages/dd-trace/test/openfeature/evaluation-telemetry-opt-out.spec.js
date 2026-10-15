@@ -13,7 +13,7 @@ const telemetryMetrics = require('../../src/telemetry/metrics')
 const { hashTargetingKey } = require('../../src/openfeature/encoding')
 
 const parameter = 'dd_evaluation_telemetry_opt_out'
-const option = 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLE_EVALUATION_TELEMETRY_OPT_OUT_PARAMETER'
+const option = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_OPT_OUT_ENABLED'
 const exposureChannel = channel('ffe:exposure:submit')
 const finishChannel = channel('dd-trace:span:finish')
 

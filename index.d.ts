@@ -898,7 +898,7 @@ declare namespace tracer {
          * Allow boolean true in dd_evaluation_telemetry_opt_out to suppress evaluation events, metrics, and span tags.
          * Exposure events and flag evaluation results remain unchanged. Captured when the provider is constructed.
          * @default false
-         * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLE_EVALUATION_TELEMETRY_OPT_OUT_PARAMETER
+         * @env DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_OPT_OUT_ENABLED
          */
         enableEvaluationTelemetryOptOutParameter?: boolean
         /**

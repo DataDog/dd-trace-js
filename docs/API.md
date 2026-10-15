@@ -105,7 +105,7 @@ const enabled = await OpenFeature.getClient().getBooleanValue('checkout', false,
 The option defaults to `false`. The provider captures it at construction.
 Only boolean `true` in the merged `dd_evaluation_telemetry_opt_out` context attribute suppresses new evaluation EVP events,
 OpenTelemetry evaluation metrics, and automatic flag span tags. Strings, numbers, null, missing attributes, and false keep existing behavior.
-You can also enable the option with `DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLE_EVALUATION_TELEMETRY_OPT_OUT_PARAMETER=true`.
+You can also enable the option with `DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_OPT_OUT_ENABLED=true`.
 
 Flag values, variants, reasons, defaults, experiment exposures, exposure deduplication, and customer hooks remain unchanged.
 Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.

@@ -937,7 +937,7 @@
         "default": "false"
       }
     ],
-    "DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLE_EVALUATION_TELEMETRY_OPT_OUT_PARAMETER": [
+    "DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_OPT_OUT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

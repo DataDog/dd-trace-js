@@ -6097,7 +6097,7 @@ rules:
     })
 
     it('disables evaluation telemetry opt-out by default and accepts the provider option', () => {
-      const name = 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLE_EVALUATION_TELEMETRY_OPT_OUT_PARAMETER'
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_OPT_OUT_ENABLED'
       assert.strictEqual(getConfig().featureFlags[name], false)
       process.env[name] = 'true'
       assert.strictEqual(getConfig().featureFlags[name], true)
@@ -6110,6 +6110,40 @@ rules:
       assert.strictEqual(getConfig({
         experimental: { flaggingProvider: { enableEvaluationTelemetryOptOutParameter: true } },
       }).featureFlags[name], true)
+    })
+
+    it('reports the stable evaluation telemetry opt-out environment variable', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_OPT_OUT_ENABLED'
+      process.env[name] = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags[name], true)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'env_var')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name, value: true, origin: 'env_var' },
+      ])
+    })
+
+    it('does not register the unreleased experimental evaluation telemetry opt-out variable', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_OPT_OUT_ENABLED'
+      const removedName = 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLE_EVALUATION_TELEMETRY_OPT_OUT_PARAMETER'
+      process.env[removedName] = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags[name], false)
+      assert.strictEqual(Object.hasOwn(config.featureFlags, removedName), false)
+    })
+
+    it('accepts false for the stable evaluation telemetry opt-out environment variable', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_OPT_OUT_ENABLED'
+      process.env[name] = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags[name], false)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'env_var')
     })
 
     it('reads the configuration source environment variable', () => {
