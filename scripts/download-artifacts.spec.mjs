@@ -111,7 +111,7 @@ describe('download-artifacts', () => {
 
       assert.equal(fetchStub.callCount, 2)
       assert.deepEqual(result, { downloaded: 1, failed: 0 })
-      assert.match(logStub.firstCall.firstArg, /\[retry 1\/4] coverage-unit from run 42: HTTP 503/)
+      assert.match(logStub.firstCall.firstArg, /\[retry 1\/4\] coverage-unit from run 42: HTTP 503/)
     } finally {
       process.chdir(originalCwd)
       rmSync(tempDir, { recursive: true, force: true })
