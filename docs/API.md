@@ -746,3 +746,38 @@ function handle () {
   })
 }
 ```
+
+## Jest test automation exclusions
+
+With the `jest-circus` runner, annotate test callbacks using `dd-trace/test-optimization`:
+
+```javascript
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+
+test('critical check', preventFailureSuppression(noAutoRetry(() => {
+  expect(check()).toBe(true)
+})))
+
+test.each(cases)('critical case %s', preventFailureSuppression(value => {
+  expect(check(value)).toBe(true)
+}))
+```
+
+`preventFailureSuppression(callback)` prevents Datadog quarantine and disabling from applying to that callback.
+It does not override Test Impact Analysis, developer skips, or test selection, and does not prevent retries.
+
+`noAutoRetry(callback)` prevents Datadog Auto Test Retries, Early Flake Detection retries, and Attempt to Fix retries.
+It does not turn off test discovery or flakiness reporting. Explicit `jest.retryTimes(...)` calls remain available.
+To protect a failure from both quarantine/disable and automatic retries, combine the helpers.
+
+Each helper returns an annotated callback without modifying the original. Callback arguments, return values,
+errors, `this`, and arity are preserved. Apply the helper to the callback passed to `test.each` to protect every case.
+The helpers can be imported without initializing the tracer; enforcement requires Jest instrumentation.
+
+Test events report `test.test_management.prevent_failure_suppression` and `test.test_management.no_auto_retry`
+as `true` when the corresponding annotation is present; absent annotations omit the tag.
+These describe annotations observed on that execution, on any branch. Management-property tags retain backend
+assignments even when annotations override their runtime behavior. Default-branch synchronization and UI restrictions require backend support;
+these helpers do not update remote test properties. Files skipped by Test Impact Analysis produce no new observation.
+
+These helpers currently target Jest Circus. Other test frameworks and the legacy Jest Jasmine runner do not enforce them.
