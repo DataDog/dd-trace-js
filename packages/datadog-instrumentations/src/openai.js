@@ -59,6 +59,13 @@ const V4_PACKAGE_SHIMS = [
     interceptChannel: responsesInterceptChannel,
   },
   {
+    file: 'resources/decisions',
+    targetClass: 'Decisions',
+    baseResource: 'decisions',
+    methods: ['create'],
+    versions: ['>=7.30.0'],
+  },
+  {
     file: 'resources/embeddings',
     targetClass: 'Embeddings',
     baseResource: 'embeddings',

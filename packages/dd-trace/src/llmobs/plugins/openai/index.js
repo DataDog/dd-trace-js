@@ -8,7 +8,7 @@ const {
 } = require('../../constants/tags')
 const { audioMimeTypeFromFormat, formatAudioPart } = require('../../audio-utils')
 const { safeJsonParse } = require('../../util')
-const { AUDIO_MIME_TYPES } = require('./constants')
+const { AUDIO_MIME_TYPES, IMAGE_FALLBACK, INPUT_TYPE_IMAGE } = require('./constants')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
@@ -107,6 +107,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       this._tagEmbedding(span, inputs, response, error)
     } else if (operation === 'response') {
       this.#tagResponse(span, inputs, response, error)
+    } else if (operation === 'decision') {
+      this.#tagDecision(span, inputs, response, error)
     }
 
     if (!error) {
@@ -464,6 +466,30 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     this._tagger.tagMetadata(span, outputMetadata) // update the metadata with the output metadata
   }
+
+  #tagDecision (span, inputs, response, error) {
+    const { input, questions } = inputs
+
+    const inputMessages = typeof input === 'string'
+      ? [{ role: 'user', content: input }]
+      : (Array.isArray(input) ? input : []).map(message => ({
+          role: message.role ?? 'user',
+          content: decisionMessageContent(message.content),
+        }))
+
+    if (Array.isArray(questions)) {
+      this._tagger.tagMetadata(span, { questions })
+    }
+
+    if (error) {
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
+      return
+    }
+
+    this._tagger.tagLLMIO(span, inputMessages, [
+      { role: 'assistant', content: JSON.stringify(response.answers ?? []) },
+    ])
+  }
 }
 
 // TODO: this will be moved to the APM integration
@@ -485,13 +511,28 @@ function normalizeOpenAIResourceName (resource) {
     case 'responses.create':
       return 'createResponse'
 
+    // decisions
+    case 'decisions.create':
+      return 'createDecision'
+
     default:
       return resource
   }
 }
 
+// Decision images must be inline data URLs, so they are replaced with a marker instead of copied onto the span
+function decisionMessageContent (content) {
+  if (!Array.isArray(content)) return content ?? ''
+
+  return content
+    .map(part => (part?.type === INPUT_TYPE_IMAGE ? IMAGE_FALLBACK : part?.text ?? ''))
+    .filter(Boolean)
+    .join('\n')
+}
+
 function gateResource (resource) {
-  return ['createCompletion', 'createChatCompletion', 'createEmbedding', 'createResponse'].includes(resource)
+  return ['createCompletion', 'createChatCompletion', 'createEmbedding', 'createResponse', 'createDecision']
+    .includes(resource)
     ? resource
     : undefined
 }
@@ -506,6 +547,8 @@ function getOperation (resource) {
       return 'embedding'
     case 'createResponse':
       return 'response'
+    case 'createDecision':
+      return 'decision'
     default:
       // should never happen
       return 'unknown'
