@@ -101,7 +101,8 @@ if (isMainThread) {
   const { isPackageManager } = require('./packages/dd-trace/src/util.js')
   // Only register the loader hook when instrumentation initialized. On a bailout the
   // loader has nothing to instrument and can keep a short-lived process from exiting.
-  // Package managers have nothing to instrument either; see register.js.
+  // Package managers have nothing to instrument either; see register.js. This only covers
+  // `--import`: with `--loader`, Node starts the hooks thread before any of this code runs.
   if (Module.register && initialized && !isPackageManager()) {
     // The loader builds its own include/exclude matcher in `initialize`, so no
     // options need to cross the registration boundary.
