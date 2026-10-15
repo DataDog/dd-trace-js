@@ -4,13 +4,9 @@ const assert = require('node:assert/strict')
 
 const { describe, before, after, it } = require('mocha')
 
-const { NODE_MAJOR } = require('../../../version')
-
-// @typesafe-ai/sdk 0.7.0 requires Node.js >=22 (its image assets rely on the global `crypto`).
-if (NODE_MAJOR < 22) return
-
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { supportsRunningNode } = require('./supports-running-node')
 
 const MODEL = 'jev-1.13.0'
 const STATE = 'I was charged twice for my subscription this month and want the duplicate refunded.'
@@ -18,6 +14,8 @@ const ERROR_STATE = 'Please cancel my account.'
 
 describe('Plugin', () => {
   withVersions('typesafe', '@typesafe-ai/sdk', (version) => {
+    if (!supportsRunningNode(require(`../../../versions/@typesafe-ai/sdk@${version}`))) return
+
     let sdk
 
     before(async () => {

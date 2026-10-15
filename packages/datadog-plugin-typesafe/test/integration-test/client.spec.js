@@ -5,11 +5,6 @@ const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
-const { NODE_MAJOR } = require('../../../../version')
-
-// @typesafe-ai/sdk 0.7.0 requires Node.js >=22 (its image assets rely on the global `crypto`).
-if (NODE_MAJOR < 22) return
-
 const {
   FakeAgent,
   sandboxCwd,
@@ -20,12 +15,15 @@ const {
   stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { supportsRunningNode } = require('../supports-running-node')
 
 describe('esm', () => {
   let agent
   let proc
 
   withVersions('typesafe', ['@typesafe-ai/sdk'], version => {
+    if (!supportsRunningNode(require(`../../../../versions/@typesafe-ai/sdk@${version}`))) return
+
     useSandbox([`@typesafe-ai/sdk@${version}`], false, [
       './packages/datadog-plugin-typesafe/test/integration-test/*',
     ])
