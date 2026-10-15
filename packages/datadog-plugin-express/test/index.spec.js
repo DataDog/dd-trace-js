@@ -5,7 +5,6 @@ const { AsyncLocalStorage } = require('node:async_hooks')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
-const axios = require('axios')
 const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
@@ -18,6 +17,7 @@ const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
@@ -74,7 +74,7 @@ describe('Plugin', () => {
               }, { timeoutMs: 100 })
               .then(done, done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
@@ -91,7 +91,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`)
               .then(() => done())
               .catch(done)
@@ -143,7 +143,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
@@ -183,7 +183,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
           })
@@ -224,7 +224,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
           })
@@ -330,10 +330,71 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
           })
+        })
+
+        it('should dispatch tracer-wrapped request middleware', async () => {
+          const app = express()
+
+          function requestMiddleware (request, response, next) {
+            response.locals.path = request.path
+            next()
+          }
+
+          const middleware = tracer.wrap('request.middleware', requestMiddleware)
+
+          app.use(middleware)
+          app.get('/wrapped', (request, response) => {
+            response.status(200).send(response.locals.path)
+          })
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+
+          const port = appListener.address().port
+          const tracePromise = agent.assertSomeTraces(traces => {
+            assert.ok(traces[0].some(span => span.name === 'request.middleware'))
+          })
+          const responsePromise = httpRequest.get(`http://localhost:${port}/wrapped`)
+          const [, response] = await Promise.all([tracePromise, responsePromise])
+
+          assert.strictEqual(middleware.length, 3)
+          assert.strictEqual(response.status, 200)
+          assert.strictEqual(response.data, '/wrapped')
+        })
+
+        it('should dispatch tracer-wrapped error middleware', async () => {
+          const app = express()
+
+          app.use(() => { throw new Error('boom') })
+
+          function errorMiddleware (error, request, response, next) {
+            next()
+            response.status(418).send(`${error.message}:${request.path}`)
+          }
+
+          const middleware = tracer.wrap('error.middleware', errorMiddleware)
+          app.use(middleware)
+          app.use((_request, _response, _next) => {})
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+
+          const port = appListener.address().port
+          const tracePromise = agent.assertSomeTraces(traces => {
+            assert.ok(traces[0].some(span => span.name === 'error.middleware'))
+          })
+          const responsePromise = httpRequest.get(`http://localhost:${port}/wrapped`, {
+            validateStatus: status => status === 418,
+          })
+          const [, response] = await Promise.all([tracePromise, responsePromise])
+
+          assert.strictEqual(middleware.length, 4)
+          assert.strictEqual(response.status, 418)
+          assert.strictEqual(response.data, 'boom:/wrapped')
         })
 
         it('should do automatic instrumentation on middleware that break the async context', done => {
@@ -384,7 +445,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user/1`)
               .catch(done)
           })
@@ -439,7 +500,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user/1`)
               .catch(done)
           })
@@ -467,7 +528,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
           })
@@ -495,7 +556,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
           })
@@ -529,7 +590,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/foo/bar`)
               .catch(done)
           })
@@ -557,7 +618,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
           })
@@ -586,7 +647,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
           })
@@ -620,7 +681,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/parent/child`)
               .catch(done)
           })
@@ -648,7 +709,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/1`)
               .catch(done)
           })
@@ -686,7 +747,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/123`)
               .catch(done)
           })
@@ -718,7 +779,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app/user/123`)
               .catch(done)
           })
@@ -747,7 +808,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app`)
               .catch(done)
           })
@@ -782,7 +843,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/v1/a`)
               .catch(() => {})
           })
@@ -812,7 +873,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app`)
               .catch(done)
           })
@@ -847,7 +908,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/foo/bar`)
               .catch(done)
           })
@@ -882,7 +943,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/foo/bar`)
               .catch(done)
           })
@@ -919,7 +980,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/foo/bar`)
               .catch(done)
           })
@@ -950,7 +1011,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/v1/a`)
               .catch(() => {})
           })
@@ -984,7 +1045,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app`)
               .catch(done)
           })
@@ -1007,7 +1068,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/app`)
               .catch(done)
           })
@@ -1040,7 +1101,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios.get(`http://localhost:${port}/user`)
+            httpRequest.get(`http://localhost:${port}/user`)
               .catch(done)
           })
         })
@@ -1072,7 +1133,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios.get(`http://localhost:${port}/user`)
+            httpRequest.get(`http://localhost:${port}/user`)
               .catch(done)
           })
         })
@@ -1103,7 +1164,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios.get(`http://localhost:${port}/app/user/123`)
+            httpRequest.get(`http://localhost:${port}/app/user/123`)
               .catch(done)
           })
         })
@@ -1127,7 +1188,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 headers: {
                   'x-datadog-trace-id': '1234',
@@ -1168,7 +1229,7 @@ describe('Plugin', () => {
               done()
             })
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -1206,7 +1267,7 @@ describe('Plugin', () => {
               done()
             })
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 400,
               })
@@ -1241,7 +1302,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -1289,7 +1350,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -1336,7 +1397,7 @@ describe('Plugin', () => {
                 })
               }
             }),
-            axios.get(`http://localhost:${port}/user`),
+            httpRequest.get(`http://localhost:${port}/user`),
           ])
         })
 
@@ -1379,7 +1440,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -1416,7 +1477,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
@@ -1446,7 +1507,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
@@ -1495,7 +1556,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
@@ -1529,7 +1590,7 @@ describe('Plugin', () => {
               assert.ok(!('http.route' in spans[0].meta))
             }).then(done).catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/does-not-exist`, {
                 validateStatus: status => status === 404,
               })
@@ -1580,7 +1641,7 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              axios.get(`http://localhost:${port}/dd`)
+              httpRequest.get(`http://localhost:${port}/dd`)
                 .catch(done)
             })
           })
@@ -1610,7 +1671,7 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              axios.get(`http://localhost:${port}/dd`)
+              httpRequest.get(`http://localhost:${port}/dd`)
                 .catch(done)
             })
           })
@@ -1654,7 +1715,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`)
               .catch(done)
           })
@@ -1679,7 +1740,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 400,
               })
@@ -1706,7 +1767,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 headers: { 'User-Agent': 'test' },
               })
@@ -1730,7 +1791,7 @@ describe('Plugin', () => {
               }, { timeoutMs: 100 })
               .then(done, done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/health`)
               .catch(done)
           })
@@ -1777,7 +1838,7 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost', () => {
             const port = appListener.address().port
 
-            axios.get(`http://localhost:${port}/user`)
+            httpRequest.get(`http://localhost:${port}/user`)
               .catch(done)
           })
         })
@@ -1806,7 +1867,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios.get(`http://localhost:${port}/user`)
+            httpRequest.get(`http://localhost:${port}/user`)
               .catch(done)
           })
         })
@@ -1840,7 +1901,7 @@ describe('Plugin', () => {
               done()
             })
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -1879,7 +1940,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 400,
               })
@@ -1914,7 +1975,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })
@@ -1949,7 +2010,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://localhost:${port}/user`, {
                 validateStatus: status => status === 500,
               })

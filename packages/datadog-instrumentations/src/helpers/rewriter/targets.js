@@ -10,7 +10,7 @@ const NODE_MODULES = '/node_modules/'
  * @typedef {object} RewriteTarget
  * @property {string} moduleName
  * @property {string} filePath
- * @property {string} [activationName]
+ * @property {boolean} [activate]
  */
 
 /**
@@ -25,13 +25,13 @@ function getRewriteTarget (filename) {
   if (!Object.hasOwn(targets, modulePath)) return
   const moduleName = targets[modulePath]
   if (typeof moduleName !== 'string') return
-  const activationName = getRewriteActivationName(moduleName)
+  const activate = isRewriteActivationEnabled(moduleName)
 
   const rewriteTarget = {
     moduleName,
     filePath: modulePath.slice(moduleName.length + 1),
   }
-  if (activationName) rewriteTarget.activationName = activationName
+  if (activate) rewriteTarget.activate = true
   return rewriteTarget
 }
 
@@ -49,9 +49,9 @@ function isRewriteTargetName (name) {
 /**
  * @param {string} moduleName
  */
-function getRewriteActivationName (moduleName) {
+function isRewriteActivationEnabled (moduleName) {
   // Keep target-name-only consumers from loading every instrumentation descriptor.
-  return require('./instrumentation-registry').getRewriteActivationName(moduleName)
+  return require('./instrumentation-registry').isRewriteActivationEnabled(moduleName)
 }
 
-module.exports = { getRewriteActivationName, getRewriteTarget, getRewriteTargetNames, isRewriteTargetName }
+module.exports = { getRewriteTarget, getRewriteTargetNames, isRewriteActivationEnabled, isRewriteTargetName }

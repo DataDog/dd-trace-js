@@ -1,0 +1,52 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/decisions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "application/json",
+      "User-Agent": "OpenAI/JS 7.30.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "7.30.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.23.2",
+      "Content-Type": "application/json",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "531"
+    },
+    "body": "{\"model\":\"not-a-decision-model\",\"input\":\"I was charged twice for my subscription this month.\",\"questions\":[{\"type\":\"choice\",\"name\":\"department\",\"instructions\":\"Which team should handle this request?\",\"choices\":[{\"value\":\"billing\"},{\"value\":\"technical\"},{\"value\":\"sales\"}]},{\"type\":\"score\",\"name\":\"severity\",\"instructions\":\"How severe is the issue?\",\"levels\":[{\"label\":\"Minor\"},{\"label\":\"Workaround available\"},{\"label\":\"Blocking\"}]},{\"type\":\"predicate\",\"name\":\"needs_refund\",\"instructions\":\"Is the customer asking for a refund?\"}]}"
+  },
+  "response": {
+    "status": {
+      "code": 404,
+      "message": "Not Found"
+    },
+    "headers": {
+      "Date": "Fri, 09 Oct 2026 17:25:23 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "vary": "origin, access-control-request-method, access-control-request-headers",
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "x-request-id,retry-after,server-timing-total, CF-Ray",
+      "server-timing-total": "1.781",
+      "openai-processing-ms": "2",
+      "x-request-id": "req_b17faa97b7e0468a9534d53be3c5ca67",
+      "x-openai-proxy-wasm": "v0.1",
+      "Server": "cloudflare",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=Uc5s73B1.cDsGarbPHwjFPr_rHDOUtxMHPF77rDemt8-1791566723.580283-1.0.1.1-mivVgaOZKl7oELEV7UDnLIXOfx5GeBlybTup74h24vm2YaJxnSSXxC_mD7oSZV37eIyRZbS2BhcgGt75.sm.7WKfZ8NDoYrvBRDhGh5QAcTZZQoRAGS0UuMMK2b5JUqM; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Fri, 09 Oct 2026 17:55:23 GMT",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Encoding": "gzip",
+      "CF-RAY": "a47f15965cf382a6-EWR",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\"error\":{\"message\":\"The model `not-a-decision-model` does not exist or you do not have access to it.\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"model_not_found\"}}"
+  }
+}

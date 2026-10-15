@@ -5,10 +5,10 @@ const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
-const axios = require('axios').create({ validateStatus: null })
 const agent = require('../../dd-trace/test/plugins/agent')
 const { getActiveRequest } = require('../../dd-trace/src/appsec/store')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client').create({ validateStatus: null })
 
 const users = [
   {
@@ -108,10 +108,10 @@ withVersions('passport', 'passport', version => {
     })
 
     it('should not call subscriber when an error occurs', async () => {
-      const login = await axios.get(`http://localhost:${port}/login?username=error&password=1234`)
+      const login = await httpRequest.get(`http://localhost:${port}/login?username=error&password=1234`)
       const cookie = login.headers['set-cookie'][0]
 
-      const res = await axios.get(`http://localhost:${port}/`, { headers: { cookie } })
+      const res = await httpRequest.get(`http://localhost:${port}/`, { headers: { cookie } })
 
       assert.strictEqual(res.status, 500)
       assert.match(res.data, /\*MOCK\* Cannot deserialize user/)
@@ -119,10 +119,10 @@ withVersions('passport', 'passport', version => {
     })
 
     it('should not call subscriber when no user is found', async () => {
-      const login = await axios.get(`http://localhost:${port}/login?username=notfound&password=1234`)
+      const login = await httpRequest.get(`http://localhost:${port}/login?username=notfound&password=1234`)
       const cookie = login.headers['set-cookie'][0]
 
-      const res = await axios.get(`http://localhost:${port}/`, { headers: { cookie } })
+      const res = await httpRequest.get(`http://localhost:${port}/`, { headers: { cookie } })
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, '')
@@ -130,10 +130,10 @@ withVersions('passport', 'passport', version => {
     })
 
     it('should call subscriber with proper arguments on user deserialize', async () => {
-      const login = await axios.get(`http://localhost:${port}/login?username=test&password=1234`)
+      const login = await httpRequest.get(`http://localhost:${port}/login?username=test&password=1234`)
       const cookie = login.headers['set-cookie'][0]
 
-      const res = await axios.get(`http://localhost:${port}/`, { headers: { cookie } })
+      const res = await httpRequest.get(`http://localhost:${port}/`, { headers: { cookie } })
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'uuid_42')
@@ -145,7 +145,7 @@ withVersions('passport', 'passport', version => {
     })
 
     it('should block when subscriber aborts', async () => {
-      const login = await axios.get(`http://localhost:${port}/login?username=test&password=1234`)
+      const login = await httpRequest.get(`http://localhost:${port}/login?username=test&password=1234`)
       const cookie = login.headers['set-cookie'][0]
 
       subscriberStub.callsFake(({ abortController }) => {
@@ -156,7 +156,7 @@ withVersions('passport', 'passport', version => {
         abortController.abort()
       })
 
-      const res = await axios.get(`http://localhost:${port}/`, { headers: { cookie } })
+      const res = await httpRequest.get(`http://localhost:${port}/`, { headers: { cookie } })
 
       const abortController = new AbortController()
       abortController.abort()

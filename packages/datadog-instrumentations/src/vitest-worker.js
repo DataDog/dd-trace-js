@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
 const { fileURLToPath } = require('node:url')
+const { deserialize } = require('node:v8')
 const { isMainThread, parentPort } = require('node:worker_threads')
 
 const { channel } = require('dc-polyfill')
@@ -47,6 +48,7 @@ const {
 
 const EFD_SUITE_ADMISSION_TIMEOUT_MS = 5000
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
+const wrappedTestRunners = new WeakSet()
 const taskToCtx = new WeakMap()
 const taskToTestProperties = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -412,6 +414,14 @@ function finishEfdSuiteAdmissionRequest (requestId, allowed) {
  * @param {unknown} message
  */
 function handleEfdSuiteAdmissionResponse (message) {
+  // Older Vitest 4 forks serialize parent messages explicitly; newer forks and threads send plain values.
+  if (Buffer.isBuffer(message) || (message?.type === 'Buffer' && Array.isArray(message.data))) {
+    try {
+      message = deserialize(Buffer.from(message))
+    } catch {
+      return
+    }
+  }
   if (!Array.isArray(message) || message[0] !== VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE) return
 
   const { allowed, requestId } = message[1] || {}
@@ -520,6 +530,11 @@ function wrapSuiteHookFn (hookType, fn, fallbackTask) {
 }
 
 function wrapVitestTestRunner (VitestTestRunner) {
+  // ESM hooks can expose the same runner through multiple module identities.
+  // Wrapping its lifecycle methods twice would report each retry twice.
+  if (wrappedTestRunners.has(VitestTestRunner)) return
+  wrappedTestRunners.add(VitestTestRunner)
+
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (task) {
@@ -622,6 +637,13 @@ function wrapVitestTestRunner (VitestTestRunner) {
   // `onAfterRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => function (task) {
     const { isTestManagementTestsEnabled } = getProvidedContext()
+
+    // Vitest 5 aggregates failed repetitions into the final state. Preserve the last attempt's actual result.
+    if ((attemptToFixTasks.has(task) || efdRetryTasks.has(task)) &&
+        task.result.state === 'fail' && taskToCtx.get(task)?.status === 'pass' &&
+        (task.result.errors?.length ?? 0) === (taskToReportedErrorCount.get(task) ?? 0)) {
+      task.result.state = 'pass'
+    }
 
     if (isTestManagementTestsEnabled) {
       const isAttemptingToFix = attemptToFixTasks.has(task)
@@ -745,7 +767,12 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
     }
 
-    const lastExecutionStatus = task.result.state
+    let lastExecutionStatus = task.result.state
+    if (lastExecutionStatus === 'run' && numRepetition > 0) {
+      // Vitest 5 resets the state before each repetition but retains errors from earlier attempts.
+      const reportedErrorCount = taskToReportedErrorCount.get(task) ?? 0
+      lastExecutionStatus = (task.result.errors?.length ?? 0) > reportedErrorCount ? 'fail' : 'pass'
+    }
     const isAtf = attemptToFixTasks.has(task)
     const isEfd = efdRetryTasks.has(task)
     const shouldTrackStatuses = isEfd || isAtf
@@ -1101,14 +1128,18 @@ function getStartTestsWrapper (frameworkVersion) {
             isDisabled: disabledTasks.has(task),
             isQuarantined: quarantinedTasks.has(task),
           })
-        } else if (state === 'pass' && !isSwitchedStatus) {
+        } else if ((state === 'pass' && !isSwitchedStatus) || switchedStatus === 'pass') {
+          // Attempt-to-fix can pass its last attempt while an earlier failure still fails the suite.
+          if (switchedStatus === 'pass' && errors?.length) {
+            testSuiteError = testError
+          }
           if (testCtx) {
             const isSkippedByTestManagement =
               !attemptToFixTasks.has(task) && (disabledTasks.has(task) || quarantinedTasks.has(task))
             const promises = {}
             testPassCh.publish({
               task,
-              finalStatus: isSkippedByTestManagement ? 'skip' : 'pass',
+              finalStatus: isSkippedByTestManagement ? 'skip' : state,
               earlyFlakeAbortReason: efdSlowAbortedTasks.has(task) ? 'slow' : undefined,
               promises,
               ...testCtx.currentStore,

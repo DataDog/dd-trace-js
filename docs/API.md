@@ -24,6 +24,66 @@ best-effort formatted `console.warn` and `console.error` calls made with an acti
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 `DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
 
+<h2 id="feature-flag-configuration">Feature Flag Configuration for SSR</h2>
+
+Use `dd-trace/openfeature/rules-based` to fetch rules and serialize configuration for browser initialization.
+These helpers do not initialize the tracer, register a provider, or enable tracking.
+The rules decoder is loaded only when this entrypoint is imported, not by `dd-trace/openfeature`
+or normal tracer or provider imports.
+
+```javascript
+import { fetchRulesConfiguration, configurationToString } from 'dd-trace/openfeature/rules-based.js'
+
+export async function getServerSideProps () {
+  const configuration = await fetchRulesConfiguration({
+    distributionChannel: 'client',
+    clientToken: process.env.DD_CLIENT_TOKEN,
+    env: process.env.DD_ENV,
+  })
+
+  return { props: { flagsConfiguration: configurationToString(configuration) } }
+}
+```
+
+The browser can parse `flagsConfiguration` with `configurationFromString` from
+`@datadog/openfeature-browser/rules-based` and pass the result to `DatadogCoreProvider.setConfiguration()`.
+Use your framework's safe SSR data serialization; do not interpolate the string directly into HTML or a script.
+
+**Only forward client-distributed configuration to browsers.** The fetch helper defaults to the `server` distribution
+channel, which requires `apiKey` instead of `clientToken`. Serialization does not remove server-only flags.
+The helper accepts explicit `env`, optional `site`, `timeoutMs` (default 5000), `signal`, and custom `fetch` options;
+it does not inherit tracer configuration or read environment variables automatically.
+Catch `ConfigurationFetchError` to handle loading failures using its `code` and optional HTTP `status`.
+
+Use `require('dd-trace/openfeature/rules-based')` for CommonJS or named imports from
+`dd-trace/openfeature/rules-based.js` for native Node.js ESM.
+
+<h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
+
+The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
+`DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false` to disable this collection. This setting does not disable
+flag evaluation, exposure events, span enrichment, or OpenTelemetry evaluation metrics.
+
+Privacy consent comes from `observeFullEvaluationData` in the flag configuration used for each evaluation:
+
+- Unless it is literally `true`, valid targeting keys are sent as unsalted SHA-256 hashes and evaluation context is omitted.
+  Hashing is pseudonymization, not anonymity: a predictable targeting key can still be guessed and hashed.
+- With consent, events may include the raw targeting key and a bounded, flattened evaluation-context snapshot.
+- When aggregation reaches its identity-level limits, degraded rows omit targeting keys and context even with consent.
+- Events may include approved error codes, but never free-form evaluation error messages.
+
+The background worker starts with the first evaluation batch. Partial batches are scheduled after 20 ms
+when the application event loop can run. There is no public flush API for these events. Internal flush signals and
+graceful shutdown bypass the batching delay. On Node.js `beforeExit`, shutdown attempts to drain pending evaluations
+for up to five seconds. Diagnostic counters already recorded by the worker are collected before instrumentation
+telemetry's final send; counters produced during the subsequent drain may miss that send. Delivery is best-effort:
+`process.exit()`, terminating signals, crashes, and frozen runtimes can prevent the drain and lose pending events.
+
+The worker requires its JavaScript file and dependencies to be available at runtime. Bundling `dd-trace` into a single
+file does not automatically include the worker; the Datadog esbuild plugin does not currently package it. Keep `dd-trace`
+external to the bundle with its installed package available. If the worker cannot load, `flagevaluation` track EVP events
+are disabled for that provider and a bounded warning is logged; flag evaluations and existing exposure events continue.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:
@@ -588,6 +648,37 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
 
+Failure screenshot and video uploads are enabled by default for supported browser test integrations and transports.
+When `DD_TEST_FAILURE_SCREENSHOTS_ENABLED` or `DD_TEST_FAILURE_VIDEOS_ENABLED` is unset, Playwright and Cypress must
+be configured to capture the corresponding media. Explicitly setting a flag to `true` also enables its capture in
+Playwright (1.38.0 or later) and Cypress. Playwright uses `only-on-failure` screenshots and `retain-on-failure` videos
+unless the project already captures failures; existing capture options are preserved. Cypress enables
+`screenshotOnRunFailure` or `video`. Setting either flag to `false` disables that upload without modifying the
+framework's capture settings. The flags operate independently. Only automatic failure media is uploaded.
+
+For WebdriverIO 9 and later with the Mocha or Jasmine adapter, explicitly set
+`DD_TEST_FAILURE_VIDEOS_ENABLED=true` to record and upload failure videos automatically.
+Install [FFmpeg](https://ffmpeg.org/download.html) with the `libvpx` encoder and make the `ffmpeg` executable
+available on the WDIO worker's `PATH`. Check the installation with `ffmpeg -version` and `ffmpeg -encoders`.
+No WebdriverIO video reporter or additional dd-trace npm dependency is required. Encoding runs in a separate
+process and only for failed attempts. If FFmpeg is unavailable, recording is disabled and a warning is logged.
+When videos are enabled and both FFmpeg and video uploads are available, dd-trace defaults new sessions to
+`unhandledPromptBehavior: 'ignore'` so background screenshots preserve open dialogs. Explicit prompt policies
+are preserved. Recording is disabled with a warning
+if any session's negotiated policy allows screenshots to accept or dismiss dialogs. Policies are checked before
+each capture; reloading a session with an unsafe policy discards the active recording. Tests must handle their
+dialogs; other WebDriver commands no longer automatically dismiss them under the `ignore` policy.
+
+WebdriverIO recordings are screenshot sequences encoded as WebM, using the approach of
+[wdio-video-reporter](https://webdriver.io/docs/wdio-video-reporter/). They capture browser command results
+and sample idle periods every 500ms; browser dialogs and native UI outside screenshots are not recorded.
+Each failed attempt, including retries and test hook failures, gets its own upload. Passing and skipped
+attempts are discarded. Multiremote sessions produce separate videos for the same attempt.
+Videos are limited to 1280×720 pixels and use two frames per second. Temporary frames and videos are
+removed after completion. Raw frames share a 200 MiB budget per WDIO worker across capturing, encoding, and
+uploading attempts, released after file cleanup, with a limit of 16 megapixels per screenshot. Capture,
+encoding, or upload failures do not fail the test run.
+
 Set `DD_CODE_COVERAGE_FLAGS` to a comma-separated list of flags to attach to uploaded code coverage
 reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
 accepted; if more are provided, the report is uploaded without flags.
@@ -602,6 +693,7 @@ duration, instead of the flat per-test retry limit. When enabled, the number of 
 determined by the duration of its initial attempt. Dynamic ATR uses inclusive upper bounds of 5s, 10s, 30s,
 and 5m, followed by a >5m bucket. EFD retains its exclusive upper bounds.
 Requires Auto Test Retries to be enabled by the backend.
+For Mocha, dynamic ATR requires version 8 or newer. Older supported versions use the flat retry limit.
 
 Set `DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS` to a comma-separated list of five positive integers in `[1, 20]`
 overriding the five duration-based Auto Test Retries budgets (for the 5s, 10s, 30s, 5m, and >5m buckets

@@ -1,6 +1,7 @@
 'use strict'
 
 const tracer = require('dd-trace').init({ flushInterval: 0 })
+const Anthropic = require('@anthropic-ai/sdk')
 const { generateText, jsonSchema, stepCountIs, tool } = require('ai')
 const express = require('express')
 const OpenAI = require('openai')
@@ -10,6 +11,11 @@ const app = express()
 const openaiClient = new OpenAI({
   apiKey: 'test-key',
   baseURL: process.env.OPENAI_BASE_URL,
+})
+
+const anthropicClient = new Anthropic({
+  apiKey: 'test-key',
+  baseURL: process.env.ANTHROPIC_BASE_URL,
 })
 
 app.get('/no-aiguard', (req, res) => {
@@ -240,9 +246,11 @@ function handleOpenAIError (error, res) {
   res.status(500).json({ error: error.message, name: error.name })
 }
 
-function handleOpenAIStreamError (error, res, chunks) {
-  if (error.name === 'AIGuardAbortError') {
-    res.status(403).json({ blocked: true, reason: error.reason, chunks })
+function handleStreamError (error, res, chunks) {
+  // `messages.stream()` rewraps anything that is not an SDK error into an AnthropicError.
+  const abort = [error, error?.cause].find(candidate => candidate?.name === 'AIGuardAbortError')
+  if (abort) {
+    res.status(403).json({ blocked: true, reason: abort.reason, chunks })
     return
   }
   res.status(500).json({ error: error.message, name: error.name, chunks })
@@ -538,7 +546,7 @@ app.get('/openai-stream-after-deny', async (req, res) => {
     }
     res.status(200).json({ blocked: false, streamed: true, chunks })
   } catch (error) {
-    handleOpenAIStreamError(error, res, chunks)
+    handleStreamError(error, res, chunks)
   }
 })
 
@@ -556,7 +564,7 @@ app.get('/openai-stream-tool-after-deny', async (req, res) => {
     }
     res.status(200).json({ blocked: false, streamed: true, chunks })
   } catch (error) {
-    handleOpenAIStreamError(error, res, chunks)
+    handleStreamError(error, res, chunks)
   }
 })
 
@@ -595,7 +603,156 @@ app.get('/openai-responses-stream-after-deny', async (req, res) => {
     }
     res.status(200).json({ blocked: false, streamed: true, chunks })
   } catch (error) {
-    handleOpenAIStreamError(error, res, chunks)
+    handleStreamError(error, res, chunks)
+  }
+})
+
+app.get('/anthropic-stream', async (req, res) => {
+  try {
+    const stream = await anthropicClient.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 32,
+      messages: [{ role: 'user', content: 'Hello there' }],
+      stream: true,
+    })
+    let chunks = 0
+    let text = ''
+    for await (const event of stream) {
+      chunks++
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        text += event.delta.text
+      }
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks, text })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
+app.get('/anthropic-stream-with-response', async (req, res) => {
+  try {
+    const { data: stream, response } = await anthropicClient.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 32,
+      messages: [{ role: 'user', content: 'Hello there' }],
+      stream: true,
+    }).withResponse()
+    let chunks = 0
+    let text = ''
+    for await (const event of stream) {
+      chunks++
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        text += event.delta.text
+      }
+    }
+    res.status(200).json({
+      blocked: false,
+      status: response.status,
+      streamed: true,
+      chunks,
+      text,
+      // The raw SSE body must survive the evaluation that consumed the parsed stream.
+      raw: await response.text(),
+    })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
+app.get('/anthropic-message-stream', async (req, res) => {
+  try {
+    const stream = anthropicClient.messages.stream({
+      model: 'claude-haiku-4-5',
+      max_tokens: 32,
+      messages: [{ role: 'user', content: 'Hello there' }],
+    })
+    let chunks = 0
+    for await (const event of stream) {
+      if (event !== undefined) chunks++
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks, text: await stream.finalText() })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
+app.get('/anthropic-message-stream-after-deny', async (req, res) => {
+  let chunks = 0
+  try {
+    const stream = anthropicClient.messages.stream({
+      model: 'claude-haiku-4-5',
+      max_tokens: 32,
+      messages: [{ role: 'user', content: 'Hello there' }],
+    }, { headers: { 'x-mock-response': 'deny' } })
+    for await (const event of stream) {
+      if (event !== undefined) chunks++
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks })
+  } catch (error) {
+    handleStreamError(error, res, chunks)
+  }
+})
+
+app.get('/anthropic-stream-after-deny', async (req, res) => {
+  let chunks = 0
+  try {
+    const stream = await anthropicClient.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 32,
+      messages: [{ role: 'user', content: 'Hello there' }],
+      stream: true,
+    }, { headers: { 'x-mock-response': 'deny' } })
+    for await (const event of stream) {
+      if (event !== undefined) chunks++
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks })
+  } catch (error) {
+    handleStreamError(error, res, chunks)
+  }
+})
+
+app.get('/anthropic-stream-tool-after-deny', async (req, res) => {
+  let chunks = 0
+  try {
+    const stream = await anthropicClient.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 32,
+      messages: [{ role: 'user', content: 'Please use tool' }],
+      tools: [{
+        name: 'search',
+        description: 'Search for a query',
+        input_schema: {
+          type: 'object',
+          properties: { q: { type: 'string' } },
+          required: ['q'],
+        },
+      }],
+      stream: true,
+    }, { headers: { 'x-mock-response': 'deny' } })
+    for await (const event of stream) {
+      if (event !== undefined) chunks++
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks })
+  } catch (error) {
+    handleStreamError(error, res, chunks)
+  }
+})
+
+app.get('/anthropic-raw-stream-after-deny', async (req, res) => {
+  let chunks = 0
+  try {
+    const response = await anthropicClient.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 32,
+      messages: [{ role: 'user', content: 'Hello there' }],
+      stream: true,
+    }, { headers: { 'x-mock-response': 'deny' } }).asResponse()
+    for await (const chunk of response.body) {
+      if (chunk !== undefined) chunks++
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks })
+  } catch (error) {
+    handleStreamError(error, res, chunks)
   }
 })
 

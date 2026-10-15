@@ -47,6 +47,7 @@ const { IGNORE_OTEL_ERROR } = constants
  * @property {number} duration
  * @property {Array} links
  * @property {Array<SpanEvent> | undefined} span_events
+ * @property {string} [trace_state] W3C tracestate, populated only for OTLP export.
  *
  * @typedef {object} SpanEvent Raw span event as stored on the span; the encoder
  *   layer derives `time_unix_nano` from `startTime` via `eventTimeNano`.
@@ -55,6 +56,11 @@ const { IGNORE_OTEL_ERROR } = constants
  * @property {Record<string, string>} [attributes]
  */
 
+/**
+ * @param {import('./opentracing/span')} span
+ * @param {boolean} [isFirstSpanInChunk]
+ * @param {string | false} [tagForFirstSpanInChunk]
+ */
 function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
   const formatted = formatSpan(span)
 

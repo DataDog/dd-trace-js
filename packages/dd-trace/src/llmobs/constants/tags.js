@@ -1,5 +1,16 @@
 'use strict'
 
+const INPUT_TOKENS_METRIC_KEY = 'input_tokens'
+const OUTPUT_TOKENS_METRIC_KEY = 'output_tokens'
+const TOTAL_TOKENS_METRIC_KEY = 'total_tokens'
+const CACHE_READ_INPUT_TOKENS_METRIC_KEY = 'cache_read_input_tokens'
+const CACHE_WRITE_INPUT_TOKENS_METRIC_KEY = 'cache_write_input_tokens'
+const CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY = 'ephemeral_5m_input_tokens'
+const CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY = 'ephemeral_1h_input_tokens'
+const REASONING_OUTPUT_TOKENS_METRIC_KEY = 'reasoning_output_tokens'
+const WEB_SEARCH_COUNT_METRIC_KEY = 'web_search_count'
+const STORAGE_SEARCH_COUNT_METRIC_KEY = 'storage_search_count'
+
 module.exports = {
   SPAN_KINDS: ['llm', 'agent', 'workflow', 'task', 'tool', 'embedding', 'retrieval', 'experiment'],
   SPAN_KIND: '_ml_obs.meta.span.kind',
@@ -9,6 +20,7 @@ module.exports = {
   INTEGRATION: '_ml_obs.integration',
   METADATA: '_ml_obs.meta.metadata',
   COST_TAGS: '_ml_obs.meta.metadata._dd.cost_tags',
+  AGENT_MANIFEST: '_ml_obs.meta.metadata._dd.agent_manifest',
   METRICS: '_ml_obs.metrics',
   TOOL_DEFINITIONS: '_ml_obs.meta.tool_definitions',
   ML_APP: '_ml_obs.meta.ml_app',
@@ -42,26 +54,44 @@ module.exports = {
   MODEL_NAME: '_ml_obs.meta.model_name',
   MODEL_PROVIDER: '_ml_obs.meta.model_provider',
   UNKNOWN_MODEL_PROVIDER: 'unknown',
+  DEFAULT_MODEL: 'custom',
 
   INPUT_DOCUMENTS: '_ml_obs.meta.input.documents',
+  EXPERIMENT_INPUT: '_ml_obs.meta.input',
   INPUT_MESSAGES: '_ml_obs.meta.input.messages',
   INPUT_VALUE: '_ml_obs.meta.input.value',
   INPUT_PROMPT: '_ml_obs.meta.input.prompt',
 
   OUTPUT_DOCUMENTS: '_ml_obs.meta.output.documents',
+  EXPERIMENT_OUTPUT: '_ml_obs.meta.output',
   OUTPUT_MESSAGES: '_ml_obs.meta.output.messages',
   OUTPUT_VALUE: '_ml_obs.meta.output.value',
 
-  INPUT_TOKENS_METRIC_KEY: 'input_tokens',
-  OUTPUT_TOKENS_METRIC_KEY: 'output_tokens',
-  TOTAL_TOKENS_METRIC_KEY: 'total_tokens',
-  CACHE_READ_INPUT_TOKENS_METRIC_KEY: 'cache_read_input_tokens',
-  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY: 'cache_write_input_tokens',
-  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY: 'ephemeral_5m_input_tokens',
-  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY: 'ephemeral_1h_input_tokens',
-  REASONING_OUTPUT_TOKENS_METRIC_KEY: 'reasoning_output_tokens',
-  WEB_SEARCH_COUNT_METRIC_KEY: 'web_search_count',
-  STORAGE_SEARCH_COUNT_METRIC_KEY: 'storage_search_count',
+  INPUT_TOKENS_METRIC_KEY,
+  OUTPUT_TOKENS_METRIC_KEY,
+  TOTAL_TOKENS_METRIC_KEY,
+  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
+  REASONING_OUTPUT_TOKENS_METRIC_KEY,
+  WEB_SEARCH_COUNT_METRIC_KEY,
+  STORAGE_SEARCH_COUNT_METRIC_KEY,
+
+  // integrations build metric objects with these camelCase spellings. Null prototype: a metric
+  // named after an `Object.prototype` member must not resolve to an inherited property.
+  METRIC_KEY_ALIASES: Object.assign(Object.create(null), {
+    inputTokens: INPUT_TOKENS_METRIC_KEY,
+    outputTokens: OUTPUT_TOKENS_METRIC_KEY,
+    totalTokens: TOTAL_TOKENS_METRIC_KEY,
+    cacheReadTokens: CACHE_READ_INPUT_TOKENS_METRIC_KEY,
+    cacheWriteTokens: CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
+    cacheWrite5mTokens: CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
+    cacheWrite1hTokens: CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
+    reasoningOutputTokens: REASONING_OUTPUT_TOKENS_METRIC_KEY,
+    webSearchCount: WEB_SEARCH_COUNT_METRIC_KEY,
+    storageSearchCount: STORAGE_SEARCH_COUNT_METRIC_KEY,
+  }),
 
   DROPPED_IO_COLLECTION_ERROR: 'dropped_io',
 

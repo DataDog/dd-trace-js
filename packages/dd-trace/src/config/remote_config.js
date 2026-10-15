@@ -148,6 +148,18 @@ function enable (rc, config, onConfigUpdated) {
   // APM_TRACING product (e.g. an org-level and a service-level config) and merges them by priority.
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
 
+  // Keep advertising the legacy per-setting capabilities while the backend and UI still use them
+  // to determine which settings are editable. Values are delivered through sdk_config below.
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
+
   // This tracer supports receiving the full SDK_CONFIGURATION settings map, env-var-keyed.
   rc.updateCapabilities(RemoteConfigCapabilities.SDK_CONFIGURATION, true)
 

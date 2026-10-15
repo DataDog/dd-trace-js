@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const {
-  getRewriteActivationName,
+  isRewriteActivationEnabled,
   instrumentations,
   registry,
 } = require('../../../src/helpers/rewriter/instrumentation-registry')
@@ -13,27 +13,27 @@ describe('instrumentation registry', () => {
     assert.deepStrictEqual(instrumentations, registry.flatMap(entry => entry.instrumentations))
   })
 
-  it('maps module names of entries with an activation name to that name', () => {
-    for (const { activationName, instrumentations: entryInstrumentations } of registry) {
-      if (!activationName) continue
+  it('uses the module name to activate opted-in rewrite targets', () => {
+    for (const { activate, instrumentations: entryInstrumentations } of registry) {
+      if (!activate) continue
 
       for (const { module } of entryInstrumentations) {
-        assert.strictEqual(getRewriteActivationName(module.name), activationName)
+        assert.strictEqual(isRewriteActivationEnabled(module.name), true)
       }
     }
   })
 
-  it('does not map modules of entries without an activation name', () => {
-    for (const { activationName, instrumentations: entryInstrumentations } of registry) {
-      if (activationName) continue
+  it('does not activate rewrite targets without the opt-in flag', () => {
+    for (const { activate, instrumentations: entryInstrumentations } of registry) {
+      if (activate) continue
 
       for (const { module } of entryInstrumentations) {
-        assert.strictEqual(getRewriteActivationName(module.name), undefined)
+        assert.strictEqual(isRewriteActivationEnabled(module.name), false)
       }
     }
   })
 
-  it('returns undefined for unknown module names', () => {
-    assert.strictEqual(getRewriteActivationName('not-a-registered-module'), undefined)
+  it('returns false for unknown module names', () => {
+    assert.strictEqual(isRewriteActivationEnabled('not-a-registered-module'), false)
   })
 })

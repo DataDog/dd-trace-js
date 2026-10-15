@@ -60,6 +60,32 @@ describe('debugger -> devtools client -> snapshot', function () {
     describe('error handling', function () {
       const mockCallFrame = { callFrameId: 'frame-123' }
 
+      it('should report redacted expressions as evaluation errors without evaluating them', async function () {
+        const redactionError = {
+          expr: 'pw',
+          message: "Could not evaluate the expression because 'password' was redacted",
+        }
+        const expressions = [
+          { name: 'pw', redactionError },
+          { name: 'testExpr', expression: 'someVariable', limits: DEFAULT_CAPTURE_LIMITS },
+        ]
+
+        sessionPostStub = sinon.stub(session, 'post')
+        sessionPostStub.withArgs('Debugger.evaluateOnCallFrame')
+          .resolves({ result: { type: 'number', value: 42, description: '42' } })
+
+        const result = await evaluateCaptureExpressions(mockCallFrame, expressions)
+
+        sinon.assert.calledOnceWithExactly(sessionPostStub, 'Debugger.evaluateOnCallFrame', {
+          callFrameId: 'frame-123',
+          expression: 'someVariable',
+        })
+        assert.deepStrictEqual(result.evaluationErrors, [redactionError])
+        assert.strictEqual(result.fatalErrors.length, 0)
+        assert.strictEqual(result.incomplete.reasons, 0)
+        assert.deepStrictEqual(result.processCaptureExpressions(), { testExpr: { type: 'number', value: '42' } })
+      })
+
       it('should return fatalErrors when session.post throws an error', async function () {
         const expressions = [{
           name: 'testExpr',
@@ -135,6 +161,48 @@ describe('debugger -> devtools client -> snapshot', function () {
         assert.ok(!('secondExpr' in captured))
       })
 
+      it('should report an expression that exceeds the evaluation time budget', async function () {
+        const expressions = [{
+          name: 'slowExpr',
+          expression: 'slow',
+          limits: DEFAULT_CAPTURE_LIMITS,
+        }, {
+          name: 'fastExpr',
+          expression: 'fast',
+          limits: DEFAULT_CAPTURE_LIMITS,
+        }]
+
+        let nowNs = 0n
+        const hrtime = sinon.stub(process.hrtime, 'bigint').callsFake(() => nowNs)
+        sessionPostStub = sinon.stub(session, 'post')
+        sessionPostStub.onCall(0).callsFake(() => {
+          nowNs += 10_000_001n
+          return Promise.resolve({ result: { type: 'string', value: 'slow' } })
+        })
+        sessionPostStub.onCall(1).callsFake(() => {
+          nowNs += 10_000_000n
+          return Promise.resolve({ result: { type: 'string', value: 'fast' } })
+        })
+
+        let result
+        try {
+          result = await evaluateCaptureExpressions(mockCallFrame, expressions, undefined, 10_000_000n)
+        } finally {
+          hrtime.restore()
+        }
+
+        assert.strictEqual(result.timedOut, true)
+        assert.strictEqual(result.incomplete.reasons, 0)
+        assert.deepStrictEqual(result.evaluationErrors, [{
+          expr: 'slowExpr',
+          message: 'Expression evaluation exceeded its time budget of 10ms',
+        }])
+        assert.deepStrictEqual(result.processCaptureExpressions(), {
+          slowExpr: { type: 'string', value: 'slow' },
+          fastExpr: { type: 'string', value: 'fast' },
+        }, 'should still capture the results')
+      })
+
       it('should distinguish between evaluationErrors and fatalErrors', async function () {
         const expressions = [{
           name: 'undefinedVar',
@@ -161,6 +229,7 @@ describe('debugger -> devtools client -> snapshot', function () {
         const result = await evaluateCaptureExpressions(mockCallFrame, expressions)
 
         // Should have one evaluation error (transient)
+        assert.strictEqual(result.timedOut, false)
         assert.deepStrictEqual(result.evaluationErrors, [{
           expr: 'undefinedVar',
           message: 'ReferenceError: doesNotExist is not defined',

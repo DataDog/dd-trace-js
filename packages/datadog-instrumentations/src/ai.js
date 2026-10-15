@@ -194,6 +194,32 @@ for (const hook of getHooks('ai').values()) {
       },
     })
 
+    tracingChannel('orchestrion:ai:includeRuntimeContext').subscribe({
+      start (ctx) {
+        const options = ctx.arguments[0]
+        const runtimeContext = options?.runtimeContext
+        const telemetry = options?.telemetry ?? options?.experimental_telemetry
+
+        if (!runtimeContext || typeof runtimeContext !== 'object' || telemetry?.isEnabled === false) return
+
+        const keys = Object.keys(runtimeContext)
+        if (!keys.length) return
+
+        const includeRuntimeContext = { ...telemetry?.includeRuntimeContext }
+        for (const key of keys) {
+          if (includeRuntimeContext[key] === undefined) includeRuntimeContext[key] = true
+        }
+
+        ctx.arguments[0] = {
+          ...options,
+          telemetry: {
+            ...telemetry,
+            includeRuntimeContext,
+          },
+        }
+      },
+    })
+
     // resolveLanguageModel is called by all LLM entry points (generateText, streamText,
     // generateObject, streamObject)
     tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({

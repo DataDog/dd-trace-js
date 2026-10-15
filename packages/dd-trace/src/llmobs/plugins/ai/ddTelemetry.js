@@ -92,6 +92,24 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
   /**
    * @override
    */
+  getGenAiApmEndTags (ctx, spanKind) {
+    if (spanKind !== 'llm' && spanKind !== 'embedding') return
+
+    const tags = /** @type {Record<string, string>} */ (getSpanTags(ctx))
+    const embeddingUsage = tags['ai.usage.tokens']
+
+    return {
+      modelName: tags['ai.model.id'],
+      modelProvider: getModelProvider(tags),
+      metrics: spanKind === 'embedding'
+        ? { inputTokens: embeddingUsage, totalTokens: embeddingUsage }
+        : getUsage(tags),
+    }
+  }
+
+  /**
+   * @override
+   */
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return

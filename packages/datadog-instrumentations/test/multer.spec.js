@@ -3,8 +3,6 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const axios = require('axios')
-
 const dc = require('dc-polyfill')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -12,6 +10,7 @@ const sinon = require('sinon')
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 withVersions('multer', 'multer', version => {
   describe('multer parser instrumentation', () => {
     const multerReadCh = dc.channel('datadog:multer:read:finish')
@@ -51,7 +50,7 @@ withVersions('multer', 'multer', version => {
     })
 
     it('should not abort the request by default', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, formData)
+      const res = await httpRequest.post(`http://localhost:${port}/`, formData)
 
       sinon.assert.calledOnceWithExactly(middlewareProcessBodyStub, formData.get('key'))
       assert.strictEqual(res.data, 'DONE')
@@ -62,7 +61,7 @@ withVersions('multer', 'multer', version => {
       multerReadCh.subscribe(noop)
 
       try {
-        const res = await axios.post(`http://localhost:${port}/`, formData)
+        const res = await httpRequest.post(`http://localhost:${port}/`, formData)
 
         sinon.assert.calledOnceWithExactly(middlewareProcessBodyStub, formData.get('key'))
         assert.strictEqual(res.data, 'DONE')
@@ -79,7 +78,7 @@ withVersions('multer', 'multer', version => {
       multerReadCh.subscribe(blockRequest)
 
       try {
-        const res = await axios.post(`http://localhost:${port}/`, formData)
+        const res = await httpRequest.post(`http://localhost:${port}/`, formData)
 
         sinon.assert.notCalled(middlewareProcessBodyStub)
         assert.strictEqual(res.data, 'BLOCKED')
@@ -99,7 +98,7 @@ withVersions('multer', 'multer', version => {
       multerReadCh.subscribe(handler)
 
       try {
-        const res = await axios.post(`http://localhost:${port}/`, formData)
+        const res = await httpRequest.post(`http://localhost:${port}/`, formData)
 
         assert.ok(payload.req)
         assert.ok(payload.res)

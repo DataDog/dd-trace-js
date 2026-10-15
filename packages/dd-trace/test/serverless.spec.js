@@ -152,6 +152,46 @@ describe('enableGCPPubSubPushSubscription', () => {
   })
 })
 
+describe('IS_STANDARD_AWS_LAMBDA', () => {
+  const originalInitType = process.env.AWS_LAMBDA_INITIALIZATION_TYPE
+  const originalMicroVm = process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+
+  beforeEach(() => {
+    delete process.env.AWS_LAMBDA_INITIALIZATION_TYPE
+    delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+  })
+
+  afterEach(() => {
+    if (originalInitType === undefined) delete process.env.AWS_LAMBDA_INITIALIZATION_TYPE
+    else process.env.AWS_LAMBDA_INITIALIZATION_TYPE = originalInitType
+    if (originalMicroVm === undefined) delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    else process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = originalMicroVm
+  })
+
+  for (const [initType, expected] of [
+    ['on-demand', true],
+    ['provisioned-concurrency', true],
+    ['snap-start', true],
+    ['native-http', false],
+    ['lambda-managed-instances', false],
+  ]) {
+    it(`is ${expected} for ${initType}`, () => {
+      process.env.AWS_LAMBDA_INITIALIZATION_TYPE = initType
+      assert.strictEqual(getServerlessFresh().IS_STANDARD_AWS_LAMBDA, expected)
+    })
+  }
+
+  it('is false outside Lambda', () => {
+    assert.strictEqual(getServerlessFresh().IS_STANDARD_AWS_LAMBDA, false)
+  })
+
+  it('is false in a MicroVM', () => {
+    process.env.AWS_LAMBDA_INITIALIZATION_TYPE = 'on-demand'
+    process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123456789012:function:test'
+    assert.strictEqual(getServerlessFresh().IS_STANDARD_AWS_LAMBDA, false)
+  })
+})
+
 describe('Vercel span metadata', () => {
   const environment = process.env
 

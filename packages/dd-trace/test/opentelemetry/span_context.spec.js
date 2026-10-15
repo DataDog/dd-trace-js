@@ -90,4 +90,18 @@ describe('OTel Span Context', () => {
 
     assert.strictEqual(context.traceState.serialize(), 'dd=foo:bar')
   })
+
+  it('should not mutate the Datadog tracestate when projecting OTel state', () => {
+    const spanId = id()
+    const tracestate = TraceState.fromString('ot=rv:1234567890abcd;th:8,vendor=value')
+    const context = new SpanContext({
+      traceId: spanId,
+      spanId,
+      sampling: { priority: USER_KEEP, isProbabilityDecision: false },
+      tracestate,
+    })
+
+    assert.strictEqual(context.traceState.serialize(), 'ot=rv:1234567890abcd,vendor=value')
+    assert.strictEqual(tracestate.toString(), 'ot=rv:1234567890abcd;th:8,vendor=value')
+  })
 })

@@ -62,6 +62,7 @@ function generateRunId () {
 function validateEvaluatorName (name) {
   if (typeof name !== 'string') throw new TypeError('Evaluator name must be a string')
   if (name.length === 0) throw new Error('Evaluator name cannot be empty')
+  if (name === '__proto__') throw new Error("Evaluator name '__proto__' is reserved")
   if (!EVALUATOR_NAME_PATTERN.test(name)) {
     throw new Error(
       `Evaluator name '${name}' is invalid. Name must contain only alphanumeric characters, underscores, and hyphens.`
@@ -78,9 +79,33 @@ function functionName (fn, fallback) {
 }
 
 /**
+ * @param {unknown} evaluator
+ * @param {string} kind
+ */
+function isClassEvaluator (evaluator, kind) {
+  // Lazy loading avoids a cycle: evaluator.js uses validateEvaluatorName from this module.
+  const { BaseEvaluator, BaseSummaryEvaluator } = require('./evaluator')
+  return kind === 'summary'
+    ? evaluator instanceof BaseSummaryEvaluator
+    : evaluator instanceof BaseEvaluator
+}
+
+/**
+ * @param {unknown} evaluator
+ * @param {string} kind
+ * @param {number} index
+ */
+function evaluatorName (evaluator, kind, index) {
+  if (isClassEvaluator(evaluator, kind)) return evaluator.name
+  if (typeof evaluator === 'function') return functionName(evaluator, `${kind}_evaluator_${index}`)
+  const baseName = kind === 'summary' ? 'BaseSummaryEvaluator' : 'BaseEvaluator'
+  throw new TypeError(`${kind} evaluator must be a function or a ${baseName} instance`)
+}
+
+/**
  * @param {unknown} evaluators
  * @param {string} kind
- * @returns {Array<[string, (...args: unknown[]) => unknown]>}
+ * @returns {Array<[string, Function | object]>}
  */
 function normalizeEvaluators (evaluators, kind) {
   if (evaluators == null) return []
@@ -90,8 +115,7 @@ function normalizeEvaluators (evaluators, kind) {
     const indexesByName = new Map()
     for (let i = 0; i < evaluators.length; i++) {
       const evaluator = evaluators[i]
-      if (typeof evaluator !== 'function') throw new TypeError(`${kind} evaluator must be a function`)
-      const name = functionName(evaluator, `${kind}_evaluator_${i}`)
+      const name = evaluatorName(evaluator, kind, i)
       validateEvaluatorName(name)
       if (indexesByName.has(name)) {
         log.warn('Duplicate %s evaluator name %s; previous evaluator will be overwritten', kind, name)
@@ -104,13 +128,17 @@ function normalizeEvaluators (evaluators, kind) {
     return normalized
   }
 
-  if (typeof evaluators !== 'object') {
-    throw new TypeError(`${kind} evaluators must be an array of functions or an object keyed by evaluator name`)
+  if (typeof evaluators !== 'object' || evaluators === null) {
+    throw new TypeError(
+      `${kind} evaluators must be an array of functions or class instances, or an object keyed by evaluator name`
+    )
   }
 
   for (const [name, evaluator] of Object.entries(evaluators)) {
     validateEvaluatorName(name)
-    if (typeof evaluator !== 'function') throw new TypeError(`${kind} evaluator '${name}' must be a function`)
+    if (!isClassEvaluator(evaluator, kind) && typeof evaluator !== 'function') {
+      throw new TypeError(`${kind} evaluator '${name}' must be a function or a class instance`)
+    }
     normalized.push([name, evaluator])
   }
   return normalized

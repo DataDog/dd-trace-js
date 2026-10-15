@@ -61,7 +61,6 @@ class Profiler extends EventEmitter {
   #exporters
   #flushInterval
   #lastStart
-  #pendingStart
   #profileSeq = 0
   #profilers
   #spanFinishListener
@@ -85,6 +84,14 @@ class Profiler extends EventEmitter {
 
   get enabled () {
     return this.#enabled
+  }
+
+  /**
+   * True while a stop()'s final collection is still encoding and exporting. The profiler no
+   * longer samples, but it also can not be started again until that settles and 'stopped' fires.
+   */
+  isStopping () {
+    return this.#stopping !== undefined
   }
 
   /**
@@ -184,12 +191,12 @@ class Profiler extends EventEmitter {
     if (this.#startFailed) return false
 
     // A prior stop()'s shutdown collection may still be encoding/exporting via #tags,
-    // #exporters and #endpointCounts. Wait for it to finish before this start() overwrites
-    // that shared state out from under it. Record the desired config rather than chaining
-    // straight onto #stopping, so a stop() arriving before it settles can cancel this restart.
+    // #exporters and #endpointCounts, which this start() would overwrite out from under it.
+    // Refuse rather than queue: the caller owns the decision of what to do once the shutdown
+    // settles, and by then its configuration may no longer be the one requested here. This is
+    // thrown outside the setup try/catch below so it does not count as a permanent start failure.
     if (this.#stopping) {
-      this.#pendingStart = config
-      return true
+      throw new Error('Cannot start the profiler while a shutdown collection is still in flight')
     }
 
     try {
@@ -294,11 +301,12 @@ class Profiler extends EventEmitter {
     this._timeoutInterval = this.#flushInterval
   }
 
+  /**
+   * Stops the profiler after collecting and exporting one final profile. That export outlives
+   * this call: {@link isStopping} returns true and start() throws until it settles, at which
+   * point a 'stopped' event is emitted.
+   */
   stop () {
-    // A stop() always reflects the latest desired state, so it cancels any restart queued by a
-    // start() that arrived while a prior shutdown collection was still in flight.
-    this.#pendingStart = undefined
-
     if (!this.enabled) return
 
     // collect and export current profiles
@@ -311,16 +319,12 @@ class Profiler extends EventEmitter {
       })
       .finally(() => {
         this.#stopping = undefined
-        if (this.#pendingStart) {
-          const config = this.#pendingStart
-          this.#pendingStart = undefined
-          // Unlike the synchronous entry point, nothing awaits this promise, so a throw here would
-          // become an unhandled rejection instead of a caught error.
-          try {
-            this.start(config)
-          } catch (error) {
-            log.error(error)
-          }
+        // Nothing awaits this promise, so a listener throwing here would become an unhandled
+        // rejection instead of reaching whoever requested the stop.
+        try {
+          this.emit('stopped')
+        } catch (error) {
+          log.error(error)
         }
       })
     this.#stop()

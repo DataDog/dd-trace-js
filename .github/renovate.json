@@ -1,0 +1,130 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "npm"
+  ],
+  "includePaths": [
+    "package.json",
+    "yarn.lock",
+    "docs/package.json",
+    "docs/yarn.lock",
+    ".github/actions/datadog-ci/package.json",
+    ".github/actions/datadog-ci/yarn.lock",
+    "vendor/package.json",
+    "vendor/package-lock.json"
+  ],
+  "timezone": "UTC",
+  "dependencyDashboard": true,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "platformAutomerge": true,
+  "rebaseWhen": "behind-base-branch",
+  "postUpdateOptions": [
+    "yarnDedupeHighest"
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": false
+  },
+  "osvVulnerabilityAlerts": false,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "* 0-4 * * 0"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Disable regular dependency updates",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest",
+        "digest",
+        "rollback",
+        "bump",
+        "replacement"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Automerge Sunday lockfile maintenance",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "groupSingleUpdates": true,
+      "automerge": true,
+      "labels": [
+        "dependencies",
+        "javascript",
+        "semver-patch"
+      ]
+    },
+    {
+      "description": "Root lockfile maintenance",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "matchFileNames": [
+        "package.json"
+      ],
+      "groupName": "root lockfile maintenance",
+      "groupSlug": "root-lockfile-maintenance"
+    },
+    {
+      "description": "Docs lockfile maintenance",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "matchFileNames": [
+        "docs/package.json"
+      ],
+      "groupName": "docs lockfile maintenance",
+      "groupSlug": "docs-lockfile-maintenance"
+    },
+    {
+      "description": "datadog-ci action lockfile maintenance",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "matchFileNames": [
+        ".github/actions/datadog-ci/package.json"
+      ],
+      "groupName": "datadog-ci action lockfile maintenance",
+      "groupSlug": "datadog-ci-action-lockfile-maintenance"
+    },
+    {
+      "description": "Vendor lockfile maintenance",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "matchFileNames": [
+        "vendor/package.json"
+      ],
+      "groupName": "vendor lockfile maintenance",
+      "groupSlug": "vendor-lockfile-maintenance"
+    }
+  ]
+}

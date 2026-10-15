@@ -431,10 +431,74 @@ function getMessagesOutputMessages (body) {
   return convertAnthropicMessage({ role, content: body.content })
 }
 
+/**
+ * Combines Anthropic message stream events into regular output messages.
+ *
+ * Accumulates exactly the way the SDK does: every `content_block_start` appends a block, and
+ * deltas address blocks by position. Keying blocks by `event.index` instead would let a repeated
+ * or out-of-range index hide output that the caller still receives.
+ *
+ * @param {Array<object>} events
+ * @returns {Array<object>}
+ */
+function getStreamedMessagesOutputMessages (events) {
+  let message
+  let contentBlocks
+  // Keyed by block, not by index: distinct indices can resolve to one block, and a second
+  // message must not inherit partial JSON accumulated for the first.
+  const inputJson = new Map()
+
+  for (const event of events) {
+    if (!event || typeof event !== 'object') continue
+
+    if (event.type === 'message_start' && event.message && typeof event.message === 'object') {
+      contentBlocks = Array.isArray(event.message.content)
+        ? event.message.content.map(block => ({ ...block }))
+        : []
+      message = { role: event.message.role || 'assistant' }
+      continue
+    }
+
+    if (event.type === 'content_block_start' && event.content_block && typeof event.content_block === 'object') {
+      message ??= { role: 'assistant' }
+      contentBlocks ??= []
+      contentBlocks.push({ ...event.content_block })
+      continue
+    }
+
+    if (event.type !== 'content_block_delta' || !event.delta || typeof event.delta !== 'object') continue
+
+    const block = contentBlocks?.at(event.index ?? 0)
+    if (!block) continue
+
+    if (event.delta.type === 'text_delta' && block.type === 'text' && typeof event.delta.text === 'string') {
+      block.text = (block.text || '') + event.delta.text
+    } else if (event.delta.type === 'input_json_delta' && typeof event.delta.partial_json === 'string') {
+      inputJson.set(block, (inputJson.get(block) || '') + event.delta.partial_json)
+    }
+  }
+
+  if (!message) return []
+
+  for (const [block, json] of inputJson) {
+    // An empty buffer is what a no-argument tool call accumulates; the SDK keeps `{}` there.
+    if (!json) continue
+    try {
+      block.input = JSON.parse(json)
+    } catch {
+      block.input = json
+    }
+  }
+
+  message.content = contentBlocks
+  return getMessagesOutputMessages(message)
+}
+
 module.exports = {
   convertAnthropicSystem,
   convertAnthropicBlocksToContent,
   convertAnthropicMessage,
   getMessagesInputMessages,
   getMessagesOutputMessages,
+  getStreamedMessagesOutputMessages,
 }

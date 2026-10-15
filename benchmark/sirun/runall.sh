@@ -87,6 +87,8 @@ echo "using Node.js ${VERSION}"
 CPU_AFFINITY="${CPUSET_START}" # reset for each node.js version
 SPLITS=${SPLITS:-1}
 GROUP=${GROUP:-1}
+VARIANT_MAX_SECONDS=75
+VARIANT_HARD_TIMEOUT_SECONDS=600
 
 # With BENCHMARKS_FROM=candidate the baseline runs this PR's benchmark code on
 # the older source. Skip a baseline failure only when the same variant passed on
@@ -143,7 +145,11 @@ function run_variant {
   local CPU_AFFINITY=$CORE
   local CPU_AFFINITY_SECOND=$((CORE+1))
   local CPU_DESCRIPTION
+  local STATUS=0
   local VARIANT_OUT
+  local STARTED_AT_NS
+  local ELAPSED_MS
+  local ELAPSED_SECONDS
 
   export CPU_AFFINITY CPU_AFFINITY_SECOND
   export SIRUN_VARIANT=$V
@@ -157,7 +163,12 @@ function run_variant {
 
   cd "${D}"
   VARIANT_OUT=$(mktemp)
-  if time node ../run-one-variant.js >> ../results.ndjson 2>"${VARIANT_OUT}"; then
+  STARTED_AT_NS=$(date +%s%N)
+  time timeout --kill-after=5s "${VARIANT_HARD_TIMEOUT_SECONDS}s" \
+    node ../run-one-variant.js >> ../results.ndjson 2>"${VARIANT_OUT}" || STATUS=$?
+  ELAPSED_MS=$(( ($(date +%s%N) - STARTED_AT_NS) / 1000000 ))
+  printf -v ELAPSED_SECONDS '%d.%03d' $((ELAPSED_MS / 1000)) $((ELAPSED_MS % 1000))
+  if [[ ${STATUS} -eq 0 && ${ELAPSED_MS} -le $((VARIANT_MAX_SECONDS * 1000)) ]]; then
     echo "${D}/${V} finished."
     if [[ -n "${RECORD_CANDIDATE_PASS}" ]]; then echo "${D}/${V}" >> "$CANDIDATE_PASSED_FILE"; fi
   elif [[ -n "${SKIP_BASELINE_FAILURES}" ]] \
@@ -166,6 +177,16 @@ function run_variant {
     # Append-only writes to a single tempfile from parallel subshells are
     # atomic on Linux below PIPE_BUF (4 KiB); each line here is ~30 bytes.
     echo "${D}/${V}" >> "$SKIPPED_FILE"
+  elif [[ ${STATUS} -eq 124 ]]; then
+    echo "${D}/${V} FAILED: did not finish within the " \
+      "${VARIANT_HARD_TIMEOUT_SECONDS}-second safety limit on core ${CPU_AFFINITY}" >&2
+    cat "${VARIANT_OUT}" >&2
+    echo "${D}/${V}" >> "$FAILURES_FILE"
+  elif [[ ${STATUS} -eq 0 ]]; then
+    echo "${D}/${V} FAILED: completed in ${ELAPSED_SECONDS}s, exceeding the " \
+      "${VARIANT_MAX_SECONDS}-second variant limit on core ${CPU_AFFINITY}" >&2
+    cat "${VARIANT_OUT}" >&2
+    echo "${D}/${V}" >> "$FAILURES_FILE"
   else
     echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2
     cat "${VARIANT_OUT}" >&2

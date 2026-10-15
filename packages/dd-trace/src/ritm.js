@@ -118,16 +118,19 @@ function Hook (modules, options, onrequire) {
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
     }
-    let exports = origRequire.apply(this, arguments)
-    payload.module = exports
-    if (moduleLoadEndChannel.hasSubscribers) {
-      moduleLoadEndChannel.publish(payload)
-      exports = payload.module
+    let exports
+    try {
+      exports = origRequire.apply(this, arguments)
+      payload.module = exports
+    } finally {
+      // Failed loads must close the subscriber's load stack too. Leave module
+      // unset on failure and preserve the original exception for the caller.
+      if (moduleLoadEndChannel.hasSubscribers) {
+        moduleLoadEndChannel.publish(payload)
+        exports = payload.module
+      }
+      delete patching[moduleId]
     }
-
-    // The module has already been loaded,
-    // so the patching mark can be cleaned up.
-    delete patching[moduleId]
 
     if (builtin) {
       hooks = moduleHooks[moduleId]

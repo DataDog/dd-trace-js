@@ -22,7 +22,13 @@ describe('Prompt caches', () => {
   })
 
   function prompt (id) {
-    return new ManagedPrompt({ id, version: '1', source: 'cache', template: 'x' })
+    return new ManagedPrompt({
+      id,
+      version: '1',
+      source: 'cache',
+      template: 'x',
+      config: { model: { temperature: 0.2 } },
+    })
   }
 
   it('enforces the 1024-entry LRU boundary', () => {
@@ -78,6 +84,7 @@ describe('Prompt caches', () => {
     cache.set(underscoreKey, prompt('a_b'))
 
     assert.strictEqual(cache.get(slashKey).prompt.id, 'a/b')
+    assert.deepStrictEqual(cache.get(slashKey).prompt.config, { model: { temperature: 0.2 } })
     assert.strictEqual(cache.get(underscoreKey).prompt.id, 'a_b')
     assert.strictEqual(fs.statSync(cacheDir).mode & 0o777, 0o700)
     const files = fs.readdirSync(cache.cacheDir).flatMap(directory => {

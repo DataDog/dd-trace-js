@@ -77,6 +77,7 @@ function promptFromData (data, source) {
     version: String(version),
     source,
     template: template || data.chat_template || [],
+    config: data.config,
     promptUuid: data.prompt_uuid,
     promptVersionUuid: data.prompt_version_uuid || data.id || data.ID,
   })
@@ -488,6 +489,9 @@ class PromptManager {
       if (requireAppKey && !this.config.DD_APP_KEY) {
         throw new PromptAPIError(0, 'DD_APP_KEY is required for prompt write operations', ERROR_NAMES.AUTH)
       }
+      if (body?.config !== undefined && !isPlainObject(body.config)) {
+        throw new PromptAPIError(0, 'config must be a JSON object', ERROR_NAMES.VALIDATION)
+      }
 
       const headers = {
         'Content-Type': 'application/json',
@@ -523,7 +527,8 @@ class PromptManager {
    * Create a text or chat prompt and its first version.
    * @param {string} promptId
    * @param {string | Array<{role: string, content: string}>} template
-   * @param {{title?: string, description?: string, userVersion?: string, envIds?: string[]}} [options]
+   * @param {{title?: string, description?: string, userVersion?: string, envIds?: string[],
+   *   config?: Record<string, unknown>}} [options]
    * @returns {Promise<object | object[]>}
    */
   async createPrompt (promptId, template, options = {}) {
@@ -532,6 +537,7 @@ class PromptManager {
     if (options.description) body.description = options.description
     if (options.userVersion) body.user_version = options.userVersion
     if (options.envIds !== undefined) body.env_ids = options.envIds
+    if (options.config !== undefined) body.config = options.config
     const response = await this.#request('POST', PROMPTS_PATH, body, true)
     this.#evictPrompt(promptId)
     return response
@@ -541,7 +547,8 @@ class PromptManager {
    * Add a text or chat version to an existing prompt.
    * @param {string} promptId
    * @param {string | Array<{role: string, content: string}>} template
-   * @param {{description?: string, userVersion?: string, envIds?: string[]}} [options]
+   * @param {{description?: string, userVersion?: string, envIds?: string[],
+   *   config?: Record<string, unknown>}} [options]
    * @returns {Promise<object | object[]>}
    */
   async createPromptVersion (promptId, template, options = {}) {
@@ -549,6 +556,7 @@ class PromptManager {
     if (options.description) body.description = options.description
     if (options.userVersion) body.user_version = options.userVersion
     if (options.envIds !== undefined) body.env_ids = options.envIds
+    if (options.config !== undefined) body.config = options.config
     const path = `${PROMPTS_PATH}/${encodeURIComponent(promptId)}/versions`
     const response = await this.#request('POST', path, body, true)
     this.#evictPrompt(promptId)

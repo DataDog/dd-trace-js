@@ -334,6 +334,10 @@ function normalizeMethodName (methodName) {
     case 'responses.create':
       return 'createResponse'
 
+    // decisions
+    case 'decisions.create':
+      return 'createDecision'
+
     // files
     case 'files.create':
       return 'createFile'

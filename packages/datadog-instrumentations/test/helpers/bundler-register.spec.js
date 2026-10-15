@@ -105,7 +105,7 @@ describe('bundler register', () => {
 
   it('activates a hookless source-rewritten integration without loading a hook', () => {
     const { loadChannel, log, publish } = loadBundlerRegister({
-      activationNames: new Map([['test-hookless', 'test-plugin']]),
+      rewriteActivationEnabled: new Set(['test-hookless']),
       hooks: {},
       instrumentations: {},
     })
@@ -117,14 +117,14 @@ describe('bundler register', () => {
       version: '1.0.0',
     })
 
-    sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-plugin' })
+    sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-hookless' })
     sinon.assert.notCalled(log.error)
   })
 
   it('does not activate a disabled hookless source-rewritten integration', () => {
     const { loadChannel, publish } = loadBundlerRegister({
       disabled: new Set(['test-hookless']),
-      activationNames: new Map([['test-hookless', 'test-plugin']]),
+      rewriteActivationEnabled: new Set(['test-hookless']),
       hooks: {},
       instrumentations: {},
     })
@@ -261,12 +261,17 @@ function throwValue (value) {
 /**
  * @param {{
  *   disabled?: Set<string>,
- *   activationNames?: Map<string, string>,
+ *   rewriteActivationEnabled?: Set<string>,
  *   hooks: Record<string, Function|{ fn: Function }>,
  *   instrumentations: Record<string, Array<object>>
  * }} options
  */
-function loadBundlerRegister ({ disabled = new Set(), activationNames = new Map(), hooks, instrumentations }) {
+function loadBundlerRegister ({
+  disabled = new Set(),
+  rewriteActivationEnabled = new Set(),
+  hooks,
+  instrumentations,
+}) {
   const bundlerRegisterPath = require.resolve('../../src/helpers/bundler-register')
   const originalRequire = Module.prototype.require
   const loadChannel = { publish: sinon.stub() }
@@ -288,7 +293,9 @@ function loadBundlerRegister ({ disabled = new Set(), activationNames = new Map(
           getDisabledInstrumentations: () => disabled,
         },
         './instrumentations': instrumentations,
-        './rewriter/targets': { getRewriteActivationName: name => activationNames.get(name) },
+        './rewriter/targets': {
+          isRewriteActivationEnabled: name => rewriteActivationEnabled.has(name),
+        },
         './register.js': register,
         '../../../dd-trace/src/log': log,
         'dc-polyfill': dc,

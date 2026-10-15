@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert')
-const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
 const {
   ERROR_TYPE,
@@ -9,6 +8,7 @@ const {
   ERROR_STACK,
 } = require('../../dd-trace/src/constants')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 describe('Plugin', () => {
   let tracer
@@ -65,7 +65,7 @@ describe('Plugin', () => {
 
         const port = await promise
 
-        const { data } = await axios.get(`http://localhost:${port}/user/123`)
+        const { data } = await httpRequest.get(`http://localhost:${port}/user/123`)
 
         assert.deepStrictEqual(data, {
           id: '123',
@@ -103,7 +103,7 @@ describe('Plugin', () => {
 
         const port = await promise
 
-        await axios.get(`http://localhost:${port}/product`)
+        await httpRequest.get(`http://localhost:${port}/product`)
 
         await agent.assertFirstTraceSpan({
           name: 'hono.request',
@@ -135,7 +135,7 @@ describe('Plugin', () => {
 
         const port = await promise
 
-        await axios.post(`http://localhost:${port}/api`)
+        await httpRequest.post(`http://localhost:${port}/api`)
 
         await agent.assertFirstTraceSpan({
           name: 'hono.request',
@@ -177,7 +177,7 @@ describe('Plugin', () => {
 
         const port = await promise
 
-        const { data } = await axios.get(`http://localhost:${port}/api/users/42`)
+        const { data } = await httpRequest.get(`http://localhost:${port}/api/users/42`)
 
         assert.deepStrictEqual(data, {
           id: '42',
@@ -216,7 +216,7 @@ describe('Plugin', () => {
 
         const port = await promise
 
-        await axios.get(`http://localhost:${port}/api/anything`)
+        await httpRequest.get(`http://localhost:${port}/api/anything`)
 
         await agent.assertFirstTraceSpan({
           name: 'hono.request',
@@ -254,7 +254,7 @@ describe('Plugin', () => {
 
         const port = await promise
 
-        const { data } = await axios.get(`http://localhost:${port}/books/12345`)
+        const { data } = await httpRequest.get(`http://localhost:${port}/books/12345`)
 
         assert.deepStrictEqual(data, {
           id: '12345',
@@ -296,10 +296,10 @@ describe('Plugin', () => {
         const port = await promise
 
         await assert.rejects(
-          axios.get(`http://localhost:${port}/error`),
+          httpRequest.get(`http://localhost:${port}/error`),
           {
             message: 'Request failed with status code 500',
-            name: 'AxiosError',
+            name: 'Error',
           }
         )
 
@@ -334,7 +334,7 @@ describe('Plugin', () => {
 
         const port = await promise
 
-        const { data } = await axios.get(`http://localhost:${port}/request`)
+        const { data } = await httpRequest.get(`http://localhost:${port}/request`)
 
         assert.deepStrictEqual(data, 'test')
       })
@@ -357,7 +357,7 @@ describe('Plugin', () => {
 
         const port = await promise
 
-        await axios.get(`http://localhost:${port}/user/123`, {
+        await httpRequest.get(`http://localhost:${port}/user/123`, {
           headers: {
             'x-datadog-trace-id': '1234',
             'x-datadog-parent-id': '5678',

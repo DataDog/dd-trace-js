@@ -571,6 +571,14 @@ describe('tagger', () => {
         })
       })
 
+      it('keeps a custom metric named after an Object.prototype member', () => {
+        tagger._register(span)
+        tagger.tagMetrics(span, { constructor: 1, toString: 2 })
+        assertObjectContains(Tagger.tagMap.get(span), {
+          '_ml_obs.metrics': { constructor: 1, toString: 2 },
+        })
+      })
+
       it('throws for non-number entries', () => {
         const metrics = {
           a: 1,
@@ -1330,6 +1338,40 @@ describe('tagger', () => {
       })
     })
 
+    describe('tagExperimentIO', () => {
+      it('preserves structured experiment io', () => {
+        const inputData = { prompt: 'smoke test' }
+        const outputData = {
+          status: 'ok',
+          count: 3,
+          nested: { a: 1, b: [1, 2, 3] },
+        }
+        tagger._register(span)
+
+        tagger.tagExperimentIO(span, inputData, outputData)
+
+        assertObjectContains(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.input': inputData,
+          '_ml_obs.meta.output': outputData,
+        })
+      })
+
+      it('preserves falsey JSON values', () => {
+        tagger._register(span)
+
+        tagger.tagExperimentIO(span, false, null)
+
+        assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.input'], false)
+        assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.output'], null)
+      })
+
+      it('throws when a value is not JSON serializable', () => {
+        tagger._register(span)
+
+        assert.throws(() => tagger.tagExperimentIO(span, undefined, unserializableObject()))
+      })
+    })
+
     describe('changeKind', () => {
       it('changes the span kind', () => {
         tagger._register(span)
@@ -1453,6 +1495,41 @@ describe('tagger', () => {
         })
       })
 
+      it('preserves message placeholders in a managed prompt annotation', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          template: [
+            { role: 'system', content: 'Be concise.' },
+            { type: 'placeholder', name: 'history' },
+            { role: 'user', content: '{{question}}' },
+          ],
+          variables: { question: 'Why?' },
+          id: 'chat-prompt',
+          version: '1',
+        })
+
+        assert.deepEqual(Tagger.tagMap.get(span)[INPUT_PROMPT], {
+          chat_template: [
+            { role: 'system', content: 'Be concise.' },
+            { type: 'placeholder', name: 'history' },
+            { role: 'user', content: '{{question}}' },
+          ],
+          variables: { question: 'Why?' },
+          _dd_context_variable_keys: ['context'],
+          _dd_query_variable_keys: ['question'],
+          version: '1',
+          id: 'chat-prompt',
+        })
+      })
+
+      it('rejects a malformed placeholder even when it has message fields', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: [{ type: 'placeholder', role: 'user', content: 'Hi' }],
+        }), /Prompt chat template/)
+        assert.equal(Tagger.tagMap.get(span)[INPUT_PROMPT], undefined)
+      })
+
       it('throws for a non-string and non-array prompt template', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
         assert.throws(() => tagger.tagPrompt(span, {
@@ -1467,7 +1544,7 @@ describe('tagger', () => {
             { role: 'system', message: 'Please use the following information: \n\n{{context}}' },
             { role: 'user', content: 'Tell me a bit about {{subject}}.' },
           ],
-        }), { message: 'Prompt chat template must be an array of objects with role and content properties.' })
+        }), { message: 'Prompt chat template must contain messages or message placeholders.' })
       })
 
       it('defaults the prompt id', () => {

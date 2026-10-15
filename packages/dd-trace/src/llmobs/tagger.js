@@ -10,12 +10,15 @@ const {
   SESSION_ID_TRACE_DEFAULT_KEY,
   ML_APP,
   SPAN_KIND,
+  EXPERIMENT_INPUT,
+  EXPERIMENT_OUTPUT,
   INPUT_VALUE,
   OUTPUT_DOCUMENTS,
   INPUT_DOCUMENTS,
   OUTPUT_VALUE,
   METADATA,
   COST_TAGS,
+  AGENT_MANIFEST,
   METRICS,
   TOOL_DEFINITIONS,
   PARENT_ID_KEY,
@@ -29,16 +32,7 @@ const {
   PROPAGATED_PARENT_AGENT_ID_KEY,
   PROPAGATED_PARENT_AGENT_NAME_KEY,
   ROOT_PARENT_ID,
-  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
-  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
-  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
-  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
-  INPUT_TOKENS_METRIC_KEY,
-  OUTPUT_TOKENS_METRIC_KEY,
-  TOTAL_TOKENS_METRIC_KEY,
-  REASONING_OUTPUT_TOKENS_METRIC_KEY,
-  WEB_SEARCH_COUNT_METRIC_KEY,
-  STORAGE_SEARCH_COUNT_METRIC_KEY,
+  METRIC_KEY_ALIASES,
   INTEGRATION,
   DECORATOR,
   PROPAGATED_ML_APP_KEY,
@@ -60,6 +54,7 @@ const {
   TRACE_ID,
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
+const { buildAgentDeclaration } = require('./agent-manifest')
 const { storage } = require('./storage')
 const {
   findGenAIAncestorSpanId,
@@ -194,6 +189,11 @@ class LLMObsTagger {
       this.tagCostTags(span, annotationContext.costTags, 'annotation_context')
     }
 
+    const agentDeclarations = /** @type {import('./agent-manifest').AgentDeclaration[] | undefined} */ (
+      storage.getStore()?.agentDeclarations
+    )
+    if (agentDeclarations) this.#applyAgentDeclarations(span, agentDeclarations)
+
     // apply annotation context name
     const annotationContextName = annotationContext?.name
     if (annotationContextName) this._setTag(span, NAME, annotationContextName)
@@ -209,6 +209,43 @@ class LLMObsTagger {
         this._setTag(span, ROUTING_SITE, routing.site)
       }
     }
+  }
+
+  /**
+   * Applies the agents declared by the enclosing annotation contexts, outermost first, to every span in the block.
+   * The manifest is emitted only if the span is an agent when it finishes, since some integrations promote a span
+   * to an agent after registration.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {import('./agent-manifest').AgentDeclaration[]} declarations
+   */
+  #applyAgentDeclarations (span, declarations) {
+    for (const declaration of declarations) {
+      this.#tagAgentManifestFields(span, declaration.manifest)
+    }
+  }
+
+  /**
+   * Tags the agent a caller declared on an agent span, merged onto what earlier annotations declared.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} agent
+   */
+  tagAgent (span, agent) {
+    const declaration = buildAgentDeclaration(agent)
+    if (declaration) this.#tagAgentManifestFields(span, declaration.manifest)
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {import('./agent-manifest').AgentManifestFields} manifest
+   */
+  #tagAgentManifestFields (span, manifest) {
+    // A shallow update, matching dd-trace-py: each declaration is already validated, so a later field replaces an
+    // earlier one whole (`model_settings` included) and an unset or invalid one leaves it in place. Declarations are
+    // never mutated, so the first one is stored without a copy.
+    const existing = registry.get(span)?.[AGENT_MANIFEST]
+    this._setTag(span, AGENT_MANIFEST, existing ? { ...existing, ...manifest } : manifest)
   }
 
   #tagSamplingDecision (span, parent) {
@@ -282,6 +319,18 @@ class LLMObsTagger {
     this.#tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
   }
 
+  /**
+   * Tags arbitrary JSON-compatible experiment input and output without converting structured values to text.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} inputData
+   * @param {unknown} outputData
+   */
+  tagExperimentIO (span, inputData, outputData) {
+    this.#tagExperimentValue(span, inputData, EXPERIMENT_INPUT, 'input')
+    this.#tagExperimentValue(span, outputData, EXPERIMENT_OUTPUT, 'output')
+  }
+
   tagTextIO (span, inputData, outputData) {
     this.#tagText(span, inputData, INPUT_VALUE)
     this.#tagText(span, outputData, OUTPUT_VALUE)
@@ -309,41 +358,8 @@ class LLMObsTagger {
   tagMetrics (span, metrics) {
     const filterdMetrics = {}
     for (const [key, value] of Object.entries(metrics)) {
-      let processedKey = key
-
       // processing these specifically for our metrics ingestion
-      switch (key) {
-        case 'inputTokens':
-          processedKey = INPUT_TOKENS_METRIC_KEY
-          break
-        case 'outputTokens':
-          processedKey = OUTPUT_TOKENS_METRIC_KEY
-          break
-        case 'totalTokens':
-          processedKey = TOTAL_TOKENS_METRIC_KEY
-          break
-        case 'cacheReadTokens':
-          processedKey = CACHE_READ_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'cacheWriteTokens':
-          processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'cacheWrite5mTokens':
-          processedKey = CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'cacheWrite1hTokens':
-          processedKey = CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'reasoningOutputTokens':
-          processedKey = REASONING_OUTPUT_TOKENS_METRIC_KEY
-          break
-        case 'webSearchCount':
-          processedKey = WEB_SEARCH_COUNT_METRIC_KEY
-          break
-        case 'storageSearchCount':
-          processedKey = STORAGE_SEARCH_COUNT_METRIC_KEY
-          break
-      }
+      const processedKey = METRIC_KEY_ALIASES[key] ?? key
 
       if (typeof value === 'number') {
         filterdMetrics[processedKey] = value
@@ -365,7 +381,16 @@ class LLMObsTagger {
     if (currentTags) {
       Object.assign(currentTags, tags)
     } else {
-      this._setTag(span, TAGS, tags)
+      // Copied so a later annotation cannot write into a caller's object shared by an annotation context. The copy
+      // reads caller getters and Proxy traps during span registration, so it must not throw into the application.
+      let copy
+      try {
+        copy = { ...tags }
+      } catch {
+        log.warn('Dropping span tags that could not be read.')
+        return
+      }
+      this._setTag(span, TAGS, copy)
     }
   }
 
@@ -513,10 +538,13 @@ class LLMObsTagger {
     }
 
     if (Array.isArray(template)) {
-      for (const message of template) {
-        if (typeof message !== 'object' || !message.role || !message.content) {
+      for (const item of template) {
+        const valid = item?.type === 'placeholder'
+          ? typeof item.name === 'string'
+          : typeof item?.role === 'string' && typeof item?.content === 'string'
+        if (!valid) {
           this.#handleFailure(
-            'Prompt chat template must be an array of objects with role and content properties.', 'invalid_prompt'
+            'Prompt chat template must contain messages or message placeholders.', 'invalid_prompt'
           )
           return
         }
@@ -540,7 +568,9 @@ class LLMObsTagger {
     if (typeof template === 'string') {
       finalTemplate = template
     } else if (Array.isArray(template)) {
-      finalChatTemplate = template.map(message => ({ role: message.role, content: message.content }))
+      finalChatTemplate = template.map(item => item.type === 'placeholder'
+        ? { type: 'placeholder', name: item.name }
+        : { role: item.role, content: item.content })
     }
 
     const validatedPrompt = {}
@@ -597,6 +627,27 @@ class LLMObsTagger {
         }
       }
     }
+  }
+
+  /**
+   * Validates and stores one free-form experiment I/O value.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} data
+   * @param {string} key
+   * @param {string} type
+   */
+  #tagExperimentValue (span, data, key, type) {
+    if (data === undefined) return
+
+    try {
+      if (JSON.stringify(data) !== undefined) {
+        this._setTag(span, key, data)
+        return
+      }
+    } catch {}
+
+    this.#handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
   }
 
   #tagDocuments (span, data, key) {

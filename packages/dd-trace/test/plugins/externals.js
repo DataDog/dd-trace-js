@@ -487,7 +487,13 @@ module.exports = {
   'light-my-request': [
     {
       name: 'fastify',
+      versions: ['>=3 <5'],
+      node: '<22.12.0',
+    },
+    {
+      name: 'fastify',
       versions: ['>=3'],
+      node: '>=22.12.0',
     },
   ],
   mariadb: [
@@ -782,26 +788,12 @@ module.exports = {
       versions: ['1.20.1'],
     },
   ],
-  '@supabase/supabase-js': [
+  supabase: [
     {
-      name: '@supabase/auth-js',
+      name: '@supabase/supabase-js',
       versions: ['>=2.112.2'],
-    },
-    {
-      name: '@supabase/functions-js',
-      versions: ['>=2.112.2'],
-    },
-    {
-      name: '@supabase/postgrest-js',
-      versions: ['>=2.112.2'],
-    },
-    {
-      name: '@supabase/realtime-js',
-      versions: ['>=2.112.2'],
-    },
-    {
-      name: '@supabase/storage-js',
-      versions: ['>=2.112.2'],
+      // This package is the Supabase test target even though it differs from the integration key above.
+      honourEnvRange: true,
     },
   ],
 }

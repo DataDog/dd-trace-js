@@ -59,7 +59,7 @@ const alreadyLoggedIncompatibleIntegrations = new Set()
 /** @type {Set<string>} */
 const compatibleOrchestrionTargets = new Set()
 
-orchestrionLoadChannel.subscribe(({ moduleName, activationName, version, result }) => {
+orchestrionLoadChannel.subscribe(({ moduleName, version, result }) => {
   const nameVersion = `${moduleName}@${version}`
 
   if (result === 'unsupported') {
@@ -72,7 +72,7 @@ orchestrionLoadChannel.subscribe(({ moduleName, activationName, version, result 
   if (result === 'matched' || result === 'rewritten') {
     compatibleOrchestrionTargets.add(nameVersion)
     instrumentedIntegrationsSuccess.set(nameVersion, true)
-    if (result === 'rewritten') loadChannel.publish({ name: activationName })
+    if (result === 'rewritten') loadChannel.publish({ name: moduleName })
   }
 })
 

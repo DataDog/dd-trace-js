@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { EventEmitter } = require('node:events')
+const { EventEmitter, once } = require('node:events')
+const http = require('node:http')
 
 const sinon = require('sinon')
 
@@ -204,5 +205,33 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     const rejection = assert.rejects(promise, /child exited with no matching payloads/)
 
     await Promise.all([clock.tickAsync(50), rejection])
+  })
+})
+
+describe('FakeCiVisIntake.stop', () => {
+  it('closes pending media requests before resolving', async () => {
+    const intake = await new FakeCiVisIntake().start()
+    intake.setMediaResponsesPending()
+    const received = once(intake.server, 'request')
+    const request = http.request({
+      port: intake.port,
+      method: 'POST',
+      path: '/api/v2/ci/test-runs/123/media',
+      headers: { 'content-length': 0 },
+    })
+    request.on('error', () => {})
+    const closed = new Promise(resolve => request.once('close', resolve))
+    request.end()
+
+    try {
+      await received
+      await intake.stop()
+      await closed
+      assert.strictEqual(request.destroyed, true)
+      assert.strictEqual(intake.server.listening, false)
+    } finally {
+      request.destroy()
+      await intake.stop()
+    }
   })
 })

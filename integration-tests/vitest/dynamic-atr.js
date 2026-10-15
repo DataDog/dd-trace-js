@@ -108,8 +108,9 @@ function describeDynamicAtr ({ mode, getContext }) {
         assert.strictEqual(final[0].meta['error.message'], `${failure} failure ${attempts}`)
         assert.ok(events.slice(1).every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
       }
-      assert.strictEqual(counts.expectedFailure, attempts)
-      assert.strictEqual(counts.unexpectedPass, 1)
+      // Vitest 5.0.3 applies test.fails before deciding whether to retry an attempt.
+      assert.strictEqual(counts.expectedFailure, 1, output)
+      assert.strictEqual(counts.unexpectedPass, attempts, output)
       assert.strictEqual(counts.eventuallyPasses, 2)
       assert.strictEqual(counts.slow, 3)
       const results = report.testResults.flatMap(result => result.assertionResults)

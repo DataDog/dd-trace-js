@@ -1,8 +1,10 @@
 'use strict'
 
 const { workerData: { probePort } } = require('node:worker_threads')
+const { WORKER_ERROR_REASON } = require('../constants')
 const { addBreakpoint, removeBreakpoint, modifyBreakpoint } = require('./breakpoints')
 const { ackReceived, ackInstalled, ackError } = require('./status')
+const WorkerError = require('./worker-error')
 const log = require('./log')
 
 // Example log line probe with captureSnapshot (simplified):
@@ -54,7 +56,8 @@ probePort.on('message', async ({ action, probe, ackId }) => {
     await processMsg(action, probe)
     probePort.postMessage({ ackId })
   } catch (err) {
-    probePort.postMessage({ ackId, error: err })
+    // Structured cloning an Error drops its custom properties, so send the reason separately.
+    probePort.postMessage({ ackId, error: err, reason: err.reason })
     ackError(err, probe)
   }
 })
@@ -72,17 +75,22 @@ async function processMsg (action, probe) {
   if (action !== 'unapply') ackReceived(probe)
 
   if (probe.type !== 'LOG_PROBE') {
-    throw new Error(`Unsupported probe type: ${probe.type} (id: ${probe.id}, version: ${probe.version})`)
+    throw new WorkerError(
+      `Unsupported probe type: ${probe.type} (id: ${probe.id}, version: ${probe.version})`,
+      WORKER_ERROR_REASON.UNSUPPORTED_PROBE_TYPE
+    )
   }
   if (!probe.where.sourceFile && !probe.where.lines) {
-    throw new Error(
+    throw new WorkerError(
       // eslint-disable-next-line @stylistic/max-len
-      `Unsupported probe insertion point! Only line-based probes are supported (id: ${probe.id}, version: ${probe.version})`
+      `Unsupported probe insertion point! Only line-based probes are supported (id: ${probe.id}, version: ${probe.version})`,
+      WORKER_ERROR_REASON.UNSUPPORTED_INSERTION_POINT
     )
   }
   if (probe.captureSnapshot && probe.captureExpressions?.length > 0) {
-    throw new Error(
-      `Cannot set both captureSnapshot and captureExpressions (probe: ${probe.id}, version: ${probe.version})`
+    throw new WorkerError(
+      `Cannot set both captureSnapshot and captureExpressions (probe: ${probe.id}, version: ${probe.version})`,
+      WORKER_ERROR_REASON.CONFLICTING_CAPTURE_OPTIONS
     )
   }
 
@@ -99,8 +107,9 @@ async function processMsg (action, probe) {
       ackInstalled(probe)
       break
     default:
-      throw new Error(
-        `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
+      throw new WorkerError(
+        `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`,
+        WORKER_ERROR_REASON.UNKNOWN_REMOTE_CONFIG_ACTION
       )
   }
 }

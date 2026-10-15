@@ -206,16 +206,15 @@ class DatadogPlaywrightReporter {
   onExit () {}
 
   /**
-   * Reports errors emitted by Playwright while later reporters are finalizing.
+   * Reports global run errors as well as errors from later reporters during finalization.
    *
    * @param {unknown} error
    */
   onError (error) {
-    if (this.isFinalizing) {
-      reporterErrorCh.publish(error)
-    } else {
+    if (!this.isFinalizing) {
       this.fatalErrorCount += 1
     }
+    reporterErrorCh.publish(error)
   }
 
   /**

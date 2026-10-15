@@ -4,7 +4,7 @@ const { URL, format } = require('node:url')
 const path = require('node:path')
 const request = require('../../exporters/common/request')
 const { getEnvironmentVariable } = require('../../config/helper')
-const { createServerlessDeliveryTracker } = require('../../serverless')
+const { createServerlessDeliveryTracker, IS_STANDARD_AWS_LAMBDA } = require('../../serverless')
 
 const logger = require('../../log')
 
@@ -118,6 +118,8 @@ class BaseLLMObsWriter {
 
     buffer.size += eventSize
     buffer.events.push(event)
+    // The standard Lambda sandbox can freeze before the periodic flush runs.
+    if (IS_STANDARD_AWS_LAMBDA) this.flush()
     return true
   }
 
@@ -293,12 +295,7 @@ class BaseLLMObsWriter {
   }
 
   _encode (payload) {
-    return JSON.stringify(payload, (key, value) => {
-      if (typeof value === 'string') {
-        return encodeUnicode(value) // serialize unicode characters
-      }
-      return value
-    }).replaceAll(String.raw`\\u`, String.raw`\u`) // remove double escaping
+    return encodeUnicode(JSON.stringify(payload))
   }
 }
 

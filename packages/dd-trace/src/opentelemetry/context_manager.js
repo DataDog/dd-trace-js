@@ -93,6 +93,9 @@ class ContextManager {
   }
 
   bind (context, target) {
+    // Per the OTel contract, only functions are wrapped; other targets are returned as-is.
+    if (typeof target !== 'function') return target
+
     const self = this
     return function (...args) {
       return self.with(context, target, this, ...args)
