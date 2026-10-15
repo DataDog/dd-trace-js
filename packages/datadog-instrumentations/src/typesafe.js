@@ -90,9 +90,7 @@ addHook({
   name: '@typesafe-ai/sdk',
   versions: ['>=0.6.0'],
 }, exports => {
-  if (exports.TypeSafeClient?.prototype?.systemOne) {
-    shimmer.wrap(exports.TypeSafeClient.prototype, 'systemOne', wrapSystemOne)
-  }
+  shimmer.wrap(exports.TypeSafeClient.prototype, 'systemOne', wrapSystemOne)
 
   return exports
 })
