@@ -277,6 +277,19 @@ describe('Plugin', () => {
         assert.ok(JSON.stringify(llmobsSpans[0]).length < 10_000, 'image bytes must not reach the span')
       })
 
+      it('records named assets by the names the SDK sends', async () => {
+        const photo = sdk.image(new Uint8Array(1_000).fill(255))
+        await createStubbedClient().systemOne({
+          state: 'Compare photo with the listing.',
+          questions: { damaged: sdk.noul(sdk.withAssets`Is ${photo} damaged?`) },
+          assets: { photo },
+          model: MODEL,
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans[0].meta.metadata.questions.damaged.instructions, 'Is photo damaged?')
+      })
+
       it('records text with assets as the text that was sent', async () => {
         const photo = sdk.image(new Uint8Array(1_000).fill(255))
         await createStubbedClient().systemOne({

@@ -2,6 +2,7 @@
 
 const LLMObsPlugin = require('../base')
 
+const TEXT_WITH_ASSETS = Symbol.for('@typesafe-ai/sdk/text-with-assets')
 const TYPESAFE_MODEL_PROVIDER = 'typesafe'
 const OPENROUTER_MODEL_PROVIDER = 'openrouter'
 
@@ -14,9 +15,10 @@ class TypeSafeLLMObsPlugin extends LLMObsPlugin {
     // Captured at call time, when the SDK serializes the request: the caller may reuse and change the object
     // before the response arrives.
     if (this._llmobsEnabledFor(ctx)) {
+      const assetNames = getAssetNames(ctx.request?.assets)
       ctx.llmobsRequest = {
-        state: toWireValue(ctx.request?.state),
-        questions: toWireValue(ctx.request?.questions),
+        state: toWireValue(ctx.request?.state, assetNames),
+        questions: toWireValue(ctx.request?.questions, assetNames),
       }
     }
     super.start(ctx)
@@ -96,18 +98,55 @@ function extractMetrics (result) {
 }
 
 /**
+ * @param {Record<string, object>} [assets] - The request's named assets
+ * @returns {Map<object, string>|undefined}
+ */
+function getAssetNames (assets) {
+  if (!assets || typeof assets !== 'object') return
+  const names = new Map()
+  for (const [name, asset] of Object.entries(assets)) names.set(asset, name)
+  return names.size > 0 ? names : undefined
+}
+
+/**
  * Converts a request value to the JSON the SDK sends. Image assets serialize to their `<image:…>` reference and
  * text with assets to its text through their `toJSON`, which the span processor's object copy would otherwise skip,
- * copying image bytes onto the span one index at a time.
+ * copying image bytes onto the span one index at a time. Assets given names in the request's `assets` are sent
+ * under those names instead, so they are replaced the same way the SDK does.
  *
  * @param {unknown} value
+ * @param {Map<object, string>} [assetNames]
  */
-function toWireValue (value) {
+function toWireValue (value, assetNames) {
   if (value === undefined) return
   try {
-    // eslint-disable-next-line unicorn/prefer-structured-clone -- structuredClone skips toJSON and copies the bytes
-    return JSON.parse(JSON.stringify(value))
+    const json = assetNames ? JSON.stringify(value, nameAssets(assetNames)) : JSON.stringify(value)
+    return JSON.parse(json)
   } catch {}
+}
+
+/**
+ * @param {Map<object, string>} assetNames
+ * @returns {(this: object, key: string, value: unknown) => unknown}
+ */
+function nameAssets (assetNames) {
+  return function (key, value) {
+    const original = this[key]
+    if (typeof original !== 'object' || original === null) return value
+
+    const name = assetNames.get(original)
+    if (name !== undefined) return name
+
+    if (TEXT_WITH_ASSETS in original) {
+      let { text } = original
+      for (const asset of original.assets) {
+        const assetName = assetNames.get(asset)
+        if (assetName !== undefined) text = text.replaceAll(String(asset), assetName)
+      }
+      return text
+    }
+    return value
+  }
 }
 
 /**
