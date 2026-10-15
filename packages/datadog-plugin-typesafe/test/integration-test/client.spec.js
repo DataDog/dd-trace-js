@@ -3,6 +3,11 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const { NODE_MAJOR } = require('../../../../version')
+
+// @typesafe-ai/sdk 0.7.0 requires Node.js >=22 (its image assets rely on the global `crypto`).
+if (NODE_MAJOR < 22) return
+
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const {
   FakeAgent,
