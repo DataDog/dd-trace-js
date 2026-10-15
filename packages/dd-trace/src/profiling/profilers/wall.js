@@ -10,7 +10,8 @@ const {
   beforeCh,
   spanFinishCh,
   getActiveSpan,
-  ensureChannelsActivated,
+  acquireChannels,
+  releaseChannels,
 } = require('../../storage-channels')
 const webTagsCache = require('../../web-tags-cache')
 
@@ -128,14 +129,6 @@ class NativeWallProfiler {
     this.#pprof = require('@datadog/pprof')
     kSampleCount = this.#pprof.time.constants.kSampleCount
 
-    // pprof otherwise crashes in worker threads
-    if (!process._startProfilerIdleNotifier) {
-      process._startProfilerIdleNotifier = () => {}
-    }
-    if (!process._stopProfilerIdleNotifier) {
-      process._stopProfilerIdleNotifier = () => {}
-    }
-
     this.#pprof.time.start({
       collectCpuTime: this.#cpuProfilingEnabled,
       columnNumbers: 'emit',
@@ -157,7 +150,7 @@ class NativeWallProfiler {
         this.#profilerState = this.#pprof.time.getState()
         this.#lastSampleCount = 0
 
-        ensureChannelsActivated(this.#asyncContextFrameEnabled)
+        acquireChannels(!this.#asyncContextFrameEnabled)
 
         if (this.#asyncContextFrameEnabled) {
           this.#setupTelemetryMetrics()
@@ -346,6 +339,7 @@ class NativeWallProfiler {
         }
         enterCh.unsubscribe(this.#boundEnter)
         spanFinishCh.unsubscribe(this.#boundSpanFinished)
+        releaseChannels(!this.#asyncContextFrameEnabled)
         if (this.#endpointCollectionEnabled) {
           webTagsCache.resolvedCh.unsubscribe(this.#boundSpanTagsUpdated)
           webTagsCache.deactivate()
