@@ -86,12 +86,12 @@ function extractMetrics (result) {
   const usage = result?.usage
   if (!usage) return
 
+  const { input_tokens: inputTokens, output_tokens: outputTokens } = usage
   const metrics = {}
-  if (usage.input_tokens != null) metrics.inputTokens = usage.input_tokens
-  if (usage.output_tokens != null) metrics.outputTokens = usage.output_tokens
-  if (usage.input_tokens != null || usage.output_tokens != null) {
-    metrics.totalTokens = (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0)
-  }
+  if (inputTokens != null) metrics.inputTokens = inputTokens
+  if (outputTokens != null) metrics.outputTokens = outputTokens
+  // The SDK reports a count it did not receive as null, so a total from one count would be misleading
+  if (inputTokens != null && outputTokens != null) metrics.totalTokens = inputTokens + outputTokens
   return metrics
 }
 

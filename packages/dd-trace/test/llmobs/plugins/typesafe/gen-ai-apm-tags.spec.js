@@ -15,6 +15,8 @@ describe('Plugin', () => {
     return new sdk.TypeSafeClient({
       apiKey: process.env.TYPESAFE_API_KEY ?? 'not-a-real-key',
       baseURL: 'http://127.0.0.1:9126/vcr/typesafe',
+      // 0.7.0 zstd-compresses request bodies of 1 KiB or more on Node.js 22.15+, which would make cassette bodies
+      // unreadable and differ across Node.js versions
       compression: false,
       retry: { maxRetries: 0 },
     })

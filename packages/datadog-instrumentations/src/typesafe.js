@@ -2,6 +2,7 @@
 
 const { tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 const { addHook } = require('./helpers/instrument')
 
 const typesafeTracingChannel = tracingChannel('apm:typesafe:request')
@@ -40,6 +41,7 @@ function wrapSystemOne (systemOne) {
       if (typeof apiPromise?.asResponse === 'function') {
         apiPromise.asResponse().then(response => readResult(ctx, response), error => finish(ctx, undefined, error))
       } else {
+        log.debug('TypeSafe systemOne returned no asResponse(); the span has no result.')
         finish(ctx)
       }
 
@@ -56,8 +58,12 @@ function wrapSystemOne (systemOne) {
  */
 function readResult (ctx, response) {
   try {
-    response.clone().json().then(body => finish(ctx, body), () => finish(ctx))
-  } catch {
+    response.clone().json().then(body => finish(ctx, body), error => {
+      log.debug('Could not parse the TypeSafe response body; the span has no result: %s', error.message)
+      finish(ctx)
+    })
+  } catch (error) {
+    log.debug('Could not read the TypeSafe response body; the span has no result: %s', error.message)
     finish(ctx)
   }
 }
