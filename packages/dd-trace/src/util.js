@@ -2,6 +2,9 @@
 
 const path = require('path')
 
+// Corepack and pnpx run a package manager in their own process, so they count as one too.
+const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm', 'pnpx', 'corepack']
+
 /**
  * `for-in` with an early return is the only allocation-free shape for
  * "does this object have any own enumerable properties". Microbenchmarks
@@ -29,6 +32,16 @@ function isFalse (str) {
 
 function isError (value) {
   return Boolean(value?.message || value instanceof Error)
+}
+
+/**
+ * Whether the current process is a package manager CLI. Scripts and test runners that a package
+ * manager launches run in child processes whose entry point is not a package manager.
+ */
+function isPackageManager () {
+  return PACKAGE_MANAGERS.some(packageManager =>
+    process.argv[1]?.includes(`bin/${packageManager}`)
+  )
 }
 
 // Matches a glob pattern to a given subject string
@@ -160,6 +173,7 @@ module.exports = {
   isTrue,
   isFalse,
   isError,
+  isPackageManager,
   globMatch,
   getSegment,
   stripQueryAndFragment,

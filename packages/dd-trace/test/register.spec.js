@@ -143,6 +143,49 @@ describe('register.js', () => {
       /dd-trace could not register synchronous loader hooks.*support detection failure/
     )
   })
+
+  describe('in a package manager', () => {
+    const { argv } = process
+
+    beforeEach(() => {
+      process.argv = [argv[0], '/project/node_modules/pnpm/bin/pnpm.mjs']
+    })
+
+    afterEach(() => {
+      process.argv = argv
+    })
+
+    it('does not register sync loader hooks on supported Node.js versions', () => {
+      const register = sinon.stub()
+      const registerSyncLoaderHooks = sinon.stub().returns(true)
+      const supportsSyncHooks = sinon.stub().returns(true)
+
+      loadRegister({ register, registerSyncLoaderHooks, supportsSyncHooks })
+
+      sinon.assert.notCalled(supportsSyncHooks)
+      sinon.assert.notCalled(registerSyncLoaderHooks)
+      sinon.assert.notCalled(register)
+      sinon.assert.notCalled(emitWarning)
+    })
+
+    it('does not register the async loader on unsupported Node.js versions', () => {
+      const register = sinon.stub()
+
+      loadRegister({
+        register,
+        registerSyncLoaderHooks: sinon.stub().returns(true),
+        supportsSyncHooks: () => true,
+        version: {
+          NODE_MAJOR: 24,
+          NODE_MINOR: 11,
+          NODE_PATCH: 0,
+        },
+      })
+
+      sinon.assert.notCalled(register)
+      sinon.assert.notCalled(emitWarning)
+    })
+  })
 })
 
 function createThrowingLoaderHook (error) {
@@ -153,6 +196,14 @@ function createThrowingLoaderHook (error) {
   })
 }
 
+/**
+ * @param {object} options
+ * @param {sinon.SinonStub} options.register
+ * @param {Function} [options.registerSyncLoaderHooks]
+ * @param {object} [options.loaderHook]
+ * @param {Function} [options.supportsSyncHooks]
+ * @param {{ NODE_MAJOR: number, NODE_MINOR: number, NODE_PATCH: number }} [options.version]
+ */
 function loadRegister ({ register, registerSyncLoaderHooks, loaderHook, supportsSyncHooks, version }) {
   proxyquire('../../../register.js', {
     'node:module': { register },

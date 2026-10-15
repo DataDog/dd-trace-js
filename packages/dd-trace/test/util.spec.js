@@ -3,13 +3,14 @@
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
 
-const { describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
 
 require('./setup/core')
 const {
   isEmpty,
   isTrue,
   isFalse,
+  isPackageManager,
   globMatch,
   getSegment,
   stripQueryAndFragment,
@@ -119,6 +120,65 @@ describe('util', () => {
     assert.strictEqual(isEmpty(Object.assign(Object.create({ inherited: 1 }), { own: 2 })), false)
     // `for-in` walks inherited enumerable keys, so a prototype-only object counts as non-empty.
     assert.strictEqual(isEmpty(Object.create({ inherited: 1 })), false)
+  })
+
+  describe('isPackageManager', () => {
+    const { argv } = process
+
+    afterEach(() => {
+      process.argv = argv
+    })
+
+    /**
+     * @param {string} [entryPoint]
+     */
+    function isPackageManagerEntryPoint (entryPoint) {
+      process.argv = entryPoint === undefined ? [argv[0]] : [argv[0], entryPoint]
+      return isPackageManager()
+    }
+
+    it('matches package manager entry points', () => {
+      const entryPoints = [
+        '/usr/local/bin/npm',
+        '/usr/local/lib/node_modules/npm/bin/npm-cli.js',
+        '/usr/local/bin/yarn',
+        '/usr/local/lib/node_modules/yarn/bin/yarn.js',
+        '/project/node_modules/.bin/pnpm',
+        '/project/node_modules/pnpm/bin/pnpm.mjs',
+        '/home/user/.cache/node/corepack/v1/pnpm/11.20.0/bin/pnpm.cjs',
+        '/project/node_modules/.bin/pnpx',
+        '/project/node_modules/pnpm/bin/pnpx.mjs',
+        // `corepack pnpm` runs pnpm inside the corepack process.
+        '/usr/local/bin/corepack',
+      ]
+
+      for (const entryPoint of entryPoints) {
+        assert.strictEqual(isPackageManagerEntryPoint(entryPoint), true, entryPoint)
+      }
+    })
+
+    it('does not match test runners and scripts that package managers launch', () => {
+      const entryPoints = [
+        '/project/node_modules/.bin/vitest',
+        '/project/node_modules/.pnpm/vitest@3.2.7/node_modules/vitest/vitest.mjs',
+        '/project/node_modules/tinypool/dist/entry/process.js',
+        '/project/node_modules/.bin/jest',
+        '/project/node_modules/jest/bin/jest.js',
+        '/project/node_modules/jest-worker/build/workers/processChild.js',
+        '/project/node_modules/mocha/bin/mocha.js',
+        '/project/node_modules/@cucumber/cucumber/bin/cucumber.js',
+        '/project/node_modules/@playwright/test/cli.js',
+        '/project/index.mjs',
+      ]
+
+      for (const entryPoint of entryPoints) {
+        assert.strictEqual(isPackageManagerEntryPoint(entryPoint), false, entryPoint)
+      }
+    })
+
+    it('does not match a process without an entry point', () => {
+      assert.strictEqual(isPackageManagerEntryPoint(), false)
+    })
   })
 
   describe('getSegment', () => {

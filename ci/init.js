@@ -4,9 +4,8 @@
 const exporters = require('../ext/exporters')
 const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/dd-trace/src/config/helper')
-const { isFalse, isTrue } = require('../packages/dd-trace/src/util')
+const { isFalse, isPackageManager, isTrue } = require('../packages/dd-trace/src/util')
 
-const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
 const DEFAULT_FLUSH_INTERVAL = 10_000
 const JEST_FLUSH_INTERVAL = 0
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
@@ -19,12 +18,6 @@ const EXPORTER_MAP = {
   mocha: exporters.MOCHA_WORKER,
   playwright: exporters.PLAYWRIGHT_WORKER,
   vitest: exporters.VITEST_WORKER,
-}
-
-function isPackageManager () {
-  return PACKAGE_MANAGERS.some(packageManager =>
-    process.argv[1]?.includes(`bin/${packageManager}`)
-  )
 }
 
 function detectTestWorkerType () {
