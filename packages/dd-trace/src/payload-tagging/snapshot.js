@@ -159,8 +159,30 @@ function hasAncestor (ancestors, value) {
 }
 
 /**
- * Assign `value` to `container[key]`, keeping `__proto__` a plain data
- * property so the snapshot cannot mutate prototypes.
+ * Write `value` to `container[key]` as an ordinary data property, keeping
+ * `__proto__` a plain data property so the snapshot cannot mutate prototypes.
+ *
+ * @param {Record<string, unknown> | unknown[]} container
+ * @param {string | number} key
+ * @param {unknown} value
+ */
+function defineDataProperty (container, key, value) {
+  if (key === '__proto__') {
+    Object.defineProperty(container, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    })
+    return
+  }
+  container[key] = value
+}
+
+/**
+ * Assign `value` to `container[key]`, or to the root when `container` is null,
+ * keeping `__proto__` a plain data property so the snapshot cannot mutate
+ * prototypes.
  *
  * @param {Record<string, unknown> | unknown[] | null} container
  * @param {string | null} key
@@ -172,16 +194,7 @@ function assign (container, key, value, root) {
     root.value = value
     return
   }
-  if (key === '__proto__') {
-    Object.defineProperty(container, key, {
-      value,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    })
-    return
-  }
-  container[key] = value
+  defineDataProperty(container, /** @type {string} */ (key), value)
 }
 
 /**
@@ -398,6 +411,9 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       return
     }
 
+    // Buffer.isBuffer is not redundant with the isView check: it walks the
+    // prototype chain, so a hostile cyclic Proxy throws here and the capture
+    // fails soft at the computeTags boundary (pinned by a regression test).
     if (Buffer.isBuffer(value) || ArrayBuffer.isView(value)) {
       let copy
       try {
@@ -519,4 +535,4 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
   return { value: root.value, incomplete }
 }
 
-module.exports = { createSafeSnapshot, createSnapshotBudget }
+module.exports = { createSafeSnapshot, createSnapshotBudget, defineDataProperty }
