@@ -10,7 +10,7 @@ const jsonpath = require('../../../../vendor/dist/jsonpath-plus').JSONPath
 const log = require('../log')
 
 const { tagsFromObject } = require('./tagging')
-const { createSafeSnapshot, createSnapshotBudget } = require('./snapshot')
+const { createSafeSnapshot, createSnapshotBudget, defineDataProperty } = require('./snapshot')
 const { truncated } = require('./constants')
 
 // JSONPath constructs that select on data values (predicates, script
@@ -37,26 +37,6 @@ function hasDataDependentRules (rules) {
     }
   }
   return false
-}
-
-/**
- * Assign to a snapshot container, keeping `__proto__` a plain data property.
- *
- * @param {Record<string, unknown>} parent
- * @param {string | number} parentProperty
- * @param {unknown} value
- */
-function assignSafe (parent, parentProperty, value) {
-  if (parentProperty === '__proto__') {
-    Object.defineProperty(parent, parentProperty, {
-      value,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    })
-    return
-  }
-  parent[parentProperty] = value
 }
 
 /**
@@ -100,9 +80,7 @@ function maybeJSONParseValue (value, capture) {
   }
 
   const snapshot = createSafeSnapshot(parsed, capture.budget)
-  if (snapshot.incomplete) {
-    capture.incomplete = true
-  }
+  capture.incomplete ||= snapshot.incomplete
   return snapshot.value
 }
 
@@ -120,7 +98,7 @@ function expand (object, expansionRules, capture) {
       // none at all; neither names a destination. Index 0 and the empty string
       // are valid, so only null and undefined are rejected.
       if (desc.parent && desc.parentProperty != null) {
-        assignSafe(desc.parent, desc.parentProperty, maybeJSONParseValue(value, capture))
+        defineDataProperty(desc.parent, desc.parentProperty, maybeJSONParseValue(value, capture))
       }
     })
   }
@@ -137,7 +115,7 @@ function redact (object, redactionRules) {
     jsonpath(rule, object, (_value, _type, desc) => {
       // See the expansion guard: null and undefined name no destination.
       if (desc.parent && desc.parentProperty != null) {
-        assignSafe(desc.parent, desc.parentProperty, 'redacted')
+        defineDataProperty(desc.parent, desc.parentProperty, 'redacted')
       }
     })
   }
@@ -185,11 +163,12 @@ function computeBoundedTags (config, object, opts) {
   const payload = /** @type {Record<string, unknown>} */ (snapshot.value)
   const redactionRules = opts.prefix === PAYLOAD_TAG_REQUEST_PREFIX ? config.request : config.response
   const expansionRules = config.expand
+  // Rules are fixed for the whole call, so the disjunction is computed once
+  // and shared by the pre- and post-expansion suppression checks.
+  const dataDependentRules =
+    hasDataDependentRules(redactionRules) || hasDataDependentRules(expansionRules)
 
-  if (
-    snapshot.incomplete &&
-    (hasDataDependentRules(redactionRules) || hasDataDependentRules(expansionRules))
-  ) {
+  if (snapshot.incomplete && dataDependentRules) {
     // Fixed, payload-safe diagnostic: no payload values or rule text included.
     log.debug(
       'Omitting payload tags: the capture was incomplete and the rules are data-dependent'
@@ -201,10 +180,7 @@ function computeBoundedTags (config, object, opts) {
   const capture = { incomplete: snapshot.incomplete, budget, expansionLength: maxExpansionLength }
   expand(payload, expansionRules, capture)
 
-  if (
-    capture.incomplete &&
-    (hasDataDependentRules(redactionRules) || hasDataDependentRules(expansionRules))
-  ) {
+  if (capture.incomplete && dataDependentRules) {
     log.debug(
       'Omitting payload tags: expansion was incomplete and the rules are data-dependent'
     )
