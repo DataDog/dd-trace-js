@@ -1206,6 +1206,116 @@ declare namespace tracer {
     iast?: boolean | IastOptions
 
     /**
+     * Configuration for AWS Lambda runtimes. Only read when the tracer runs inside AWS Lambda.
+     */
+    lambda?: {
+      /**
+       * API key resolved through AWS KMS, used when submitting Lambda metrics directly.
+       * @env DD_KMS_API_KEY
+       */
+      apiKeyKms?: string,
+
+      /**
+       * ARN of an AWS Secrets Manager secret holding the API key, used when submitting Lambda
+       * metrics directly.
+       * @env DD_API_KEY_SECRET_ARN
+       */
+      apiKeySecretArn?: string,
+
+      /**
+       * Whether to add the invocation event and response as span tags.
+       * @default false
+       * @env DD_CAPTURE_LAMBDA_PAYLOAD
+       */
+      captureLambdaPayload?: boolean,
+
+      /**
+       * How deep to traverse the payload when capturing it as span tags.
+       * @default 10
+       * @env DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH
+       */
+      captureLambdaPayloadMaxDepth?: number,
+
+      /**
+       * Module prefix excluded from the cold-start module-load tree.
+       * @default './opentracing/tracer'
+       * @env DD_COLD_START_TRACE_SKIP_LIB
+       */
+      coldStartTraceSkipLib?: string,
+
+      /**
+       * Whether to trace module loads during the init phase.
+       * @default true
+       * @env DD_COLD_START_TRACING
+       */
+      coldStartTracing?: boolean,
+
+      /**
+       * Whether to create an inferred span for the upstream managed service that triggered the
+       * invocation.
+       * @default true
+       * @env DD_TRACE_MANAGED_SERVICES
+       */
+      createInferredSpan?: boolean,
+
+      /**
+       * Whether to read trace context out of an API Gateway authorizer's context.
+       * @default true
+       * @env DD_DECODE_AUTHORIZER_CONTEXT
+       */
+      decodeAuthorizerContext?: boolean,
+
+      /**
+       * Whether to write trace context into an API Gateway authorizer's response context.
+       * @default true
+       * @env DD_ENCODE_AUTHORIZER_CONTEXT
+       */
+      encodeAuthorizerContext?: boolean,
+
+      /**
+       * Whether to submit the Lambda enhanced metrics.
+       * @default true
+       * @env DD_ENHANCED_METRICS
+       */
+      enhancedMetrics?: boolean,
+
+      /**
+       * Whether to use FIPS endpoints. Defaults to true in AWS GovCloud regions.
+       * @env DD_LAMBDA_FIPS_MODE
+       */
+      fipsMode?: boolean,
+
+      /**
+       * Whether to emit metrics as log records for the log forwarder instead of over DogStatsD.
+       * @default false
+       * @env DD_FLUSH_TO_LOG
+       */
+      logForwarding?: boolean,
+
+      /**
+       * Whether to merge Datadog traces with AWS X-Ray traces.
+       * @default false
+       * @env DD_MERGE_XRAY_TRACES
+       */
+      mergeXrayTraces?: boolean,
+
+      /**
+       * Minimum module-load duration, in milliseconds, that produces a cold-start span.
+       * @default 3
+       * @env DD_MIN_COLD_START_DURATION
+       */
+      minColdStartTraceDurationMs?: number,
+
+      /**
+       * Whether the `aws.lambda` span's service is the function name. When false, the span falls
+       * back to the legacy `aws.lambda` service representation.
+       * @default true
+       * @env DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED
+       */
+      serviceRepresentationEnabled?: boolean,
+    }
+
+    /**
      * Configuration of ASM Remote Configuration
      */
     remoteConfig?: {
