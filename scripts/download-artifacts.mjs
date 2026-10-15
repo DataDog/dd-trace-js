@@ -22,11 +22,50 @@ const execFileAsync = promisify(execFile)
 // `downloadArtifacts` call, not just within one of them — a per-call limit still lets N concurrent
 // runs each open their own 10, recreating the exact burst this exists to prevent.
 const MAX_CONCURRENT_DOWNLOADS = 10
+const DEFAULT_RETRIES = 4
+const MAX_RETRY_DELAY_MS = 30_000
+const RETRY_JITTER = 0.2
 const RETRY_PATTERN = /-retry-\d+$/
 
 // Shared (not per-call) so every concurrently processed sibling workflow's downloads draw from the
 // same pool of permits — see the comment above `MAX_CONCURRENT_DOWNLOADS`.
 const downloadSemaphore = new Semaphore(MAX_CONCURRENT_DOWNLOADS)
+
+/**
+ * @param {string} value
+ */
+function parseRetryAfter (value) {
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000
+
+  const timestamp = Date.parse(value)
+  if (Number.isNaN(timestamp)) return
+  return Math.max(0, timestamp - Date.now())
+}
+
+class ArtifactDownloadError extends Error {
+  /**
+   * @param {string} message
+   * @param {number|undefined} retryAfterMs
+   */
+  constructor (message, retryAfterMs) {
+    super(message)
+    this.retryAfterMs = retryAfterMs
+  }
+}
+
+/**
+ * @param {unknown} err
+ * @param {number} attempt
+ * @param {number} delayMs
+ */
+function retryDelay (err, attempt, delayMs) {
+  if (err instanceof ArtifactDownloadError && err.retryAfterMs !== undefined) return err.retryAfterMs
+
+  const backoff = Math.min(delayMs * (2 ** (attempt - 1)), MAX_RETRY_DELAY_MS)
+  const jitter = 1 + ((Math.random() * 2 - 1) * RETRY_JITTER)
+  return Math.round(backoff * jitter)
+}
 
 /**
  * Download and unzip a single artifact, retrying on failure with a backoff delay.
@@ -52,7 +91,13 @@ async function downloadOne ({ runId, artifact, owner, repo, token, retries, dela
       `https://api.github.com/repos/${owner}/${repo}/actions/artifacts/${artifact.id}/zip`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    if (!response.ok) {
+      const retryAfterHeader = response.headers?.get('retry-after')
+      const retryAfterMs = retryAfterHeader === null || retryAfterHeader === undefined
+        ? undefined
+        : parseRetryAfter(retryAfterHeader)
+      throw new ArtifactDownloadError(`HTTP ${response.status}`, retryAfterMs)
+    }
     mkdirSync(dir, { recursive: true })
     await pipeline(Readable.fromWeb(response.body), createWriteStream(tmpFile))
     await execFileAsync('unzip', ['-oq', '-d', dir, tmpFile])
@@ -62,8 +107,9 @@ async function downloadOne ({ runId, artifact, owner, repo, token, retries, dela
       console.error(`Failed to download ${artifact.name} from run ${runId}: ${err.message}`)
       return false
     }
+    const waitMs = retryDelay(err, attempt, delayMs)
     console.log(`[retry ${attempt}/${retries}] ${artifact.name} from run ${runId}: ${err.message}`)
-    await sleep(delayMs)
+    await sleep(waitMs)
     return downloadOne({ runId, artifact, owner, repo, token, retries, delayMs }, attempt + 1)
   } finally {
     try { unlinkSync(tmpFile) } catch {}
@@ -81,7 +127,10 @@ async function downloadOne ({ runId, artifact, owner, repo, token, retries, dela
  * @param {number} [opts.delayMs]
  * @returns {Promise<{ downloaded: number, failed: number }>}
  */
-export async function downloadArtifacts (octokit, { owner, repo, token, runs, retries = 2, delayMs = 2000 }) {
+export async function downloadArtifacts (
+  octokit,
+  { owner, repo, token, runs, retries = DEFAULT_RETRIES, delayMs = 2000 }
+) {
   const artifactLists = await Promise.all(
     runs.map(run =>
       octokit.paginate(octokit.rest.actions.listWorkflowRunArtifacts, {
