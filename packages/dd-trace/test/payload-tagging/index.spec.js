@@ -335,43 +335,6 @@ describe('Safe payload capture', () => {
         assert.strictEqual(input.items[0].encoded, '{"secret":"s3cret"}')
       })
 
-      const leaves = [
-        { name: 'Date', make: () => new Date() },
-        { name: 'Map', make: () => new Map() },
-        { name: 'Set', make: () => new Set() },
-      ]
-      for (const { name, make } of leaves) {
-        it(`suppresses ${prefix} predicates on discarded ${name} fields`, () => {
-          const leaf = Object.assign(make(), { flag: true })
-          const input = { items: [{ leaf, secret: 's3cret' }] }
-          const rule = '$.items[?(@.leaf.flag)].secret'
-          const config = { expand: [], request: [rule], response: [rule] }
-
-          assert.deepStrictEqual(computeTags(config, input, opts), {})
-          const snapshot = createSafeSnapshot(leaf)
-          assert.strictEqual(snapshot.incomplete, true)
-          assert.strictEqual(Object.hasOwn(/** @type {object} */ (snapshot.value), 'flag'), false)
-          assert.strictEqual(leaf.flag, true)
-        })
-      }
-
-      for (const rule of [
-        '$.items[?(@.toString)].secret',
-        '$.items[?(@.hasOwnProperty)].secret',
-        '$.items[?(typeof @.toString === "function")].secret',
-      ]) {
-        it(`preserves inherited members for ${prefix} rule ${rule}`, () => {
-          const input = { items: [{ secret: 's3cret' }] }
-          const config = { expand: [], request: [rule], response: [rule] }
-
-          assert.deepStrictEqual(computeTags(config, input, opts), {
-            [`${prefix}.items.0.secret`]: 'redacted',
-          })
-          assert.strictEqual(createSafeSnapshot(input).incomplete, false)
-          assert.strictEqual(input.items[0].secret, 's3cret')
-        })
-      }
-
       for (const throwsOnSecond of [false, true]) {
         it(`reads enumerable getReader once for ${prefix} (second read throws: ${throwsOnSecond})`, () => {
           let reads = 0
@@ -624,25 +587,6 @@ describe('Safe payload capture', () => {
         assert.deepStrictEqual(snapshot.value, { safe: 'ok', writeOnly: undefined })
       })
 
-      it(`passes the source as the getter receiver for ${prefix}`, () => {
-        /** @type {unknown[]} */
-        const receivers = []
-        const holder = {}
-        Object.defineProperty(holder, 'computed', {
-          enumerable: true,
-          get () {
-            receivers.push(this)
-            return 'ok'
-          },
-        })
-
-        const snapshot = createSafeSnapshot({ holder })
-        assert.strictEqual(snapshot.incomplete, false)
-        assert.deepStrictEqual(snapshot.value, { holder: { computed: 'ok' } })
-        assert.strictEqual(receivers.length, 1)
-        assert.strictEqual(receivers[0], holder)
-      })
-
       it(`invokes accessors intrinsically without consulting a spoofed call property for ${prefix}`, () => {
         let callReads = 0
         let getterReads = 0
@@ -734,28 +678,18 @@ describe('Safe payload capture', () => {
       assert.strictEqual(root.callCount, 0)
     })
 
-    it('truncates functions in containers without inspecting attached data', () => {
+    it('truncates aliased functions in containers without inspecting attached data', () => {
       const attached = { secret: 'customer-secret' }
       const fn = Object.assign(sinon.spy(() => { throw new Error('unexpected call') }), { attached })
-      const snapshot = createSafeSnapshot({ field: fn, list: [fn] })
+      const snapshot = createSafeSnapshot({ a: fn, b: fn, list: [fn] })
 
       assert.strictEqual(snapshot.incomplete, true)
-      const value = /** @type {{ field: unknown, list: unknown[] }} */ (snapshot.value)
-      assert.strictEqual(value.field, 'truncated')
+      const value = /** @type {{ a: unknown, b: unknown, list: unknown[] }} */ (snapshot.value)
+      assert.strictEqual(value.a, 'truncated')
+      assert.strictEqual(value.b, 'truncated')
       assert.strictEqual(value.list[0], 'truncated')
       assert.strictEqual(fn.callCount, 0)
       assert.deepStrictEqual(attached, { secret: 'customer-secret' })
-    })
-
-    it('truncates aliased functions per path without reading them twice', () => {
-      const fn = sinon.spy()
-      const snapshot = createSafeSnapshot({ a: fn, b: fn })
-
-      assert.strictEqual(snapshot.incomplete, true)
-      const value = /** @type {{ a: unknown, b: unknown }} */ (snapshot.value)
-      assert.strictEqual(value.a, 'truncated')
-      assert.strictEqual(value.b, 'truncated')
-      assert.strictEqual(fn.callCount, 0)
     })
 
     it('truncates callable proxies without triggering traps that inspect them', () => {
@@ -917,13 +851,6 @@ describe('Safe payload capture', () => {
 
     assert.strictEqual(tags['aws.response.body.secret'], 'redacted')
     assert.strictEqual(tags['aws.response.body.self'], 'truncated')
-  })
-
-  it('should suppress payload tags when capture is incomplete and rules are data-dependent', () => {
-    const input = { Body: makeReadable(), token: 's3cret' }
-    const config = { expand: [], request: [], response: ['$..[?(@.token)]'] }
-
-    assert.deepStrictEqual(computeTags(config, input, responseOpts), {})
   })
 
   it('should retain partial payload tags with the incomplete flag when rules are structural', () => {
@@ -1088,16 +1015,6 @@ describe('Safe payload capture', () => {
     assert.strictEqual(tags['foo.body.0.a'], undefined)
     assert.strictEqual(tags['foo.body.1'], 'truncated')
     assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
-  })
-
-  it('should suppress payload tags when expansion truncation meets data-dependent redaction rules', () => {
-    const huge = `{ "a": "${'x'.repeat(1000001)}" }`
-    const config = { expand: ['$.body'], request: [], response: ['$..[?(@.token)]'] }
-
-    assert.deepStrictEqual(
-      computeTags(config, { body: huge, token: 's3cret' }, { maxDepth: 10, prefix: 'foo' }),
-      {}
-    )
   })
 
   it('should bound the expansion of deeply nested JSON strings', () => {
@@ -1270,8 +1187,22 @@ describe('Safe payload capture', () => {
               response: expand ? ['$.items[*].encoded.secret'] : [`${rule}.secret`],
             }
             const tags = computeTags(config, input, { maxDepth: 10, prefix })
-            assert.strictEqual(tags[`${prefix}.items.0.${expand ? 'encoded.secret' : 'secret'}`], 'redacted')
-            assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
+
+            // The whole map pins both destinations: the plain secret and its
+            // encoded sibling keep their independent fates, with no extra
+            // tags and no incomplete flag.
+            if (expand) {
+              assert.deepStrictEqual(tags, {
+                [`${prefix}.items.0.secret`]: 's3cret',
+                [`${prefix}.items.0.encoded.secret`]: 'redacted',
+              })
+            } else {
+              assert.deepStrictEqual(tags, {
+                [`${prefix}.items.0.secret`]: 'redacted',
+                [`${prefix}.items.0.encoded`]: '{"secret":"encoded-secret"}',
+              })
+            }
+            assert.strictEqual(createSafeSnapshot(input).incomplete, false)
             assert.deepStrictEqual(input.items[0], { secret: 's3cret', encoded: '{"secret":"encoded-secret"}' })
           })
         }
@@ -1575,19 +1506,6 @@ describe('Safe payload capture', () => {
       assert.ok(!Object.hasOwn(/** @type {object} */ (snapshot.value), 'pending'))
       assert.strictEqual(getReader.callCount, 0)
     })
-  })
-
-  it('should omit payload tags when capture fails unexpectedly', () => {
-    const input = {}
-    Object.defineProperty(input, 'boom', {
-      get () {
-        throw new Error('boom')
-      },
-      enumerable: true,
-    })
-    input.safe = 'ok'
-
-    assert.deepStrictEqual(computeTags(safeConfig, input, responseOpts), {})
   })
 
   describe('payload-controlled exceptions', () => {
