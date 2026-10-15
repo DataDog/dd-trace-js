@@ -20,8 +20,9 @@
 // and the OTel ContextManager activates spans via
 // storage('legacy').run({ span: ddSpan }, ...), so the active span
 // our writer reads from legacy storage is the same DatadogSpan in
-// both cases. The OTel-visible trace/span IDs come from the same
-// _ddContext.toTraceId/toSpanId calls we use here.
+// both cases. The record's trace/span IDs are read from the same
+// Identifier bytes (and _dd.p.tid) behind _ddContext.toTraceId/toSpanId,
+// and the spec pins them byte-for-byte to those methods.
 
 const { isMainThread, threadId } = require('worker_threads')
 
@@ -124,6 +125,7 @@ function traceFlagsOf (spanContext) {
 //             waiting on; undefined while the span has no web-server ancestry.
 //             Distinguishes a stale announcement from a live one when a nearer
 //             web-server span takes over.
+//   awaitsOwnEndpoint: this is the request span, waiting on its own endpoint.
 const CachedSym = Symbol('OtelThreadCtx.cached')
 
 let started = false
@@ -131,29 +133,18 @@ let ThreadContext
 let getContext
 let clearContext
 
-// The upper 64 bits of a 128-bit trace id, when the identifier itself only holds
-// the lower 64; see DatadogSpanContext#toTraceId.
 const TRACE_ID_128 = '_dd.p.tid'
 const HEX16 = /^[\da-f]{16}$/i
 
-// Scratch buffers the IDs are assembled in. The ThreadContext constructor copies
-// both into its own record, so they are free for reuse as soon as it returns.
+// Reusable: the ThreadContext constructor copies the ids into its own record.
 const traceIdBytes = new Uint8Array(16)
 const spanIdBytes = new Uint8Array(8)
 
-// Single-entry memo for the decoded upper half of the trace id. Locally started
-// traces derive it from their start second, so it changes about once a second
-// rather than once per trace.
+// The upper half of local trace ids only changes once per second.
 let lastTraceIdHigh
 const lastTraceIdHighBytes = new Uint8Array(8)
 
-// The same bytes as `Buffer.from(spanContext.toTraceId(true), 'hex')`, read
-// straight from the identifier instead of round-tripping through hex. Shapes
-// toTraceId can produce but this does not expect (an identifier that is neither
-// 64 nor 128 bits, a malformed _dd.p.tid) take that slow path verbatim.
-//
-// Identifier buffers are usually plain arrays, which indexed copies handle
-// about twice as fast as TypedArray#set.
+// Same bytes as decoding toTraceId(true); unexpected shapes fall back to that.
 function getTraceIdBytes (spanContext) {
   const low = spanContext._traceId.toBuffer()
   if (low.length === 16) {
@@ -178,12 +169,25 @@ function getTraceIdBytes (spanContext) {
   return traceIdBytes
 }
 
-// The same bytes as `Buffer.from(spanContext.toSpanId(true), 'hex')`.
 function getSpanIdBytes (spanContext) {
   const bytes = spanContext._spanId.toBuffer()
   if (bytes.length !== 8) return Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex'))
   for (let i = 0; i < 8; i++) spanIdBytes[i] = bytes[i]
   return spanIdBytes
+}
+
+const HEX_CODES = Uint8Array.from(Buffer.from('0123456789abcdef'))
+
+// Same string as toSpanId(true), without the per-trace Buffer hex round trip.
+function localRootSpanIdHex (rootContext) {
+  const b = rootContext._spanId.toBuffer()
+  if (b.length !== 8) return rootContext.toSpanId(true)
+  return String.fromCharCode(
+    HEX_CODES[b[0] >> 4], HEX_CODES[b[0] & 15], HEX_CODES[b[1] >> 4], HEX_CODES[b[1] & 15],
+    HEX_CODES[b[2] >> 4], HEX_CODES[b[2] & 15], HEX_CODES[b[3] >> 4], HEX_CODES[b[3] & 15],
+    HEX_CODES[b[4] >> 4], HEX_CODES[b[4] & 15], HEX_CODES[b[5] >> 4], HEX_CODES[b[5] & 15],
+    HEX_CODES[b[6] >> 4], HEX_CODES[b[6] & 15], HEX_CODES[b[7] >> 4], HEX_CODES[b[7] & 15]
+  )
 }
 
 function getOrBuildContext (span) {
@@ -202,7 +206,7 @@ function getOrBuildContext (span) {
   const webTags = webTagsCache.getCachedWebTags(span)
   const endpoint = finalEndpoint(webTags)
   const attrs = []
-  attrs[LOCAL_ROOT_SPAN_ID_IDX] = rootContext.toSpanId(true)
+  attrs[LOCAL_ROOT_SPAN_ID_IDX] = localRootSpanIdHex(rootContext)
   if (endpoint !== undefined) attrs[ENDPOINT_IDX] = endpoint
   attrs[THREAD_NAME_IDX] = THREAD_NAME
   attrs[THREAD_ID_IDX] = THREAD_ID
@@ -229,10 +233,7 @@ function awaitEndpoint (span, webTags, cached) {
   // one appear later, webTagsCache announces that separately — see
   // onWebTagsResolved.
   if (webTags === undefined) return
-  // The request span itself, by far the most common waiter. Its announcement
-  // names this very span, so onEndpointResolved finds the record on it and the
-  // shared waiting list (a WeakMap entry and an array per request) is only
-  // needed for descendants.
+  // The request span waits on its own announcement; only descendants need the shared list.
   if (webTags === span.context().getTags()) {
     cached.awaitsOwnEndpoint = true
     return
@@ -258,8 +259,7 @@ function onEnter () {
   if (!started) return
   const span = getActiveSpan()
   if (!span) {
-    // Clearing an already empty frame would still make @datadog/pprof install a
-    // fresh AsyncContextFrame holding nothing.
+    // Clearing an empty frame would still make pprof install a new AsyncContextFrame.
     if (getContext() !== undefined) clearContext()
     return
   }
