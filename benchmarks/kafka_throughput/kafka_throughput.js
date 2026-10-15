@@ -60,11 +60,12 @@ const NUM_HEADERS = 5
 const COMMIT_EVERY = parseCommitEvery(process.env.COMMIT_EVERY)
 
 /**
- * @param {string | undefined} raw COMMIT_EVERY env value; unset or empty means the default (100).
+ * @param {string | undefined} raw COMMIT_EVERY env value; unset means the default (100). An empty
+ * string is rejected, like in the Java/Python/Ruby harnesses.
  */
 function parseCommitEvery (raw) {
-  if (raw === undefined || raw === '') return 100
-  const value = Number(raw)
+  if (raw === undefined) return 100
+  const value = /^\d+$/.test(raw) ? Number(raw) : Number.NaN
   if (!Number.isInteger(value) || value < 1) {
     throw new Error(`COMMIT_EVERY must be an integer >= 1, got ${JSON.stringify(raw)}`)
   }
