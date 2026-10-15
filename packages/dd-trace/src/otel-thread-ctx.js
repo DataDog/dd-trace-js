@@ -133,8 +133,8 @@ let ThreadContext
 let getContext
 let clearContext
 
-const TRACE_ID_128 = '_dd.p.tid'
 const HEX16 = /^[\da-f]{16}$/i
+const HEX_CODES = Uint8Array.from(Buffer.from('0123456789abcdef'))
 
 // Reusable: the ThreadContext constructor copies the ids into its own record.
 const traceIdBytes = new Uint8Array(16)
@@ -152,7 +152,7 @@ function getTraceIdBytes (spanContext) {
     return traceIdBytes
   }
   if (low.length !== 8) return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
-  const high = spanContext._trace.tags[TRACE_ID_128]
+  const high = spanContext._trace.tags['_dd.p.tid']
   if (high) {
     if (high !== lastTraceIdHigh) {
       if (typeof high !== 'string' || !HEX16.test(high)) {
@@ -176,17 +176,15 @@ function getSpanIdBytes (spanContext) {
   return spanIdBytes
 }
 
-const HEX_CODES = Uint8Array.from(Buffer.from('0123456789abcdef'))
-
 // Same string as toSpanId(true), without the per-trace Buffer hex round trip.
 function localRootSpanIdHex (rootContext) {
-  const b = rootContext._spanId.toBuffer()
-  if (b.length !== 8) return rootContext.toSpanId(true)
+  const bytes = rootContext._spanId.toBuffer()
+  if (bytes.length !== 8) return rootContext.toSpanId(true)
   return String.fromCharCode(
-    HEX_CODES[b[0] >> 4], HEX_CODES[b[0] & 15], HEX_CODES[b[1] >> 4], HEX_CODES[b[1] & 15],
-    HEX_CODES[b[2] >> 4], HEX_CODES[b[2] & 15], HEX_CODES[b[3] >> 4], HEX_CODES[b[3] & 15],
-    HEX_CODES[b[4] >> 4], HEX_CODES[b[4] & 15], HEX_CODES[b[5] >> 4], HEX_CODES[b[5] & 15],
-    HEX_CODES[b[6] >> 4], HEX_CODES[b[6] & 15], HEX_CODES[b[7] >> 4], HEX_CODES[b[7] & 15]
+    HEX_CODES[bytes[0] >> 4], HEX_CODES[bytes[0] & 15], HEX_CODES[bytes[1] >> 4], HEX_CODES[bytes[1] & 15],
+    HEX_CODES[bytes[2] >> 4], HEX_CODES[bytes[2] & 15], HEX_CODES[bytes[3] >> 4], HEX_CODES[bytes[3] & 15],
+    HEX_CODES[bytes[4] >> 4], HEX_CODES[bytes[4] & 15], HEX_CODES[bytes[5] >> 4], HEX_CODES[bytes[5] & 15],
+    HEX_CODES[bytes[6] >> 4], HEX_CODES[bytes[6] & 15], HEX_CODES[bytes[7] >> 4], HEX_CODES[bytes[7] & 15]
   )
 }
 
