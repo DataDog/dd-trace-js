@@ -116,7 +116,10 @@ function maybeJSONParseValue (value, capture) {
 function expand (object, expansionRules, capture) {
   for (const rule of expansionRules) {
     jsonpath(rule, object, (value, _type, desc) => {
-      if (desc.parent && desc.parentProperty !== undefined) {
+      // Property-name selectors report `parentProperty: null` and the root has
+      // none at all; neither names a destination. Index 0 and the empty string
+      // are valid, so only null and undefined are rejected.
+      if (desc.parent && desc.parentProperty != null) {
         assignSafe(desc.parent, desc.parentProperty, maybeJSONParseValue(value, capture))
       }
     })
@@ -132,7 +135,8 @@ function expand (object, expansionRules, capture) {
 function redact (object, redactionRules) {
   for (const rule of redactionRules) {
     jsonpath(rule, object, (_value, _type, desc) => {
-      if (desc.parent && desc.parentProperty !== undefined) {
+      // See the expansion guard: null and undefined name no destination.
+      if (desc.parent && desc.parentProperty != null) {
         assignSafe(desc.parent, desc.parentProperty, 'redacted')
       }
     })

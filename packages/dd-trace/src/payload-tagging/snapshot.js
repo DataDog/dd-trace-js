@@ -263,7 +263,8 @@ function copyBinary (value, kind, byteLength) {
  *   keys: string[],
  *   index: number,
  *   childDepth: number,
- *   ancestors: Ancestors | null
+ *   ancestors: Ancestors | null,
+ *   sourceLength: number | null
  * }} Frame
  */
 
@@ -300,7 +301,15 @@ function createSnapshotBudget () {
  *   rules keep matching each path independently.
  * - Own enumerable string-keyed properties of plain objects and class
  *   instances are captured; getters are read at most once, and only when
- *   admitted.
+ *   admitted. Keys are re-checked against their own descriptor at read time,
+ *   so keys deleted or hidden by earlier getters are omitted (marking the
+ *   snapshot incomplete) instead of falling through to the prototype.
+ * - Functions become `truncated` and mark the snapshot incomplete: their
+ *   identity and attached data stay caller-owned, so nothing reachable from a
+ *   function is copied, invoked, or exposed to later mutation.
+ * - Arrays are copied compactly. When copying changes the reported length
+ *   (dropped trailing holes or named metadata), the snapshot is marked
+ *   incomplete; holes are never materialized to preserve the length.
  *
  * The root and every admitted descendant each count one entry against
  * `maxEntries`; once exhausted, traversal stops without reading or
@@ -369,6 +378,17 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
    * @param {Ancestors | null} ancestors
    */
   function admit (container, key, value, depth, ancestors) {
+    // Functions are opaque references into caller state: retaining one keeps
+    // its mutable identity and attached data reachable from the snapshot, so
+    // later redaction or expansion could mutate application-owned objects
+    // through it. Replace the leaf without invoking, enumerating, or copying
+    // anything reachable from it.
+    if (typeof value === 'function') {
+      incomplete = true
+      assign(container, key, truncated, root)
+      return
+    }
+
     if (value === null || typeof value !== 'object') {
       assign(container, key, value, root)
       return
@@ -408,11 +428,14 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       return
     }
 
+    const isArray = Array.isArray(value)
+    const sourceLength = isArray ? value.length : null
+
     if (
       // Reject omitted work before even inspecting stream descriptors.
       hasAncestor(ancestors, value) ||
       depth >= maxDepth ||
-      (Array.isArray(value) && value.length > maxArrayLength) ||
+      (sourceLength !== null && sourceLength > maxArrayLength) ||
       isStream(value)
     ) {
       incomplete = true
@@ -420,7 +443,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       return
     }
 
-    const copy = Array.isArray(value) ? [] : {}
+    const copy = isArray ? [] : {}
     assign(container, key, copy, root)
     stack.push({
       source: value,
@@ -429,6 +452,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       index: 0,
       childDepth: depth + 1,
       ancestors: { value, next: ancestors },
+      sourceLength,
     })
   }
 
@@ -444,6 +468,13 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     const frame = stack[stack.length - 1]
 
     if (frame.index === frame.keys.length) {
+      // The copy is compact: copying may have dropped trailing holes or named
+      // metadata, shortening the array. When the reported length changed,
+      // predicates on length or indexes can flip, so mark the capture
+      // incomplete. Holes are never materialized to preserve the length.
+      if (frame.sourceLength !== null && frame.copy.length !== frame.sourceLength) {
+        incomplete = true
+      }
       stack.pop()
       continue
     }
@@ -458,8 +489,22 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     frame.index++
     budget.entries--
     // Read only once admitted, so getter side effects cannot grow with
-    // omitted siblings.
-    admit(frame.copy, key, frame.source[key], frame.childDepth, frame.ancestors)
+    // omitted siblings. Read the current own descriptor: the key may have
+    // been deleted or hidden by an earlier getter since enumeration, and an
+    // ordinary lookup would then fall through to the prototype, capturing or
+    // invoking inherited state. A data property is read directly, an own
+    // accessor's getter is invoked exactly once with the source as receiver,
+    // and a setter-only accessor reads as undefined. Reflection and getter
+    // exceptions reach the fail-soft boundary in payload-tagging/index.js.
+    const descriptor = Object.getOwnPropertyDescriptor(frame.source, key)
+    if (descriptor === undefined || !descriptor.enumerable) {
+      incomplete = true
+      continue
+    }
+    const value = 'value' in descriptor
+      ? descriptor.value
+      : descriptor.get?.call(frame.source)
+    admit(frame.copy, key, value, frame.childDepth, frame.ancestors)
   }
 
   return { value: root.value, incomplete }

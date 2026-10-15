@@ -407,6 +407,337 @@ describe('Safe payload capture', () => {
     })
   })
 
+  describe('safe destination and capture regressions', () => {
+    const sentinelSecretRule = '$.items[?(!@root.hasOwnProperty("null"))].secret'
+
+    for (const prefix of [PAYLOAD_TAG_REQUEST_PREFIX, PAYLOAD_TAG_RESPONSE_PREFIX]) {
+      const opts = { maxDepth: 10, prefix }
+
+      // A property-name selector reports `parentProperty: null`, which only a
+      // guard that rejects both null and undefined can catch; index 0, the
+      // empty string, and the literal keys "null" and "undefined" must stay
+      // assignable.
+      it(`ignores property-name selectors during ${prefix} expansion so later predicates still match`, () => {
+        const input = { marker: 'ok', items: [{ secret: 'customer-secret' }] }
+        const config = {
+          expand: ['$.marker~'],
+          request: [sentinelSecretRule],
+          response: [sentinelSecretRule],
+        }
+
+        assert.deepStrictEqual(computeTags(config, input, opts), {
+          [`${prefix}.marker`]: 'ok',
+          [`${prefix}.items.0.secret`]: 'redacted',
+        })
+        assert.ok(!('null' in input), 'the input must not gain a "null" property')
+        assert.strictEqual(input.items[0].secret, 'customer-secret')
+      })
+
+      it(`ignores property-name selectors during ${prefix} redaction`, () => {
+        const input = { marker: 'ok', items: [{ secret: 'customer-secret' }] }
+        const config = { expand: [], request: ['$.marker~'], response: ['$.marker~'] }
+
+        assert.deepStrictEqual(computeTags(config, input, opts), {
+          [`${prefix}.marker`]: 'ok',
+          [`${prefix}.items.0.secret`]: 'customer-secret',
+        })
+        assert.ok(!('null' in input))
+      })
+
+      it(`keeps root selectors inert during ${prefix} expansion and redaction`, () => {
+        const input = { marker: 'ok' }
+        const config = { expand: ['$'], request: ['$'], response: ['$'] }
+
+        assert.deepStrictEqual(computeTags(config, input, opts), {
+          [`${prefix}.marker`]: 'ok',
+        })
+        assert.deepStrictEqual(input, { marker: 'ok' })
+      })
+
+      it(`keeps index-zero and empty-string destinations assignable for ${prefix}`, () => {
+        const input = { secrets: ['s0', 's1'], '': 'empty-key' }
+        const config = {
+          expand: [],
+          request: ['$.secrets[*]', "$['']"],
+          response: ['$.secrets[*]', "$['']"],
+        }
+
+        assert.deepStrictEqual(computeTags(config, input, opts), {
+          [`${prefix}.secrets.0`]: 'redacted',
+          [`${prefix}.secrets.1`]: 'redacted',
+          [`${prefix}.`]: 'redacted',
+        })
+      })
+
+      it(`keeps literal "null" and "undefined" keys assignable for ${prefix}`, () => {
+        const input = { null: 's3cret', undefined: 's3cret' }
+        const config = { expand: [], request: ['$.null', '$.undefined'], response: ['$.null', '$.undefined'] }
+
+        assert.deepStrictEqual(computeTags(config, input, opts), {
+          [`${prefix}.null`]: 'redacted',
+          [`${prefix}.undefined`]: 'redacted',
+        })
+      })
+
+      it(`suppresses ${prefix} predicates when sparse-array length changes`, () => {
+        const gate = Object.assign(new Array(1), { note: 'ok' })
+        const input = { gate, items: [{ secret: 's3cret' }] }
+        const rule = '$.items[?(@root.gate.length === 1)].secret'
+        const config = { expand: [], request: [rule], response: [rule] }
+
+        // The compact copy reports length 0, so the predicate would stop
+        // matching and the secret would leak; suppression must win instead.
+        assert.deepStrictEqual(computeTags(config, input, opts), {})
+
+        const snapshot = createSafeSnapshot(input)
+        assert.strictEqual(snapshot.incomplete, true)
+        const copy = /** @type {{ gate: unknown[] & { note?: string } }} */ (snapshot.value).gate
+        assert.strictEqual(copy.length, 0)
+        assert.strictEqual(copy.note, 'ok')
+        assert.deepStrictEqual(Object.keys(copy), ['note'])
+        assert.strictEqual(input.gate.length, 1)
+      })
+
+      it(`suppresses ${prefix} expansion predicates when sparse-array length changes`, () => {
+        const gate = Object.assign(new Array(1), { note: 'ok' })
+        const input = { gate, items: [{ encoded: '{"secret":"s3cret"}' }] }
+        const config = {
+          expand: ['$.items[?(@root.gate.length === 1)].encoded'],
+          request: ['$.items[*].encoded.secret'],
+          response: ['$.items[*].encoded.secret'],
+        }
+
+        assert.deepStrictEqual(computeTags(config, input, opts), {})
+        assert.strictEqual(input.items[0].encoded, '{"secret":"s3cret"}')
+      })
+
+      it(`keeps structural ${prefix} tags for sparse arrays with the incomplete flag`, () => {
+        const gate = Object.assign(new Array(2), { 0: 'kept', note: 'ok' })
+        const input = { gate, items: [{ secret: 's3cret' }] }
+        const config = { expand: [], request: ['$.items[*].secret'], response: [] }
+
+        const tags = computeTags(config, input, { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX })
+        assert.deepStrictEqual(tags, {
+          'aws.request.body.gate.0': 'kept',
+          'aws.request.body.gate.note': 'ok',
+          'aws.request.body.items.0.secret': 'redacted',
+          '_dd.payload_tags_incomplete': true,
+        })
+      })
+
+      it(`keeps sparse arrays complete when the highest retained index preserves length for ${prefix}`, () => {
+        const holes = new Array(2)
+        holes[1] = 'kept'
+        const middle = ['a', 'b']
+        delete middle[0]
+        const input = { holes, middle, empty: [], dense: [1, 2] }
+
+        const snapshot = createSafeSnapshot(input)
+        assert.strictEqual(snapshot.incomplete, false)
+        const value = /** @type {{ holes: unknown[], middle: unknown[] }} */ (snapshot.value)
+        assert.strictEqual(value.holes.length, 2)
+        assert.strictEqual(0 in value.holes, false)
+        assert.strictEqual(value.holes[1], 'kept')
+        assert.strictEqual(value.middle.length, 2)
+        assert.strictEqual(0 in value.middle, false)
+        assert.strictEqual(value.middle[1], 'b')
+      })
+
+      it(`never captures inherited values exposed by own-property deletion for ${prefix}`, () => {
+        const holder = Object.create({ private: 'customer-secret' })
+        Object.defineProperty(holder, 'boom', {
+          enumerable: true,
+          get () {
+            delete holder.private
+            return 1
+          },
+        })
+        holder.private = 'public'
+        const input = { items: [holder] }
+        const config = { expand: [], request: ['$..private'], response: ['$..private'] }
+
+        const tags = computeTags(config, input, opts)
+        assert.deepStrictEqual(tags, {
+          [`${prefix}.items.0.boom`]: '1',
+          '_dd.payload_tags_incomplete': true,
+        })
+        assert.ok(!Object.values(tags).includes('customer-secret'))
+      })
+
+      it(`never runs inherited getters exposed by own-property deletion for ${prefix}`, () => {
+        let reads = 0
+        const holder = Object.create({
+          get private () {
+            reads++
+            return 'customer-secret'
+          },
+        })
+        Object.defineProperty(holder, 'boom', {
+          enumerable: true,
+          get () {
+            delete holder.private
+            return 1
+          },
+        })
+        Object.defineProperty(holder, 'private', {
+          enumerable: true,
+          writable: true,
+          configurable: true,
+          value: 'public',
+        })
+
+        const snapshot = createSafeSnapshot({ items: [holder] })
+        assert.strictEqual(snapshot.incomplete, true)
+        assert.strictEqual(reads, 0)
+        assert.deepStrictEqual(/** @type {{ items: object[] }} */ (snapshot.value).items[0], { boom: 1 })
+      })
+
+      it(`omits own properties hidden during ${prefix} capture`, () => {
+        const holder = {}
+        Object.defineProperty(holder, 'boom', {
+          enumerable: true,
+          get () {
+            Object.defineProperty(holder, 'private', { enumerable: false, value: 's3cret' })
+            return 1
+          },
+        })
+        holder.private = 'public'
+
+        const snapshot = createSafeSnapshot({ holder })
+        assert.strictEqual(snapshot.incomplete, true)
+        assert.deepStrictEqual(/** @type {{ holder: object }} */ (snapshot.value).holder, { boom: 1 })
+      })
+
+      it(`reads setter-only accessors as undefined for ${prefix}`, () => {
+        let writes = 0
+        const holder = {}
+        // eslint-disable-next-line accessor-pairs
+        Object.defineProperty(holder, 'writeOnly', {
+          enumerable: true,
+          set: (_value) => { writes++ },
+        })
+        holder.safe = 'ok'
+
+        const snapshot = createSafeSnapshot(holder)
+        assert.strictEqual(snapshot.incomplete, false)
+        assert.strictEqual(writes, 0)
+        assert.deepStrictEqual(snapshot.value, { safe: 'ok', writeOnly: undefined })
+      })
+
+      it(`passes the source as the getter receiver for ${prefix}`, () => {
+        /** @type {unknown[]} */
+        const receivers = []
+        const holder = {}
+        Object.defineProperty(holder, 'computed', {
+          enumerable: true,
+          get () {
+            receivers.push(this)
+            return 'ok'
+          },
+        })
+
+        const snapshot = createSafeSnapshot({ holder })
+        assert.strictEqual(snapshot.incomplete, false)
+        assert.deepStrictEqual(snapshot.value, { holder: { computed: 'ok' } })
+        assert.strictEqual(receivers.length, 1)
+        assert.strictEqual(receivers[0], holder)
+      })
+
+      it(`leaves caller state unchanged when ${prefix} rules target a function's attached data`, () => {
+        const callback = () => {}
+        callback.values = ['original']
+        const config = {
+          expand: [],
+          request: ['$.callback.values[*]'],
+          response: ['$.callback.values[*]'],
+        }
+
+        const tags = computeTags(config, { callback }, opts)
+        assert.deepStrictEqual(callback.values, ['original'])
+        assert.strictEqual(tags[`${prefix}.callback`], 'truncated')
+        assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
+      })
+
+      it(`leaves caller state unchanged when ${prefix} expansion targets a function's attached data`, () => {
+        const callback = () => {}
+        callback.values = ['{"secret":"s3cret"}']
+        const config = { expand: ['$.callback.values[*]'], request: [], response: [] }
+
+        computeTags(config, { callback }, opts)
+        assert.deepStrictEqual(callback.values, ['{"secret":"s3cret"}'])
+      })
+    }
+
+    it('truncates functions at the root without invoking them', () => {
+      const root = sinon.spy(() => { throw new Error('unexpected root call') })
+      Object.defineProperty(root, 'boom', {
+        enumerable: true,
+        get () { throw new Error('unexpected root getter') },
+      })
+
+      const snapshot = createSafeSnapshot(root)
+      assert.strictEqual(snapshot.incomplete, true)
+      assert.strictEqual(snapshot.value, 'truncated')
+      assert.strictEqual(root.callCount, 0)
+    })
+
+    it('truncates functions in containers without inspecting attached data', () => {
+      const attached = { secret: 'customer-secret' }
+      const fn = Object.assign(sinon.spy(() => { throw new Error('unexpected call') }), { attached })
+      const snapshot = createSafeSnapshot({ field: fn, list: [fn] })
+
+      assert.strictEqual(snapshot.incomplete, true)
+      const value = /** @type {{ field: unknown, list: unknown[] }} */ (snapshot.value)
+      assert.strictEqual(value.field, 'truncated')
+      assert.strictEqual(value.list[0], 'truncated')
+      assert.strictEqual(fn.callCount, 0)
+      assert.deepStrictEqual(attached, { secret: 'customer-secret' })
+    })
+
+    it('truncates aliased functions per path without reading them twice', () => {
+      const fn = sinon.spy()
+      const snapshot = createSafeSnapshot({ a: fn, b: fn })
+
+      assert.strictEqual(snapshot.incomplete, true)
+      const value = /** @type {{ a: unknown, b: unknown }} */ (snapshot.value)
+      assert.strictEqual(value.a, 'truncated')
+      assert.strictEqual(value.b, 'truncated')
+      assert.strictEqual(fn.callCount, 0)
+    })
+
+    it('truncates callable proxies without triggering traps that inspect them', () => {
+      const target = () => {}
+      const traps = []
+      const proxy = new Proxy(target, {
+        get (_t, key, receiver) {
+          traps.push(String(key))
+          return Reflect.get(_t, key, receiver)
+        },
+        ownKeys () {
+          traps.push('ownKeys')
+          return Reflect.ownKeys(target)
+        },
+      })
+
+      const snapshot = createSafeSnapshot({ proxy })
+      assert.strictEqual(snapshot.incomplete, true)
+      assert.strictEqual(/** @type {{ proxy: unknown }} */ (snapshot.value).proxy, 'truncated')
+      assert.deepStrictEqual(traps, [])
+    })
+
+    it('truncates functions with throwing attached getters without reading them', () => {
+      const fn = () => {}
+      Object.defineProperty(fn, 'boom', {
+        enumerable: true,
+        get () { throw new Error('payload-secret') },
+      })
+
+      const snapshot = createSafeSnapshot({ fn })
+      assert.strictEqual(snapshot.incomplete, true)
+      assert.strictEqual(/** @type {{ fn: unknown }} */ (snapshot.value).fn, 'truncated')
+    })
+  })
+
   it('should replace a Node.js stream with "truncated" and retain sibling metadata', () => {
     const stream = makeReadable()
     const input = { ETag: '"etag"', Body: stream, ContentLength: 5 }
@@ -1040,13 +1371,16 @@ describe('Safe payload capture', () => {
       assert.strictEqual(method.callCount, 0)
     })
 
-    it('copies an admitted accessor returning a function, without treating it as native-stream evidence', () => {
+    it('truncates an admitted accessor returning a function, without treating it as native-stream evidence', () => {
       const method = sinon.spy()
       const getReader = sinon.spy(() => method)
       const input = Object.defineProperty({ safe: 'ok' }, 'getReader', { enumerable: true, get: getReader })
       const snapshot = createSafeSnapshot(input)
-      assert.deepStrictEqual(snapshot.value, { safe: 'ok', getReader: method })
-      assert.strictEqual(snapshot.incomplete, false)
+      // The returned function is never inspected or retained: the leaf is
+      // replaced with the truncation sentinel and the capture is incomplete.
+      // The containing object is still an ordinary, fully walked object.
+      assert.deepStrictEqual(snapshot.value, { safe: 'ok', getReader: 'truncated' })
+      assert.strictEqual(snapshot.incomplete, true)
       assert.strictEqual(getReader.callCount, 1)
       assert.strictEqual(method.callCount, 0)
     })
