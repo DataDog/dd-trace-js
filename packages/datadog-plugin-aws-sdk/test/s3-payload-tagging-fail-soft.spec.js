@@ -8,6 +8,7 @@ const path = require('node:path')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const { FakeAgent, spawnProcAndExpectExit, stopProc } = require('../../../integration-tests/helpers')
+const { withAwsSdkVersions } = require('./spec_helpers')
 
 const fixture = path.join(__dirname, 'fixtures/s3-payload-tagging-fail-soft.js')
 
@@ -46,7 +47,9 @@ describe('S3 payload tagging fail-soft process boundary', function () {
     await receiver?.stop()
   })
 
-  for (const sdk of ['v2', 'v3']) {
+  withAwsSdkVersions((version, moduleName) => {
+    const sdk = moduleName === '@aws-sdk/smithy-client' ? 'v3' : 'v2'
+
     for (const scenario of ['snapshot', 'request', 'response']) {
       for (const capture of ['disabled', 'enabled']) {
         it(`survives a hostile ${scenario} exception with ${sdk} and capture ${capture}`, async () => {
@@ -62,6 +65,7 @@ describe('S3 payload tagging fail-soft process boundary', function () {
                 env: {
                   ...process.env,
                   S3_PAYLOAD_SDK: sdk,
+                  S3_PAYLOAD_VERSION: version,
                   S3_PAYLOAD_SCENARIO: scenario,
                   S3_PAYLOAD_CAPTURE: capture,
                   S3_PAYLOAD_ENDPOINT: endpoint,
@@ -112,5 +116,5 @@ describe('S3 payload tagging fail-soft process boundary', function () {
         })
       }
     }
-  }
+  })
 })
