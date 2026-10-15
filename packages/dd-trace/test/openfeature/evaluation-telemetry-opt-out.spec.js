@@ -169,7 +169,7 @@ describe('evaluation telemetry opt-out', () => {
       // Config tracks precedence at module scope; isolate each simulated process configuration.
       const Config = proxyquire('../../src/config', {})
       const resolved = new Config({
-        experimental: { flaggingProvider: { enableEvaluationTelemetryOptOutParameter: explicit } },
+        featureFlags: { enableEvaluationTelemetryOptOutParameter: explicit },
       })
       const { client } = await register(resolved.featureFlags[option])
       const result = await client.getBooleanDetails('flag', false, { targetingKey: 'subject', [parameter]: true })

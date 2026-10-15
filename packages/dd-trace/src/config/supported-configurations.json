@@ -943,7 +943,7 @@
         "type": "boolean",
         "namespace": "featureFlags",
         "configurationNames": [
-          "experimental.flaggingProvider.enableEvaluationTelemetryOptOutParameter"
+          "featureFlags.enableEvaluationTelemetryOptOutParameter"
         ],
         "default": "false"
       }

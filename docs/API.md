@@ -90,8 +90,8 @@ Enable the context parameter before you first access `tracer.openfeature`:
 
 ```javascript
 const tracer = require('dd-trace').init({
-  experimental: {
-    flaggingProvider: { enableEvaluationTelemetryOptOutParameter: true }
+  featureFlags: {
+    enableEvaluationTelemetryOptOutParameter: true
   }
 })
 const { OpenFeature } = require('@openfeature/server-sdk')
@@ -106,9 +106,11 @@ The option defaults to `false`. The provider captures it at construction.
 Only boolean `true` in the merged `dd_evaluation_telemetry_opt_out` context attribute suppresses new evaluation EVP events,
 OpenTelemetry evaluation metrics, and automatic flag span tags. Strings, numbers, null, missing attributes, and false keep existing behavior.
 You can also enable per-subject opt-out with `DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED=true`.
+Explicit configuration takes precedence over this environment variable, including `false`.
 This enables the context parameter; it does not disable evaluation telemetry globally.
 
 Flag values, variants, reasons, defaults, experiment exposures, exposure deduplication, and customer hooks remain unchanged.
+Set the subject attribute before evaluation. Do not rely on an After hook to change opt-out behavior across SDKs.
 Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.
 The option does not change protected/full-data reporting consent or debug logging.
 

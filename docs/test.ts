@@ -80,10 +80,16 @@ let promise: Promise<void>;
 
 ddTrace.init();
 const evaluationTelemetryOptOutOption: TracerOptions = {
+  featureFlags: {
+    // @ts-expect-error The activation option must be a boolean.
+    enableEvaluationTelemetryOptOutParameter: 'true'
+  }
+};
+const experimentalEvaluationTelemetryOptOutOption: TracerOptions = {
   experimental: {
     flaggingProvider: {
-      // @ts-expect-error The activation option must be a boolean.
-      enableEvaluationTelemetryOptOutParameter: 'true'
+      // @ts-expect-error The opt-out option belongs to stable Feature Flags configuration.
+      enableEvaluationTelemetryOptOutParameter: true
     }
   }
 };
@@ -95,11 +101,11 @@ tracer.init({
   version: '1.0.0',
   url: 'http://localhost',
   runtimeMetrics: true,
+  featureFlags: {
+    enableEvaluationTelemetryOptOutParameter: true
+  },
   experimental: {
-    exporter: 'log',
-    flaggingProvider: {
-      enableEvaluationTelemetryOptOutParameter: true
-    }
+    exporter: 'log'
   },
   iast: true,
   hostname: 'agent',

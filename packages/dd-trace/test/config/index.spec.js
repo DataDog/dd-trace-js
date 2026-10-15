@@ -6102,14 +6102,22 @@ rules:
       process.env[name] = 'true'
       assert.strictEqual(getConfig().featureFlags[name], true)
       const config = getConfig({
-        experimental: { flaggingProvider: { enableEvaluationTelemetryOptOutParameter: false } },
+        featureFlags: { enableEvaluationTelemetryOptOutParameter: false },
       })
       assert.strictEqual(config.featureFlags[name], false)
       assert.strictEqual(config.getOrigin('featureFlags.' + name), 'code')
       delete process.env[name]
       assert.strictEqual(getConfig({
-        experimental: { flaggingProvider: { enableEvaluationTelemetryOptOutParameter: true } },
+        featureFlags: { enableEvaluationTelemetryOptOutParameter: true },
       }).featureFlags[name], true)
+    })
+
+    it('does not accept the unreleased experimental opt-out option', () => {
+      const config = getConfig({
+        experimental: { flaggingProvider: { enableEvaluationTelemetryOptOutParameter: true } },
+      })
+
+      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED, false)
     })
 
     it('reports the stable evaluation telemetry opt-out environment variable', () => {
