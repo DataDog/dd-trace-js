@@ -4,8 +4,14 @@ const satisfies = require('../../../../vendor/dist/semifies')
 const getGitMetadata = require('../git_metadata')
 const log = require('../log')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
-const { getIsAzureFunction } = require('../serverless')
-const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
+const { getIsAzureContainerApp, getIsAzureFunction } = require('../serverless')
+const {
+  getACATagsFromMetadata,
+  getAzureAppMetadata,
+  getAzureContainerAppMetadata,
+  getAzureFunctionMetadata,
+  getAzureTagsFromMetadata,
+} = require('../azure_metadata')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../config/helper')
 const { isACFActive } = require('../../../datadog-core/src/storage')
 
@@ -31,7 +37,9 @@ function getProfilingTags (config) {
       host: config.reportHostname ? require('os').hostname() : undefined,
       functionname: functionName,
     }),
-    ...getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata()),
+    ...(getIsAzureContainerApp()
+      ? getACATagsFromMetadata(getAzureContainerAppMetadata())
+      : getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata())),
   }
 
   const { commitSHA, repositoryUrl } = getGitMetadata(config)

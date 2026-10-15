@@ -5,7 +5,7 @@
 const os = require('os')
 const getConfig = require('./config')
 const { getEnvironmentVariable } = require('./config/helper')
-const { getIsAzureFunction } = require('./serverless')
+const { getIsAzureContainerApp, getIsAzureFunction } = require('./serverless')
 const { getSegment } = require('./util')
 
 function extractSubscriptionID (ownerName) {
@@ -43,6 +43,24 @@ function buildResourceID (subscriptionID, siteName, resourceGroup) {
 }
 
 /**
+ * Extracts the Azure region from `CONTAINER_APP_ENV_DNS_SUFFIX`, whose format is
+ * `<default-hostname>.<region>.azurecontainerapps.io`. Anchors from the right because
+ * the default hostname is a variable number of labels.
+ *
+ * @param {string} [dnsSuffix]
+ */
+function extractContainerAppRegion (dnsSuffix) {
+  if (typeof dnsSuffix !== 'string') return
+  const tld = dnsSuffix.lastIndexOf('.')
+  if (tld === -1) return
+  const regionEnd = dnsSuffix.lastIndexOf('.', tld - 1)
+  if (regionEnd === -1) return
+  const regionStart = dnsSuffix.lastIndexOf('.', regionEnd - 1) + 1
+  if (regionStart >= regionEnd) return
+  return dnsSuffix.slice(regionStart, regionEnd)
+}
+
+/**
  * @param {Record<string | symbol, unknown>} obj
  * @returns {Partial<Record<string | symbol, unknown>>}
  */
@@ -67,6 +85,10 @@ function buildMetadata () {
   const WEBSITE_RESOURCE_GROUP = getEnvironmentVariable('WEBSITE_RESOURCE_GROUP')
   const WEBSITE_SITE_NAME = getEnvironmentVariable('WEBSITE_SITE_NAME')
   const WEBSITE_SKU = getEnvironmentVariable('WEBSITE_SKU')
+  const APP_NAME = getEnvironmentVariable('CONTAINER_APP_NAME')
+  const REPLICA_NAME = getEnvironmentVariable('CONTAINER_APP_REPLICA_NAME')
+  const APP_REVISION = getEnvironmentVariable('CONTAINER_APP_REVISION')
+  const APP_DNS_SUFFIX = getEnvironmentVariable('CONTAINER_APP_ENV_DNS_SUFFIX')
 
   const { DD_AZURE_RESOURCE_GROUP } = getConfig()
   const isAzureFunction = FUNCTIONS_EXTENSION_VERSION !== undefined && FUNCTIONS_WORKER_RUNTIME !== undefined
@@ -80,6 +102,10 @@ function buildMetadata () {
     ? ['functionapp', 'function']
     : ['app', 'app']
 
+  const appRegion = getIsAzureContainerApp()
+    ? extractContainerAppRegion(APP_DNS_SUFFIX) ?? 'unknown'
+    : undefined
+
   // Azure Functions on Flex Consumption plans require the `DD_AZURE_RESOURCE_GROUP` env var.
   // If this logic ever changes, update the logic in `libdatadog`, `serverless-components/src/datadog-trace-agent`,
   // and the serverless compat layers accordingly.
@@ -88,6 +114,10 @@ function buildMetadata () {
     : (WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME))
 
   return trimObject({
+    appName: APP_NAME,
+    appRegion,
+    appRevision: APP_REVISION,
+    appReplicaName: REPLICA_NAME,
     functionRuntimeVersion: FUNCTIONS_EXTENSION_VERSION,
     instanceID: WEBSITE_INSTANCE_ID,
     instanceName: COMPUTERNAME,
@@ -101,6 +131,12 @@ function buildMetadata () {
     siteType,
     subscriptionID,
   })
+}
+
+function getAzureContainerAppMetadata () {
+  if (getIsAzureContainerApp()) {
+    return buildMetadata()
+  }
 }
 
 function getAzureAppMetadata () {
@@ -142,8 +178,38 @@ function getAzureTagsFromMetadata (metadata) {
   })
 }
 
+// Modeled after https://github.com/DataDog/datadog-agent/blob/f93b44cdd8898e27d4720f3a0c79a64a25074bef/cmd/serverless-init/cloudservice/containerapp.go
+function getACATagsFromMetadata (metadata) {
+  if (metadata === undefined) {
+    return {}
+  }
+  const functionsContainerTags = getIsAzureFunction()
+    ? {
+        'aas.environment.extension_version': metadata.extensionVersion,
+        'aas.environment.function_runtime': metadata.functionRuntimeVersion,
+        'aas.environment.instance_id': metadata.instanceID,
+        'aas.environment.instance_name': metadata.instanceName,
+        'aas.environment.os': metadata.operatingSystem,
+        'aas.environment.runtime': metadata.runtime,
+        'aas.environment.runtime_version': metadata.runtimeVersion,
+      }
+    : undefined
+  return trimObject({
+    'aca.app.name': metadata.appName,
+    'aca.app.region': metadata.appRegion,
+    'aca.app.revision': metadata.appRevision,
+    'aca.replica.name': metadata.appReplicaName,
+    'aca.subscription.id': metadata.subscriptionID,
+    'aca.resource.group': metadata.resourceGroup,
+    'aca.resource.id': metadata.resourceID,
+    ...functionsContainerTags,
+  })
+}
+
 module.exports = {
   getAzureAppMetadata,
   getAzureFunctionMetadata,
+  getAzureContainerAppMetadata,
   getAzureTagsFromMetadata,
+  getACATagsFromMetadata,
 }
