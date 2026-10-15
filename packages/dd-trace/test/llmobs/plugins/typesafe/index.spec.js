@@ -53,8 +53,9 @@ describe('Plugin', () => {
       sdk = require(`../../../../../../versions/@typesafe-ai/sdk@${version}`).get()
     })
 
-    function createClient (apiKey = process.env.TYPESAFE_API_KEY ?? 'not-a-real-key') {
+    function createClient (apiKey = process.env.TYPESAFE_API_KEY ?? 'not-a-real-key', options = {}) {
       return new sdk.TypeSafeClient({
+        ...options,
         apiKey,
         baseURL: 'http://127.0.0.1:9126/vcr/typesafe',
         // 0.7.0 zstd-compresses request bodies of 1 KiB or more on Node.js 22.15+, which would make cassette bodies
@@ -66,8 +67,9 @@ describe('Plugin', () => {
 
     // Requests with image assets are multipart with a random boundary and random image references, so a
     // cassette keyed on the request body cannot replay them; these tests answer from a canned response instead.
-    function createStubbedClient () {
+    function createStubbedClient (options = {}) {
       return new sdk.TypeSafeClient({
+        ...options,
         apiKey: 'not-a-real-key',
         retry: { maxRetries: 0 },
         fetch: () => Promise.resolve(new Response(JSON.stringify(STUB_RESPONSE), {
@@ -138,13 +140,69 @@ describe('Plugin', () => {
         })
       })
 
+      it('captures the answers when the caller uses withResponse()', async () => {
+        const { data, response } = await createClient()
+          .systemOne({ state: STATE, questions: questions(), model: MODEL })
+          .withResponse()
+        assert.equal(data.model, MODEL)
+        assert.equal(response.status, 200)
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
+          content: STATE,
+          output: STRING_STATE_OUTPUT,
+          metrics: STRING_STATE_METRICS,
+        })
+      })
+
+      it('captures the answers when the caller uses map()', async () => {
+        const team = await createClient()
+          .systemOne({ state: STATE, questions: questions(), model: MODEL })
+          .map(result => result.answers.team.choice)
+        assert.equal(team, 'billing')
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
+          content: STATE,
+          output: STRING_STATE_OUTPUT,
+          metrics: STRING_STATE_METRICS,
+        })
+      })
+
+      it('uses the client default model when the request has none', async () => {
+        // The SDK fills in defaultModel before sending, so this replays the same cassette as 'creates a span'
+        await createClient(undefined, { defaultModel: MODEL }).systemOne({ state: STATE, questions: questions() })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
+          content: STATE,
+          output: STRING_STATE_OUTPUT,
+          metrics: STRING_STATE_METRICS,
+        })
+      })
+
+      it('reports OpenRouter as the provider when the client points at OpenRouter', async () => {
+        await createStubbedClient({ baseURL: 'https://openrouter.ai/api' })
+          .systemOne({ state: STATE, questions: questions(), model: MODEL })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans[0].meta.model_provider, 'openrouter')
+      })
+
       it('records errors', async () => {
+        let caught
         await assert.rejects(
           createClient('not-a-real-key').systemOne({ state: ERROR_STATE, questions: questions(), model: MODEL }),
-          error => error instanceof sdk.AuthenticationError
+          error => {
+            caught = error
+            return error instanceof sdk.AuthenticationError
+          }
         )
 
         const { apmSpans, llmobsSpans } = await getEvents()
+        // assertLlmObsSpanEvent copies the error fields from the APM span, so pin those directly
+        assert.equal(apmSpans[0].meta['error.type'], 'AuthenticationError')
+        assert.equal(apmSpans[0].meta['error.message'], caught.message)
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
