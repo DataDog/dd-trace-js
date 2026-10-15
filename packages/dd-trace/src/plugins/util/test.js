@@ -306,6 +306,8 @@ const DI_DEBUG_ERROR_LINE_SUFFIX = 'line'
 
 // Test Management tags
 const TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX = 'test.test_management.is_attempt_to_fix'
+const TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION = 'test.test_management.prevent_failure_suppression'
+const TEST_MANAGEMENT_NO_AUTO_RETRY = 'test.test_management.no_auto_retry'
 const TEST_MANAGEMENT_IS_DISABLED = 'test.test_management.is_test_disabled'
 const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
@@ -587,6 +589,8 @@ module.exports = {
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION,
+  TEST_MANAGEMENT_NO_AUTO_RETRY,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
@@ -2297,14 +2301,17 @@ function collectDynamicNameFromTraceSpan (span, newTestsWithDynamicNames) {
 
 function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions) {
   const meta = span.meta
-  if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true') return
+  if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true' ||
+    meta[TEST_MANAGEMENT_NO_AUTO_RETRY] === 'true') return
 
   recordAttemptToFixExecution(attemptToFixExecutions, {
     testSuite: meta[TEST_SUITE],
     testName: meta[TEST_NAME],
     status: meta[TEST_STATUS],
-    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
+    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
   })
 }
 
@@ -2322,9 +2329,12 @@ function collectTestManagementExecutionFromTraceSpan (span, executions) {
     testSuite: meta[TEST_SUITE],
     testName: meta[TEST_NAME],
     status: meta[TEST_STATUS],
-    isAttemptToFix: meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true',
-    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+    isAttemptToFix: meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true' &&
+      meta[TEST_MANAGEMENT_NO_AUTO_RETRY] !== 'true',
+    isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
+    isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' &&
+      meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] !== 'true',
   }, executions)
 }
 
@@ -2335,6 +2345,7 @@ function collectTestManagementExecutionFromTraceSpan (span, executions) {
  * @param {string} data - JSON-serialized traces from a worker
  * @param {{
  *   newTestsWithDynamicNames?: Set<string>,
+ *   testAnnotations?: Map<string, { mustFail: boolean, noAutoRetry: boolean }>,
  *   attemptToFixExecutions?: AttemptToFixExecutions,
  *   testManagementExecutions?: TestManagementExecutions
  * }} summaries
@@ -2344,12 +2355,21 @@ function collectTestOptimizationSummariesFromTraces (data, summaries) {
     newTestsWithDynamicNames,
     attemptToFixExecutions,
     testManagementExecutions: executions = testManagementExecutions,
+    testAnnotations,
   } = summaries
 
   try {
     const traces = JSON.parse(data)
     for (const trace of traces) {
       for (const span of trace) {
+        if (testAnnotations && span.type === 'test' &&
+          (span.meta?.[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] === 'true' ||
+            span.meta?.[TEST_MANAGEMENT_NO_AUTO_RETRY] === 'true')) {
+          testAnnotations.set(`${span.meta[TEST_SUITE]} › ${span.meta[TEST_NAME]}`, {
+            mustFail: span.meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] === 'true',
+            noAutoRetry: span.meta[TEST_MANAGEMENT_NO_AUTO_RETRY] === 'true',
+          })
+        }
         if (newTestsWithDynamicNames) {
           collectDynamicNameFromTraceSpan(span, newTestsWithDynamicNames)
         }
