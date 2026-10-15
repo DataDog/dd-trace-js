@@ -187,12 +187,12 @@ const efdSlowAbortedTests = new Set()
 const efdCandidates = new Set()
 // Per-declaration dynamic ATR retry count, retained across attempts of the same Jest test object.
 const dynamicAtrRetryCountByTest = new Map()
-// Jest only accepts a suite-wide retry ceiling. Terminal dynamic failures are
+// Jest only accepts a suite-wide retry ceiling. Excluded and terminal dynamic failures are
 // temporarily cleared to keep that ceiling from scheduling another retry, then
 // restored before Jest reports the suite result.
-const dynamicAtrFinalErrorsByTest = new Map()
+const terminalRetryErrorsByTest = new Map()
 // Custom environments may prevent extensions after their base constructor runs.
-const dynamicAtrResultHandlerRegistrations = new WeakMap()
+const retryResultHandlerRegistrations = new WeakMap()
 // Tests that are genuinely new (not in known tests list).
 const newTests = new Set()
 const testSuiteJestObjects = new Map()
@@ -580,8 +580,8 @@ function setOriginalConcurrentTest (wrappedConcurrentTest, originalConcurrentTes
  *
  * @param {{ name: string, test?: { errors: unknown[] } }} event
  */
-function suppressDynamicAtrErrors (event) {
-  if (event.name === 'test_done' && dynamicAtrFinalErrorsByTest.has(event.test)) {
+function suppressTerminalRetryErrors (event) {
+  if (event.name === 'test_done' && terminalRetryErrorsByTest.has(event.test)) {
     event.test.errors = []
   }
 }
@@ -591,13 +591,13 @@ function suppressDynamicAtrErrors (event) {
  *
  * @param {{ name: string }} event
  */
-function restoreDynamicAtrErrors (event) {
-  if (event.name !== 'run_describe_finish' || dynamicAtrFinalErrorsByTest.size === 0) return
+function restoreTerminalRetryErrors (event) {
+  if (event.name !== 'run_describe_finish' || terminalRetryErrorsByTest.size === 0) return
 
-  for (const [test, errors] of dynamicAtrFinalErrorsByTest) {
+  for (const [test, errors] of terminalRetryErrorsByTest) {
     test.errors = errors
   }
-  dynamicAtrFinalErrorsByTest.clear()
+  terminalRetryErrorsByTest.clear()
 }
 
 /**
@@ -618,7 +618,7 @@ function getWrappedCustomHandleTestEvent (handleTestEvent, datadogHandleTestEven
   }
 
   const wrappedHandleTestEvent = function (event, state) {
-    restoreDynamicAtrErrors(event)
+    restoreTerminalRetryErrors(event)
     const result = handleTestEvent.call(this, event, state)
     const runDatadogHandler = value => {
       if (isDatadogJestEventHandled(event)) return value
@@ -2065,7 +2065,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.handleAddTestEvent(event, state)
       }
 
-      restoreDynamicAtrErrors(event)
+      restoreTerminalRetryErrors(event)
 
       if (super.handleTestEvent) {
         await super.handleTestEvent(event, state)
@@ -2073,8 +2073,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (event.name === 'run_start') {
         this.#trackQuarantinedSnapshots()
-        const registerResultHandler = dynamicAtrResultHandlerRegistrations.get(this)
-        dynamicAtrResultHandlerRegistrations.delete(this)
+        const registerResultHandler = retryResultHandlerRegistrations.get(this)
+        retryResultHandlerRegistrations.delete(this)
         registerResultHandler?.()
       } else if (event.name === 'setup') {
         this.#expect = event.runtimeGlobals?.expect ?? this.global.expect
@@ -2447,9 +2447,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.ignoreQuarantinedSnapshotResults(event.test)
 
         // Quarantine must consume terminal failures before we save errors for Jest's final result.
-        if (((dynamicAtrCount !== undefined && failedAllTests) || suppressAutomaticRetries) &&
-          event.test.errors?.length) {
-          dynamicAtrFinalErrorsByTest.set(event.test, event.test.errors)
+        const isTerminalFailure = (dynamicAtrCount !== undefined && failedAllTests) || suppressAutomaticRetries
+        if (isTerminalFailure && event.test.errors?.length) {
+          terminalRetryErrorsByTest.set(event.test, event.test.errors)
         }
 
         const ctx = testContexts.get(event.test)
@@ -3692,12 +3692,12 @@ function jestAdapterWrapper (jestAdapter, jestVersion, isIitm, hookMeta) {
 
     if (environment.isFlakyTestRetriesEnabled) {
       // Register at run_start, after Circus installs its per-test reporter and snapshot handlers.
-      dynamicAtrResultHandlerRegistrations.set(environment, () => {
+      retryResultHandlerRegistrations.set(environment, () => {
         if (satisfies(jestVersion, '>=30.0.0')) {
-          environment.global[Symbol.for('EVENT_HANDLERS')].push(suppressDynamicAtrErrors)
+          environment.global[Symbol.for('EVENT_HANDLERS')].push(suppressTerminalRetryErrors)
         } else {
           const circusState = args[3].requireInternalModule(path.join(hookMeta.moduleBaseDir, 'build/state.js'))
-          circusState.addEventHandler(suppressDynamicAtrErrors)
+          circusState.addEventHandler(suppressTerminalRetryErrors)
         }
       })
     }
