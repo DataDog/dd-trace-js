@@ -169,6 +169,8 @@
     "loader-hook.mjs",
     "openfeature.d.ts",
     "openfeature.js",
+    "test-optimization.js",
+    "test-optimization.d.ts",
     "packages/*/index.js",
     "packages/*/index.electron.js",
     "packages/*/lib/**/*",
