@@ -2,8 +2,10 @@
 
 const path = require('path')
 
-// Corepack and pnpx run a package manager in their own process, so they count as one too.
-const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm', 'pnpx', 'corepack']
+// A package manager CLI file in a `bin` or `.bin` directory, such as `/usr/local/bin/npm`,
+// `npm/bin/npm-cli.js`, `node_modules/.bin/pnpm` or `pnpm/bin/pnpm.cjs`. Corepack and pnpx run a
+// package manager in their own process, so they count as one too.
+const PACKAGE_MANAGER_ENTRY_POINT = /(?:^|[\\/])\.?bin[\\/](?:npm(?:-cli)?|yarn|yarnpkg|pnpm|pnpx|corepack)(?:\.[cm]?js)?$/
 
 /**
  * `for-in` with an early return is the only allocation-free shape for
@@ -39,9 +41,7 @@ function isError (value) {
  * manager launches run in child processes whose entry point is not a package manager.
  */
 function isPackageManager () {
-  return PACKAGE_MANAGERS.some(packageManager =>
-    process.argv[1]?.includes(`bin/${packageManager}`)
-  )
+  return PACKAGE_MANAGER_ENTRY_POINT.test(process.argv[1] ?? '')
 }
 
 // Matches a glob pattern to a given subject string

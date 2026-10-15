@@ -62,8 +62,8 @@ describe('package managers', () => {
 
   // Off-thread hooks rethrow import errors that fail `util.types.isNativeError`, which is what trips
   // pnpm. This keeps the package manager cases above from passing without exercising any hooks.
-  it('registers the asynchronous loader hook for other entry points', async () => {
-    const stdout = await run('dd-trace/initialize.mjs', ['package-managers/missing-import.mjs'])
+  it('registers the asynchronous loader hook for applications that only resemble a package manager', async () => {
+    const stdout = await run('dd-trace/initialize.mjs', ['package-managers/bin/pnpm-app.mjs'])
 
     assert.deepStrictEqual(JSON.parse(stdout), { code: 'ERR_MODULE_NOT_FOUND', isNativeError: false })
   })

@@ -141,13 +141,16 @@ describe('util', () => {
       const entryPoints = [
         '/usr/local/bin/npm',
         '/usr/local/lib/node_modules/npm/bin/npm-cli.js',
+        'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js',
         '/usr/local/bin/yarn',
+        '/usr/local/bin/yarnpkg',
         '/usr/local/lib/node_modules/yarn/bin/yarn.js',
         '/project/node_modules/.bin/pnpm',
         '/project/node_modules/pnpm/bin/pnpm.mjs',
         '/home/user/.cache/node/corepack/v1/pnpm/11.20.0/bin/pnpm.cjs',
         '/project/node_modules/.bin/pnpx',
         '/project/node_modules/pnpm/bin/pnpx.mjs',
+        'C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\pnpm\\bin\\pnpm.cjs',
         // `corepack pnpm` runs pnpm inside the corepack process.
         '/usr/local/bin/corepack',
       ]
@@ -169,6 +172,22 @@ describe('util', () => {
         '/project/node_modules/@cucumber/cucumber/bin/cucumber.js',
         '/project/node_modules/@playwright/test/cli.js',
         '/project/index.mjs',
+      ]
+
+      for (const entryPoint of entryPoints) {
+        assert.strictEqual(isPackageManagerEntryPoint(entryPoint), false, entryPoint)
+      }
+    })
+
+    it('does not match applications whose path only resembles a package manager', () => {
+      const entryPoints = [
+        '/srv/bin/pnpm-app/server.mjs',
+        '/app/bin/npm-report.js',
+        '/app/bin/yarn-worker.mjs',
+        '/app/bin/corepack-tools/index.js',
+        '/app/sbin/npm',
+        '/project/node_modules/.bin/npm-run-all',
+        '/project/node_modules/pnpm-sync/bin/index.js',
       ]
 
       for (const entryPoint of entryPoints) {
