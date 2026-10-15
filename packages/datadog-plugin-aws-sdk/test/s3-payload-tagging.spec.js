@@ -278,7 +278,9 @@ describe('Plugin', () => {
             }, { timeoutMs: 20000, spanResourceMatch: new RegExp(`^getObject ${bucketName}$`) })
 
             await Promise.all([
-              callViaCallback(s3, 'getObject', params).then(data => readBody(data.Body)),
+              callViaCallback(s3, 'getObject', params).then(async data => {
+                assert.strictEqual(await readBody(data.Body), bodyContent)
+              }),
               secondSpanPromise,
             ])
           })
