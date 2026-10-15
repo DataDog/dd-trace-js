@@ -29,6 +29,10 @@ function patchDatadogLambdaModule (datadogLambdaModule) {
  * traces. Off preserves the pre-PR3 division of ownership — dd-trace's Lambda support was timeout
  * monitoring only and never produced a span.
  *
+ * This gates span ownership, not all Lambda behavior: the shared timeout monitor, hook
+ * registration, and plugin-manager configuration still run with it off. Explicit facade
+ * wrapping is opt-in and does not depend on this gate.
+ *
  * Enabling it is for migration testing and knowingly double-spans against the old shim. The gate
  * goes away once the shim delegates to `dd-trace/lambda` and the marker makes wrapping idempotent.
  *
