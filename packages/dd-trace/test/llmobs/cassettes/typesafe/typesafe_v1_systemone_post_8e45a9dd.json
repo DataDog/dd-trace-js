@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.typesafe.ai/v1/systemone",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "application/json",
+      "User-Agent": "typesafe-sdk/0.6.0",
+      "X-TypeSafe-SDK": "typesafe-sdk/0.6.0",
+      "X-TypeSafe-Runtime": "node/22.23.2 (darwin; arm64)",
+      "Content-Type": "application/json",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "523"
+    },
+    "body": "{\"state\":\"I was charged twice for my subscription this month and want the duplicate refunded.\",\"questions\":{\"team\":{\"type\":\"choice\",\"instructions\":\"Which team should handle this message?\",\"criteria\":{\"billing\":\"Charges, refunds, invoices\",\"technical\":\"Bugs, outages, errors\",\"sales\":\"Pricing, plans, buying more\"}},\"refund\":{\"type\":\"noul\",\"instructions\":\"Is the customer asking for a refund?\"},\"urgency\":{\"type\":\"score\",\"instructions\":\"How urgent is this message?\",\"criteria\":[\"Low\",\"Medium\",\"High\"]}},\"model\":\"jev-1.13.0\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Thu, 15 Oct 2026 00:53:49 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "x-typesafe-request-id": "req_01a13d0d11e17a68a77089d79a634222",
+      "x-envoy-upstream-service-time": "36",
+      "Server": "cloudflare",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=tVqYIwFcz2FuZfVMi_6PD2.WPX9p6lXMQLetzJ8pEqM-1792025629.1380463-1.0.1.1-LXSNGJP1a9LfnmaBhxQBYSwU6rCJBly5Dg5pyBZhQzNLK3X71MbqBlmEbmEnCxVOMdFWwd4I2l2V_Uxb.MFLElSNZ7F5H675Iz5hNrKo2ZwPyvk.2Lvnx8fk6rHYFTsM; HttpOnly; SameSite=None; Secure; Path=/; Domain=typesafe.ai; Expires=Thu, 15 Oct 2026 01:23:49 GMT",
+      "Content-Encoding": "gzip",
+      "CF-RAY": "a4aad9561cb6de0e-EWR",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\"model\":\"jev-1.13.0\",\"answers\":{\"team\":{\"type\":\"choice\",\"choice\":\"billing\",\"confidence\":1.0,\"probabilities\":{\"billing\":1.0,\"technical\":0.0,\"sales\":0.0}},\"refund\":{\"type\":\"noul\",\"noul\":0.99},\"urgency\":{\"type\":\"score\",\"score\":1.08,\"confidence\":0.76,\"legend\":{\"0\":\"Low\",\"1\":\"Medium\",\"2\":\"High\"},\"probabilities\":{\"0\":0.04,\"1\":0.84,\"2\":0.12}}},\"usage\":{\"input_tokens\":403,\"output_tokens\":69}}"
+  }
+}

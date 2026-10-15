@@ -229,6 +229,7 @@ updates:
           - "@langchain/*"
           - "@modelcontextprotocol/sdk"
           - "@openai/*"
+          - "@typesafe-ai/sdk"
           - "ai"
           - "langchain"
           - "openai"

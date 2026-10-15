@@ -55,6 +55,7 @@ module.exports = {
   '@redis/client': () => require('../redis'),
   '@smithy/core': () => require('../aws-sdk'),
   '@smithy/smithy-client': () => require('../aws-sdk'),
+  '@typesafe-ai/sdk': () => require('../typesafe'),
   '@vitest/runner': { esmFirst: true, fn: () => require('../vitest') },
   '@wdio/cli': { esmFirst: true, fn: () => require('../webdriverio') },
   '@wdio/jasmine-framework': { esmFirst: true, fn: () => require('../webdriverio') },

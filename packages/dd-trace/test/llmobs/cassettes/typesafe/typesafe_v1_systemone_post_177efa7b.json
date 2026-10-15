@@ -1,0 +1,39 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.typesafe.ai/v1/systemone",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "application/json",
+      "User-Agent": "typesafe-sdk/0.6.0",
+      "X-TypeSafe-SDK": "typesafe-sdk/0.6.0",
+      "X-TypeSafe-Runtime": "node/22.23.2 (darwin; arm64)",
+      "Content-Type": "application/json",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "465"
+    },
+    "body": "{\"state\":\"Please cancel my account.\",\"questions\":{\"team\":{\"type\":\"choice\",\"instructions\":\"Which team should handle this message?\",\"criteria\":{\"billing\":\"Charges, refunds, invoices\",\"technical\":\"Bugs, outages, errors\",\"sales\":\"Pricing, plans, buying more\"}},\"refund\":{\"type\":\"noul\",\"instructions\":\"Is the customer asking for a refund?\"},\"urgency\":{\"type\":\"score\",\"instructions\":\"How urgent is this message?\",\"criteria\":[\"Low\",\"Medium\",\"High\"]}},\"model\":\"jev-1.13.0\"}"
+  },
+  "response": {
+    "status": {
+      "code": 401,
+      "message": "Unauthorized"
+    },
+    "headers": {
+      "Date": "Thu, 15 Oct 2026 00:53:49 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "138",
+      "Connection": "keep-alive",
+      "x-typesafe-request-id": "req_01a13d0d12587c318b24be0ec801ac29",
+      "x-envoy-upstream-service-time": "1",
+      "Server": "cloudflare",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=jIVfeFAXd9iiRNUwegjUSywbdZNcSTJVcpBXdjthfgY-1792025629.257318-1.0.1.1-I7i2fy4Xz1z27041hUYoQqfNBgFxaN3Tkz91PJtgmv5rRPlZrJpW3D1bMKUUzwoFuXFf1jL3KOknGmOezdsT0HrjCcfdUnmlT4bO7liqPHwMbGMP8dkNX2PxlDQrq8Db; HttpOnly; SameSite=None; Secure; Path=/; Domain=typesafe.ai; Expires=Thu, 15 Oct 2026 01:23:49 GMT",
+      "CF-RAY": "a4aad956df1a0cc6-EWR",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\"detail\":{\"error_type\":\"authentication_error\",\"message\":\"Cannot authenticate with the server. Please check your API key and try again.\"}}"
+  }
+}
