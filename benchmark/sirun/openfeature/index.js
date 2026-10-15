@@ -177,9 +177,9 @@ async function main () {
     const setupBytes = bytes
     admissionWaitNs = 0
     global.gc?.()
+    guard.loopStart()
     const heapBefore = process.memoryUsage().heapUsed
     const start = process.hrtime.bigint()
-    guard.loopStart()
     for (let i = 0; i < operations; i++) {
       if (!saturated && evaluationWriter && !evaluationWriter.hasCapacity()) await waitForCapacity()
       assert.strictEqual(await client.getBooleanValue('flag', false, context), true)
