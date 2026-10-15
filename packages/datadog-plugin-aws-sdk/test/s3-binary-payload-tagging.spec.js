@@ -12,7 +12,7 @@ const http = require('node:http')
 const { after, before, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { callViaCallback, setup } = require('./spec_helpers')
+const { callViaCallback, setup, withAwsSdkVersions } = require('./spec_helpers')
 
 const bodyBytes = [97, 98, 99] // 'abc'
 
@@ -117,17 +117,19 @@ describe('Plugin', () => {
       server.close(() => done())
     })
 
-    for (const captureEnabled of [false, true]) {
-      describe(`with payload capture ${captureEnabled ? 'enabled' : 'disabled'}`, () => {
-        before(() => {
-          return agent.load('aws-sdk', {}, captureEnabled
-            ? { cloudPayloadTagging: { request: '$.Body[1]', maxDepth: 10 } }
-            : {})
-        })
+    withAwsSdkVersions((version, moduleName) => {
+      const isV3 = moduleName === '@aws-sdk/smithy-client'
 
-        after(() => agent.close())
+      for (const captureEnabled of [false, true]) {
+        describe(`with payload capture ${captureEnabled ? 'enabled' : 'disabled'}`, () => {
+          before(() => {
+            return agent.load('aws-sdk', {}, captureEnabled
+              ? { cloudPayloadTagging: { request: '$.Body[1]', maxDepth: 10 } }
+              : {})
+          })
 
-        for (const isV3 of [false, true]) {
+          after(() => agent.close())
+
           describe(isV3 ? 'aws-sdk v3' : 'aws-sdk v2', () => {
             let s3
 
@@ -135,8 +137,8 @@ describe('Plugin', () => {
               // Load the SDK only after agent.load() so instrumentation hooks
               // are installed first.
               const AWS = isV3
-                ? require('../../../versions/@aws-sdk/client-s3@3').get()
-                : require('../../../versions/aws-sdk@2').get()
+                ? require(`../../../versions/@aws-sdk/client-s3@${version}`).get()
+                : require(`../../../versions/aws-sdk@${version}`).get()
               const options = {
                 endpoint,
                 region: 'us-east-1',
@@ -207,8 +209,8 @@ describe('Plugin', () => {
               })
             }
           })
-        }
-      })
-    }
+        })
+      }
+    })
   })
 })

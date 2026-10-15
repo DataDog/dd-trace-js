@@ -4,11 +4,18 @@ const assert = require('node:assert/strict')
 
 const {
   S3_PAYLOAD_SDK: sdk,
+  S3_PAYLOAD_VERSION: version,
   S3_PAYLOAD_SCENARIO: scenario,
   S3_PAYLOAD_CAPTURE: capture,
   S3_PAYLOAD_ENDPOINT: endpoint,
   DD_TRACE_AGENT_PORT: port,
 } = process.env
+if (sdk !== 'v2' && sdk !== 'v3') {
+  throw new Error(`fixture requires S3_PAYLOAD_SDK to be 'v2' or 'v3', got ${sdk}`)
+}
+if (!version) {
+  throw new Error('fixture requires S3_PAYLOAD_VERSION to name the selected workspace version')
+}
 const enabled = capture === 'enabled'
 const tracer = require('../../../dd-trace').init({
   service: 's3-fail-soft',
@@ -22,9 +29,9 @@ const tracer = require('../../../dd-trace').init({
 })
 // Keep the fixture focused on the AWS span, rather than its HTTP children.
 tracer.use('http', false)
-const AWS = sdk === 'v3'
-  ? require('../../../../versions/@aws-sdk/client-s3@3').get()
-  : require('../../../../versions/aws-sdk@2').get()
+// Load the selected workspace folder rather than a hardcoded version so the
+// fixture only requires the SDK family the suite selected (RANGE-filtered).
+const AWS = require(`../../../../versions/${sdk === 'v3' ? '@aws-sdk/client-s3' : 'aws-sdk'}@${version}`).get()
 /**
  * @typedef {{
  *   putObject: (params: object, callback: (error: Error | null, data: object) => void) => void,
