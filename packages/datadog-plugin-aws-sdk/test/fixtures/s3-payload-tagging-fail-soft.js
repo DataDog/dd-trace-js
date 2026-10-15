@@ -91,10 +91,16 @@ async function main () {
         return rules
       },
     })
+  } else if (scenario === 'request') {
+    Object.defineProperty(plugin, property, {
+      configurable: true,
+      get () {
+        if (failures === 0) fail()
+        return rules
+      },
+    })
   } else {
-    Object.defineProperty(plugin, property, scenario === 'request'
-      ? { configurable: true, get () { if (failures === 0) fail(); return rules } }
-      : { configurable: true, value: fail })
+    Object.defineProperty(plugin, property, { configurable: true, value: fail })
   }
   try {
     await new Promise((resolve, reject) => {
