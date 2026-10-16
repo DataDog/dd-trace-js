@@ -1649,9 +1649,10 @@ describe('Safe payload capture', () => {
           const snapshot = createSafeSnapshot({ a: leaf, b: leaf })
           const { a, b } = /** @type {Record<string, object>} */ (snapshot.value)
 
-          // An opaque leaf always marks the capture incomplete, even with no
-          // discarded fields or contents.
-          assert.strictEqual(snapshot.incomplete, true)
+          // Maps and Sets always mark the capture incomplete. A Date without
+          // own enumerable keys does not: its time value survives the copy, so
+          // no payload data is discarded.
+          assert.strictEqual(snapshot.incomplete, kind.name !== 'Date')
           assert.notStrictEqual(a, leaf)
           assert.notStrictEqual(b, leaf)
           assert.notStrictEqual(a, b)
@@ -1680,7 +1681,51 @@ describe('Safe payload capture', () => {
       const snapshot = createSafeSnapshot(date)
       assert.notStrictEqual(snapshot.value, date)
       assert.ok(Number.isNaN(Date.prototype.getTime.call(snapshot.value)))
+      // A NaN time value is preserved in the fresh copy, so nothing is lost.
+      assert.strictEqual(snapshot.incomplete, false)
+    })
+
+    it('keeps data-dependent tags when the only opaque leaf is a plain Date', () => {
+      const input = {
+        at: new Date(1234),
+        items: [{ secret: 's3cret', encoded: '{"secret":"encoded-secret"}' }],
+      }
+      const config = {
+        expand: [],
+        request: [],
+        response: ['$.items[?(@.secret)].secret'],
+      }
+
+      const tags = computeTags(config, input, responseOpts)
+
+      // The sensitive value must actually be redacted, not merely emitted.
+      assert.deepStrictEqual(tags, {
+        'aws.response.body.items.0.secret': 'redacted',
+        'aws.response.body.items.0.encoded': '{"secret":"encoded-secret"}',
+      })
+      assert.strictEqual(input.items[0].secret, 's3cret')
+      assert.strictEqual(createSafeSnapshot(input).incomplete, false)
+    })
+
+    it('keeps subclass and cross-realm Dates unflagged when they have no own keys', () => {
+      const SubDate = nodeVm.runInThisContext('(class extends Date {})')
+      const crossRealmDate = nodeVm.runInNewContext('new Date(1234)')
+      const crossRealmSub = nodeVm.runInNewContext('new (class extends Date {})(1234)')
+      for (const date of [new SubDate(1234), crossRealmDate, crossRealmSub]) {
+        const snapshot = createSafeSnapshot({ at: date })
+        assert.strictEqual(snapshot.incomplete, false)
+        assert.strictEqual(Date.prototype.getTime.call(snapshot.value.at), 1234)
+        assert.notStrictEqual(snapshot.value.at, date)
+      }
+    })
+
+    it('flags a Date with own enumerable keys as incomplete', () => {
+      const date = new Date(1234)
+      date.detail = { secret: 's3cret' }
+      const snapshot = createSafeSnapshot({ at: date })
       assert.strictEqual(snapshot.incomplete, true)
+      assert.strictEqual(Date.prototype.getTime.call(snapshot.value.at), 1234)
+      assert.strictEqual(Object.hasOwn(snapshot.value.at, 'detail'), false)
     })
 
     for (const name of ['Map', 'Set']) {
