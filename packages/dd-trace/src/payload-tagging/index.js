@@ -142,7 +142,7 @@ function computeTags (config, object, opts) {
     // A capture failure must not break the instrumented operation. Omit
     // partly expanded or redacted tags; never inspect the caught value, as
     // payload getters can throw while logging it.
-    log.error('Error generating payload tags; omitting payload tags for this operation')
+    log.debug('Error generating payload tags; omitting payload tags for this operation')
     return {}
   }
 }

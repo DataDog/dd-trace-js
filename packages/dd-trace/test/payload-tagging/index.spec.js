@@ -1411,7 +1411,7 @@ describe('Safe payload capture', () => {
     it('omits a first-read throwing admitted accessor with a fixed payload-safe error', () => {
       const getReader = sinon.spy(() => { throw new Error('payload-secret') })
       const input = Object.defineProperty({ safe: 'ok' }, 'getReader', { enumerable: true, get: getReader })
-      const diagnostic = sinon.stub(log, 'error')
+      const diagnostic = sinon.stub(log, 'debug')
       try {
         assert.deepStrictEqual(computeTags(safeConfig, input, responseOpts), {})
         assert.strictEqual(getReader.callCount, 1)
@@ -1488,7 +1488,7 @@ describe('Safe payload capture', () => {
 
     it('fails soft if a cyclic Proxy prototype fails native binary brand detection before stream detection', () => {
       const cyclic = new Proxy({}, { getPrototypeOf () { return cyclic } })
-      const diagnostic = sinon.stub(log, 'error')
+      const diagnostic = sinon.stub(log, 'debug')
       try {
         assert.deepStrictEqual(computeTags(safeConfig, cyclic, responseOpts), {})
         assert.deepStrictEqual(diagnostic.args, [
@@ -1582,7 +1582,7 @@ describe('Safe payload capture', () => {
           enumerable: true,
           get () { throw error },
         })
-        const diagnostic = sinon.stub(log, 'error')
+        const diagnostic = sinon.stub(log, 'debug')
         try {
           assert.deepStrictEqual(computeTags(safeConfig, input, responseOpts), {})
           assert.strictEqual(inspect.callCount, 0)
