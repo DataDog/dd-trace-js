@@ -179,15 +179,15 @@ function isStream (value) {
  * currently being visited and the root. Chains are shared between siblings of
  * the same container, so membership checks cost at most the snapshot depth.
  *
- * @typedef {{ value: object, next: Ancestors | null }} Ancestors
+ * @typedef {{ value: object, next: Ancestors | undefined }} Ancestors
  */
 
 /**
- * @param {Ancestors | null} ancestors
+ * @param {Ancestors | undefined} ancestors
  * @param {object} value
  */
 function hasAncestor (ancestors, value) {
-  for (let node = ancestors; node !== null; node = node.next) {
+  for (let node = ancestors; node !== undefined; node = node.next) {
     if (node.value === value) {
       return true
     }
@@ -217,17 +217,17 @@ function defineDataProperty (container, key, value) {
 }
 
 /**
- * Assign `value` to `container[key]`, or to the root when `container` is null,
+ * Assign `value` to `container[key]`, or to the root when `container` is undefined,
  * keeping `__proto__` a plain data property so the snapshot cannot mutate
  * prototypes.
  *
- * @param {Record<string, unknown> | unknown[] | null} container
- * @param {string | null} key
+ * @param {Record<string, unknown> | unknown[] | undefined} container
+ * @param {string | undefined} key
  * @param {unknown} value
  * @param {{ value: unknown }} root
  */
 function assign (container, key, value, root) {
-  if (container === null) {
+  if (container === undefined) {
     root.value = value
     return
   }
@@ -236,11 +236,11 @@ function assign (container, key, value, root) {
 
 /**
  * Identify a genuine Buffer or ArrayBuffer view using only intrinsic brand
- * checks, returning `null` for unsupported kinds. Never consults
- * payload-defined properties and never throws.
+ * checks: 'buffer', 'DataView', or a trusted typed-array kind, and `undefined`
+ * for unsupported kinds. Never consults payload-defined properties and never
+ * throws.
  *
  * @param {Buffer | TypedArray | DataView} value
- * @returns {string | null} 'buffer', 'DataView', or a trusted typed-array kind
  */
 function binaryKind (value) {
   if (Buffer.isBuffer(value)) {
@@ -250,7 +250,7 @@ function binaryKind (value) {
     return 'DataView'
   }
   const kind = /** @type {string} */ (getTypedArrayKind?.call(value))
-  return typedArrayConstructors.has(kind) ? kind : null
+  return typedArrayConstructors.has(kind) ? kind : undefined
 }
 
 /**
@@ -319,8 +319,8 @@ function copyBinary (value, kind, byteLength) {
  *   keys: string[],
  *   index: number,
  *   childDepth: number,
- *   ancestors: Ancestors | null,
- *   sourceLength: number | null
+ *   ancestors: Ancestors | undefined,
+ *   sourceLength: number | undefined
  * }} Frame
  */
 
@@ -425,7 +425,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     // so data-dependent rules cannot decide redaction from the copy.
     normalized = true
     const kind = binaryKind(view)
-    if (kind === null) {
+    if (kind === undefined) {
       markIncomplete()
       return truncated
     }
@@ -453,11 +453,11 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
    * Store one admitted value in its destination container, pushing a frame
    * when the value is itself a container that can be expanded.
    *
-   * @param {Record<string, unknown> | unknown[] | null} container
-   * @param {string | null} key
+   * @param {Record<string, unknown> | unknown[] | undefined} container
+   * @param {string | undefined} key
    * @param {unknown} value
    * @param {number} depth
-   * @param {Ancestors | null} ancestors
+   * @param {Ancestors} [ancestors] undefined for the root
    */
   function admit (container, key, value, depth, ancestors) {
     // Functions are opaque references into caller state: retaining one keeps
@@ -519,13 +519,13 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     }
 
     const isArray = Array.isArray(value)
-    const sourceLength = isArray ? value.length : null
+    const sourceLength = isArray ? value.length : undefined
 
     if (
       // Reject omitted work before even inspecting stream descriptors.
       hasAncestor(ancestors, value) ||
       depth >= maxDepth ||
-      (sourceLength !== null && sourceLength > maxArrayLength) ||
+      (sourceLength !== undefined && sourceLength > maxArrayLength) ||
       isStream(value)
     ) {
       markIncomplete()
@@ -551,7 +551,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     return { value: truncated, incomplete: true, normalized: true }
   }
   budget.entries--
-  admit(null, null, input, 0, null)
+  admit(undefined, undefined, input, 0)
 
   while (stack.length > 0) {
     // eslint-disable-next-line unicorn/prefer-at
@@ -563,7 +563,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       // length changed, predicates on length or indexes can flip, so mark the
       // capture normalized. Holes are never materialized to preserve the
       // length. Omitted keys mark the capture incomplete where they are read.
-      if (frame.sourceLength !== null && frame.copy.length !== frame.sourceLength) {
+      if (frame.sourceLength !== undefined && frame.copy.length !== frame.sourceLength) {
         normalized = true
       }
       stack.pop()

@@ -809,7 +809,9 @@ describe('Safe payload capture', () => {
     const probe = () => {
       reads++
     }
-    const cyclic = Object.defineProperty({}, 'getReader', { get: probe, enumerable: false })
+    const cyclic = /** @type {Record<string, unknown>} */ (
+      Object.defineProperty({}, 'getReader', { get: probe, enumerable: false })
+    )
     cyclic.self = cyclic
     let deep = Object.defineProperty({}, 'getReader', { get: probe, enumerable: false })
     for (let i = 0; i < 150; i++) {
@@ -1807,29 +1809,30 @@ describe('Safe payload capture', () => {
       const crossRealmSub = nodeVm.runInNewContext('new (class extends Date {})(1234)')
       for (const date of [new SubDate(1234), crossRealmDate, crossRealmSub]) {
         const snapshot = createSafeSnapshot({ at: date })
+        const copy = /** @type {{ at: Date }} */ (snapshot.value).at
         assert.strictEqual(snapshot.incomplete, false)
-        assert.strictEqual(Date.prototype.getTime.call(snapshot.value.at), 1234)
-        assert.notStrictEqual(snapshot.value.at, date)
+        assert.strictEqual(Date.prototype.getTime.call(copy), 1234)
+        assert.notStrictEqual(copy, date)
       }
     })
 
     it('flags a Date with own enumerable keys as incomplete', () => {
-      const date = new Date(1234)
-      date.detail = { secret: 's3cret' }
+      const date = Object.assign(new Date(1234), { detail: { secret: 's3cret' } })
       const snapshot = createSafeSnapshot({ at: date })
+      const copy = /** @type {{ at: Date }} */ (snapshot.value).at
       assert.strictEqual(snapshot.incomplete, true)
-      assert.strictEqual(Date.prototype.getTime.call(snapshot.value.at), 1234)
-      assert.strictEqual(Object.hasOwn(snapshot.value.at, 'detail'), false)
+      assert.strictEqual(Date.prototype.getTime.call(copy), 1234)
+      assert.strictEqual(Object.hasOwn(copy, 'detail'), false)
     })
 
     for (const name of ['Map', 'Set']) {
       it(`flags a ${name} with own enumerable keys as incomplete`, () => {
-        const leaf = name === 'Map' ? new Map() : new Set()
-        leaf.detail = 'attached'
+        const leaf = Object.assign(name === 'Map' ? new Map() : new Set(), { detail: 'attached' })
         const snapshot = createSafeSnapshot({ leaf })
         assert.strictEqual(snapshot.incomplete, true)
         assert.strictEqual(snapshot.normalized, true)
-        assert.strictEqual(Object.hasOwn(snapshot.value.leaf, 'detail'), false)
+        const copy = /** @type {{ leaf: object }} */ (snapshot.value).leaf
+        assert.strictEqual(Object.hasOwn(copy, 'detail'), false)
       })
     }
 
@@ -1926,13 +1929,14 @@ describe('Safe payload capture', () => {
 
     for (const kind of ['Uint8Array', 'DataView']) {
       it(`should flag a ${kind} whose attached properties are discarded`, () => {
-        const body = kind === 'DataView' ? new DataView(new ArrayBuffer(2)) : new Uint8Array([104, 105])
-        body.detail = 'attached'
+        const view = kind === 'DataView' ? new DataView(new ArrayBuffer(2)) : new Uint8Array([104, 105])
+        const body = Object.assign(view, { detail: 'attached' })
 
         const snapshot = createSafeSnapshot({ Body: body })
         assert.strictEqual(snapshot.incomplete, true)
         assert.strictEqual(snapshot.normalized, true)
-        assert.strictEqual(Object.hasOwn(snapshot.value.Body, 'detail'), false)
+        const copy = /** @type {{ Body: object }} */ (snapshot.value).Body
+        assert.strictEqual(Object.hasOwn(copy, 'detail'), false)
         // Attached properties of non-Buffer views render as tags, so the
         // public flag reports their loss.
         assert.strictEqual(computeTags(safeConfig, { Body: body }, responseOpts)['_dd.payload_tags_incomplete'], true)
@@ -1940,8 +1944,7 @@ describe('Safe payload capture', () => {
     }
 
     it('should not flag a Buffer whose attached properties are discarded', () => {
-      const body = Buffer.from('abc')
-      body.detail = 'attached'
+      const body = Object.assign(Buffer.from('abc'), { detail: 'attached' })
 
       // Buffers render only their bytes, so attached properties never render.
       const snapshot = createSafeSnapshot({ Body: body })
