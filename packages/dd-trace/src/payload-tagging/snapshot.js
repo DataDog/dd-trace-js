@@ -25,14 +25,15 @@ function getterOf (object, key) {
 }
 
 /**
- * Whether the value has any own enumerable string-keyed property. Advances one
- * step of the key iterator instead of probing `Object.keys(value).length`,
- * which the lint rules reject, and stops at the first key.
+ * Whether the value has any own enumerable string-keyed property. This still
+ * allocates the full keys array: without `for-in`, which the repository
+ * prohibits, there is no lazy own-key enumeration. It is only called on opaque
+ * leaves (Dates, Maps, Sets, DataViews), which rarely carry own keys.
  *
  * @param {object} object
  */
 function hasOwnEnumerableKeys (object) {
-  return !Object.keys(object)[Symbol.iterator]().next().done
+  return Object.keys(object)[0] !== undefined
 }
 
 /**
