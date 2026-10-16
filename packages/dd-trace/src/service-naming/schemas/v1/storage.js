@@ -77,7 +77,7 @@ const storage = {
       serviceSource: optionServiceSource,
     },
     oracledb: {
-      opName: () => 'oracle.query',
+      opName: ({ operation = 'query' }) => `oracle.${operation}`,
       serviceName: withFunction,
       serviceSource: optionServiceSource,
     },
