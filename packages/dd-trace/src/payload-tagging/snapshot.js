@@ -132,22 +132,30 @@ const maxBufferPrefixBytes = maxValueLength * 3 + 4
  */
 
 /**
- * Detect native streams and descriptor-backed getReader functions without
- * executing payload accessors. Streams are never enumerated, cloned, drained,
- * or locked: consuming one would corrupt the application's own use of the
- * payload.
+ * Detect native streams, descriptor-backed getReader functions, and Node-style
+ * userland streams (descriptor-backed `pipe` and `on` functions, as in
+ * readable-stream, minipass or streamx, which do not inherit from Node's
+ * Stream) without executing payload accessors. Streams are never enumerated,
+ * cloned, drained, or locked: consuming one would corrupt the application's
+ * own use of the payload, and their internal state can hold buffered chunks.
  *
  * @param {object} value
  */
 function isStream (value) {
   // Inspect effective descriptors without executing accessors; the walk is
   // bounded rather than an unbounded instanceof through a controlled chain.
+  // The first descriptor found for a key shadows any later one.
   let current = value
   let descriptor
+  let pipe
+  let on
   for (let depth = 0; current !== null && depth < maxStreamPrototypeDepth; depth++) {
     if (current === Stream.prototype || current === webStreamPrototype) return true
     descriptor ??= Object.getOwnPropertyDescriptor(current, 'getReader')
     if (typeof descriptor?.value === 'function') return true
+    pipe ??= Object.getOwnPropertyDescriptor(current, 'pipe')
+    on ??= Object.getOwnPropertyDescriptor(current, 'on')
+    if (typeof pipe?.value === 'function' && typeof on?.value === 'function') return true
     current = Object.getPrototypeOf(current)
   }
   // An exhausted inspection bound is ambiguous, so truncate conservatively.

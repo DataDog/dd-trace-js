@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { execFile } = require('node:child_process')
+const { EventEmitter } = require('node:events')
 const { Readable } = require('node:stream')
 const nodeVm = require('node:vm')
 const sinon = require('sinon')
@@ -1466,6 +1467,51 @@ describe('Safe payload capture', () => {
     it('recognizes a cross-realm inherited data-method stream-like value without calling it', () => {
       const input = nodeVm.runInNewContext('Object.assign(Object.create({ getReader () { throw 1 } }), { safe: "ok" })')
       assert.deepStrictEqual(createSafeSnapshot(input), { value: 'truncated', incomplete: true, normalized: true })
+    })
+
+    it('keeps a userland Node-style stream opaque without reading its internal state', () => {
+      // Mirrors readable-stream and minipass: an EventEmitter with a pipe
+      // method that does not inherit from Node's Stream.
+      class UserlandStream extends EventEmitter {
+        pipe () { throw new Error('unexpected pipe') }
+      }
+      const stream = new UserlandStream()
+      const readState = sinon.spy(() => ({ buffer: ['payload-secret'] }))
+      Object.defineProperty(stream, '_readableState', { enumerable: true, get: readState })
+
+      const snapshot = createSafeSnapshot({ Body: stream, safe: 'ok' })
+      assert.deepStrictEqual(snapshot.value, { Body: 'truncated', safe: 'ok' })
+      assert.strictEqual(snapshot.incomplete, true)
+      assert.strictEqual(readState.callCount, 0)
+    })
+
+    it('recognizes own data pipe and on methods as a stream without calling them', () => {
+      const pipe = sinon.spy()
+      const on = sinon.spy()
+      const snapshot = createSafeSnapshot({ Body: { pipe, on, chunk: 'payload-secret' } })
+      assert.deepStrictEqual(snapshot.value, { Body: 'truncated' })
+      assert.strictEqual(pipe.callCount + on.callCount, 0)
+    })
+
+    it('captures an event emitter or a pipe method alone as a plain object', () => {
+      // Either method alone is not a Node-style stream.
+      const emitter = Object.assign(new EventEmitter(), { safe: 'ok' })
+      const piped = { pipe () {}, safe: 'ok' }
+      const snapshot = createSafeSnapshot({ emitter, piped })
+      const value = /** @type {Record<string, Record<string, unknown>>} */ (snapshot.value)
+      assert.strictEqual(value.emitter.safe, 'ok')
+      assert.strictEqual(value.piped.safe, 'ok')
+    })
+
+    it('does not invoke accessor pipe or on descriptors while probing for streams', () => {
+      const read = sinon.spy(() => () => {})
+      const input = Object.create({}, {
+        pipe: { get: read },
+        on: { get: read },
+        safe: { value: 'ok', enumerable: true },
+      })
+      assert.deepStrictEqual(createSafeSnapshot(input).value, { safe: 'ok' })
+      assert.strictEqual(read.callCount, 0)
     })
 
     for (const depth of [100, 101]) {
