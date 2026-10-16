@@ -673,7 +673,7 @@ describe('Plugin', () => {
           remapStub.restore()
         })
 
-        it('should use the service name when peer service is not available', done => {
+        it('should omit ddprs when peer service computation is disabled', done => {
           computeStub.value(false)
           remapStub.value({})
           connection.query('SELECT 1 + 1 AS solution', () => {
@@ -688,13 +688,13 @@ describe('Plugin', () => {
           })
         })
 
-        it('should use the peer service when peer service is available', done => {
+        it('should keep dddbs as the service name when the peer service is computed from db.name', done => {
           computeStub.value(true)
           remapStub.value({})
           connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               assert.strictEqual(connection._protocol._queue[0].sql,
-                '/*dddb=\'db\',dddbs=\'db\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\'' +
+                '/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\'' +
                 `,ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
@@ -703,13 +703,13 @@ describe('Plugin', () => {
           })
         })
 
-        it('should use the remapped peer service when peer service is available and remapped', done => {
+        it('should ignore a peer service mapping when the peer service is computed from db.name', done => {
           computeStub.value(true)
           remapStub.value({ db: 'remappedDB' })
           connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               assert.strictEqual(connection._protocol._queue[0].sql,
-                '/*dddb=\'db\',dddbs=\'remappedDB\',dde=\'tester\',ddh=\'127.0.0.1\',' +
+                '/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',' +
                 `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
