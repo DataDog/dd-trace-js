@@ -1979,7 +1979,8 @@
         "transform": "toLowerCase",
         "configurationNames": [
           "site"
-        ]
+        ],
+        "transform": "toLowerCase"
       }
     ],
     "DD_SPAN_SAMPLING_RULES": [
