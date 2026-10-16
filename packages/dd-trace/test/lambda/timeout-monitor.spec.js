@@ -150,6 +150,37 @@ describe('Lambda timeout monitor', () => {
     }
   })
 
+  it('keeps a pending callback monitored when the runtime beforeExit callback cannot be wrapped', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, BEFORE_EXIT)
+    Object.defineProperty(globalThis, BEFORE_EXIT, { value: () => {}, writable: false, configurable: true })
+    try {
+      /** @type {Function} */
+      let complete = notCaptured
+      const handler = datadog((_event, _context, cb) => { complete = cb })
+      handler({}, context, () => {})
+      clock.tick(75)
+      assert.strictEqual(killAll.callCount, 1)
+      complete()
+      assert.strictEqual(clock.countTimers(), 0)
+    } finally {
+      if (descriptor) Object.defineProperty(globalThis, BEFORE_EXIT, descriptor)
+      else delete globalThis[BEFORE_EXIT]
+    }
+  })
+
+  it('monitors a rest-argument callback handler with a frozen context', () => {
+    context.done = context.succeed = context.fail = () => {}
+    Object.freeze(context)
+    /** @type {Function} */
+    let complete = notCaptured
+    const handler = datadog((...args) => { complete = args[2] })
+    handler({}, context, () => {})
+    clock.tick(75)
+    assert.strictEqual(killAll.callCount, 1)
+    complete()
+    assert.strictEqual(clock.countTimers(), 0)
+  })
+
   for (const protect of [Object.freeze, Object.seal, Object.preventExtensions]) {
     it(`monitors a ${protect.name} handler without modifying it`, () => {
       const original = protect((_event, _context, callback) => undefined)
@@ -197,6 +228,29 @@ describe('Lambda timeout monitor', () => {
   })
 
   for (const name of ['done', 'succeed', 'fail']) {
+    for (const outcome of ['timeout', 'success', 'error']) {
+      it(`keeps callback completion observable with read-only context.${name} (${outcome})`, () => {
+        Object.defineProperty(context, name, { value: () => {}, writable: false })
+        /** @type {Function} */
+        let complete = notCaptured
+        const callback = sinon.spy()
+        const handler = datadog((_event, _context, cb) => { complete = cb })
+        assert.strictEqual(handler({}, context, callback), undefined)
+        assert.strictEqual(clock.countTimers(), 1)
+        if (outcome === 'timeout') {
+          clock.tick(75)
+          assert.strictEqual(killAll.callCount, 1)
+          assert.strictEqual(span.addTags.firstCall.args[0]['error.type'], 'Impending Timeout')
+        }
+        const error = outcome === 'error' ? new Error('callback failure') : null
+        complete(error, 'done')
+        clock.tick(100)
+        assert.strictEqual(killAll.callCount, outcome === 'timeout' ? 1 : 0)
+        assert.strictEqual(clock.countTimers(), 0)
+        assert.deepStrictEqual(callback.firstCall.args, [error, 'done'])
+      })
+    }
+
     it(`does not leave a timer armed when an unpatchable context.${name} completes`, () => {
       const original = context[name] = sinon.spy()
       Object.freeze(context)
@@ -340,6 +394,8 @@ describe('Lambda timeout monitor', () => {
   for (const result of [
     { listen () {}, close () {} },
     { on () {}, emit () {} },
+    Object.create({ listen () {}, close () {} }),
+    Object.create({ on () {}, emit () {} }),
     new (class Socket {})(),
   ]) {
     it(`keeps a ${result.constructor.name} side-effect artifact monitored until context completion`, () => {
@@ -350,6 +406,80 @@ describe('Lambda timeout monitor', () => {
       context.done()
       clock.tick(100)
       assert.strictEqual(killAll.callCount, 0)
+    })
+  }
+
+  for (const name of ['listen', 'close', 'on', 'emit', 'constructor']) {
+    for (const inherited of [false, true]) {
+      it(`does not invoke an ${inherited ? 'inherited' : 'own'} ${name} getter on a sync result`, () => {
+        const target = {}
+        if (name === 'close') target.listen = () => {}
+        if (name === 'emit') target.on = () => {}
+        const getter = sinon.stub().throws(new Error('application getter must not run'))
+        Object.defineProperty(target, name, { get: getter })
+        const result = inherited ? Object.create(target) : target
+        const handler = datadog(() => result)
+        assert.strictEqual(handler({}, context), result)
+        assert.strictEqual(getter.callCount, 0)
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+  }
+
+  it('does not invoke a constructor name getter or coerce a non-string constructor name', () => {
+    const getter = sinon.stub().throws(new Error('constructor name must not run'))
+    const toString = sinon.stub().throws(new Error('constructor name must not be coerced'))
+    for (const constructor of [Object.defineProperty({}, 'name', { get: getter }), { name: { toString } }]) {
+      const result = { constructor }
+      const handler = datadog(() => result)
+      assert.strictEqual(handler({}, context), result)
+      assert.strictEqual(clock.countTimers(), 0)
+    }
+    assert.strictEqual(getter.callCount, 0)
+    assert.strictEqual(toString.callCount, 0)
+  })
+
+  it('does not look through an accessor shadowing an inherited artifact method', () => {
+    const result = Object.create({ listen () {}, close () {} })
+    const getter = sinon.stub().returns(() => {})
+    Object.defineProperty(result, 'listen', { get: getter })
+    const handler = datadog(() => result)
+    assert.strictEqual(handler({}, context), result)
+    assert.strictEqual(getter.callCount, 0)
+    assert.strictEqual(clock.countTimers(), 0)
+  })
+
+  it('recognizes EventEmitter ancestry without evaluating overridden metadata', () => {
+    const result = new EventEmitter()
+    const getter = sinon.stub().throws(new Error('metadata getter must not run'))
+    Object.defineProperties(result, {
+      on: { get: getter },
+      emit: { get: getter },
+      constructor: { get: getter },
+    })
+    context.done = () => {}
+    const handler = datadog(() => result)
+    assert.strictEqual(handler({}, context), result)
+    clock.tick(75)
+    assert.strictEqual(killAll.callCount, 1)
+    context.done()
+    assert.strictEqual(getter.callCount, 0)
+    assert.strictEqual(clock.countTimers(), 0)
+  })
+
+  for (const inherited of [false, true]) {
+    it(`does not inspect a ${inherited ? 'prototype' : 'result'} Proxy for side-effect artifact heuristics`, () => {
+      const trap = sinon.stub().throws(new Error('reflection trap must not run'))
+      const proxy = new Proxy({}, {
+        get: (_target, name) => name === 'then' ? undefined : trap(),
+        getPrototypeOf: trap,
+        getOwnPropertyDescriptor: trap,
+      })
+      const result = inherited ? Object.create(proxy) : proxy
+      const handler = datadog(() => result)
+      assert.strictEqual(handler({}, context), result)
+      assert.strictEqual(trap.callCount, 0)
+      assert.strictEqual(clock.countTimers(), 0)
     })
   }
 

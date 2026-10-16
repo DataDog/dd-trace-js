@@ -1,6 +1,7 @@
 'use strict'
 
 const { EventEmitter } = require('node:events')
+const { types: { isProxy } } = require('node:util')
 
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
@@ -93,7 +94,8 @@ exports.datadog = function datadog (lambdaHandler) {
     }
 
     const contextIndex = args.indexOf(context)
-    if (contextIndex !== 2 && typeof args[2] === 'function') {
+    const callbackObservable = contextIndex !== 2 && typeof args[2] === 'function'
+    if (callbackObservable) {
       args[2] = onCompletion(args[2], clear)
     }
     let completionObservable = true
@@ -115,8 +117,9 @@ exports.datadog = function datadog (lambdaHandler) {
         })
       }
       // Match the shim's callback/context completion contract, including incidental server returns.
-      // Unpatchable completion APIs retain legacy return/promise cleanup instead of leaving a stale timer.
-      if (!completionObservable || !isCallbackCompletion(lambdaHandler, result, contextIndex)) clear()
+      // Fall back only when neither the completion APIs nor the invocation callback can be observed.
+      if ((!completionObservable && !callbackObservable) ||
+          !isCallbackCompletion(lambdaHandler, result, contextIndex)) clear()
       return result
     } catch (error) {
       clear()
@@ -171,12 +174,29 @@ function onCompletion (callback, clear) {
 function isCallbackCompletion (handler, result, contextIndex) {
   if (handler[HANDLER_STREAMING] === 'response') return false
   if ((handler.length >= 3 && contextIndex !== 2) || result === undefined) return true
-  return result !== null && typeof result === 'object' && (
-    (typeof (/** @type {{ listen?: unknown }} */ (result)).listen === 'function' &&
-      typeof (/** @type {{ close?: unknown }} */ (result)).close === 'function') ||
-    (typeof (/** @type {{ on?: unknown }} */ (result)).on === 'function' &&
-      typeof (/** @type {{ emit?: unknown }} */ (result)).emit === 'function') ||
-    result instanceof EventEmitter ||
-    (result.constructor && /Server|Socket|Emitter/i.test(result.constructor.name))
-  )
+  if (result === null || typeof result !== 'object') return false
+  for (let target = result; target !== null && !isProxy(target); target = Object.getPrototypeOf(target)) {
+    if (target === EventEmitter.prototype) return true
+  }
+  if ((typeof getDataProperty(result, 'listen') === 'function' &&
+      typeof getDataProperty(result, 'close') === 'function') ||
+      (typeof getDataProperty(result, 'on') === 'function' &&
+      typeof getDataProperty(result, 'emit') === 'function')) return true
+  const name = getDataProperty(getDataProperty(result, 'constructor'), 'name')
+  return typeof name === 'string' && /Server|Socket|Emitter/i.test(name)
+}
+
+/**
+ * Reads heuristic metadata without executing application getters or Proxy traps.
+ *
+ * @param {unknown} target
+ * @param {string} name
+ */
+function getDataProperty (target, name) {
+  if (target === null || (typeof target !== 'object' && typeof target !== 'function')) return
+  while (target !== null && !isProxy(target)) {
+    const descriptor = Object.getOwnPropertyDescriptor(target, name)
+    if (descriptor) return descriptor.value
+    target = Object.getPrototypeOf(target)
+  }
 }
