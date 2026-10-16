@@ -1,0 +1,5 @@
+{
+  "name": "opentracing",
+  "version": "0.14.7",
+  "types": "lib/index.d.ts"
+}

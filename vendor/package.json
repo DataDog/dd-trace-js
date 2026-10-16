@@ -24,6 +24,7 @@
     "meriyah": "^6.1.4",
     "module-details-from-path": "^1.0.4",
     "mutexify": "^1.4.0",
+    "opentracing": "0.14.7",
     "pprof-format": "^2.3.1",
     "protobufjs": "^8.8.0",
     "proxy-from-env": "^2.1.0",

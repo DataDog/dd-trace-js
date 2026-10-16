@@ -78,7 +78,6 @@
 "mutexify","https://github.com/mafintosh/mutexify","['MIT']","['Mathias Buus']"
 "node-addon-api","https://github.com/nodejs/node-addon-api","['MIT']","['nodejs']"
 "node-gyp-build","https://github.com/prebuild/node-gyp-build","['MIT']","['Mathias Buus']"
-"opentracing","https://github.com/opentracing/opentracing-javascript","['Apache-2.0']","['opentracing']"
 "oxc-parser","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "pprof-format","https://github.com/DataDog/pprof-format","['MIT']","['Datadog Inc.']"
 "protobufjs","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
@@ -95,3 +94,4 @@
 "ttl-set","https://github.com/watson/ttl-set","['MIT']","['Thomas Watson']"
 "aws-lambda-nodejs-runtime-interface-client","https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/v2.1.0/src/utils/UserFunction.ts","['Apache-2.0']","['Amazon.com Inc. or its affiliates']"
 "is-git-url","https://github.com/jonschlinkert/is-git-url/blob/396965ffabf2f46656c8af4c47bef1d69f09292e/index.js#L9C15-L9C87","['MIT']","['Jon Schlinkert']"
+"opentracing","https://github.com/opentracing/opentracing-javascript/tree/v0.14.7","['Apache-2.0']","['opentracing']"
