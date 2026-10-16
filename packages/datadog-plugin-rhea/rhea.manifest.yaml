@@ -1,0 +1,12 @@
+_v: 1
+name: rhea
+display_name: rhea
+description: "Instruments AMQP message sending, receiving, and delivery settlement through rhea, with trace-context\
+  \ propagation and optional Data Streams Monitoring checkpoints."
+packages:
+- name: rhea
+category:
+- messaging.consumer
+- messaging.producer
+systems: []
+creation_date: '2019-12-19'
