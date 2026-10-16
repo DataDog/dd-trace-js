@@ -923,6 +923,32 @@ export default [
     },
   },
   {
+    name: 'dd-trace/lambda-shim-compat',
+    files: ['integration-tests/lambda-shim-compat/**/*.cjs'],
+    rules: {
+      // These are standalone process probes; stdout is their assertion transport.
+      'no-console': 'off',
+      'n/no-process-exit': 'off',
+      'n/hashbang': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/lambda-shim-compat/driver',
+    files: ['integration-tests/lambda-shim-compat/scripts/*.cjs'],
+    settings: { node: { version: '>=22.3.0' } },
+  },
+  {
+    name: 'dd-trace/lambda-shim-compat/installed-fixtures',
+    files: ['integration-tests/lambda-shim-compat/assets/fixture/*.cjs'],
+    rules: {
+      // The harness installs these packages and writes metadata inside the Docker task/layer layout.
+      'n/no-missing-require': 'off',
+      'import/no-absolute-path': 'off',
+      'import/no-extraneous-dependencies': 'off',
+      'n/no-extraneous-require': 'off',
+    },
+  },
+  {
     // Benchmarks and integration test scaffolding are standalone scripts. Shebangs
     // are used so they can be invoked as `./script.js`, and `process.exit` is the
     // expected exit signal for these driver / harness programs.

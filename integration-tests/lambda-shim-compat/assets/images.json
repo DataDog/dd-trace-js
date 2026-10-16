@@ -1,0 +1,7 @@
+{
+  "18": "node:18-bullseye@sha256:0d9e9a8dcd5a83ea737ed92227a6591a31ad70c8bb722b0c51aff7ae23a88b6a",
+  "20": "node:20-bullseye@sha256:c0122351f25f04facee976f9db7214789eabadb489f4e4aea9cd00a0d6af77c4",
+  "22": "node:22-bullseye@sha256:22eaafec77d7d907e8f634096958cb221b7ef2479e76284d4d1ef4f2f1bf9d42",
+  "24": "node:24-bullseye@sha256:25f3016fcdae6b5d65bd9bcb4064b7e4198ec8d49493fa40d73f9b463d04fb15",
+  "26": "node:26-bullseye@sha256:f66d0dcdcfdaba63cc9a87c0fd1c30ab8b5fb6efd6531d0f36f8e06a88af1f6f"
+}
