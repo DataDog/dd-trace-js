@@ -111,6 +111,63 @@ describe('TelemetryDeliveryTracker', () => {
 
     assert.strictEqual(done, 1)
   })
+
+  it('reports the first pending failure after every boundary delivery completes', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    const complete = []
+    const errors = []
+    const error = new Error('delivery failed')
+    tracker.track(callback => complete.push(callback))
+    tracker.track(callback => complete.push(callback))
+    tracker.waitForIdle(error => errors.push(error))
+
+    complete[1](error)
+    assert.deepStrictEqual(errors, [])
+    complete[0](new Error('later failure'))
+
+    assert.deepStrictEqual(errors, [error])
+  })
+
+  it('passes delivery failures to both per-delivery and flush callbacks once', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    const errors = []
+    const error = new Error('delivery failed')
+    let complete
+    tracker.track(callback => { complete = callback }, error => errors.push(error))
+    tracker.waitForIdle(error => errors.push(error))
+
+    complete(error)
+    complete(new Error('duplicate completion'))
+
+    assert.deepStrictEqual(errors, [error, error])
+  })
+
+  it('releases synchronously failed deliveries before reporting their error', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    const errors = []
+    const error = new Error('synchronous failure')
+
+    assert.throws(() => tracker.track(() => { throw error }, error => {
+      errors.push(error)
+      tracker.waitForIdle(error => errors.push(error))
+    }), error)
+
+    assert.deepStrictEqual(errors, [error, undefined])
+  })
+
+  it('normalizes non-Error synchronous failures for delivery callbacks', () => {
+    const tracker = new TelemetryDeliveryTracker()
+    const errors = []
+
+    assert.throws(() => tracker.track(() => {
+      // eslint-disable-next-line no-throw-literal
+      throw 'delivery failed'
+    }, error => errors.push(error)), value => value === 'delivery failed')
+
+    assert.strictEqual(errors.length, 1)
+    assert.ok(errors[0] instanceof Error)
+    assert.strictEqual(errors[0].message, 'delivery failed')
+  })
 })
 
 describe('flushServerlessTelemetry', () => {
