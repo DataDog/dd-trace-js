@@ -1898,10 +1898,10 @@ describe('Safe payload capture', () => {
       const tags = computeTags(config, { Body: body }, requestOpts)
 
       assert.deepStrictEqual(Array.from(body), [104, 105])
-      // Per-index tag format is preserved and the redacted copy element no
-      // longer exposes the original value.
+      // Per-index tag format is preserved. Assigning 'redacted' to a typed
+      // array element stores 0, so the copy no longer exposes the original.
       assert.strictEqual(tags['aws.request.body.Body.0'], '104')
-      assert.notStrictEqual(tags['aws.request.body.Body.1'], '105')
+      assert.strictEqual(tags['aws.request.body.Body.1'], '0')
     })
 
     it('should copy aliased binary values independently per occurrence', () => {
@@ -2473,7 +2473,7 @@ describe('Safe payload capture', () => {
       assert.strictEqual(calls, 0)
       assert.deepStrictEqual(Array.from(body), [97, 98, 99])
       assert.strictEqual(tags['aws.request.body.Body.0'], '97')
-      assert.notStrictEqual(tags['aws.request.body.Body.1'], '98')
+      assert.strictEqual(tags['aws.request.body.Body.1'], '0')
     })
 
     it('should ignore a subclass slice override and preserve the native element type', () => {
@@ -2504,7 +2504,7 @@ describe('Safe payload capture', () => {
       assert.strictEqual(calls, 0)
       assert.deepStrictEqual(Array.from(body), [97, 98, 99])
       assert.strictEqual(tags['aws.request.body.Body.0'], '97')
-      assert.notStrictEqual(tags['aws.request.body.Body.1'], '98')
+      assert.strictEqual(tags['aws.request.body.Body.1'], '0')
     })
 
     it('should ignore custom species returning caller-owned storage', () => {
@@ -2525,7 +2525,7 @@ describe('Safe payload capture', () => {
       assert.strictEqual(speciesCalls, 0)
       assert.deepStrictEqual(Array.from(body), [97, 98, 99])
       assert.strictEqual(tags['aws.request.body.Body.0'], '97')
-      assert.notStrictEqual(tags['aws.request.body.Body.1'], '98')
+      assert.strictEqual(tags['aws.request.body.Body.1'], '0')
     })
 
     it('should copy without invoking payload-defined hooks whose getters throw', () => {
@@ -2544,7 +2544,7 @@ describe('Safe payload capture', () => {
 
       assert.deepStrictEqual(Array.from(body), [97, 98, 99])
       assert.strictEqual(tags['aws.request.body.Body.0'], '97')
-      assert.notStrictEqual(tags['aws.request.body.Body.1'], '98')
+      assert.strictEqual(tags['aws.request.body.Body.1'], '0')
     })
 
     it('should copy using intrinsic metadata when payload metadata getters throw', () => {

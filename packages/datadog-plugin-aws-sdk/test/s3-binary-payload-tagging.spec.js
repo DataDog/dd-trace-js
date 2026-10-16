@@ -183,10 +183,10 @@ describe('Plugin', () => {
                   // The operation itself must not be marked as failed.
                   assert.strictEqual(span.error, 0)
                   if (captureEnabled) {
-                    // The snapshot's indexed tag is redacted; the wire body is
-                    // unaffected either way.
+                    // The snapshot's indexed tag is redacted ('redacted' stores 0
+                    // in a typed array); the wire body is unaffected either way.
                     assert.strictEqual(span.meta['aws.request.body.Body.0'], '97')
-                    assert.notStrictEqual(span.meta['aws.request.body.Body.1'], '98')
+                    assert.strictEqual(span.meta['aws.request.body.Body.1'], '0')
                   } else {
                     assert.ok(!Object.keys(span.meta).some(key => key.startsWith('aws.request.body')))
                   }
