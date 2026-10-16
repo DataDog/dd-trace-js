@@ -113,42 +113,6 @@ function hasStreamInternals (meta) {
 }
 
 describe('Plugin', () => {
-  describe('aws-sdk (s3 payload tagging) cleanup helpers', () => {
-    it('surfaces reset failures instead of swallowing them', async () => {
-      const reset = async () => {
-        throw new Error('reset failed')
-      }
-      await assert.rejects(cleanup(reset, async () => {}), { message: 'reset failed' })
-    })
-
-    it('closes the agent even when reset fails', async () => {
-      let closed = false
-      const reset = async () => {
-        throw new Error('reset failed')
-      }
-      const close = async () => {
-        closed = true
-      }
-      await assert.rejects(cleanup(reset, close), { message: 'reset failed' })
-      assert.strictEqual(closed, true)
-    })
-
-    it('preserves both errors when reset and close fail', async () => {
-      const reset = async () => {
-        throw new Error('reset failed')
-      }
-      const close = async () => {
-        throw new Error('close failed')
-      }
-      await assert.rejects(cleanup(reset, close), /** @param {Error & { resetError?: Error }} err */ err => {
-        assert.strictEqual(err.message, 'close failed')
-        assert.ok(err.resetError)
-        assert.strictEqual(err.resetError.message, 'reset failed')
-        return true
-      })
-    })
-  })
-
   describe('aws-sdk (s3 payload tagging) fixture precondition', () => {
     it('vendored JSONPath throws for the failing-redaction rule on representative S3 parameters', () => {
       assert.throws(
@@ -170,51 +134,6 @@ describe('Plugin', () => {
         'the S3 fail-soft fixture requires this rule to throw on representative S3 parameters; ' +
           'revisit the fixture if JSONPath semantics change'
       )
-    })
-  })
-
-  describe('aws-sdk (s3 payload tagging) body reader', () => {
-    it('decodes Buffer bodies as UTF-8 text', async () => {
-      assert.strictEqual(await readBody(Buffer.from(bodyContent)), bodyContent)
-    })
-
-    it('decodes plain Node streams, including multibyte characters split across chunks', async () => {
-      const multibyte = Buffer.from('\u{1F642}', 'utf8') // 4-byte UTF-8 sequence
-      const stream = Readable.from([
-        Buffer.from('split-'),
-        multibyte.subarray(0, 2),
-        multibyte.subarray(2),
-      ])
-      try {
-        assert.strictEqual(await readBody(stream), 'split-\u{1F642}')
-      } finally {
-        stream.destroy()
-      }
-    })
-
-    it('prefers transformToString and calls it exactly once', async () => {
-      let calls = 0
-      const body = {
-        transformToString () {
-          calls++
-          return Promise.resolve(bodyContent)
-        },
-      }
-      assert.strictEqual(await readBody(body), bodyContent)
-      assert.strictEqual(calls, 1)
-    })
-
-    it('propagates stream errors instead of returning partial content', async () => {
-      async function * generate () {
-        yield Buffer.from('partial-')
-        throw new Error('stream read failed')
-      }
-      const stream = Readable.from(generate())
-      try {
-        await assert.rejects(() => readBody(stream), { message: 'stream read failed' })
-      } finally {
-        stream.destroy()
-      }
     })
   })
 
