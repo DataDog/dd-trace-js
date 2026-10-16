@@ -43,6 +43,23 @@ function buildResourceID (subscriptionID, siteName, resourceGroup) {
 }
 
 /**
+ * Azure Container Apps resources live under `microsoft.app/containerapps`, not the
+ * `microsoft.web/sites` path `buildResourceID` builds for App Service. Only the app name is
+ * lowercased, matching `cmd/serverless-init/cloudservice/containerapp.go`.
+ *
+ * @param {string} [subscriptionID]
+ * @param {string} [appName]
+ * @param {string} [resourceGroup]
+ */
+function buildContainerAppResourceID (subscriptionID, appName, resourceGroup) {
+  if (subscriptionID === undefined || appName === undefined || resourceGroup === undefined) {
+    return
+  }
+  return `/subscriptions/${subscriptionID}/resourcegroups/${resourceGroup}` +
+    `/providers/microsoft.app/containerapps/${appName.toLowerCase()}`
+}
+
+/**
  * Extracts the Azure region from `CONTAINER_APP_ENV_DNS_SUFFIX`, whose format is
  * `<default-hostname>.<region>.azurecontainerapps.io`. Anchors from the right because
  * the default hostname is a variable number of labels.
@@ -90,7 +107,7 @@ function buildMetadata () {
   const APP_REVISION = getEnvironmentVariable('CONTAINER_APP_REVISION')
   const APP_DNS_SUFFIX = getEnvironmentVariable('CONTAINER_APP_ENV_DNS_SUFFIX')
 
-  const { DD_AZURE_RESOURCE_GROUP } = getConfig()
+  const { DD_AZURE_RESOURCE_GROUP, DD_AZURE_SUBSCRIPTION_ID } = getConfig()
   const isAzureFunction = FUNCTIONS_EXTENSION_VERSION !== undefined && FUNCTIONS_WORKER_RUNTIME !== undefined
   const isFlexConsumptionAzureFunction = isAzureFunction && WEBSITE_SKU === 'FlexConsumption'
 
@@ -102,9 +119,13 @@ function buildMetadata () {
     ? ['functionapp', 'function']
     : ['app', 'app']
 
-  const appRegion = getIsAzureContainerApp()
-    ? extractContainerAppRegion(APP_DNS_SUFFIX) ?? 'unknown'
-    : undefined
+  // Container Apps exposes no subscription or resource-group variable, so the ACA identity comes
+  // only from the `DD_AZURE_*` config, as it does in `serverless-init`. Deriving it from the
+  // `WEBSITE_*` vars would describe the App Service resource, not the container app.
+  const isContainerApp = getIsAzureContainerApp()
+  const appRegion = isContainerApp ? extractContainerAppRegion(APP_DNS_SUFFIX) ?? 'unknown' : undefined
+  const appSubscriptionID = isContainerApp ? DD_AZURE_SUBSCRIPTION_ID : undefined
+  const appResourceGroup = isContainerApp ? DD_AZURE_RESOURCE_GROUP : undefined
 
   // Azure Functions on Flex Consumption plans require the `DD_AZURE_RESOURCE_GROUP` env var.
   // If this logic ever changes, update the logic in `libdatadog`, `serverless-components/src/datadog-trace-agent`,
@@ -116,8 +137,11 @@ function buildMetadata () {
   return trimObject({
     appName: APP_NAME,
     appRegion,
-    appRevision: APP_REVISION,
     appReplicaName: REPLICA_NAME,
+    appResourceGroup,
+    appResourceID: buildContainerAppResourceID(appSubscriptionID, APP_NAME, appResourceGroup),
+    appRevision: APP_REVISION,
+    appSubscriptionID,
     functionRuntimeVersion: FUNCTIONS_EXTENSION_VERSION,
     instanceID: WEBSITE_INSTANCE_ID,
     instanceName: COMPUTERNAME,
@@ -199,9 +223,9 @@ function getACATagsFromMetadata (metadata) {
     'aca.app.region': metadata.appRegion,
     'aca.app.revision': metadata.appRevision,
     'aca.replica.name': metadata.appReplicaName,
-    'aca.subscription.id': metadata.subscriptionID,
-    'aca.resource.group': metadata.resourceGroup,
-    'aca.resource.id': metadata.resourceID,
+    'aca.subscription.id': metadata.appSubscriptionID,
+    'aca.resource.group': metadata.appResourceGroup,
+    'aca.resource.id': metadata.appResourceID,
     ...functionsContainerTags,
   })
 }

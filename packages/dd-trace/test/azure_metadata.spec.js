@@ -29,6 +29,7 @@ describe('Azure metadata', () => {
     'CONTAINER_APP_REPLICA_NAME',
     'CONTAINER_APP_REVISION',
     'DD_AZURE_RESOURCE_GROUP',
+    'DD_AZURE_SUBSCRIPTION_ID',
     'FUNCTIONS_EXTENSION_VERSION',
     'FUNCTIONS_WORKER_RUNTIME',
     'FUNCTIONS_WORKER_RUNTIME_VERSION',
@@ -216,6 +217,41 @@ describe('Azure metadata', () => {
         'aca.app.revision': 'my-containerapp--20mh1s9',
         'aca.replica.name': 'my-containerapp--20mh1s9-86c8c4b497-zx9bq',
       })
+    })
+
+    it('never derive the ACA identity from the App Service vars', () => {
+      // A function hosted on container apps can carry the WEBSITE_* vars too, which would otherwise
+      // build a `microsoft.web/sites` ID and publish it under the ACA key.
+      process.env.CONTAINER_APP_NAME = 'my-containerapp'
+      process.env.WEBSITE_SITE_NAME = 'my-func'
+      process.env.WEBSITE_RESOURCE_GROUP = 'website_resource_group'
+      process.env.WEBSITE_OWNER_NAME = 'subscription_id+resource_group-regionwebspace'
+      const tags = getACATagsFromMetadata(getAzureContainerAppMetadata())
+      assert.strictEqual(tags['aca.resource.id'], undefined)
+      assert.strictEqual(tags['aca.subscription.id'], undefined)
+      assert.strictEqual(tags['aca.resource.group'], undefined)
+    })
+
+    it('build the ACA resource ID from the DD_AZURE_* config', () => {
+      process.env.CONTAINER_APP_NAME = 'My-ContainerApp'
+      process.env.DD_AZURE_SUBSCRIPTION_ID = 'subscription_id'
+      process.env.DD_AZURE_RESOURCE_GROUP = 'resource_group'
+      const tags = getACATagsFromMetadata(getAzureContainerAppMetadata())
+      assert.strictEqual(tags['aca.subscription.id'], 'subscription_id')
+      assert.strictEqual(tags['aca.resource.group'], 'resource_group')
+      assert.strictEqual(
+        tags['aca.resource.id'],
+        '/subscriptions/subscription_id/resourcegroups/resource_group' +
+        '/providers/microsoft.app/containerapps/my-containerapp'
+      )
+    })
+
+    it('omit the ACA resource ID when only one of the DD_AZURE_* values is set', () => {
+      process.env.CONTAINER_APP_NAME = 'my-containerapp'
+      process.env.DD_AZURE_SUBSCRIPTION_ID = 'subscription_id'
+      const tags = getACATagsFromMetadata(getAzureContainerAppMetadata())
+      assert.strictEqual(tags['aca.subscription.id'], 'subscription_id')
+      assert.strictEqual(tags['aca.resource.id'], undefined)
     })
 
     it('omit the aas.environment.* tags outside Azure Functions', () => {
