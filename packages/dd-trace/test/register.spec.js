@@ -154,10 +154,14 @@ function createThrowingLoaderHook (error) {
 }
 
 function loadRegister ({ register, registerSyncLoaderHooks, loaderHook, supportsSyncHooks, version }) {
+  const loaderHooks = proxyquire('../src/loader-hooks', {
+    'import-in-the-middle/create-hook.mjs': { supportsSyncHooks },
+    '../../../loader-hook.mjs': loaderHook || { registerSyncLoaderHooks },
+    '../../../version': version || SUPPORTED_SYNC_HOOKS_NODE_VERSION,
+  })
+
   proxyquire('../../../register.js', {
     'node:module': { register },
-    'import-in-the-middle/create-hook.mjs': { supportsSyncHooks },
-    './loader-hook.mjs': loaderHook || { registerSyncLoaderHooks },
-    './version': version || SUPPORTED_SYNC_HOOKS_NODE_VERSION,
+    './packages/dd-trace/src/loader-hooks': loaderHooks,
   })
 }

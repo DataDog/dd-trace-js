@@ -98,9 +98,11 @@ export const resolve = useDefaultLoader ? undefined : loaderHook.resolve
 if (isMainThread) {
   const require = Module.createRequire(import.meta.url)
   const initialized = require('./init.js')
+  const { registerSyncHooks } = require('./packages/dd-trace/src/loader-hooks.js')
   // Only register the loader hook when instrumentation initialized. On a bailout the
   // loader has nothing to instrument and can keep a short-lived process from exiting.
-  if (Module.register && initialized) {
+  // Prefer the synchronous hooks and fall back to the asynchronous loader without them.
+  if (initialized && !registerSyncHooks() && Module.register) {
     // The loader builds its own include/exclude matcher in `initialize`, so no
     // options need to cross the registration boundary.
     Module.register('./loader-hook.mjs', import.meta.url)
