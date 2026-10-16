@@ -146,7 +146,7 @@ function wrapCompletion (target, name, clear, completionMethods) {
     const original = target[name]
     if (typeof original !== 'function') return true
     const wrapped = onCompletion(original, clear)
-    if (!Reflect.set(target, name, wrapped)) return false
+    if (!Reflect.set(target, name, wrapped) || target[name] !== wrapped) return false
     completionMethods.push([target, name, original, wrapped])
     return true
   } catch (error) {

@@ -181,6 +181,33 @@ describe('Lambda timeout monitor', () => {
     assert.strictEqual(clock.countTimers(), 0)
   })
 
+  for (const behavior of ['ignore', 'throw on readback']) {
+    it(`falls back when the runtime completion setter will ${behavior}`, () => {
+      const descriptor = Object.getOwnPropertyDescriptor(globalThis, BEFORE_EXIT)
+      let assigned = false
+      const original = sinon.spy()
+      Object.defineProperty(globalThis, BEFORE_EXIT, {
+        configurable: true,
+        get () {
+          if (assigned && behavior === 'throw on readback') throw new Error('cannot verify wrapper')
+          return original
+        },
+        set () { assigned = true },
+      })
+      try {
+        const handler = datadog(() => undefined)
+        handler({}, context)
+        clock.tick(100)
+        assert.strictEqual(clock.countTimers(), 0)
+        assert.strictEqual(killAll.callCount, 0)
+        assert.strictEqual(original.callCount, 0)
+      } finally {
+        if (descriptor) Object.defineProperty(globalThis, BEFORE_EXIT, descriptor)
+        else delete globalThis[BEFORE_EXIT]
+      }
+    })
+  }
+
   for (const protect of [Object.freeze, Object.seal, Object.preventExtensions]) {
     it(`monitors a ${protect.name} handler without modifying it`, () => {
       const original = protect((_event, _context, callback) => undefined)
@@ -228,6 +255,47 @@ describe('Lambda timeout monitor', () => {
   })
 
   for (const name of ['done', 'succeed', 'fail']) {
+    for (const behavior of ['ignoring setter', 'lying Proxy', 'throwing readback']) {
+      for (const withCallback of [false, true]) {
+        it(`verifies context.${name} installation: ${behavior} (callback=${withCallback})`, () => {
+          const original = sinon.stub().returns('completion result')
+          let assigned = false
+          if (behavior === 'lying Proxy') {
+            context[name] = original
+            context = new Proxy(context, {
+              set: (target, key, value) => key === name || Reflect.set(target, key, value),
+            })
+          } else {
+            Object.defineProperty(context, name, {
+              get () {
+                if (assigned && behavior === 'throwing readback') throw new Error('cannot verify wrapper')
+                return original
+              },
+              set () { assigned = true },
+            })
+          }
+          /** @type {Function} */
+          let complete = notCaptured
+          const handler = datadog((...args) => {
+            complete = args[2]
+            if (!withCallback && behavior !== 'throwing readback') {
+              assert.strictEqual(context[name]('done'), 'completion result')
+            }
+          })
+          handler({}, context, withCallback ? () => {} : undefined)
+          assert.strictEqual(clock.countTimers(), withCallback ? 1 : 0)
+          if (withCallback) complete()
+          clock.tick(100)
+          assert.strictEqual(clock.countTimers(), 0)
+          assert.strictEqual(killAll.callCount, 0)
+          if (!withCallback && behavior !== 'throwing readback') {
+            assert.strictEqual(original.firstCall.thisValue, context)
+            assert.deepStrictEqual(original.firstCall.args, ['done'])
+          }
+        })
+      }
+    }
+
     for (const outcome of ['timeout', 'success', 'error']) {
       it(`keeps callback completion observable with read-only context.${name} (${outcome})`, () => {
         Object.defineProperty(context, name, { value: () => {}, writable: false })
