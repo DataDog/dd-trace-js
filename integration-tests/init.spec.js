@@ -24,6 +24,8 @@ const {
 } = require('./helpers')
 const supportedRange = engines.node
 const currentVersionIsSupported = semver.satisfies(NODE_VERSION, supportedRange)
+// Mirrors `supportsSyncHooks` in import-in-the-middle: releases with nodejs/node#59929.
+const SYNC_HOOKS_SUPPORTED = semver.satisfies(NODE_VERSION, '^22.22.3 || ^24.11.1 || ^25.1.0 || >=26')
 // These are on by default in release tests, so we'll turn them off for
 // more fine-grained control of these variables in these tests.
 delete process.env.DD_INJECTION_ENABLED
@@ -252,6 +254,45 @@ true
   })
 }
 
+function testLoaderHookRegistration () {
+  if (!currentVersionIsSupported) return
+
+  context('loader hook registration', () => {
+    const preload = '--import ./init/loader-hook-calls.mjs'
+
+    /**
+     * @param {{ instrumented: boolean, register: number, registerHooks: number }} expected
+     */
+    function checkLoaderHooks (expected) {
+      return testFile('init/loader-hooks.mjs', out => {
+        assert.deepStrictEqual(JSON.parse(out.trim()), expected)
+      }, [], '')
+    }
+
+    context('when instrumentation initializes', () => {
+      useEnv({ NODE_OPTIONS: `--no-warnings ${preload} --import dd-trace/initialize.mjs` })
+
+      if (SYNC_HOOKS_SUPPORTED) {
+        it('instruments ESM through sync hooks without the async loader', () =>
+          checkLoaderHooks({ instrumented: true, register: 0, registerHooks: 1 }))
+      } else {
+        it('instruments ESM through the async loader', () =>
+          checkLoaderHooks({ instrumented: true, register: 1, registerHooks: 0 }))
+      }
+    })
+
+    context('when instrumentation bails out', () => {
+      useEnv({
+        DD_INJECTION_ENABLED,
+        NODE_OPTIONS: `--no-warnings ${preload} --import ${path.join(__dirname, '..', 'initialize.mjs')}`,
+      })
+
+      it('registers no loader hooks', () =>
+        checkLoaderHooks({ instrumented: false, register: 0, registerHooks: 0 }))
+    })
+  })
+}
+
 function stubTracerIfNeeded () {
   if (!currentVersionIsSupported) {
     before(() => {
@@ -409,6 +450,7 @@ describe('init.js', () => {
         setShouldKill(false)
         testInjectionScenarios('import', 'initialize.mjs', true)
         testRuntimeVersionChecks('import', 'initialize.mjs')
+        testLoaderHookRegistration()
       })
     }
   })

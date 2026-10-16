@@ -510,6 +510,7 @@
 /packages/dd-trace/src/id.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/src/iitm.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/src/index.js @DataDog/dd-trace-js @DataDog/lang-platform-js
+/packages/dd-trace/src/loader-hooks.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/src/pkg.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/src/proxy.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/src/rate_limiter.js @DataDog/dd-trace-js @DataDog/lang-platform-js
