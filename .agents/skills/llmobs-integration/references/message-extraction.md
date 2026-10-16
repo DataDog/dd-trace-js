@@ -52,3 +52,12 @@ The best examples of message extraction for the providers we support:
 - For streaming, accumulate delta content across chunks before tagging
 - Error output follows the integration contract: OpenAI and GenAI emit an empty message, while Anthropic omits
   output when there is no result
+
+### OpenAI Realtime token usage
+
+Realtime uses singular `input_token_details` and `output_token_details`, unlike
+Chat/Responses usage fields. Preserve audio counts as `input_audio_tokens` and
+`output_audio_tokens`, cached input as `cache_read_input_tokens`, and
+`input_token_details.cached_tokens_details.audio_tokens` as `cache_audio_read_tokens`.
+All are subsets of the inclusive totals. Keep explicit zero values; omit absent or
+invalid counts so the backend can distinguish unknown cache splits from zero audio.

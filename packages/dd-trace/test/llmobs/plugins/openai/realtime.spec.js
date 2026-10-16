@@ -198,6 +198,7 @@ describe('integrations', () => {
             transcript = 'Sure, here you go.',
             inputTranscript = 'What is the weather?',
             status = 'completed',
+            usage = { input_tokens: 11, output_tokens: 22 },
           } = {}) {
             mic.stream(leadInMs)
             mic.speechStarted()
@@ -222,13 +223,79 @@ describe('integrations', () => {
                 id,
                 status,
                 model: 'gpt-realtime-2025-08-28',
-                usage: { input_tokens: 11, output_tokens: 22 },
+                usage,
               },
             })
             socket.deliver({
               type: 'conversation.item.input_audio_transcription.completed',
               item_id: item,
               transcript: inputTranscript,
+            })
+          }
+
+          for (const { name, details, expected } of [
+            {
+              name: 'mixed audio and cached audio',
+              details: {
+                input_token_details: {
+                  text_tokens: 200,
+                  audio_tokens: 4800,
+                  cached_tokens: 4000,
+                  cached_tokens_details: { text_tokens: 100, audio_tokens: 3900 },
+                },
+                output_token_details: { text_tokens: 100, audio_tokens: 1200 },
+              },
+              expected: {
+                input_audio_tokens: 4800,
+                output_audio_tokens: 1200,
+                cache_read_input_tokens: 4000,
+                cache_audio_read_tokens: 3900,
+              },
+            },
+            { name: 'absent details', details: {}, expected: {} },
+            {
+              name: 'null details',
+              details: { input_token_details: null, output_token_details: null },
+              expected: {},
+            },
+            {
+              name: 'cached usage without an audio breakdown',
+              details: { input_token_details: { audio_tokens: 4800, cached_tokens: 4000 } },
+              expected: { input_audio_tokens: 4800, cache_read_input_tokens: 4000 },
+            },
+            {
+              name: 'explicit zero audio counts',
+              details: {
+                input_token_details: {
+                  audio_tokens: 0, cached_tokens: 0, cached_tokens_details: { audio_tokens: 0 },
+                },
+                output_token_details: { audio_tokens: 0 },
+              },
+              expected: {
+                input_audio_tokens: 0,
+                output_audio_tokens: 0,
+                cache_read_input_tokens: 0,
+                cache_audio_read_tokens: 0,
+              },
+            },
+            {
+              name: 'invalid optional counts',
+              details: {
+                input_token_details: {
+                  audio_tokens: -1, cached_tokens: true, cached_tokens_details: { audio_tokens: '3' },
+                },
+                output_token_details: { audio_tokens: 1.5 },
+              },
+              expected: {},
+            },
+          ]) {
+            it(`preserves token totals with ${name}`, async () => {
+              sessionCreated()
+              spokenTurn({ usage: { input_tokens: 5000, output_tokens: 1300, ...details } })
+              const { llmobsSpans } = await getEvents(4)
+              assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, {
+                input_tokens: 5000, output_tokens: 1300, total_tokens: 6300, ...expected,
+              })
             })
           }
 
