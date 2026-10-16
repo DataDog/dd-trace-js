@@ -199,7 +199,7 @@ function computeBoundedTags (config, object, opts) {
  * Compute request tags with the request prefix.
  *
  * @param {{ expand: string[], request: string[], response: string[] }} config
- * @param {Record<string, unknown>} object
+ * @param {unknown} object
  * @param {{ maxDepth: number }} opts
  * @returns {Record<string, string|boolean>}
  */
@@ -211,7 +211,7 @@ function tagsFromRequest (config, object, opts) {
  * Compute response tags with the response prefix.
  *
  * @param {{ expand: string[], request: string[], response: string[] }} config
- * @param {Record<string, unknown>} object
+ * @param {unknown} object
  * @param {{ maxDepth: number }} opts
  * @returns {Record<string, string|boolean>}
  */
