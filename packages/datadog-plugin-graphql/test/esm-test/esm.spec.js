@@ -210,6 +210,35 @@ describe('Plugin (ESM)', () => {
           })
         })()])
       }).timeout(50000)
+
+      it('does not trace GraphQL JIT execution when graphql instrumentation is disabled', async () => {
+        const res = agent.assertMessageReceived(({ payload }) => {
+          const spans = payload.flat()
+          assert.ok(spans.some(span => span.name === 'web.request'), 'expected the HTTP request trace')
+          assert.deepStrictEqual(spans.filter(span => span.name.startsWith('graphql.')), [])
+        })
+
+        proc = await spawnPluginIntegrationTestProc(
+          sandboxCwd(),
+          'esm-graphql-jit-server.mjs',
+          agent.port,
+          {
+            NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs',
+            DD_TRACE_DISABLED_INSTRUMENTATIONS: 'graphql',
+          }
+        )
+
+        await Promise.all([res, (async () => {
+          const response = await axios.get(`${proc.url}/graphql`)
+          assert.deepStrictEqual(response.data, {
+            data: {
+              hello: 'world',
+              user: { name: 'Ada' },
+            },
+          })
+          assert.deepStrictEqual(JSON.parse(response.headers['x-resolver-calls']), {})
+        })()])
+      }).timeout(50000)
     })
   })
 })

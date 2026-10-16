@@ -200,6 +200,7 @@ describe('Plugin Structure Validation', () => {
       '@supabase/realtime-js',
       '@supabase/storage-js',
       'bullmq',
+      'graphql-jit',
       'mercurius',
       'postgres',
     ]

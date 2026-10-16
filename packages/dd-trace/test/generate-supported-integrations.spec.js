@@ -52,13 +52,27 @@ describe('generate supported integrations', () => {
     ])
   })
 
-  it('keeps umbrella package aliases out of the runtime hooks and plugin registry', () => {
+  it('lists graphql-jit under graphql without a plugin getter', () => {
+    const stdout = execFileSync(process.execPath, ['--eval', `
+      global.fetch = async () => ({ ok: false })
+      const { generateSupportedIntegrations } = require(${JSON.stringify(scriptPath)})
+      generateSupportedIntegrations().then(({ rows }) => {
+        console.log(JSON.stringify(rows.filter(row => row.dependency === 'graphql-jit')))
+      })
+    `], { encoding: 'utf8' })
+
+    assert.deepStrictEqual(JSON.parse(stdout), [integration('graphql-jit', 'graphql', '0.7.0')])
+  })
+
+  it('keeps package aliases out of the runtime hooks and plugin registry', () => {
     const hooks = require('../../datadog-instrumentations/src/helpers/hooks')
     const plugins = require('../src/plugins')
 
     assert.equal(Object.hasOwn(hooks, '@supabase/supabase-js'), false)
     assert.equal(Object.hasOwn(plugins, '@supabase/supabase-js'), false)
     assert.equal(Object.hasOwn(plugins, '@supabase/auth-js'), true)
+    assert.equal(Object.hasOwn(hooks, 'graphql-jit'), false)
+    assert.equal(Object.hasOwn(plugins, 'graphql-jit'), false)
   })
 })
 

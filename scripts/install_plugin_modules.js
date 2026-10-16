@@ -64,8 +64,8 @@ async function assertPrerequisites () {
 
   const packages = collectPackages(moduleNames)
 
-  await mapWithConcurrency(packages, FS_CONCURRENCY, ({ name, version, range, external }) =>
-    assertPackage(name, version, range, external))
+  await mapWithConcurrency(packages, FS_CONCURRENCY, ({ name, version, range, isolated }) =>
+    assertPackage(name, version, range, isolated))
 
   await assertWorkspaces()
 }
@@ -76,24 +76,26 @@ async function assertPrerequisites () {
  * the nohoisted (isolated) variant wins for any shared folder.
  *
  * @param {string[]} moduleNames
- * @returns {Array<{ name: string, version: string|null, range: string, external: boolean }>}
+ * @returns {Array<{ name: string, version: string|null, range: string, isolated: boolean }>}
  */
 function collectPackages (moduleNames) {
   const seen = new Set()
-  /** @type {Array<{ name: string, version: string|null, range: string, external: boolean }>} */
+  /** @type {Array<{ name: string, version: string|null, range: string, isolated: boolean }>} */
   const packages = []
 
-  const addFolder = (name, version, range, external) => {
+  const addFolder = (name, version, range, isolated) => {
     // File-path requires are resolved from disk; their non-path counterparts already cover them.
     if (isRelativeRequire(name)) return
     const key = basename(name, version)
     if (seen.has(key)) return
     seen.add(key)
-    packages.push({ name, version, range, external })
+    packages.push({ name, version, range, isolated })
   }
 
   /**
-   * @param {Array<{ name: string, versions?: string[], node?: string, honourEnvRange?: boolean }>} instrumentations
+   * @param {Array<{
+   *   name: string, versions?: string[], node?: string, honourEnvRange?: boolean, isolated?: boolean
+   * }>} instrumentations
    * @param {boolean} external
    * @param {string} [pluginName] The plugin key an external entry belongs to. Same-name externals (e.g. the aerospike
    *   entry mirroring the addHook versions) honour `PACKAGE_VERSION_RANGE` so per-major CI matrices do not force every
@@ -112,6 +114,7 @@ function collectPackages (moduleNames) {
     }
 
     for (const [name, declarations] of declarationsByName) {
+      const isolated = !external || declarations.some(declaration => declaration.isolated)
       const { versionList, unversioned } = resolvePluginVersions({
         name,
         declarations,
@@ -120,10 +123,10 @@ function collectPackages (moduleNames) {
 
       // The unversioned `versions/<name>` folder is the default `require('versions/<name>')` target used by service
       // setup and several plugin specs.
-      if (unversioned) addFolder(name, null, unversioned, external)
+      if (unversioned) addFolder(name, null, unversioned, isolated)
 
       for (const { versionKey } of versionList) {
-        addFolder(name, versionKey, versionKey, external)
+        addFolder(name, versionKey, versionKey, isolated)
       }
     }
   }
@@ -152,9 +155,9 @@ async function assertFolder (name, version) {
  * @param {string} name
  * @param {string|null} version
  * @param {string} dependencyVersionRange
- * @param {boolean} external
+ * @param {boolean} isolated
  */
-async function assertPackage (name, version, dependencyVersionRange, external) {
+async function assertPackage (name, version, dependencyVersionRange, isolated) {
   const dependencies = {
     [name]: getCappedRange(name, dependencyVersionRange),
   }
@@ -170,7 +173,7 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     pkg.installConfig = {
       hoistingLimits: 'workspaces',
     }
-  } else if (!external) {
+  } else if (isolated) {
     pkg.workspaces = {
       nohoist: ['**/**'],
     }

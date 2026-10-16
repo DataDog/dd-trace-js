@@ -21,7 +21,6 @@ function addRewriterHooks (name) {
 
 addRewriterHooks('graphql')
 addRewriterHooks('@graphql-tools/executor')
-addRewriterHooks('graphql-jit')
 
 // Module-load hooks: capture references on ddGlobal for cross-plugin access
 // (read lazily inside each callback so agent.load() between mocha suites can
