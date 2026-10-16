@@ -198,6 +198,37 @@ function getModelProviderAndClient (baseUrl = '') {
   return { modelProvider, client: 'OpenAI' }
 }
 
+/**
+ * Count the billable server-side tool calls in an OpenAI Responses `output` array.
+ *
+ * OpenAI bills per tool call and `usage` doesn't report it, so each completed `web_search_call` /
+ * `file_search_call` item counts once. For web search only `search` actions are billed.
+ * Zero counts are omitted.
+ *
+ * @param {Record<string, unknown>} [response] - Any OpenAI response; only a Responses API `output` array is read
+ * @returns {{ webSearchCount?: number, storageSearchCount?: number }}
+ */
+function getServerToolUsageMetrics (response) {
+  const metrics = {}
+  const output = response?.output
+  if (!Array.isArray(output)) return metrics
+
+  for (const item of output) {
+    if (item?.status !== 'completed') continue
+
+    if (item.type === 'web_search_call') {
+      // Items without an action (older payloads) are assumed to be searches.
+      const actionType = item.action?.type
+      if (actionType !== undefined && actionType !== 'search') continue
+      metrics.webSearchCount = (metrics.webSearchCount ?? 0) + 1
+    } else if (item.type === 'file_search_call') {
+      metrics.storageSearchCount = (metrics.storageSearchCount ?? 0) + 1
+    }
+  }
+
+  return metrics
+}
+
 module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
@@ -206,4 +237,5 @@ module.exports = {
   hasMultimodalInputs,
   getModelProviderAndClient,
   getOpenAIModelProvider,
+  getServerToolUsageMetrics,
 }
