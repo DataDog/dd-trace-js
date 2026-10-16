@@ -33,7 +33,8 @@ class AzureFunctionsPlugin extends TracingPlugin {
 
     if (isHttpTrigger) {
       const { httpRequest } = ctx
-      const path = (new URL(httpRequest.url)).pathname
+      const url = new URL(httpRequest.url)
+      const path = url.pathname
       const req = {
         method: httpRequest.method,
         headers: Object.fromEntries(httpRequest.headers),
@@ -41,22 +42,38 @@ class AzureFunctionsPlugin extends TracingPlugin {
       }
       // Patch the request to create web context
       const webContext = web.patch(req)
-      webContext.config = this.config
-      webContext.tracer = this.tracer
-      webContext.paths = [path]
+      const operationName = this.operationName()
       // Creates a standard span and an inferred proxy span if headers are present
-      span = web.startServerlessSpanWithInferredProxy(
-        this.tracer,
-        this.config,
-        this.operationName(),
-        req,
-        ctx
-      )
+      if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        req.headers.host = url.host
+        req.url = `${path}${url.search}`
+        req.socket = { encrypted: url.protocol === 'https:' }
+        span = web.startSpan(
+          this.tracer,
+          this.config,
+          req,
+          undefined,
+          operationName,
+          ctx
+        )
+        web.setRoute(req, path)
+      } else {
+        webContext.config = this.config
+        webContext.tracer = this.tracer
+        webContext.paths = [path]
+        span = web.startServerlessSpanWithInferredProxy(
+          this.tracer,
+          this.config,
+          operationName,
+          req,
+          ctx
+        )
+        webContext.span = span
+      }
 
       span._integrationName = 'azure-functions'
       span.context().setTag('component', 'azure-functions')
       span.addTags(meta)
-      webContext.span = span
       webContext.azureFunctionCtx = ctx
       ctx.webContext = webContext
     } else {

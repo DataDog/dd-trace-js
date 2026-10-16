@@ -7,6 +7,10 @@ const { VERSION } = require('../../../../../version')
 const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
+const {
+  INT_VALUED_OTEL_ATTRIBUTES,
+  toSafeInteger,
+} = require('../../plugins/util/http-otel-semantics')
 
 const { protoSpanKind } = getProtobufTypes()
 const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
@@ -221,6 +225,12 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       for (const [key, value] of Object.entries(span.meta)) {
         if (EXCLUDED_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && DD_ERROR_META_KEYS.has(key)) continue
+        if (this.#otelTraceSemanticsEnabled && INT_VALUED_OTEL_ATTRIBUTES.has(key)) {
+          // Agent protocol stores these attributes as strings; OTLP requires integers.
+          const integer = toSafeInteger(value)
+          if (integer !== undefined) attributes.push({ key, value: { intValue: integer } })
+          continue
+        }
         attributes.push({ key, value: { stringValue: value } })
       }
     }
