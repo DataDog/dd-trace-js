@@ -5,17 +5,19 @@ const { execFile } = require('node:child_process')
 const { EventEmitter } = require('node:events')
 const { Readable } = require('node:stream')
 const nodeVm = require('node:vm')
+
 const sinon = require('sinon')
+
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const jsonpath = require('../../../../vendor/dist/jsonpath-plus').JSONPath
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
   PAYLOAD_TAG_RESPONSE_PREFIX,
 } = require('../../src/constants')
 const log = require('../../src/log')
-const { tagsFromObject } = require('../../src/payload-tagging/tagging')
 const { computeTags } = require('../../src/payload-tagging')
 const { createSafeSnapshot, createSnapshotBudget } = require('../../src/payload-tagging/snapshot')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { tagsFromObject } = require('../../src/payload-tagging/tagging')
 
 const defaultOpts = { maxDepth: 10, prefix: 'http.payload' }
 
