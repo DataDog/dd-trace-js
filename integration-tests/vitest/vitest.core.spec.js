@@ -153,6 +153,57 @@ versions.forEach((version) => {
 
     const poolConfig = ['forks', 'threads']
 
+    for (const pool of poolConfig) {
+      it(`reports tests when the global URL is mocked during a DogStatsD flush (${pool})`, async () => {
+        testOutput = ''
+        receiver.setSettings({ itr_enabled: false })
+        childProcess = exec('./node_modules/.bin/vitest run', {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_INJECT_FORCE: 'true',
+            DD_TRACE_AGENT_URL: `http://127.0.0.1:${receiver.port}`,
+            DD_RUNTIME_METRICS_ENABLED: 'false',
+            TEST_DIR: 'ci-visibility/vitest-tests/mocked-url.mjs',
+            POOL_CONFIG: pool,
+          },
+        })
+        childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle') || url === '/dogstatsd/v2/proxy',
+          payloads => {
+            const metrics = payloads.filter(({ url }) => url === '/dogstatsd/v2/proxy')
+            assert.ok(metrics.length, `expected DogStatsD telemetry: ${testOutput}`)
+            assert.match(metrics[0].payload, /datadog\.dogstatsd\.client\.metrics:0\|c/)
+
+            const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+            const { testSession, testModule, testSuite, tests } = assertCompleteTestSessionTrace(events, testOutput)
+            for (const event of [testSession, testModule, testSuite]) {
+              assert.strictEqual(event.meta[TEST_STATUS], 'fail', testOutput)
+            }
+            assert.strictEqual(tests.length, 2, testOutput)
+            const passedTest = tests.find(test => test.meta[TEST_NAME].endsWith('is flushed'))
+            const failedTest = tests.find(test => test.meta[TEST_NAME].endsWith('original test failure'))
+            assert.ok(passedTest, testOutput)
+            assert.ok(failedTest, testOutput)
+            assert.strictEqual(passedTest.meta[TEST_STATUS], 'pass', testOutput)
+            assert.strictEqual(passedTest.error, 0)
+            assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail', testOutput)
+            assert.strictEqual(failedTest.meta[ERROR_TYPE], 'Error')
+            assert.strictEqual(failedTest.meta[ERROR_MESSAGE], 'expected test failure')
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1, testOutput)
+        assert.doesNotMatch(testOutput, /URL is not a constructor/)
+      })
+    }
+
     if (version === 'latest') {
       for (const pool of poolConfig) {
         describeDynamicAtr({

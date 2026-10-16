@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { join } = require('node:path')
 const { inspect } = require('node:util')
 const { Worker: NativeWorker } = require('node:worker_threads')
 
@@ -25,6 +26,7 @@ describe('debugger/index', () => {
   let rc
   let fetchAgentInfo
   let readFileStub
+  let logGenericError
   let messageChannels
 
   beforeEach(() => {
@@ -36,6 +38,7 @@ describe('debugger/index', () => {
     Worker.prototype.removeAllListeners = sinon.stub()
 
     readFileStub = sinon.stub()
+    logGenericError = sinon.stub()
     fetchAgentInfo = sinon.stub().callsFake((url, callback) => {
       callback(null, { endpoints: ['/debugger/v2/input'] })
     })
@@ -47,6 +50,9 @@ describe('debugger/index', () => {
       },
       '../agent/info': {
         fetchAgentInfo,
+      },
+      '../startup-log': {
+        logGenericError,
       },
       './config': proxyquire('../../src/debugger/config', {
         '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
@@ -183,6 +189,46 @@ describe('debugger/index', () => {
         '[debugger] worker thread exited unexpectedly exit_code=1',
       ])
       assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+    })
+
+    it('should explain a worker that cannot load its entry point', async () => {
+      const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
+      const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
+      const [workerFilename, { execArgv, env }] = Worker.lastCall.args
+      const failingWorker = new NativeWorker(join(__dirname, 'missing-worker-entry-point.js'), { execArgv, env })
+      failingWorker.on('error', onError)
+      failingWorker.once('exit', onExit)
+      const exitCode = await new Promise(resolve => failingWorker.once('exit', resolve))
+
+      assert.strictEqual(exitCode, 1)
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.deepStrictEqual(entries.map(entry => entry.message), [
+        '[debugger] worker thread error name=Error code=MODULE_NOT_FOUND reason=worker_entry_point_not_found',
+        '[debugger] worker thread exited unexpectedly exit_code=1',
+      ])
+      sinon.assert.calledOnceWithExactly(logGenericError,
+        `Dynamic Instrumentation is disabled, because its worker thread could not load ${workerFilename}. ` +
+        'Make sure dd-trace is installed as regular files on disk and is not bundled into the application.')
+    })
+
+    it('should not explain a missing worker dependency as a missing entry point', async () => {
+      const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
+      const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
+      const { execArgv, env } = Worker.lastCall.args[1]
+      const failingWorker = new NativeWorker("require('./missing-worker-dependency')", { eval: true, execArgv, env })
+      failingWorker.on('error', onError)
+      failingWorker.once('exit', onExit)
+      const exitCode = await new Promise(resolve => failingWorker.once('exit', resolve))
+
+      assert.strictEqual(exitCode, 1)
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.deepStrictEqual(entries.map(entry => entry.message), [
+        '[debugger] worker thread error name=Error code=MODULE_NOT_FOUND reason=unknown',
+        '[debugger] worker thread exited unexpectedly exit_code=1',
+      ])
+      sinon.assert.notCalled(logGenericError)
     })
 
     it('should report a rejected probe without terminating the worker', () => {

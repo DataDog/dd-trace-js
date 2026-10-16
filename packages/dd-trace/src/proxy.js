@@ -6,6 +6,7 @@ const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
 const { getEnvironmentVariable } = require('./config/helper')
+const { reseed } = require('./id')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager, startupLog } = require('./startup-log')
@@ -353,6 +354,7 @@ class Tracer extends NoopProxy {
       if (request.method === 'POST' && request.url === '/aws/lambda-microvms/runtime/v1/run') {
         ch.unsubscribe(onHttpRequest)
         drainUuidPool()
+        reseed()
         channel('datadog:identity:update').publish(config)
         if (this._tracingInitialized) {
           const storeTracerMetadata = require('./tracer_metadata')

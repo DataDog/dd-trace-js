@@ -2,6 +2,7 @@
 
 const { types } = require('node:util')
 
+const { storage } = require('../../../datadog-core')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./devtools_client/defaults')
 const { MAX_MESSAGE_LENGTH } = require('./constants')
 const { EVENT_TYPE, SKIPPED_REASON } = require('./guardrail-metrics')
@@ -31,6 +32,20 @@ const ddTraceGlobal = /** @type {Record<symbol, SharedArrayBuffer | object | und
  * @typedef {object} ProbeSamplerConfig
  * @property {{ DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: number }} dynamicInstrumentation
  */
+
+/**
+ * The trace object shared by all spans of a trace in this process (`DatadogSpanContext#_trace`).
+ *
+ * @typedef {{ started: object[] }} LocalTrace
+ */
+
+/**
+ * The span active in the current async context, as stored in the legacy storage by the tracer.
+ *
+ * @typedef {{ context: () => { _trace: LocalTrace } }} ActiveSpan
+ */
+
+const legacyStorage = storage('legacy')
 
 let evaluationTimeoutNs = 0n
 
@@ -63,6 +78,14 @@ function installProbeSampler (guardrailMetrics, config) {
   const buffer = createProbeSamplerBuffer()
 
   const lastCaptureNsByProbeId = new Map()
+  /**
+   * The coordinated sampling decision of each trace in which a snapshot-producing probe was hit: `false` if the trace
+   * was dropped, otherwise the sampling indexes of the probes that already emitted a snapshot in it. Keyed weakly, so
+   * a decision is released together with its trace.
+   *
+   * @type {WeakMap<LocalTrace, Set<number> | false>}
+   */
+  const emittedProbesByTrace = new WeakMap()
   /**
    * Probes that are skipped at entry because a recent evaluation failed or exceeded its time budget. One error result
    * is reported per throttle window, so the probe stays visible without repeatedly paying for the evaluation.
@@ -219,7 +242,10 @@ function installProbeSampler (guardrailMetrics, config) {
   }
 
   /**
-   * Apply the per-probe and global rate limits and store the sampled probe index for the debugger worker.
+   * Decide if a probe hit should be sampled and store the sampled probe index for the debugger worker.
+   *
+   * Snapshot-producing probes hit within an active trace share one sampling decision per trace, so a trace emits the
+   * snapshots of all of its probes or none of them. Other hits are sampled independently.
    *
    * @param {number} probeIndex - The worker-side probe sampling index.
    * @param {string} probeId - The probe id.
@@ -228,29 +254,100 @@ function installProbeSampler (guardrailMetrics, config) {
    * @param {boolean} isSnapshotProducingProbe - Whether this probe counts toward the global snapshot sample limit.
    */
   function sample (probeIndex, probeId, now, nsBetweenSampling, isSnapshotProducingProbe) {
+    if (isSnapshotProducingProbe === true) {
+      const span = /** @type {ActiveSpan | null | undefined} */ (legacyStorage.getStore()?.span)
+      const trace = span?.context()._trace
+      // The span processor empties `started` once all spans of a trace have finished. A probe hit under such a trace
+      // runs in a context that outlived it, e.g. a connection pool or event emitter callback bound to a request that
+      // has since ended. Coordinating that hit would let a decision made for the old request silence the probe, or
+      // limit it to a single snapshot, for as long as the context lives, so it's sampled independently instead.
+      if (trace !== undefined && trace.started.length !== 0) {
+        return sampleInTrace(trace, probeIndex, probeId, now, nsBetweenSampling)
+      }
+    }
+
+    if (isRateLimited(probeId, now, nsBetweenSampling, isSnapshotProducingProbe)) return false
+    return commitSample(probeIndex, probeId, now, isSnapshotProducingProbe)
+  }
+
+  /**
+   * Sample a snapshot-producing probe hit using the sampling decision of its trace. The first such probe hit in the
+   * trace makes the decision for all of them, subject to its per-probe rate limit and the global snapshot rate limit.
+   * If the trace is sampled, each probe then emits once in it without being subject to the rate limits, so the trace
+   * emits a complete set of snapshots. Those snapshots still count toward the rate limits, which keeps the overall
+   * volume close to the limits by making later traces less likely to be sampled.
+   *
+   * @param {LocalTrace} trace - The trace the probe was hit in.
+   * @param {number} probeIndex - The worker-side probe sampling index.
+   * @param {string} probeId - The probe id.
+   * @param {bigint} now - The current time.
+   * @param {bigint} nsBetweenSampling - Minimum nanoseconds between samples for this probe.
+   */
+  function sampleInTrace (trace, probeIndex, probeId, now, nsBetweenSampling) {
+    const emittedProbes = emittedProbesByTrace.get(trace)
+
+    if (emittedProbes === undefined) {
+      if (isRateLimited(probeId, now, nsBetweenSampling, true)) {
+        emittedProbesByTrace.set(trace, false)
+        return false
+      }
+      // If the sampled probe can't be handed over, no decision is made, so the next probe hit in the trace makes it
+      if (!commitSample(probeIndex, probeId, now, true)) return false
+      emittedProbesByTrace.set(trace, new Set([probeIndex]))
+      return true
+    }
+
+    if (emittedProbes === false || emittedProbes.has(probeIndex)) {
+      guardrailMetrics.eventSkipped(SKIPPED_REASON.RATE_LIMIT_PROBE, EVENT_TYPE.SNAPSHOT)
+      return false
+    }
+
+    if (!commitSample(probeIndex, probeId, now, true)) return false
+    emittedProbes.add(probeIndex)
+    return true
+  }
+
+  /**
+   * Check the per-probe and global rate limits, recording the skip if a limit is reached.
+   *
+   * @param {string} probeId - The probe id.
+   * @param {bigint} now - The current time.
+   * @param {bigint} nsBetweenSampling - Minimum nanoseconds between samples for this probe.
+   * @param {boolean} isSnapshotProducingProbe - Whether this probe is subject to the global snapshot sample limit.
+   */
+  function isRateLimited (probeId, now, nsBetweenSampling, isSnapshotProducingProbe) {
     const lastCaptureNs = lastCaptureNsByProbeId.get(probeId)
     if (lastCaptureNs !== undefined && now - lastCaptureNs < nsBetweenSampling) {
       guardrailMetrics.eventSkipped(
         SKIPPED_REASON.RATE_LIMIT_PROBE,
         isSnapshotProducingProbe === true ? EVENT_TYPE.SNAPSHOT : EVENT_TYPE.LOG
       )
-      return false
+      return true
     }
 
-    let shouldResetGlobalSnapshotRateWindow = false
-    if (isSnapshotProducingProbe === true) {
-      if (now - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
-        shouldResetGlobalSnapshotRateWindow = true
-      } else if (snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
-        guardrailMetrics.eventSkipped(SKIPPED_REASON.RATE_LIMIT_GLOBAL, EVENT_TYPE.SNAPSHOT)
-        return false
-      }
+    if (isSnapshotProducingProbe === true &&
+        now - globalSnapshotSamplingRateWindowStart <= oneSecondNs &&
+        snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
+      guardrailMetrics.eventSkipped(SKIPPED_REASON.RATE_LIMIT_GLOBAL, EVENT_TYPE.SNAPSHOT)
+      return true
     }
 
+    return false
+  }
+
+  /**
+   * Store the sampled probe index for the debugger worker and count the sample toward the rate limits.
+   *
+   * @param {number} probeIndex - The worker-side probe sampling index.
+   * @param {string} probeId - The probe id.
+   * @param {bigint} now - The current time.
+   * @param {boolean} isSnapshotProducingProbe - Whether this probe counts toward the global snapshot sample limit.
+   */
+  function commitSample (probeIndex, probeId, now, isSnapshotProducingProbe) {
     if (!storeSampledProbeIndex(probeIndex)) return false
 
     if (isSnapshotProducingProbe === true) {
-      if (shouldResetGlobalSnapshotRateWindow === true) {
+      if (now - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
         snapshotsSampledWithinTheLastSecond = 1
         globalSnapshotSamplingRateWindowStart = now
       } else {
