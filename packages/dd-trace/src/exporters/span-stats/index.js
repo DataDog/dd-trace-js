@@ -31,6 +31,13 @@ class SpanStatsExporter {
     this._writer.flush(this.#serverlessDeliveryTracker ? undefined : done)
     this.#serverlessDeliveryTracker?.waitForIdle(done)
   }
+
+  /**
+   * Discards encoded payloads and cancels retries that were started before an identity refresh.
+   */
+  resetPendingState () {
+    this._writer.resetPendingBatch()
+  }
 }
 
 module.exports = {
