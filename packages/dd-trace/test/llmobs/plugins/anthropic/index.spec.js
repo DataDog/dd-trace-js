@@ -436,9 +436,9 @@ describe('Plugin', () => {
       /**
        * @param {object[]} apmSpans
        * @param {object[]} llmobsSpans
-       * @param {{ content: string, webSearchCount?: number }} options
+       * @param {{ content: string, webSearchCount?: number, tokens?: Record<string, number> }} options
        */
-      function assertWebSearchSpan (apmSpans, llmobsSpans, { content, webSearchCount }) {
+      function assertWebSearchSpan (apmSpans, llmobsSpans, { content, webSearchCount, tokens }) {
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
@@ -456,6 +456,7 @@ describe('Plugin', () => {
             cache_read_input_tokens: MOCK_NUMBER,
             ephemeral_5m_input_tokens: MOCK_NUMBER,
             ephemeral_1h_input_tokens: MOCK_NUMBER,
+            ...tokens,
             ...(webSearchCount === undefined ? {} : { web_search_count: webSearchCount }),
           },
           tags: { ml_app: 'test', integration: 'anthropic' },
@@ -490,7 +491,12 @@ describe('Plugin', () => {
         }
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        assertWebSearchSpan(apmSpans, llmobsSpans, { content, webSearchCount: 1 })
+        // input_tokens comes from the cumulative message_delta count (18882), not message_start (2234)
+        assertWebSearchSpan(apmSpans, llmobsSpans, {
+          content,
+          webSearchCount: 1,
+          tokens: { input_tokens: 18882, output_tokens: 120, total_tokens: 19002 },
+        })
       })
 
       it('omits web_search_count when no search runs', async () => {

@@ -239,6 +239,11 @@ function mergeChunkUsage (usage, chunk) {
   const mergedUsage = usage ?? { input_tokens: 0, output_tokens: 0 }
   mergedUsage.output_tokens = chunk.usage.output_tokens
 
+  // `message_delta` counts are cumulative; input grows past the `message_start` count when server
+  // tools (e.g. web search) feed results back into the model
+  const inputTokens = chunk.usage.input_tokens
+  if (inputTokens != null) mergedUsage.input_tokens = inputTokens
+
   const cacheCreationTokens = chunk.usage.cache_creation_input_tokens
   const cacheReadTokens = chunk.usage.cache_read_input_tokens
   if (cacheCreationTokens) mergedUsage.cache_creation_input_tokens = cacheCreationTokens
