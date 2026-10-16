@@ -159,15 +159,20 @@ async function mergeV8File (mergedScripts, inclusionCache, v8File) {
 }
 
 /**
- * Convert every raw V8 profile in `v8Dir` into a merged istanbul report (lcov + html + json) under
- * `outputDir`. Shared by the integration harness (this script's `main`) and the in-process
- * `scripts/c8-ci.js`, so both produce identical reports from the same patched converter.
+ * Convert every raw V8 profile in `v8Dir` into a merged Istanbul report under `outputDir`.
+ * CI can request only the LCOV artifact consumed by coverage uploaders, while local runs retain
+ * HTML, text-summary, and JSON reports for debugging.
  *
  * @param {string} v8Dir directory of raw `NODE_V8_COVERAGE` JSON files
  * @param {string} outputDir report destination (`coverage/node-<version>-<label>`)
+ * @param {{lcovOnly?: boolean}} [options]
  * @returns {Promise<{scripts: number, profiles: number, files: number}>}
  */
-async function convertV8DirToReport (v8Dir, outputDir) {
+async function convertV8DirToReport (
+  v8Dir,
+  outputDir,
+  { lcovOnly = process.env.DD_COVERAGE_REPORT_LCOV_ONLY === 'true' } = {}
+) {
   await fs.mkdir(outputDir, { recursive: true })
 
   let files
@@ -216,10 +221,11 @@ async function convertV8DirToReport (v8Dir, outputDir) {
 
   const context = libReport.createContext({ coverageMap, dir: outputDir, defaultSummarizer: 'nested' })
   reports.create('lcovonly', { file: 'lcov.info', projectRoot: REPO_ROOT }).execute(context)
-  reports.create('html', { subdir: 'html' }).execute(context)
-  reports.create('text-summary', { file: 'text-summary.txt' }).execute(context)
-
-  await fs.writeFile(path.join(outputDir, 'coverage-final.json'), JSON.stringify(coverageMap.toJSON()))
+  if (!lcovOnly) {
+    reports.create('html', { subdir: 'html' }).execute(context)
+    reports.create('text-summary', { file: 'text-summary.txt' }).execute(context)
+    await fs.writeFile(path.join(outputDir, 'coverage-final.json'), JSON.stringify(coverageMap.toJSON()))
+  }
 
   return { scripts, profiles: v8Files.length, files: coverageMap.files().length }
 }
@@ -231,9 +237,12 @@ async function main () {
     process.stdout.write('No V8 coverage data found to merge.\n')
     return
   }
+  const reportPath = process.env.DD_COVERAGE_REPORT_LCOV_ONLY === 'true'
+    ? path.join(outputDir, 'lcov.info')
+    : path.join(outputDir, 'html', 'index.html')
   process.stdout.write(
     `Converted ${scripts} V8 script entries across ${profiles} process profile(s) into ` +
-    `${files} file section(s). HTML report: ${path.join(outputDir, 'html', 'index.html')}\n`
+    `${files} file section(s). Report: ${reportPath}\n`
   )
 }
 

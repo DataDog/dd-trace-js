@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  DD_COVERAGE_REPORT_LCOV_ONLY: 'true'
   DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
   # TODO: remove this once we have stable tests
   MOCHA_OPTIONS: --retries 2
@@ -587,6 +588,8 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           SPEC: ${{ matrix.spec }}
+          TEST_OPTIMIZATION_PARALLEL_VITEST_VERSIONS: >-
+            ${{ matrix.spec == 'vitest.core' && matrix.vitest-version == 'all' && 'oldest,latest' || '' }}
           VITEST_VERSION: ${{ matrix.vitest-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
