@@ -125,7 +125,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
           // A capture failure must not disable the plugin or fail the
           // operation. Never inspect the caught value: payload getters can
           // throw while logging it.
-          log.error('Error attaching request payload tags; omitting payload tags for this operation')
+          log.debug('Error attaching request payload tags; omitting payload tags for this operation')
         }
       }
 
@@ -266,7 +266,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         // A capture failure must not skip remaining response tagging or span
         // completion. Never inspect the caught value: payload getters can
         // throw while logging it.
-        log.error('Error attaching response payload tags; omitting payload tags for this operation')
+        log.debug('Error attaching response payload tags; omitting payload tags for this operation')
       }
     }
   }
