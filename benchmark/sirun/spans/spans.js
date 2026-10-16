@@ -1,16 +1,23 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
 const guard = require('../startup-guard')
+const validateThreadContext = require('../validate-thread-context')
 
 const tracer = require('../../..').init()
 
 tracer._tracer._processor.process = function process (span) {
-  const trace = span.context()._trace
-  this._erase(trace)
+  this._erase(span.context()._trace, [])
 }
 
-const { FINISH, SHAPE = 'plain' } = process.env
+const {
+  ACTIVATE,
+  FINISH,
+  SHAPE = 'plain',
+} = process.env
+
+validateThreadContext(tracer)
 
 // Total spans created per process. The fixed tracer load (~75 ms) must be a small
 // fraction of the run so the bench measures span construction, not startup; at
@@ -79,6 +86,8 @@ assert.equal(sanitySpan.context().getTag('service'), 'svc')
 assert.equal(sanitySpan._links.length, 1)
 assert.equal(sanitySpan._events.length, 1)
 sanitySpan.finish()
+assert.deepEqual(sanitySpan.context()._trace.started, [])
+assert.deepEqual(sanitySpan.context()._trace.finished, [])
 
 // One span creation for the active shape. addEvent only applies to the otel shape.
 function startOne () {
@@ -96,10 +105,25 @@ function startOne () {
   return tracer.startSpan('some.span.name', {})
 }
 
+const scope = ACTIVATE === 'true' ? tracer.scope() : undefined
+/** @type {import('../../../index').Span} */
+let activeSpan
+
+function finishActiveSpan () {
+  activeSpan.finish()
+}
+
 guard.loopStart()
 if (FINISH === 'now') {
-  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
-    startOne().finish()
+  if (scope) {
+    for (let iteration = 0; iteration < OPERATIONS; iteration++) {
+      activeSpan = startOne()
+      scope.activate(activeSpan, finishActiveSpan)
+    }
+  } else {
+    for (let iteration = 0; iteration < OPERATIONS; iteration++) {
+      startOne().finish()
+    }
   }
 } else {
   // Deferred finish in batches: start BATCH spans, finish them after the batch is
