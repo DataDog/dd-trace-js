@@ -9,6 +9,8 @@ const { ImpendingTimeout } = require('./runtime/errors')
 const { extractContext } = require('./context')
 
 const HANDLER_STREAMING = Symbol.for('aws.lambda.runtime.handler.streaming')
+const HANDLER_HIGHWATERMARK = Symbol.for('aws.lambda.runtime.handler.streaming.highWaterMark')
+const BEFORE_EXIT = Symbol.for('aws.lambda.beforeExit')
 const timeoutChannel = channel('apm:aws:lambda:timeout')
 // Always crash the flushes when a message is received
 // from this channel.
@@ -27,9 +29,11 @@ function checkTimeout (context) {
   const apmFlushDeadline = global._ddtrace?._tracer?._config?.DD_APM_FLUSH_DEADLINE_MILLISECONDS
   if (!Number.isFinite(remainingTimeInMillis) || !Number.isFinite(apmFlushDeadline)) return
 
-  return setTimeout(() => {
+  const timeout = setTimeout(() => {
     timeoutChannel.publish()
   }, Math.max(0, remainingTimeInMillis - apmFlushDeadline))
+  timeout.unref?.()
+  return timeout
 }
 
 /**
@@ -73,13 +77,18 @@ exports.datadog = function datadog (lambdaHandler) {
     if (!timeout) return lambdaHandler.apply(this, args)
 
     let completed = false
-    const contextMethods = []
+    /** @type {Array<[object, string | symbol, Function, Function]>} */
+    const completionMethods = []
     const clear = () => {
       if (completed) return
       completed = true
       clearTimeout(timeout)
-      for (const [name, original, wrapped] of contextMethods) {
-        if (context[name] === wrapped) context[name] = original
+      for (const [target, name, original, wrapped] of completionMethods) {
+        try {
+          if (target[name] === wrapped) Reflect.set(target, name, original)
+        } catch (error) {
+          log.error('Error restoring Lambda completion %s: %s', name, error)
+        }
       }
     }
 
@@ -87,13 +96,12 @@ exports.datadog = function datadog (lambdaHandler) {
     if (contextIndex !== 2 && typeof args[2] === 'function') {
       args[2] = onCompletion(args[2], clear)
     }
+    let completionObservable = true
     for (const name of ['done', 'succeed', 'fail']) {
-      if (typeof context[name] !== 'function') continue
-      const original = context[name]
-      const wrapped = onCompletion(original, clear)
-      contextMethods.push([name, original, wrapped])
-      context[name] = wrapped
+      if (!wrapCompletion(context, name, clear, completionMethods)) completionObservable = false
     }
+    // Legacy Lambda runtimes complete idle invocations through this callback instead of the handler's callback.
+    if (!wrapCompletion(globalThis, BEFORE_EXIT, clear, completionMethods)) completionObservable = false
 
     try {
       const result = lambdaHandler.apply(this, args)
@@ -107,7 +115,8 @@ exports.datadog = function datadog (lambdaHandler) {
         })
       }
       // Match the shim's callback/context completion contract, including incidental server returns.
-      if (!isCallbackCompletion(lambdaHandler, result, contextIndex)) clear()
+      // Unpatchable completion APIs retain legacy return/promise cleanup instead of leaving a stale timer.
+      if (!completionObservable || !isCallbackCompletion(lambdaHandler, result, contextIndex)) clear()
       return result
     } catch (error) {
       clear()
@@ -115,12 +124,32 @@ exports.datadog = function datadog (lambdaHandler) {
     }
   }
 
-  // The shim uses arity and the runtime's streaming marker to choose how to invoke the handler.
+  // The shim uses arity and the runtime's streaming metadata to choose how to invoke the handler.
   Object.defineProperty(monitored, 'length', { value: lambdaHandler.length })
-  if (lambdaHandler[HANDLER_STREAMING] !== undefined) {
-    monitored[HANDLER_STREAMING] = lambdaHandler[HANDLER_STREAMING]
+  for (const symbol of [HANDLER_STREAMING, HANDLER_HIGHWATERMARK]) {
+    if (lambdaHandler[symbol] !== undefined) monitored[symbol] = lambdaHandler[symbol]
   }
   return monitored
+}
+
+/**
+ * @param {object} target
+ * @param {string | symbol} name
+ * @param {() => void} clear
+ * @param {Array<[object, string | symbol, Function, Function]>} completionMethods
+ */
+function wrapCompletion (target, name, clear, completionMethods) {
+  try {
+    const original = target[name]
+    if (typeof original !== 'function') return true
+    const wrapped = onCompletion(original, clear)
+    if (!Reflect.set(target, name, wrapped)) return false
+    completionMethods.push([target, name, original, wrapped])
+    return true
+  } catch (error) {
+    log.error('Error wrapping Lambda completion %s: %s', name, error)
+    return false
+  }
 }
 
 /**

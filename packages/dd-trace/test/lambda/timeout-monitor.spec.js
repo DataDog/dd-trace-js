@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
 const { EventEmitter } = require('node:events')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -9,6 +10,8 @@ const sinon = require('sinon')
 const { datadog } = require('../../src/lambda/handler')
 
 const HANDLER_STREAMING = Symbol.for('aws.lambda.runtime.handler.streaming')
+const HANDLER_HIGHWATERMARK = Symbol.for('aws.lambda.runtime.handler.streaming.highWaterMark')
+const BEFORE_EXIT = Symbol.for('aws.lambda.beforeExit')
 
 function notCaptured () {
   assert.fail('The handler did not capture its completion callback')
@@ -17,6 +20,7 @@ function notCaptured () {
 describe('Lambda timeout monitor', () => {
   let clock
   let originalTracer
+  let originalBeforeExit
   let killAll
   let span
   let context
@@ -24,6 +28,7 @@ describe('Lambda timeout monitor', () => {
   beforeEach(() => {
     clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     originalTracer = global._ddtrace
+    originalBeforeExit = globalThis[BEFORE_EXIT]
     killAll = sinon.spy()
     span = { addTags: sinon.spy(), finish: sinon.spy() }
     global._ddtrace = {
@@ -39,6 +44,110 @@ describe('Lambda timeout monitor', () => {
   afterEach(() => {
     clock.restore()
     global._ddtrace = originalTracer
+    if (originalBeforeExit === undefined) delete globalThis[BEFORE_EXIT]
+    else globalThis[BEFORE_EXIT] = originalBeforeExit
+  })
+
+  it('lets an idle void handler reach beforeExit without an impending timeout', () => {
+    const script = `
+      const { datadog } = require(${JSON.stringify(require.resolve('../../src/lambda/handler'))})
+      global._ddtrace = {
+        _tracer: {
+          _config: { DD_APM_FLUSH_DEADLINE_MILLISECONDS: 25 },
+          _processor: { killAll: () => console.log('timeout') },
+          scope: () => ({ active: () => null })
+        }
+      }
+      const beforeExit = Symbol.for('aws.lambda.beforeExit')
+      globalThis[beforeExit] = () => console.log('beforeExit')
+      process.once('beforeExit', () => globalThis[beforeExit]())
+      const handler = datadog(() => undefined)
+      handler({}, { getRemainingTimeInMillis: () => 1000 })
+    `
+    const result = spawnSync(process.execPath, ['--eval', script], { encoding: 'utf8', timeout: 5000 })
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout, 'beforeExit\n')
+  })
+
+  for (const unref of [undefined, () => null]) {
+    it(`keeps the timer handle when unref ${unref ? 'returns null' : 'is unavailable'}`, () => {
+      const setTimeout = global.setTimeout
+      const stub = sinon.stub(global, 'setTimeout').callsFake((...args) => {
+        const timer = setTimeout(...args)
+        Reflect.set(timer, 'unref', unref)
+        return timer
+      })
+      try {
+        /** @type {Function} */
+        let complete = notCaptured
+        const handler = datadog((_event, _context, cb) => { complete = cb })
+        handler({}, context, () => {})
+        assert.strictEqual(clock.countTimers(), 1)
+        complete(null, 'done')
+        clock.tick(100)
+        assert.strictEqual(clock.countTimers(), 0)
+        assert.strictEqual(killAll.callCount, 0)
+      } finally {
+        stub.restore()
+      }
+    })
+  }
+
+  it('cleans up at runtime beforeExit completion and preserves the runtime callback contract', () => {
+    const original = globalThis[BEFORE_EXIT] = sinon.stub().returns('runtime result')
+    const receiver = {}
+    const handler = datadog(() => undefined)
+    handler({}, context)
+    assert.strictEqual(clock.countTimers(), 1)
+    assert.strictEqual(globalThis[BEFORE_EXIT].call(receiver, 'runtime argument'), 'runtime result')
+    assert.strictEqual(globalThis[BEFORE_EXIT], original)
+    assert.strictEqual(original.firstCall.thisValue, receiver)
+    assert.deepStrictEqual(original.firstCall.args, ['runtime argument'])
+    clock.tick(100)
+    assert.strictEqual(clock.countTimers(), 0)
+    assert.strictEqual(killAll.callCount, 0)
+  })
+
+  it('does not leak an idle invocation timer into the next warm invocation', () => {
+    const handler = datadog(() => undefined)
+    for (let invocation = 0; invocation < 3; invocation++) {
+      globalThis[BEFORE_EXIT] = () => {}
+      handler({}, context)
+      assert.strictEqual(clock.countTimers(), 1)
+      globalThis[BEFORE_EXIT]()
+    }
+    globalThis[BEFORE_EXIT] = () => {}
+    handler({}, context)
+    clock.tick(75)
+    assert.strictEqual(killAll.callCount, 1, 'only the still-pending invocation can time out')
+    globalThis[BEFORE_EXIT]()
+  })
+
+  it('does not replace a newer runtime beforeExit callback when an earlier invocation completes', () => {
+    globalThis[BEFORE_EXIT] = () => {}
+    /** @type {Function} */
+    let complete = notCaptured
+    const handler = datadog((_event, _context, cb) => { complete = cb })
+    handler({}, context, () => {})
+    const replacement = globalThis[BEFORE_EXIT] = () => {}
+    complete(null, 'done')
+    assert.strictEqual(globalThis[BEFORE_EXIT], replacement)
+    assert.strictEqual(clock.countTimers(), 0)
+  })
+
+  it('falls back to return cleanup when the runtime beforeExit callback cannot be wrapped', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, BEFORE_EXIT)
+    Object.defineProperty(globalThis, BEFORE_EXIT, { value: () => {}, writable: false, configurable: true })
+    try {
+      const handler = datadog(() => undefined)
+      assert.strictEqual(handler({}, context), undefined)
+      clock.tick(100)
+      assert.strictEqual(clock.countTimers(), 0)
+      assert.strictEqual(killAll.callCount, 0)
+    } finally {
+      if (descriptor) Object.defineProperty(globalThis, BEFORE_EXIT, descriptor)
+      else delete globalThis[BEFORE_EXIT]
+    }
   })
 
   for (const protect of [Object.freeze, Object.seal, Object.preventExtensions]) {
@@ -88,6 +197,105 @@ describe('Lambda timeout monitor', () => {
   })
 
   for (const name of ['done', 'succeed', 'fail']) {
+    it(`does not leave a timer armed when an unpatchable context.${name} completes`, () => {
+      const original = context[name] = sinon.spy()
+      Object.freeze(context)
+      const handler = datadog((_event, ctx) => { ctx[name]('done') })
+      assert.strictEqual(handler({}, context), undefined)
+      assert.strictEqual(original.firstCall.thisValue, context)
+      assert.deepStrictEqual(original.firstCall.args, ['done'])
+      clock.tick(100)
+      assert.strictEqual(clock.countTimers(), 0)
+      assert.strictEqual(killAll.callCount, 0)
+    })
+
+    for (const protection of ['frozen', 'read-only', 'getter-only', 'throwing getter', 'throwing setter']) {
+      it(`preserves handler execution with a ${protection} context.${name}`, async () => {
+        const original = sinon.stub().returns('completion result')
+        if (protection === 'frozen') {
+          context[name] = original
+          Object.freeze(context)
+        } else if (protection === 'read-only') {
+          Object.defineProperty(context, name, { value: original, writable: false })
+        } else {
+          Object.defineProperty(context, name, {
+            get () {
+              if (protection === 'throwing getter') throw new Error('cannot read completion method')
+              return original
+            },
+            set: protection === 'throwing setter'
+              ? () => { throw new Error('cannot set completion method') }
+              : undefined,
+          })
+        }
+        const handler = datadog((_event, ctx) => {
+          assert.strictEqual(ctx, context)
+          return Promise.resolve('done')
+        })
+        const result = handler({}, context)
+        assert.strictEqual(clock.countTimers(), 1, 'promise completion must remain monitored')
+        assert.strictEqual(await result, 'done')
+        clock.tick(100)
+        assert.strictEqual(killAll.callCount, 0)
+        assert.strictEqual(clock.countTimers(), 0)
+        assert.strictEqual(original.callCount, 0)
+      })
+    }
+
+    for (const completion of ['return', 'throw', 'fulfill', 'reject', 'callback', 'context']) {
+      it(`preserves ${completion} completion when the handler freezes context.${name}`, async () => {
+        const original = context[name] = sinon.stub().returns('context result')
+        const error = new Error('handler failure')
+        const callback = sinon.stub().returns('callback result')
+        const handlers = {
+          return: () => 'done',
+          throw: () => { throw error },
+          fulfill: () => Promise.resolve('done'),
+          reject: () => Promise.reject(error),
+          callback: cb => cb(null, 'done'),
+          context: () => context[name]('done'),
+        }
+        const handler = datadog(function (_event, ctx) {
+          Object.freeze(ctx)
+          return handlers[completion](arguments[2])
+        })
+        if (completion === 'throw') assert.throws(() => handler({}, context, callback), e => e === error)
+        else if (completion === 'reject') await assert.rejects(handler({}, context, callback), e => e === error)
+        else {
+          const expected = { callback: 'callback result', context: 'context result' }[completion] ?? 'done'
+          assert.strictEqual(await handler({}, context, callback), expected)
+        }
+        clock.tick(100)
+        assert.strictEqual(killAll.callCount, 0)
+        assert.strictEqual(clock.countTimers(), 0)
+        if (completion === 'callback') assert.deepStrictEqual(callback.firstCall.args, [null, 'done'])
+        if (completion === 'context') {
+          assert.strictEqual(original.firstCall.thisValue, context)
+          assert.deepStrictEqual(original.firstCall.args, ['done'])
+        }
+      })
+    }
+
+    it(`preserves completion if restoring context.${name} throws`, () => {
+      let method = sinon.spy()
+      let writable = true
+      Object.defineProperty(context, name, {
+        get: () => method,
+        set (value) {
+          if (!writable) throw new Error('cannot restore completion method')
+          method = value
+        },
+      })
+      const handler = datadog(() => {
+        writable = false
+        return 'done'
+      })
+      assert.strictEqual(handler({}, context), 'done')
+      clock.tick(100)
+      assert.strictEqual(killAll.callCount, 0)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
     for (const result of [undefined, new EventEmitter()]) {
       it(`keeps ${name} completion monitored after returning ${result ? 'an artifact' : 'undefined'}`, () => {
         const original = context[name] = sinon.stub().returns('completion result')
@@ -260,6 +468,19 @@ describe('Lambda timeout monitor', () => {
     clock.tick(100)
     assert.strictEqual(killAll.callCount, 0)
   })
+
+  for (const highWaterMark of [undefined, 0, 16384]) {
+    it(`preserves streaming highWaterMark=${highWaterMark} on a frozen handler`, () => {
+      const original = () => undefined
+      original[HANDLER_STREAMING] = 'response'
+      if (highWaterMark !== undefined) original[HANDLER_HIGHWATERMARK] = highWaterMark
+      Object.freeze(original)
+      const handler = datadog(original)
+      assert.strictEqual(handler[HANDLER_STREAMING], 'response')
+      assert.strictEqual(handler[HANDLER_HIGHWATERMARK], highWaterMark)
+      assert.strictEqual(Object.hasOwn(handler, HANDLER_HIGHWATERMARK), highWaterMark !== undefined)
+    })
+  }
 
   it('does not require a context or an initialized tracer', () => {
     const receiver = {}
