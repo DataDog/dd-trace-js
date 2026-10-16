@@ -376,30 +376,129 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
       })
     }
 
-    it('keeps consecutive text-only exchanges separate after terminal text', async () => {
-      const records = []
-      for (let index = 0; index < 2; index++) {
-        for (const role of ['USER', 'ASSISTANT']) {
-          const contentId = `${role}${index}`
-          const at = index * 200 + (role === 'USER' ? 0 : 100)
-          records.push(
-            record('contentStart', { contentId, role, type: 'TEXT' }, at),
-            record('textOutput', { contentId, content: `${role}${index}` }, at + 10),
-            record('contentEnd', { contentId, stopReason: 'END_TURN' }, at + 20))
-        }
+    for (const stage of ['SPECULATIVE', 'FINAL']) {
+      for (const openUser of [false, true]) {
+        it(`keeps consecutive ${stage} text-only exchanges separate (open user=${openUser})`, async () => {
+          const records = []
+          for (let index = 0; index < 2; index++) {
+            for (const role of ['USER', 'ASSISTANT']) {
+              const contentId = `${role}${index}`
+              const at = index * 200 + (role === 'USER' ? 0 : 100)
+              records.push(
+                record('contentStart', {
+                  contentId, role, type: 'TEXT', additionalModelFields: { generationStage: stage },
+                }, at),
+                record('textOutput', { contentId, content: `${role}${index}` }, at + 10))
+              if (!(openUser && index === 1 && role === 'USER')) {
+                records.push(record('contentEnd', { contentId, stopReason: 'END_TURN' }, at + 20))
+              }
+            }
+          }
+          if (openUser) {
+            records.push(record('contentEnd', { contentId: 'USER1', stopReason: 'END_TURN' }, 350))
+            records.push(record('contentEnd', { contentId: 'USER1', stopReason: 'END_TURN' }, 360))
+          }
+          records.push(record('completionEnd', {}, 10_100))
+          await drain(await client.send(command(records).request))
+          const { llmobsSpans } = await getEvents(4)
+          assert.equal(llmobsSpans.length, 4)
+          for (let index = 0; index < 2; index++) {
+            const { llm } = tree(llmobsSpans, index)
+            assert.equal(llm.meta.input.messages[0].content, `USER${index}`)
+            assert.equal(llm.meta.output.messages[0].content, `ASSISTANT${index}`)
+            assert.equal(llm.start_ns + llm.duration, (EPOCH + index * 200 + 120) * MS)
+            assert.equal(llm.meta.metadata.partial, false)
+          }
+        })
       }
-      records.push(record('completionEnd', {}, 10_100))
-      await drain(await client.send(command(records).request))
-      const { llmobsSpans } = await getEvents(4)
-      assert.equal(llmobsSpans.length, 4)
-      for (let index = 0; index < 2; index++) {
-        const { llm } = tree(llmobsSpans, index)
-        assert.equal(llm.meta.input.messages[0].content, `USER${index}`)
-        assert.equal(llm.meta.output.messages[0].content, `ASSISTANT${index}`)
-        assert.equal(llm.start_ns + llm.duration, (EPOCH + index * 200 + 120) * MS)
-        assert.equal(llm.meta.metadata.partial, false)
+    }
+
+    for (const kind of ['audio', 'text', 'unfinished']) {
+      for (const pending of ['speech', 'open-text', 'none']) {
+        it(`attributes a later stream failure correctly (${kind}, pending=${pending})`, async () => {
+          const records = kind === 'text'
+            ? [
+                record('contentStart', { contentId: 'answer', role: 'ASSISTANT', type: 'TEXT' }, 100),
+                record('textOutput', { contentId: 'answer', content: 'done' }, 110),
+                record('contentEnd', { contentId: 'answer', stopReason: 'END_TURN' }, 120),
+              ]
+            : kind === 'unfinished' ? speech().slice(0, 11) : speech()
+          if (pending === 'speech') {
+            records.push(
+              record('userSpeechStart', { inputAudioOffsetMs: 1100 }, 4000),
+              record('userSpeechEnd', { inputAudioOffsetMs: 1200 }, 4100))
+          } else if (pending === 'open-text') {
+            records.push(
+              record('contentStart', { contentId: 'next-user', role: 'USER', type: 'TEXT' }, 4000),
+              record('textOutput', { contentId: 'next-user', content: 'next question' }, 4100))
+          }
+          const failure = new Error('later stream failed')
+          await assert.rejects(drain(await client.send(command(records, { failure }).request)), e => e === failure)
+          const next = pending === 'speech' || (pending === 'open-text' && kind !== 'unfinished')
+          const count = (kind === 'text' ? 2 : 4) + (next ? (pending === 'speech' ? 3 : 2) : 0)
+          const { llmobsSpans } = await getEvents(count)
+          const first = tree(llmobsSpans)
+          for (const span of [first.root, ...first.children]) {
+            assert.equal(span.status, next && kind !== 'unfinished' ? 'ok' : 'error')
+          }
+          if (next) {
+            const second = tree(llmobsSpans, 1)
+            for (const span of [second.root, ...second.children]) {
+              assert.equal(span.status, 'error')
+              assert.equal(span.meta['error.message'], failure.message)
+            }
+          }
+        })
       }
-    })
+    }
+
+    for (const ending of ['END_TURN', 'INTERRUPTED', 'open']) {
+      for (const fragmented of [false, true]) {
+        it(`distinguishes literal interruption JSON (${ending}, fragmented=${fragmented})`, async () => {
+          const records = speech({ outputMs: 2000 }).slice(0, 11)
+          records.push(record('contentStart', {
+            contentId: 'json', role: 'ASSISTANT', type: 'TEXT', additionalModelFields: { generationStage: 'FINAL' },
+          }, 3200))
+          if (fragmented) {
+            records.push(record('textOutput', { contentId: 'json', content: '{"interrupted":' }, 3240))
+          }
+          records.push(record('textOutput', {
+            contentId: 'json', content: fragmented ? 'true}' : '{"interrupted":true}',
+          }, 3250))
+          if (ending !== 'open') records.push(record('contentEnd', { contentId: 'json', stopReason: ending }, 3300))
+          if (ending !== 'INTERRUPTED') {
+            records.push(record('contentEnd', { contentId: 'audio1', stopReason: 'END_TURN' }, 3350))
+          }
+          records.push(record('completionEnd', {}, 6000))
+          await drain(await client.send(command(records).request))
+          const { llmobsSpans } = await getEvents(4)
+          const { llm, children } = tree(llmobsSpans)
+          const interrupted = ending === 'INTERRUPTED'
+          assert.equal(llm.meta.metadata.interrupted, interrupted)
+          assert.equal(llm.meta.output.messages[0].content, interrupted ? '[audio]' : '{"interrupted":true}')
+          wav(llm.meta.output.messages[0].audio_parts[0], 24000, interrupted ? 12000 : 96000)
+          const agent = named(children, 'agent speech')
+          assert.equal(agent.start_ns + agent.duration, (EPOCH + (interrupted ? 3250 : 5000)) * MS)
+        })
+      }
+    }
+
+    for (const ending of ['END_TURN', 'INTERRUPTED', 'open']) {
+      it(`preserves literal interruption JSON in text-only output (${ending})`, async () => {
+        const records = [
+          record('contentStart', { contentId: 'json', role: 'ASSISTANT', type: 'TEXT' }, 100),
+          record('textOutput', { contentId: 'json', content: '{"interrupted":true}' }, 110),
+        ]
+        if (ending !== 'open') records.push(record('contentEnd', { contentId: 'json', stopReason: ending }, 120))
+        records.push(record('completionEnd', {}, 1000))
+        await drain(await client.send(command(records).request))
+        const { llmobsSpans } = await getEvents(2)
+        const { llm } = tree(llmobsSpans)
+        assert.equal(llm.meta.output.messages[0].content, ending === 'INTERRUPTED' ? '' : '{"interrupted":true}')
+        assert.equal(llm.meta.metadata.interrupted, ending === 'INTERRUPTED')
+        assert.equal(llm.meta.metadata.partial, ending !== 'END_TURN')
+      })
+    }
 
     it('serializes the exact hierarchy, WAV placement, and receipt-based TTFA', async () => {
       const records = speech()
@@ -532,7 +631,7 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
             }, 3060)
           }
           if (!closed) first.splice(kind === 'user' ? 8 : 14, 1)
-          // Control blocks must never become transcripts, even when they have no contentEnd.
+          // Confirmed control blocks must never become transcripts at rollover.
           first.push(
             record('contentStart', {
               contentId: 'control',
@@ -540,7 +639,8 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
               type: 'TEXT',
               additionalModelFields: { generationStage: 'FINAL' },
             }, 3100),
-            record('textOutput', { contentId: 'control', content: '{"interrupted":true}' }, 3101))
+            record('textOutput', { contentId: 'control', content: '{"interrupted":true}' }, 3101),
+            record('contentEnd', { contentId: 'control', stopReason: 'INTERRUPTED' }, 3102))
           const second = speech({ id: '2', offset: 1000, at: 4000 })
           // The next user's open text belongs to the new turn, not the retiring one.
           second.splice(8, 1)

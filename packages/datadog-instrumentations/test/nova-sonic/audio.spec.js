@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const { InputAudio, OutputAudio } = require('../../src/nova-sonic/audio')
 const { LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES } = require('../../../dd-trace/src/llmobs/constants/audio')
@@ -11,6 +12,89 @@ const { INPUT, OUTPUT, pcm } = require('./helpers')
 const LIMIT = LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES - 128
 
 describe('Nova Sonic PCM retention', () => {
+  for (const length of [LIMIT - 2, LIMIT, LIMIT + 2, LIMIT + 4, LIMIT * 2]) {
+    it(`bounds input decoding before allocation (${length} bytes)`, () => {
+      const input = new InputAudio()
+      input.configure(INPUT)
+      const raw = Buffer.alloc(length, 1)
+      raw.writeUInt16LE(513, raw.length - 2)
+      const encoded = raw.toString('base64')
+      const from = sinon.spy(Buffer, 'from')
+      try {
+        input.append(encoded, 100_000)
+        const decodes = from.getCalls().filter(call => call.args[1] === 'base64')
+        assert.equal(decodes.length, 1)
+        assert.ok(decodes[0].returnValue.length <= LIMIT + 2)
+      } finally {
+        from.restore()
+      }
+      assert.equal(input.total, length)
+      assert.equal(input.anchor, 100_000 - length / 32)
+      const start = Math.max(0, length - LIMIT)
+      assert.deepEqual(input.clip(start / 32, length / 32), raw.subarray(start))
+      input.append('AgA=', 100_001)
+      assert.deepEqual(input.clip(length / 32, (length + 2) / 32), Buffer.from([2, 0]))
+    })
+  }
+
+  for (const kind of ['oversized', 'overflowed', 'interrupted', 'odd', 'invalid-format']) {
+    it(`does not decode discarded output (${kind})`, () => {
+      const output = new OutputAudio()
+      if (kind === 'overflowed') output.append(Buffer.alloc(LIMIT + 2).toString('base64'), OUTPUT, 1000)
+      if (kind === 'interrupted') output.interrupt(1000)
+      const length = kind === 'odd' ? LIMIT + 1 : LIMIT + 2
+      const encoded = Buffer.alloc(length).toString('base64')
+      const from = sinon.spy(Buffer, 'from')
+      try {
+        output.append(encoded, kind === 'invalid-format' ? {} : OUTPUT, 1001)
+        assert.equal(from.getCalls().filter(call => call.args[1] === 'base64').length, 0)
+      } finally {
+        from.restore()
+      }
+      assert.equal(output.generatedBytes, length + (kind === 'overflowed' ? LIMIT + 2 : 0))
+      assert.equal(output.pcm(), undefined)
+      if (kind === 'oversized' || kind === 'overflowed') {
+        assert.equal(output.timingValid, true)
+        assert.equal(output.omittedReason, 'retention_limit')
+      }
+    })
+  }
+
+  for (const encoded of ['AA==', 'AAA=', 'AAAA', 'AAAAAA==', 'AAAAAAAA']) {
+    it(`accounts for base64 padding without decoding invalid PCM (${encoded})`, () => {
+      const raw = Buffer.from(encoded, 'base64')
+      const input = new InputAudio()
+      input.configure(INPUT)
+      input.append(encoded, 1000)
+      assert.equal(input.total, raw.length)
+      assert.equal(input.valid, raw.length % 2 === 0)
+      const output = new OutputAudio()
+      output.append(encoded, OUTPUT, 1000)
+      assert.equal(output.generatedBytes, raw.length)
+      assert.equal(output.timingValid, raw.length % 2 === 0)
+      if (output.timingValid) assert.deepEqual(output.pcm(), raw)
+    })
+  }
+
+  for (const encoded of ['A===', 'AA=A', '====', 'AAA\n', 'AAA\r', 'AAA\u2028', 'AAA\u2029', 'AA!A']) {
+    it(`rejects malformed base64 before allocating (${JSON.stringify(encoded)})`, () => {
+      const input = new InputAudio()
+      input.configure(INPUT)
+      const output = new OutputAudio()
+      const from = sinon.spy(Buffer, 'from')
+      try {
+        input.append(encoded, 0)
+        output.append(encoded, OUTPUT, 0)
+        assert.equal(from.getCalls().filter(call => call.args[1] === 'base64').length, 0)
+      } finally {
+        from.restore()
+      }
+      assert.equal(input.valid, false)
+      assert.equal(output.timingValid, false)
+      assert.equal(output.generatedBytes, 0)
+    })
+  }
+
   for (const rate of [8000, 16_000, 24_000, 48_000]) {
     it(`copies exact input samples across chunk boundaries at ${rate}Hz`, () => {
       const audio = new InputAudio()

@@ -5,7 +5,7 @@ const { LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES } = require('../../../dd-trace/src/llm
 // Leave room for the WAV header when the retained PCM is encoded.
 const MAX_AUDIO = LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES - 128
 const RATES = new Set([8000, 16_000, 24_000, 48_000])
-const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/
+const INVALID_BASE64 = /[^A-Za-z0-9+/]/
 
 /** @param {object} configuration */
 function pcmRate (configuration = {}) {
@@ -17,9 +17,11 @@ function pcmRate (configuration = {}) {
 }
 
 /** @param {string} encoded */
-function decode (encoded) {
-  if (typeof encoded !== 'string' || encoded.length % 4 || !BASE64.test(encoded)) return
-  return Buffer.from(encoded, 'base64')
+function decodedLength (encoded) {
+  if (typeof encoded !== 'string' || encoded.length % 4) return
+  const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0
+  if (INVALID_BASE64.test(encoded.slice(0, encoded.length - padding))) return
+  return encoded.length / 4 * 3 - padding
 }
 
 /** A bounded, connection-wide sample timeline. Content-name changes do not reset its origin. */
@@ -43,18 +45,20 @@ class InputAudio {
    * @param {number} now Milliseconds at SDK consumption, not an acknowledgement from the provider.
    */
   append (encoded, now) {
-    const raw = decode(encoded)
-    if (!raw) {
+    const length = decodedLength(encoded)
+    if (length === undefined) {
       this.valid = false
       this.clear()
       return
     }
-    if (raw.length % 2) this.valid = false
-    this.total += raw.length
+    if (length % 2) this.valid = false
+    this.total += length
     if (this.rate) this.anchor = now - this.total * 1000 / (2 * this.rate)
-    if (!this.valid || !raw.length) return
-    // Copy large tails so the ring cannot retain a much larger backing allocation.
-    const retained = raw.length > MAX_AUDIO ? Buffer.from(raw.subarray(-MAX_AUDIO)) : raw
+    if (!this.valid || !length) return
+    // Decode from a base64 quartet boundary, retaining at most two alignment bytes
+    // beyond the cap instead of allocating the entire incoming frame.
+    const start = Math.max(0, length - MAX_AUDIO)
+    const retained = Buffer.from(encoded.slice(Math.floor(start / 3) * 4), 'base64').subarray(start % 3)
     this.#chunks.push(retained)
     this.#bytes += retained.length
     while (this.#bytes > MAX_AUDIO) {
@@ -118,28 +122,28 @@ class OutputAudio {
    * @param {number} now
    */
   append (encoded, configuration, now) {
-    const raw = decode(encoded)
-    if (raw) this.generatedBytes += raw.length
+    const length = decodedLength(encoded)
+    if (length !== undefined) this.generatedBytes += length
     // Late chunks cannot resurrect playback or invalidate the clip already cut at interruption.
     if (this.interrupted !== undefined) return
     const rate = pcmRate(configuration)
-    if (!raw || !rate || raw.length % 2 || (this.rate && this.rate !== rate)) {
+    if (length === undefined || !rate || length % 2 || (this.rate && this.rate !== rate)) {
       this.timingValid = false
       this.omittedReason = 'invalid_audio'
       this.#chunks = []
       this.#bytes = 0
       return
     }
-    if (!raw.length) return
+    if (!length) return
     this.rate ||= rate
     this.start ??= now
     const previousEnd = this.end ?? now
     const gap = Math.floor(Math.max(0, now - previousEnd) * rate / 1000) * 2
-    this.end = previousEnd + (gap + raw.length) * 1000 / (2 * rate)
-    if (!this.omittedReason && this.#bytes + gap + raw.length <= MAX_AUDIO) {
+    this.end = previousEnd + (gap + length) * 1000 / (2 * rate)
+    if (!this.omittedReason && this.#bytes + gap + length <= MAX_AUDIO) {
       if (gap) this.#chunks.push(Buffer.alloc(gap))
-      this.#chunks.push(raw)
-      this.#bytes += gap + raw.length
+      this.#chunks.push(Buffer.from(encoded, 'base64'))
+      this.#bytes += gap + length
     } else {
       this.omittedReason ||= 'retention_limit'
       this.#chunks = []

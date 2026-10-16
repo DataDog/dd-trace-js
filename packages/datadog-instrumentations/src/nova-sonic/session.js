@@ -208,12 +208,21 @@ class SonicSession {
     while (map.size > MAX_BLOCKS) map.delete(map.keys().next().value)
   }
 
+  #hasPendingInput () {
+    if (hasInput(this.#pending)) return true
+    // ASR text may precede contentEnd, even when speech boundary events are absent.
+    for (const block of this.#blocks.values()) {
+      if (block.turn === this.#pending && block.data.role === 'USER' && block.text) return true
+    }
+    return false
+  }
+
   /**
    * @param {object} data
    * @param {number} now
    */
   #startResponse (data, now) {
-    if (!this.#current || hasInput(this.#pending)) {
+    if (!this.#current || this.#hasPendingInput()) {
       if (this.#current) {
         // A new response can arrive before the previous response's text blocks close.
         for (const block of this.#blocks.values()) {
@@ -283,9 +292,13 @@ class SonicSession {
         const stage = object(fields) ? fields.generationStage : undefined
         let turn
         if (data.role === 'ASSISTANT' || data.type === 'TOOL') {
-          turn = stage === 'FINAL' && this.#current ? this.#current : this.#startResponse(data, now)
+          const newTextResponse = this.#current && !this.#current.audioStarted &&
+            completionTime(this.#current) !== undefined && this.#hasPendingInput()
+          turn = stage === 'FINAL' && this.#current && !newTextResponse
+            ? this.#current
+            : this.#startResponse(data, now)
         } else {
-          turn = hasInput(this.#pending) || !this.#current || completionTime(this.#current) !== undefined
+          turn = this.#hasPendingInput() || !this.#current || completionTime(this.#current) !== undefined
             ? this.#pending
             : this.#current
         }
@@ -320,12 +333,13 @@ class SonicSession {
     if (!block) return
     const { turn } = block
     if (name === 'textOutput' && typeof data.content === 'string') {
-      const control = parse(data.content)
-      if (block.data.role === 'ASSISTANT' && control?.interrupted === true) {
-        turn.output.interrupt(now)
-        block.control = true
+      block.text = (block.text + data.content).slice(0, MAX_TEXT)
+      if (block.data.role === 'ASSISTANT' && parse(block.text)?.interrupted === true) {
+        // Keep literal JSON until contentEnd confirms protocol control. Retain its
+        // receipt time so confirmation does not move the projected playback cut.
+        block.interruptionTime ??= now
       } else {
-        block.text = (block.text + data.content).slice(0, MAX_TEXT)
+        block.interruptionTime = undefined
       }
     } else if (name === 'audioOutput' && block.data.role === 'ASSISTANT') {
       if (typeof data.content === 'string' && data.content.length) turn.outputAudioObserved = true
@@ -339,8 +353,11 @@ class SonicSession {
         type: 'function',
       })
     } else if (name === 'contentEnd') {
+      if (block.data.role === 'ASSISTANT' && data.stopReason === 'INTERRUPTED') {
+        block.control = block.interruptionTime !== undefined
+        turn.output.interrupt(block.interruptionTime ?? now)
+      }
       this.#text(block)
-      if (data.stopReason === 'INTERRUPTED') turn.output.interrupt(now)
       if (block.data.type === 'AUDIO' && data.stopReason === 'END_TURN') turn.generationEnd = now
       if (block.data.role === 'ASSISTANT' && block.data.type === 'TEXT' &&
           !block.control && data.stopReason === 'END_TURN') turn.textEnd = now
@@ -367,7 +384,7 @@ class SonicSession {
       if (!Number.isSafeInteger(total) || total < this.#totals[key]) continue
       const delta = total - this.#totals[key]
       this.#totals[key] = total
-      const target = !this.#current || (direction === 'input' && hasInput(this.#pending))
+      const target = !this.#current || (direction === 'input' && this.#hasPendingInput())
         ? this.#pending
         : this.#current
       target.metrics[key] += delta
@@ -444,7 +461,12 @@ class SonicSession {
     if (this.#closed) return
     this.#closed = true
     for (const block of this.#blocks.values()) this.#text(block)
-    if (this.#current) this.#emitTurn(this.#current, now, error)
+    if (this.#current) {
+      // A failure before the next response starts belongs to its pending utterance,
+      // not to the response that has already completed.
+      const laterTurnFailed = completionTime(this.#current) !== undefined && this.#hasPendingInput()
+      this.#emitTurn(this.#current, now, laterTurnFailed ? undefined : error)
+    }
     if (hasInput(this.#pending) || this.#pending.metrics.total_tokens || (error && !this.#current)) {
       this.#emitTurn(this.#pending, now, error)
     }

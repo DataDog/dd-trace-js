@@ -235,6 +235,7 @@ describe('Nova Sonic protocol', () => {
           contentId: 'control', role: 'ASSISTANT', type: 'TEXT', additionalModelFields: { generationStage: 'FINAL' },
         }, 3200),
         record('textOutput', { contentId: 'control', content: '{ "interrupted" : true }' }, 3250),
+        record('contentEnd', { contentId: 'control', stopReason: 'INTERRUPTED' }, 3251),
         record('contentStart', {
           contentId: 'late',
           role: 'ASSISTANT',
