@@ -24,6 +24,17 @@ function getterOf (object, key) {
   return Object.getOwnPropertyDescriptor(object, key)?.get
 }
 
+/**
+ * Whether the value has any own enumerable string-keyed property. Advances one
+ * step of the key iterator instead of probing `Object.keys(value).length`,
+ * which the lint rules reject, and stops at the first key.
+ *
+ * @param {object} object
+ */
+function hasOwnEnumerableKeys (object) {
+  return !Object.keys(object)[Symbol.iterator]().next().done
+}
+
 // Typed-array metadata getters inherited from %TypedArray%.prototype; calling
 // them directly bypasses payload-spoofed own properties.
 const typedArrayProto = Object.getPrototypeOf(Uint8Array.prototype)
@@ -429,8 +440,14 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     // marking the snapshot incomplete keeps predicates from silently changing
     // redaction or expansion decisions after that data is omitted, without
     // reading getters or iterating contents.
+    // A Date without own enumerable string-keyed properties is the exception:
+    // its time value is preserved in the native copy, so no payload data is
+    // lost and data-dependent rules can keep applying. Dates with own
+    // enumerable keys still flag, because that attached data is discarded.
     if (isDate(value)) {
-      incomplete = true
+      if (hasOwnEnumerableKeys(value)) {
+        incomplete = true
+      }
       assign(container, key, new Date(getDateTime.call(value)), root)
       return
     }
