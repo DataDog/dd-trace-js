@@ -19,6 +19,12 @@ const { truncated } = require('./constants')
 // sensitive value. Normalized captures are suppressed when any rule uses
 // one; structural paths, wildcards, indexes and recursive descent stay safe
 // because normalization only removes or normalizes content.
+//
+// The match is deliberately conservative: it also flags some structural
+// rules, such as slices (`$.items[0:2]`) and quoted keys containing one of
+// these characters (`$['@timestamp']`). Those rules then lose all tags on a
+// normalized capture. Parsing rules to avoid the over-match would make a
+// missed data-dependent construct, and so a leaked value, possible.
 const dataDependentRulePattern = /[?()@^~:`]/
 
 // Remaining cumulative string length (UTF-16 code units) available for
