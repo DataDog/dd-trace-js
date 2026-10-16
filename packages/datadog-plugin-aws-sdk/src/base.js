@@ -2,10 +2,13 @@
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
-const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const getConfig = require('../../dd-trace/src/config')
 const log = require('../../dd-trace/src/log')
 const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
+
+// Loaded on first use inside the capture gates, so users with cloud payload
+// tagging disabled never initialize the payload-tagging snapshot machinery.
+let payloadTagging
 
 const RESPONSE_SKIP_KEYS = new Set(['request', 'requestId', 'error', '$metadata'])
 
@@ -119,7 +122,8 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.request) {
         const maxDepth = this.cloudTaggingConfig.maxDepth
         try {
-          const requestTags = tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
+          payloadTagging ??= require('../../dd-trace/src/payload-tagging')
+          const requestTags = payloadTagging.tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
           span.addTags(requestTags)
         } catch {
           // A capture failure must not disable the plugin or fail the
@@ -259,8 +263,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.response) {
       const maxDepth = this.cloudTaggingConfig.maxDepth
       try {
+        payloadTagging ??= require('../../dd-trace/src/payload-tagging')
         const responseBody = this.extractResponseBody(response)
-        const responseTags = tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })
+        const responseTags = payloadTagging.tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })
         span.addTags(responseTags)
       } catch {
         // A capture failure must not skip remaining response tagging or span
