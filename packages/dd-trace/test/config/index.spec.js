@@ -2077,6 +2077,49 @@ describe('Config', () => {
     sinon.assert.notCalled(log.warn)
   })
 
+  it('should default the startup summary level to warn', () => {
+    const config = getConfig()
+
+    assert.strictEqual(config.startupLogLevel, 'warn')
+    assert.strictEqual(config.getOrigin('startupLogLevel'), 'default')
+  })
+
+  it('should accept an info startup summary level from the environment', () => {
+    process.env.DD_TRACE_STARTUP_LOG_LEVEL = 'INFO'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.startupLogLevel, 'info')
+    assert.strictEqual(config.getOrigin('startupLogLevel'), 'env_var')
+    assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+      { name: 'DD_TRACE_STARTUP_LOG_LEVEL', value: 'INFO', origin: 'env_var' },
+    ])
+  })
+
+  it('should accept a programmatic startup summary level', () => {
+    const config = getConfig({ startupLogLevel: 'info' })
+
+    assert.strictEqual(config.startupLogLevel, 'info')
+    assert.strictEqual(config.getOrigin('startupLogLevel'), 'code')
+  })
+
+  it('should reject an invalid startup summary level', () => {
+    process.env.DD_TRACE_STARTUP_LOG_LEVEL = 'debug'
+
+    const config = getConfig({ startupLogLevel: 'verbose' })
+
+    assert.strictEqual(config.startupLogLevel, 'warn')
+    assert.strictEqual(config.getOrigin('startupLogLevel'), 'default')
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: 'debug' for DD_TRACE_STARTUP_LOG_LEVEL (source: env_var), picked default"
+    )
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: 'verbose' for startupLogLevel (source: code), picked default"
+    )
+  })
+
   it('should preserve environment tags when the programmatic tags type is invalid', () => {
     process.env.DD_TRACE_GLOBAL_TAGS = 'team:checkout,tier:backend'
 

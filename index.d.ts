@@ -615,6 +615,17 @@ declare namespace tracer {
     startupLogs?: boolean,
 
     /**
+     * Level for the startup configuration and loaded-integrations summaries.
+     * `warn` uses the warning logger, which is stderr for the default console logger.
+     * `info` uses the info logger, which is stdout for the default console logger.
+     * Agent errors, generic diagnostics, and packages loaded before the tracer stay at `warn`.
+     * @default 'warn'
+     * @env DD_TRACE_STARTUP_LOG_LEVEL
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    startupLogLevel?: 'info' | 'warn',
+
+    /**
      * The service name to be used for this program. If not set, the service name
      * will attempted to be inferred from package.json
      * @env DD_SERVICE, OTEL_SERVICE_NAME

@@ -387,3 +387,75 @@ describe('otlp export flags', () => {
     assert.strictEqual(startupLogObj().otlp_logs_export_enabled, true)
   })
 })
+
+describe('startup summary level', () => {
+  const plugins = { _pluginsByName: { http: {} } }
+
+  afterEach(() => {
+    delete process.env.DD_TRACE_STARTUP_LOG_LEVEL
+    delete process.env.DD_TRACE_STARTUP_LOGS
+  })
+
+  function loadStartupLog () {
+    delete require.cache[require.resolve('../src/startup-log')]
+    return require('../src/startup-log')
+  }
+
+  it('should keep configuration and integration summaries on warn by default', () => {
+    process.env.DD_TRACE_STARTUP_LOGS = 'true'
+    const config = getConfigFresh()
+    const infoStub = sinon.stub(console, 'info')
+    const warnStub = sinon.stub(console, 'warn')
+    try {
+      const { setStartupLogConfig, setStartupLogPluginManager, startupLog, logIntegrations } = loadStartupLog()
+      setStartupLogConfig(config)
+      setStartupLogPluginManager(plugins)
+      startupLog()
+      logIntegrations()
+
+      assert.strictEqual(infoStub.callCount, 0)
+      assert.strictEqual(warnStub.callCount, 2)
+      assert.strictEqual(warnStub.firstCall.args[0].startsWith('DATADOG TRACER CONFIGURATION - '), true)
+      assert.strictEqual(warnStub.secondCall.args[0], 'DATADOG TRACER INTEGRATIONS LOADED - ["http"]')
+    } finally {
+      infoStub.restore()
+      warnStub.restore()
+    }
+  })
+
+  it('should emit summaries at info and keep diagnostics at warn', () => {
+    process.env.DD_TRACE_STARTUP_LOGS = 'true'
+    process.env.DD_TRACE_STARTUP_LOG_LEVEL = 'INFO'
+    const config = getConfigFresh()
+    const infoStub = sinon.stub(console, 'info')
+    const warnStub = sinon.stub(console, 'warn')
+    try {
+      const {
+        setStartupLogConfig,
+        setStartupLogPluginManager,
+        startupLog,
+        logIntegrations,
+        logAgentError,
+        logGenericError,
+      } = loadStartupLog()
+      setStartupLogConfig(config)
+      setStartupLogPluginManager(plugins)
+      startupLog()
+      logIntegrations()
+      logAgentError({ status: 500, message: 'agent down' })
+      logGenericError('packages loaded early')
+
+      assert.strictEqual(config.startupLogLevel, 'info')
+      assert.strictEqual(infoStub.callCount, 2)
+      assert.strictEqual(infoStub.firstCall.args[0].startsWith('DATADOG TRACER CONFIGURATION - '), true)
+      assert.strictEqual(infoStub.secondCall.args[0], 'DATADOG TRACER INTEGRATIONS LOADED - ["http"]')
+      assert.deepStrictEqual(warnStub.args.map(args => args[0]), [
+        'DATADOG TRACER DIAGNOSTIC - Agent Error: agent down',
+        'DATADOG TRACER DIAGNOSTIC - Generic Error: packages loaded early',
+      ])
+    } finally {
+      infoStub.restore()
+      warnStub.restore()
+    }
+  })
+})
