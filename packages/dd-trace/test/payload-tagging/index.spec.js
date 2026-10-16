@@ -964,22 +964,17 @@ describe('Safe payload capture', () => {
     })
   })
 
-  it('proves a full binary copy at the last byte of the copy budget', () => {
-    const body = Buffer.alloc(1_000_000, 120)
-
-    // The incomplete flag no longer distinguishes an accepted full copy from
-    // a truncated prefix, so the boundary must assert the retained length.
-    const snapshot = createSafeSnapshot({ Body: body })
-    const copy = /** @type {{ Body: Buffer }} */ (snapshot.value).Body
-    assert.ok(Buffer.isBuffer(copy))
-    assert.strictEqual(copy.byteLength, 1_000_000)
-
-    const firstBeyond = Buffer.alloc(1_000_001, 120)
-    const overSnapshot = createSafeSnapshot({ Body: firstBeyond })
-    const overCopy = /** @type {{ Body: Buffer }} */ (overSnapshot.value).Body
-    assert.ok(Buffer.isBuffer(overCopy))
-    assert.strictEqual(overCopy.byteLength, 15_004)
-  })
+  for (const [length, retained] of [[15_004, 15_004], [15_005, 15_004]]) {
+    it(`copies a ${length}-byte Buffer only up to its rendered prefix`, () => {
+      // Neither flag distinguishes a full copy from a prefix, so the boundary
+      // must assert the retained length.
+      const snapshot = createSafeSnapshot({ Body: Buffer.alloc(length, 120) })
+      const copy = /** @type {{ Body: Buffer }} */ (snapshot.value).Body
+      assert.ok(Buffer.isBuffer(copy))
+      assert.strictEqual(copy.byteLength, retained)
+      assert.strictEqual(snapshot.incomplete, false)
+    })
+  }
 
   it('should bound traversal depth independently of the output max depth', () => {
     let deep = /** @type {unknown} */ ({ leaf: true })
@@ -1966,16 +1961,16 @@ describe('Safe payload capture', () => {
       })
     })
 
-    it('should accept a binary value at the last byte of the copy budget without flagging it', () => {
+    it('should render a Buffer as large as the copy budget without flagging it', () => {
       const body = Buffer.alloc(1_000_000, 120)
       const tags = computeTags(safeConfig, { Body: body }, responseOpts)
 
       assert.strictEqual(tags['aws.response.body.Body'], 'x'.repeat(5000))
-      // A within-budget copy normalizes the value but renders the same tag.
+      // The prefix copy normalizes the value but renders the same tag.
       assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
     })
 
-    it('should keep the rendered prefix of a Buffer at the first byte beyond the copy budget', () => {
+    it('should render the prefix of a Buffer larger than the copy budget', () => {
       const body = Buffer.alloc(1_000_001, 120)
       const tags = computeTags(safeConfig, { Body: body }, responseOpts)
 
@@ -1984,7 +1979,7 @@ describe('Safe payload capture', () => {
       assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
     })
 
-    it('should copy only the rendered prefix of an over-budget Buffer', () => {
+    it('should copy only the rendered prefix of a large Buffer', () => {
       const snapshot = createSafeSnapshot({ Body: Buffer.alloc(1_000_001, 120) })
 
       assert.strictEqual(snapshot.normalized, true)
@@ -1994,7 +1989,7 @@ describe('Safe payload capture', () => {
       assert.strictEqual(copy.byteLength, 15_004)
     })
 
-    const overBudgetEncodings = /** @type {Array<[string, Buffer]>} */ ([
+    const largeBufferEncodings = /** @type {Array<[string, Buffer]>} */ ([
       ['three-byte characters', Buffer.from('\u20ac'.repeat(400_000))],
       ['four-byte characters', Buffer.from('\u{1F600}'.repeat(300_000))],
       ['invalid bytes', Buffer.alloc(1_000_001, 0xff)],
@@ -2004,8 +1999,8 @@ describe('Safe payload capture', () => {
         Buffer.from('\u{1F600}'.repeat(300_000)),
       ])],
     ])
-    for (const [name, body] of overBudgetEncodings) {
-      it(`should render an over-budget Buffer prefix like the full Buffer for ${name}`, () => {
+    for (const [name, body] of largeBufferEncodings) {
+      it(`should render a large Buffer prefix like the full Buffer for ${name}`, () => {
         const expected = tagsFromObject({ Body: body }, responseOpts)['aws.response.body.Body']
         const tags = computeTags(safeConfig, { Body: body }, responseOpts)
 
@@ -2023,7 +2018,7 @@ describe('Safe payload capture', () => {
       })
     })
 
-    it('should keep an over-budget Buffer prefix within the remaining aggregate budget', () => {
+    it('should keep Buffer prefixes whose full sizes exceed the aggregate budget', () => {
       const first = Buffer.alloc(600_000, 97)
       const second = Buffer.alloc(600_000, 98)
 
@@ -2032,24 +2027,32 @@ describe('Safe payload capture', () => {
       assert.strictEqual(tags['aws.response.body.a'], 'a'.repeat(5000))
       assert.strictEqual(tags['aws.response.body.b'], 'b'.repeat(5000))
       assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
-      // The oversized second value must not have consumed the first one.
+      // Copying the prefixes must not mutate the caller's bytes.
       assert.strictEqual(first[0], 97)
       assert.strictEqual(second[0], 98)
     })
 
-    it('should truncate an over-budget Buffer when its prefix exceeds the remaining budget', () => {
-      // 15,003 bytes remain: one byte short of the 15,004-byte prefix.
-      const first = Buffer.alloc(984_997, 97)
-      const second = Buffer.alloc(600_000, 98)
-      const third = Buffer.alloc(15_003, 99)
+    for (const remaining of [15_004, 15_003]) {
+      it(`should ${remaining === 15_004 ? 'keep' : 'truncate'} a Buffer prefix with ${remaining} budget bytes`, () => {
+        // The 15,004-byte prefix is the last accepted size.
+        const budget = createSnapshotBudget()
+        budget.binaryBytes = remaining
+        const snapshot = createSafeSnapshot({
+          a: Buffer.alloc(600_000, 97),
+          b: Buffer.alloc(15_003, 98),
+        }, budget)
 
-      const tags = computeTags(safeConfig, { a: first, b: second, c: third }, responseOpts)
-
-      assert.strictEqual(tags['aws.response.body.a'], 'a'.repeat(5000))
-      assert.strictEqual(tags['aws.response.body.b'], 'truncated')
-      assert.strictEqual(tags['aws.response.body.c'], 'c'.repeat(5000))
-      assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
-    })
+        const value = /** @type {{ a: Buffer | string, b: Buffer | string }} */ (snapshot.value)
+        if (remaining === 15_004) {
+          assert.strictEqual(/** @type {Buffer} */ (value.a).byteLength, 15_004)
+          assert.strictEqual(value.b, 'truncated')
+        } else {
+          assert.strictEqual(value.a, 'truncated')
+          assert.strictEqual(/** @type {Buffer} */ (value.b).byteLength, 15_003)
+        }
+        assert.strictEqual(snapshot.incomplete, true)
+      })
+    }
 
     describe('binary metadata completeness', () => {
       const kinds = /** @type {const} */ (['Uint8Array', 'Uint16Array', 'DataView', 'Buffer'])
@@ -2695,18 +2698,27 @@ describe('Safe payload capture', () => {
       assert.strictEqual(shared[0], 115)
     })
 
-    it('should account for the aggregate budget across mixed binary kinds', () => {
-      const first = Buffer.alloc(600_000, 97)
-      const second = new Uint8Array(600_000).fill(98)
+    for (const length of [984_996, 984_997]) {
+      it(`should account for the aggregate budget across mixed binary kinds (${length} bytes)`, () => {
+        // The Buffer debits only its 15,004-byte prefix, leaving 984,996 bytes.
+        const first = Buffer.alloc(600_000, 97)
+        const second = new Uint8Array(length).fill(98)
 
-      const tags = computeTags(safeConfig, { a: first, b: second }, responseOpts)
+        const snapshot = createSafeSnapshot({ a: first, b: second })
+        const value = /** @type {{ a: Buffer, b: Uint8Array | string }} */ (snapshot.value)
 
-      assert.strictEqual(tags['aws.response.body.a'], 'a'.repeat(5000))
-      assert.strictEqual(tags['aws.response.body.b'], 'truncated')
-      assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
-      assert.strictEqual(first[0], 97)
-      assert.strictEqual(second[0], 98)
-    })
+        assert.strictEqual(value.a.byteLength, 15_004)
+        if (length === 984_996) {
+          assert.strictEqual(/** @type {Uint8Array} */ (value.b).byteLength, length)
+          assert.strictEqual(snapshot.incomplete, false)
+        } else {
+          assert.strictEqual(value.b, 'truncated')
+          assert.strictEqual(snapshot.incomplete, true)
+        }
+        assert.strictEqual(first[0], 97)
+        assert.strictEqual(second[0], 98)
+      })
+    }
 
     // Skipped on runtimes without the optional numeric format: there is then
     // no unsupported kind left to exercise.

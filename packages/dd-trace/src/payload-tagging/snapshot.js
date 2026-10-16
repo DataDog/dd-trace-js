@@ -114,14 +114,15 @@ const maxArrayLength = 10_000
 
 // Aggregate byte budget for binary copies shared by every `createSafeSnapshot`
 // call given the same budget. Copying keeps later JSONPath redaction from
-// mutating application-owned bytes; over-budget views become `truncated`,
-// except a Buffer that keeps its rendered prefix.
+// mutating application-owned bytes; over-budget views become `truncated`.
+// Buffers only ever copy their rendered prefix.
 const maxBinaryCopyBytes = 1_000_000
 
 // A Buffer's tag renders its UTF-8 decoding cut to `maxValueLength` code
 // units. Each code unit consumes at most 3 bytes (malformed sequences decode
 // to one U+FFFD per maximal subpart), so a prefix of this size plus a small
-// margin renders the same tag value as the full Buffer.
+// margin renders the same tag value as the full Buffer. Bytes past it never
+// render, so Buffers are never copied beyond it.
 const maxBufferPrefixBytes = maxValueLength * 3 + 4
 
 /**
@@ -291,7 +292,9 @@ function copyBinary (value, kind, byteLength) {
     /** @type {number} */ (getByteOffset?.call(value)),
     byteLength
   )
-  const bytes = kind === 'buffer' ? Buffer.alloc(byteLength) : new Uint8Array(byteLength)
+  // Every byte is overwritten below, so zero-filling would be wasted work. The
+  // unpooled allocation keeps the copy's backing storage private to it.
+  const bytes = kind === 'buffer' ? Buffer.allocUnsafeSlow(byteLength) : new Uint8Array(byteLength)
   bytes.set(source)
 
   if (kind === 'buffer') {
@@ -426,9 +429,9 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       return truncated
     }
     let copyLength = visibleByteLength(view, kind)
-    if (kind === 'buffer' && copyLength > budget.binaryBytes) {
-      // The over-budget Buffer keeps the prefix its tag renders.
-      // Typed arrays are never shortened.
+    if (kind === 'buffer') {
+      // A Buffer keeps only the prefix its tag renders. Typed arrays render
+      // one tag per element and are never shortened.
       copyLength = Math.min(copyLength, maxBufferPrefixBytes)
     }
     if (copyLength > budget.binaryBytes) {
