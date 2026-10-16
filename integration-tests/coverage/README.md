@@ -51,7 +51,7 @@ merge-lcov.js  (called by run-suite.js after mocha exits; converts every V8
 | `register.js` | Preloaded into mocha; installs the `child_process` / `Worker` patches. |
 | `patch-child-process.js` | Rewrites options for `fork`/`spawn`/`exec`/`Worker` so every Node descendant inherits `NODE_V8_COVERAGE` and the bootstrap require. |
 | `child-bootstrap.js` | Preloaded into every child. Re-installs the patch (for deeper custom-env spawns) and flushes V8 coverage on the termination signals the harness uses to stop long-running fixtures. Does **no** instrumentation. |
-| `merge-lcov.js` | Converts every per-process V8 profile in the collector via `v8-to-istanbul` (same `include`/`exclude` as `nyc.config.js`) into a single LCOV + HTML report. |
+| `merge-lcov.js` | Converts every per-process V8 profile in the collector via `v8-to-istanbul` (same `include`/`exclude` as `nyc.config.js`) into LCOV plus local debugging reports. |
 
 ## Environment variables
 
@@ -62,6 +62,7 @@ merge-lcov.js  (called by run-suite.js after mocha exits; converts every V8
 | `_DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR` | Optional override for the collector directory. |
 | `_DD_TRACE_INTEGRATION_COVERAGE_COPY_BACK` | Set on a child that brought its own `NODE_V8_COVERAGE`. Names the collector so the child's profiles are copied in on exit; managed by the harness, not set by hand. |
 | `_DD_TRACE_INTEGRATION_COVERAGE_DISABLE` | Per-spawn opt-out. Set it in the child env you pass to `fork`/`exec`/`spawn` to run that subtree without coverage. The harness blanks `NODE_V8_COVERAGE` only when it is the value the harness itself injected (omitting is not enough — Node copies the parent's value to children otherwise); a directory the child set for itself is preserved. |
+| `DD_COVERAGE_REPORT_LCOV_ONLY` | Set to `true` in CI to skip HTML, text, and JSON reports that coverage uploaders do not consume. |
 
 ### Children that set their own `NODE_V8_COVERAGE`
 

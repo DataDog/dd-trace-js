@@ -187,7 +187,11 @@ describe('withReceiver', () => {
 
   it('preserves a failure and starts a fresh retry after closing a pending request', async () => {
     const mocha = new Mocha({ reporter: class {} })
-    const parallelIt = createParallelIt((name, fn) => mocha.suite.addTest(new Mocha.Test(name, fn)), {
+    const parallelIt = createParallelIt((name, fn) => {
+      const test = new Mocha.Test(name, fn)
+      mocha.suite.addTest(test)
+      return test
+    }, {
       withReceiver: true,
     })
     const error = new Error('original assertion')
@@ -223,5 +227,61 @@ describe('withReceiver', () => {
     } finally {
       for (const request of requests) request.destroy()
     }
+  })
+})
+
+describe('createParallelIt', () => {
+  it('prioritizes retries over scenarios waiting in the pool', async () => {
+    const mocha = new Mocha({ reporter: class {} })
+    const started = []
+    let attempts = 0
+
+    const parallelIt = createParallelIt((name, fn) => {
+      const test = new Mocha.Test(name, fn)
+      mocha.suite.addTest(test)
+      return test
+    }, { concurrency: 1 })
+
+    parallelIt('retried', async () => {
+      started.push(`retried ${++attempts}`)
+      if (attempts === 1) throw new Error('retry me')
+    }, { retries: 1 })
+    parallelIt('first queued', async () => {
+      started.push('first queued')
+      await new Promise(resolve => setTimeout(resolve, 20))
+    })
+    parallelIt('last queued', async () => { started.push('last queued') })
+
+    const failures = await new Promise(resolve => mocha.run(resolve))
+    assert.strictEqual(failures, 0)
+    assert.deepStrictEqual(started, [
+      'retried 1',
+      'first queued',
+      'retried 2',
+      'last queued',
+    ])
+  })
+
+  it('does not retry a failure before Mocha observes it', async () => {
+    const mocha = new Mocha({ reporter: class {} })
+    let attempts = 0
+
+    const parallelIt = createParallelIt((name, fn) => {
+      const test = new Mocha.Test(name, fn)
+      mocha.suite.addTest(test)
+      return test
+    }, { concurrency: 2 })
+
+    parallelIt('slow', async () => {
+      await new Promise(resolve => setTimeout(resolve, 20))
+    })
+    parallelIt('fails before its wrapper runs', async () => {
+      attempts++
+      throw new Error('expected failure')
+    })
+
+    const failures = await new Promise(resolve => mocha.run(resolve))
+    assert.strictEqual(failures, 1)
+    assert.strictEqual(attempts, 1)
   })
 })
