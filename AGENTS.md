@@ -161,6 +161,19 @@ never weaken or delete assertions to make them pass.
 - Before opening or updating a PR, read and follow `.github/pull_request_template.md`.
 - All required tests must pass; the repository follows an all-green policy.
 
+## CI Scripts
+
+Every `curl` that runs in CI (workflows, composite actions, `.gitlab-ci.yml`/`.gitlab/`, the scripts they call, and the
+Dockerfiles they build) must:
+
+- Fail on HTTP errors with `-f`/`--fail`; otherwise a 4xx/5xx exits 0 and the error page is used as the response.
+- Retry transient errors with `--retry 5 --retry-delay 2 --retry-connrefused`.
+- Propagate the failure: use `set -o pipefail` for `curl | x`, and in a Dockerfile `RUN` download to a file first.
+
+Example: `curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused -o out.tar.gz "$url"`
+
+A polling loop that is its own retry (`until curl -sf ...; do sleep 1; done`) may skip `--retry`.
+
 ## Specialized Workflows
 
 Load the relevant repository skill when the task matches:
