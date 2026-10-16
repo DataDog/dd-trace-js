@@ -10,6 +10,13 @@ const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
 // tagging disabled never initialize the payload-tagging snapshot machinery.
 let payloadTagging
 
+// A failed load is not cached: it throws into the caller's fail-soft catch and
+// the next capture gate retries.
+function getPayloadTagging () {
+  payloadTagging ??= require('../../dd-trace/src/payload-tagging')
+  return payloadTagging
+}
+
 const RESPONSE_SKIP_KEYS = new Set(['request', 'requestId', 'error', '$metadata'])
 
 class BaseAwsSdkPlugin extends ClientPlugin {
@@ -122,8 +129,8 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.request) {
         const maxDepth = this.cloudTaggingConfig.maxDepth
         try {
-          payloadTagging ??= require('../../dd-trace/src/payload-tagging')
-          const requestTags = payloadTagging.tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
+          const { tagsFromRequest } = getPayloadTagging()
+          const requestTags = tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
           span.addTags(requestTags)
         } catch {
           // A capture failure must not disable the plugin or fail the
@@ -263,9 +270,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.response) {
       const maxDepth = this.cloudTaggingConfig.maxDepth
       try {
-        payloadTagging ??= require('../../dd-trace/src/payload-tagging')
+        const { tagsFromResponse } = getPayloadTagging()
         const responseBody = this.extractResponseBody(response)
-        const responseTags = payloadTagging.tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })
+        const responseTags = tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })
         span.addTags(responseTags)
       } catch {
         // A capture failure must not skip remaining response tagging or span
