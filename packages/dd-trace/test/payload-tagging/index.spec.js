@@ -275,6 +275,52 @@ describe('Tagging orchestration', () => {
     })
   })
 
+  it('should redact an element selected by literal index 0', () => {
+    const config = {
+      request: ['$.arr[0]'],
+      response: [],
+      expand: [],
+    }
+    const input = { arr: ['s3cret', 'safe'] }
+    const prefix = PAYLOAD_TAG_REQUEST_PREFIX
+    const tags = computeTags(config, input, { maxDepth: 10, prefix })
+    assert.deepStrictEqual(tags, {
+      [`${prefix}.arr.0`]: 'redacted',
+      [`${prefix}.arr.1`]: 'safe',
+    })
+    // Redaction must land on the snapshot copy, never on the caller's array.
+    assert.deepStrictEqual(input.arr, ['s3cret', 'safe'])
+  })
+
+  it('should redact and expand the empty-string key', () => {
+    const redactConfig = {
+      request: ["$['']"],
+      response: [],
+      expand: [],
+    }
+    const redacted = computeTags(redactConfig, { '': 's3cret', safe: 'ok' }, {
+      maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX,
+    })
+    assert.deepStrictEqual(redacted, {
+      // Flattening joins with a dot, so the empty key renders a trailing dot.
+      [`${PAYLOAD_TAG_REQUEST_PREFIX}.`]: 'redacted',
+      [`${PAYLOAD_TAG_REQUEST_PREFIX}.safe`]: 'ok',
+    })
+
+    const expandConfig = {
+      request: [],
+      response: [],
+      expand: ["$['']"],
+    }
+    const expanded = computeTags(expandConfig, { '': '{"a":{"b":"x"}}', safe: 'ok' }, {
+      maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX,
+    })
+    assert.deepStrictEqual(expanded, {
+      [`${PAYLOAD_TAG_REQUEST_PREFIX}..a.b`]: 'x',
+      [`${PAYLOAD_TAG_REQUEST_PREFIX}.safe`]: 'ok',
+    })
+  })
+
   it('should apply expansion rules', () => {
     const config = {
       request: [],
