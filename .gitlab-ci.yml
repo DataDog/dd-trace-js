@@ -30,7 +30,7 @@ include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks/gitlab-ci.yml"
   - project: "ddoghq/llm-validation-platform"
-    ref: &llmval_platform_sha "4bb157a2cbb50ef608b9ec8e14b886e0cf838ca3" # v0.1.4
+    ref: &llmval_platform_sha "68250345c9e358d4345545516f4c180e0370eb76"
     file: "/ci/llm-validation.gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
