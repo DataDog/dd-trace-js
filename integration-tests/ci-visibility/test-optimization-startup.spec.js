@@ -73,6 +73,16 @@ describe('test optimization startup', () => {
     })
   }
 
+  // Corepack and pnpx run a package manager in their own process.
+  for (const packageManager of ['corepack', 'pnpx']) {
+    it(`skips initialization for ${packageManager}`, async () => {
+      const exitCode = await runCommand(`node ./package-managers/bin/${packageManager}.mjs`, { DD_TRACE_DEBUG: '1' })
+
+      assert.strictEqual(exitCode, 0, processOutput)
+      assert.match(processOutput, /dd-trace is not initialized in a package manager/)
+    })
+  }
+
   it('does not interfere with native pnpm', async () => {
     const exitCode = await runCommand('./node_modules/.bin/pnpm -v', { DD_TRACE_DEBUG: '1' })
 

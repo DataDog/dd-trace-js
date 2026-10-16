@@ -98,9 +98,12 @@ export const resolve = useDefaultLoader ? undefined : loaderHook.resolve
 if (isMainThread) {
   const require = Module.createRequire(import.meta.url)
   const initialized = require('./init.js')
+  const { isPackageManager } = require('./packages/dd-trace/src/util.js')
   // Only register the loader hook when instrumentation initialized. On a bailout the
   // loader has nothing to instrument and can keep a short-lived process from exiting.
-  if (Module.register && initialized) {
+  // Package managers have nothing to instrument either; see register.js. This only covers
+  // `--import`: with `--loader`, Node starts the hooks thread before any of this code runs.
+  if (Module.register && initialized && !isPackageManager()) {
     // The loader builds its own include/exclude matcher in `initialize`, so no
     // options need to cross the registration boundary.
     Module.register('./loader-hook.mjs', import.meta.url)

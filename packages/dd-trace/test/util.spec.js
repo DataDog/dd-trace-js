@@ -3,13 +3,14 @@
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
 
-const { describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
 
 require('./setup/core')
 const {
   isEmpty,
   isTrue,
   isFalse,
+  isPackageManager,
   globMatch,
   getSegment,
   stripQueryAndFragment,
@@ -119,6 +120,93 @@ describe('util', () => {
     assert.strictEqual(isEmpty(Object.assign(Object.create({ inherited: 1 }), { own: 2 })), false)
     // `for-in` walks inherited enumerable keys, so a prototype-only object counts as non-empty.
     assert.strictEqual(isEmpty(Object.create({ inherited: 1 })), false)
+  })
+
+  describe('isPackageManager', () => {
+    const { argv } = process
+
+    afterEach(() => {
+      process.argv = argv
+    })
+
+    /**
+     * @param {string} [entryPoint]
+     */
+    function isPackageManagerEntryPoint (entryPoint) {
+      process.argv = entryPoint === undefined ? [argv[0]] : [argv[0], entryPoint]
+      return isPackageManager()
+    }
+
+    it('matches package manager entry points', () => {
+      const entryPoints = [
+        '/usr/local/bin/npm',
+        '/usr/local/lib/node_modules/npm/bin/npm-cli.js',
+        'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js',
+        '/usr/local/bin/yarn',
+        '/usr/local/bin/yarnpkg',
+        '/usr/local/lib/node_modules/yarn/bin/yarn.js',
+        '/project/node_modules/.bin/pnpm',
+        '/project/node_modules/pnpm/bin/pnpm.mjs',
+        '/home/user/.cache/node/corepack/v1/pnpm/11.20.0/bin/pnpm.cjs',
+        '/project/node_modules/.bin/pnpx',
+        '/project/node_modules/pnpm/bin/pnpx.mjs',
+        'C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\pnpm\\bin\\pnpm.cjs',
+        // `corepack pnpm` runs pnpm inside the corepack process.
+        '/usr/local/bin/corepack',
+        '/usr/local/lib/node_modules/corepack/dist/pnpm.js',
+        // Targets of the Windows shims that Node.js installs and that `corepack enable` generates.
+        'C:\\Program Files\\nodejs\\node_modules\\corepack\\dist\\corepack.js',
+        'C:\\Program Files\\nodejs\\node_modules\\corepack\\dist\\pnpm.js',
+        'C:\\Program Files\\nodejs\\node_modules\\corepack\\dist\\pnpx.js',
+        'C:\\Program Files\\nodejs\\node_modules\\corepack\\dist\\yarn.js',
+      ]
+
+      for (const entryPoint of entryPoints) {
+        assert.strictEqual(isPackageManagerEntryPoint(entryPoint), true, entryPoint)
+      }
+    })
+
+    it('does not match test runners and scripts that package managers launch', () => {
+      const entryPoints = [
+        '/project/node_modules/.bin/vitest',
+        '/project/node_modules/.pnpm/vitest@3.2.7/node_modules/vitest/vitest.mjs',
+        '/project/node_modules/tinypool/dist/entry/process.js',
+        '/project/node_modules/.bin/jest',
+        '/project/node_modules/jest/bin/jest.js',
+        '/project/node_modules/jest-worker/build/workers/processChild.js',
+        '/project/node_modules/mocha/bin/mocha.js',
+        '/project/node_modules/@cucumber/cucumber/bin/cucumber.js',
+        '/project/node_modules/@playwright/test/cli.js',
+        '/project/index.mjs',
+      ]
+
+      for (const entryPoint of entryPoints) {
+        assert.strictEqual(isPackageManagerEntryPoint(entryPoint), false, entryPoint)
+      }
+    })
+
+    it('does not match applications whose path only resembles a package manager', () => {
+      const entryPoints = [
+        '/srv/bin/pnpm-app/server.mjs',
+        '/app/bin/npm-report.js',
+        '/app/bin/yarn-worker.mjs',
+        '/app/bin/corepack-tools/index.js',
+        '/app/sbin/npm',
+        '/project/node_modules/.bin/npm-run-all',
+        '/project/node_modules/pnpm-sync/bin/index.js',
+        '/app/dist/pnpm.js',
+        '/app/corepack/dist/server.js',
+        'C:\\app\\corepack\\dist\\pnpm-helper.js',
+      ]
+
+      for (const entryPoint of entryPoints) {
+        assert.strictEqual(isPackageManagerEntryPoint(entryPoint), false, entryPoint)
+      }
+    })
+
+    it('does not match a process without an entry point', () => {
+      assert.strictEqual(isPackageManagerEntryPoint(), false)
+    })
   })
 
   describe('getSegment', () => {

@@ -2,6 +2,13 @@
 
 const path = require('path')
 
+// A package manager CLI file in a `bin` or `.bin` directory, such as `/usr/local/bin/npm`,
+// `npm/bin/npm-cli.js`, `node_modules/.bin/pnpm` or `pnpm/bin/pnpm.cjs`. Corepack's Windows shims
+// run its `dist` files instead, such as `node_modules\corepack\dist\pnpm.js`. Corepack and pnpx run
+// a package manager in their own process, so they count as one too.
+const PACKAGE_MANAGER_ENTRY_POINT =
+  /(?:^|[\\/])(?:\.?bin|corepack[\\/]dist)[\\/](?:npm(?:-cli)?|yarn|yarnpkg|pnpm|pnpx|corepack)(?:\.[cm]?js)?$/
+
 /**
  * `for-in` with an early return is the only allocation-free shape for
  * "does this object have any own enumerable properties". Microbenchmarks
@@ -29,6 +36,14 @@ function isFalse (str) {
 
 function isError (value) {
   return Boolean(value?.message || value instanceof Error)
+}
+
+/**
+ * Whether the current process is a package manager CLI. Scripts and test runners that a package
+ * manager launches run in child processes whose entry point is not a package manager.
+ */
+function isPackageManager () {
+  return PACKAGE_MANAGER_ENTRY_POINT.test(process.argv[1] ?? '')
 }
 
 // Matches a glob pattern to a given subject string
@@ -160,6 +175,7 @@ module.exports = {
   isTrue,
   isFalse,
   isError,
+  isPackageManager,
   globMatch,
   getSegment,
   stripQueryAndFragment,

@@ -1,6 +1,7 @@
 'use strict'
 
 const childProcess = require('node:child_process')
+const { promisify } = require('node:util')
 const workerThreads = require('node:worker_threads')
 
 const {
@@ -69,6 +70,29 @@ function installWorkerPatch () {
   }
 }
 
+/**
+ * Node.js gives `exec` and `execFile` a custom `util.promisify` implementation that resolves
+ * `{ stdout, stderr }`. A plain wrapper loses it, so promisified calls would resolve with `stdout`
+ * alone. Rebuild it on top of the wrapper so those calls keep both that shape and the coverage env.
+ *
+ * @param {Function} run
+ */
+function promisifyWithOutput (run) {
+  return function (...args) {
+    let child
+    const promise = new Promise((resolve, reject) => {
+      child = run(...args, (error, stdout, stderr) => {
+        if (error) {
+          reject(Object.assign(error, { stdout, stderr }))
+        } else {
+          resolve({ stdout, stderr })
+        }
+      })
+    })
+    return Object.assign(promise, { child })
+  }
+}
+
 function installPatch () {
   if (!isCoverageActive() || childProcess[PATCHED]) return
 
@@ -118,6 +142,7 @@ function installPatch () {
     return originalExecFile.call(this, file, n.args, patchSpawnOptions(n.options, file, n.args), callback)
   }
   execFile.__promisify__ = originalExecFile.__promisify__
+  execFile[promisify.custom] = promisifyWithOutput(execFile)
   childProcess.execFile = execFile
   function exec (command, options, callback) {
     if (typeof options === 'function') {
@@ -127,6 +152,7 @@ function installPatch () {
     return originalExec.call(this, command, patchExecOptions(options), callback)
   }
   exec.__promisify__ = originalExec.__promisify__
+  exec[promisify.custom] = promisifyWithOutput(exec)
   childProcess.exec = exec
 
   childProcess.execSync = function (command, options) {

@@ -488,6 +488,8 @@
 /integration-tests/mocha-parallel-files.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/package-guardrails/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
+/integration-tests/package-managers/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/integration-tests/package-managers.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/process-lifecycle.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/startup/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
