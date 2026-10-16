@@ -1,0 +1,11 @@
+_v: 1
+name: fastify
+display_name: Fastify
+description: Instruments Fastify HTTP server request handling and lifecycle errors, with code-origin tagging and request/response
+  data capture for application security.
+packages:
+- name: fastify
+category:
+- http.server
+systems: []
+creation_date: '2019-07-08'
