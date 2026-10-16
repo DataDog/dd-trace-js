@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+/* eslint-disable no-console */
+// Console output is this CLI script's entire interface (reporting violations
+// and the final pass/fail summary), matching the convention used by the
+// other scripts/*.js check scripts in this repo.
+
 // This check enforces `curly: ['error', 'all']` (braces required on every
 // if/else/for/while body) but ONLY on lines added or modified relative to the
 // PR's merge-base with its target branch.
@@ -63,7 +68,9 @@ function getChangedLines (base, file) {
       currentLine = Number(hunkMatch[1])
       continue
     }
-    if (currentLine === null) continue
+    if (currentLine === null) {
+      continue
+    }
     if (line.startsWith('+') && !line.startsWith('+++')) {
       lines.add(currentLine)
       currentLine++
@@ -89,11 +96,20 @@ async function main () {
   let failed = false
   for (const file of files) {
     const changedLines = getChangedLines(base, file)
-    if (changedLines.size === 0) continue
-    if (await eslint.isPathIgnored(file)) continue
+    if (changedLines.size === 0) {
+      continue
+    }
+    // Files are intentionally checked one at a time, in order: each needs its
+    // own changed-line set before linting, so the awaits below cannot be
+    // parallelized without restructuring the skip/early-continue logic.
+    // eslint-disable-next-line no-await-in-loop
+    if (await eslint.isPathIgnored(file)) {
+      continue
+    }
 
     let results
     try {
+      // eslint-disable-next-line no-await-in-loop
       results = await eslint.lintFiles([file])
     } catch {
       // File may have been deleted since the diff was computed; skip it.
@@ -102,8 +118,12 @@ async function main () {
 
     for (const result of results) {
       for (const message of result.messages) {
-        if (message.ruleId !== 'curly') continue
-        if (!changedLines.has(message.line)) continue
+        if (message.ruleId !== 'curly') {
+          continue
+        }
+        if (!changedLines.has(message.line)) {
+          continue
+        }
         failed = true
         console.error(
           `${file}:${message.line}:${message.column} ${message.message} ` +
