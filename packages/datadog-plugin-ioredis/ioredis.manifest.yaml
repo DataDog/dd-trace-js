@@ -1,0 +1,11 @@
+_v: 1
+name: ioredis
+display_name: ioredis
+description: Instruments Redis client commands issued through ioredis, including commands dispatched to cluster nodes.
+packages:
+- name: ioredis
+category:
+- db.client
+systems:
+- redis
+creation_date: '2018-09-21'
