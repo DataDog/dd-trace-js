@@ -37,7 +37,7 @@ class HstsHeaderMissingAnalyzer extends MissingHeaderAnalyzer {
   }
 
   _isHttpsProtocol (req) {
-    return req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https'
+    return req.protocol === 'https' || req.socket?.encrypted === true || req.headers['x-forwarded-proto'] === 'https'
   }
 }
 
