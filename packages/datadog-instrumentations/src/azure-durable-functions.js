@@ -12,6 +12,7 @@ const {
  * @type {import('diagnostics_channel').TracingChannel}
  */
 const azureDurableFunctionsChannel = dc.tracingChannel('datadog:azure:durable-functions:invoke')
+const patchedApps = new WeakSet()
 
 for (const hook of getHooks('durable-functions').values()) {
   addHook(hook, exports => exports)
@@ -19,9 +20,12 @@ for (const hook of getHooks('durable-functions').values()) {
 
 addHook({ name: 'durable-functions', versions: ['>=3'], patchDefault: false }, (df) => {
   const { app } = df
+  if (app && !patchedApps.has(app)) {
+    patchedApps.add(app)
 
-  shimmer.wrap(app, 'entity', entityWrapper)
-  shimmer.wrap(app, 'activity', activityHandler)
+    shimmer.wrap(app, 'entity', entityWrapper)
+    shimmer.wrap(app, 'activity', activityHandler)
+  }
 
   return df
 })

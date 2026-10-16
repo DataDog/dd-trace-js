@@ -31,14 +31,19 @@ const startCh = channel('datadog:mongodb:collection:filter:start')
 const bulkWriteStartCh = channel('apm:mongodb:bulkwrite:start')
 const bulkWriteFinishCh = channel('apm:mongodb:bulkwrite:finish')
 const bulkWriteErrorCh = channel('apm:mongodb:bulkwrite:error')
+const patchedCollections = new WeakSet()
 
 addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
+  const collectionProto = mongodb.Collection.prototype
+  if (patchedCollections.has(collectionProto)) return mongodb
+  patchedCollections.add(collectionProto)
+
   for (const methodName of [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters]) {
-    if (!(methodName in mongodb.Collection.prototype)) continue
+    if (!(methodName in collectionProto)) continue
 
     const useTwoArguments = collectionMethodsWithTwoFilters.has(methodName)
 
-    shimmer.wrap(mongodb.Collection.prototype, methodName, method => {
+    shimmer.wrap(collectionProto, methodName, method => {
       return function (...args) {
         if (!startCh.hasSubscribers) {
           return method.apply(this, args)
@@ -62,8 +67,8 @@ addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
 
   // `bulkWrite` fans out into separate `insert`/`update`/`delete` wire commands, so wrap
   // it to open one parent span those per-type commands nest under as children.
-  if ('bulkWrite' in mongodb.Collection.prototype) {
-    shimmer.wrap(mongodb.Collection.prototype, 'bulkWrite', wrapBulkWrite)
+  if ('bulkWrite' in collectionProto) {
+    shimmer.wrap(collectionProto, 'bulkWrite', wrapBulkWrite)
   }
 
   return mongodb

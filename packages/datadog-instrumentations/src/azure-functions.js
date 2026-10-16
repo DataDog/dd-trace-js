@@ -13,30 +13,34 @@ const azureDurableFunctionsChannel = dc.tracingChannel('datadog:azure:durable-fu
 
 const ORCHESTRATION_TRIGGER_TYPE = 'orchestrationTrigger'
 const ORCHESTRATOR_COMPLETED_EVENT_TYPE = 13
+const patchedApps = new WeakSet()
 
 addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (azureFunction) => {
   const { app } = azureFunction
+  if (app && !patchedApps.has(app)) {
+    patchedApps.add(app)
 
-  // Http triggers
-  shimmer.wrap(app, 'deleteRequest', wrapHandler)
-  shimmer.wrap(app, 'http', wrapHandler)
-  shimmer.wrap(app, 'get', wrapHandler)
-  shimmer.wrap(app, 'patch', wrapHandler)
-  shimmer.wrap(app, 'post', wrapHandler)
-  shimmer.wrap(app, 'put', wrapHandler)
+    // Http triggers
+    shimmer.wrap(app, 'deleteRequest', wrapHandler)
+    shimmer.wrap(app, 'http', wrapHandler)
+    shimmer.wrap(app, 'get', wrapHandler)
+    shimmer.wrap(app, 'patch', wrapHandler)
+    shimmer.wrap(app, 'post', wrapHandler)
+    shimmer.wrap(app, 'put', wrapHandler)
 
-  // Service Bus triggers
-  shimmer.wrap(app, 'serviceBusQueue', wrapHandler)
-  shimmer.wrap(app, 'serviceBusTopic', wrapHandler)
+    // Service Bus triggers
+    shimmer.wrap(app, 'serviceBusQueue', wrapHandler)
+    shimmer.wrap(app, 'serviceBusTopic', wrapHandler)
 
-  // Event Hub triggers
-  shimmer.wrap(app, 'eventHub', wrapHandler)
+    // Event Hub triggers
+    shimmer.wrap(app, 'eventHub', wrapHandler)
 
-  // CosmosDB triggers
-  shimmer.wrap(app, 'cosmosDB', wrapHandler)
+    // CosmosDB triggers
+    shimmer.wrap(app, 'cosmosDB', wrapHandler)
 
-  // Durable Functions orchestration triggers
-  shimmer.wrap(app, 'generic', wrapGeneric)
+    // Durable Functions orchestration triggers
+    shimmer.wrap(app, 'generic', wrapGeneric)
+  }
 
   return azureFunction
 })

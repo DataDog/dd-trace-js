@@ -2,6 +2,7 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { addHook, AsyncResource } = require('./helpers/instrument')
+const patched = new WeakSet()
 
 function createWrapAcquire () {
   return function wrapAcquire (acquire) {
@@ -35,7 +36,12 @@ addHook({
   name: 'generic-pool',
   versions: ['^2.4'],
 }, genericPool => {
-  shimmer.wrap(genericPool.Pool.prototype, 'acquire', createWrapAcquire())
+  const proto = genericPool.Pool.prototype
+  if (!patched.has(proto)) {
+    patched.add(proto)
+    shimmer.wrap(proto, 'acquire', createWrapAcquire())
+  }
+
   return genericPool
 })
 

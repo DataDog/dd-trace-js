@@ -6,6 +6,7 @@ const shimmer = require('../../../datadog-shimmer')
 const startChannel = channel('apm:moleculer:action:start')
 const finishChannel = channel('apm:moleculer:action:finish')
 const errorChannel = channel('apm:moleculer:action:error')
+const patched = new WeakSet()
 
 function wrapRegisterMiddlewares (registerMiddlewares) {
   return function (userMiddlewares) {
@@ -52,7 +53,12 @@ function createMiddleware () {
 }
 
 addHook({ name: 'moleculer', versions: ['>=0.14'] }, moleculer => {
-  shimmer.wrap(moleculer.ServiceBroker.prototype, 'registerMiddlewares', wrapRegisterMiddlewares)
+  const proto = moleculer.ServiceBroker.prototype
+
+  if (!patched.has(proto)) {
+    patched.add(proto)
+    shimmer.wrap(proto, 'registerMiddlewares', wrapRegisterMiddlewares)
+  }
 
   return moleculer
 })
