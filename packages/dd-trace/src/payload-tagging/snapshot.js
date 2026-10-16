@@ -377,9 +377,10 @@ function createSnapshotBudget () {
  * - Functions become `truncated` and mark the snapshot incomplete: their
  *   identity and attached data stay caller-owned, so nothing reachable from a
  *   function is copied, invoked, or exposed to later mutation.
- * - Arrays are copied compactly. When copying changes the reported length
- *   (dropped trailing holes), the snapshot is marked normalized; holes are
- *   never materialized to preserve the length.
+ * - Arrays are copied key by key, so interior holes stay holes, but the
+ *   copy's length ends at its last assigned index and trailing holes are
+ *   lost. When that changes the reported length, the snapshot is marked
+ *   normalized; holes are never materialized to preserve the length.
  *
  * The root and every admitted descendant each count one entry against
  * `maxEntries`; once exhausted, traversal stops without reading or
@@ -558,8 +559,8 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     const frame = stack[stack.length - 1]
 
     if (frame.index === frame.keys.length) {
-      // The copy is compact: copying may have dropped trailing holes,
-      // shortening the array. Holes render no tags, but when the reported
+      // The copy is assigned key by key, so trailing holes are lost and the
+      // array can be shorter. Holes render no tags, but when the reported
       // length changed, predicates on length or indexes can flip, so mark the
       // capture normalized. Holes are never materialized to preserve the
       // length. Omitted keys mark the capture incomplete where they are read.
