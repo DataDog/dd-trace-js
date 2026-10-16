@@ -5363,6 +5363,38 @@ rules:
       assert.strictEqual(config.DD_TRACE_ENABLED, false)
     })
 
+    it('should apply and unapply the DBM propagation mode', () => {
+      const config = getConfig({ dbmPropagationMode: 'full' })
+
+      config.setRemoteConfig({ DD_DBM_PROPAGATION_MODE: 'disabled' })
+
+      assert.strictEqual(config.dbmPropagationMode, 'disabled')
+      assert.strictEqual(config.getOrigin('dbmPropagationMode'), 'remote_config')
+
+      config.setRemoteConfig(null)
+
+      assert.strictEqual(config.dbmPropagationMode, 'full')
+      assert.strictEqual(config.getOrigin('dbmPropagationMode'), 'code')
+    })
+
+    it('should accept every DBM propagation mode from remote configuration', () => {
+      const config = getConfig()
+
+      for (const mode of ['disabled', 'service', 'full', 'dynamic_service']) {
+        config.setRemoteConfig({ DD_DBM_PROPAGATION_MODE: mode })
+        assert.strictEqual(config.dbmPropagationMode, mode)
+      }
+    })
+
+    it('should reject an invalid remote DBM propagation mode', () => {
+      const config = getConfig({ dbmPropagationMode: 'service' })
+
+      config.setRemoteConfig({ DD_DBM_PROPAGATION_MODE: 'invalid' })
+
+      assert.strictEqual(config.dbmPropagationMode, 'service')
+      assert.strictEqual(config.getOrigin('dbmPropagationMode'), 'code')
+    })
+
     it('should resolve a structured (JSON) env-var-keyed config', () => {
       const config = getConfig()
       assert.deepStrictEqual(config.sampler.rules, [])
