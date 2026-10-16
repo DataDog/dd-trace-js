@@ -35,6 +35,22 @@ function hasOwnEnumerableKeys (object) {
   return !Object.keys(object)[Symbol.iterator]().next().done
 }
 
+/**
+ * Whether a genuine typed array or DataView carries own enumerable keys beyond
+ * its element indexes. Index keys of a typed array are exactly its element
+ * count, read from the trusted copy; a DataView has no index keys. Enumeration
+ * is bounded by the binary copy budget the view was admitted against.
+ *
+ * @param {TypedArray | DataView} view
+ * @param {TypedArray | DataView} copy fresh copy with the same element count
+ */
+function hasAttachedProperties (view, copy) {
+  if (isDataView(copy)) {
+    return hasOwnEnumerableKeys(view)
+  }
+  return Object.keys(view).length !== /** @type {TypedArray} */ (copy).length
+}
+
 // Typed-array metadata getters inherited from %TypedArray%.prototype; calling
 // them directly bypasses payload-spoofed own properties.
 const typedArrayProto = Object.getPrototypeOf(Uint8Array.prototype)
@@ -312,19 +328,33 @@ function createSnapshotBudget () {
 /**
  * Produce a bounded, acyclic, stream-safe snapshot of an arbitrary payload.
  *
+ * Two flags describe how the snapshot differs from the payload:
+ * - `normalized`: anything differs at all, including metadata the tag format
+ *   never renders. Data-dependent rules could decide differently on the copy,
+ *   so callers suppress tags for such rules when this is set.
+ * - `incomplete`: rendered content was lost, because a value became
+ *   `truncated`, a key was omitted, or attached properties were discarded.
+ *   This drives the public `_dd.payload_tags_incomplete` tag. It implies
+ *   `normalized`.
+ *
  * - Streams and cyclic back-references become `truncated` without being read.
  * - Depth, admitted entries and aggregate binary copy bytes are bounded;
  *   over-limit values become `truncated` and mark the snapshot incomplete.
  * - Dates, Maps and Sets become isolated native leaves without attached
- *   properties. Their data is never inspected or rendered, so they always
- *   mark the snapshot incomplete and predicates cannot silently change
- *   redaction or expansion decisions after their data is omitted.
+ *   properties. Map and Set contents are never inspected or rendered, so they
+ *   mark the snapshot normalized and predicates cannot silently change
+ *   redaction or expansion decisions after their data is omitted. A Date keeps
+ *   its time value and is only flagged when it carries attached properties.
+ *   Attached properties render as tags, so discarding them marks the snapshot
+ *   incomplete.
  * - Buffers and ArrayBuffer views are copied into fresh storage within the
  *   binary budget so redaction cannot mutate caller-owned bytes. An
  *   over-budget Buffer keeps the prefix its string tag renders. Normalization
  *   always drops metadata the tag format cannot carry (view offsets, backing
  *   storage, prototypes, shadowed properties), so every binary value marks
- *   the capture incomplete instead of proving the loss harmless.
+ *   the capture normalized instead of proving the loss harmless. Only views
+ *   that become `truncated`, or non-Buffer views carrying attached
+ *   properties, mark it incomplete.
  * - Repeated non-circular references are copied per occurrence so redaction
  *   rules keep matching each path independently.
  * - Own enumerable string-keyed properties of plain objects and class
@@ -336,8 +366,8 @@ function createSnapshotBudget () {
  *   identity and attached data stay caller-owned, so nothing reachable from a
  *   function is copied, invoked, or exposed to later mutation.
  * - Arrays are copied compactly. When copying changes the reported length
- *   (dropped trailing holes or named metadata), the snapshot is marked
- *   incomplete; holes are never materialized to preserve the length.
+ *   (dropped trailing holes), the snapshot is marked normalized; holes are
+ *   never materialized to preserve the length.
  *
  * The root and every admitted descendant each count one entry against
  * `maxEntries`; once exhausted, traversal stops without reading or
@@ -352,10 +382,18 @@ function createSnapshotBudget () {
  *
  * @param {unknown} input
  * @param {SnapshotBudget} [budget] remaining work, consumed in place
- * @returns {{ value: unknown, incomplete: boolean }}
+ * @returns {{ value: unknown, incomplete: boolean, normalized: boolean }}
  */
 function createSafeSnapshot (input, budget = createSnapshotBudget()) {
   let incomplete = false
+  let normalized = false
+
+  // Rendered content was lost; loss always implies normalization.
+  function markIncomplete () {
+    incomplete = true
+    normalized = true
+  }
+
   const root = { value: undefined }
   /** @type {Frame[]} */
   const stack = []
@@ -371,11 +409,12 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
   function captureBinary (view) {
     // Normalization always changes or drops metadata the tag format cannot
     // carry (view offsets, backing storage, prototypes, shadowed properties).
-    // Rather than prove the loss harmless, mark every binary value incomplete
+    // Rather than prove the loss harmless, mark every binary value normalized
     // so data-dependent rules cannot decide redaction from the copy.
-    incomplete = true
+    normalized = true
     const kind = binaryKind(view)
     if (kind === null) {
+      markIncomplete()
       return truncated
     }
     let copyLength = visibleByteLength(view, kind)
@@ -385,10 +424,16 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       copyLength = Math.min(copyLength, maxBufferPrefixBytes)
     }
     if (copyLength > budget.binaryBytes) {
+      markIncomplete()
       return truncated
     }
     const copy = copyBinary(view, kind, copyLength)
     budget.binaryBytes -= copyLength
+    if (kind !== 'buffer' && hasAttachedProperties(view, copy)) {
+      // Non-Buffer views render their own enumerable keys as tags, and the
+      // copy discards attached ones. Buffers render only their bytes.
+      markIncomplete()
+    }
     return copy
   }
 
@@ -409,7 +454,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     // through it. Replace the leaf without invoking, enumerating, or copying
     // anything reachable from it.
     if (typeof value === 'function') {
-      incomplete = true
+      markIncomplete()
       assign(container, key, truncated, root)
       return
     }
@@ -429,36 +474,35 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       } catch {
         // Native reads reject detached storage; only this leaf is lost. Never
         // inspect the caught value.
-        incomplete = true
+        markIncomplete()
         copy = truncated
       }
       assign(container, key, copy, root)
       return
     }
 
-    // Opaque leaves render no payload tags, so anything they hold is lost:
-    // marking the snapshot incomplete keeps predicates from silently changing
-    // redaction or expansion decisions after that data is omitted, without
-    // reading getters or iterating contents.
-    // A Date without own enumerable string-keyed properties is the exception:
-    // its time value is preserved in the native copy, so no payload data is
-    // lost and data-dependent rules can keep applying. Dates with own
-    // enumerable keys still flag, because that attached data is discarded.
+    // Map and Set contents never render as tags, but dropping them can flip
+    // predicates (for example on `size`): marking the snapshot normalized
+    // keeps data-dependent rules from silently changing redaction or
+    // expansion decisions, without reading getters or iterating contents.
+    // A Date keeps its time value in the native copy, so on its own it is
+    // neither normalized nor incomplete. Own enumerable string-keyed
+    // properties of any of these leaves render as tags and are discarded, so
+    // they mark the snapshot incomplete.
     if (isDate(value)) {
       if (hasOwnEnumerableKeys(value)) {
-        incomplete = true
+        markIncomplete()
       }
       assign(container, key, new Date(getDateTime.call(value)), root)
       return
     }
-    if (isMap(value)) {
-      incomplete = true
-      assign(container, key, new Map(), root)
-      return
-    }
-    if (isSet(value)) {
-      incomplete = true
-      assign(container, key, new Set(), root)
+    if (isMap(value) || isSet(value)) {
+      if (hasOwnEnumerableKeys(value)) {
+        markIncomplete()
+      } else {
+        normalized = true
+      }
+      assign(container, key, isMap(value) ? new Map() : new Set(), root)
       return
     }
 
@@ -472,7 +516,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
       (sourceLength !== null && sourceLength > maxArrayLength) ||
       isStream(value)
     ) {
-      incomplete = true
+      markIncomplete()
       assign(container, key, truncated, root)
       return
     }
@@ -492,7 +536,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
 
   // The root counts as one admitted entry like every other value.
   if (budget.entries <= 0) {
-    return { value: truncated, incomplete: true }
+    return { value: truncated, incomplete: true, normalized: true }
   }
   budget.entries--
   admit(null, null, input, 0, null)
@@ -502,12 +546,13 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     const frame = stack[stack.length - 1]
 
     if (frame.index === frame.keys.length) {
-      // The copy is compact: copying may have dropped trailing holes or named
-      // metadata, shortening the array. When the reported length changed,
-      // predicates on length or indexes can flip, so mark the capture
-      // incomplete. Holes are never materialized to preserve the length.
+      // The copy is compact: copying may have dropped trailing holes,
+      // shortening the array. Holes render no tags, but when the reported
+      // length changed, predicates on length or indexes can flip, so mark the
+      // capture normalized. Holes are never materialized to preserve the
+      // length. Omitted keys mark the capture incomplete where they are read.
       if (frame.sourceLength !== null && frame.copy.length !== frame.sourceLength) {
-        incomplete = true
+        normalized = true
       }
       stack.pop()
       continue
@@ -515,7 +560,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
 
     if (budget.entries <= 0) {
       // Budget exhausted: stop without reading or materializing anything else.
-      incomplete = true
+      markIncomplete()
       break
     }
 
@@ -532,7 +577,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     // exceptions reach the fail-soft boundary in payload-tagging/index.js.
     const descriptor = Object.getOwnPropertyDescriptor(frame.source, key)
     if (descriptor === undefined || !descriptor.enumerable) {
-      incomplete = true
+      markIncomplete()
       continue
     }
     let value
@@ -546,7 +591,7 @@ function createSafeSnapshot (input, budget = createSnapshotBudget()) {
     admit(frame.copy, key, value, frame.childDepth, frame.ancestors)
   }
 
-  return { value: root.value, incomplete }
+  return { value: root.value, incomplete, normalized }
 }
 
 module.exports = { createSafeSnapshot, createSnapshotBudget, defineDataProperty }

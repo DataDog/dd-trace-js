@@ -14,11 +14,11 @@ const { createSafeSnapshot, createSnapshotBudget, defineDataProperty } = require
 const { truncated } = require('./constants')
 
 // JSONPath constructs that select on data values (predicates, script
-// expressions, type, parent and property-name selectors). On an incomplete
+// expressions, type, parent and property-name selectors). On a normalized
 // capture their matches can differ from the full payload, possibly missing a
-// sensitive value. Incomplete captures are suppressed when any rule uses
+// sensitive value. Normalized captures are suppressed when any rule uses
 // one; structural paths, wildcards, indexes and recursive descent stay safe
-// because incompleteness only removes or normalizes content.
+// because normalization only removes or normalizes content.
 const dataDependentRulePattern = /[?()@^~:`]/
 
 // Remaining cumulative string length (UTF-16 code units) available for
@@ -41,12 +41,15 @@ function hasDataDependentRules (rules) {
 
 /**
  * Work shared by every expansion of one payload: the snapshot budget left by
- * capture and the remaining parse budget, both consumed in place. The
- * incomplete flag records any normalization or truncation encountered so far,
- * whether during initial capture or expansion.
+ * capture and the remaining parse budget, both consumed in place. The flags
+ * accumulate across initial capture and expansion: `normalized` records any
+ * difference from the payload and gates suppression for data-dependent rules,
+ * while `incomplete` records lost rendered content and drives the public
+ * `_dd.payload_tags_incomplete` tag.
  *
  * @typedef {{
  *   incomplete: boolean,
+ *   normalized: boolean,
  *   budget: import('./snapshot').SnapshotBudget,
  *   expansionLength: number
  * }} Capture
@@ -68,6 +71,7 @@ function maybeJSONParseValue (value, capture) {
 
   if (value.length > capture.expansionLength) {
     capture.incomplete = true
+    capture.normalized = true
     return truncated
   }
   capture.expansionLength -= value.length
@@ -81,6 +85,7 @@ function maybeJSONParseValue (value, capture) {
 
   const snapshot = createSafeSnapshot(parsed, capture.budget)
   capture.incomplete ||= snapshot.incomplete
+  capture.normalized ||= snapshot.normalized
   return snapshot.value
 }
 
@@ -148,7 +153,7 @@ function computeTags (config, object, opts) {
 }
 
 /**
- * Snapshot, expand, redact and flatten a payload. Incomplete captures whose
+ * Snapshot, expand, redact and flatten a payload. Normalized captures whose
  * rules are data-dependent are suppressed instead of risking exposure of
  * unredacted values.
  *
@@ -168,7 +173,7 @@ function computeBoundedTags (config, object, opts) {
   const dataDependentRules =
     hasDataDependentRules(redactionRules) || hasDataDependentRules(expansionRules)
 
-  if (snapshot.incomplete && dataDependentRules) {
+  if (snapshot.normalized && dataDependentRules) {
     // Fixed, payload-safe diagnostic: no payload values or rule text included.
     log.debug(
       'Omitting payload tags: the capture was incomplete and the rules are data-dependent'
@@ -177,10 +182,15 @@ function computeBoundedTags (config, object, opts) {
   }
 
   /** @type {Capture} */
-  const capture = { incomplete: snapshot.incomplete, budget, expansionLength: maxExpansionLength }
+  const capture = {
+    incomplete: snapshot.incomplete,
+    normalized: snapshot.normalized,
+    budget,
+    expansionLength: maxExpansionLength,
+  }
   expand(payload, expansionRules, capture)
 
-  if (capture.incomplete && dataDependentRules) {
+  if (capture.normalized && dataDependentRules) {
     log.debug(
       'Omitting payload tags: expansion was incomplete and the rules are data-dependent'
     )
