@@ -508,6 +508,13 @@
         "default": null
       }
     ],
+    "DD_AZURE_SUBSCRIPTION_ID": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null
+      }
+    ],
     "DD_CIVISIBILITY_AGENTLESS_ENABLED": [
       {
         "implementation": "A",

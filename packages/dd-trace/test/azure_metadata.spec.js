@@ -8,7 +8,9 @@ const proxyquire = require('proxyquire')
 
 require('./setup/core')
 const {
+  getACATagsFromMetadata,
   getAzureAppMetadata,
+  getAzureContainerAppMetadata,
   getAzureTagsFromMetadata,
   getAzureFunctionMetadata,
 } = proxyquire('../src/azure_metadata', {
@@ -22,7 +24,12 @@ const {
 describe('Azure metadata', () => {
   const AZURE_ENV_KEYS = [
     'COMPUTERNAME',
+    'CONTAINER_APP_ENV_DNS_SUFFIX',
+    'CONTAINER_APP_NAME',
+    'CONTAINER_APP_REPLICA_NAME',
+    'CONTAINER_APP_REVISION',
     'DD_AZURE_RESOURCE_GROUP',
+    'DD_AZURE_SUBSCRIPTION_ID',
     'FUNCTIONS_EXTENSION_VERSION',
     'FUNCTIONS_WORKER_RUNTIME',
     'FUNCTIONS_WORKER_RUNTIME_VERSION',
@@ -167,6 +174,161 @@ describe('Azure metadata', () => {
     process.env.DD_AZURE_RESOURCE_GROUP = 'should_not_use_this'
     const metadata = getAzureFunctionMetadata()
     assert.strictEqual(metadata.resourceGroup, 'regular_resource_group')
+  })
+
+  describe('for container apps is', () => {
+    it('not provided without CONTAINER_APP_NAME', () => {
+      delete process.env.CONTAINER_APP_NAME
+      assert.strictEqual(getAzureContainerAppMetadata(), undefined)
+    })
+
+    it('provided with CONTAINER_APP_NAME', () => {
+      delete process.env.COMPUTERNAME // actually defined on Windows
+      process.env.CONTAINER_APP_NAME = 'my-containerapp'
+      assert.deepStrictEqual(getAzureContainerAppMetadata(), {
+        appName: 'my-containerapp',
+        appRegion: 'unknown',
+        operatingSystem: os.platform(),
+        siteKind: 'app',
+        siteType: 'app',
+      })
+    })
+
+    it('not provided for an App Service app', () => {
+      delete process.env.CONTAINER_APP_NAME
+      process.env.WEBSITE_SITE_NAME = 'website_name'
+      assert.strictEqual(getAzureContainerAppMetadata(), undefined)
+    })
+  })
+
+  describe('container app tags', () => {
+    it('are empty without metadata', () => {
+      assert.deepStrictEqual(getACATagsFromMetadata(undefined), {})
+    })
+
+    it('are generated from the container app vars', () => {
+      process.env.CONTAINER_APP_NAME = 'my-containerapp'
+      process.env.CONTAINER_APP_REVISION = 'my-containerapp--20mh1s9'
+      process.env.CONTAINER_APP_REPLICA_NAME = 'my-containerapp--20mh1s9-86c8c4b497-zx9bq'
+      process.env.CONTAINER_APP_ENV_DNS_SUFFIX = 'wonderfulmoss-f1e2d3c4.eastus.azurecontainerapps.io'
+      assert.deepStrictEqual(getACATagsFromMetadata(getAzureContainerAppMetadata()), {
+        'aca.app.name': 'my-containerapp',
+        'aca.app.region': 'eastus',
+        'aca.app.revision': 'my-containerapp--20mh1s9',
+        'aca.replica.name': 'my-containerapp--20mh1s9-86c8c4b497-zx9bq',
+      })
+    })
+
+    it('never derive the ACA identity from the App Service vars', () => {
+      // A function hosted on container apps can carry the WEBSITE_* vars too, which would otherwise
+      // build a `microsoft.web/sites` ID and publish it under the ACA key.
+      process.env.CONTAINER_APP_NAME = 'my-containerapp'
+      process.env.WEBSITE_SITE_NAME = 'my-func'
+      process.env.WEBSITE_RESOURCE_GROUP = 'website_resource_group'
+      process.env.WEBSITE_OWNER_NAME = 'subscription_id+resource_group-regionwebspace'
+      const tags = getACATagsFromMetadata(getAzureContainerAppMetadata())
+      assert.strictEqual(tags['aca.resource.id'], undefined)
+      assert.strictEqual(tags['aca.subscription.id'], undefined)
+      assert.strictEqual(tags['aca.resource.group'], undefined)
+    })
+
+    it('build the ACA resource ID from the DD_AZURE_* config', () => {
+      process.env.CONTAINER_APP_NAME = 'My-ContainerApp'
+      process.env.DD_AZURE_SUBSCRIPTION_ID = 'subscription_id'
+      process.env.DD_AZURE_RESOURCE_GROUP = 'resource_group'
+      const tags = getACATagsFromMetadata(getAzureContainerAppMetadata())
+      assert.strictEqual(tags['aca.subscription.id'], 'subscription_id')
+      assert.strictEqual(tags['aca.resource.group'], 'resource_group')
+      assert.strictEqual(
+        tags['aca.resource.id'],
+        '/subscriptions/subscription_id/resourcegroups/resource_group' +
+        '/providers/microsoft.app/containerapps/my-containerapp'
+      )
+    })
+
+    it('omit the ACA resource ID when only one of the DD_AZURE_* values is set', () => {
+      process.env.CONTAINER_APP_NAME = 'my-containerapp'
+      process.env.DD_AZURE_SUBSCRIPTION_ID = 'subscription_id'
+      const tags = getACATagsFromMetadata(getAzureContainerAppMetadata())
+      assert.strictEqual(tags['aca.subscription.id'], 'subscription_id')
+      assert.strictEqual(tags['aca.resource.id'], undefined)
+    })
+
+    it('omit the aas.environment.* tags outside Azure Functions', () => {
+      process.env.CONTAINER_APP_NAME = 'my-containerapp'
+      const tags = getACATagsFromMetadata(getAzureContainerAppMetadata())
+      assert.deepStrictEqual(Object.keys(tags).filter(key => key.startsWith('aas.')), [])
+    })
+
+    it('include the Azure Functions runtime context for a function hosted on container apps', () => {
+      delete process.env.COMPUTERNAME
+      process.env.CONTAINER_APP_NAME = 'my-containerapp'
+      process.env.CONTAINER_APP_ENV_DNS_SUFFIX = 'wonderfulmoss-f1e2d3c4.eastus.azurecontainerapps.io'
+      process.env.FUNCTIONS_EXTENSION_VERSION = '~4'
+      process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
+      process.env.FUNCTIONS_WORKER_RUNTIME_VERSION = '22'
+      assert.deepStrictEqual(getACATagsFromMetadata(getAzureContainerAppMetadata()), {
+        'aas.environment.function_runtime': '~4',
+        'aas.environment.os': os.platform(),
+        'aas.environment.runtime': 'node',
+        'aas.environment.runtime_version': '22',
+        'aca.app.name': 'my-containerapp',
+        'aca.app.region': 'eastus',
+      })
+    })
+  })
+
+  describe('region extraction from CONTAINER_APP_ENV_DNS_SUFFIX', () => {
+    /** @param {string} [dnsSuffix] */
+    function regionFor (dnsSuffix) {
+      process.env.CONTAINER_APP_NAME = 'my-containerapp'
+      if (dnsSuffix === undefined) {
+        delete process.env.CONTAINER_APP_ENV_DNS_SUFFIX
+      } else {
+        process.env.CONTAINER_APP_ENV_DNS_SUFFIX = dnsSuffix
+      }
+      return getAzureContainerAppMetadata().appRegion
+    }
+
+    it('reads the label before the two-label tail', () => {
+      assert.strictEqual(regionFor('wonderfulmoss-f1e2d3c4.eastus.azurecontainerapps.io'), 'eastus')
+    })
+
+    it('ignores how many labels the default hostname spans', () => {
+      assert.strictEqual(regionFor('test.bluebeach.eastus.azurecontainerapps.io'), 'eastus')
+    })
+
+    it('extracts from the shortest accepted form', () => {
+      assert.strictEqual(regionFor('eastus.azurecontainerapps.io'), 'eastus')
+    })
+
+    it('does not depend on the top-level domain', () => {
+      // Anchoring from the right keeps sovereign clouds working.
+      assert.strictEqual(regionFor('eastus.azurecontainerapps.us'), 'eastus')
+    })
+
+    it('falls back to unknown with only two labels', () => {
+      // First rejected length: one label short of the three the format requires.
+      assert.strictEqual(regionFor('foo.bar'), 'unknown')
+    })
+
+    it('falls back to unknown when the region label is empty', () => {
+      assert.strictEqual(regionFor('.azurecontainerapps.io'), 'unknown')
+    })
+
+    it('falls back to unknown when the suffix is empty', () => {
+      assert.strictEqual(regionFor(''), 'unknown')
+    })
+
+    it('falls back to unknown when the suffix is unset', () => {
+      assert.strictEqual(regionFor(undefined), 'unknown')
+    })
+
+    it('reads the third label from the right of a custom domain suffix', () => {
+      // Matches the Agent, which also has no way to tell a custom suffix from the
+      // platform one: cmd/serverless-init/cloudservice/containerapp.go.
+      assert.strictEqual(regionFor('apps.contoso.com'), 'apps')
+    })
   })
 
   describe('resource group extraction from WEBSITE_OWNER_NAME', () => {

@@ -98,6 +98,25 @@ const tracer = require('dd-trace').init({
 
 The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project name is configured, Experiments uses `default-project`. The `mlApp` and `service` settings are not used as Experiments project-name fallbacks. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
 
+<h2 id="azure-container-apps">Azure Container Apps</h2>
+
+On Azure Container Apps the tracer tags telemetry with the container app's identity: its name, revision, replica, and
+region, read from the `CONTAINER_APP_*` variables the platform injects.
+
+Container Apps does not expose the subscription or resource group to the container, so set both of these to get the
+resource identity tags:
+
+- `DD_AZURE_SUBSCRIPTION_ID` - Your Azure subscription ID.
+- `DD_AZURE_RESOURCE_GROUP` - Your Azure resource group.
+
+With both set, the tracer reports `aca.subscription.id`, `aca.resource.group`, and the full `aca.resource.id`. With
+neither or only one, those three tags are omitted and the remaining container app tags are unaffected. These are the
+same variables the [Datadog sidecar for Azure Container Apps](https://docs.datadoghq.com/serverless/azure_container_apps/sidecar/)
+requires, so deployments already following that setup need no additional configuration.
+
+`DD_AZURE_RESOURCE_GROUP` is also used by Azure Functions on Flex Consumption plans, which cannot derive the resource
+group from the environment either.
+
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
