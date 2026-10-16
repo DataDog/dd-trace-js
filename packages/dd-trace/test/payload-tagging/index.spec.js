@@ -1836,6 +1836,39 @@ describe('Safe payload capture', () => {
       })
     }
 
+    /** @type {Array<[string, () => ArrayBuffer | SharedArrayBuffer]>} */
+    const rawBuffers = [
+      ['ArrayBuffer', () => new ArrayBuffer(2)],
+      ['SharedArrayBuffer', () => new SharedArrayBuffer(2)],
+      ['cross-realm ArrayBuffer', () => nodeVm.runInNewContext('new ArrayBuffer(2)')],
+    ]
+    for (const [name, make] of rawBuffers) {
+      it(`replaces a raw ${name} with an empty native buffer and suppresses its predicates`, () => {
+        const storage = make()
+        const input = { items: [{ storage, secret: 's3cret' }] }
+        const rule = '$.items[?(@.storage.byteLength > 0)].secret'
+        assert.deepStrictEqual(jsonpath({ path: rule, json: input }), ['s3cret'])
+
+        const snapshot = createSafeSnapshot(input)
+        const copy = /** @type {{ items: Array<{ storage: ArrayBuffer }> }} */ (snapshot.value).items[0].storage
+        assert.strictEqual(snapshot.normalized, true)
+        assert.strictEqual(snapshot.incomplete, false)
+        assert.ok(copy instanceof ArrayBuffer)
+        assert.strictEqual(copy.byteLength, 0)
+        assert.deepStrictEqual(computeTags({ ...safeConfig, response: [rule] }, input, responseOpts), {})
+        assert.strictEqual(input.items[0].secret, 's3cret')
+      })
+    }
+
+    it('flags a raw ArrayBuffer with own enumerable keys as incomplete', () => {
+      const storage = Object.assign(new ArrayBuffer(2), { detail: 'attached' })
+      const snapshot = createSafeSnapshot({ storage })
+      assert.strictEqual(snapshot.incomplete, true)
+      assert.strictEqual(snapshot.normalized, true)
+      const copy = /** @type {{ storage: object }} */ (snapshot.value).storage
+      assert.strictEqual(Object.hasOwn(copy, 'detail'), false)
+    })
+
     for (const name of ['Map', 'Set']) {
       it(`discards nonempty ${name} contents without iteration and keeps structural captures`, () => {
         const stream = makeReadable()

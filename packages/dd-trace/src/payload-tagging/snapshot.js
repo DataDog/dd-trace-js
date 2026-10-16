@@ -1,7 +1,7 @@
 'use strict'
 
 const { Stream } = require('node:stream')
-const { isDataView, isDate, isMap, isSet } = require('node:util').types
+const { isAnyArrayBuffer, isDataView, isDate, isMap, isSet } = require('node:util').types
 
 // Intrinsic used to invoke accessor getters, so a payload-defined `call`
 // property on a getter (data or accessor) is never consulted.
@@ -469,6 +469,18 @@ function admit (state, container, key, value, depth, ancestors) {
     assign(container, key, isMap(value) ? new Map() : new Set(), state)
     return
   }
+  // Raw ArrayBuffer and SharedArrayBuffer storage renders no tags either, but
+  // predicates can read its metadata (for example `byteLength`). Bytes are
+  // never copied: an empty native buffer stands in for it.
+  if (isAnyArrayBuffer(value)) {
+    if (hasOwnEnumerableKeys(value)) {
+      markIncomplete(state)
+    } else {
+      state.normalized = true
+    }
+    assign(container, key, new ArrayBuffer(0), state)
+    return
+  }
 
   const isArray = Array.isArray(value)
   const sourceLength = isArray ? value.length : undefined
@@ -528,6 +540,9 @@ function admit (state, container, key, value, depth, ancestors) {
  *   the capture normalized instead of proving the loss harmless. Only views
  *   that become `truncated`, or non-Buffer views carrying attached
  *   properties, mark it incomplete.
+ * - Raw ArrayBuffer and SharedArrayBuffer values become a fresh empty
+ *   ArrayBuffer without copying any bytes; like Maps and Sets they mark the
+ *   snapshot normalized, or incomplete when they carry attached properties.
  * - Repeated non-circular references are copied per occurrence so redaction
  *   rules keep matching each path independently.
  * - Own enumerable string-keyed properties of plain objects and class
