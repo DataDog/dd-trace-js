@@ -54,7 +54,7 @@ describe('S3 payload tagging fail-soft process boundary', function () {
       for (const capture of ['disabled', 'enabled']) {
         it(`survives a hostile ${scenario} exception with ${sdk} and capture ${capture}`, async () => {
           let completed
-          let stderr = ''
+          let output = ''
           const groups = receiver.collectGroups({
             expectedCount: 2,
             timeout: 10000,
@@ -76,15 +76,22 @@ describe('S3 payload tagging fail-soft process boundary', function () {
                   DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
                   DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: '',
                   DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING: '',
+                  // Debug logging makes the fixed diagnostics observable, so the
+                  // payload-content check below inspects real log output.
+                  DD_TRACE_DEBUG: 'true',
+                  DD_TRACE_LOG_LEVEL: 'debug',
                 },
                 silent: true,
-              }, undefined, chunk => { stderr += chunk }, 10000)
+              }, chunk => { output += chunk }, chunk => { output += chunk }, 10000)
               child = completed.proc
               return completed
             },
           })
           const [traces] = await Promise.all([groups, completed])
-          assert.ok(!stderr.includes('payload-secret'), 'diagnostics must not include payload contents')
+          const enabled = capture === 'enabled'
+          // Debug logs go to stdout and errors to stderr; both are inspected.
+          assert.strictEqual(output.includes('omitting payload tags for this operation'), enabled)
+          assert.ok(!output.includes('payload-secret'), 'diagnostics must not include payload contents')
           const spans = traces.flat().filter(span => span.name === 'aws.request')
           assert.strictEqual(spans.length, 2)
           for (const span of spans) {
@@ -92,7 +99,6 @@ describe('S3 payload tagging fail-soft process boundary', function () {
             assert.strictEqual(span.error, 0)
             assert.strictEqual(span.meta['aws.response.request_id'], 'request-id')
           }
-          const enabled = capture === 'enabled'
           const [first, next] = spans
           if (!enabled || scenario !== 'response') {
             assert.ok(!Object.keys(first.meta).some(key => key.startsWith('aws.request.body')))
