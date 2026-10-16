@@ -19,6 +19,8 @@ module.exports = {
   METADATA: '_ml_obs.meta.metadata',
   COST_TAGS: '_ml_obs.meta.metadata._dd.cost_tags',
   AGENT_MANIFEST: '_ml_obs.meta.metadata._dd.agent_manifest',
+  AGENT_VERSION: '_ml_obs.agent_version',
+  AGENT_VERSION_TAG_KEY: 'agent_version',
   METRICS: '_ml_obs.metrics',
   TOOL_DEFINITIONS: '_ml_obs.meta.tool_definitions',
   ML_APP: '_ml_obs.meta.ml_app',
@@ -29,6 +31,7 @@ module.exports = {
 
   PARENT_AGENT_NAME: '_ml_obs.parent_agent_name',
   PARENT_AGENT_SPAN_ID: '_ml_obs.parent_agent_span_id',
+  PARENT_AGENT_VERSION: '_ml_obs.parent_agent_version',
   PROPAGATED_PARENT_AGENT_ID_KEY: '_dd.p.llmobs_pagent_span_id',
   PROPAGATED_PARENT_AGENT_NAME_KEY: '_dd.p.llmobs_pagent_name',
   PROPAGATED_SAMPLE_RATE_KEY: '_dd.p.llmobs_sr',

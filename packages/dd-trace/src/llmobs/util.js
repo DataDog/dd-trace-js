@@ -8,8 +8,10 @@ const {
   SPAN_KINDS,
   SPAN_KIND,
   NAME,
+  AGENT_VERSION,
   PARENT_AGENT_NAME,
   PARENT_AGENT_SPAN_ID,
+  PARENT_AGENT_VERSION,
 } = require('./constants/tags')
 
 const DECIMAL_TRACE_ID_REGEX = /^\d+$/
@@ -326,14 +328,18 @@ function agentNameWireSafe (name) {
  *
  * @param {Record<string, unknown> | undefined} tags - Registry entry for the parent span.
  * @param {import('../opentracing/span')} [span] - The parent span itself (needed for span id / name).
- * @returns {{ name: string | undefined, spanId: string | undefined }}
+ * @returns {{ name: string | undefined, spanId: string | undefined, version: string | undefined }}
  */
 function resolveAgentAttribution (tags, span) {
-  if (!tags) return { name: undefined, spanId: undefined }
+  if (!tags) return { name: undefined, spanId: undefined, version: undefined }
   if (tags[SPAN_KIND] === 'agent') {
-    return { name: tags[NAME] || span._name, spanId: span.context().toSpanId() }
+    return {
+      name: tags[NAME] || span._name,
+      spanId: span.context().toSpanId(),
+      version: tags[AGENT_VERSION] || tags[PARENT_AGENT_VERSION],
+    }
   }
-  return { name: tags[PARENT_AGENT_NAME], spanId: tags[PARENT_AGENT_SPAN_ID] }
+  return { name: tags[PARENT_AGENT_NAME], spanId: tags[PARENT_AGENT_SPAN_ID], version: tags[PARENT_AGENT_VERSION] }
 }
 
 function spanHasError (span) {
