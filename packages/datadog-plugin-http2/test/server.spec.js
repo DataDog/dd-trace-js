@@ -21,10 +21,10 @@ const { rawExpectedSchema } = require('./naming')
 /**
  * @param {typeof import('http2')} http2
  * @param {string} url
- * @param {{ signal?: import('node:events').EventEmitter }} [options]
+ * @param {{ method?: string, signal?: import('node:events').EventEmitter }} [options]
  */
 function request (http2, url, options = {}) {
-  const { signal } = options
+  const { method = 'GET', signal } = options
   const urlObj = new URL(url)
   return new Promise((resolve, reject) => {
     const client = http2
@@ -33,7 +33,7 @@ function request (http2, url, options = {}) {
 
     const req = client.request({
       ':path': urlObj.pathname + urlObj.search,
-      ':method': 'GET',
+      ':method': method,
     })
     req.on('error', reject)
 
@@ -344,6 +344,16 @@ describe('Plugin', () => {
           request(http2, `http://localhost:${port}/user`).catch(done)
         })
 
+        it('should trace OPTIONS requests by default', async () => {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['http.method'], 'OPTIONS')
+              assert.strictEqual(traces[0][0].resource, 'OPTIONS')
+            }),
+            request(http2, `http://localhost:${port}/user`, { method: 'OPTIONS' }),
+          ])
+        })
+
         it('should run the request\'s close event in the correct context', done => {
           app = (req, res) => {
             req.on('close', () => {
@@ -420,6 +430,72 @@ describe('Plugin', () => {
             .then(done, done)
 
           request(http2, `http://localhost:${port}/health`).catch(done)
+        })
+      })
+
+      describe('with disabled OPTIONS request tracing', () => {
+        beforeEach(async () => {
+          process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED = 'false'
+          await agent.load('http2', { client: false })
+          http2 = require(pluginToBeLoaded)
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED
+        })
+
+        /** @param {import('node:http2').Http2Server} server */
+        function listen (server) {
+          appListener = server
+          return new Promise(resolve => {
+            server.listen(0, 'localhost', () => {
+              port = server.address().port
+              resolve()
+            })
+          })
+        }
+
+        it('should not export traces for compatibility requests', async () => {
+          app = sinon.stub()
+          await listen(http2.createServer(listener))
+
+          await Promise.all([
+            agent.assertNoTraces(() => {
+              throw new Error('OPTIONS requests should not be recorded.')
+            }, { timeoutMs: 100 }),
+            request(http2, `http://localhost:${port}/user`, { method: 'OPTIONS' }),
+          ])
+
+          sinon.assert.calledOnce(app)
+        })
+
+        it('should not export traces for core streams', async () => {
+          const onStream = sinon.spy(stream => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          })
+          await listen(http2.createServer().on('stream', onStream))
+
+          await Promise.all([
+            agent.assertNoTraces(() => {
+              throw new Error('OPTIONS requests should not be recorded.')
+            }, { timeoutMs: 100 }),
+            request(http2, `http://localhost:${port}/user`, { method: 'OPTIONS' }),
+          ])
+
+          sinon.assert.calledOnce(onStream)
+        })
+
+        it('should continue to trace other request methods', async () => {
+          await listen(http2.createServer(listener))
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
+              assert.strictEqual(traces[0][0].resource, 'GET')
+            }),
+            request(http2, `http://localhost:${port}/user`),
+          ])
         })
       })
 
