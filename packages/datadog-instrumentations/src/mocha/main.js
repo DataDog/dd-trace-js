@@ -1,6 +1,9 @@
 'use strict'
 
 const { AsyncResource } = require('node:async_hooks')
+const { realpathSync } = require('node:fs')
+const { resolve, sep } = require('node:path')
+const { fileURLToPath } = require('node:url')
 
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../../vendor/dist/semifies')
@@ -16,6 +19,7 @@ const { EMPTY_EFD_RETRY_POLICY } = require('../../../dd-trace/src/ci-visibility/
 const { writeCoverageBackfillToCache } = require('../../../dd-trace/src/ci-visibility/test-optimization-cache')
 const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
+const { getCallSites } = require('../../../dd-trace/src/plugins/util/stacktrace')
 const {
   getTestSuitePath,
   MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
@@ -88,6 +92,9 @@ const runnerRecoveryStates = new WeakMap()
 const runnersWithPendingCoverageReset = new WeakSet()
 const parallelRunners = new WeakSet()
 const wrappedRunnerEmitPrototypes = new WeakSet()
+const rootSuitesWithHookFiles = new WeakSet()
+const ROOT_HOOK_NAMES = ['_beforeAll', '_afterAll', '_beforeEach', '_afterEach']
+const ROOT_SUITE_ARRAY_NAMES = ['tests', 'suites', '_onlyTests', '_onlySuites', ...ROOT_HOOK_NAMES]
 let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
@@ -931,6 +938,23 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       return
     }
 
+    if (runner._opts?.cleanReferencesAfterRun === false) {
+      const rootSuite = runner.suite
+      const originalArrays = ROOT_SUITE_ARRAY_NAMES.map(name => rootSuite[name])
+      // Restore definitions before completion callbacks can start another run, including with the plugin disabled.
+      runner.prependOnceListener('end', () => {
+        for (let index = 0; index < ROOT_SUITE_ARRAY_NAMES.length; index++) {
+          rootSuite[ROOT_SUITE_ARRAY_NAMES[index]] = originalArrays[index]
+        }
+      })
+    }
+
+    // Root hooks must be selected before .only() removes other files from the test tree.
+    for (const name of ROOT_HOOK_NAMES) {
+      runner.suite[name] = runner.suite[name].filter(hook => !hook.file ||
+        !suitesToSkip.includes(getSuitePath(hook)) || unskippableSuites.includes(hook.file))
+    }
+
     // We remove the suites that we skip through ITR
     // Mocha normally applies exclusivity after this asynchronous configuration step.
     if (typeof runner.suite.hasOnly === 'function') {
@@ -940,17 +964,28 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
     const numTestsToRun = runner.grepTotal(runner.suite)
     const filteredSuites = getFilteredSuites(runner.suite.suites)
+    // Root tests share a Mocha suite across files, but TIA still selects them by file.
+    const filteredRootTests = getFilteredSuites(runner.suite.tests)
     const { suitesToRun, suitesToSkipForRun } = filteredSuites
 
-    isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
+    isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length ||
+      filteredRootTests.suitesToRun.length !== runner.suite.tests.length
 
     log.debug('%d out of %d suites are going to run.', suitesToRun.length, runner.suite.suites.length)
 
     runner.suite.suites = suitesToRun
+    runner.suite.tests = filteredRootTests.suitesToRun
+    // Mocha reapplies exclusivity when the delayed runner resumes.
+    if (runner.suite._onlyTests.length) {
+      runner.suite._onlyTests = runner.suite.tests
+    }
+    if (runner.suite._onlySuites.length) {
+      runner.suite._onlySuites = runner.suite._onlySuites.filter(suite => suitesToRun.includes(suite))
+    }
     areAllSuitesSkipped = isSuitesSkipped && numTestsToRun > 0 && runner.grepTotal(runner.suite) === 0
 
-    skippedSuites = [...filteredSuites.skippedSuites]
-    suitesToSkip = suitesToSkipForRun
+    skippedSuites = [...new Set([...filteredSuites.skippedSuites, ...filteredRootTests.skippedSuites])]
+    suitesToSkip = [...new Set([...suitesToSkipForRun, ...filteredRootTests.suitesToSkipForRun])]
     skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
     writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
 
@@ -1095,10 +1130,50 @@ function runMochaRunner (run, runner, args) {
 /**
  * @param {Function} Mocha
  * @param {string} frameworkVersion
+ * @param {import('./common').MochaHookMeta} hookMeta
  * @returns {Function}
  */
-function wrapMochaRun (Mocha, frameworkVersion) {
+function wrapMochaRun (Mocha, frameworkVersion, hookMeta) {
   warnDeprecatedMochaVersion(frameworkVersion)
+
+  // Shimmer is required to attach listeners to the root suite created by each Mocha instance.
+  shimmer.wrap(Mocha.prototype, 'ui', ui => function (...args) {
+    const result = ui.apply(this, args)
+    const suite = this.suite
+    if (!rootSuitesWithHookFiles.has(suite)) {
+      rootSuitesWithHookFiles.add(suite)
+      let file
+      suite.prependListener('pre-require', (context, testFile) => {
+        file = testFile
+      })
+      suite.on('post-require', () => {
+        file = undefined
+      })
+      // Hook objects are created at runtime; inspect the caller while registration is still on the stack.
+      shimmer.wrap(suite, '_createHook', createHook => function createHookWithFile (...args) {
+        const hook = createHook.apply(this, args)
+        if (file && !hook.file) {
+          try {
+            const { moduleBaseDir } = hookMeta
+            const mochaPathPrefix = moduleBaseDir && moduleBaseDir + sep
+            for (const site of getCallSites(createHookWithFile)) {
+              const source = site.getFileName()
+              if (!source || source.startsWith('node:')) continue
+              const sourceFile = source.startsWith('file:') ? fileURLToPath(source) : source
+              if (mochaPathPrefix && sourceFile.startsWith(mochaPathPrefix)) continue
+              // Helpers register shared setup; only direct declarations belong to the loading test file.
+              if (sourceFile === file || realpathSync(sourceFile) === realpathSync(file)) hook.file = file
+              break
+            }
+          } catch (error) {
+            log.debug('Error capturing Mocha root hook source: %s', error)
+          }
+        }
+        return hook
+      })
+    }
+    return result
+  })
 
   // Shimmer is required because run must return its Runner while execution is paused and resumed after configuration.
   shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
@@ -1123,7 +1198,7 @@ function wrapMochaRun (Mocha, frameworkVersion) {
     this.files.forEach((path) => {
       const isUnskippable = isMarkedAsUnskippable({ path })
       if (isUnskippable) {
-        unskippableSuites.push(path)
+        unskippableSuites.push(resolve(path))
       }
     })
 
@@ -1226,7 +1301,7 @@ addHook({
       runnerFrameworkErrors.delete(this)
     }
 
-    const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
+    let { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
     // Root-level tests (direct children of root, no describe wrapper) keyed by file.
     // Populated during the root 'suite' event so the normal finish path can include them
     // in mixed-file status calculation.
@@ -1409,6 +1484,12 @@ addHook({
     this.prependListener('pending', getOnPendingHandler())
 
     this.prependListener('suite', function (suite) {
+      if (suite.root) {
+        // TIA and .only() have now selected the suites that can finish during this run.
+        const selectedSuites = getSuitesByTestFile(suite)
+        suitesByTestFile = selectedSuites.suitesByTestFile
+        numSuitesByTestFile = selectedSuites.numSuitesByTestFile
+      }
       if (suite.root || !suite.tests.length) {
         // This branch can be triggered when we have top level it(...) inside test files.
         // In that case, they all (even if they are from different files) are going to be
