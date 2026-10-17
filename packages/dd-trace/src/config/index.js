@@ -537,6 +537,11 @@ class Config extends ConfigBase {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
+    if (this.llmobs.DD_LLMOBS_ENABLED) {
+      // LLMObs payloads use APM structured metadata, which is only supported by protocol v0.4.
+      setAndTrack(this, 'protocolVersion', '0.4')
+    }
+
     if (this.OTEL_RESOURCE_ATTRIBUTES) {
       for (const [key, value] of Object.entries(this.OTEL_RESOURCE_ATTRIBUTES)) {
         // Not replacing existing tags keeps the order of the tags as before.
@@ -680,6 +685,14 @@ class Config extends ConfigBase {
       // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation
       if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
         setAndTrack(this, 'traceId128BitGenerationEnabled', false)
+      }
+    }
+
+    if (this.llmobs.DD_LLMOBS_ENABLED) {
+      const exporter = this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER
+      const supportsLlmobs = !exporter || exporter === exporters.AGENT || exporter === exporters.AGENTLESS
+      if (!this.isCiVisibility && this.OTEL_TRACES_EXPORTER !== 'otlp' && supportsLlmobs) {
+        setAndTrack(this, 'tracing.DD_TRACE_EXPERIMENTAL_EXPORTER', exporters.LLMOBS)
       }
     }
 

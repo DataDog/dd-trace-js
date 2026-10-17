@@ -296,6 +296,27 @@ describe('sendData', () => {
     assert.strictEqual(options.headers['dd-api-key'], 'secret-key')
   })
 
+  it('uses the direct telemetry intake when the LLMObs exporter wraps global agentless mode', () => {
+    sendDataModule.sendData(
+      {
+        DD_AGENTLESS_ENABLED: true,
+        DD_API_KEY: 'secret-key',
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'llmobs' },
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.eu',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+    assert.strictEqual(options.path, '/api/v2/apmtelemetry')
+    assert.deepStrictEqual(options.url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    assert.strictEqual(options.headers['dd-api-key'], 'secret-key')
+  })
+
   it('uses the staging telemetry intake for APM agentless mode', () => {
     sendDataModule.sendData(
       {

@@ -502,31 +502,68 @@ describe('Plugin', () => {
             tags: { ml_app: 'test', integration: 'bedrock' },
           })
         })
-
-        // MLOS-591 regression: `bedrockruntime` registers its LLMObs span from
-        // `setLLMObsTags` rather than the inherited `LLMObsPlugin.start`. The
-        // dd-go LLMObs trace-indexer needs `llmobs_trace_id` /
-        // `llmobs_parent_id` on the local trace tags so OTel `gen_ai.*` spans
-        // share an LLMObs trace with this bedrock span. The first model is
-        // enough — bridge-tag plumbing is not per-model.
-        it('writes otel bridge tags onto the apm span meta', async () => {
-          const model = models[0]
-          const command = new AWS.InvokeModelCommand({
-            body: JSON.stringify(model.requestBody),
-            contentType: 'application/json',
-            accept: 'application/json',
-            modelId: model.modelId,
-          })
-
-          await bedrockRuntimeClient.send(command)
-
-          const { apmSpans } = await getEvents()
-          const apmMeta = apmSpans[0].meta
-          assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
-          assert.ok(apmMeta.llmobs_parent_id)
-          assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
-        })
       })
+    })
+  })
+})
+
+describe('Plugin with LLMObs direct traces', () => {
+  useEnv({
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY || '0000000000/00000000000000000000000000000',
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID || '00000000000000000000',
+  })
+
+  const { getEvents } = useLlmObs({
+    plugin: 'aws-sdk',
+    tracerConfigOptions: {
+      samplingRules: [{ sampleRate: 0 }],
+    },
+  })
+
+  withAwsSdkVersions('>=3', (version, moduleName) => {
+    let AWS
+    let bedrockRuntimeClient
+
+    const bedrockRuntimeClientName =
+      moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-bedrock-runtime' : 'aws-sdk'
+
+    before(() => {
+      const requireVersion = version === '3.0.0' ? '3.422.0' : '3'
+      AWS = require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
+      const NodeHttpHandler =
+        require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)
+          .get('@smithy/node-http-handler')
+          .NodeHttpHandler
+
+      bedrockRuntimeClient = new AWS.BedrockRuntimeClient({
+        endpoint: { url: 'http://127.0.0.1:9126/vcr/bedrock-runtime' },
+        region: 'us-east-1',
+        ServiceId: serviceName,
+        requestHandler: new NodeHttpHandler(),
+      })
+    })
+
+    it('submits rejected spans through direct LLMObs intake', async () => {
+      const model = models[0]
+      const command = new AWS.InvokeModelCommand({
+        body: JSON.stringify(model.requestBody),
+        contentType: 'application/json',
+        accept: 'application/json',
+        modelId: model.modelId,
+      })
+
+      await bedrockRuntimeClient.send(command)
+      const { apmSpans, llmobsSpans } = await getEvents()
+
+      // MLOS-591 regression: `bedrockruntime` registers its LLMObs span from
+      // `setLLMObsTags` rather than the inherited `LLMObsPlugin.start`.
+      assert.equal(apmSpans.length, 1)
+      assert.equal(llmobsSpans.length, 1)
+      assert.strictEqual(llmobsSpans[0].name, 'bedrock-runtime.command')
+      const apmMeta = apmSpans[0].meta
+      assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
+      assert.ok(apmMeta.llmobs_parent_id)
+      assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
     })
   })
 })
