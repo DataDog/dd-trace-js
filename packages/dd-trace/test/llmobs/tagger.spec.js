@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
+const { INPUT_PROMPT, SPAN_KINDS } = require('../../src/llmobs/constants/tags')
 const { writeBridgeTags, findGenAIAncestorSpanId, normalizeLlmObsTraceId } = require('../../src/llmobs/util')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
@@ -26,6 +26,7 @@ describe('tagger', () => {
   beforeEach(() => {
     spanContext = {
       _tags: {},
+      getTag (key) { return this._tags[key] },
       _trace: { tags: {} },
       _traceId: { toBigInt () { return 0x1111111111111111n } },
       toTraceId () { return '00000000000000001111111111111111' },
@@ -68,10 +69,31 @@ describe('tagger', () => {
     describe('registerLLMObsSpan', () => {
       it('will not set tags if llmobs is not enabled', () => {
         tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: false } })
-        tagger.registerLLMObsSpan(span, 'llm')
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
         assert.deepStrictEqual(Tagger.tagMap.get(span), undefined)
+        assert.strictEqual(spanContext.getTag('span.type'), undefined)
       })
+
+      for (const kind of [...SPAN_KINDS, 'step']) {
+        it(`sets the APM span type to llm for an LLMObs ${kind} span`, () => {
+          tagger.registerLLMObsSpan(span, { kind })
+
+          assert.strictEqual(spanContext.getTag('span.type'), 'llm')
+          assert.strictEqual(Tagger.getSpanKind(span), kind)
+        })
+      }
+
+      for (const type of ['openai', 'custom', 'llm']) {
+        it(`preserves an existing APM span type of ${type}`, () => {
+          span.setTag('span.type', type)
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          assert.strictEqual(spanContext.getTag('span.type'), type)
+          assert.strictEqual(Tagger.getSpanKind(span), 'llm')
+        })
+      }
 
       it('tags an llm obs span with basic and default properties', () => {
         tagger.registerLLMObsSpan(span, { kind: 'workflow' })
@@ -223,11 +245,14 @@ describe('tagger', () => {
         })
       })
 
-      it('does not set span type if the LLMObs span kind is falsy', () => {
-        tagger.registerLLMObsSpan(span, { kind: false })
+      for (const kind of [undefined, null, '', false]) {
+        it(`does not set span type if the LLMObs span kind is ${JSON.stringify(kind)}`, () => {
+          tagger.registerLLMObsSpan(span, { kind })
 
-        assert.strictEqual(Tagger.tagMap.get(span), undefined)
-      })
+          assert.strictEqual(Tagger.tagMap.get(span), undefined)
+          assert.strictEqual(spanContext.getTag('span.type'), undefined)
+        })
+      }
 
       it('creates a custom trace id', () => {
         tagger.registerLLMObsSpan(span, { kind: 'workflow' })
@@ -405,11 +430,15 @@ describe('tagger', () => {
 
           const secondSpanContext = {
             _tags: {},
+            getTag: spanContext.getTag,
             _trace: spanContext._trace, // sibling shares the local trace
             toTraceId () { return 'ffffffffffffffffffffffffffffffff' },
             toSpanId () { return '9999999999999999' },
           }
-          const secondSpan = { context () { return secondSpanContext } }
+          const secondSpan = {
+            context () { return secondSpanContext },
+            setTag: span.setTag,
+          }
 
           tagger.registerLLMObsSpan(secondSpan, { kind: 'task' })
 

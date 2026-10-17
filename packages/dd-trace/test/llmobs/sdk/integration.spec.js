@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -42,6 +42,9 @@ describe('end to end sdk integration tests', () => {
     const { apmSpans, llmobsSpans } = await getEvents(2)
     assert.equal(apmSpans.length, 3)
     assert.equal(llmobsSpans.length, 2)
+    assert.equal(apmSpans[0].type, 'llm')
+    assert.equal(apmSpans[1].type, undefined)
+    assert.equal(apmSpans[2].type, 'llm')
 
     assertLlmObsSpanEvent(llmobsSpans[0], {
       span: apmSpans[0],
@@ -115,6 +118,9 @@ describe('end to end sdk integration tests', () => {
     const { apmSpans, llmobsSpans } = await getEvents(2)
     assert.equal(apmSpans.length, 3)
     assert.equal(llmobsSpans.length, 2)
+    assert.equal(apmSpans[0].type, 'llm')
+    assert.equal(apmSpans[1].type, undefined)
+    assert.equal(apmSpans[2].type, 'llm')
 
     assertLlmObsSpanEvent(llmobsSpans[0], {
       span: apmSpans[0],
@@ -136,6 +142,26 @@ describe('end to end sdk integration tests', () => {
       outputValue: 'custom',
     })
   })
+
+  for (const method of ['trace', 'wrap']) {
+    it(`preserves an explicitly configured APM span type with ${method}`, async () => {
+      const options = { kind: 'workflow', type: 'custom' }
+      const fn = () => {}
+
+      if (method === 'trace') {
+        llmobs.trace(options, fn)
+      } else {
+        const wrapped = llmobs.wrap(options, fn)
+        wrapped()
+      }
+
+      const { apmSpans, llmobsSpans } = await getEvents()
+      assert.equal(apmSpans.length, 1)
+      assert.equal(apmSpans[0].type, 'custom')
+      assert.equal(llmobsSpans.length, 1)
+      assert.equal(llmobsSpans[0].meta.span.kind, 'workflow')
+    })
+  }
 
   describe('evaluations', () => {
     before(() => {
