@@ -20,7 +20,7 @@ class EvaluationTelemetryOptOutHook {
 
   /** @param {import('@openfeature/core').HookContext} hookContext */
   error (hookContext) {
-    // A customer before hook can fail before this hook runs. Capture before customer error hooks mutate consent.
+    // A customer before hook can fail before this hook runs. Capture opt-out before customer error hooks change it.
     if (!this.#decisions.has(hookContext)) {
       this.#decisions.set(hookContext, isOptedOut(hookContext.context))
     }

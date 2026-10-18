@@ -109,8 +109,12 @@ You can also enable per-subject opt-out with `DD_FEATURE_FLAGS_EVALUATION_TELEME
 Explicit configuration takes precedence over this environment variable, including `false`.
 This enables the context parameter; it does not disable evaluation telemetry globally.
 
-Flag values, variants, reasons, defaults, experiment exposures, exposure deduplication, and customer hooks remain unchanged.
-Set the subject attribute before evaluation. Do not rely on an After hook to change opt-out behavior across SDKs.
+The attribute remains available to targeting rules and exposure reporting, whether this option is enabled or disabled.
+Changing it can affect assignments through targeting rules and can produce another exposure under normal deduplication rules.
+
+The telemetry control does not change flag values, variants, reasons, defaults, experiment exposures,
+exposure deduplication, or customer hooks.
+Set the subject attribute before evaluation. Changes from After or Error hooks are not a supported opt-out API.
 Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.
 The option does not change protected/full-data reporting consent or debug logging.
 

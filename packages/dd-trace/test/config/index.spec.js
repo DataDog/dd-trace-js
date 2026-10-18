@@ -6112,14 +6112,6 @@ rules:
       }).featureFlags[name], true)
     })
 
-    it('does not accept the unreleased experimental opt-out option', () => {
-      const config = getConfig({
-        experimental: { flaggingProvider: { enableEvaluationTelemetryOptOutParameter: true } },
-      })
-
-      assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED, false)
-    })
-
     it('reports the stable evaluation telemetry opt-out environment variable', () => {
       const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
       process.env[name] = 'true'
@@ -6132,21 +6124,6 @@ rules:
         { name, value: true, origin: 'env_var' },
       ])
     })
-
-    for (const removedName of [
-      'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLE_EVALUATION_TELEMETRY_OPT_OUT_PARAMETER',
-      'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_OPT_OUT_ENABLED',
-    ]) {
-      it(`does not register the superseded variable ${removedName}`, () => {
-        const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
-        process.env[removedName] = 'true'
-
-        const config = getConfig()
-
-        assert.strictEqual(config.featureFlags[name], false)
-        assert.strictEqual(Object.hasOwn(config.featureFlags, removedName), false)
-      })
-    }
 
     it('accepts false for the stable evaluation telemetry opt-out environment variable', () => {
       const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'

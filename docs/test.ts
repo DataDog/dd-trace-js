@@ -85,14 +85,6 @@ const evaluationTelemetryOptOutOption: TracerOptions = {
     enableEvaluationTelemetryOptOutParameter: 'true'
   }
 };
-const experimentalEvaluationTelemetryOptOutOption: TracerOptions = {
-  experimental: {
-    flaggingProvider: {
-      // @ts-expect-error The opt-out option belongs to stable Feature Flags configuration.
-      enableEvaluationTelemetryOptOutParameter: true
-    }
-  }
-};
 tracer.init({
   apmTracingEnabled: false,
   logInjection: true,

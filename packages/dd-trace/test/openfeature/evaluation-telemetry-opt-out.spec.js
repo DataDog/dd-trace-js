@@ -11,6 +11,7 @@ const sinon = require('sinon')
 require('../setup/core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const { hashTargetingKey } = require('../../src/openfeature/encoding')
+const { debugChannel } = require('../../src/log/channels')
 
 const parameter = 'dd_evaluation_telemetry_opt_out'
 const option = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
@@ -115,7 +116,7 @@ describe('evaluation telemetry opt-out', () => {
       service: 'telemetry-opt-out',
       DD_METRICS_OTEL_ENABLED: true,
       featureFlags: {
-        [option]: arguments.length === 0 ? true : enabled,
+        [option]: enabled,
         DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true,
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 1000,
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED: true,
@@ -148,13 +149,43 @@ describe('evaluation telemetry opt-out', () => {
   }
 
   it('suppresses all evaluation signals and preserves the assignment and exposure', async () => {
-    const { client } = await register()
+    const { client } = await register(true)
     const details = await client.getBooleanDetails('flag', false, { targetingKey: 'opted-out', [parameter]: true })
     assert.deepStrictEqual({ value: details.value, variant: details.variant, reason: details.reason }, {
       value: true, variant: 'on', reason: 'STATIC',
     })
     assert.deepStrictEqual(signals(), { evaluations: 0, metrics: 0, spanTags: 0, exposures: 1, customerHooks: 1 })
+    assert.deepStrictEqual(exposures[0].subject.attributes, { [parameter]: true })
   })
+
+  for (const enabled of [false, true]) {
+    it(`retains the attribute for targeting and exposures with activation=${enabled}`, async () => {
+      const { provider, client } = await register(enabled)
+      const config = configuration()
+      provider.setConfiguration({
+        ...config,
+        flags: {
+          flag: {
+            ...config.flags.flag,
+            allocations: [{
+              ...config.flags.flag.allocations[0],
+              rules: [{ conditions: [{ operator: 'ONE_OF', attribute: parameter, value: ['true'] }] }],
+            }],
+          },
+        },
+      })
+      const matched = await client.getBooleanDetails('flag', false, { targetingKey: 'subject', [parameter]: true })
+      assert.strictEqual(matched.value, true)
+      assert.strictEqual(matched.flagMetadata.allocationKey, 'experiment')
+      const unmatched = await client.getBooleanDetails('flag', false, { targetingKey: 'subject', [parameter]: false })
+      assert.strictEqual(unmatched.value, false)
+      assert.deepStrictEqual(exposures[0].subject.attributes, { [parameter]: true })
+      const counts = signals()
+      assert.strictEqual(counts.evaluations, enabled ? 1 : 2)
+      assert.strictEqual(counts.metrics, enabled ? 1 : 2)
+      assert.strictEqual(counts.exposures, 1)
+    })
+  }
 
   for (const { environment, explicit, suppressed } of [
     { environment: undefined, explicit: undefined, suppressed: false },
@@ -193,7 +224,7 @@ describe('evaluation telemetry opt-out', () => {
   })
 
   it('preserves all supported flag types while suppressing evaluation telemetry', async () => {
-    const { client, provider } = await register()
+    const { client, provider } = await register(true)
     const context = { targetingKey: 'subject', [parameter]: true }
     for (const { type, value, evaluate } of [
       { type: 'BOOLEAN', value: true, evaluate: () => client.getBooleanDetails('flag', false, context) },
@@ -216,7 +247,7 @@ describe('evaluation telemetry opt-out', () => {
 
   for (const value of [undefined, false, null, 'true', 'false', 1, 0, {}, []]) {
     it(`keeps telemetry for a non-true parameter: ${JSON.stringify(value)}`, async () => {
-      const { client } = await register()
+      const { client } = await register(true)
       const context = /** @type {import('@openfeature/core').EvaluationContext} */ (
         { targetingKey: 'allowed', [parameter]: value }
       )
@@ -235,7 +266,7 @@ describe('evaluation telemetry opt-out', () => {
   }
 
   it('does not recognize old or differently cased parameter names', async () => {
-    const { client } = await register()
+    const { client } = await register(true)
     await client.getBooleanValue('flag', false, {
       targetingKey: 'allowed',
       dd_telemetry_opt_out: true,
@@ -272,7 +303,7 @@ describe('evaluation telemetry opt-out', () => {
   }
 
   it('preserves exposure deduplication when the same subject changes the parameter', async () => {
-    const { client } = await register()
+    const { client } = await register(true)
     for (const optedOut of [true, false, true, false]) {
       assert.strictEqual(await client.getBooleanValue('flag', false, {
         targetingKey: 'same-subject', [parameter]: optedOut,
@@ -289,14 +320,14 @@ describe('evaluation telemetry opt-out', () => {
   })
 
   it('captures activation at provider construction', async () => {
-    const { client, config } = await register()
+    const { client, config } = await register(true)
     config.featureFlags[option] = false
     await client.getBooleanValue('flag', false, { targetingKey: 'opted-out', [parameter]: true })
     assert.deepStrictEqual(signals(), { evaluations: 0, metrics: 0, spanTags: 0, exposures: 1, customerHooks: 1 })
   })
 
   it('honors per-evaluation overrides and customer before hooks in the merged context', async () => {
-    const { client } = await register()
+    const { client } = await register(true)
     OpenFeature.setContext({ [parameter]: true })
     await client.getBooleanValue('flag', false, { targetingKey: 'allowed', [parameter]: false })
     client.addHooks({ before: () => ({ [parameter]: true }) })
@@ -305,8 +336,8 @@ describe('evaluation telemetry opt-out', () => {
   })
 
   for (const initial of [false, true]) {
-    it(`does not emit if an after hook changes consent from ${initial} to ${!initial}`, async () => {
-      const { client } = await register()
+    it(`does not emit if an after hook changes opt-out from ${initial} to ${!initial}`, async () => {
+      const { client } = await register(true)
       let optedOut = initial
       client.addHooks({
         before ({ context }) {
@@ -325,7 +356,7 @@ describe('evaluation telemetry opt-out', () => {
   }
 
   it('captures a failing before hook decision before a customer error hook changes it', async () => {
-    const { client } = await register()
+    const { client } = await register(true)
     const onError = sinon.spy(({ context }) => { context[parameter] = false })
     client.addHooks({ before () { throw new Error('before failed') }, error: onError })
     const result = await client.getBooleanDetails('flag', false, { targetingKey: 'subject', [parameter]: true })
@@ -335,7 +366,14 @@ describe('evaluation telemetry opt-out', () => {
     assert.deepStrictEqual(signals(), { evaluations: 0, metrics: 0, spanTags: 0, exposures: 0, customerHooks: 1 })
   })
 
-  for (const failure of ['missing', 'type-mismatch', 'no-config', 'not-ready', 'fatal', 'after-hook']) {
+  for (const [failure, errorCode] of Object.entries({
+    missing: 'FLAG_NOT_FOUND',
+    'type-mismatch': 'TYPE_MISMATCH',
+    'no-config': 'PROVIDER_NOT_READY',
+    'not-ready': 'PROVIDER_NOT_READY',
+    fatal: 'PROVIDER_FATAL',
+    'after-hook': 'GENERAL',
+  })) {
     it(`preserves defaults and errors without new telemetry on ${failure}`, async () => {
       const { client, provider } = await register(true, false, 'telemetry-opt-out', failure !== 'not-ready')
       if (failure === 'no-config') provider.setConfiguration(undefined)
@@ -347,7 +385,7 @@ describe('evaluation telemetry opt-out', () => {
         : await client.getBooleanDetails(failure === 'missing' ? 'missing' : 'flag', false, context)
       assert.strictEqual(result.value, failure === 'type-mismatch' ? 'fallback' : false)
       assert.strictEqual(result.reason, 'ERROR')
-      assert.ok(result.errorCode)
+      assert.strictEqual(result.errorCode, errorCode)
       if (failure === 'not-ready') provider.setConfiguration(configuration())
       assert.deepStrictEqual(signals(), {
         evaluations: 0, metrics: 0, spanTags: 0, exposures: failure === 'after-hook' ? 1 : 0, customerHooks: 1,
@@ -356,7 +394,7 @@ describe('evaluation telemetry opt-out', () => {
   }
 
   it('isolates nested calls from their outer evaluation', async () => {
-    const { client } = await register()
+    const { client } = await register(true)
     client.addHooks({
       async after ({ context }) {
         if (context.targetingKey === 'outer') {
@@ -373,7 +411,7 @@ describe('evaluation telemetry opt-out', () => {
   })
 
   it('isolates concurrent subjects while after hooks overlap', async () => {
-    const { client } = await register()
+    const { client } = await register(true)
     let arrivals = 0
     let release
     const barrier = new Promise(resolve => { release = resolve })
@@ -400,5 +438,83 @@ describe('evaluation telemetry opt-out', () => {
     ))
     assert.ok(results.every(result => result.value === true), JSON.stringify(results))
     assert.deepStrictEqual(signals(), { evaluations: 2, metrics: 2, spanTags: 2, exposures: 4, customerHooks: 2 })
+  })
+
+  it('keeps the outer decision when a nested evaluation decides differently', async () => {
+    const { client } = await register(true)
+    let outerOptedOut = true
+    client.addHooks({
+      before ({ context }) {
+        if (context.targetingKey !== 'outer') return
+        // The SDK freezes the merged context after before hooks. An accessor can still change its value.
+        Object.defineProperty(context, parameter, {
+          enumerable: true,
+          configurable: true,
+          get: () => outerOptedOut,
+          set: value => { outerOptedOut = value },
+        })
+      },
+      async after ({ context }) {
+        if (context.targetingKey !== 'outer') return
+        outerOptedOut = false
+        assert.strictEqual(await client.getBooleanValue('flag', false, { targetingKey: 'inner' }), true)
+      },
+    })
+    assert.strictEqual(await client.getBooleanValue('flag', false, { targetingKey: 'outer' }), true)
+    assert.deepStrictEqual(signals(), { evaluations: 1, metrics: 1, spanTags: 2, exposures: 2, customerHooks: 2 })
+  })
+
+  it('keeps debug logging for an opted-out subject', async () => {
+    const messages = []
+    const onDebug = message => { messages.push(String(message)) }
+    debugChannel.subscribe(onDebug)
+    try {
+      const provider = new Provider({ scope: () => ({ active: () => span }) }, {
+        url: new URL('http://localhost:8126'),
+        debug: true,
+        featureFlags: {
+          [option]: true,
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 1000,
+        },
+      })
+      providers.push(provider)
+      provider.setConfiguration(configuration())
+      await OpenFeature.setProviderAndWait('debug', provider)
+      messages.length = 0
+      const client = OpenFeature.getClient('debug')
+      await client.getBooleanValue('flag', false, { targetingKey: 'subject', [parameter]: true })
+      assert.strictEqual(messages.filter(message => message.startsWith('Feature Flags: evaluated flag:')).length, 1)
+      assert.strictEqual(signals().evaluations, 0)
+    } finally {
+      debugChannel.unsubscribe(onDebug)
+    }
+  })
+
+  it('keeps the result and telemetry when the parameter cannot be read', async () => {
+    const { client } = await register(true)
+    client.addHooks({
+      before ({ context }) {
+        // Context merges skip this non-enumerable property. Only the opt-out check reads it.
+        Object.defineProperty(context, parameter, { get () { throw new Error('unreadable') } })
+      },
+    })
+    const result = await client.getBooleanDetails('flag', false, { targetingKey: 'subject' })
+    assert.deepStrictEqual({ value: result.value, reason: result.reason, errorCode: result.errorCode }, {
+      value: true, reason: 'STATIC', errorCode: undefined,
+    })
+    assert.deepStrictEqual(signals(), { evaluations: 1, metrics: 1, spanTags: 2, exposures: 1, customerHooks: 1 })
+  })
+
+  it('wraps only hooks that implement finally alone', () => {
+    for (const Hook of [
+      require('../../src/openfeature/eval-metrics-hook'),
+      require('../../src/openfeature/span-enrichment-hook'),
+      require('../../src/openfeature/writers/flag-eval-evp-hook'),
+    ]) {
+      for (const stage of ['before', 'after', 'error']) {
+        // The wrapper forwards only finally, so another stage would run only with activation disabled.
+        assert.strictEqual(Hook.prototype[stage], undefined, `${Hook.name}.${stage} would be skipped by the wrapper`)
+      }
+    }
   })
 })
