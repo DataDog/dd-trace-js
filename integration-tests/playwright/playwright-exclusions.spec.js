@@ -81,7 +81,7 @@ describe(`Playwright automation exclusions@${version}`, () => {
       receiver.setTestManagementTests({
         playwright: {
           suites: {
-            'exclusions.test.js': {
+            'exclusions.js': {
               tests: Object.fromEntries(Object.entries(assigned).map(([name, properties]) => [name, { properties }])),
             },
           },
