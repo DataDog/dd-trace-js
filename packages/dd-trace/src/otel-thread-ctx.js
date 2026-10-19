@@ -198,6 +198,8 @@ function getOrBuildContext (span) {
   const spanContext = span.context()
   const traceId = getTraceIdBytes(spanContext)
   const spanId = getSpanIdBytes(spanContext)
+  // The native constructor throws on any other id length, and onEnter runs inside user code.
+  if (traceId.length !== 16 || spanId.length !== 8) return
   // Local root span: the first entry in the trace's started-spans list, or
   // this span itself when it IS the root. Encoded as 16-char lowercase hex
   // per the libdatadog convention.
@@ -260,12 +262,12 @@ function appendEndpoint (context, endpoint) {
 function onEnter () {
   if (!started) return
   const span = getActiveSpan()
-  if (!span) {
+  const context = span && getOrBuildContext(span)
+  if (!context) {
     // Clearing an empty frame would still make pprof install a new AsyncContextFrame.
     if (getContext() !== undefined) clearContext()
     return
   }
-  const context = getOrBuildContext(span)
   // Skip if this CPED already holds the same context. Same allocation-churn
   // fix as the wall profiler in dd-trace-js#8638.
   if (getContext() === context) return

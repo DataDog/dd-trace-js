@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -104,6 +104,13 @@ describe('otel-thread-ctx', () => {
 
     StubThreadContext = class StubThreadContext {
       constructor (traceId, spanId, traceFlags, attributes) {
+        // Same id checks as the native constructor, which throws on any other shape.
+        if (!(traceId instanceof Uint8Array) || traceId.length !== 16) {
+          throw new Error('traceId must be a 16-byte Uint8Array')
+        }
+        if (!(spanId instanceof Uint8Array) || spanId.length !== 8) {
+          throw new Error('spanId must be an 8-byte Uint8Array')
+        }
         // The native constructor copies the id bytes into its record, so the
         // caller may reuse its buffers; capture copies the same way.
         this.traceId = Uint8Array.from(traceId)
@@ -351,8 +358,8 @@ describe('otel-thread-ctx', () => {
     it('writes the ids and local root id of every identifier shape the tracer produces as toTraceId/toSpanId', () => {
       // Local root with the 128-bit high half in _dd.p.tid (two different values,
       // to cover the memo), 64-bit without _dd.p.tid (high half zero), a 128-bit
-      // identifier that wins over _dd.p.tid, Datadog decimal ids, and shapes the
-      // byte path declines (malformed _dd.p.tid, a non-64/128-bit identifier).
+      // identifier that wins over _dd.p.tid, Datadog decimal ids, and a short or
+      // empty _dd.p.tid the byte path declines but toTraceId still resolves.
       const cases = [
         { traceId: 'aabbccddeeff0011', traceTags: { '_dd.p.tid': '640cfd8d00000000' } },
         { traceId: 'aabbccddeeff0012', traceTags: { '_dd.p.tid': '640cfd8e00000000' } },
@@ -360,10 +367,8 @@ describe('otel-thread-ctx', () => {
         { traceId: 'aabbccddeeff0014' },
         { traceId: '0af7651916cd43dd8448eb211c80319c', traceTags: { '_dd.p.tid': '1111111111111111' } },
         { traceId: id('123', 10), spanId: id('-456', 10) },
-        { traceId: 'aabbccddeeff0015', traceTags: { '_dd.p.tid': 'not-hex-16chars!' } },
         { traceId: 'aabbccddeeff0016', traceTags: { '_dd.p.tid': '640cfd8d' } },
         { traceId: 'aabbccddeeff0017', traceTags: { '_dd.p.tid': '' } },
-        { traceId: '0102030405060708090a0b0c0d0e0f1011', spanId: '0102030405060708090a' },
         { traceId: 'aabbccddeeff0018', traceTags: { '_dd.p.tid': '640cfd8d00000000' } },
         { traceId: 'aabbccddeeff0019', spanId: id() },
         { traceId: 'aabbccddeeff001a', spanId: '0' },
@@ -383,6 +388,24 @@ describe('otel-thread-ctx', () => {
           Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex')), `span id ${label}`)
         assert.equal(constructedContexts[0].attributes[0], spanContext.toSpanId(true), `local root id ${label}`)
       }
+    })
+
+    it('builds no record and clears the frame for ids the native constructor rejects', () => {
+      activeSpan = makeSpan()
+      enterCh.publish()
+      assert.equal(constructedContexts.length, 1)
+      const rejected = [
+        { traceId: 'aabbccddeeff0015', traceTags: { '_dd.p.tid': 'not-hex-16chars!' } },
+        { traceId: '0102030405060708090a0b0c0d0e0f1011', spanId: '0102030405060708090a' },
+      ]
+      for (const fields of rejected) {
+        constructedContexts = []
+        activeSpan = makeSpan(fields)
+        enterCh.publish()
+        assert.equal(constructedContexts.length, 0)
+        assert.equal(activeContext, undefined)
+      }
+      sinon.assert.calledOnce(pprofStub.otelThreadCtx.clearContext)
     })
 
     it('writes the ids and local root id of propagated contexts as toTraceId/toSpanId', () => {
@@ -866,6 +889,35 @@ describe('otel-thread-ctx', () => {
       endpointResolvedCh.publish(parent)
       webTagsResolvedCh.publish(parent)
       assert.equal(constructedContexts.length, 0)
+    })
+  })
+
+  describe('native ThreadContext contract', () => {
+    // The stub mirrors the native constructor's id checks; pin them to the real
+    // addon wherever it loads, so the two can't drift apart unnoticed.
+    let NativeThreadContext
+
+    before(function () {
+      if (process.platform !== 'linux') return this.skip()
+      try {
+        NativeThreadContext = require('@datadog/pprof').otelThreadCtx?.ThreadContext
+      } catch {}
+      if (typeof NativeThreadContext !== 'function') this.skip()
+    })
+
+    it('accepts and rejects the same id shapes as the stub', () => {
+      const shapes = [[16, 8], [17, 8], [15, 8], [0, 8], [16, 9], [16, 7], [16, 0]]
+      for (const [traceIdLength, spanIdLength] of shapes) {
+        const ids = [new Uint8Array(traceIdLength), new Uint8Array(spanIdLength)]
+        const label = `${traceIdLength}/${spanIdLength} bytes`
+        if (traceIdLength === 16 && spanIdLength === 8) {
+          assert.ok(new NativeThreadContext(...ids) instanceof NativeThreadContext, label)
+          assert.ok(new StubThreadContext(...ids) instanceof StubThreadContext, label)
+        } else {
+          assert.throws(() => new NativeThreadContext(...ids), { message: /must be an? \d+-byte Uint8Array/ }, label)
+          assert.throws(() => new StubThreadContext(...ids), { message: /must be an? \d+-byte Uint8Array/ }, label)
+        }
+      }
     })
   })
 
