@@ -2238,7 +2238,8 @@ function processRootSuite (createRootSuiteReturnValue) {
       ? testManagementTests?.playwright?.suites
         ?.[getTestSuitePath(test._requireFile, rootDir)]?.tests?.[getTestFullname(test)]?.properties
       : undefined
-    if (getTestAnnotations(test.fn).noAutoRetry && hasAutomaticRetries(test, sessionProjects)) test.retries = 0
+    if (isFlakyTestRetriesEnabled &&
+      getTestAnnotations(test.fn).noAutoRetry && hasAutomaticRetries(test, sessionProjects)) test.retries = 0
   }
 
   if (isTestManagementTestsEnabled) {
