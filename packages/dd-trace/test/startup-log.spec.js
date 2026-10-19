@@ -127,6 +127,18 @@ describe('startup logging', () => {
       otlp_traces_export_enabled: false,
       otlp_metrics_export_enabled: false,
       otlp_logs_export_enabled: false,
+      DD_TRACE_OTEL_ENABLED: false,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED: false,
+      DD_METRICS_OTEL_ENABLED: false,
+      DD_LOGS_OTEL_ENABLED: false,
+      OTEL_ENABLED: false,
+      OTEL_LOG_LEVEL: 'none',
+      OTEL_SERVICE_NAME: 'test',
+      OTEL_RESOURCE_ATTRIBUTES: {
+        'deployment.environment.name': 'production',
+      },
+      OTEL_LOGS_EXPORTER: 'none',
+      OTEL_TRACES_SPAN_METRICS_ENABLED: false,
     })
   })
 })
@@ -323,6 +335,7 @@ describe('profiling_enabled', () => {
 
 describe('otlp export flags', () => {
   function clearOtlpEnv () {
+    delete process.env.DD_TRACE_ENABLED
     delete process.env.OTEL_TRACES_EXPORTER
     delete process.env.OTEL_METRICS_EXPORTER
     delete process.env.OTEL_LOGS_EXPORTER
@@ -337,20 +350,7 @@ describe('otlp export flags', () => {
   afterEach(clearOtlpEnv)
 
   function startupLogObj (configOptions) {
-    sinon.stub(console, 'warn')
-    delete require.cache[require.resolve('../src/startup-log')]
-    const {
-      setStartupLogConfig,
-      startupLog,
-    } = require('../src/startup-log')
-    process.env.DD_TRACE_STARTUP_LOGS = 'true'
-    setStartupLogConfig(getConfigFresh(configOptions))
-    startupLog()
-    /* eslint-disable-next-line no-console */
-    const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
-    const logObj = JSON.parse(warnStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
-    warnStub.restore()
-    return logObj
+    return require('./helpers/config').runStartup(process.env, configOptions).configuration
   }
 
   it('should default to false when no OTLP env vars are set', () => {
@@ -366,6 +366,7 @@ describe('otlp export flags', () => {
   })
 
   it('otlp_traces_export_enabled should be false when OTEL_TRACES_EXPORTER is none', () => {
+    process.env.DD_TRACE_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'
     assert.strictEqual(startupLogObj().otlp_traces_export_enabled, false)
   })

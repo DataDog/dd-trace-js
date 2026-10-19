@@ -1,5 +1,7 @@
 'use strict'
 
+const { logs } = require('@opentelemetry/api-logs')
+
 const { buildResourceAttributes, registerResourceAttributeRefresh } = require('../resource-attributes')
 
 /**
@@ -35,6 +37,8 @@ const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
 /**
  * Initializes OpenTelemetry Logs support
  * @param {import('../../config/config-base')} config - Tracer configuration instance
+ * @returns {import('../startup-config').InitializedExporter | undefined} Startup reporting metadata
+ * with the effective protocol, or undefined when another provider owns the global Logs API.
  */
 function initializeOpenTelemetryLogs (config) {
   // Create OTLP exporter using resolved config values
@@ -58,11 +62,14 @@ function initializeOpenTelemetryLogs (config) {
 
   // Expose this provider to application calls through the OpenTelemetry Logs API.
   loggerProvider.register()
+  // Registration can leave an existing global provider in place; only report ours when it is active.
+  const registered = logs.getLoggerProvider() === loggerProvider
 
   // Include final log batches in lifecycle retention with trace delivery.
   registerTelemetryFlusher(done => loggerProvider.forceFlush(done))
 
   registerResourceAttributeRefresh(exporter, () => buildResourceAttributes(config))
+  return registered ? { protocol: exporter.transformer.protocol } : undefined
 }
 
 module.exports = {

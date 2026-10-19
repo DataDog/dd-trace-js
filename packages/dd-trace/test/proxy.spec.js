@@ -296,6 +296,11 @@ describe('TracerProxy', () => {
       './config': Config,
       './plugin_manager': PluginManager,
       './runtime_metrics': runtimeMetrics,
+      './startup-log': {
+        setStartupLogConfig: sinon.spy(),
+        setStartupLogPluginManager: sinon.spy(),
+        startupLog: sinon.spy(),
+      },
       './debugger': dynamicInstrumentation,
       './log': log,
       './profiler': profiler,

@@ -327,6 +327,7 @@
 /packages/dd-trace/test/log-submission/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/opentelemetry/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/opentelemetry/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/fixtures/otel-startup.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/opentracing/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/opentracing/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/remote_config/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities

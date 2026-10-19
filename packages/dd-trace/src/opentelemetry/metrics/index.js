@@ -45,6 +45,7 @@ const RESERVED_TRACER_TAGS = new Set(['service', 'env', 'version', 'runtime_id',
 /**
  * Initializes OpenTelemetry Metrics support
  * @param {import('../../config/config-base')} config - Tracer configuration instance
+ * @returns {import('../startup-config').InitializedExporter | undefined}
  */
 function initializeOpenTelemetryMetrics (config) {
   const exporter = new OtlpHttpMetricExporter(
@@ -63,12 +64,13 @@ function initializeOpenTelemetryMetrics (config) {
   )
 
   const meterProvider = new MeterProvider({ reader })
-  metrics.setGlobalMeterProvider(meterProvider)
+  const registered = metrics.setGlobalMeterProvider(meterProvider)
 
   // Include the final metric collection and export in lifecycle retention.
   registerTelemetryFlusher(done => reader.forceFlush(done))
 
   registerResourceAttributeRefresh(exporter, () => buildGeneralResourceAttributes(config))
+  return registered ? { protocol: exporter.transformer.protocol } : undefined
 }
 
 /**

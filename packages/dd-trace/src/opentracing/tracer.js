@@ -20,6 +20,12 @@ const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
 
 class DatadogTracer {
+  /**
+   * @readonly
+   * @type {import('../opentelemetry/startup-config').Pipelines}
+   */
+  _startupPipelines
+
   constructor (config, prioritySampler) {
     this._config = config
     this._service = config.service
@@ -41,9 +47,11 @@ class DatadogTracer {
     // even when OTEL_* vars are set for unrelated telemetry.
     const exportOtlpTraces = config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility &&
       config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'
+    let traces
     if (exportOtlpTraces) {
       const { createOtlpTraceExporter } = require('../opentelemetry/trace')
       this._exporter = createOtlpTraceExporter(config)
+      traces = { protocol: this._exporter.protocol }
     } else {
       const Exporter = getExporter(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
       this._exporter = new Exporter(config, this._prioritySampler)
@@ -70,6 +78,11 @@ class DatadogTracer {
       [formats.BINARY]: new BinaryPropagator(),
       [formats.LOG]: new LogPropagator(config),
       [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config),
+    }
+    this._startupPipelines = {
+      tracing: true,
+      traces,
+      spanMetrics: this._processor.otelSpanMetrics,
     }
     if (config.reportHostname) {
       this._hostname = os.hostname()

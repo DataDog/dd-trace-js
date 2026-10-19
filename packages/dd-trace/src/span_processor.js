@@ -35,6 +35,12 @@ function formatOtlpSpan (span, isFirstSpanInChunk, processTagsValue) {
 class SpanProcessor {
   #formatSpan
 
+  /**
+   * @readonly
+   * @type {import('./opentelemetry/startup-config').InitializedExporter | undefined}
+   */
+  otelSpanMetrics
+
   constructor (exporter, prioritySampler, config, otlpStatsExporter, exportOtlpTraces) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
@@ -46,6 +52,7 @@ class SpanProcessor {
         !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
+      if (otlpStatsExporter) this.otelSpanMetrics = { protocol: otlpStatsExporter.protocol }
     }
 
     this._spanSampler = new SpanSampler(config.sampler)
