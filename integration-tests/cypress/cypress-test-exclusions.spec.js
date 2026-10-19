@@ -42,10 +42,10 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
   const properties = assignments => {
     receiver.setTestManagementTests({ cypress: { suites: { [suite]: { tests: assignments } } } })
   }
-  const run = async (mode, expectedExit, check, env = {}) => {
-    childProcess = exec(moduleType === 'esm'
+  const run = async (mode, expectedExit, check, env = {}, command) => {
+    childProcess = exec(command || (moduleType === 'esm'
       ? 'node ./cypress-esm-config.mjs'
-      : `./node_modules/.bin/cypress run --spec ${suite}`, {
+      : `./node_modules/.bin/cypress run --spec ${suite}`), {
       cwd,
       env: {
         ...getCiVisEvpProxyConfig(receiver.port),
@@ -207,6 +207,23 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       assert.strictEqual(tests[0].meta[exclusion], 'true')
     })
   })
+
+  for (const mode of ['fail', 'skip']) {
+    it(`reports annotations when an earlier root setup hook must ${mode}`, async () => {
+      await run(mode, mode === 'fail' ? 1 : 0, tests => {
+        assert.strictEqual(tests.length, 2)
+        const [annotated] = named(tests, 'annotated setup skip')
+        const [control] = named(tests, 'ordinary setup skip')
+        assert.strictEqual(annotated.meta['test.status'], 'skip')
+        assert.strictEqual(annotated.meta[protection], 'true')
+        assert.strictEqual(annotated.meta[exclusion], 'true')
+        assert.strictEqual(control.meta['test.status'], 'skip')
+        assert.strictEqual(control.meta[protection], undefined)
+        assert.strictEqual(control.meta[exclusion], undefined)
+      }, { NODE_OPTIONS: '', CYPRESS_ROOT_SETUP_MODE: mode },
+      './node_modules/.bin/cypress run --config-file ci-visibility/cypress-exclusions-manual/config.js')
+    })
+  }
 
   for (const mode of ['duplicate-skipped', 'duplicate-mixed']) {
     it(`retains separate annotations for ${mode} declarations with identical titles`, async () => {
