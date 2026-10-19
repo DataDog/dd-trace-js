@@ -6096,6 +6096,45 @@ rules:
       assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'flaggingProvider'), false)
     })
 
+    it('disables evaluation telemetry opt-out by default and accepts the provider option', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
+      assert.strictEqual(getConfig().featureFlags[name], false)
+      process.env[name] = 'true'
+      assert.strictEqual(getConfig().featureFlags[name], true)
+      const config = getConfig({
+        featureFlags: { enableEvaluationTelemetryOptOutParameter: false },
+      })
+      assert.strictEqual(config.featureFlags[name], false)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'code')
+      delete process.env[name]
+      assert.strictEqual(getConfig({
+        featureFlags: { enableEvaluationTelemetryOptOutParameter: true },
+      }).featureFlags[name], true)
+    })
+
+    it('reports the stable evaluation telemetry opt-out environment variable', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
+      process.env[name] = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags[name], true)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'env_var')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name, value: true, origin: 'env_var' },
+      ])
+    })
+
+    it('accepts false for the stable evaluation telemetry opt-out environment variable', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
+      process.env[name] = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags[name], false)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'env_var')
+    })
+
     it('reads the configuration source environment variable', () => {
       process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
 

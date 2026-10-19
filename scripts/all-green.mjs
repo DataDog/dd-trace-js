@@ -339,7 +339,11 @@ async function checkAllGreen () {
   }
 
   if (outcome === 'success') {
-    console.log('All jobs were successful.')
+    if (process.exitCode) {
+      console.error('All workflows passed, but report processing failed. See the errors above.')
+    } else {
+      console.log('All jobs were successful.')
+    }
   } else {
     console.log('One or more jobs failed.')
     process.exitCode = 1
