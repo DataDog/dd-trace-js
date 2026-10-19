@@ -1,7 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { afterEach, describe, it } = require('mocha')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+
+const { after, afterEach, before, describe, it } = require('mocha')
 
 const DatadogWebpackPlugin = require('../index')
 const loader = require('../src/loader')
@@ -134,6 +138,7 @@ describe('loader', () => {
     const context = {
       cacheable: () => {},
       getOptions: () => options,
+      resourcePath: '/app/node_modules/mypackage/index.js',
     }
 
     const result = loader.call(context, source)
@@ -143,7 +148,10 @@ describe('loader', () => {
     // in `source` would be more error-prone than this `startsWith` check.
     // eslint-disable-next-line eslint-rules/eslint-prefer-assert-match
     assert.ok(result.startsWith(source), 'result should start with original source')
-    assert.ok(result.includes("require('dc-polyfill')"), 'result should require dc-polyfill')
+    assert.ok(
+      result.includes(`require(${JSON.stringify(require.resolve('dc-polyfill').replaceAll('\\', '/'))})`),
+      'result should require the resolved dc-polyfill'
+    )
     assert.ok(result.includes("'dd-trace:bundler:load'"), 'result should use the bundler channel')
     assert.ok(result.includes("version: '1.2.3'"), 'result should contain the version')
     assert.ok(result.includes("package: 'mypackage'"), 'result should contain the package name')
@@ -157,6 +165,7 @@ describe('loader', () => {
     const context = {
       cacheable: () => {},
       getOptions: () => options,
+      resourcePath: '/app/node_modules/pkg/index.js',
     }
 
     const result = loader.call(context, source)
@@ -165,5 +174,84 @@ describe('loader', () => {
     assert.ok(result.includes('__dd_ch'), 'should use __dd_ch variable')
     assert.ok(result.includes('__dd_mod'), 'should use __dd_mod variable')
     assert.ok(result.includes('__dd_payload'), 'should use __dd_payload variable')
+  })
+
+  describe('orchestrion rewrite targets', () => {
+    const pkg = '@langchain/langgraph'
+    const version = '1.4.19'
+    let packageDir
+
+    before(() => {
+      const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-webpack-loader-'))
+      packageDir = path.join(projectDir, 'node_modules', '@langchain', 'langgraph')
+      fs.mkdirSync(path.join(packageDir, 'dist', 'pregel'), { recursive: true })
+      fs.writeFileSync(path.join(packageDir, 'package.json'), JSON.stringify({ name: pkg, version }))
+    })
+
+    after(() => {
+      fs.rmSync(path.resolve(packageDir, '..', '..', '..'), { recursive: true, force: true })
+    })
+
+    /**
+     * @param {string} modulePath
+     * @param {string} source
+     */
+    function runLoader (modulePath, source) {
+      const resourcePath = path.join(packageDir, modulePath)
+      const options = { pkg, version, path: `${pkg}/${modulePath}` }
+      let callbackArgs
+      const context = {
+        cacheable: () => {},
+        getOptions: () => options,
+        resourcePath,
+        callback: (...args) => { callbackArgs = args },
+      }
+
+      const returned = loader.call(context, source)
+
+      return { returned, callbackArgs }
+    }
+
+    it('rewrites a pure orchestrion target and appends the activation publish', () => {
+      const source = 'class Pregel { async stream () { return [] } }\nmodule.exports = { Pregel }\n'
+
+      const { returned, callbackArgs } = runLoader('dist/pregel/index.cjs', source)
+
+      assert.equal(returned, undefined)
+      assert.ok(callbackArgs, 'result should be passed through this.callback')
+      const [error, code, map] = callbackArgs
+      assert.equal(error, null)
+      assert.ok(code.includes('orchestrion:@langchain/langgraph:Pregel_stream'), 'code should be rewritten')
+      assert.ok(code.includes("'dd-trace:bundler:load'"), 'code should use the bundler channel')
+      assert.ok(
+        code.includes(JSON.stringify({ activate: true, package: pkg, version, path: `${pkg}/dist/pregel/index.cjs` })),
+        'code should publish the activation payload'
+      )
+      assert.ok(code.includes('if (__dd_ch.hasSubscribers)'), 'activation should be gated on subscribers')
+      assert.ok(!code.includes('__dd_payload'), 'code should not publish the module exports')
+      assert.ok(map, 'source map should be returned')
+    })
+
+    it('falls back to the module publish for non-target files of a target package', () => {
+      const source = 'module.exports = {}'
+
+      const { returned, callbackArgs } = runLoader('dist/index.cjs', source)
+
+      assert.equal(callbackArgs, undefined)
+      assert.equal(returned.slice(0, source.length), source, 'result should start with original source')
+      assert.ok(!returned.includes('orchestrion:'), 'result should not be rewritten')
+      assert.ok(returned.includes('module.exports = __dd_payload.module'), 'result should publish the module exports')
+    })
+
+    it('falls back to the module publish when the target does not match the function query', () => {
+      const source = 'module.exports = { notPregel: true }\n'
+
+      const { returned, callbackArgs } = runLoader('dist/pregel/index.cjs', source)
+
+      assert.equal(callbackArgs, undefined)
+      assert.equal(returned.slice(0, source.length), source, 'result should start with original source')
+      assert.ok(!returned.includes('activate'), 'result should not publish an activation')
+      assert.ok(returned.includes('module.exports = __dd_payload.module'), 'result should publish the module exports')
+    })
   })
 })

@@ -6,6 +6,7 @@ const fs = require('node:fs')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const { getRewriteTarget } = require('../datadog-instrumentations/src/helpers/rewriter/targets')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
 const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
@@ -154,8 +155,9 @@ class DatadogWebpackPlugin {
         }
 
         const request = resolveData.request
+        const isRewriteTarget = getRewriteTarget(normalizedResource) !== undefined
 
-        if (!modulesOfInterest.has(request) && !modulesOfInterest.has(`${pkg}/${modulePath}`)) {
+        if (!isRewriteTarget && !modulesOfInterest.has(request) && !modulesOfInterest.has(`${pkg}/${modulePath}`)) {
           return
         }
 

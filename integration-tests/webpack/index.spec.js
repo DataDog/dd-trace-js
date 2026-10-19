@@ -65,5 +65,9 @@ webpackVersions.forEach((version) => {
     it('prints error when user enables optimization.minimize', () => {
       execSync('node ./build-and-test-minify.js', { timeout })
     })
+
+    it('instruments orchestrion-based integrations', () => {
+      execSync('node ./build-and-test-orchestrion.js', { timeout })
+    })
   })
 })
