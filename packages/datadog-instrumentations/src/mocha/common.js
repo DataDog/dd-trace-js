@@ -106,6 +106,23 @@ function wrapDeclaration (original) {
   }
 }
 
+// Carry declaration policy alongside each serialized execution, including duplicate full titles.
+addHook({
+  name: 'mocha',
+  versions: ['>=8.0.0'],
+  filePattern: String.raw`lib/test\.(?:c?js)$`,
+}, TestPackage => {
+  const Test = TestPackage.Test ?? TestPackage
+  shimmer.wrap(Test.prototype, 'serialize', serialize => function () {
+    const serialized = serialize.apply(this, arguments)
+    const { mustFail, noAutoRetry } = this._ddTestAnnotations || this._ddDeclaredAnnotations ||
+      getTestAnnotations(this.fn)
+    serialized._ddTestAnnotations = { mustFail, noAutoRetry }
+    return serialized
+  })
+  return TestPackage
+})
+
 // mocha-each support
 addHook({
   name: 'mocha-each',

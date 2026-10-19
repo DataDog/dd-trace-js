@@ -7581,6 +7581,28 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       }, {}, 'node ci-visibility/run-mocha-review-repeated.js')
     })
 
+    parallelIt('preserves per-execution protection for duplicate parallel titles', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        mocha: {
+          suites: {
+            'ci-visibility/test-management/mocha-review-duplicates.js': {
+              tests: { duplicate: { properties: { quarantined: true } } },
+            },
+          },
+        },
+      })
+      await runReviewFixture('mocha-review-duplicates', 1, events => {
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.strictEqual(tests.length, 3)
+        assert.strictEqual(tests.find(test => test.meta['test.test_management.prevent_failure_suppression'] === 'true')
+          .meta['test.test_management.prevent_failure_suppression'], 'true')
+        assert.strictEqual(tests.find(test => test.meta[TEST_STATUS] === 'pass')
+          .meta['test.test_management.no_auto_retry'], 'true')
+      }, {}, 'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ci-visibility/test-management/mocha-review-duplicates.js')
+    })
+
     for (const parallel of [false, true]) {
       for (const scenario of [
         {
