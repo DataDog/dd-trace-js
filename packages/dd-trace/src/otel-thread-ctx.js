@@ -181,10 +181,14 @@ function localRootSpanIdHex (rootContext) {
   const bytes = rootContext._spanId.toBuffer()
   if (bytes.length !== 8) return rootContext.toSpanId(true)
   return String.fromCharCode(
-    HEX_CODES[bytes[0] >> 4], HEX_CODES[bytes[0] & 15], HEX_CODES[bytes[1] >> 4], HEX_CODES[bytes[1] & 15],
-    HEX_CODES[bytes[2] >> 4], HEX_CODES[bytes[2] & 15], HEX_CODES[bytes[3] >> 4], HEX_CODES[bytes[3] & 15],
-    HEX_CODES[bytes[4] >> 4], HEX_CODES[bytes[4] & 15], HEX_CODES[bytes[5] >> 4], HEX_CODES[bytes[5] & 15],
-    HEX_CODES[bytes[6] >> 4], HEX_CODES[bytes[6] & 15], HEX_CODES[bytes[7] >> 4], HEX_CODES[bytes[7] & 15]
+    HEX_CODES[(bytes[0] >> 4) & 15], HEX_CODES[bytes[0] & 15],
+    HEX_CODES[(bytes[1] >> 4) & 15], HEX_CODES[bytes[1] & 15],
+    HEX_CODES[(bytes[2] >> 4) & 15], HEX_CODES[bytes[2] & 15],
+    HEX_CODES[(bytes[3] >> 4) & 15], HEX_CODES[bytes[3] & 15],
+    HEX_CODES[(bytes[4] >> 4) & 15], HEX_CODES[bytes[4] & 15],
+    HEX_CODES[(bytes[5] >> 4) & 15], HEX_CODES[bytes[5] & 15],
+    HEX_CODES[(bytes[6] >> 4) & 15], HEX_CODES[bytes[6] & 15],
+    HEX_CODES[(bytes[7] >> 4) & 15], HEX_CODES[bytes[7] & 15]
   )
 }
 

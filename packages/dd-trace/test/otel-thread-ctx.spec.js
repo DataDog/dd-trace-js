@@ -369,6 +369,7 @@ describe('otel-thread-ctx', () => {
         { traceId: 'aabbccddeeff001a', spanId: '0' },
         { traceId: 'aabbccddeeff001b', spanId: 'f' },
         { traceId: 'aabbccddeeff001c', spanId: 'ffffffffffffffff' },
+        { traceId: 'aabbccddeeff001d', spanId: id('-1') },
       ]
       for (const fields of cases) {
         constructedContexts = []
