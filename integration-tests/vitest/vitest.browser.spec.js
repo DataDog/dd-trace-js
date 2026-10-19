@@ -979,6 +979,20 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
+  // Legacy browser jobs use Vite 6/esbuild; Rolldown optimizer plugins are supported by Vite 8.
+  const rolldownPluginsIt = isLegacyBrowserProvider ? it.skip : it
+  rolldownPluginsIt('starts browser mode with empty Rolldown optimizer plugin entries', async () => {
+    const runPromise = runVitest('browser-reporting.mjs', { VITEST_OPTIONAL_OPTIMIZER_PLUGINS: '1' })
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const tests = getEventContents(getEvents(payloads), 'test')
+        assert.strictEqual(tests.length, 2, testOutput)
+        assert.strictEqual(getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
+          .meta[TEST_STATUS], 'pass')
+      })
+    await Promise.all([runPromise, eventsPromise])
+  })
+
   it('keeps a sole browser test automation exclusions failure blocking', async () => {
     const testSuite = 'ci-visibility/vitest-browser-tests/browser-exclusions-sole.mjs'
     receiver.setSettings({
