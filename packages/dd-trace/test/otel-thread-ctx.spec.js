@@ -397,7 +397,8 @@ describe('otel-thread-ctx', () => {
       const rejected = [
         { traceId: 'aabbccddeeff0015', traceTags: { '_dd.p.tid': 'not-hex-16chars!' } },
         { traceId: 'aabbccddeeff001e', traceTags: { '_dd.p.tid': '640cfd8d0000000g' } },
-        { traceId: '0102030405060708090a0b0c0d0e0f1011', spanId: '0102030405060708090a' },
+        { traceId: '0102030405060708090a0b0c0d0e0f1011' },
+        { traceId: 'aabbccddeeff001f', spanId: '0102030405060708090a' },
       ]
       for (const fields of rejected) {
         constructedContexts = []
