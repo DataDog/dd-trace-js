@@ -190,8 +190,9 @@ function startRootSuite (test) {
 /**
  * @param {string} file
  * @param {'pass' | 'fail' | 'skip'} status
+ * @param {object} [runner] Defers coverage reset until this runner's suite-end reporters finish.
  */
-function finishRootSuite (file, status) {
+function finishRootSuite (file, status, runner) {
   const ctx = testFileToSuiteCtx.get(file)
   if (!ctx) {
     log.warn('No ctx found for suite', file)
@@ -202,7 +203,8 @@ function finishRootSuite (file, status) {
     const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
     testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
     mergeCoverage(global.__coverage__, originalCoverageMap)
-    resetCoverage(global.__coverage__)
+    if (runner) runnersWithPendingCoverageReset.add(runner)
+    else resetCoverage(global.__coverage__)
   }
 
   testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
@@ -1415,14 +1417,14 @@ addHook({
       finishRootSuite(file, getRootSuiteStatus(rootTests))
     }
 
-    function finishRootSuiteFallbackForFile (file) {
+    function finishRootSuiteFallbackForFile (file, runner) {
       const ctx = testFileToSuiteCtx.get(file)
       if (!ctx || !rootPendingCountByFile.has(file)) return
 
       const rootTests = rootTestsByFile.get(file) || []
       const status = haveRootTestsFinished(rootTests) ? getRootSuiteStatus(rootTests) : 'fail'
       rootPendingCountByFile.delete(file)
-      finishRootSuite(file, status)
+      finishRootSuite(file, status, runner)
     }
 
     function finishRootSuiteAfterFinalAttempt (test) {
@@ -1585,7 +1587,7 @@ addHook({
               continue
             }
 
-            finishRootSuiteFallbackForFile(test.file)
+            finishRootSuiteFallbackForFile(test.file, this)
           }
         }
         return

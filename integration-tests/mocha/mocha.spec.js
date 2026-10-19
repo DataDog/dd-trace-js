@@ -2781,14 +2781,67 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           })
         }
 
-        for (const hook of ['beforeEach', 'afterEach']) {
-          it(`preserves top-level suite coverage after an aborting ${hook}`, async () => {
+        for (const followingFile of ['top-level-it-no-describe.js', 'top-level-it-with-hooks.js']) {
+          it(`finishes skipped root files before ${followingFile}`, async () => {
+            const skippedFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            const passingFile = `ci-visibility/mocha-plugin-tests/${followingFile}`
+            childProcess = exec(`node node_modules/mocha/bin/mocha ./${skippedFile} ./${passingFile}`, {
+              cwd,
+              env: { ...envVars, DD_INJECT_FORCE: 'true' },
+            })
+
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                assert.strictEqual(suites.length, 2)
+                const skippedSuite = suites.find(suite => suite.meta[TEST_SUITE] === skippedFile)
+                const passingSuite = suites.find(suite => suite.meta[TEST_SUITE] === passingFile)
+                assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+                assert.strictEqual(passingSuite.meta[TEST_STATUS], 'pass')
+                assert.ok(skippedSuite.start + BigInt(skippedSuite.duration) <= passingSuite.start,
+                  'Skipped files must finish before the following file starts')
+                assert.strictEqual(tests.length, 4)
+                for (const test of tests) {
+                  const suite = test.meta[TEST_SUITE] === skippedFile ? skippedSuite : passingSuite
+                  assert.strictEqual(test.test_suite_id.toString(), suite.test_suite_id.toString())
+                }
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0)
+          })
+        }
+
+        for (const { hook, skippedFileFirst, reporterThrows } of [
+          { hook: 'beforeEach', skippedFileFirst: false, reporterThrows: false },
+          { hook: 'afterEach', skippedFileFirst: false, reporterThrows: false },
+          { hook: 'beforeEach', skippedFileFirst: false, reporterThrows: true },
+          { hook: 'afterEach', skippedFileFirst: false, reporterThrows: true },
+          { hook: 'afterEach', skippedFileFirst: true, reporterThrows: false },
+        ]) {
+          it(`preserves top-level suite coverage after an aborting ${hook}` +
+            ` (skipped file first=${skippedFileFirst}, reporter throws=${reporterThrows})`, async () => {
             const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-aborted.js'
+            const skippedFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            const files = skippedFileFirst ? `./${skippedFile} ./${suiteFile}` : `./${suiteFile}`
             receiver.setSettings({ itr_enabled: true, code_coverage: true, tests_skipping: false })
             childProcess = exec(
-              `node node_modules/nyc/bin/nyc.js --silent node node_modules/mocha/bin/mocha ./${suiteFile}`,
-              { cwd, env: { ...envVars, DD_INJECT_FORCE: 'true', MOCHA_FAILING_HOOK: hook } }
+              `node node_modules/nyc/bin/nyc.js --silent node node_modules/mocha/bin/mocha ${files}` +
+              ' --reporter ./ci-visibility/mocha-root-coverage-reporter.js',
+              {
+                cwd,
+                env: {
+                  ...envVars,
+                  DD_INJECT_FORCE: 'true',
+                  MOCHA_FAILING_HOOK: hook,
+                  MOCHA_COVERAGE_REPORTER_THROWS: reporterThrows ? '1' : '',
+                },
+              }
             )
+            childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+            childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
             const payloadsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
               ({ url }) => url.endsWith('/api/v2/citestcycle') || url.endsWith('/api/v2/citestcov'), payloads => {
@@ -2798,18 +2851,35 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 const coverages = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcov'))
                   .flatMap(({ payload }) => payload).flatMap(({ content }) => content.coverages)
 
-                assert.strictEqual(suites.length, 1)
-                assertObjectContains(suites[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'fail' } })
-                assert.strictEqual(coverages.length, 1, 'An aborted suite must still report its coverage')
-                assert.strictEqual(coverages[0].test_suite_id, Number(suites[0].test_suite_id))
-                assertObjectContains(coverages[0].files.map(({ filename }) => filename), [
+                assert.strictEqual(suites.length, skippedFileFirst ? 2 : 1)
+                const abortedSuite = suites.find(suite => suite.meta[TEST_SUITE] === suiteFile)
+                assert.strictEqual(abortedSuite.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(coverages.length, suites.length)
+                const abortedCoverage = coverages.find(coverage =>
+                  coverage.test_suite_id === Number(abortedSuite.test_suite_id))
+                assertObjectContains(abortedCoverage.files.map(({ filename }) => filename), [
                   suiteFile,
                   'ci-visibility/test/sum.js',
                 ])
+                const abortedSum = abortedCoverage.files.find(
+                  ({ filename }) => filename === 'ci-visibility/test/sum.js')
+                assert.ok(abortedSum.bitmap[0] & (1 << 4), 'The aborted file must own coverage of the sum body')
+                if (skippedFileFirst) {
+                  const skippedSuite = suites.find(suite => suite.meta[TEST_SUITE] === skippedFile)
+                  const skippedCoverage = coverages.find(coverage =>
+                    coverage.test_suite_id === Number(skippedSuite.test_suite_id))
+                  assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+                  const skippedSum = skippedCoverage.files.find(
+                    ({ filename }) => filename === 'ci-visibility/test/sum.js')
+                  assert.strictEqual((skippedSum?.bitmap[0] || 0) & (1 << 4), 0,
+                    'Skipped files must not receive coverage executed by a later file')
+                }
               })
 
             const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), payloadsPromise])
-            assert.strictEqual(exitCode, 1)
+            assert.strictEqual(exitCode, 1, testOutput)
+            assert.match(testOutput, /MOCHA ROOT REPORTER COVERAGE: 1/)
+            assert.match(testOutput, /MOCHA ROOT COVERAGE AFTER REPORTERS: 0/)
           })
         }
 
