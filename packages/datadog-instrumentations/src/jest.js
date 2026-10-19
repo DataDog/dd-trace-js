@@ -682,6 +682,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
   return class DatadogEnvironment extends BaseEnvironment {
     #activeDetachedEfdRetries
+    #boundTestEach = new WeakSet()
     #detachedEfdRetryConcurrency
     #detachedEfdRetryQueue
     #discardedEfdRetryTests
@@ -832,7 +833,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @param {boolean} needsEachError
      */
     bindTestEach (test, needsEachError = false) {
-      if (typeof test?.each !== 'function') return
+      if (typeof test?.each !== 'function' || this.#boundTestEach.has(test)) return
+      this.#boundTestEach.add(test)
 
       const bind = this.getJestEachBind()
       if (typeof bind !== 'function') {
@@ -873,6 +875,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           return eachBind.apply(this, testArgs)
         }
       }
+    }
+
+    /** @param {Function|undefined} test */
+    bindTestEachGlobals (test) {
+      this.bindTestEach(test)
+      this.bindTestEach(test?.only)
+      this.bindTestEach(test?.skip)
+      this.bindTestEach(test?.failing, true)
+      this.bindTestEach(test?.only?.failing, true)
+      this.bindTestEach(test?.skip?.failing, true)
     }
 
     /**
@@ -2079,12 +2091,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       } else if (event.name === 'setup') {
         this.#expect = event.runtimeGlobals?.expect ?? this.global.expect
         this.wrapConcurrentTest(state)
-        this.bindTestEach(this.global.test)
-        this.bindTestEach(this.global.test?.only)
-        this.bindTestEach(this.global.test?.skip)
-        this.bindTestEach(this.global.test?.failing, true)
-        this.bindTestEach(this.global.test?.only?.failing, true)
-        this.bindTestEach(this.global.test?.skip?.failing, true)
+        this.bindTestEachGlobals(event.runtimeGlobals?.test ?? this.global.test)
       }
       if (
         event.name === 'run_describe_start' &&
@@ -4112,6 +4119,7 @@ function wrapJestGlobalsForRuntime (runtime) {
 
 function wrapConcurrentJestGlobalsForRuntime (runtime, jestGlobals) {
   const environment = testSuiteDatadogEnvironments.get(runtime?._testPath)
+  environment?.bindTestEachGlobals(jestGlobals?.test)
   environment?.wrapConcurrentTestGlobals(jestGlobals?.test, environment.concurrentTestState)
 }
 

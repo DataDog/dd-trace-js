@@ -546,6 +546,25 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
+    const importedEachIt = supportsImportedGlobals ? it : it.skip
+    importedEachIt('preserves serial each annotations with injectGlobals disabled', async () => {
+      const file = 'test-exclusions-imported'
+      receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+      setProperties(file, ['selected 1', 'selected 2', 'skipped 1', 'skipped 2'],
+        { disabled: true, quarantined: true })
+      await runExclusions(file, 1, spans => {
+        assert.strictEqual(spans.length, 6)
+        for (const span of spans) {
+          const name = span.meta[TEST_NAME]
+          assert.strictEqual(span.meta[TEST_STATUS],
+            name.startsWith('selected') ? 'fail' : name.startsWith('skipped') ? 'skip' : 'pass', name)
+          assert.strictEqual(span.meta[preventFailureSuppressionTag],
+            name.startsWith('ordinary') ? undefined : 'true', name)
+          if (name.startsWith('selected')) assert.strictEqual(span.meta[noAutoRetryTag], 'true', name)
+        }
+      }, { DO_NOT_INJECT_GLOBALS: '1' })
+    })
+
     // test.failing.each was added in Jest 29 (jestjs/jest#13142).
     const failingExclusionsIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 29 ? it : it.skip
     failingExclusionsIt('preserves expected-failure semantics for annotated test.failing.each', async () => {
