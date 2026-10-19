@@ -7556,7 +7556,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           check(payloads.flatMap(({ payload }) => payload.events))
         })
-      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise]).catch(error => {
+        error.message += `\nMocha output:\n${testOutput}`
+        throw error
+      })
       assert.strictEqual(exitCode, expectedExit, testOutput)
     }
 
@@ -7601,6 +7604,21 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           .meta['test.test_management.no_auto_retry'], 'true')
       }, {}, 'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
         ' ci-visibility/test-management/mocha-review-duplicates.js')
+    })
+
+    it('preserves annotations on exported skipped declarations', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      await runReviewFixture('mocha-review-exported', 0, events => {
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.strictEqual(tests.length, 4)
+        for (const test of tests) {
+          const skipped = test.meta[TEST_NAME] !== 'live control'
+          assert.strictEqual(test.meta[TEST_STATUS], skipped ? 'skip' : 'pass')
+          assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'],
+            skipped ? 'true' : undefined)
+          assert.strictEqual(test.meta['test.test_management.no_auto_retry'], skipped ? 'true' : undefined)
+        }
+      })
     })
 
     for (const parallel of [false, true]) {
