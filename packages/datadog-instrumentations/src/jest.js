@@ -3216,6 +3216,7 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       resetSuiteSkippingRunState()
+      testAnnotations.clear()
       hasFinishedTestSession = false
 
       let shouldResetLibraryConfiguration = true
