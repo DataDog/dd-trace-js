@@ -8,7 +8,7 @@
 
 const { join } = require('node:path')
 
-const { CopyRspackPlugin, DefinePlugin, SwcJsMinimizerRspackPlugin } = require('@rspack/core')
+const { BannerPlugin, CopyRspackPlugin, DefinePlugin, SwcJsMinimizerRspackPlugin } = require('@rspack/core')
 const { LicenseWebpackPlugin } = require('license-webpack-plugin')
 
 const { dependencies } = require('./package.json')
@@ -95,8 +95,15 @@ module.exports = {
   plugins: [
     // rspack otherwise inlines the build machine's file URL for `import.meta.url`
     // (used by import-in-the-middle's `createRequire`), so resolve it at runtime.
+    // It is computed in a banner because import-in-the-middle declares its own
+    // `require` variable, which would shadow a `require()` call inlined there.
     new DefinePlugin({
-      'import.meta.url': 'require("node:url").pathToFileURL(__filename).href',
+      'import.meta.url': '__ddImportMetaUrl',
+    }),
+    new BannerPlugin({
+      banner: 'const __ddImportMetaUrl = require("node:url").pathToFileURL(__filename).href;',
+      raw: true,
+      include: /^import-in-the-middle\/(create-hook|lib\/get-exports)\.js$/,
     }),
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
