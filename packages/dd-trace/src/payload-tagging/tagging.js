@@ -48,7 +48,7 @@ function tagsFromObject (object, opts) {
   const result = {}
 
   function tagRec (prefix, object, depth = 0) {
-    // Off by one: _dd.payload_tags_trimmed counts as 1 tag
+    // Off by one: _dd.payload_tags_incomplete counts as 1 tag
     if (abort) { return }
 
     if (tagCount >= PAYLOAD_TAGGING_MAX_TAGS - 1) {
