@@ -73,6 +73,31 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     assert.strictEqual(assertionRuns, 1, 'onPayload runs exactly once on the post-exit buffer')
   })
 
+  for (const formerDeadlineMs of [15_000, 30_000]) {
+    it(`collects the complete run when payloads arrive after ${formerDeadlineMs}ms`, async () => {
+      const child = fakeChildProcess()
+      const onPayload = sinon.spy(payloads => assert.strictEqual(payloads.length, 2))
+      const promise = intake.gatherPayloadsUntilChildExit(
+        child,
+        ({ url }) => url === '/api/v2/citestcycle',
+        onPayload,
+        { gracePeriod: 50, hardTimeout: 70_000 }
+      )
+
+      intake.emit('message', { url: '/api/v2/citestcycle', payload: { run: 1 } })
+      await clock.tickAsync(formerDeadlineMs + 1)
+      assert.strictEqual(onPayload.callCount, 0)
+
+      intake.emit('message', { url: '/api/v2/citestcycle', payload: { run: 2 } })
+      child.simulateExit()
+
+      await Promise.all([clock.tickAsync(50), promise])
+      assert.strictEqual(onPayload.callCount, 1)
+      assert.strictEqual(intake.listenerCount('message'), 0)
+      assert.strictEqual(child.listenerCount('exit'), 0)
+    })
+  }
+
   it('picks up payloads that arrive during the grace period after child exit', async () => {
     const child = fakeChildProcess()
     const promise = intake.gatherPayloadsUntilChildExit(
