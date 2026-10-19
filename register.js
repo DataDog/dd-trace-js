@@ -4,12 +4,17 @@
 
 const { register } = require('node:module')
 const { pathToFileURL } = require('node:url')
+const { isPackageManager } = require('./packages/dd-trace/src/util')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('./version')
 
 const parentURL = pathToFileURL(__filename)
+// Package managers launch scripts and test runners as child processes, which register the hooks
+// themselves, so there is nothing to instrument here. Asynchronous hooks also make pnpm 11.0-11.20
+// fail every command: they change the error its probe for an optional `.pnpmfile.mjs` expects.
+const shouldRegisterLoaderHooks = !isPackageManager()
 let isSyncLoaderRegistered = false
 
-if (shouldRegisterSyncLoaderHooks()) {
+if (shouldRegisterLoaderHooks && shouldRegisterSyncLoaderHooks()) {
   let registerSyncLoaderHooks
   let syncRegistrationError
   try {
@@ -26,7 +31,7 @@ if (shouldRegisterSyncLoaderHooks()) {
   }
 }
 
-if (!isSyncLoaderRegistered) {
+if (shouldRegisterLoaderHooks && !isSyncLoaderRegistered) {
   register('./loader-hook.mjs', parentURL)
 }
 

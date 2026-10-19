@@ -6,7 +6,7 @@ const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
-const { inspect } = require('node:util')
+const { inspect, promisify } = require('node:util')
 
 const libCoverage = require('istanbul-lib-coverage')
 
@@ -224,6 +224,37 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     const expected = { bootstrap: true, v8Dir: getV8CoverageDir() }
     assert.deepEqual(JSON.parse(fs.readFileSync(asyncOut, 'utf8')), expected)
     assert.deepEqual(JSON.parse(fs.readFileSync(syncOut, 'utf8')), expected)
+  })
+
+  it('keeps the util.promisify result of exec and execFile', async () => {
+    const fixtureDir = path.join(appRoot, 'promisify-fixtures')
+    await fsp.mkdir(fixtureDir, { recursive: true })
+    const fixturePath = path.join(fixtureDir, 'print-env.js')
+    await fsp.writeFile(fixturePath, `
+'use strict'
+process.stdout.write(JSON.stringify({
+  bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),
+  v8Dir: process.env.${V8_COVERAGE_ENV} || '',
+}))
+process.stderr.write('stderr')
+process.exitCode = Number(process.argv[2] || 0)
+`)
+    const expected = { bootstrap: true, v8Dir: getV8CoverageDir() }
+    const execFileAsync = promisify(childProcess.execFile)
+    const execAsync = promisify(childProcess.exec)
+
+    const fromExecFile = await execFileAsync(process.execPath, [fixturePath], { cwd: appRoot })
+    const fromExec = await execAsync(`node ${JSON.stringify(fixturePath)}`, { cwd: appRoot })
+
+    for (const { stdout, stderr } of [fromExecFile, fromExec]) {
+      assert.deepEqual(JSON.parse(stdout), expected)
+      assert.equal(stderr, 'stderr')
+    }
+    await assert.rejects(execFileAsync(process.execPath, [fixturePath, '3'], { cwd: appRoot }), {
+      code: 3,
+      stdout: JSON.stringify(expected),
+      stderr: 'stderr',
+    })
   })
 
   it('probes fresh when a sandbox path has no dd-trace yet', async () => {
