@@ -94,6 +94,7 @@ describe('S3 payload tagging fail-soft process boundary', function () {
           assert.ok(!output.includes('payload-secret'), 'diagnostics must not include payload contents')
           const spans = traces.flat().filter(span => span.name === 'aws.request')
           assert.strictEqual(spans.length, 2)
+          spans.sort((a, b) => (a.start.toString() >= b.start.toString() ? 1 : -1))
           for (const span of spans) {
             assert.strictEqual(span.resource, 'putObject s3-fail-soft')
             assert.strictEqual(span.error, 0)
