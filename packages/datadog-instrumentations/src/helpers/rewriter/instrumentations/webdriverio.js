@@ -506,9 +506,8 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
-    astQuery: 'TryStatement:has(CatchClause IfStatement[test.operator=">"]' +
-      '[test.left.object.name="retries"][test.left.property.name="limit"]' +
-      '[test.right.object.name="retries"][test.right.property.name="attempts"]) > BlockStatement',
+    astQuery: 'FunctionDeclaration[id.name="executeAsync"] TryStatement:has(CatchClause ' +
+      'CallExpression[callee.object.name="executeAsync"][callee.property.name="call"]) > BlockStatement',
     channelName: 'executeAsync',
     transform: 'awaitContextCallback',
     transformOptions: {
@@ -521,10 +520,8 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
-    astQuery: 'FunctionDeclaration[id.name="executeAsync"] CatchClause ' +
-      'IfStatement[test.operator=">"][test.left.object.name="retries"]' +
-      '[test.left.property.name="limit"][test.right.object.name="retries"]' +
-      '[test.right.property.name="attempts"]',
+    astQuery: 'FunctionDeclaration[id.name="executeAsync"] CatchClause > BlockStatement > ' +
+      'IfStatement:has(CallExpression[callee.object.name="executeAsync"][callee.property.name="call"])',
     channelName: 'executeAsync',
     transform: 'awaitContextCallback',
     transformOptions: {
