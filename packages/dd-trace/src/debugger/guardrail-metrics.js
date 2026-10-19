@@ -9,10 +9,10 @@
  * atomics, and the main thread periodically drains the counters into instrumentation telemetry metrics.
  *
  * The metric names, tags and reason codes are defined by the "Debugger Observability for GA" specification and are
- * shared with the other tracers. All metrics are counts in the `live_debugger` telemetry namespace.
+ * shared with the other tracers. All metrics are counts in the `debugger` telemetry namespace.
  */
 
-const TELEMETRY_NAMESPACE = 'live_debugger'
+const TELEMETRY_NAMESPACE = 'debugger'
 
 const EVENT_TYPE = Object.freeze({
   SNAPSHOT: 0,
