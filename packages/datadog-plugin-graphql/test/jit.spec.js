@@ -2919,11 +2919,11 @@ void generatedResolver
     })
   })
 
-  describe('repository-pinned graphql-jit and GraphQL', () => {
+  describe('graphql-jit 0.8 with repository-pinned GraphQL', () => {
     let compileQuery
     let graphql
 
-    useSandbox(["'graphql-jit'", "'graphql'"], false, [])
+    useSandbox(["'graphql-jit@^0.8.0'", "'graphql'"], false, [])
 
     before(() => {
       return agent.load('graphql')
