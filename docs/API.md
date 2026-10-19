@@ -851,6 +851,17 @@ parameterized callbacks, including `only` and `skip` declarations. The annotatio
 preserved in serial and parallel workers. Native Mocha retries remain available when
 `noAutoRetry` excludes Datadog ATR, EFD, and Attempt to Fix.
 
+## Cucumber test automation exclusions
+
+Use the native Gherkin tags `@datadog:prevent_failure_suppression` and
+`@datadog:no_auto_retry` on a `Scenario` or `Scenario Outline`. Outline tags apply
+to every example. These are tracer declaration annotations, resolved before
+Datadog disabling, quarantine, ATR, EFD, and Attempt to Fix. Explicit `--retry`
+settings remain available. Parallel Test Management exclusions require Cucumber 11 or later,
+which exposes the worker `runTestCase` lifecycle; serial scenarios support Cucumber 7 or later.
+Cucumber's normal tag selection and dry runs still apply.
+The annotation and assigned Test Management span tags follow the callback API below.
+
 ## Jest test automation exclusions
 
 With the `jest-circus` runner, annotate test callbacks using `dd-trace/test-optimization`:
