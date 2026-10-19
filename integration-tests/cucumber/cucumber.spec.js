@@ -3531,8 +3531,7 @@ describe(`cucumber@${version} commonJS`, () => {
   context('test automation exclusions', () => {
     for (const parallel of [false, true]) {
       for (const atrEnabled of [false, true]) {
-        const run = parallel && version !== 'latest' && satisfies(version, '<11.0.0') ? it.skip : it
-        run(`preserves native retry tag filters with ATR ${atrEnabled ? 'enabled' : 'disabled'} ` +
+        it(`preserves native retry tag filters with ATR ${atrEnabled ? 'enabled' : 'disabled'} ` +
           `in ${parallel ? 'parallel' : 'serial'} excluded scenarios`, async () => {
           const file = 'ci-visibility/features-automation-exclusions/retry-filter.feature'
           const messagesPath = `${cwd}/retry-filter-attempts.ndjson`
