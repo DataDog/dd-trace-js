@@ -41,7 +41,7 @@ function addMochaRunHooks (versions, wrapMochaRun) {
     patchedMochaConstructors.set(Mocha, metadata)
     shimmer.wrap(Mocha.prototype, 'ui', ui => function () {
       const result = ui.apply(this, arguments)
-      this.suite.on('pre-require', preserveDeclarationAnnotations)
+      this.suite.on('pre-require', context => preserveDeclarationAnnotations(context, Mocha))
       return result
     })
     return wrapMochaRun(Mocha, frameworkVersion, metadata)
@@ -82,12 +82,19 @@ function addMochaRunHooks (versions, wrapMochaRun) {
   }, wrapMochaPackage)
 }
 
-/** @param {object} context */
-function preserveDeclarationAnnotations (context) {
+/**
+ * @param {object} context
+ * @param {Function} Mocha
+ */
+function preserveDeclarationAnnotations (context, Mocha) {
   for (const key of ['it', 'specify', 'test', 'xit', 'xspecify']) {
     const declare = context[key]
     if (typeof declare !== 'function') continue
     context[key] = shimmer.wrapFunction(declare, wrapDeclaration)
+    // Older Mocha interfaces copy declarations to exports before this listener runs.
+    for (const exported of ['it', 'specify', 'test', 'xit', 'xspecify']) {
+      if (Mocha[exported] === declare) Mocha[exported] = context[key]
+    }
     for (const modifier of ['skip', 'only']) {
       if (typeof declare[modifier] === 'function') {
         context[key][modifier] = shimmer.wrapFunction(declare[modifier], wrapDeclaration)
