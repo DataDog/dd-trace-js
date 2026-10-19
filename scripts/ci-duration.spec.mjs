@@ -36,16 +36,16 @@ function step ({ name, start, end, conclusion = 'success' }) {
 }
 
 /**
- * @param {{ id: number, name: string, start: number, end: number, steps?: object[] }} value
+ * @param {{ id: number, name: string, end: number, steps?: object[] }} value
  * @returns {object}
  */
-function job ({ id, name, start, end, steps = [] }) {
+function job ({ id, name, end, steps = [] }) {
   return {
     id,
     name,
     html_url: `https://example.com/jobs/${id}`,
     conclusion: 'success',
-    started_at: timestamp(start),
+    started_at: timestamp(0),
     completed_at: timestamp(end),
     steps,
   }
@@ -107,7 +107,7 @@ describe('CI duration report', () => {
       job({
         id: 1,
         name: 'End-to-end #9 / express4',
-        start: 0,
+
         end: 756,
         steps: [
           step({ name: 'Run FAST scenario', start: 1, end: 31 }),
@@ -117,7 +117,7 @@ describe('CI duration report', () => {
       job({
         id: 2,
         name: 'End-to-end #4 / express5',
-        start: 0,
+
         end: 700,
         steps: [
           step({ name: 'Run APPSEC_RASP scenario', start: 5, end: 477 }),
@@ -127,7 +127,7 @@ describe('CI duration report', () => {
       job({
         id: 3,
         name: 'End-to-end #12 / express4-typescript',
-        start: 0,
+
         end: 650,
         steps: [
           step({ name: 'Run DEBUGGER_REPLAY scenario', start: 5, end: 409 }),
@@ -237,7 +237,7 @@ describe('CI duration report', () => {
         },
         listJobsForWorkflowRunAttempt: options => {
           jobRequests.push(options.run_id)
-          return Promise.resolve({ data: { jobs: [job({ id: 4, name: 'slow', start: 0, end: 590 })] } })
+          return Promise.resolve({ data: { jobs: [job({ id: 4, name: 'slow', end: 590 })] } })
         },
       },
     }
@@ -314,7 +314,7 @@ describe('CI duration report', () => {
       job({
         id: 4,
         name: 'End-to-end #9 / express4',
-        start: 0,
+
         end: 756,
         steps: [step({ name: 'Run FEATURE_FLAGS scenario', start: 31, end: 602 })],
       }),

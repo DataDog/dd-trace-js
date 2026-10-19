@@ -97,17 +97,17 @@ describe('plugin fixture discovery', () => {
 
   it('selects BullMQ and its Redis external through the installer entrypoint', () => {
     withInstallerFixture({ PLUGINS: 'bullmq', PACKAGE_VERSION_RANGE: '5.66.0' }, fixtureRoot => {
-      const workspace = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json')))
+      const workspace = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'), 'utf8'))
       assert.ok(workspace.workspaces.packages.includes('bullmq@5.66.0'))
       assert.ok(workspace.workspaces.packages.includes('redis'))
-      const redis = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'redis', 'package.json')))
+      const redis = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'redis', 'package.json'), 'utf8'))
       assert.match(redis.dependencies.redis, /^>=4/)
     })
   })
 
   it('applies PACKAGE_VERSION_RANGE to the Supabase client external through the installer entrypoint', () => {
     withInstallerFixture({ PLUGINS: 'supabase', PACKAGE_VERSION_RANGE: '2.115.0' }, fixtureRoot => {
-      const { packages } = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'))).workspaces
+      const { packages } = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'), 'utf8')).workspaces
       assert.ok(packages.includes('@supabase/supabase-js@2.115.0'))
       assert.ok(!packages.includes('@supabase/supabase-js@2.112.2'))
     })
