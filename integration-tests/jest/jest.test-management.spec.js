@@ -607,6 +607,20 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
+    // Jest 30.5.2 supports describe-level retry configuration independently of per-test retries.
+    const describeRetriesIt = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=30.5.2') ? it : it.skip
+    describeRetriesIt('keeps describe retries separate from automatic sibling retries', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      await runExclusions('test-exclusions-describe', 1, spans => {
+        const sibling = spans.filter(span => span.meta[TEST_NAME] === 'excluded sibling')
+        const native = spans.filter(span => span.meta[TEST_NAME] === 'native group native retry')
+        assert.strictEqual(sibling.length, 1)
+        assert.strictEqual(sibling[0].meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(native.length, 2)
+        for (const span of spans) assert.strictEqual(span.meta[noAutoRetryTag], 'true')
+      })
+    })
+
     it('executes annotated generator callbacks through Jest generator handling', async () => {
       await runExclusions('test-exclusions-generators', 0, spans => {
         assert.strictEqual(spans.length, 3)

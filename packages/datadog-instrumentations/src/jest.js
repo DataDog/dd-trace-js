@@ -4091,9 +4091,11 @@ function wrapJestObject (jestObject, suiteFilePath, from = suiteFilePath) {
   // retryTimes is created per runtime, so wrap the returned public API object.
   shimmer.wrap(jestObject, 'retryTimes', retryTimes => function () {
     const environment = testSuiteDatadogEnvironments.get(suiteFilePath)
-    if (environment) environment.hasExplicitRetries = true
+    const setsDescribeRetries = arguments[1]?.entireDescribe &&
+      typeof environment?.global[RETRY_TIMES_SETTER] === 'function'
     // Older Jest versions ignore entireDescribe and still replace the global budget.
-    if (environment && !(arguments[1]?.entireDescribe && environment.global[RETRY_TIMES_SETTER])) {
+    if (environment && !setsDescribeRetries) {
+      environment.hasExplicitRetries = true
       environment.hasAutomaticRetries = false
     }
     return retryTimes.apply(this, arguments)
