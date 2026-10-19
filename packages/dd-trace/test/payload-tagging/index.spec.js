@@ -694,8 +694,9 @@ describe('Safe payload capture', () => {
 
         const tags = computeTags(config, { callback }, opts)
         assert.deepStrictEqual(callback.values, ['original'])
-        assert.strictEqual(tags[`${prefix}.callback`], 'truncated')
-        assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
+        // The function key is omitted and renders no tag, matching releases
+        // that never rendered function values.
+        assert.deepStrictEqual(tags, {})
       })
 
       it(`leaves caller state unchanged when ${prefix} expansion targets a function's attached data`, () => {
@@ -708,7 +709,7 @@ describe('Safe payload capture', () => {
       })
     }
 
-    it('truncates functions at the root without invoking them', () => {
+    it('omits functions at the root without invoking them', () => {
       const root = sinon.spy(() => { throw new Error('unexpected root call') })
       Object.defineProperty(root, 'boom', {
         enumerable: true,
@@ -716,26 +717,28 @@ describe('Safe payload capture', () => {
       })
 
       const snapshot = createSafeSnapshot(root)
-      assert.strictEqual(snapshot.incomplete, true)
-      assert.strictEqual(snapshot.value, 'truncated')
+      assert.strictEqual(snapshot.normalized, true)
+      assert.strictEqual(snapshot.incomplete, false)
+      assert.strictEqual(snapshot.value, undefined)
       assert.strictEqual(root.callCount, 0)
     })
 
-    it('truncates aliased functions in containers without inspecting attached data', () => {
+    it('omits aliased functions in containers without inspecting attached data', () => {
       const attached = { secret: 'customer-secret' }
       const fn = Object.assign(sinon.spy(() => { throw new Error('unexpected call') }), { attached })
       const snapshot = createSafeSnapshot({ a: fn, b: fn, list: [fn] })
 
-      assert.strictEqual(snapshot.incomplete, true)
+      assert.strictEqual(snapshot.normalized, true)
+      assert.strictEqual(snapshot.incomplete, false)
       const value = /** @type {{ a: unknown, b: unknown, list: unknown[] }} */ (snapshot.value)
-      assert.strictEqual(value.a, 'truncated')
-      assert.strictEqual(value.b, 'truncated')
-      assert.strictEqual(value.list[0], 'truncated')
+      assert.deepStrictEqual(value.list, [])
+      assert.ok(!('a' in value))
+      assert.ok(!('b' in value))
       assert.strictEqual(fn.callCount, 0)
       assert.deepStrictEqual(attached, { secret: 'customer-secret' })
     })
 
-    it('truncates callable proxies without triggering traps that inspect them', () => {
+    it('omits callable proxies without triggering traps that inspect them', () => {
       const target = () => {}
       const traps = []
       const proxy = new Proxy(target, {
@@ -750,12 +753,12 @@ describe('Safe payload capture', () => {
       })
 
       const snapshot = createSafeSnapshot({ proxy })
-      assert.strictEqual(snapshot.incomplete, true)
-      assert.strictEqual(/** @type {{ proxy: unknown }} */ (snapshot.value).proxy, 'truncated')
+      assert.strictEqual(snapshot.normalized, true)
+      assert.ok(!('proxy' in /** @type {{ proxy: unknown }} */ (snapshot.value)))
       assert.deepStrictEqual(traps, [])
     })
 
-    it('truncates functions with throwing attached getters without reading them', () => {
+    it('omits functions with throwing attached getters without reading them', () => {
       const fn = () => {}
       Object.defineProperty(fn, 'boom', {
         enumerable: true,
@@ -763,8 +766,8 @@ describe('Safe payload capture', () => {
       })
 
       const snapshot = createSafeSnapshot({ fn })
-      assert.strictEqual(snapshot.incomplete, true)
-      assert.strictEqual(/** @type {{ fn: unknown }} */ (snapshot.value).fn, 'truncated')
+      assert.strictEqual(snapshot.normalized, true)
+      assert.ok(!('fn' in /** @type {{ fn: unknown }} */ (snapshot.value)))
     })
   })
 
@@ -1398,16 +1401,18 @@ describe('Safe payload capture', () => {
       assert.strictEqual(method.callCount, 0)
     })
 
-    it('truncates an admitted accessor returning a function, without treating it as native-stream evidence', () => {
+    it('omits an admitted accessor returning a function, without treating it as native-stream evidence', () => {
       const method = sinon.spy()
       const getReader = sinon.spy(() => method)
       const input = Object.defineProperty({ safe: 'ok' }, 'getReader', { enumerable: true, get: getReader })
       const snapshot = createSafeSnapshot(input)
       // The returned function is never inspected or retained: the leaf is
-      // replaced with the truncation sentinel and the capture is incomplete.
-      // The containing object is still an ordinary, fully walked object.
-      assert.deepStrictEqual(snapshot.value, { safe: 'ok', getReader: 'truncated' })
-      assert.strictEqual(snapshot.incomplete, true)
+      // omitted and the capture is only normalized, since tags never render
+      // function values. The containing object is still an ordinary, fully
+      // walked object.
+      assert.deepStrictEqual(snapshot.value, { safe: 'ok' })
+      assert.strictEqual(snapshot.normalized, true)
+      assert.strictEqual(snapshot.incomplete, false)
       assert.strictEqual(getReader.callCount, 1)
       assert.strictEqual(method.callCount, 0)
     })

@@ -415,11 +415,11 @@ function admit (state, container, key, value, depth, ancestors) {
   // Functions are opaque references into caller state: retaining one keeps
   // its mutable identity and attached data reachable from the snapshot, so
   // later redaction or expansion could mutate application-owned objects
-  // through it. Replace the leaf without invoking, enumerating, or copying
-  // anything reachable from it.
+  // through it. Omit the leaf without invoking, enumerating, or copying
+  // anything reachable from it. Tags never render function values, so the
+  // omission loses nothing rendered and only normalizes the capture.
   if (typeof value === 'function') {
-    markIncomplete(state)
-    assign(container, key, truncated, state)
+    state.normalized = true
     return
   }
 
@@ -518,9 +518,9 @@ function admit (state, container, key, value, depth, ancestors) {
  *   never renders. Data-dependent rules could decide differently on the copy,
  *   so callers suppress tags for such rules when this is set.
  * - `incomplete`: rendered content was lost, because a value became
- *   `truncated`, a key was omitted, or attached properties were discarded.
- *   This drives the public `_dd.payload_tags_incomplete` tag. It implies
- *   `normalized`.
+ *   `truncated`, a key whose value would have rendered was omitted, or
+ *   attached properties were discarded. This drives the public
+ *   `_dd.payload_tags_incomplete` tag. It implies `normalized`.
  *
  * - Streams and cyclic back-references become `truncated` without being read.
  * - Depth, admitted entries and aggregate binary copy bytes are bounded;
@@ -550,9 +550,10 @@ function admit (state, container, key, value, depth, ancestors) {
  *   admitted. Keys are re-checked against their own descriptor at read time,
  *   so keys deleted or hidden by earlier getters are omitted (marking the
  *   snapshot incomplete) instead of falling through to the prototype.
- * - Functions become `truncated` and mark the snapshot incomplete: their
- *   identity and attached data stay caller-owned, so nothing reachable from a
- *   function is copied, invoked, or exposed to later mutation.
+ * - Function values are omitted: their identity and attached data stay
+ *   caller-owned, so nothing reachable from a function is copied, invoked, or
+ *   exposed to later mutation. Tags never render function values, so the
+ *   omission marks the snapshot normalized without making it incomplete.
  * - Arrays are copied key by key, so interior holes stay holes, but the
  *   copy's length ends at its last assigned index and trailing holes are
  *   lost. When that changes the reported length, the snapshot is marked
