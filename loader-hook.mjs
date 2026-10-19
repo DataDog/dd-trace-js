@@ -1,12 +1,20 @@
 /* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['module.registerHooks'] }] */
 
 import * as Module from 'node:module'
-import { pathToFileURL } from 'node:url'
 import { isMainThread } from 'node:worker_threads'
 
-import { createHook, supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
-import { initialize as origInitialize, load as origLoad } from 'import-in-the-middle/hook.mjs'
+import iitmCreateHook from './vendor/dist/import-in-the-middle/create-hook.js'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
+
+const { createHook, supportsSyncHooks } = iitmCreateHook
+// createHook derives the wrappers' `lib/register.js` import from this URL, so it must point
+// at the vendored package root where that file is shipped next to the bundled `index.js`.
+const iitmHookUrl = new URL('vendor/dist/import-in-the-middle/hook.mjs', import.meta.url).href
+const {
+  initialize: origInitialize,
+  load: origLoad,
+  resolve: iitmResolve,
+} = createHook({ url: iitmHookUrl })
 
 // This file must support Node.js 12.0.0 syntax
 
@@ -150,10 +158,7 @@ function getSyncImportInTheMiddleHook () {
     return syncImportInTheMiddleHook
   }
 
-  const importInTheMiddleRegisterHooksUrl = pathToFileURL(
-    require.resolve('import-in-the-middle/register-hooks.mjs')
-  ).href
-  syncImportInTheMiddleHook = createHook({ url: importInTheMiddleRegisterHooksUrl })
+  syncImportInTheMiddleHook = createHook({ url: iitmHookUrl })
   return syncImportInTheMiddleHook
 }
 
@@ -192,5 +197,4 @@ function registerSyncLoaderHooks (data = {}) {
   return true
 }
 
-export { resolve } from 'import-in-the-middle/hook.mjs'
-export { initialize, load, registerSyncLoaderHooks }
+export { initialize, load, iitmResolve as resolve, registerSyncLoaderHooks }
