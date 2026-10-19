@@ -17,6 +17,23 @@ function getPayloadTagging () {
   return payloadTagging
 }
 
+// Only the first payload-reporter instance attempts the eager load, keeping a
+// single initialization per process; a failed preload is retried by the
+// capture gates.
+let preloadAttempted = false
+
+function preloadPayloadTagging () {
+  if (preloadAttempted) return
+  preloadAttempted = true
+  try {
+    getPayloadTagging()
+  } catch {
+    // Never inspect the caught value; the capture gates log their own
+    // diagnostics when they retry the load.
+    log.debug('Error loading payload tagging; payload tags are omitted until a capture retries the load')
+  }
+}
+
 const RESPONSE_SKIP_KEYS = new Set(['request', 'requestId', 'error', '$metadata'])
 
 class BaseAwsSdkPlugin extends ClientPlugin {
@@ -85,6 +102,17 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     super(...args)
 
     this._parentMap = new WeakMap()
+
+    // Initialize the snapshot machinery during startup when capture is
+    // enabled, so the first captured operation does not pay for loading the
+    // module. Users with capture disabled never load it.
+    const pluginClass = /** @type {typeof BaseAwsSdkPlugin} */ (this.constructor)
+    if (
+      pluginClass.isPayloadReporter &&
+      (this.cloudTaggingConfig?.request || this.cloudTaggingConfig?.response)
+    ) {
+      preloadPayloadTagging()
+    }
 
     this.addBind(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
       const {

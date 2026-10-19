@@ -44,6 +44,25 @@ const cloudPayloadTagging = {
   both: { request: 'all', response: 'all', maxDepth: 10 },
 }[capture]
 
+// Count imports of the payload-tagging module from the AWS base plugin and,
+// in fail-first mode, make the first one throw. The eager preload runs during
+// tracer init, so the interception must be installed before init. Delegating
+// unrelated imports keeps the rest of the process behavior intact.
+const failFirst = intercept === 'fail-first'
+let importAttempts = 0
+let importFailures = 0
+const originalLoad = Module._load
+Module._load = function (request, parent, isMain) {
+  if (parent?.filename === baseJsPath && request === '../../dd-trace/src/payload-tagging') {
+    importAttempts++
+    if (failFirst && importFailures === 0) {
+      importFailures++
+      throw new Error('simulated payload-tagging load failure')
+    }
+  }
+  return originalLoad(request, parent, isMain)
+}
+
 const tracer = require('../../../dd-trace').init({
   service: 's3-lazy-loading',
   hostname: '127.0.0.1',
@@ -78,24 +97,6 @@ const s3 = new AWS.S3({
 })
 
 const loadedAfterClientCreation = modulesLoaded()
-
-// Count imports of the payload-tagging module from the AWS base plugin and,
-// in fail-first mode, make the first one throw. Delegating unrelated imports
-// keeps the rest of the process behavior intact.
-const failFirst = intercept === 'fail-first'
-let importAttempts = 0
-let importFailures = 0
-const originalLoad = Module._load
-Module._load = function (request, parent, isMain) {
-  if (parent?.filename === baseJsPath && request === '../../dd-trace/src/payload-tagging') {
-    importAttempts++
-    if (failFirst && importFailures === 0) {
-      importFailures++
-      throw new Error('simulated payload-tagging load failure')
-    }
-  }
-  return originalLoad(request, parent, isMain)
-}
 
 function putObject (params) {
   return new Promise((resolve, reject) => {

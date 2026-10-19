@@ -95,13 +95,19 @@ describe('S3 payload tagging lazy loading process boundary', function () {
           const [traces] = await Promise.all([groups, completed])
           const result = JSON.parse(fs.readFileSync(out, 'utf8'))
 
-          // The modules must stay unloaded until an enabled gate runs.
+          // With capture enabled, the plugin preloads payload tagging when
+          // its instance is constructed, which happens when the AWS SDK module
+          // loads (during INIT, before any invocation). A failed preload
+          // (fail-first) leaves the module unloaded until the first enabled
+          // capture gate retries, and that retry succeeds.
+          const preloaded = capture !== 'disabled' && intercept === 'none'
           assert.strictEqual(result.loadedAfterTracerInit, false)
           assert.strictEqual(result.loadedAfterPluginRequire, false)
-          assert.strictEqual(result.loadedAfterClientCreation, false)
+          assert.strictEqual(result.loadedAfterClientCreation, preloaded)
 
           const spans = traces.flat().filter(span => span.name === 'aws.request')
           assert.strictEqual(spans.length, 2)
+          spans.sort((a, b) => (a.start.toString() >= b.start.toString() ? 1 : -1))
           for (const span of spans) {
             assert.strictEqual(span.resource, 'putObject s3-lazy-loading')
             assert.strictEqual(span.error, 0)
@@ -116,6 +122,8 @@ describe('S3 payload tagging lazy loading process boundary', function () {
           if (capture === 'disabled') {
             // No enabled gate ever runs, so nothing is imported or loaded.
             assert.strictEqual(result.importAttempts, 0)
+            assert.strictEqual(result.importSuccesses, 0)
+            assert.strictEqual(result.loadedAfterFirstOperation, false)
             assert.strictEqual(result.loadedAfterOperations, false)
             assert.ok(!requestTags(first) && !responseTags(first))
             assert.ok(!requestTags(next) && !responseTags(next))
@@ -125,56 +133,25 @@ describe('S3 payload tagging lazy loading process boundary', function () {
           const expectedRequest = capture === 'request' || capture === 'both'
           const expectedResponse = capture === 'response' || capture === 'both'
 
-          if (intercept === 'none') {
-            // The first enabled gate imports the module; later gates reuse the
-            // cached value and never import again.
-            assert.strictEqual(result.importAttempts, 1)
-            assert.strictEqual(result.importSuccesses, 1)
-            assert.strictEqual(result.loadedAfterFirstOperation, true)
-            assert.strictEqual(result.loadedAfterOperations, true)
-            if (expectedRequest) {
-              assert.strictEqual(first.meta['aws.request.body.Key'], 'first')
-              assert.strictEqual(next.meta['aws.request.body.Key'], 'next')
-            } else {
-              assert.ok(!requestTags(first))
-              assert.ok(!requestTags(next))
-            }
-            if (expectedResponse) {
-              assert.ok(responseTags(first))
-              assert.ok(responseTags(next))
-            } else {
-              assert.ok(!responseTags(first))
-              assert.ok(!responseTags(next))
-            }
-            return
-          }
-
-          // fail-first: the first import throws, so the affected gate of the
-          // first operation omits its payload tags. The next import attempt
-          // succeeds and later gates capture tags again.
-          assert.strictEqual(result.importAttempts, 2)
+          // One load attempt at construction, plus exactly one retry when the
+          // preload failed. The retry happens in the first enabled capture
+          // gate of the first operation, so that operation is fully tagged.
+          assert.strictEqual(result.importAttempts, intercept === 'none' ? 1 : 2)
           assert.strictEqual(result.importSuccesses, 1)
+          assert.strictEqual(result.loadedAfterFirstOperation, true)
           assert.strictEqual(result.loadedAfterOperations, true)
           if (expectedRequest) {
-            assert.ok(!requestTags(first))
-          } else {
-            assert.ok(!requestTags(first) && !responseTags(first))
-          }
-          if (expectedResponse && expectedRequest) {
-            // The response gate ran after the failed request gate and its
-            // import attempt succeeded.
-            assert.ok(responseTags(first))
-          } else {
-            assert.ok(!responseTags(first))
-          }
-          if (expectedRequest) {
+            assert.strictEqual(first.meta['aws.request.body.Key'], 'first')
             assert.strictEqual(next.meta['aws.request.body.Key'], 'next')
           } else {
+            assert.ok(!requestTags(first))
             assert.ok(!requestTags(next))
           }
           if (expectedResponse) {
+            assert.ok(responseTags(first))
             assert.ok(responseTags(next))
           } else {
+            assert.ok(!responseTags(first))
             assert.ok(!responseTags(next))
           }
         })
