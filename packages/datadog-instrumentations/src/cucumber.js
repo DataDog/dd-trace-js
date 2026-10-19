@@ -833,9 +833,9 @@ function wrapRun (pl, isLatestVersion, version) {
       return run.apply(this, args)
     }
 
-    // Cucumber 8–10 workers construct runners directly, without the newer
+    // Cucumber 7–10 workers construct runners directly, without the newer
     // runTestCase wrapper that reads the coordinator's configuration.
-    if (getEnvironmentVariable('CUCUMBER_WORKER_ID') && satisfies(version, '>=8.0.0 <11.0.0')) {
+    if (getEnvironmentVariable('CUCUMBER_WORKER_ID') && satisfies(version, '>=7.0.0 <11.0.0')) {
       readParallelWorkerAtrParameters(this.worldParameters)
     }
 
