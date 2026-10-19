@@ -4,6 +4,9 @@ const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { isTrue } = require('../../dd-trace/src/util')
 const { channel } = require('./helpers/instrument')
 
+// Declaration metadata is also needed when workers do not initialize a tracer.
+require('./vitest-test-annotations')
+
 channel('tracing:orchestrion:@vitest/runner:createTestTask:end').subscribe(({ arguments: args, result: task }) => {
   // Suite options have already been merged here, including overrides equal to ATR's count.
   if (args[1]?.retry !== undefined && task?.meta) {
