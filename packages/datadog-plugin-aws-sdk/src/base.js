@@ -338,8 +338,7 @@ function getHooks (config) {
 }
 
 function getHostname (store, region) {
-  if (!store) return
-  if (!region) return
+  if (!store || !region) return
   const { awsParams, awsService } = store
   switch (awsService) {
     case 'CloudWatchEvents':

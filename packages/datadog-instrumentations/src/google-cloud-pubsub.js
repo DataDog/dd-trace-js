@@ -126,10 +126,14 @@ function wrapMethod (method) {
   }
 }
 
-function massWrap (obj, methods, wrapper) {
+/**
+ * @param {Record<string, Function>} obj
+ * @param {string[]} methods
+ */
+function massWrap (obj, methods) {
   for (const method of methods) {
     if (typeof obj[method] === 'function') {
-      shimmer.wrap(obj, method, wrapper)
+      shimmer.wrap(obj, method, wrapMethod)
     }
   }
 }
@@ -274,11 +278,11 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   const { PublisherClient, SchemaServiceClient, SubscriberClient } = obj.v1
 
-  massWrap(PublisherClient.prototype, publisherMethods, wrapMethod)
-  massWrap(SubscriberClient.prototype, subscriberMethods, wrapMethod)
+  massWrap(PublisherClient.prototype, publisherMethods)
+  massWrap(SubscriberClient.prototype, subscriberMethods)
 
   if (SchemaServiceClient) {
-    massWrap(SchemaServiceClient.prototype, schemaServiceMethods, wrapMethod)
+    massWrap(SchemaServiceClient.prototype, schemaServiceMethods)
   }
 
   return obj
