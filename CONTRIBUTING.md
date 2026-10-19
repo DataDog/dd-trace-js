@@ -363,7 +363,7 @@ This helper performs partial deep equality checking and provides better error me
 
 ### Time-Based Testing
 
-**Never rely on actual time passing in unit tests.** Tests that use `setTimeout()`, `setInterval()`, or `Date.now()` should use [sinon's fake timers](https://sinonjs.org/releases/latest/fake-timers/) to mock time. This makes tests:
+**Never rely on actual time passing in unit tests.** Tests that use `setTimeout()`, `setInterval()`, or `Date.now()` should use [sinon's fake timers](https://sinonjs.org/concepts/fake-timers/) to mock time. This makes tests:
 - Run instantly instead of waiting for real time
 - Deterministic and reliable (no timing-related flakiness)
 - Easier to reason about
