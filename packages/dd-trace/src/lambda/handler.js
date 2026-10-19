@@ -104,6 +104,8 @@ exports.datadog = function datadog (lambdaHandler) {
     }
     // Legacy Lambda runtimes complete idle invocations through this callback instead of the handler's callback.
     if (!wrapCompletion(globalThis, BEFORE_EXIT, clear, completionMethods)) completionObservable = false
+    // Newer runtimes complete from the return value and expose no legacy completion hooks.
+    if (completionMethods.length === 0) completionObservable = false
 
     try {
       const result = lambdaHandler.apply(this, args)
@@ -116,10 +118,10 @@ exports.datadog = function datadog (lambdaHandler) {
           throw error
         })
       }
-      // Match the shim's callback/context completion contract, including incidental server returns.
-      // Fall back only when neither the completion APIs nor the invocation callback can be observed.
-      if ((!completionObservable && !callbackObservable) ||
-          !isCallbackCompletion(lambdaHandler, result, contextIndex)) clear()
+      // An observed callback can complete later regardless of arity or an incidental return value.
+      // Otherwise, retain monitoring only when context/runtime completion is observable and expected.
+      if (!callbackObservable &&
+          (!completionObservable || !isCallbackCompletion(lambdaHandler, result, contextIndex))) clear()
       return result
     } catch (error) {
       clear()

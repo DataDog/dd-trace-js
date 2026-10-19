@@ -69,6 +69,44 @@ describe('Lambda timeout monitor', () => {
     assert.strictEqual(result.stdout, 'beforeExit\n')
   })
 
+  for (const hooks of ['absent', 'non-callable']) {
+    for (const result of [undefined, new EventEmitter()]) {
+      it(`clears an ${result ? 'artifact' : 'undefined'} return with ${hooks} completion hooks`, () => {
+        delete globalThis[BEFORE_EXIT]
+        if (hooks === 'non-callable') {
+          context.done = context.succeed = context.fail = globalThis[BEFORE_EXIT] = {}
+        }
+        const handler = datadog(() => result)
+        assert.strictEqual(handler({}, context), result)
+        assert.strictEqual(clock.countTimers(), 0)
+        clock.tick(100)
+        assert.strictEqual(killAll.callCount, 0)
+        assert.strictEqual(span.addTags.callCount, 0)
+        assert.strictEqual(span.finish.callCount, 0)
+      })
+    }
+  }
+
+  it('does not leak a hookless return timer into a warm invocation', async () => {
+    delete globalThis[BEFORE_EXIT]
+    const completed = datadog(() => undefined)
+    completed({}, context)
+    clock.tick(25)
+
+    /** @type {Function} */
+    let resolvePromise = notCaptured
+    const pending = datadog(() => new Promise(resolve => { resolvePromise = resolve }))
+    const result = pending({}, context)
+    clock.tick(50)
+    assert.strictEqual(killAll.callCount, 0, 'the completed invocation must not flush the pending invocation')
+    assert.strictEqual(clock.countTimers(), 1)
+    resolvePromise('done')
+    assert.strictEqual(await result, 'done')
+    clock.tick(100)
+    assert.strictEqual(killAll.callCount, 0)
+    assert.strictEqual(clock.countTimers(), 0)
+  })
+
   for (const unref of [undefined, () => null]) {
     it(`keeps the timer handle when unref ${unref ? 'returns null' : 'is unavailable'}`, () => {
       const setTimeout = global.setTimeout
@@ -173,13 +211,50 @@ describe('Lambda timeout monitor', () => {
     Object.freeze(context)
     /** @type {Function} */
     let complete = notCaptured
-    const handler = datadog((...args) => { complete = args[2] })
-    handler({}, context, () => {})
+    const result = {}
+    const handler = datadog((...args) => {
+      complete = args[2]
+      return result
+    })
+    assert.strictEqual(handler({}, context, () => {}), result)
     clock.tick(75)
     assert.strictEqual(killAll.callCount, 1)
     complete()
     assert.strictEqual(clock.countTimers(), 0)
   })
+
+  for (const style of ['rest', 'default']) {
+    for (const incidental of [{}, false]) {
+      for (const outcome of ['success', 'error', 'timeout']) {
+        it(`keeps a ${style} callback monitored after an incidental ${typeof incidental} return (${outcome})`, () => {
+          delete globalThis[BEFORE_EXIT]
+          const callback = sinon.spy()
+          const error = outcome === 'error' ? new Error('callback failure') : null
+          const schedule = cb => {
+            setTimeout(() => cb(error, 'done'), outcome === 'timeout' ? 76 : 74)
+            return incidental
+          }
+          const handlers = {
+            rest: (...args) => schedule(args[2]),
+            default: (_event, _context, cb = notCaptured) => schedule(cb),
+          }
+          const handler = datadog(handlers[style])
+          assert.strictEqual(handler.length, style === 'rest' ? 0 : 2)
+          assert.strictEqual(handler({}, context, callback), incidental)
+          assert.strictEqual(clock.countTimers(), 2, 'keep both the monitor and the scheduled callback')
+          clock.tick(74)
+          assert.strictEqual(killAll.callCount, 0)
+          assert.strictEqual(callback.callCount, outcome === 'timeout' ? 0 : 1)
+          clock.tick(1)
+          assert.strictEqual(killAll.callCount, outcome === 'timeout' ? 1 : 0)
+          clock.tick(1)
+          assert.strictEqual(callback.callCount, 1)
+          assert.deepStrictEqual(callback.firstCall.args, [error, 'done'])
+          assert.strictEqual(clock.countTimers(), 0)
+        })
+      }
+    }
+  }
 
   for (const behavior of ['ignore', 'throw on readback']) {
     it(`falls back when the runtime completion setter will ${behavior}`, () => {
@@ -385,7 +460,8 @@ describe('Lambda timeout monitor', () => {
         else if (completion === 'reject') await assert.rejects(handler({}, context, callback), e => e === error)
         else {
           const expected = { callback: 'callback result', context: 'context result' }[completion] ?? 'done'
-          assert.strictEqual(await handler({}, context, callback), expected)
+          const result = handler({}, context, completion === 'return' ? undefined : callback)
+          assert.strictEqual(await result, expected)
         }
         clock.tick(100)
         assert.strictEqual(killAll.callCount, 0)
@@ -480,6 +556,7 @@ describe('Lambda timeout monitor', () => {
   for (const name of ['listen', 'close', 'on', 'emit', 'constructor']) {
     for (const inherited of [false, true]) {
       it(`does not invoke an ${inherited ? 'inherited' : 'own'} ${name} getter on a sync result`, () => {
+        context.done = () => {}
         const target = {}
         if (name === 'close') target.listen = () => {}
         if (name === 'emit') target.on = () => {}
@@ -495,6 +572,7 @@ describe('Lambda timeout monitor', () => {
   }
 
   it('does not invoke a constructor name getter or coerce a non-string constructor name', () => {
+    context.done = () => {}
     const getter = sinon.stub().throws(new Error('constructor name must not run'))
     const toString = sinon.stub().throws(new Error('constructor name must not be coerced'))
     for (const constructor of [Object.defineProperty({}, 'name', { get: getter }), { name: { toString } }]) {
@@ -508,6 +586,7 @@ describe('Lambda timeout monitor', () => {
   })
 
   it('does not look through an accessor shadowing an inherited artifact method', () => {
+    context.done = () => {}
     const result = Object.create({ listen () {}, close () {} })
     const getter = sinon.stub().returns(() => {})
     Object.defineProperty(result, 'listen', { get: getter })
@@ -537,6 +616,7 @@ describe('Lambda timeout monitor', () => {
 
   for (const inherited of [false, true]) {
     it(`does not inspect a ${inherited ? 'prototype' : 'result'} Proxy for side-effect artifact heuristics`, () => {
+      context.done = () => {}
       const trap = sinon.stub().throws(new Error('reflection trap must not run'))
       const proxy = new Proxy({}, {
         get: (_target, name) => name === 'then' ? undefined : trap(),
@@ -553,6 +633,7 @@ describe('Lambda timeout monitor', () => {
 
   for (const value of [null, false, 0, '', {}, Object.create(null)]) {
     it(`treats an ordinary ${value === null ? 'null' : typeof value} return as completion`, () => {
+      context.done = () => {}
       const handler = datadog(() => value)
       assert.strictEqual(handler({}, context), value)
       assert.strictEqual(clock.countTimers(), 0)
@@ -691,7 +772,7 @@ describe('Lambda timeout monitor', () => {
 
   it('handles an already elapsed deadline', () => {
     context.getRemainingTimeInMillis = () => 10
-    const handler = datadog(() => undefined)
+    const handler = datadog(() => new Promise(() => {}))
     handler({}, context)
     clock.tick(0)
     assert.strictEqual(killAll.callCount, 1)
@@ -708,7 +789,7 @@ describe('Lambda timeout monitor', () => {
 
   it('flushes unfinished spans even when no invocation span is active', () => {
     span = null
-    const handler = datadog(() => undefined)
+    const handler = datadog(() => new Promise(() => {}))
     handler({}, context)
     clock.tick(75)
     assert.strictEqual(killAll.callCount, 1)
