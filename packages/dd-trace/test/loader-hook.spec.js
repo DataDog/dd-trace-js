@@ -42,7 +42,7 @@ describe('initialize.mjs', () => {
 function initializeEsm (execArgv = []) {
   return spawnSync(process.execPath, [
     ...execArgv,
-    '--import', join(repositoryRoot, 'initialize.mjs'),
+    '--import', pathToFileURL(join(repositoryRoot, 'initialize.mjs')).href,
     join(repositoryRoot, 'integration-tests/init/instrument.mjs'),
   ], {
     encoding: 'utf8',
