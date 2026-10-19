@@ -1570,9 +1570,15 @@ class CypressPlugin {
 
     // Get tests that didn't go through `dd:afterEach`
     // and create a skipped test span for each of them
+    const annotationOffsets = new Map()
     for (const { title } of cypressTests) {
       const cypressTestName = title.join(' ')
-      const isTestFinished = finishedTests.some(({ testName }) => cypressTestName === testName)
+      const declarationIndex = annotationOffsets.get(cypressTestName) || 0
+      const annotations = this.testAnnotationsBySuite.get(spec.relative)?.get(cypressTestName)?.[declarationIndex]
+      annotationOffsets.set(cypressTestName, declarationIndex + 1)
+      const isTestFinished = annotations?.testId
+        ? finishedTests.some(({ testId }) => testId === annotations.testId)
+        : finishedTests.some(({ testName }) => cypressTestName === testName)
 
       if (isTestFinished) {
         continue
@@ -1585,7 +1591,6 @@ class CypressPlugin {
         ? getTestSuitePath(spec.absolute, this.repositoryRoot)
         : spec.relative
 
-      const annotations = this.testAnnotationsBySuite.get(spec.relative)?.get(cypressTestName)
       // Recovered tests that never ran have no execution time; keep them at the recorded suite end.
       const skippedTestSpan = this.getTestSpan({
         testName: cypressTestName, testSuite: spec.relative, testSourceFile, annotations, startTime: finishTime,
@@ -2065,9 +2070,12 @@ class CypressPlugin {
       'dd:testSuiteStart': ({
         testSuite, testSuiteAbsolutePath, isTextTerminal: browserIsTextTerminal, testAnnotations = [],
       }) => {
-        this.testAnnotationsBySuite.set(testSuite, new Map(testAnnotations.map(annotation =>
-          [annotation.testName, annotation]
-        )))
+        const declarationsByName = new Map()
+        for (const annotation of testAnnotations) {
+          if (!declarationsByName.has(annotation.testName)) declarationsByName.set(annotation.testName, [])
+          declarationsByName.get(annotation.testName).push(annotation)
+        }
+        this.testAnnotationsBySuite.set(testSuite, declarationsByName)
         // Cypress 6 omits the execution mode from the Node plugin configuration.
         const isTextTerminal = this.cypressConfig.isTextTerminal ?? browserIsTextTerminal
         if (!isTextTerminal) {
