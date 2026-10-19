@@ -200,11 +200,12 @@ function getSuiteStatusFromTestStatuses (testStatuses) {
   return 'pass'
 }
 
-function publishWorkerEfdRetryCount (pickle, retryCount) {
+function publishWorkerEfdRetryCount (pickle, retryCount, isModified) {
   const message = {
     [DD_EFD_RETRY_COUNT_MESSAGE]: {
       pickleId: pickle.id,
       retryCount,
+      isModified,
       testFileAbsolutePath: pickle.uri,
       testName: pickle.name,
     },
@@ -220,10 +221,12 @@ function publishWorkerEfdRetryCount (pickle, retryCount) {
   }
 
   try {
-    const { isMainThread, parentPort } = require('node:worker_threads')
+    const { isMainThread, parentPort, workerData } = require('node:worker_threads')
     if (isMainThread || !parentPort) return
 
-    parentPort.postMessage(message)
+    // Share Cucumber's envelope port so EFD metadata arrives before test results.
+    const port = workerData?.port ?? parentPort
+    port.postMessage(message)
   } catch {
     // ignore IPC errors
   }
@@ -385,7 +388,7 @@ function handleParallelTestCaseFinished (pickle, worstTestStepResult, usesNumeri
   const testFileAbsolutePath = pickle.uri
   const finished = (pickleResultByFile[testFileAbsolutePath] ||= [])
 
-  if (shouldRunEarlyFlakeDetection() && isNew) {
+  if (shouldRunEarlyFlakeDetection() && (isNew || modifiedTestsByPickleId.get(pickle.id))) {
     const testFullname = `${pickle.uri}:${pickle.name}`
     let testStatuses = newTestsByTestFullname.get(testFullname)
     if (testStatuses) {
@@ -513,15 +516,18 @@ function maybeRecordFinalParallelEfdStatus ({ pickleId, testFileAbsolutePath, te
   if (efdRetryCount === undefined || !testStatuses || !finished) return
   if (testStatuses.length !== efdRetryCount + 1) return
 
-  finished.push(getTestStatusFromRetries(testStatuses))
+  finished.push(efdRetryCount === 0 ? testStatuses[0] : getTestStatusFromRetries(testStatuses))
   newTestsByTestFullname.delete(testFullname)
   finishParallelSuiteIfDone(testFileAbsolutePath)
 }
 
 function handleEfdRetryCountMessage (message) {
-  const { pickleId, retryCount, testFileAbsolutePath, testName } = message
+  const { pickleId, retryCount, isModified, testFileAbsolutePath, testName } = message
 
-  if (!pickleId || typeof retryCount !== 'number' || !testFileAbsolutePath || !testName) return
+  if (!pickleId || !testFileAbsolutePath || !testName) return
+
+  if (isModified) modifiedTestsByPickleId.set(pickleId, true)
+  if (typeof retryCount !== 'number') return
 
   efdRetryCountByPickleId.set(pickleId, retryCount)
   maybeRecordFinalParallelEfdStatus({
@@ -1266,6 +1272,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     efdSlowAbortedPickleIds.clear()
     finishedParallelSuites.clear()
     newTestsByTestFullname.clear()
+    modifiedTestsByPickleId.clear()
     sessionStartCh.publish({ command, frameworkVersion })
 
     if (!errorSkippableRequest && skippedSuites.length) {
@@ -1481,6 +1488,10 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     const isManagedRetry = isAttemptToFix || (shouldRunEarlyFlakeDetection() && (isNew || isModified))
     if (isManagedRetry) {
       this.options.retry = 0
+    }
+    if (isWorker && isModified && shouldRunEarlyFlakeDetection()) {
+      // The coordinator must recognize modified EFD tests before their first result arrives.
+      publishWorkerEfdRetryCount(pickle, undefined, true)
     }
     // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`
     const firstExecutionStart = performance.now()

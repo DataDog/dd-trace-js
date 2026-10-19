@@ -4636,8 +4636,14 @@ describe(`cucumber@${version} commonJS`, () => {
         const feature = fs.readFileSync(featurePath, 'utf8')
         fs.writeFileSync(featurePath, feature.replace(original, modified))
       }
+      const flakyFeaturePath = path.join(cwd, 'ci-visibility/features-flaky/flaky.feature')
+      const flakyFeature = fs.readFileSync(flakyFeaturePath, 'utf8')
+      fs.writeFileSync(flakyFeaturePath, flakyFeature.replace(
+        'When the greeter says flaky', 'And the greeter says flaky'
+      ))
       execSync('git add ci-visibility/features-impacted-test/impacted-test.feature ' +
-        'ci-visibility/features-impacted-background/*.feature', { cwd, stdio: 'ignore' })
+        'ci-visibility/features-impacted-background/*.feature ci-visibility/features-flaky/flaky.feature',
+      { cwd, stdio: 'ignore' })
       execSync('git commit -m "modify impacted test features"', { cwd, stdio: 'ignore' })
     })
 
@@ -4850,6 +4856,88 @@ describe(`cucumber@${version} commonJS`, () => {
             { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
           )
         })
+
+      // Managed retries in parallel workers require Cucumber 11 or newer.
+      const parallelEfdIt = version === 'latest' || satisfies(version, '>=11.0.0') ? it : it.skip
+      for (const { outcome, suite, name, status, attempts, args = '', slowTestRetries = { '5s': NUM_RETRIES } } of [
+        {
+          outcome: 'retries pass',
+          suite: 'features-flaky/flaky.feature',
+          name: 'Say flaky',
+          status: 'pass',
+          attempts: NUM_RETRIES + 1,
+        },
+        {
+          outcome: 'retries fail',
+          suite: 'features-impacted-test/impacted-test.feature',
+          name: 'Say impacted test',
+          status: 'fail',
+          attempts: NUM_RETRIES + 1,
+        },
+        {
+          outcome: 'is skipped',
+          suite: 'features-flaky/flaky.feature',
+          name: 'Say flaky',
+          status: 'skip',
+          attempts: 1,
+          args: '--dry-run',
+        },
+        {
+          outcome: 'aborts slow retries',
+          suite: 'features-flaky/flaky.feature',
+          name: 'Say flaky',
+          status: 'fail',
+          attempts: 1,
+          slowTestRetries: { '5s': 0, '10s': NUM_RETRIES },
+        },
+      ]) {
+        parallelEfdIt(`reports modified test suites after parallel EFD ${outcome}`, async () => {
+          const testSuitePath = `ci-visibility/${suite}`
+          receiver.setKnownTests({ cucumber: { [testSuitePath]: [name] } })
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            known_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: slowTestRetries,
+            },
+          })
+
+          childProcess = exec(`./node_modules/.bin/cucumber-js ${testSuitePath} --parallel 2 ${args}`, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              GITHUB_BASE_REF: '',
+            },
+          })
+          let output = ''
+          childProcess.stdout.on('data', chunk => { output += chunk })
+          childProcess.stderr.on('data', chunk => { output += chunk })
+
+          await receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              const session = events.find(event => event.type === 'test_session_end').content
+
+              assert.strictEqual(tests.length, attempts)
+              assert.strictEqual(suites.length, 1)
+              assert.strictEqual(suites[0].meta[TEST_STATUS], status)
+              assert.strictEqual(session.meta[TEST_STATUS], status)
+              assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, attempts - 1)
+              for (const test of tests) {
+                assert.strictEqual(test.meta[TEST_IS_MODIFIED], 'true')
+                assert.ok(!(TEST_IS_NEW in test.meta))
+              }
+              assert.strictEqual(tests[0].meta[TEST_STATUS], status === 'skip' ? 'skip' : 'fail')
+            }
+          )
+          assert.strictEqual(childProcess.exitCode, status === 'fail' ? 1 : 0, output)
+        })
+      }
 
       onlyLatestIt('can detect impacted tests in parallel mode', async () => {
         receiver.setSettings({ impacted_tests_enabled: true })
