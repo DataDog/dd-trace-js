@@ -578,6 +578,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     }
 
+    it('finalizes annotated tests when beforeAll prevents explicit retries', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      await runExclusions('test-exclusions-hook-terminal', 1, spans => {
+        assert.strictEqual(spans.length, 1)
+        assert.strictEqual(spans[0].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(spans[0].meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(spans[0].meta[noAutoRetryTag], 'true')
+      })
+    })
+
     it('executes annotated generator callbacks through Jest generator handling', async () => {
       await runExclusions('test-exclusions-generators', 0, spans => {
         assert.strictEqual(spans.length, 3)
