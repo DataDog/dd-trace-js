@@ -16,7 +16,7 @@ RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub \
 
 # Install ChromeDriver matching the installed Chrome version
 RUN CHROME_VER=$(google-chrome --version | awk '{print $3}' | cut -d. -f1-3) \
-    && curl -sf https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json \
+    && curl -sf --retry 5 --retry-delay 2 --retry-connrefused https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json \
       > /tmp/chrome-versions.json \
     && DRIVER_URL=$(CHROME_VER="$CHROME_VER" node -e " \
         const d = JSON.parse(require('fs').readFileSync('/tmp/chrome-versions.json', 'utf8')); \
