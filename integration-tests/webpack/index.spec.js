@@ -9,6 +9,7 @@ const pathModule = require('node:path')
 const fs = require('node:fs')
 
 const { describe, before, after, it } = require('mocha')
+const semver = require('semver')
 
 // sub process must be executed inside TEST_DIR
 const TEST_DIR = pathModule.join(__dirname, '.')
@@ -66,7 +67,11 @@ webpackVersions.forEach((version) => {
       execSync('node ./build-and-test-minify.js', { timeout })
     })
 
-    it('instruments orchestrion-based integrations', () => {
+    it('instruments orchestrion-based integrations', function () {
+      // The @langchain/langgraph fixture depends on @langchain/core, which relies on the global `crypto`.
+      const { engines } = require(pathModule.join(TEST_DIR, 'node_modules/@langchain/core/package.json'))
+      if (!semver.satisfies(process.versions.node, engines.node)) this.skip()
+
       execSync('node ./build-and-test-orchestrion.js', { timeout })
     })
   })
