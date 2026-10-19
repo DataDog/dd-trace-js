@@ -133,16 +133,18 @@ let ThreadContext
 let getContext
 let clearContext
 
-const HEX16 = /^[\da-f]{16}$/i
+// Hex digit value of a char code below 128, or -1 when it isn't a hex digit.
+const HEX_VALUES = new Int8Array(128).fill(-1)
+for (let i = 0; i < 10; i++) HEX_VALUES[48 + i] = i
+for (let i = 0; i < 6; i++) {
+  HEX_VALUES[65 + i] = 10 + i
+  HEX_VALUES[97 + i] = 10 + i
+}
 const HEX_CODES = Uint8Array.from(Buffer.from('0123456789abcdef'))
 
 // Reusable: the ThreadContext constructor copies the ids into its own record.
 const traceIdBytes = new Uint8Array(16)
 const spanIdBytes = new Uint8Array(8)
-
-// The upper half of local trace ids only changes once per second.
-let lastTraceIdHigh
-const lastTraceIdHighBytes = new Uint8Array(8)
 
 // Same bytes as decoding toTraceId(true); unexpected shapes fall back to that.
 function getTraceIdBytes (spanContext) {
@@ -154,14 +156,16 @@ function getTraceIdBytes (spanContext) {
   if (low.length !== 8) return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
   const high = spanContext._trace.tags['_dd.p.tid']
   if (high) {
-    if (high !== lastTraceIdHigh) {
-      if (typeof high !== 'string' || !HEX16.test(high)) {
-        return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
-      }
-      for (let i = 0; i < 8; i++) lastTraceIdHighBytes[i] = Number.parseInt(high.slice(i * 2, i * 2 + 2), 16)
-      lastTraceIdHigh = high
+    if (typeof high !== 'string' || high.length !== 16) {
+      return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
     }
-    for (let i = 0; i < 8; i++) traceIdBytes[i] = lastTraceIdHighBytes[i]
+    for (let i = 0; i < 8; i++) {
+      const hi = high.charCodeAt(i * 2)
+      const lo = high.charCodeAt(i * 2 + 1)
+      const byte = hi < 128 && lo < 128 ? (HEX_VALUES[hi] << 4) | HEX_VALUES[lo] : -1
+      if (byte < 0) return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
+      traceIdBytes[i] = byte
+    }
   } else {
     for (let i = 0; i < 8; i++) traceIdBytes[i] = 0
   }

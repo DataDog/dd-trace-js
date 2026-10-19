@@ -356,8 +356,8 @@ describe('otel-thread-ctx', () => {
     })
 
     it('writes the ids and local root id of every identifier shape the tracer produces as toTraceId/toSpanId', () => {
-      // Local root with the 128-bit high half in _dd.p.tid (two different values,
-      // to cover the memo), 64-bit without _dd.p.tid (high half zero), a 128-bit
+      // Local root with the 128-bit high half in _dd.p.tid (lower and upper case
+      // hex), 64-bit without _dd.p.tid (high half zero), a 128-bit
       // identifier that wins over _dd.p.tid, Datadog decimal ids, and a short or
       // empty _dd.p.tid the byte path declines but toTraceId still resolves.
       const cases = [
@@ -396,6 +396,7 @@ describe('otel-thread-ctx', () => {
       assert.equal(constructedContexts.length, 1)
       const rejected = [
         { traceId: 'aabbccddeeff0015', traceTags: { '_dd.p.tid': 'not-hex-16chars!' } },
+        { traceId: 'aabbccddeeff001e', traceTags: { '_dd.p.tid': '640cfd8d0000000g' } },
         { traceId: '0102030405060708090a0b0c0d0e0f1011', spanId: '0102030405060708090a' },
       ]
       for (const fields of rejected) {
