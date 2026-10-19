@@ -4999,6 +4999,50 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     for (const parallel of [false, true]) {
+      for (const only of [false, true]) {
+        // Mocha rejects exclusive suites when parallel mode is enabled.
+        const run = parallel && only ? it.skip : parallel ? parallelIt : it
+        run(`preserves mocha-each declaration annotations (parallel=${parallel}, only=${only})`, async () => {
+          // Mocha 6 stopped treating every empty-titled suite as a root suite.
+          const namePrefix = only && mochaMajor >= 6 ? ' ' : ''
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          })
+          receiver.setTestManagementTests({
+            mocha: {
+              suites: {
+                'ci-visibility/test-management/mocha-review-each.js': {
+                  tests: Object.fromEntries(['case 1', 'case 2', 'passing 3'].map(name => [`${namePrefix}${name}`, {
+                    properties: { disabled: true, quarantined: true, attempt_to_fix: true },
+                  }])),
+                },
+              },
+            },
+          })
+          await runReviewFixture('mocha-review-each', 2, events => {
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 4, testOutput)
+            for (const test of tests) {
+              const name = test.meta[TEST_NAME].trim()
+              assert.strictEqual(test.meta[TEST_STATUS],
+                name.startsWith('case') ? 'fail' : name.startsWith('passing') ? 'pass' : 'skip', name)
+              assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'], 'true', name)
+              assert.strictEqual(test.meta['test.test_management.no_auto_retry'], 'true', name)
+              if (!name.startsWith('skipped')) {
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true', name)
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true', name)
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true', name)
+              }
+            }
+          }, { MOCHA_REVIEW_ONLY: only ? '1' : '0' },
+          `node node_modules/mocha/bin/mocha ${parallel ? '--parallel --jobs 2' : ''}` +
+            ' ci-visibility/test-management/mocha-review-each.js')
+        })
+      }
+    }
+
+    for (const parallel of [false, true]) {
       for (const scenario of [
         {
           name: 'combined annotations',
