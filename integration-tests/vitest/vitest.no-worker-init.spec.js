@@ -876,13 +876,34 @@ describe('vitest no-worker init instrumentation selection', () => {
     })
   })
 
+  describe('browser declaration plugin', () => {
+    it('installs only once when start and create reuse the same Vite overrides', () => {
+      const existing = { name: 'existing plugin' }
+      const overrides = { plugins: [existing] }
+      assert.strictEqual(noWorkerInit.addBrowserAnnotationPlugin(overrides), overrides)
+      noWorkerInit.addBrowserAnnotationPlugin(overrides)
+      assert.strictEqual(overrides.plugins.length, 2)
+      assert.strictEqual(overrides.plugins[0], existing)
+    })
+  })
+
   describe('configureWorkerEnv', () => {
+    it('does not duplicate the annotation preload when configuring a reused no-worker environment', () => {
+      const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: DEFAULT_NODE_OPTIONS }, true)
+      const first = env.NODE_OPTIONS
+      noWorkerInit.configureWorkerEnv(env, true)
+      assert.strictEqual(env.NODE_OPTIONS, first)
+      noWorkerInit.configureWorkerEnv(env)
+      assert.strictEqual(env.NODE_OPTIONS, DEFAULT_NODE_OPTIONS)
+    })
+
     it('restores Datadog NODE_OPTIONS when no-worker mode falls back', () => {
       const noWorkerEnv = noWorkerInit.configureWorkerEnv({
         NODE_OPTIONS: DEFAULT_NODE_OPTIONS,
       }, true)
 
-      assert.strictEqual(noWorkerEnv.NODE_OPTIONS, '--no-warnings')
+      assert.strictEqual(noWorkerEnv.NODE_OPTIONS,
+        `--no-warnings --require ${require.resolve('../../ci/vitest-annotations-register')}`)
       assert.strictEqual(noWorkerEnv.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE, '1')
 
       const workerEnv = noWorkerInit.configureWorkerEnv({

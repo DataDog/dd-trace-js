@@ -570,7 +570,8 @@ describe('vitest main instrumentation', () => {
       },
       filename: '/repo/node_modules/vitest/dist/worker.js',
     })
-    assert.strictEqual(pool.options.env.NODE_OPTIONS, '--conditions "custom condition"')
+    assert.strictEqual(pool.options.env.NODE_OPTIONS,
+      `--conditions "custom condition" --require ${require.resolve('../../../ci/vitest-annotations-register')}`)
     assert.strictEqual(pool.options.env.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE, '1')
     assert.strictEqual(pool.options.env.DD_VITEST_WORKER, '1')
 
