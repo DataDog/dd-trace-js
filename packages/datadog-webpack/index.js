@@ -155,9 +155,9 @@ class DatadogWebpackPlugin {
         }
 
         const request = resolveData.request
-        const isRewriteTarget = getRewriteTarget(normalizedResource) !== undefined
+        const isModuleOfInterest = modulesOfInterest.has(request) || modulesOfInterest.has(`${pkg}/${modulePath}`)
 
-        if (!isRewriteTarget && !modulesOfInterest.has(request) && !modulesOfInterest.has(`${pkg}/${modulePath}`)) {
+        if (!isModuleOfInterest && getRewriteTarget(normalizedResource) === undefined) {
           return
         }
 
@@ -190,7 +190,7 @@ class DatadogWebpackPlugin {
         createData.loaders ||= []
         createData.loaders.unshift({
           loader: require.resolve('./src/loader'),
-          options: { pkg, version, path: pkgPath },
+          options: { pkg, version, path: pkgPath, rewriteOnly: !isModuleOfInterest },
         })
 
         log.debug('LOAD: %s@%s, pkg "%s"', pkg, version, pkgPath)
