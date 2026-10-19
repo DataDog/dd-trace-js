@@ -1,8 +1,7 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { once } = require('node:events')
-const { exec } = require('child_process')
 const { inspect } = require('node:util')
 
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -87,15 +86,6 @@ versions.forEach((version) => {
 
     contextNewVersions('active test span', () => {
       it('can grab the test span and add tags', async (receiver, run) => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const test = events.find(event => event.type === 'test').content
-
-            assert.strictEqual(test.meta['test.custom_tag'], 'this is custom')
-          })
-
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js active-test-span-tags-test.js',
           {
@@ -107,13 +97,32 @@ versions.forEach((version) => {
             },
           }
         )
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const test = events.find(event => event.type === 'test').content
+
+            assert.strictEqual(test.meta['test.custom_tag'], 'this is custom')
+          }, { hardTimeout: 70_000 })
 
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
       it('can grab the test span and add spans', async (receiver, run) => {
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
+            },
+          }
+        )
         const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const test = events.find(event => event.type === 'test').content
@@ -127,32 +136,12 @@ versions.forEach((version) => {
             // custom span is children of active test span
             assert.strictEqual(customSpan.trace_id.toString(), test.trace_id.toString())
             assert.strictEqual(customSpan.parent_id.toString(), test.span_id.toString())
-          })
-
-        const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-active-test-span',
-            },
-          }
-        )
+          }, { hardTimeout: 70_000 })
 
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
       it('does not request the page fixture from instrumented hooks', async (receiver, run) => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const test = events.find(event => event.type === 'test').content
-
-            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
-          })
-
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js no-page-fixture-test.js',
           {
@@ -163,6 +152,13 @@ versions.forEach((version) => {
             },
           }
         )
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const test = events.find(event => event.type === 'test').content
+
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          }, { hardTimeout: 70_000 })
 
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), receiverPromise])
 
@@ -171,11 +167,12 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('correlation between tests and RUM sessions', () => {
-      const getTestAssertions = (receiver, { isRedirecting }) =>
+      const getTestAssertions = (receiver, proc, { isRedirecting }) =>
         receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
             tests.forEach(test => {
               if (isRedirecting) {
                 // can't do assertions because playwright has been redirected
@@ -195,92 +192,82 @@ versions.forEach((version) => {
                 )
               }
             })
-          })
+          }, { hardTimeout: 70_000 })
 
-      const runRumTest = async (receiver, { isRedirecting }, extraEnvVars) => {
-        const testAssertionsPromise = getTestAssertions(receiver, { isRedirecting })
+      const runRumTest = async (receiver, run, { isRedirecting, telemetryEnabled = false }, extraEnvVars) => {
         let testOutput = ''
-        let proc
-        try {
-          proc = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                DD_TRACE_DEBUG: 'true',
-                DD_TRACE_LOG_LEVEL: 'error',
-                PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-rum',
-                ...extraEnvVars,
-              },
-            }
-          )
-          proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
-          proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_TRACE_DEBUG: 'true',
+              DD_TRACE_LOG_LEVEL: 'error',
+              PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-rum',
+              ...(telemetryEnabled && {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+              }),
+              ...extraEnvVars,
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
-          const [[exitCode]] = await Promise.all([once(proc, 'exit'), testAssertionsPromise])
+        const assertions = [once(proc, 'exit'), getTestAssertions(receiver, proc, { isRedirecting })]
+        if (telemetryEnabled) {
+          assertions.push(receiver
+            .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+              const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
 
-          assert.strictEqual(exitCode, isRedirecting ? 1 : 0)
-          assert.doesNotMatch(testOutput, /Failed to find injection points/)
-        } finally {
-          proc?.kill()
+              const testSessionMetric = telemetryEvents.find(
+                ({ metric }) => metric === 'test_session'
+              )
+              assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+
+              const eventFinishedTestEvents = telemetryEvents
+                .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
+
+              assert.ok(eventFinishedTestEvents.length > 0, 'test event telemetry from a worker should be sent')
+              eventFinishedTestEvents.forEach(({ tags }) => {
+                assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
+                assert.ok(tags.includes('test_framework:playwright'), `Got: ${inspect(tags)}`)
+              })
+            }, { hardTimeout: 70_000 }))
         }
+
+        const [[exitCode]] = await Promise.all(assertions)
+        assert.strictEqual(exitCode, isRedirecting ? 1 : 0)
+        assert.doesNotMatch(testOutput, /Failed to find injection points/)
       }
 
-      it('can correlate tests and RUM sessions', async (receiver) => {
-        await runRumTest(receiver, { isRedirecting: false })
+      it('can correlate tests and RUM sessions', async (receiver, run) => {
+        await runRumTest(receiver, run, { isRedirecting: false })
       })
 
       for (const failure of ['throw', 'reject']) {
-        it(`does not fail when the RUM correlation cookie ${failure}s`, async (receiver) => {
-          await runRumTest(receiver, { isRedirecting: false }, {
+        it(`does not fail when the RUM correlation cookie ${failure}s`, async (receiver, run) => {
+          await runRumTest(receiver, run, { isRedirecting: false }, {
             RUM_COOKIE_FAILURE: failure,
           })
         })
       }
 
-      it('expires only the RUM correlation cookie during cleanup', async (receiver) => {
-        await runRumTest(receiver, { isRedirecting: false }, {
+      it('expires only the RUM correlation cookie during cleanup', async (receiver, run) => {
+        await runRumTest(receiver, run, { isRedirecting: false }, {
           VERIFY_RUM_COOKIE_CLEANUP: 'true',
         })
       })
 
-      it('sends telemetry for RUM browser tests when telemetry is enabled', async (receiver) => {
-        const telemetryPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
-            const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
-
-            const testSessionMetric = telemetryEvents.find(
-              ({ metric }) => metric === 'test_session'
-            )
-            assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
-
-            const eventFinishedTestEvents = telemetryEvents
-              .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
-
-            assert.ok(eventFinishedTestEvents.length > 0, 'test event telemetry from a worker should be sent')
-            eventFinishedTestEvents.forEach(({ tags }) => {
-              assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
-              assert.ok(tags.includes('test_framework:playwright'), `Got: ${inspect(tags)}`)
-            })
-          })
-
-        await Promise.all([
-          runRumTest(
-            receiver,
-            { isRedirecting: false },
-            {
-              ...getCiVisEvpProxyConfig(receiver.port),
-              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
-            }
-          ),
-          telemetryPromise,
-        ])
+      it('sends telemetry for RUM browser tests when telemetry is enabled', async (receiver, run) => {
+        await runRumTest(receiver, run, { isRedirecting: false, telemetryEnabled: true })
       })
 
-      it('do not crash when redirecting and RUM sessions are not active', async (receiver) => {
-        await runRumTest(receiver, { isRedirecting: true })
+      it('do not crash when redirecting and RUM sessions are not active', async (receiver, run) => {
+        await runRumTest(receiver, run, { isRedirecting: true })
       })
     })
 
@@ -333,21 +320,6 @@ versions.forEach((version) => {
 
     contextNewVersions('playwright early bail', () => {
       it('reports tests that did not run', async (receiver, run) => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 2)
-            const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
-            assertObjectContains(failedTest.meta, {
-              [TEST_NAME]: 'failing test fails and causes early bail',
-            })
-            const didNotRunTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
-            assertObjectContains(didNotRunTest.meta, {
-              [TEST_NAME]: 'did not run because of early bail',
-            })
-          })
-
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
@@ -360,6 +332,20 @@ versions.forEach((version) => {
             },
           }
         )
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+            const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assertObjectContains(failedTest.meta, {
+              [TEST_NAME]: 'failing test fails and causes early bail',
+            })
+            const didNotRunTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
+            assertObjectContains(didNotRunTest.meta, {
+              [TEST_NAME]: 'did not run because of early bail',
+            })
+          }, { hardTimeout: 70_000 })
 
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
