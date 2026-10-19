@@ -218,7 +218,6 @@ interface Tracer extends opentracing.Tracer {
    * @env DD_FEATURE_FLAGS_ENABLED
    * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
    * @env DD_FLAGGING_EVALUATION_COUNTS_ENABLED
-   * @beta This feature is in preview and not ready for production use
    */
   openfeature: tracer.OpenFeatureProvider;
 
@@ -819,6 +818,22 @@ declare namespace tracer {
     site?: string;
 
     /**
+     * Feature Flags configuration.
+     */
+    featureFlags?: {
+      /**
+       * Allow boolean true in dd_evaluation_telemetry_opt_out to suppress evaluation events, metrics, and span tags.
+       * The attribute remains available to targeting rules and exposure reporting.
+       * Enabling this option does not change exposure events or flag evaluation results.
+       * Captured when the provider is constructed.
+       * Explicit configuration takes precedence over the environment variable, including false.
+       * @default false
+       * @env DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED
+       */
+      enableEvaluationTelemetryOptOutParameter?: boolean
+    }
+
+    /**
      * Experimental features can be enabled individually using key / value pairs.
      * @default {}
      */
@@ -890,8 +905,6 @@ declare namespace tracer {
 
       /**
        * Configuration for Feature Flagging & Experimentation.
-       *
-       * @beta This feature is in preview and not ready for production use
        */
       flaggingProvider?: {
         /**
@@ -1728,8 +1741,6 @@ declare namespace tracer {
    *
    * Wraps @datadog/openfeature-node-server with agentless and Agent Remote Config delivery.
    * Implements the OpenFeature Provider interface for flag evaluation.
-   *
-   * @beta This feature is in preview and not ready for production use
    */
   export interface OpenFeatureProvider {
     /**
