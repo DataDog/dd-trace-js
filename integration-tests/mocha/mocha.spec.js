@@ -4938,4 +4938,152 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         await Promise.all([eventsPromise, once(childProcess, 'exit')])
       })
   })
+
+  context('test automation exclusions', () => {
+    for (const parallel of [false, true]) {
+      for (const scenario of [
+        {
+          name: 'combined annotations',
+          protect: true,
+          noRetry: true,
+          properties: {
+            attempt_to_fix: true, disabled: true, quarantined: true,
+          },
+          count: 1,
+          exit: 1,
+          status: 'fail',
+        },
+        {
+          name: 'retry exclusion retains quarantine',
+          noRetry: true,
+          properties: {
+            attempt_to_fix: true, quarantined: true,
+          },
+          count: 1,
+          exit: 0,
+          status: 'fail',
+        },
+        {
+          name: 'retry exclusion retains disabling',
+          noRetry: true,
+          properties: {
+            attempt_to_fix: true, disabled: true,
+          },
+          count: 1,
+          exit: 0,
+          status: 'skip',
+        },
+        {
+          name: 'protection permits ATR',
+          needsRetryEvents: true,
+          protect: true,
+          properties: { quarantined: true },
+          count: 3,
+          exit: 1,
+          status: 'fail',
+        },
+        {
+          name: 'explicit retries remain',
+          needsRetryEvents: true,
+          noRetry: true,
+          native: true,
+          properties: {},
+          count: 3,
+          exit: 1,
+          status: 'fail',
+        },
+        {
+          name: 'retry exclusion prevents EFD',
+          noRetry: true,
+          efd: true,
+          properties: {},
+          count: 1,
+          exit: 1,
+          status: 'fail',
+        },
+        {
+          name: 'passing protection stays passing',
+          protect: true,
+          noRetry: true,
+          pass: true,
+          properties: { disabled: true },
+          count: 1,
+          exit: 0,
+          status: 'pass',
+        },
+      ]) {
+        const run = scenario.needsRetryEvents && !supportsMochaRetryEvents
+          ? it.skip
+          : parallel ? parallelIt : it
+        run(`${scenario.name} in ${parallel ? 'parallel' : 'serial'} mode`, async () => {
+          receiver.setKnownTests({ mocha: {} })
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            known_tests_enabled: scenario.efd === true,
+            early_flake_detection: { enabled: scenario.efd === true, slow_test_retries: { '5s': 2 } },
+            test_management: {
+              enabled: true, attempt_to_fix_retries: 2,
+            },
+          })
+          receiver.setTestManagementTests({
+            mocha: {
+              suites: {
+                'ci-visibility/test-management/test-exclusions-mocha.js': {
+                  tests: {
+                    'annotated test': { properties: scenario.properties },
+                  },
+                },
+              },
+            },
+          })
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ${parallel ? '--parallel --jobs 2' : ''}` +
+            ` ${scenario.native ? '--retries 2' : ''}` +
+            ' ci-visibility/test-management/test-exclusions-mocha.js', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+                EXCLUSION_PROTECT: scenario.protect ? '1' : '0',
+                EXCLUSION_NO_RETRY: scenario.noRetry ? '1' : '0',
+                EXCLUSION_PASS: scenario.pass ? '1' : '0',
+              },
+            })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              const attempts = tests.filter(test => test.meta[TEST_NAME] === 'annotated test')
+              assert.strictEqual(attempts.length, scenario.count, testOutput)
+              for (const test of attempts) {
+                assert.strictEqual(test.meta[TEST_STATUS], scenario.status)
+                assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'],
+                  scenario.protect ? 'true' : undefined)
+                assert.strictEqual(test.meta['test.test_management.no_auto_retry'],
+                  scenario.noRetry ? 'true' : undefined)
+                for (const [property, tag] of [
+                  ['attempt_to_fix', TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX],
+                  ['disabled', TEST_MANAGEMENT_IS_DISABLED],
+                  ['quarantined', TEST_MANAGEMENT_IS_QUARANTINED],
+                ]) assert.strictEqual(test.meta[tag], scenario.properties[property] ? 'true' : undefined)
+                if (scenario.noRetry) {
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON],
+                    scenario.native && test.meta[TEST_IS_RETRY] ? TEST_RETRY_REASON_TYPES.ext : undefined)
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined)
+                }
+              }
+              const skipped = tests.find(test => test.meta[TEST_NAME] === 'developer skip')
+              assert.strictEqual(skipped.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(skipped.meta['test.test_management.no_auto_retry'], 'true', testOutput)
+              assert.strictEqual(skipped.meta['test.test_management.prevent_failure_suppression'], 'true')
+            })
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, scenario.exit, testOutput)
+        })
+      }
+    }
+  })
+
 })

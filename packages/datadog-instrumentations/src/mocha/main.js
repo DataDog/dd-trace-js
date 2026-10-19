@@ -1319,11 +1319,13 @@ addHook({
   shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
       resetRunState(this.suite)
+      workerTestAnnotations.clear()
       return runMochaRunner(run, this, args)
     }
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(args[0])
     resetRunState(this.suite)
+    workerTestAnnotations.clear()
     runnerFailuresAdjusted.delete(this)
     runnerFrameworkErrors.delete(this)
     runnerStarted.delete(this)
@@ -1658,12 +1660,15 @@ addHook({
   file: 'lib/runnable.js',
 }, (runnablePackage) => runnableWrapper(runnablePackage, config))
 
+const workerTestAnnotations = new Map()
+
 function onMessage (message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
       collectTestOptimizationSummariesFromTraces(payload, {
         newTestsWithDynamicNames,
+        testAnnotations: workerTestAnnotations,
         attemptToFixExecutions,
       })
       workerReportTraceCh.publish(payload)
@@ -1914,6 +1919,9 @@ addHook({
     const isModified = config.isImpactedTestsEnabled && isModifiedTestSuite(testSuiteAbsolutePath)
 
     for (const test of tests) {
+      test._ddTestAnnotations = workerTestAnnotations.get(
+        `${getTestSuitePath(test.file, process.cwd())} › ${test.fullTitle()}`
+      )
       const testProperties = getTestProperties(test, config.testManagementTests)
       const isAttemptToFix = config.isTestManagementTestsEnabled && testProperties.isAttemptToFix
 
@@ -1930,7 +1938,7 @@ addHook({
         }
       }
       // `efdTests` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (!isAttemptToFix && (isNew || isModified)) {
+      if (!test._ddTestAnnotations?.noAutoRetry && !isAttemptToFix && (isNew || isModified)) {
         const testFullName = getTestFullName(test)
         const tests = efdTests[testFullName]
 
