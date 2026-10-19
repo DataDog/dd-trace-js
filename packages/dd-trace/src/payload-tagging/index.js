@@ -22,9 +22,10 @@ const { truncated } = require('./constants')
 //
 // The match is deliberately conservative: it also flags some structural
 // rules, such as slices (`$.items[0:2]`) and quoted keys containing one of
-// these characters (`$['@timestamp']`). Those rules then lose all tags on a
-// normalized capture. Parsing rules to avoid the over-match would make a
-// missed data-dependent construct, and so a leaked value, possible.
+// these characters (`$['@timestamp']`). Those rules then lose all payload
+// tags on a normalized capture, with `_dd.payload_tags_suppressed` marking
+// the omission. Parsing rules to avoid the over-match would make a missed
+// data-dependent construct, and so a leaked value, possible.
 const dataDependentRulePattern = /[?()@^~:`]/
 
 // Remaining cumulative string length (UTF-16 code units) available for
@@ -182,9 +183,12 @@ function computeBoundedTags (config, object, opts) {
   if (snapshot.normalized && dataDependentRules) {
     // Fixed, payload-safe diagnostic: no payload values or rule text included.
     log.debug(
-      'Omitting payload tags: the capture was incomplete and the rules are data-dependent'
+      'Omitting payload tags: the capture was normalized and the rules are data-dependent'
     )
-    return {}
+    // The marker keeps the suppression observable on the span, since no
+    // payload tag or the incomplete flag distinguishes it from a payload
+    // that simply produced no tags.
+    return { '_dd.payload_tags_suppressed': true }
   }
 
   /** @type {Capture} */
@@ -198,9 +202,9 @@ function computeBoundedTags (config, object, opts) {
 
   if (capture.normalized && dataDependentRules) {
     log.debug(
-      'Omitting payload tags: expansion was incomplete and the rules are data-dependent'
+      'Omitting payload tags: expansion normalized the capture and the rules are data-dependent'
     )
-    return {}
+    return { '_dd.payload_tags_suppressed': true }
   }
 
   redact(payload, redactionRules)

@@ -21,6 +21,9 @@ const { tagsFromObject } = require('../../src/payload-tagging/tagging')
 
 const defaultOpts = { maxDepth: 10, prefix: 'http.payload' }
 
+// The tags returned when a normalized capture suppresses data-dependent rules.
+const suppressedTags = { '_dd.payload_tags_suppressed': true }
+
 describe('Payload tagger', () => {
   describe('tag count cutoff', () => {
     it('should generate many tags when not reaching the cap', () => {
@@ -369,7 +372,7 @@ describe('Safe payload capture', () => {
           response: ['$.items[*].encoded.secret'],
         }
 
-        assert.deepStrictEqual(computeTags(config, input, opts), {})
+        assert.deepStrictEqual(computeTags(config, input, opts), suppressedTags)
         assert.strictEqual(input.gate, huge)
         assert.strictEqual(input.items[0].encoded, '{"secret":"s3cret"}')
       })
@@ -489,7 +492,7 @@ describe('Safe payload capture', () => {
 
         // The compact copy reports length 0, so the predicate would stop
         // matching and the secret would leak; suppression must win instead.
-        assert.deepStrictEqual(computeTags(config, input, opts), {})
+        assert.deepStrictEqual(computeTags(config, input, opts), suppressedTags)
 
         // Holes render no tags, so the length change is normalization, not loss.
         const snapshot = createSafeSnapshot(input)
@@ -511,7 +514,7 @@ describe('Safe payload capture', () => {
           response: ['$.items[*].encoded.secret'],
         }
 
-        assert.deepStrictEqual(computeTags(config, input, opts), {})
+        assert.deepStrictEqual(computeTags(config, input, opts), suppressedTags)
         assert.strictEqual(input.items[0].encoded, '{"secret":"s3cret"}')
       })
 
@@ -927,7 +930,7 @@ describe('Safe payload capture', () => {
       'aws.response.body.ETag': '"etag"',
       'aws.response.body.token': 'redacted',
     })
-    assert.deepStrictEqual(computeTags(dependent, input, responseOpts), {})
+    assert.deepStrictEqual(computeTags(dependent, input, responseOpts), suppressedTags)
     assert.strictEqual(input.Body.toString('hex'), '616263')
     assert.strictEqual(input.at.getTime(), 1234)
     assert.strictEqual(input.pairs.size, 0)
@@ -954,7 +957,7 @@ describe('Safe payload capture', () => {
     const binaryInput = { items: [{ secret: 's3cret', safe: 'ok', Body: Buffer.from('abc') }] }
     assert.deepStrictEqual(computeTags({
       expand: [], request: [structural, dependent], response: [],
-    }, binaryInput, { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX }), {})
+    }, binaryInput, { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX }), suppressedTags)
     // Expansion rules follow the same classifier, but the expansion gate
     // suppresses only when expansion itself was incomplete: a complete
     // capture with fully applied expansion safely runs every rule. The
@@ -1115,7 +1118,7 @@ describe('Safe payload capture', () => {
               assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
               assert.ok(!Object.values(tags).includes('s3cret'))
             } else {
-              assert.deepStrictEqual(tags, {})
+              assert.deepStrictEqual(tags, suppressedTags)
             }
             assert.deepStrictEqual(items.map(item => item.encoded), original)
           })
@@ -1136,7 +1139,7 @@ describe('Safe payload capture', () => {
             assert.strictEqual(tags[`${prefix}.items.1.encoded.secret`], 'redacted')
             assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
           } else {
-            assert.deepStrictEqual(tags, {})
+            assert.deepStrictEqual(tags, suppressedTags)
           }
           assert.ok(input.items.every(item => item.encoded === half))
         })
@@ -1154,7 +1157,7 @@ describe('Safe payload capture', () => {
             assert.ok(Object.values(tags).includes('redacted'))
             assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
           } else {
-            assert.deepStrictEqual(tags, {})
+            assert.deepStrictEqual(tags, suppressedTags)
           }
           assert.strictEqual(input.items[0].encoded, encoded)
         })
@@ -1163,7 +1166,7 @@ describe('Safe payload capture', () => {
       it(`suppresses initially incomplete captures with expansion predicates on ${phase}`, () => {
         const input = { items: [{ encoded: '{"secret":"s3cret"}' }], wide: new Array(10_001) }
         const config = { expand: ['$.items[?(@.encoded)].encoded'], request: [], response: [], [phase]: ['$..secret'] }
-        assert.deepStrictEqual(computeTags(config, input, opts), {})
+        assert.deepStrictEqual(computeTags(config, input, opts), suppressedTags)
         assert.strictEqual(input.items[0].encoded, '{"secret":"s3cret"}')
       })
 
@@ -1727,7 +1730,7 @@ describe('Safe payload capture', () => {
                 response: phase === 'redact' ? [`${rule}.secret`] : ['$.items[*].encoded.secret'],
               }
 
-              assert.deepStrictEqual(computeTags(config, input, { maxDepth: 10, prefix }), {})
+              assert.deepStrictEqual(computeTags(config, input, { maxDepth: 10, prefix }), suppressedTags)
               const snapshot = createSafeSnapshot(leaf)
               assert.strictEqual(snapshot.incomplete, true)
               assert.strictEqual(Object.getPrototypeOf(snapshot.value), kind.prototype)
@@ -1857,7 +1860,7 @@ describe('Safe payload capture', () => {
         assert.strictEqual(snapshot.incomplete, false)
         assert.ok(copy instanceof ArrayBuffer)
         assert.strictEqual(copy.byteLength, 0)
-        assert.deepStrictEqual(computeTags({ ...safeConfig, response: [rule] }, input, responseOpts), {})
+        assert.deepStrictEqual(computeTags({ ...safeConfig, response: [rule] }, input, responseOpts), suppressedTags)
         assert.strictEqual(input.items[0].secret, 's3cret')
       })
     }
@@ -1907,7 +1910,7 @@ describe('Safe payload capture', () => {
             : '$.items[?(@.leaf.size > 0)].secret'
           const config = { ...safeConfig, [phase]: [rule] }
 
-          assert.deepStrictEqual(computeTags(config, input, responseOpts), {})
+          assert.deepStrictEqual(computeTags(config, input, responseOpts), suppressedTags)
           assert.strictEqual(input.items[0].secret, 's3cret')
           assert.strictEqual(input.items[0].encoded, '{"secret":"encoded-secret"}')
         })
@@ -2128,12 +2131,12 @@ describe('Safe payload capture', () => {
               const rule = `$.items[?(${expression})].secret`
               assert.deepStrictEqual(jsonpath({ path: rule, json: input }), ['customer-secret'])
 
-              assert.deepStrictEqual(computeTags({ ...safeConfig, [phase]: [rule] }, input, opts), {})
+              assert.deepStrictEqual(computeTags({ ...safeConfig, [phase]: [rule] }, input, opts), suppressedTags)
               assert.deepStrictEqual(computeTags({
                 ...safeConfig,
                 expand: [`$.items[?(${expression})].encoded`],
                 [phase]: ['$.items[*].encoded.secret'],
-              }, input, opts), {})
+              }, input, opts), suppressedTags)
 
               const snapshot = createSafeSnapshot(input)
               const items = /** @type {{ items: Array<{ bytes: Uint8Array | DataView }> }} */ (snapshot.value).items
@@ -2173,7 +2176,8 @@ describe('Safe payload capture', () => {
             const items = /** @type {{ items: Array<{ bytes: Uint8Array | DataView }> }} */ (snapshot.value).items
             const copy = items[0].bytes
             assert.notStrictEqual(copy.buffer, backing)
-            assert.deepStrictEqual(computeTags({ ...safeConfig, response: [rule] }, input, responseOpts), {})
+            const suppressed = computeTags({ ...safeConfig, response: [rule] }, input, responseOpts)
+            assert.deepStrictEqual(suppressed, suppressedTags)
             // Structural rules still produce tags, without the flag: nothing
             // rendered was lost.
             const tags = computeTags({ ...safeConfig, response: ['$.items[*].secret'] }, input, responseOpts)
@@ -2203,7 +2207,8 @@ describe('Safe payload capture', () => {
             const rule = `$.items[?(${expression})].secret`
             assert.deepStrictEqual(jsonpath({ path: rule, json: input }), ['customer-secret'])
 
-            assert.deepStrictEqual(computeTags({ ...safeConfig, response: [rule] }, input, responseOpts), {})
+            const suppressed = computeTags({ ...safeConfig, response: [rule] }, input, responseOpts)
+            assert.deepStrictEqual(suppressed, suppressedTags)
             assert.strictEqual(createSafeSnapshot(input).normalized, true)
             assert.strictEqual(input.items[0].secret, 'customer-secret')
           })
@@ -2228,7 +2233,7 @@ describe('Safe payload capture', () => {
             assert.strictEqual(snapshot.incomplete, false)
             assert.deepStrictEqual(computeTags({
               ...safeConfig, response: ['$.items[?(@.bytes.byteLength > 0)].secret'],
-            }, input, responseOpts), {})
+            }, input, responseOpts), suppressedTags)
             assert.strictEqual(reads, 0)
             const items = /** @type {{ items: Array<{ bytes: Uint8Array | DataView }> }} */ (snapshot.value).items
             const copy = items[0].bytes
@@ -2249,7 +2254,7 @@ describe('Safe payload capture', () => {
 
         assert.deepStrictEqual(computeTags({
           ...safeConfig, response: ['$.items[?(@.bytes.byteOffset > 0)].secret'],
-        }, input, responseOpts), {})
+        }, input, responseOpts), suppressedTags)
         assert.strictEqual(createSafeSnapshot(input).normalized, true)
         assert.strictEqual(reads, 0)
       })
@@ -2267,7 +2272,7 @@ describe('Safe payload capture', () => {
 
         assert.deepStrictEqual(computeTags({
           ...safeConfig, response: ['$.items[?(@.bytes.buffer.byteLength > 2)].secret'],
-        }, input, responseOpts), {})
+        }, input, responseOpts), suppressedTags)
         assert.strictEqual(createSafeSnapshot(input).normalized, true)
         assert.strictEqual(reads, 0)
       })
@@ -2883,9 +2888,9 @@ describe('Safe payload capture', () => {
 
   describe('suppression diagnostics', () => {
     const snapshotMessage =
-      'Omitting payload tags: the capture was incomplete and the rules are data-dependent'
+      'Omitting payload tags: the capture was normalized and the rules are data-dependent'
     const expansionMessage =
-      'Omitting payload tags: expansion was incomplete and the rules are data-dependent'
+      'Omitting payload tags: expansion normalized the capture and the rules are data-dependent'
 
     afterEach(() => {
       sinon.restore()
@@ -2896,7 +2901,7 @@ describe('Safe payload capture', () => {
       const input = { Body: makeReadable(), token: 's3cret' }
       const config = { expand: [], request: [], response: ['$..[?(@.token)]'] }
 
-      assert.deepStrictEqual(computeTags(config, input, responseOpts), {})
+      assert.deepStrictEqual(computeTags(config, input, responseOpts), suppressedTags)
 
       assert.ok(debug.getCalls().some(call => call.args[0] === snapshotMessage))
       // The diagnostic must never carry payload values or rule text.
@@ -2914,7 +2919,7 @@ describe('Safe payload capture', () => {
 
       assert.deepStrictEqual(
         computeTags(config, { body: huge, token: 's3cret' }, { maxDepth: 10, prefix: 'foo' }),
-        {}
+        suppressedTags
       )
 
       assert.ok(debug.getCalls().some(call => call.args[0] === expansionMessage))
@@ -2932,7 +2937,7 @@ describe('Safe payload capture', () => {
       }
       assert.deepStrictEqual(computeTags(config, {
         gate: huge, items: [{ encoded: '{"secret":"s3cret"}' }],
-      }, responseOpts), {})
+      }, responseOpts), suppressedTags)
       assert.deepStrictEqual(debug.args, [[expansionMessage]])
       assert.strictEqual(error.callCount, 0)
     })
