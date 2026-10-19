@@ -2065,17 +2065,29 @@ class CypressPlugin {
     if (finishPromises.length > 0) return Promise.all(finishPromises).then(() => null)
   }
 
+  /**
+   * @param {string} testSuite Suite path shared with Cypress results.
+   * @param {object[]} testAnnotations Declaration metadata from the browser.
+   */
+  recordTestDeclarations (testSuite, testAnnotations) {
+    const declarationsByName = new Map()
+    for (const annotation of testAnnotations) {
+      if (!declarationsByName.has(annotation.testName)) declarationsByName.set(annotation.testName, [])
+      declarationsByName.get(annotation.testName).push(annotation)
+    }
+    this.testAnnotationsBySuite.set(testSuite, declarationsByName)
+  }
+
   getTasks () {
     return {
+      'dd:testDeclarations': ({ testSuite, testAnnotations }) => {
+        this.recordTestDeclarations(testSuite, testAnnotations)
+        return null
+      },
       'dd:testSuiteStart': ({
         testSuite, testSuiteAbsolutePath, isTextTerminal: browserIsTextTerminal, testAnnotations = [],
       }) => {
-        const declarationsByName = new Map()
-        for (const annotation of testAnnotations) {
-          if (!declarationsByName.has(annotation.testName)) declarationsByName.set(annotation.testName, [])
-          declarationsByName.get(annotation.testName).push(annotation)
-        }
-        this.testAnnotationsBySuite.set(testSuite, declarationsByName)
+        this.recordTestDeclarations(testSuite, testAnnotations)
         // Cypress 6 omits the execution mode from the Node plugin configuration.
         const isTextTerminal = this.cypressConfig.isTextTerminal ?? browserIsTextTerminal
         if (!isTextTerminal) {
