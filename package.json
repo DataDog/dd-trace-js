@@ -248,7 +248,7 @@
     "mocha-junit-reporter": "^2.2.1",
     "mocha-multi-reporters": "^1.5.2",
     "multer": "^2.4.0",
-    "nock": "^14.0.17",
+    "nock": "^15.0.1",
     "node-preload": "^0.2.1",
     "nyc": "^18.0.0",
     "octokit": "^5.0.3",
