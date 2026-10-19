@@ -33,6 +33,7 @@ function annotate (fn, annotation) {
   const annotated = function (...args) {
     return fn.apply(this, args)
   }
+  Object.setPrototypeOf(annotated, Object.getPrototypeOf(fn))
   Object.defineProperties(annotated, {
     length: { value: fn.length },
     name: { value: fn.name },

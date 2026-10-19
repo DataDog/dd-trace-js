@@ -565,6 +565,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     }
 
+    it('executes annotated generator callbacks through Jest generator handling', async () => {
+      await runExclusions('test-exclusions-generators', 0, spans => {
+        assert.strictEqual(spans.length, 3)
+        for (const span of spans) assert.strictEqual(span.meta[TEST_STATUS], 'pass')
+      })
+    })
+
     it('preserves explicit Jest retries even when ATR is enabled', async () => {
       receiver.setSettings({ flaky_test_retries_enabled: true })
       await runExclusions('test-exclusions-native', 0, spans => {
