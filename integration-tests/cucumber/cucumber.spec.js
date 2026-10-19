@@ -1077,6 +1077,108 @@ describe(`cucumber@${version} commonJS`, () => {
     })
   })
 
+  context('test automation exclusions', () => {
+    for (const parallel of [false, true]) {
+      for (const mode of ['atr', 'efd', 'native']) {
+        // Parallel Test Management requires the worker runTestCase lifecycle available in Cucumber 11.
+        const run = parallel && version !== 'latest' && satisfies(version, '<11.0.0') ? it.skip : it
+        run(`${mode} exclusions in ${parallel ? 'parallel' : 'serial'} scenarios`, async () => {
+          const file = 'ci-visibility/features-automation-exclusions/exclusions.feature'
+          const messagesPath = `${cwd}/exclusion-attempts.ndjson`
+          const assigned = {
+            'combined one': { attempt_to_fix: true, disabled: true, quarantined: true },
+            'combined two': { attempt_to_fix: true, disabled: true, quarantined: true },
+            'quarantined exclusion': { attempt_to_fix: true, quarantined: true },
+            'disabled exclusion': { attempt_to_fix: true, disabled: true },
+            'protected retries': { disabled: true, quarantined: true },
+            'protected passing': { disabled: true },
+            'ordinary control': {},
+          }
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            known_tests_enabled: mode === 'efd',
+            early_flake_detection: {
+              enabled: mode === 'efd',
+              slow_test_retries: { '5s': 2 },
+              faulty_session_threshold: 100,
+            },
+            test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          })
+          receiver.setKnownTests({ cucumber: {} })
+          receiver.setTestManagementTests({
+            cucumber: {
+              suites: {
+                [file]: {
+                  tests: Object.fromEntries(Object.entries(assigned)
+                    .map(([name, properties]) => [name, { properties }])),
+                },
+              },
+            },
+          })
+          childProcess = exec(
+            `./node_modules/.bin/cucumber-js ${file} --format message:${messagesPath} ` +
+            `${parallel ? '--parallel 2' : ''}` +
+            (mode === 'native' ? ' --retry 2' : ''), {
+              cwd,
+              env: { ...getCiVisAgentlessConfig(receiver.port), DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2' },
+            })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              for (const [name, properties] of Object.entries(assigned)) {
+                const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+                const noRetry = !['ordinary control', 'protected retries'].includes(name)
+                const protect = name.startsWith('combined') || name.startsWith('protected')
+                const count = name === 'disabled exclusion' || name === 'protected passing'
+                  ? 1
+                  : noRetry && mode !== 'native' ? 1 : 3
+                const hasRetrySpans = version === 'latest' || satisfies(version, '>=8.0.0') || mode === 'efd'
+                assert.strictEqual(attempts.length, hasRetrySpans ? count : 1, `${name}: ${testOutput}`)
+                for (const test of attempts) {
+                  assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'],
+                    protect ? 'true' : undefined, name)
+                  assert.strictEqual(test.meta['test.test_management.no_auto_retry'],
+                    noRetry ? 'true' : undefined, name)
+                  assert.strictEqual(test.meta[TEST_STATUS], name === 'disabled exclusion'
+                    ? 'skip'
+                    : name === 'protected passing' ? 'pass' : 'fail', name)
+                  for (const [property, tag] of [
+                    ['attempt_to_fix', TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX],
+                    ['disabled', TEST_MANAGEMENT_IS_DISABLED],
+                    ['quarantined', TEST_MANAGEMENT_IS_QUARANTINED],
+                  ]) assert.strictEqual(test.meta[tag], properties[property] ? 'true' : undefined, name)
+                  if (noRetry) {
+                    assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined)
+                    assert.strictEqual(test.meta[TEST_RETRY_REASON],
+                      mode === 'native' && test.meta[TEST_IS_RETRY] ? TEST_RETRY_REASON_TYPES.ext : undefined)
+                  }
+                }
+              }
+            })
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, 1, testOutput)
+          const messages = fs.readFileSync(messagesPath, 'utf8').trim().split('\n').map(line => JSON.parse(line))
+          const pickles = new Map(messages.filter(message => message.pickle)
+            .map(({ pickle }) => [pickle.id, pickle.name]))
+          const cases = new Map(messages.filter(message => message.testCase)
+            .map(({ testCase }) => [testCase.id, testCase.pickleId]))
+          const executions = messages.filter(message => message.testCaseStarted)
+            .map(({ testCaseStarted }) => pickles.get(cases.get(testCaseStarted.testCaseId)))
+          for (const name of Object.keys(assigned)) {
+            const noRetry = !['ordinary control', 'protected retries'].includes(name)
+            const expected = name === 'disabled exclusion' || name === 'protected passing'
+              ? 1
+              : noRetry && mode !== 'native' ? 1 : 3
+            assert.strictEqual(executions.filter(testName => testName === name).length, expected, name)
+          }
+        })
+      }
+    }
+  })
+
   context('test management', () => {
     context('attempt to fix', () => {
       beforeEach(() => {
