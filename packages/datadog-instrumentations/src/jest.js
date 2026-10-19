@@ -4093,7 +4093,9 @@ function wrapJestObject (jestObject, suiteFilePath) {
 
   shimmer.wrap(jestObject, 'retryTimes', retryTimes => function () {
     const environment = testSuiteDatadogEnvironments.get(suiteFilePath)
-    if (environment) environment.hasExplicitRetries = true
+    const setsDescribeRetries = arguments[1]?.entireDescribe &&
+      typeof environment?.global[Symbol.for('RETRY_TIMES_SETTER')] === 'function'
+    if (environment && !setsDescribeRetries) environment.hasExplicitRetries = true
     return retryTimes.apply(this, arguments)
   })
 
