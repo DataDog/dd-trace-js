@@ -75,6 +75,15 @@ describe('Test Optimization callback annotations', () => {
       await assert.rejects(rejects(), actual => actual === error)
     })
 
+    it('preserves the callback source for framework fixture discovery', () => {
+      function callback ({ value }) { return value }
+      const annotated = helper(helper(callback))
+      assert.strictEqual(annotated.toString(), callback.toString())
+      assert.strictEqual(annotated.name, callback.name)
+      assert.strictEqual(annotated.length, callback.length)
+      assert.strictEqual(annotated({ value: 42 }), 42)
+    })
+
     it('preserves done callbacks', done => {
       const annotated = helper(callback => callback())
       assert.strictEqual(annotated.length, 1)

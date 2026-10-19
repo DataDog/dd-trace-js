@@ -858,6 +858,15 @@ which exposes the worker `runTestCase` lifecycle; serial scenarios support Cucum
 Cucumber's normal tag selection and dry runs still apply.
 The annotation and assigned Test Management span tags follow the callback API below.
 
+## Playwright test automation exclusions
+
+Playwright 1.38 and later support the `preventFailureSuppression` and `noAutoRetry`
+callback annotations from `dd-trace/test-optimization`. Apply them to individual
+`test` callbacks, including generated cases, `test.only`, and `test.skip`. Callback
+fixture parameters remain available. Exclusions are resolved in the coordinator
+before disabling and retries; worker spans retain both annotation and backend
+assignment tags. Explicit project and suite retry settings remain available.
+
 ## Jest test automation exclusions
 
 With the `jest-circus` runner, annotate test callbacks using `dd-trace/test-optimization`:
