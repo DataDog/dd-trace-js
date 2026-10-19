@@ -176,6 +176,38 @@ function haveRootTestsFinished (rootTests) {
   return true
 }
 
+/**
+ * @param {{ file: string }} test
+ */
+function startRootSuite (test) {
+  const ctx = testFileToSuiteCtx.get(test.file)
+  if (ctx?._pendingRootStart) {
+    ctx._pendingRootStart = false
+    testSuiteStartCh.runStores(ctx, () => {})
+  }
+}
+
+/**
+ * @param {string} file
+ * @param {'pass' | 'fail' | 'skip'} status
+ */
+function finishRootSuite (file, status) {
+  const ctx = testFileToSuiteCtx.get(file)
+  if (!ctx) {
+    log.warn('No ctx found for suite', file)
+    return
+  }
+
+  if (global.__coverage__) {
+    const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
+    testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
+    mergeCoverage(global.__coverage__, originalCoverageMap)
+    resetCoverage(global.__coverage__)
+  }
+
+  testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+}
+
 function getSuitePath (suite) {
   return getTestSuitePath(suite.file, process.cwd())
 }
@@ -1379,23 +1411,8 @@ addHook({
       }
       rootPendingCountByFile.delete(file)
 
-      const ctx = testFileToSuiteCtx.get(file)
-      if (!ctx) {
-        log.warn('No ctx found for suite', file)
-        return
-      }
-
       const rootTests = rootTestsByFile.get(file) || []
-      const status = getRootSuiteStatus(rootTests)
-
-      if (global.__coverage__) {
-        const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
-        testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
-        mergeCoverage(global.__coverage__, originalCoverageMap)
-        resetCoverage(global.__coverage__)
-      }
-
-      testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+      finishRootSuite(file, getRootSuiteStatus(rootTests))
     }
 
     function finishRootSuiteFallbackForFile (file) {
@@ -1405,7 +1422,7 @@ addHook({
       const rootTests = rootTestsByFile.get(file) || []
       const status = haveRootTestsFinished(rootTests) ? getRootSuiteStatus(rootTests) : 'fail'
       rootPendingCountByFile.delete(file)
-      testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+      finishRootSuite(file, status)
     }
 
     function finishRootSuiteAfterFinalAttempt (test) {
@@ -1436,13 +1453,7 @@ addHook({
     this.prependListener('test', getOnTestHandler(true))
     // Reporters are registered before Runner#run, so prepend this after the test handler
     // to start the suite first and preserve the test event if a reporter throws.
-    this.prependListener('test', function (test) {
-      const ctx = testFileToSuiteCtx.get(test.file)
-      if (ctx?._pendingRootStart) {
-        ctx._pendingRootStart = false
-        testSuiteStartCh.runStores(ctx, () => {})
-      }
-    })
+    this.prependListener('test', startRootSuite)
 
     // Reporters are registered before this run wrapper. Prepend terminal handlers
     // so a reporter error cannot strand a test span that Mocha already completed.
@@ -1482,6 +1493,8 @@ addHook({
     this.prependListener('fail', getOnFailHandler(true, config))
 
     this.prependListener('pending', getOnPendingHandler())
+    // Static skips emit 'pending' without 'test', so their suite must start here too.
+    this.prependListener('pending', startRootSuite)
 
     this.prependListener('suite', function (suite) {
       if (suite.root) {
@@ -1542,10 +1555,10 @@ addHook({
     this.prependListener('suite end', function (suite) {
       if (suite.root) {
         // Normal case: pure root-level files are finished by the 'test end' / 'hook end'
-        // listeners via finishRootSuiteForFile. Two edge cases remain here:
+        // listeners via finishRootSuiteForFile. Fallback cases remain here:
         //
-        // 1. All-pending: no 'test' event fired, _pendingRootStart is still true.
-        //    Start and immediately finish with 'skip'.
+        // 1. Unstarted file: no 'test' or 'pending' event fired (e.g. all tests
+        //    were filtered out). Start and immediately finish with 'skip'.
         //
         // 2. Aborted mid-run (e.g. a beforeEach hook failure): Mocha skips remaining
         //    tests and jumps straight to 'suite end'. rootPendingCountByFile still has

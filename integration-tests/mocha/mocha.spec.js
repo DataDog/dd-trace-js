@@ -2749,6 +2749,70 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
+        for (const mode of ['all', 'first', 'last', 'mixed']) {
+          it(`associates skipped top-level tests with their suite (${mode})`, async () => {
+            const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            childProcess = exec(`node node_modules/mocha/bin/mocha ./${suiteFile}`, {
+              cwd,
+              env: { ...envVars, DD_INJECT_FORCE: 'true', MOCHA_TOP_LEVEL_SKIP_MODE: mode },
+            })
+
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+
+                assert.strictEqual(suites.length, 1)
+                assert.strictEqual(tests.length, mode === 'mixed' ? 3 : 2)
+                assertObjectContains(suites[0], {
+                  meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: mode === 'all' ? 'skip' : 'pass' },
+                })
+                for (const test of tests) {
+                  assert.ok(test.test_suite_id, 'Skipped tests must reference their suite')
+                  assert.strictEqual(test.test_suite_id.toString(), suites[0].test_suite_id.toString())
+                }
+                const skippedTests = tests.filter(test => test.meta[TEST_STATUS] === 'skip')
+                assert.strictEqual(skippedTests.length, mode === 'all' || mode === 'mixed' ? 2 : 1)
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0)
+          })
+        }
+
+        for (const hook of ['beforeEach', 'afterEach']) {
+          it(`preserves top-level suite coverage after an aborting ${hook}`, async () => {
+            const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-aborted.js'
+            receiver.setSettings({ itr_enabled: true, code_coverage: true, tests_skipping: false })
+            childProcess = exec(
+              `node node_modules/nyc/bin/nyc.js --silent node node_modules/mocha/bin/mocha ./${suiteFile}`,
+              { cwd, env: { ...envVars, DD_INJECT_FORCE: 'true', MOCHA_FAILING_HOOK: hook } }
+            )
+
+            const payloadsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle') || url.endsWith('/api/v2/citestcov'), payloads => {
+                const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                const coverages = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcov'))
+                  .flatMap(({ payload }) => payload).flatMap(({ content }) => content.coverages)
+
+                assert.strictEqual(suites.length, 1)
+                assertObjectContains(suites[0], { meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: 'fail' } })
+                assert.strictEqual(coverages.length, 1, 'An aborted suite must still report its coverage')
+                assert.strictEqual(coverages[0].test_suite_id, Number(suites[0].test_suite_id))
+                assertObjectContains(coverages[0].files.map(({ filename }) => filename), [
+                  suiteFile,
+                  'ci-visibility/test/sum.js',
+                ])
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), payloadsPromise])
+            assert.strictEqual(exitCode, 1)
+          })
+        }
+
         context('suite span timing', () => {
           it('suite spans for top-level-only files are bounded to their own file execution', async () => {
             const suiteFiles = [
