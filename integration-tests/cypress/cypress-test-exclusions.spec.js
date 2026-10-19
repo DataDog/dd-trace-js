@@ -208,6 +208,23 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     })
   })
 
+  for (const mode of ['duplicate-skipped', 'duplicate-mixed']) {
+    it(`retains separate annotations for ${mode} declarations with identical titles`, async () => {
+      await run(mode, 0, tests => {
+        assert.strictEqual(tests.length, 3)
+        const actual = tests.map(test => JSON.stringify([
+          test.meta['test.status'], test.meta[protection], test.meta[exclusion],
+        ])).sort()
+        const expected = [
+          [mode === 'duplicate-mixed' ? 'pass' : 'skip', 'true', undefined],
+          ['skip', undefined, 'true'],
+          ['skip', undefined, undefined],
+        ].map(test => JSON.stringify(test)).sort()
+        assert.deepStrictEqual(actual, expected)
+      })
+    })
+  }
+
   it('restores ordinary quarantine policy when the annotation is removed', async () => {
     receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: false })
     properties({ sole: { properties: { quarantined: true } } })

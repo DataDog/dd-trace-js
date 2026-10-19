@@ -512,7 +512,7 @@ before(function () {
   Cypress.mocha.getRootSuite().eachTest(test => {
     const annotations = getTestAnnotations(test)
     testAnnotations.push({
-      testName: test.fullTitle(), mustFail: annotations.mustFail, noAutoRetry: annotations.noAutoRetry,
+      testId: test.id, testName: test.fullTitle(), mustFail: annotations.mustFail, noAutoRetry: annotations.noAutoRetry,
     })
   })
   cy.task('dd:testSuiteStart', {
