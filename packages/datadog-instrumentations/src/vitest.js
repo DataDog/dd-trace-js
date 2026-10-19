@@ -3,6 +3,9 @@
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { isTrue } = require('../../dd-trace/src/util')
 
+// Declaration metadata is also needed when workers do not initialize a tracer.
+require('./vitest-test-annotations')
+
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 
 if (getEnvironmentVariable('DD_VITEST_WORKER') === '1') {

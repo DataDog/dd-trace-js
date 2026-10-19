@@ -547,9 +547,11 @@ jobs:
           - vitest.core
           - vitest.tia
           - vitest.test-management
+          - vitest.test-exclusions
           - vitest.advanced
           - vitest.msw
           - vitest.no-worker-init
+          - vitest.no-worker-exclusions
         # TIA is the only Vitest spec whose two supported versions exceed the CI time budget when run together.
         vitest-version: [all]
         exclude:

@@ -46,6 +46,26 @@ const {
   getVitestTestProperties,
 } = require('./vitest-util')
 
+const emptyAnnotations = { mustFail: false, noAutoRetry: false }
+
+/** @param {object} task */
+function getAnnotations (task) {
+  return task.meta?.__ddTestOptAnnotations || emptyAnnotations
+}
+
+/** @param {object} task */
+function getReportedProperties (task) {
+  const properties = taskToTestProperties.get(task) || getVitestTestProperties(
+    getProvidedContext(), task.file.filepath, getTestName(task)
+  )
+  return {
+    isAttemptToFix: properties.isAttemptToFix,
+    isDisabled: properties.isDisabled,
+    isQuarantined: properties.isQuarantined,
+    annotations: getAnnotations(task),
+  }
+}
+
 const EFD_SUITE_ADMISSION_TIMEOUT_MS = 5000
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const wrappedTestRunners = new WeakSet()
@@ -383,10 +403,11 @@ function hasConcurrentTests (file) {
  */
 function hasRunnableNewTest (file, providedContext) {
   for (const task of getTypeTasks(file.tasks)) {
-    if (task.mode === 'skip' || task.mode === 'todo') continue
+    if (task.mode === 'skip' || task.mode === 'todo' || getAnnotations(task).noAutoRetry) continue
 
     const testProperties = getVitestTestProperties(providedContext, file.filepath, getTestName(task))
-    if (testProperties.isNew && !testProperties.isAttemptToFix && !testProperties.isDisabled) {
+    if (testProperties.isNew && !testProperties.isAttemptToFix &&
+      (!testProperties.isDisabled || getAnnotations(task).mustFail)) {
       return true
     }
   }
@@ -551,6 +572,11 @@ function wrapVitestTestRunner (VitestTestRunner) {
     } = providedContext
     const testProperties = getVitestTestProperties(providedContext, task.file.filepath, testName)
     taskToTestProperties.set(task, testProperties)
+    const annotations = getAnnotations(task)
+    if (annotations.noAutoRetry && !annotations.hasFrameworkRetry &&
+      isFlakyTestRetriesEnabledForTask(providedContext, task)) {
+      task.retry = 0
+    }
 
     if (isTestManagementTestsEnabled) {
       const {
@@ -558,7 +584,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         isDisabled,
         isQuarantined,
       } = testProperties
-      if (isAttemptToFix) {
+      if (isAttemptToFix && !annotations.noAutoRetry) {
         if (task.repeats !== testManagementAttemptToFixRetries) {
           attemptToFixRetryTasks.add(task)
         }
@@ -567,10 +593,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
         attemptToFixTasks.add(task)
         attemptToFixTaskToStatuses.set(task, [])
       }
-      if (isQuarantined) {
+      if (isQuarantined && !annotations.mustFail) {
         quarantinedTasks.add(task)
       }
-      if (isDisabled) {
+      if (isDisabled && !annotations.mustFail) {
         disabledTasks.add(task)
         if (!attemptToFixTasks.has(task)) {
           // we only actually skip if the test is not being attempted to be fixed
@@ -590,7 +616,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
     }
 
-    const isEfdCandidate = isEarlyFlakeDetectionEnabled &&
+    const isEfdCandidate = !annotations.noAutoRetry && isEarlyFlakeDetectionEnabled &&
       !attemptToFixTasks.has(task) &&
       !disabledTasks.has(task) &&
       (modifiedTasks.has(task) || newTasks.has(task))
@@ -606,6 +632,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     if (
+      !annotations.noAutoRetry &&
       providedContext.isDynamicAtrEnabled &&
       isFlakyTestRetriesEnabledForTask(providedContext, task) &&
       !attemptToFixTasks.has(task) &&
@@ -819,7 +846,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
     }
 
-    const isRetryReasonAtr = numAttempt > 0 &&
+    const isRetryReasonAtr = !getAnnotations(task).noAutoRetry && numAttempt > 0 &&
       isFlakyTestRetriesEnabledForTask(providedContext, task) &&
       !attemptToFixRetryTasks.has(task) &&
       !efdRetryTasks.has(task)
@@ -833,9 +860,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isNew,
       hasDynamicName: dynamicNameTasks.has(task),
       mightHitProbe: isDiEnabled && isFailedTestReplayAllowed && numAttempt > 0,
-      isAttemptToFix: attemptToFixTasks.has(task),
-      isDisabled: disabledTasks.has(task),
-      isQuarantined: quarantinedTasks.has(task),
+      ...getReportedProperties(task),
       isRetryReasonAtr,
       isModified: modifiedTasks.has(task),
     }
@@ -1124,9 +1149,7 @@ function getStartTestsWrapper (frameworkVersion) {
             testName: getTestName(task),
             testSuiteAbsolutePath: task.file.filepath,
             isNew: newTasks.has(task),
-            isAttemptToFix: attemptToFixTasks.has(task),
-            isDisabled: disabledTasks.has(task),
-            isQuarantined: quarantinedTasks.has(task),
+            ...getReportedProperties(task),
           })
         } else if ((state === 'pass' && !isSwitchedStatus) || switchedStatus === 'pass') {
           // Attempt-to-fix can pass its last attempt while an earlier failure still fails the suite.
@@ -1175,7 +1198,8 @@ function getStartTestsWrapper (frameworkVersion) {
           }
 
           // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
-          const isAtrRetry = isFlakyTestRetriesEnabledForTask(providedContext, task) && !attemptToFixTasks.has(task) &&
+          const isAtrRetry = !getAnnotations(task).noAutoRetry &&
+            isFlakyTestRetriesEnabledForTask(providedContext, task) && !attemptToFixTasks.has(task) &&
             !efdRetryTasks.has(task)
           if (isAtrRetry) {
             // Dynamic ATR: use the per-test duration-based count instead of the flat limit.
@@ -1231,9 +1255,7 @@ function getStartTestsWrapper (frameworkVersion) {
           testName: getTestName(task),
           testSuiteAbsolutePath: task.file.filepath,
           isNew: newTasks.has(task),
-          isAttemptToFix: attemptToFixTasks.has(task),
-          isDisabled: disabledTasks.has(task),
-          isQuarantined: quarantinedTasks.has(task),
+          ...getReportedProperties(task),
         })
       }
     }

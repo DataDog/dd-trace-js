@@ -895,7 +895,7 @@ To protect a failure from both quarantine/disable and automatic retries, combine
 
 Each helper returns an annotated callback without modifying the original. Callback arguments, return values,
 errors, `this`, and arity are preserved. Apply the helper to the callback passed to `test.each` to protect every case.
-The helpers can be imported without initializing the tracer; enforcement requires the corresponding Jest, Mocha, or Playwright instrumentation.
+The helpers can be imported without initializing the tracer; enforcement requires the corresponding test framework instrumentation.
 
 Test events report `test.test_management.prevent_failure_suppression` and `test.test_management.no_auto_retry`
 as `true` when the corresponding annotation is present; absent annotations omit the tag.
@@ -904,3 +904,17 @@ assignments even when annotations override their runtime behavior. Default-branc
 these helpers do not update remote test properties. Files skipped by Test Impact Analysis produce no new observation.
 
 Framework support is described in the framework-specific sections. The legacy Jest Jasmine runner does not enforce these helpers.
+
+## Vitest test automation exclusions
+
+Annotate callbacks with `preventFailureSuppression` and `noAutoRetry` from
+`dd-trace/test-optimization`. These declarations apply to all generated `test.each`
+cases and work with Vitest's test modifiers, worker processes and supported
+browser/no-worker modes. Annotation flags travel with test task metadata before
+Vitest replaces callbacks for fixtures or parameterization.
+
+Protection overrides Datadog quarantine/disabling; retry exclusion blocks Datadog
+ATR, EFD and Attempt to Fix. Explicit native retries on a test or suite remain
+available and are reported as framework retries. Developer skips and TIA retain
+their ordinary selection semantics. Backend-assigned property tags remain visible
+when the execution policy is overridden; observed annotation tags are true-only.
