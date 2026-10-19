@@ -1340,7 +1340,7 @@ addHook({
     // Populated during the root 'suite' event so the normal finish path can include them
     // in mixed-file status calculation.
     const rootTestsByFile = new Map()
-    // Counts how many original tests per pure-root file still need their final attempt.
+    // Counts how many selected tests per pure-root file still need their final attempt.
     // Hits zero when the last test's lifecycle completes, triggering the suite finish.
     const rootPendingCountByFile = new Map()
     const rootFinalizationPendingCountByFile = new Map()
@@ -1514,9 +1514,14 @@ addHook({
         // below. Since 'suite' fires for root first, in the mixed case the ctx is created
         // here and the describe-based handler finds it already set.
         if (suite.root && suite.tests.length > 0) {
+          const { _grep: grep, _invert: invert } = this
+          const lastIndex = grep.lastIndex
+          const selectedTests = suite.tests.filter(test => grep.test(test.fullTitle()) !== !!invert)
+          // Inspecting a stateful grep must not change which tests Mocha subsequently selects.
+          if (grep.lastIndex !== lastIndex) grep.lastIndex = lastIndex
           const files = new Set(suite.tests.map(test => test.file).filter(Boolean))
           for (const file of files) {
-            const testsForFile = suite.tests.filter(t => t.file === file)
+            const testsForFile = selectedTests.filter(t => t.file === file)
             rootTestsByFile.set(file, testsForFile)
             // Only track the countdown for pure root-level files.
             // Mixed files are finished by the normal 'suite end' path.

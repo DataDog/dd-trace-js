@@ -22,4 +22,9 @@ module.exports = function RootCoverageReporter (runner) {
     // eslint-disable-next-line no-console
     console.log(`MOCHA ROOT COVERAGE AFTER REPORTERS: ${getSumHits()}`)
   })
+
+  process.once('exit', () => {
+    // eslint-disable-next-line no-console
+    console.log(`MOCHA RESTORED SUM HITS: ${getSumHits()}`)
+  })
 }

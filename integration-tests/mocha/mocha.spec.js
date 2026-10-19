@@ -2883,6 +2883,79 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           })
         }
 
+        for (const invert of [false, true]) {
+          it(`keeps filtered root-file coverage separate (invert=${invert})`, async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-filtered.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-filtered2.js',
+            ]
+            const grep = invert ? '--grep excluded --invert' : '--grep included'
+            receiver.setSettings({ itr_enabled: true, code_coverage: true, tests_skipping: false })
+            childProcess = exec(
+              'node node_modules/nyc/bin/nyc.js --silent node node_modules/mocha/bin/mocha ' +
+              `${suiteFiles.join(' ')} ${grep} --reporter ./ci-visibility/mocha-root-coverage-reporter.js`,
+              { cwd, env: { ...envVars, DD_INJECT_FORCE: 'true' } }
+            )
+            childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+            childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+            const payloadsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle') || url.endsWith('/api/v2/citestcov'), payloads => {
+                const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                const coverages = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcov'))
+                  .flatMap(({ payload }) => payload).flatMap(({ content }) => content.coverages)
+
+                assert.strictEqual(tests.length, 2)
+                assert.strictEqual(suites.length, 2)
+                assert.strictEqual(coverages.length, 2)
+                const [suiteA, suiteB] = suiteFiles.map(file => suites.find(suite => suite.meta[TEST_SUITE] === file))
+                assert.ok(suiteA.start + BigInt(suiteA.duration) <= suiteB.start,
+                  'Filtered files must finish at their own execution boundary')
+                for (const suite of suites) {
+                  assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+                  const coverage = coverages.find(item => item.test_suite_id === Number(suite.test_suite_id))
+                  const ownFile = coverage.files.find(({ filename }) => filename === suite.meta[TEST_SUITE])
+                  assert.ok(ownFile.bitmap[0] & (1 << 6), 'Each suite must cover its own executed test body')
+                  const otherFile = suiteFiles.find(file => file !== suite.meta[TEST_SUITE])
+                  const otherCoverage = coverage.files.find(({ filename }) => filename === otherFile)
+                  assert.strictEqual((otherCoverage?.bitmap[0] || 0) & (1 << 6), 0,
+                    'A suite must not claim the other file\'s executed test body')
+                }
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), payloadsPromise])
+            assert.strictEqual(exitCode, 0, testOutput)
+            assert.match(testOutput, /MOCHA RESTORED SUM HITS: 2/)
+          })
+
+          it(`keeps filtered skipped root suites skipped (invert=${invert})`, async () => {
+            const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            const grep = invert ? '--grep second --invert' : '--grep first'
+            childProcess = exec(`node node_modules/mocha/bin/mocha ./${suiteFile} ${grep}`, {
+              cwd,
+              env: { ...envVars, DD_INJECT_FORCE: 'true', MOCHA_TOP_LEVEL_SKIP_MODE: 'first' },
+            })
+
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                assert.strictEqual(tests.length, 1)
+                assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
+                assert.strictEqual(suites.length, 1)
+                assert.strictEqual(suites[0].meta[TEST_STATUS], 'skip')
+                assert.strictEqual(tests[0].test_suite_id.toString(), suites[0].test_suite_id.toString())
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0)
+          })
+        }
+
         context('suite span timing', () => {
           it('suite spans for top-level-only files are bounded to their own file execution', async () => {
             const suiteFiles = [
