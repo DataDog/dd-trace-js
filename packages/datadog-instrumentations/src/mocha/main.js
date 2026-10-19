@@ -1920,7 +1920,7 @@ addHook({
     const isModified = config.isImpactedTestsEnabled && isModifiedTestSuite(testSuiteAbsolutePath)
 
     for (const test of tests) {
-      test._ddTestAnnotations = workerTestAnnotations.get(
+      test._ddTestAnnotations ||= workerTestAnnotations.get(
         `${getTestSuitePath(test.file, process.cwd())} › ${test.fullTitle()}`
       )
       const testProperties = getTestProperties(test, config.testManagementTests)
