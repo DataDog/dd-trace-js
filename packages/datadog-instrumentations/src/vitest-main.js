@@ -1230,7 +1230,7 @@ function getFinishWrapper (exitOrClose) {
     const tests = getTypeTasks(this.state.getFiles())
     const hasExecutedTests = tests.some(test =>
       test.mode !== 'skip' && test.mode !== 'todo' &&
-      test.result?.state !== 'skip' && test.result?.state !== 'todo'
+      (test.result?.state === 'pass' || test.result?.state === 'fail')
     )
     const hasErrors = hasRunError || error ||
       this.state.getCountOfFailedTests() > 0 || this.state.getUnhandledErrors().length > 0
