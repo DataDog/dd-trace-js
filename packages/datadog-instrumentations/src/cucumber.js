@@ -845,7 +845,8 @@ function wrapRun (pl, isLatestVersion, version) {
     const testSourceLine = this.gherkinDocument?.feature?.location?.line
 
     const testAnnotations = getScenarioAnnotations(this.pickle)
-    if (testAnnotations.noAutoRetry) this.maxAttempts = frameworkRetryCount + 1
+    // Explicit native retries already include the pickle's retry-tag-filter decision.
+    if (testAnnotations.noAutoRetry && frameworkRetryCount === 0) this.maxAttempts = 1
     const testStartPayload = {
       testAnnotations,
       assignedProperties: isTestManagementTestsEnabled
