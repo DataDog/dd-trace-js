@@ -21,6 +21,19 @@ if (Cypress.env('EXCLUSIONS_MODE') === 'policy') {
 } else if (Cypress.env('EXCLUSIONS_MODE') === 'all-skipped') {
   // Verify annotation reporting when every declaration is skipped.
   it.skip('annotated skip', preventFailureSuppression(noAutoRetry(fail)))
+} else if (Cypress.env('EXCLUSIONS_MODE') === 'duplicate-skipped') {
+  // Keep protection attached to the first skipped declaration with this title.
+  it.skip('duplicate declaration', preventFailureSuppression(fail))
+  // Retry exclusion belongs only to this skipped declaration.
+  it.skip('duplicate declaration', noAutoRetry(fail))
+  // An unannotated skip must not inherit its sibling's metadata.
+  it.skip('duplicate declaration', fail)
+} else if (Cypress.env('EXCLUSIONS_MODE') === 'duplicate-mixed') {
+  it('duplicate declaration', preventFailureSuppression(() => {}))
+  // Retry exclusion belongs only to this skipped declaration.
+  it.skip('duplicate declaration', noAutoRetry(fail))
+  // An unannotated skip must not inherit its sibling's metadata.
+  it.skip('duplicate declaration', fail)
 } else if (Cypress.env('EXCLUSIONS_MODE') === 'removed') {
   it('sole', fail)
 } else if (Cypress.env('EXCLUSIONS_MODE') === 'sole') {
