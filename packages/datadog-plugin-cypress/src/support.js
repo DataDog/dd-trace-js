@@ -13,6 +13,18 @@ function getTestAnnotations (test) {
   return test._ddTestAnnotations || (test.fn && test.fn[annotationsKey]) || emptyAnnotations
 }
 
+/** @returns {object[]} Declaration metadata, including tests whose setup never executes. */
+function getTestDeclarations () {
+  const testAnnotations = []
+  Cypress.mocha.getRootSuite().eachTest(test => {
+    const annotations = getTestAnnotations(test)
+    testAnnotations.push({
+      testId: test.id, testName: test.fullTitle(), mustFail: annotations.mustFail, noAutoRetry: annotations.noAutoRetry,
+    })
+  })
+  return testAnnotations
+}
+
 /** @param {Function} declaration */
 function wrapTestDeclaration (declaration) {
   return function () {
@@ -508,15 +520,8 @@ beforeEach(function () {
 })
 
 before(function () {
-  const testAnnotations = []
-  Cypress.mocha.getRootSuite().eachTest(test => {
-    const annotations = getTestAnnotations(test)
-    testAnnotations.push({
-      testId: test.id, testName: test.fullTitle(), mustFail: annotations.mustFail, noAutoRetry: annotations.noAutoRetry,
-    })
-  })
   cy.task('dd:testSuiteStart', {
-    testAnnotations,
+    testAnnotations: getTestDeclarations(),
     testSuite: Cypress.mocha.getRootSuite().file,
     testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
     isTextTerminal: Cypress.config('isTextTerminal'),
@@ -549,6 +554,14 @@ before(function () {
 })
 
 after(() => {
+  // Root teardown still runs when a user root setup hook fails before Datadog setup.
+  // Publish all declarations so Node-side recovery can annotate the skipped tests.
+  if (!hasSuiteConfig) {
+    cy.task('dd:testDeclarations', {
+      testSuite: Cypress.mocha.getRootSuite().file,
+      testAnnotations: getTestDeclarations(),
+    })
+  }
   dynamicAtrRetryCountByTest.clear()
   try {
     if (safeGetRum(originalWindow)) {
