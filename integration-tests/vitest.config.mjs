@@ -26,6 +26,12 @@ const config = {
   },
 }
 
+if (process.env.VITEST_OPTIONAL_OPTIMIZER_PLUGINS) {
+  config.optimizeDeps = {
+    rolldownOptions: { plugins: [null, undefined, false, []] },
+  }
+}
+
 if (process.env.VITEST_THROWING_REPORTER) {
   config.test.reporters.push('./ci-visibility/vitest-reporter-throws.mjs')
 }

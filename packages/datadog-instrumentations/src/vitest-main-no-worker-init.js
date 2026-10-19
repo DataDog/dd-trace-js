@@ -541,7 +541,7 @@ function configureVitestBrowserSetupFile (viteConfig) {
     viteConfig.optimizeDeps.rolldownOptions ||= {}
     viteConfig.optimizeDeps.rolldownOptions.plugins ||= []
     if (!viteConfig.optimizeDeps.rolldownOptions.plugins.some(plugin =>
-      plugin.name === 'datadog:vitest-browser-declarations')) {
+      plugin?.name === 'datadog:vitest-browser-declarations')) {
       viteConfig.optimizeDeps.rolldownOptions.plugins.push({
         name: 'datadog:vitest-browser-declarations',
         resolveId: VITEST_BROWSER_SETUP_FILE_PLUGIN.resolveId,
