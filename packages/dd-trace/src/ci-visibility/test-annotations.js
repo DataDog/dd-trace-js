@@ -38,6 +38,7 @@ function annotate (fn, annotation) {
     ...Object.getOwnPropertyDescriptors(fn),
     length: { value: fn.length },
     name: { value: fn.name },
+    toString: { value: () => fn.toString() },
     [annotationsKey]: {
       value: Object.freeze({
         ...inherited,
