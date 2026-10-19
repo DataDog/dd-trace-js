@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 
 const SonicSession = require('../../src/nova-sonic/session')
-const { INPUT, OUTPUT, EPOCH, event, pcm, record, fixture, speech } = require('./helpers')
+const { INPUT, OUTPUT, EPOCH, event, pcm, record, fixture, speech, namedUsage } = require('./helpers')
 
 function replay (records) {
   const emitted = []
@@ -72,8 +72,14 @@ describe('Nova Sonic protocol', () => {
       assert.equal(totals.input_tokens, capture.input_tokens)
       assert.equal(totals.output_tokens, capture.output_tokens)
       const lastUsage = capture.events.filter(r => r.event.usageEvent).at(-1).event.usageEvent
-      assert.equal(totals.input_audio_tokens, lastUsage.details.total.input.speechTokens)
-      assert.equal(totals.output_audio_tokens, lastUsage.details.total.output.speechTokens)
+      for (const direction of ['input', 'output']) {
+        assert.equal(totals[`${direction}_audio_tokens`], lastUsage.details.total[direction].speechTokens)
+        assert.equal(totals[`${direction}_text_tokens`], lastUsage.details.total[direction].textTokens)
+        for (const { turn } of emitted) {
+          assert.equal(turn.metrics[`${direction}_text_tokens`] + turn.metrics[`${direction}_audio_tokens`],
+            turn.metrics[`${direction}_tokens`])
+        }
+      }
       for (const { turn, metadata } of emitted) {
         assert.ok(turn.inputPcm.length > 0)
         assert.ok(turn.output.pcm().length > 0)
@@ -211,6 +217,135 @@ describe('Nova Sonic protocol', () => {
     const turns = replay([...records, ...next])
     assert.equal(turns[0].turn.metrics.input_audio_tokens, undefined)
     assert.equal(turns[1].turn.metrics.input_audio_tokens, 6)
+  })
+
+  it('routes named cumulative deltas to their turns and ignores duplicate or stale usage', () => {
+    const first = speech()
+    const next = speech({ id: '2', offset: 1000, at: 4000 })
+    const initial = namedUsage({
+      input: 85, output: 129, inputText: 6, outputText: 24, inputAudio: 79, outputAudio: 105,
+    }, 2600)
+    const pending = namedUsage({
+      input: 95, output: 139, inputText: 8, outputText: 28, inputAudio: 87, outputAudio: 111,
+    }, 6600)
+    const turns = replay([
+      ...first.slice(0, 9), initial, initial, ...first.slice(9),
+      ...next.slice(0, 9), pending, pending, { ...initial, at: 6601 }, ...next.slice(9),
+      namedUsage({
+        input: 95, output: 149, inputText: 8, outputText: 31, inputAudio: 87, outputAudio: 118,
+      }, 7100),
+    ])
+    assert.deepEqual(turns.map(({ turn }) => turn.metrics), [
+      {
+        input_tokens: 85,
+        output_tokens: 139,
+        total_tokens: 224,
+        input_text_tokens: 6,
+        output_text_tokens: 28,
+        input_audio_tokens: 79,
+        output_audio_tokens: 111,
+      },
+      {
+        input_tokens: 10,
+        output_tokens: 10,
+        total_tokens: 20,
+        input_text_tokens: 2,
+        output_text_tokens: 3,
+        input_audio_tokens: 8,
+        output_audio_tokens: 7,
+      },
+    ])
+  })
+
+  for (const direction of ['input', 'output']) {
+    for (const bad of [undefined, null, -1, true, false, '2', 1.5, Number.MAX_SAFE_INTEGER + 1, 11]) {
+      it(`omits invalid ${direction} text without discarding audio (${bad})`, () => {
+        const [{ turn }] = replay([namedUsage({
+          input: 10,
+          output: 10,
+          inputText: 2,
+          outputText: 2,
+          inputAudio: 8,
+          outputAudio: 8,
+          [`${direction}Text`]: bad,
+        }, 0)])
+        assert.equal(turn.metrics[`${direction}_text_tokens`], undefined)
+        assert.equal(turn.metrics.input_audio_tokens, 8)
+        assert.equal(turn.metrics.output_audio_tokens, 8)
+        assert.equal(turn.metrics[`${direction === 'input' ? 'output' : 'input'}_text_tokens`], 2)
+        assert.equal(turn.metrics.total_tokens, 20)
+      })
+    }
+
+    it(`rejects ${direction} text deltas larger than the aggregate delta`, () => {
+      const records = speech()
+      records.splice(10, 0,
+        namedUsage({
+          input: 0,
+          output: 0,
+          [direction]: 10,
+          [`${direction}Text`]: 2,
+          [`${direction}Audio`]: 8,
+        }, 2701),
+        namedUsage({
+          input: 0,
+          output: 0,
+          [direction]: 15,
+          [`${direction}Text`]: 10,
+          [`${direction}Audio`]: 13,
+        }, 2702))
+      const [{ turn }] = replay(records)
+      assert.equal(turn.metrics[`${direction}_text_tokens`], undefined)
+      assert.equal(turn.metrics[`${direction}_audio_tokens`], 13)
+      assert.equal(turn.metrics[`${direction}_tokens`], 15)
+    })
+
+    for (const modality of ['Text', 'Audio']) {
+      for (const missing of [undefined, -1, 3, 21]) {
+        it(`rebases ${direction} ${modality} gaps independently across turns (${missing})`, () => {
+          const other = modality === 'Text' ? 'Audio' : 'Text'
+          const usage = (total, value, otherValue, at) => namedUsage({
+            input: 0,
+            output: 0,
+            [direction]: total,
+            [`${direction}${modality}`]: value,
+            [`${direction}${other}`]: otherValue,
+          }, at)
+          const first = speech()
+          first.splice(10, 0, usage(10, 6, 4, 2701), usage(20, missing, 8, 2702))
+          const second = speech({ id: '2', offset: 1000, at: 4000 })
+          second.splice(10, 0, usage(30, 16, 12, 6701))
+          const third = speech({ id: '3', offset: 2000, at: 8000 })
+          third.splice(10, 0, usage(40, 18, 16, 10701))
+          const turns = replay([...first, ...second, ...third])
+          assert.deepEqual(turns.map(({ turn }) => turn.metrics[`${direction}_${modality.toLowerCase()}_tokens`]),
+            [undefined, undefined, 2])
+          assert.deepEqual(turns.map(({ turn }) => turn.metrics[`${direction}_${other.toLowerCase()}_tokens`]),
+            [8, 4, 4])
+          assert.deepEqual(turns.map(({ turn }) => turn.metrics[`${direction}_tokens`]), [20, 10, 10])
+        })
+      }
+    }
+  }
+
+  it('preserves the largest safe text count and explicit zero modality counts', () => {
+    const [{ turn }] = replay([namedUsage({
+      input: Number.MAX_SAFE_INTEGER,
+      output: 0,
+      inputText: Number.MAX_SAFE_INTEGER,
+      inputAudio: 0,
+      outputText: 0,
+      outputAudio: 0,
+    }, 0)])
+    assert.deepEqual(turn.metrics, {
+      input_tokens: Number.MAX_SAFE_INTEGER,
+      output_tokens: 0,
+      total_tokens: Number.MAX_SAFE_INTEGER,
+      input_text_tokens: Number.MAX_SAFE_INTEGER,
+      input_audio_tokens: 0,
+      output_text_tokens: 0,
+      output_audio_tokens: 0,
+    })
   })
 
   it('survives malformed event JSON and emits a partial error exactly once', () => {

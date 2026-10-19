@@ -184,9 +184,12 @@ workflow, if present, and share a conversation session ID.
 
 The LLM child contains transcripts, tool calls/results, token usage, and bounded inline WAV audio.
 Invalid or oversized audio falls back to text without dropping independently valid speech timing.
-Audio-token counts are subsets of the input/output token totals. Input speech offsets select the audio
-clip; time to first audio uses local receipt of `userSpeechEnd` and the first output audio. Output speech
-timing projects PCM playback, including queueing, underrun silence, and interruption cuts; it does not
+The optional `input_text_tokens`, `output_text_tokens`, `input_audio_tokens`, and `output_audio_tokens`
+metrics are per-turn subsets of the inclusive input/output totals. Reported zeros are preserved; missing
+or invalid modality counters remain absent, with independent recovery baselines. Cache counts are not
+inferred. Input speech offsets select the audio clip; time to first audio uses local receipt of
+`userSpeechEnd` and the first output audio. Output speech timing projects PCM playback, including
+queueing, underrun silence, and interruption cuts; it does not
 measure sound heard at a device. Input is observed as the SDK consumes it, which may precede transmission.
 
 Original Nova Sonic and restarting a different prompt on the same connection are unsupported. On a prompt
