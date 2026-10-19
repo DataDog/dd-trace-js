@@ -3530,6 +3530,55 @@ describe(`cucumber@${version} commonJS`, () => {
 
   context('test automation exclusions', () => {
     for (const parallel of [false, true]) {
+      for (const atrEnabled of [false, true]) {
+        const run = parallel && version !== 'latest' && satisfies(version, '<11.0.0') ? it.skip : it
+        run(`preserves native retry tag filters with ATR ${atrEnabled ? 'enabled' : 'disabled'} ` +
+          `in ${parallel ? 'parallel' : 'serial'} excluded scenarios`, async () => {
+          const file = 'ci-visibility/features-automation-exclusions/retry-filter.feature'
+          const messagesPath = `${cwd}/retry-filter-attempts.ndjson`
+          receiver.setSettings({
+            flaky_test_retries_enabled: atrEnabled,
+            early_flake_detection: { enabled: false },
+            test_management: { enabled: false },
+          })
+          childProcess = exec(
+            `./node_modules/.bin/cucumber-js ${file} --retry 2 --retry-tag-filter @retryable ` +
+            `--format message:${messagesPath} ${parallel ? '--parallel 2' : ''}`, {
+              cwd,
+              env: { ...getCiVisAgentlessConfig(receiver.port), DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2' },
+            })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              for (const [name, count] of [['matching retry filter', 3], ['excluded by retry filter', 1]]) {
+                const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+                const reportsRetries = version === 'latest' || satisfies(version, '>=8.0.0')
+                assert.strictEqual(attempts.length, reportsRetries ? count : 1, `${name}: ${testOutput}`)
+                for (const test of attempts) {
+                  assert.strictEqual(test.meta['test.test_management.no_auto_retry'], 'true', name)
+                  assert.strictEqual(test.meta[TEST_STATUS], 'fail', name)
+                  if (test.meta[TEST_IS_RETRY] === 'true') {
+                    assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext, name)
+                  }
+                }
+              }
+            })
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, 1, testOutput)
+          const messages = fs.readFileSync(messagesPath, 'utf8').trim().split('\n').map(line => JSON.parse(line))
+          const pickles = new Map(messages.filter(message => message.pickle)
+            .map(({ pickle }) => [pickle.id, pickle.name]))
+          const cases = new Map(messages.filter(message => message.testCase)
+            .map(({ testCase }) => [testCase.id, testCase.pickleId]))
+          const executions = messages.filter(message => message.testCaseStarted)
+            .map(({ testCaseStarted }) => pickles.get(cases.get(testCaseStarted.testCaseId)))
+          assert.strictEqual(executions.filter(name => name === 'matching retry filter').length, 3)
+          assert.strictEqual(executions.filter(name => name === 'excluded by retry filter').length, 1)
+        })
+      }
       for (const mode of ['atr', 'efd', 'native']) {
         // Parallel Test Management requires the worker runTestCase lifecycle available in Cucumber 11.
         const run = parallel && version !== 'latest' && satisfies(version, '<11.0.0') ? it.skip : it
