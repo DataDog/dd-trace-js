@@ -1,0 +1,11 @@
+_v: 1
+name: avsc
+display_name: avsc
+description: Instruments avsc serialization and deserialization to attach Avro schema metadata to active spans when Data
+  Streams Monitoring is enabled.
+packages:
+- name: avsc
+category:
+- other
+systems: []
+creation_date: '2024-10-04'

@@ -1,0 +1,11 @@
+_v: 1
+name: sharedb
+display_name: ShareDB
+description: Instruments ShareDB server request handling for document and snapshot fetches, queries, subscriptions,
+  operations, handshakes, and presence actions.
+packages:
+- name: sharedb
+category:
+- other
+systems: []
+creation_date: '2021-08-23'
