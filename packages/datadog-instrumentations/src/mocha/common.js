@@ -2,6 +2,7 @@
 
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
+const { getTestAnnotations } = require('../../../dd-trace/src/ci-visibility/test-annotations')
 const { getCallSites } = require('../../../dd-trace/src/plugins/util/stacktrace')
 const { DD_MAJOR } = require('../../../../version')
 const { testToStartLine } = require('./utils')
@@ -38,6 +39,11 @@ function addMochaRunHooks (versions, wrapMochaRun) {
     }
     metadata = { moduleBaseDir: hookMeta?.moduleBaseDir }
     patchedMochaConstructors.set(Mocha, metadata)
+    shimmer.wrap(Mocha.prototype, 'ui', ui => function () {
+      const result = ui.apply(this, arguments)
+      this.suite.on('pre-require', preserveDeclarationAnnotations)
+      return result
+    })
     return wrapMochaRun(Mocha, frameworkVersion, metadata)
   }
 
@@ -74,6 +80,30 @@ function addMochaRunHooks (versions, wrapMochaRun) {
     file: 'index.js',
     patchDefault: false,
   }, wrapMochaPackage)
+}
+
+/** @param {object} context */
+function preserveDeclarationAnnotations (context) {
+  for (const key of ['it', 'specify', 'test', 'xit', 'xspecify']) {
+    const declare = context[key]
+    if (typeof declare !== 'function') continue
+    context[key] = shimmer.wrapFunction(declare, wrapDeclaration)
+    for (const modifier of ['skip', 'only']) {
+      if (typeof declare[modifier] === 'function') {
+        context[key][modifier] = shimmer.wrapFunction(declare[modifier], wrapDeclaration)
+      }
+    }
+  }
+}
+
+/** @param {Function} original */
+function wrapDeclaration (original) {
+  return function (title, fn) {
+    const test = original.apply(this, arguments)
+    // Mocha discards callbacks on skipped tests before constructing its Test object.
+    if (test && !test.fn) test._ddDeclaredAnnotations = getTestAnnotations(fn)
+    return test
+  }
 }
 
 // mocha-each support
