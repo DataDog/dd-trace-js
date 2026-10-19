@@ -160,8 +160,6 @@ never weaken or delete assertions to make them pass.
 - Commit format: `type(scope): description`.
 - Before opening or updating a PR, read and follow `.github/pull_request_template.md`.
 - All required tests must pass; the repository follows an all-green policy.
-- Every `curl` run in CI must fail on HTTP errors and retry (`curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused`),
-  and its failure must stop the job (`set -o pipefail` for `curl | x`; in a Dockerfile `RUN`, download to a file first).
 
 ## Specialized Workflows
 
