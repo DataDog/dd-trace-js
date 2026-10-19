@@ -84,13 +84,11 @@ function promptFromData (data, source) {
 }
 
 /**
- * Copy a prompt with a different source.
  * @param {ManagedPrompt} prompt
- * @param {'registry'|'cache'|'fallback'|'ff'|'resolve'} source
  */
-function withSource (prompt, source) {
-  if (source === prompt.source) return prompt
-  return new ManagedPrompt({ ...prompt, source })
+function withCacheSource (prompt) {
+  if (SOURCE_CACHE === prompt.source) return prompt
+  return new ManagedPrompt({ ...prompt, source: /** @type {ManagedPrompt['source']} */ (SOURCE_CACHE) })
 }
 
 function detailFromBody (body) {
@@ -310,7 +308,7 @@ class PromptManager {
     const cacheable = generationAtStart === this.cacheGeneration && latest
     if (result.prompt) {
       if (cacheable) {
-        const cached = withSource(result.prompt, SOURCE_CACHE)
+        const cached = withCacheSource(result.prompt)
         if (hot) this.hotCache.set(request.key, cached)
         if (!request.resolve) this.warmCache.set(request.key, cached)
       }
@@ -335,7 +333,7 @@ class PromptManager {
   async #backgroundFetch (request, signal) {
     const result = await this.#fetchAndCache(request, { hot: false, signal })
     if (!result.cacheable) return
-    if (result.prompt) return withSource(result.prompt, SOURCE_CACHE)
+    if (result.prompt) return withCacheSource(result.prompt)
     if (result.notFound) return
     throw new Error(result.reason)
   }
