@@ -2186,6 +2186,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx.assignedManagementProperties = assignedManagementProperties
         ctx.mustFail = mustFail
         ctx.noAutoRetry = noAutoRetry
+        ctx.hadErrorsBeforeExecution = event.test.errors.length > 0
         ctx.isDisabled = isDisabled
         ctx.isQuarantined = isQuarantined
         ctx.isModified = isModified
@@ -2655,7 +2656,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     ) {
       if (ctx.noAutoRetry) {
         const retryCount = this.hasExplicitRetries ? Number(this.global[RETRY_TIMES]) : 0
-        if (status === 'fail' && numberOfTestInvocations <= retryCount) return
+        if (status === 'fail' && !ctx.hadErrorsBeforeExecution && numberOfTestInvocations <= retryCount) return
         return ctx.isQuarantined ? 'skip' : status
       }
       const numberOfExecutedRetries = retriedTestsToNumAttempts.get(testName) ?? 0
