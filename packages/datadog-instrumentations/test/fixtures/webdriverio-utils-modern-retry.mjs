@@ -1,22 +1,21 @@
-const testFrameworkFnWrapper = async function (_wrapFunctions, type, { specFn }, _before, _after, _cid, _retries,
-  hookName) {
-  let error
-  if (_before?.beforeFn) await _before.beforeFn()
-  try {
-    return specFn(type, hookName)
-  } catch (caughtError) {
-    error = caughtError
-  }
-  throw error
-}
-
 async function executeAsync (fn, retries, args = [], timeout = 2e4) {
   this.wdioRetries = retries.attempts
+  let timer
+  let mochaTimedOut = false
   try {
-    const result = await fn.apply(this, args)
+    const result = await Promise.race([
+      fn.apply(this, args),
+      new Promise((resolve, reject) => {
+        timer = setTimeout(() => {
+          mochaTimedOut = typeof this?._runnable?._timeoutError === 'function'
+          reject(mochaTimedOut ? this._runnable._timeoutError(timeout) : new Error(`Timeout after ${timeout}ms`))
+        }, timeout)
+      }),
+    ])
+    clearTimeout(timer)
     return await result
   } catch (err) {
-    const mochaTimedOut = err.message === 'Timeout'
+    clearTimeout(timer)
     if (retries.limit > retries.attempts && !mochaTimedOut) {
       retries.attempts++
       return await executeAsync.call(this, fn, retries, args, timeout)
@@ -25,4 +24,4 @@ async function executeAsync (fn, retries, args = [], timeout = 2e4) {
   }
 }
 
-export { executeAsync, testFrameworkFnWrapper }
+export { executeAsync }
