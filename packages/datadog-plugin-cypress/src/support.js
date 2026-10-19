@@ -3,6 +3,40 @@
 // No optional chaining or nullish coalescing in this file: Cypress 12 bundles it with webpack 4,
 // whose parser predates both, and its babel-loader skips node_modules.
 
+const annotationsKey = Symbol.for('dd-trace:test-annotations')
+const emptyAnnotations = { mustFail: false, noAutoRetry: false }
+let frameworkRetries = 0
+let hasSuiteConfig = false
+
+/** @param {object} test */
+function getTestAnnotations (test) {
+  return test._ddTestAnnotations || (test.fn && test.fn[annotationsKey]) || emptyAnnotations
+}
+
+/** @param {Function} declaration */
+function wrapTestDeclaration (declaration) {
+  return function () {
+    const callback = arguments[arguments.length - 1]
+    const test = declaration.apply(this, arguments)
+    if (test && typeof callback === 'function' && callback[annotationsKey]) {
+      const { mustFail, noAutoRetry } = callback[annotationsKey]
+      test._ddTestAnnotations = { mustFail, noAutoRetry }
+    }
+    return test
+  }
+}
+
+// Mocha discards the callback of it.skip(). Capture annotations while it is still known.
+for (const name of ['it', 'specify', 'xit', 'xspecify']) {
+  const declareTest = globalThis[name]
+  if (typeof declareTest !== 'function') continue
+  const wrapped = Object.assign(wrapTestDeclaration(declareTest), declareTest)
+  for (const modifier of ['only', 'skip']) {
+    if (typeof declareTest[modifier] === 'function') wrapped[modifier] = wrapTestDeclaration(declareTest[modifier])
+  }
+  globalThis[name] = wrapped
+}
+
 let rumFlushWaitMillis = 500
 let rumTestExecutionIdCookieName
 
@@ -252,7 +286,11 @@ Cypress.on('fail', (err, runnable) => {
   }
 
   const testName = runnable.fullTitle()
-  const { isAttemptToFix, isQuarantined, isDisabled } = getTestProperties(testName)
+  const annotations = getTestAnnotations(runnable)
+  const properties = getTestProperties(testName)
+  const isAttemptToFix = properties.isAttemptToFix && !annotations.noAutoRetry
+  const isQuarantined = properties.isQuarantined && !annotations.mustFail
+  const isDisabled = properties.isDisabled && !annotations.mustFail
 
   // Suppress failures for quarantined or disabled tests so they don't affect the exit code.
   // Attempt-to-fix ignores quarantine/disabled suppression and keeps the normal framework result.
@@ -312,7 +350,8 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
     const { isAttemptToFix } = getTestProperties(testName)
     const isSkipped = test.isPending()
 
-    const isAtemptToFix = isTestManagementEnabled && isAttemptToFix && !isSkipped
+    const annotations = getTestAnnotations(test)
+    const isAtemptToFix = isTestManagementEnabled && isAttemptToFix && !isSkipped && !annotations.noAutoRetry
     const isModified = isImpactedTestsEnabled && isModifiedTest
     const isNew = isKnownTestsEnabled && !isSkipped && isNewTest(test)
 
@@ -327,7 +366,7 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
     // Add the original test first
     testsWithRetries.push(test)
 
-    if (!isTestIsolationEnabled) {
+    if (!isTestIsolationEnabled || annotations.noAutoRetry) {
       continue
     }
 
@@ -377,6 +416,23 @@ function getDynamicAtrTestKey (test) {
  * @param {{ id: string, _retries: number }} test
  */
 function configureTestRetries (test) {
+  if (hasSuiteConfig && getTestAnnotations(test).noAutoRetry) {
+    // Restore developer configuration after the plugin's global ATR configuration.
+    // Read the nearest test/suite override before or after Cypress resolves it.
+    let retries = frameworkRetries
+    for (let current = test; current; current = current.parent) {
+      const config = current._testConfig
+      const overrides = config && (config.unverifiedTestConfig || config)
+      if (overrides && overrides.retries !== undefined) {
+        const configured = overrides.retries
+        retries = typeof configured === 'number' ? configured : configured[isTextTerminal ? 'runMode' : 'openMode']
+        break
+      }
+    }
+    test._retries = Number.isSafeInteger(retries) ? retries : 0
+    // Cypress resolves local retries after this event; the support hook reapplies this value.
+    return
+  }
   if (shouldDisableFrameworkRetries(test)) {
     disableFrameworkRetries(test)
     return
@@ -427,6 +483,7 @@ beforeEach(function () {
   runBeforeEachTask({
     testId: currentTest.id,
     testName,
+    annotations: getTestAnnotations(currentTest),
     testSuite: Cypress.mocha.getRootSuite().file,
     isEfdRetry: Cypress.mocha.getRunner().suite.ctx.currentTest._ddIsEfdRetry,
     efdRetryIndex: Cypress.mocha.getRunner().suite.ctx.currentTest._ddEfdRetryIndex,
@@ -454,12 +511,22 @@ beforeEach(function () {
 })
 
 before(function () {
+  const testAnnotations = []
+  Cypress.mocha.getRootSuite().eachTest(test => {
+    const annotations = getTestAnnotations(test)
+    testAnnotations.push({
+      testName: test.fullTitle(), mustFail: annotations.mustFail, noAutoRetry: annotations.noAutoRetry,
+    })
+  })
   cy.task('dd:testSuiteStart', {
+    testAnnotations,
     testSuite: Cypress.mocha.getRootSuite().file,
     testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
     isTextTerminal: Cypress.config('isTextTerminal'),
   }).then((suiteConfig) => {
     if (suiteConfig) {
+      hasSuiteConfig = true
+      frameworkRetries = suiteConfig.frameworkRetries
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
       isKnownTestsEnabled = suiteConfig.isKnownTestsEnabled
       knownTestsForSuite = suiteConfig.knownTestsForSuite
@@ -472,7 +539,7 @@ before(function () {
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
       isDynamicAtrEnabled = suiteConfig.isDynamicAtrEnabled
       isTextTerminal = suiteConfig.isTextTerminal
-      if (isDynamicAtrEnabled && isTextTerminal) {
+      if (isTextTerminal) {
         // The first test event can precede this task, and an earlier user hook can skip our beforeEach.
         Cypress.mocha.getRootSuite().eachTest(configureTestRetries)
       }
@@ -525,6 +592,7 @@ afterEach(function () {
     isNew: currentTest._ddIsNew,
     isEfdRetry: currentTest._ddIsEfdRetry,
     isAttemptToFix: currentTest._ddIsAttemptToFix,
+    annotations: getTestAnnotations(currentTest),
     isModified: currentTest._ddIsModified,
     duration: currentTest.duration,
     // Mark suppressed tests so the plugin can tag them with the correct test management reason.
