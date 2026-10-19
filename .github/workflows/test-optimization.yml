@@ -166,6 +166,7 @@ jobs:
           - playwright-test-management-disabled-quarantine
           - playwright-active-test-span
           - playwright-impacted-tests
+          - playwright-exclusions
           - playwright-final-status
     name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
