@@ -123,6 +123,7 @@ const launcherFixtureModulePath = path.join(
   'index.js'
 )
 const utilsFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-utils.mjs')
+const modernRetryUtilsFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-utils-modern-retry.mjs')
 const utilsFixtureModulePath = path.join(
   __dirname,
   'fixtures',
@@ -132,6 +133,16 @@ const utilsFixtureModulePath = path.join(
   'build',
   'index.js'
 )
+const modernRetryUtilsFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'utils-v10',
+  'build',
+  'index.js'
+)
+const modernRetryUtilsFixtureTarget = { moduleName: '@wdio/utils', filePath: 'build/index.js' }
 const browserFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-browser.mjs')
 const browserFixtureModulePaths = ['index.js', 'node.js'].map(file => path.join(
   __dirname,
@@ -734,6 +745,20 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rumCleanupCallback/)
     assert.strictEqual(rewrittenSource.match(/__apm\$ctx\.rumStartCallback/g)?.length, 1)
+    assert.match(rewrittenSource, /__apm\$ctx\.retryCallback/)
+  })
+
+  it('rewrites the WebdriverIO 10.1 executeAsync retry branch', () => {
+    const source = fs.readFileSync(modernRetryUtilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(
+      source,
+      modernRetryUtilsFixtureModulePath,
+      'module',
+      modernRetryUtilsFixtureTarget
+    )
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /__apm\$ctx\.rumStartCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.retryCallback/)
   })
 
@@ -1500,6 +1525,50 @@ describe('webdriverio instrumentation', () => {
 
       const { executeAsync } = await import(pathToFileURL(outputPath))
       const result = await executeAsync(() => {
+        attempts++
+        if (attempts === 1) {
+          throw new Error('failed attempt')
+        }
+        return attempts
+      }, retries)
+
+      assert.strictEqual(result, 2)
+      assert.strictEqual(retries.attempts, 1)
+      assert.deepStrictEqual(callbacks, ['failed attempt'])
+    } finally {
+      executeAsyncCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('runs the WebdriverIO retry callback before a 10.1 failed test is retried', async () => {
+    const source = fs.readFileSync(modernRetryUtilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(
+      source,
+      modernRetryUtilsFixtureModulePath,
+      'module',
+      modernRetryUtilsFixtureTarget
+    )
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const callbacks = []
+    const retries = { attempts: 0, limit: 2 }
+    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const subscriber = {
+      start (ctx) {
+        ctx.retryCallback = async function (error) {
+          callbacks.push(error.message)
+          await new Promise(resolve => setImmediate(resolve))
+        }
+      },
+    }
+    let attempts = 0
+
+    executeAsyncCh.subscribe(subscriber)
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+
+      const { executeAsync } = await import(pathToFileURL(outputPath))
+      const result = await executeAsync.call({}, () => {
         attempts++
         if (attempts === 1) {
           throw new Error('failed attempt')

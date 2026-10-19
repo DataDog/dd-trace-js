@@ -518,6 +518,23 @@ module.exports = [
   {
     module: {
       name: '@wdio/utils',
+      versionRange: '>=10.1.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'TryStatement:has(CatchClause IfStatement[test.operator="&&"]' +
+      '[test.left.operator=">"][test.left.left.object.name="retries"]' +
+      '[test.left.left.property.name="limit"][test.left.right.object.name="retries"]' +
+      '[test.left.right.property.name="attempts"]' +
+      '[test.right.operator="!"][test.right.argument.name="mochaTimedOut"]) > BlockStatement',
+    channelName: 'executeAsync',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackName: 'rumStartCallback',
+    },
+  },
+  {
+    module: {
+      name: '@wdio/utils',
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
@@ -525,6 +542,25 @@ module.exports = [
       'IfStatement[test.operator=">"][test.left.object.name="retries"]' +
       '[test.left.property.name="limit"][test.right.object.name="retries"]' +
       '[test.right.property.name="attempts"]',
+    channelName: 'executeAsync',
+    transform: 'awaitContextCallback',
+    transformOptions: {
+      callbackArgumentNames: ['err'],
+      callbackName: 'retryCallback',
+    },
+  },
+  {
+    module: {
+      name: '@wdio/utils',
+      versionRange: '>=10.1.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="executeAsync"] CatchClause ' +
+      'IfStatement[test.operator="&&"]' +
+      '[test.left.operator=">"][test.left.left.object.name="retries"]' +
+      '[test.left.left.property.name="limit"][test.left.right.object.name="retries"]' +
+      '[test.left.right.property.name="attempts"]' +
+      '[test.right.operator="!"][test.right.argument.name="mochaTimedOut"]',
     channelName: 'executeAsync',
     transform: 'awaitContextCallback',
     transformOptions: {
