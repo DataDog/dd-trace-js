@@ -517,6 +517,19 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       }, { RUN_JEST_TWICE: '1' })
     })
 
+    it('resets annotation observations before repeated runCLI reconciliation', async () => {
+      receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 2 } })
+      setProperties('test-exclusions-repeated', ['annotation removal'], { quarantined: true, attempt_to_fix: true })
+      await runExclusions('test-exclusions-repeated', 1, (spans, events) => {
+        assert.strictEqual(spans.length, 4)
+        assert.strictEqual(spans.filter(span => span.meta[noAutoRetryTag] === 'true').length, 1)
+        const sessions = events.filter(event => event.type === 'test_session_end')
+        assert.strictEqual(sessions.length, 2)
+        assert.strictEqual(sessions[0].content.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(sessions[1].content.meta[TEST_STATUS], 'fail')
+      }, { RUN_JEST_TWICE: '1' })
+    })
+
     it('preserves only/skip modifiers and parameterized done callbacks', async () => {
       receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
       setProperties('test-exclusions-modifiers', ['selected 1', 'selected 2', 'skipped 1', 'skipped 2'],
