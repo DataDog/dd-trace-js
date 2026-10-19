@@ -7545,6 +7545,42 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('test automation exclusions', () => {
+    const runReviewFixture = async (file, expectedExit, check, env = {}, command) => {
+      childProcess = exec(command || `node node_modules/mocha/bin/mocha ci-visibility/test-management/${file}.js`, {
+        cwd,
+        env: { ...getCiVisAgentlessConfig(receiver.port), DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2', ...env },
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          check(payloads.flatMap(({ payload }) => payload.events))
+        })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, expectedExit, testOutput)
+    }
+
+    parallelIt('clears annotation observations between parallel runs', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        mocha: {
+          suites: {
+            'ci-visibility/test-management/mocha-review-repeated.js': {
+              tests: { 'same test': { properties: { quarantined: true } } },
+            },
+          },
+        },
+      })
+      await runReviewFixture('mocha-review-repeated', 0, events => {
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.strictEqual(tests.length, 2)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['pass', 'fail'])
+        assert.strictEqual(tests[0].meta['test.test_management.prevent_failure_suppression'], 'true')
+        assert.strictEqual(tests[1].meta['test.test_management.prevent_failure_suppression'], undefined)
+        assert.match(testOutput, /failures: 0,0/)
+      }, {}, 'node ci-visibility/run-mocha-review-repeated.js')
+    })
+
     for (const parallel of [false, true]) {
       for (const scenario of [
         {

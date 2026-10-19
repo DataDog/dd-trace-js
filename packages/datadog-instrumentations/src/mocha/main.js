@@ -1740,6 +1740,7 @@ addHook({
   filePattern: String.raw`lib/nodejs/parallel-buffered-runner\.(?:c?js)$`,
 }, (ParallelBufferedRunner, frameworkVersion) => {
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files, options = {} }) {
+    workerTestAnnotations.clear()
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
