@@ -2861,8 +2861,8 @@ describe('Safe payload capture', () => {
       const snapshot = createSafeSnapshot(container)
 
       assert.strictEqual(snapshot.incomplete, true)
-      assert.ok(reads() <= 9_999)
-      assert.ok(Object.keys(captured(snapshot)).length < 20_000)
+      assert.strictEqual(reads(), 9_999)
+      assert.strictEqual(Object.keys(captured(snapshot)).length, 9_999)
     })
 
     it('should not read pending sibling work once the entry budget is exhausted', () => {
@@ -2875,10 +2875,10 @@ describe('Safe payload capture', () => {
       const snapshot = createSafeSnapshot(input)
 
       assert.strictEqual(snapshot.incomplete, true)
-      assert.ok(Object.keys(/** @type {Record<string, unknown>} */ (captured(snapshot).a)).length > 0)
       assert.ok(!('b' in captured(snapshot)))
       assert.strictEqual(second.reads(), 0)
-      assert.ok(first.reads() <= 9_999)
+      assert.strictEqual(first.reads(), 9_998)
+      assert.strictEqual(Object.keys(/** @type {Record<string, unknown>} */ (captured(snapshot).a)).length, 9_998)
     })
 
     it('should preserve original key order and array indexes in partial captures', () => {
