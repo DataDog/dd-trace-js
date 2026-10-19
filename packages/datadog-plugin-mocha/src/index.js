@@ -853,7 +853,7 @@ class MochaPlugin extends CiPlugin {
       const store = storage('legacy').getStore()
       // skipped through it.skip, so the span is not created yet
       // for this test
-      if (!store) {
+      if (!ctx.currentStore) {
         const span = this.startTestSpan(ctx)
 
         ctx.parentStore = store

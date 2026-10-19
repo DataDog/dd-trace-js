@@ -2,7 +2,7 @@
 
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
-const { getTestAnnotations } = require('../../../dd-trace/src/ci-visibility/test-annotations')
+const { getTestAnnotations, copyTestAnnotations } = require('../../../dd-trace/src/ci-visibility/test-annotations')
 const { getCallSites } = require('../../../dd-trace/src/plugins/util/stacktrace')
 const { DD_MAJOR } = require('../../../../version')
 const { testToStartLine } = require('./utils')
@@ -133,15 +133,33 @@ addHook({
   patched.add(mochaEach)
 
   return shimmer.wrapFunction(mochaEach, mochaEach => function (...args) {
-    const [params] = args
-    const { it, ...rest } = mochaEach.apply(this, args)
-    return {
-      it: function (title) {
-        parameterizedTestCh.publish({ title, params })
-        it.apply(this, arguments)
-      },
-      ...rest,
+    const [params, declare = global.it] = args
+    let sourceTestFn
+    /** @param {Function} original */
+    const wrapRow = original => function (title, fn) {
+      copyTestAnnotations(sourceTestFn, fn)
+      return original.apply(this, arguments)
     }
+    const rowDeclaration = shimmer.wrapFunction(declare, wrapRow)
+    for (const modifier of ['skip', 'only']) {
+      if (typeof declare[modifier] === 'function') {
+        rowDeclaration[modifier] = shimmer.wrapFunction(declare[modifier], wrapRow)
+      }
+    }
+    const declarations = mochaEach.call(this, params, rowDeclaration, ...args.slice(2))
+    /** @param {Function} original */
+    const wrapEachDeclaration = original => function (title, fn) {
+      sourceTestFn = fn
+      parameterizedTestCh.publish({ title, params })
+      return original.apply(this, arguments)
+    }
+    declarations.it = shimmer.wrapFunction(declarations.it, wrapEachDeclaration)
+    for (const modifier of ['skip', 'only']) {
+      if (typeof declarations.it[modifier] === 'function') {
+        declarations.it[modifier] = shimmer.wrapFunction(declarations.it[modifier], wrapEachDeclaration)
+      }
+    }
+    return declarations
   })
 })
 
