@@ -29,6 +29,33 @@ describe(`Playwright automation exclusions@${version}`, () => {
     afterEach(async () => { child?.kill(); await receiver.stop() })
   }
 
+  // The reusable config runner entry point used by this fixture is available from Playwright 1.60.
+  const lifecycleIt = version === 'latest' || satisfies(version, '>=1.60.0') ? it : it.skip
+  lifecycleIt('preserves native retries after disabling the plugin on a reused project', async () => {
+    receiver.setSettings({ flaky_test_retries_enabled: true })
+    child = exec('node ./ci-visibility/playwright-rerun-console.js', {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        NODE_OPTIONS: '',
+        TEST_DIR: './ci-visibility/playwright-tests-exclusions-rerun',
+        TEST_SHOULD_FAIL: 'true',
+        PLAYWRIGHT_DISABLE_PLUGIN_BETWEEN_RUNS: '1',
+        PLAYWRIGHT_NATIVE_RETRIES_AFTER_DISABLE: '2',
+        DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+      },
+    })
+    child.stdout.on('data', chunk => { output += chunk.toString() })
+    child.stderr.on('data', chunk => { output += chunk.toString() })
+    const [exitCode] = await once(child, 'close')
+    const [firstRun, secondRun] = output.split('PLAYWRIGHT_PLUGIN_DISABLED\n')
+    assert.ok(secondRun, output)
+    const executions = part => part.split('PLAYWRIGHT_EXCLUDED_TEST_EXECUTED\n').length - 1
+    assert.strictEqual(executions(firstRun), 1, output)
+    assert.strictEqual(executions(secondRun), 3, output)
+    assert.strictEqual(exitCode, 0, output)
+  })
+
   for (const mode of ['atr', 'efd', 'native']) {
     const run = supported ? it : it.skip
     run(`preserves ${mode} policy and assigned tags`, async () => {
