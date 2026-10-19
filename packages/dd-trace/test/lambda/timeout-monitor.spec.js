@@ -761,6 +761,95 @@ describe('Lambda timeout monitor', () => {
     })
   }
 
+  for (const symbol of [HANDLER_STREAMING, HANDLER_HIGHWATERMARK]) {
+    for (const inherited of [false, true]) {
+      it(`does not invoke an ${inherited ? 'inherited' : 'own'} ${symbol.description} getter`, () => {
+        const original = () => 'done'
+        const target = inherited ? Object.create(Object.getPrototypeOf(original)) : original
+        if (inherited) Object.setPrototypeOf(original, target)
+        const getter = sinon.stub().throws(new Error('handler metadata getter must not run'))
+        Object.defineProperty(target, symbol, { get: getter })
+        const other = symbol === HANDLER_STREAMING ? HANDLER_HIGHWATERMARK : HANDLER_STREAMING
+        const value = other === HANDLER_STREAMING ? 'response' : 0
+        original[other] = value
+
+        const handler = datadog(original)
+        assert.strictEqual(Object.hasOwn(handler, symbol), false)
+        assert.strictEqual(handler[other], value)
+        context.done = () => {}
+        const args = other === HANDLER_STREAMING ? [{}, {}, context] : [{}, context]
+        assert.strictEqual(handler(...args), 'done')
+        clock.tick(100)
+        assert.strictEqual(getter.callCount, 0)
+        assert.strictEqual(killAll.callCount, 0)
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+  }
+
+  it('preserves inherited streaming metadata on a frozen handler', () => {
+    const original = () => undefined
+    const prototype = Object.create(Function.prototype)
+    prototype[HANDLER_STREAMING] = 'response'
+    prototype[HANDLER_HIGHWATERMARK] = 0
+    Object.setPrototypeOf(original, prototype)
+    Object.freeze(original)
+
+    const handler = datadog(original)
+    assert.strictEqual(handler[HANDLER_STREAMING], 'response')
+    assert.strictEqual(handler[HANDLER_HIGHWATERMARK], 0)
+    context.done = () => {}
+    assert.strictEqual(handler({}, {}, context), undefined)
+    clock.tick(100)
+    assert.strictEqual(killAll.callCount, 0)
+    assert.strictEqual(clock.countTimers(), 0)
+  })
+
+  for (const inherited of [false, true]) {
+    it(`does not inspect a ${inherited ? 'prototype' : 'handler'} Proxy for handler metadata`, () => {
+      const original = (_event, _context) => 'done'
+      const target = inherited ? Object.create(Function.prototype) : original
+      target[HANDLER_STREAMING] = 'response'
+      target[HANDLER_HIGHWATERMARK] = 16384
+      const trap = sinon.stub().throws(new Error('handler metadata trap must not run'))
+      const proxy = new Proxy(target, {
+        get (target, name, receiver) {
+          if (name === 'length' || name === HANDLER_STREAMING || name === HANDLER_HIGHWATERMARK) return trap()
+          return Reflect.get(target, name, receiver)
+        },
+        getOwnPropertyDescriptor: trap,
+        getPrototypeOf: trap,
+      })
+      if (inherited) Object.setPrototypeOf(original, proxy)
+
+      const handler = datadog(inherited ? original : proxy)
+      assert.strictEqual(handler.length, inherited ? 2 : 0)
+      assert.strictEqual(Object.hasOwn(handler, HANDLER_STREAMING), false)
+      assert.strictEqual(Object.hasOwn(handler, HANDLER_HIGHWATERMARK), false)
+      context.done = () => {}
+      assert.strictEqual(handler({}, context), 'done')
+      clock.tick(100)
+      assert.strictEqual(trap.callCount, 0)
+      assert.strictEqual(killAll.callCount, 0)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+  }
+
+  it('does not invoke a handler length getter', () => {
+    const original = () => 'done'
+    const getter = sinon.stub().throws(new Error('handler length getter must not run'))
+    Object.defineProperty(original, 'length', { get: getter })
+
+    const handler = datadog(original)
+    assert.strictEqual(handler.length, 0)
+    context.done = () => {}
+    assert.strictEqual(handler({}, context), 'done')
+    clock.tick(100)
+    assert.strictEqual(getter.callCount, 0)
+    assert.strictEqual(killAll.callCount, 0)
+    assert.strictEqual(clock.countTimers(), 0)
+  })
+
   it('does not require a context or an initialized tracer', () => {
     const receiver = {}
     const handler = datadog(function () { return this })

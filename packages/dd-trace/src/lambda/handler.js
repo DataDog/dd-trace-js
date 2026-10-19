@@ -121,7 +121,7 @@ exports.datadog = function datadog (lambdaHandler) {
       // An observed callback can complete later regardless of arity or an incidental return value.
       // Otherwise, retain monitoring only when context/runtime completion is observable and expected.
       if (!callbackObservable &&
-          (!completionObservable || !isCallbackCompletion(lambdaHandler, result, contextIndex))) clear()
+          (!completionObservable || !isCallbackCompletion(monitored, result, contextIndex))) clear()
       return result
     } catch (error) {
       clear()
@@ -130,9 +130,10 @@ exports.datadog = function datadog (lambdaHandler) {
   }
 
   // The shim uses arity and the runtime's streaming metadata to choose how to invoke the handler.
-  Object.defineProperty(monitored, 'length', { value: lambdaHandler.length })
+  Object.defineProperty(monitored, 'length', { value: getDataProperty(lambdaHandler, 'length') ?? 0 })
   for (const symbol of [HANDLER_STREAMING, HANDLER_HIGHWATERMARK]) {
-    if (lambdaHandler[symbol] !== undefined) monitored[symbol] = lambdaHandler[symbol]
+    const value = getDataProperty(lambdaHandler, symbol)
+    if (value !== undefined) monitored[symbol] = value
   }
   return monitored
 }
@@ -189,10 +190,10 @@ function isCallbackCompletion (handler, result, contextIndex) {
 }
 
 /**
- * Reads heuristic metadata without executing application getters or Proxy traps.
+ * Reads metadata without executing application getters or Proxy traps.
  *
  * @param {unknown} target
- * @param {string} name
+ * @param {string | symbol} name
  */
 function getDataProperty (target, name) {
   if (target === null || (typeof target !== 'object' && typeof target !== 'function')) return
