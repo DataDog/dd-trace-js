@@ -13,6 +13,13 @@ if (process.env.EXCLUSIONS_MODE === 'policy') {
   test('protected passing', preventFailureSuppression(() => {}))
   // Verify annotations do not reverse an explicit developer skip.
   test.skip('developer skipped', preventFailureSuppression(noAutoRetry(fail)))
+} else if (process.env.EXCLUSIONS_MODE === 'tagged-table') {
+  const cases = test.each`
+    row | callback
+    ${1} | ${noAutoRetry(() => {})}
+    ${2} | ${noAutoRetry(() => {})}
+  `
+  cases('tagged $row', preventFailureSuppression(noAutoRetry(fail)))
 } else if (process.env.EXCLUSIONS_MODE === 'sole') {
   test('sole', preventFailureSuppression(noAutoRetry(fail)))
 } else if (process.env.EXCLUSIONS_MODE === 'removed') {

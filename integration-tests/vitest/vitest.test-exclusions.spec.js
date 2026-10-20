@@ -105,6 +105,26 @@ for (const version of versions) {
       })
     })
 
+    it('captures callback annotations when tagged table data contains annotated functions', async () => {
+      receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
+      properties(Object.fromEntries(['tagged 1', 'tagged 2'].map(name => [name, {
+        properties: { disabled: true, quarantined: true, attempt_to_fix: true },
+      }])))
+      await run('tagged-table', 1, tests => {
+        assert.strictEqual(tests.length, 2)
+        for (const test of tests) {
+          assert.strictEqual(test.meta['test.status'], 'fail')
+          assert.strictEqual(test.meta['test.final_status'], 'fail')
+          assert.strictEqual(test.meta[protection], 'true')
+          assert.strictEqual(test.meta[exclusion], 'true')
+          assert.strictEqual(test.meta['test.is_retry'], undefined)
+          assert.strictEqual(test.meta['test.test_management.is_test_disabled'], 'true')
+          assert.strictEqual(test.meta['test.test_management.is_quarantined'], 'true')
+          assert.strictEqual(test.meta['test.test_management.is_attempt_to_fix'], 'true')
+        }
+      })
+    })
+
     it('blocks ATR without preventing protected retries or changing unannotated controls', async () => {
       receiver.setSettings({ flaky_test_retries_enabled: true })
       await run('atr', 1, tests => {
