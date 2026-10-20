@@ -101,8 +101,9 @@ if (isMainThread) {
   // Only register the loader hook when instrumentation initialized. On a bailout the
   // loader has nothing to instrument and can keep a short-lived process from exiting.
   if (Module.register && initialized) {
-    // The loader builds its own include/exclude matcher in `initialize`, so no
-    // options need to cross the registration boundary.
-    Module.register('./loader-hook.mjs', import.meta.url)
+    // The loader builds its own include/exclude matcher in `initialize`; only the
+    // port that reports unwrapped module loads back crosses the registration boundary.
+    const { getLoaderRegisterOptions } = require('./packages/dd-trace/src/esm-module-load.js')
+    Module.register('./loader-hook.mjs', import.meta.url, getLoaderRegisterOptions())
   }
 }

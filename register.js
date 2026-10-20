@@ -27,7 +27,8 @@ if (shouldRegisterSyncLoaderHooks()) {
 }
 
 if (!isSyncLoaderRegistered) {
-  register('./loader-hook.mjs', parentURL)
+  const { getLoaderRegisterOptions } = require('./packages/dd-trace/src/esm-module-load')
+  register('./loader-hook.mjs', parentURL, getLoaderRegisterOptions())
 }
 
 function shouldRegisterSyncLoaderHooks () {

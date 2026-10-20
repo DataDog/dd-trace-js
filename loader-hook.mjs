@@ -5,7 +5,11 @@ import { pathToFileURL } from 'node:url'
 import { isMainThread } from 'node:worker_threads'
 
 import { createHook, supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
-import { initialize as origInitialize, load as origLoad } from 'import-in-the-middle/hook.mjs'
+import {
+  initialize as origInitialize,
+  load as origLoad,
+  resolve as origResolve,
+} from 'import-in-the-middle/hook.mjs'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 
 // This file must support Node.js 12.0.0 syntax
@@ -52,9 +56,62 @@ if (!isInitializeMainThread) {
 
 const nodeModulesIncludeSource = `node_modules/(?:${moduleNameAlternation})/(?!node_modules).+`
 
+const NODE_MODULES = '/node_modules/'
+
+// Package roots already reported, so each package costs a single report however many of its files load.
+const reportedPackageRoots = new Set()
+/** @type {((url: string) => void) | undefined} */
+let reportModuleLoad
+
 function initialize (data = {}) {
+  const { moduleLoadPort } = data
+  if (moduleLoadPort) {
+    // A MessagePort, not a timer; optional chaining would break the Node.js 12 syntax this file supports.
+    // eslint-disable-next-line eslint-rules/eslint-timer-unref
+    moduleLoadPort.unref()
+    reportModuleLoad = (url) => moduleLoadPort.postMessage(url)
+  }
+
   prepareImportInTheMiddleOptions(data)
   return origInitialize(data)
+}
+
+async function resolve (specifier, context, nextResolve) {
+  const result = await origResolve(specifier, context, nextResolve)
+  reportUnwrappedPackage(result.url)
+  return result
+}
+
+function resolveSync (specifier, context, nextResolve) {
+  const result = getSyncImportInTheMiddleHook().resolveSync(specifier, context, nextResolve)
+  // require() loads are already published by require-in-the-middle.
+  if (!hasRequireCondition(context)) reportUnwrappedPackage(result.url)
+  return result
+}
+
+/**
+ * Reports the first resolved file of each `node_modules` package that import-in-the-middle leaves
+ * unwrapped. Wrapped modules are already published through iitm's `addHook`; the rest would
+ * otherwise never reach `dd-trace:moduleLoadStart`.
+ *
+ * @param {string} url Resolved module URL.
+ */
+function reportUnwrappedPackage (url) {
+  if (!reportModuleLoad || !url.startsWith('file:') || url.includes('iitm=true')) return
+
+  const nodeModulesIndex = url.lastIndexOf(NODE_MODULES)
+  if (nodeModulesIndex === -1) return
+
+  const nameStart = nodeModulesIndex + NODE_MODULES.length
+  let nameEnd = url.indexOf('/', nameStart)
+  if (url[nameStart] === '@' && nameEnd !== -1) nameEnd = url.indexOf('/', nameEnd + 1)
+  if (nameEnd === -1) return
+
+  const packageRoot = url.slice(0, nameEnd)
+  if (reportedPackageRoots.has(packageRoot)) return
+
+  reportedPackageRoots.add(packageRoot)
+  reportModuleLoad(url)
 }
 
 function prepareImportInTheMiddleOptions (data = {}) {
@@ -135,6 +192,10 @@ function isCommonJSLoad (context) {
   // Sync hooks report CommonJS require() dependency loads with a `require`
   // condition but no format. If a format is present, trust it instead: ESM
   // loaded through require() reports `format: 'module'` and still needs rewrite.
+  return hasRequireCondition(context)
+}
+
+function hasRequireCondition (context) {
   const conditions = context.conditions
   if (!conditions) return false
 
@@ -184,13 +245,14 @@ function registerSyncLoaderHooks (data = {}) {
   // synchronous and asynchronous loaders share the same option preparation so
   // that `import http from 'node:http'` is wrapped on both paths.
   syncHook.applyOptions(prepareImportInTheMiddleOptions(data))
+  // The synchronous hooks run on the application thread, so publish directly.
+  reportModuleLoad = require('./packages/dd-trace/src/esm-module-load.js').publishModuleLoad
   Module.registerHooks({
-    resolve: syncHook.resolveSync,
+    resolve: resolveSync,
     load: loadSync,
   })
 
   return true
 }
 
-export { resolve } from 'import-in-the-middle/hook.mjs'
-export { initialize, load, registerSyncLoaderHooks }
+export { initialize, load, registerSyncLoaderHooks, resolve }
