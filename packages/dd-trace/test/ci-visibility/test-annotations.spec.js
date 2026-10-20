@@ -19,6 +19,13 @@ describe('Test Optimization callback annotations', () => {
     assert.doesNotMatch(exclusions, /Other test frameworks[^.]*do not enforce (?:these helpers|them)\b/)
   })
 
+  it('includes Playwright in the shared enforcement statement', () => {
+    const api = readFileSync(resolve(__dirname, '../../../../docs/API.md'), 'utf8')
+    const [, statement] = api.match(/enforcement requires ([^.]+) instrumentation/) || []
+    assert.ok(statement, 'Shared callback annotation enforcement must be documented')
+    assert.match(statement, /\b(?:Playwright|test framework)\b/)
+  })
+
   for (const helper of [preventFailureSuppression, noAutoRetry, fn => preventFailureSuppression(noAutoRetry(fn))]) {
     it('preserves parameters, this, return values, and callback arity', () => {
       const callback = Object.freeze(function callback (a, b) { return this.offset + a + b })
