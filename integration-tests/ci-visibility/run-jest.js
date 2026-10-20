@@ -108,6 +108,10 @@ if (process.env.DO_NOT_INJECT_GLOBALS) {
   options.injectGlobals = false
 }
 
+if (process.env.JEST_MODULE_FILE_EXTENSIONS) {
+  options.moduleFileExtensions = process.env.JEST_MODULE_FILE_EXTENSIONS.split(',')
+}
+
 if (process.env.WAIT_FOR_UNHANDLED_REJECTIONS) {
   options.waitForUnhandledRejections = true
 }

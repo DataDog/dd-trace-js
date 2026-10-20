@@ -2089,6 +2089,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       } else if (event.name === 'setup') {
         this.#expect = event.runtimeGlobals?.expect ?? this.global.expect
         this.wrapConcurrentTest(state)
+        this.wrapConcurrentTestGlobals(event.runtimeGlobals?.test, state)
         this.bindTestEachGlobals(event.runtimeGlobals?.test ?? this.global.test)
       }
       if (
@@ -2116,6 +2117,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.orderConcurrentEfdRetries(event.tests)
       } else if (event.name === 'test_start') {
         const testName = getJestTestName(event.test)
+        const registeredConcurrentTestState = testContexts.get(event.test)?.concurrentTestState
+        const concurrentTestState = this.concurrentTestStates.get(event.test.fn) ||
+          registeredConcurrentTestState
+        // Older Circus replaces concurrent callbacks after registration to schedule their execution.
+        copyTestAnnotations(concurrentTestState?.testFn, event.test.fn)
         const { isAttemptToFix, isDisabled, isQuarantined, mustFail, noAutoRetry, assignedManagementProperties } =
           this.getTestPolicy(testName, event.test.fn)
         if (!isAttemptToFix && isDisabled) {
@@ -2128,9 +2134,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           return
         }
 
-        const registeredConcurrentTestState = testContexts.get(event.test)?.concurrentTestState
-        const concurrentTestState = this.concurrentTestStates.get(event.test.fn) ||
-          registeredConcurrentTestState
         let concurrentCtx = concurrentTestState?.ctx
         if (concurrentCtx) {
           this.removeConcurrentTestContext(testName, concurrentCtx)
@@ -4458,6 +4461,15 @@ addHook({
   versions: [MINIMUM_JEST_VERSION],
 }, (runtimePackage) => {
   const Runtime = runtimePackage.default ?? runtimePackage
+
+  // Older Jest versions build the ESM @jest/globals module from this runtime getter.
+  if (typeof Runtime.prototype.getGlobalsFromEnvironment === 'function') {
+    shimmer.wrap(Runtime.prototype, 'getGlobalsFromEnvironment', getGlobals => function () {
+      const globals = getGlobals.apply(this, arguments)
+      wrapConcurrentJestGlobalsForRuntime(this, globals)
+      return globals
+    })
+  }
 
   if (typeof Runtime.prototype._createJestObjectFor === 'function') {
     shimmer.wrap(Runtime.prototype, '_createJestObjectFor', _createJestObjectFor => function (from) {
