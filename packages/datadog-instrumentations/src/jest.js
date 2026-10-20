@@ -765,6 +765,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       this.hasAutomaticRetries = false
+      this.testResultAnnotations = []
       this.hasExplicitRetries = !!this.global[RETRY_TIMES]
       if (this.isFlakyTestRetriesEnabled) {
         const currentNumRetries = this.global[RETRY_TIMES]
