@@ -60,6 +60,9 @@ for (const builtin of builtinModules) {
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
+// eslint-disable-next-line eslint-rules/eslint-process-env
+const DD_BUNDLER_INJECT_GIT_METADATA = process.env.DD_BUNDLER_INJECT_GIT_METADATA?.toLowerCase() !== 'false' &&
+  process.env.DD_BUNDLER_INJECT_GIT_METADATA !== '0'
 
 module.exports.name = 'datadog-esbuild'
 
@@ -143,26 +146,30 @@ globalThis.__dirname ??= $dd_dirname(globalThis.__filename);
 ${build.initialOptions.banner.js}`
   }
 
-  // Get git metadata at build time and add it to the banner for both ESM and CommonJS builds
-  const gitMetadata = getGitMetadata()
-  if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
-    build.initialOptions.banner ??= {}
-    build.initialOptions.banner.js ??= ''
+  // Bake DD_GIT_* into the banner unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
+  if (DD_BUNDLER_INJECT_GIT_METADATA) {
+    const gitMetadata = getGitMetadata()
+    if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
+      build.initialOptions.banner ??= {}
+      build.initialOptions.banner.js ??= ''
 
-    build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null &&
+      build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null &&
     process.env !== null && typeof process.env === 'object') {
   ${gitMetadata.repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = '${gitMetadata.repositoryURL}';` : ''}
   ${gitMetadata.commitSHA ? `process.env.DD_GIT_COMMIT_SHA = '${gitMetadata.commitSHA}';` : ''}
 }
 ${build.initialOptions.banner.js}`
 
-    log.debug(
-      'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
-      gitMetadata.repositoryURL || 'not available',
-      gitMetadata.commitSHA || 'not available'
-    )
+      log.debug(
+        'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
+        gitMetadata.repositoryURL || 'not available',
+        gitMetadata.commitSHA || 'not available'
+      )
+    } else {
+      log.warn('No git metadata available - skipping injection')
+    }
   } else {
-    log.warn('No git metadata available - skipping injection')
+    log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
   }
 
   let resolver
