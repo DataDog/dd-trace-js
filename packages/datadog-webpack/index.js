@@ -6,12 +6,14 @@ const fs = require('node:fs')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const createBundlerBanner = require('../datadog-instrumentations/src/helpers/bundler-banner')
 const { getRewriteTarget } = require('../datadog-instrumentations/src/helpers/rewriter/targets')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
 const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
+const JAVASCRIPT_ASSET = /\.[cm]?js$/
 
 const DD_BUNDLER_INJECT_GIT_METADATA = getValueFromEnvSources('DD_BUNDLER_INJECT_GIT_METADATA') !== false
 
@@ -82,13 +84,21 @@ class DatadogWebpackPlugin {
           'instrumentation. Disable optimization.minimize when using this plugin.'
         )
       }
+
+      if (!isNodeTarget(compiler.options.target)) {
+        log.warn('Node.js built-in instrumentation may not work with webpack target %s', compiler.options.target)
+      }
+      if (compiler.options.externalsPresets?.node === false) {
+        log.warn('externalsPresets.node is false; Node.js built-ins may be bundled instead of instrumented')
+      }
     })
 
     // Bake DD_GIT_* into assets unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
+    let gitMetadataBanner = ''
     if (DD_BUNDLER_INJECT_GIT_METADATA) {
       const gitMetadata = getGitMetadata()
       if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
-        const banner =
+        gitMetadataBanner =
           'if (typeof process === \'object\' && process !== null &&\n' +
           '    process.env !== null && typeof process.env === \'object\') {\n' +
           (gitMetadata.repositoryURL
@@ -98,30 +108,6 @@ class DatadogWebpackPlugin {
             ? `  process.env.DD_GIT_COMMIT_SHA = ${JSON.stringify(gitMetadata.commitSHA)};\n`
             : '') +
           '}\n'
-
-        compiler.hooks.thisCompilation.tap(PLUGIN_NAME, (compilation) => {
-          compilation.hooks.processAssets.tap(
-            { name: PLUGIN_NAME, stage: -2000 },
-            () => {
-              for (const chunk of compilation.chunks) {
-                if (!chunk.canBeInitial()) continue
-                for (const filename of chunk.files) {
-                  if (!filename.endsWith('.js') && !filename.endsWith('.mjs')) continue
-                  compilation.updateAsset(filename, (old) => {
-                    const content = banner + old.source()
-                    return {
-                      source () { return content },
-                      size () { return Buffer.byteLength(content, 'utf8') },
-                      map () { return old.map() },
-                      sourceAndMap () { return { source: content, map: old.map() } },
-                      updateHash (hash) { hash.update(content) },
-                    }
-                  })
-                }
-              }
-            }
-          )
-        })
 
         log.debug(
           'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
@@ -134,6 +120,35 @@ class DatadogWebpackPlugin {
     } else {
       log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
     }
+
+    // Node's ESM output has no CommonJS globals, but bundled tracer modules still use them.
+    const esmBanner = compiler.options.output?.module
+      ? 'import {createRequire as __dd_createRequire} from "node:module";' +
+        'import {fileURLToPath as __dd_fileURLToPath} from "node:url";' +
+        'const require=__dd_createRequire(import.meta.url);' +
+        'const __filename=__dd_fileURLToPath(import.meta.url);' +
+        'const __dirname=require("node:path").dirname(__filename);'
+      : ''
+
+    const banner = esmBanner + gitMetadataBanner + createBundlerBanner('webpack')
+
+    compiler.hooks.thisCompilation.tap(PLUGIN_NAME, (compilation) => {
+      compilation.hooks.processAssets.tap(
+        { name: PLUGIN_NAME, stage: -2000 },
+        () => {
+          const updatedAssets = new Set()
+
+          for (const chunk of compilation.chunks) {
+            if (!chunk.canBeInitial()) continue
+            for (const filename of chunk.files) {
+              if (updatedAssets.has(filename) || !JAVASCRIPT_ASSET.test(filename)) continue
+              updatedAssets.add(filename)
+              compilation.updateAsset(filename, old => new compiler.webpack.sources.ConcatSource(banner, old))
+            }
+          }
+        }
+      )
+    })
 
     compiler.hooks.normalModuleFactory.tap(PLUGIN_NAME, (nmf) => {
       nmf.hooks.afterResolve.tap(PLUGIN_NAME, (resolveData) => {
@@ -199,6 +214,17 @@ class DatadogWebpackPlugin {
       })
     })
   }
+}
+
+/**
+ * @param {unknown} target
+ */
+function isNodeTarget (target) {
+  if (Array.isArray(target)) return target.some(isNodeTarget)
+  if (typeof target !== 'string') return false
+
+  return /^(?:async-)?node(?:\d+(?:\.\d+)?)?$/.test(target) ||
+    target === 'electron-main' || target === 'electron-preload' || target === 'nwjs'
 }
 
 module.exports = DatadogWebpackPlugin
