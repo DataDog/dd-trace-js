@@ -59,43 +59,21 @@ describe('effective OTel startup configuration', () => {
   })
 
   for (const signal of ['LOGS', 'METRICS']) {
-    it(`initializes and reports ${signal.toLowerCase()} when tracing is disabled`, () => {
-      const { configuration: c } = run({ DD_TRACE_ENABLED: 'false', [`DD_${signal}_OTEL_ENABLED`]: 'true' })
+    it(`reports ${signal.toLowerCase()} through the existing tracing-enabled entrypoint`, () => {
+      const { configuration: c, carrier } = run({
+        DD_TRACE_ENABLED: 'true',
+        OTEL_TRACES_EXPORTER: 'none',
+        [`DD_${signal}_OTEL_ENABLED`]: 'true',
+        OTEL_STARTUP_SAMPLE: 'true',
+      })
       assert.equal(c.OTEL_ENABLED, true)
       assert.equal(c.otlp_traces_export_enabled, false)
       assert.equal(c[`otlp_${signal.toLowerCase()}_export_enabled`], true)
       assert.equal(c[`OTEL_EXPORTER_OTLP_${signal}_PROTOCOL`], 'http/protobuf')
-      assert.equal('OTEL_TRACES_SAMPLER' in c, false)
+      assert.equal(c.OTEL_PROPAGATORS, 'datadog,tracecontext,baggage')
+      assert.ok(Object.keys(carrier).length > 0)
     })
   }
-
-  for (const signal of ['LOGS', 'METRICS']) {
-    for (const enabled of [undefined, 'false', 'true']) {
-      it(`preserves the OTel trace opt-out with ${signal.toLowerCase()} and DD_TRACE_ENABLED=${enabled}`, () => {
-        const { configuration: c, carrier } = run({
-          OTEL_TRACES_EXPORTER: 'none',
-          DD_TRACE_ENABLED: enabled,
-          [`DD_${signal}_OTEL_ENABLED`]: 'true',
-          OTEL_STARTUP_SAMPLE: 'true',
-        })
-        assert.equal(c[`otlp_${signal.toLowerCase()}_export_enabled`], true)
-        assert.equal('OTEL_PROPAGATORS' in c, enabled === 'true')
-        assert.equal(Object.keys(carrier).length > 0, enabled === 'true')
-      })
-    }
-  }
-
-  it('preserves the trace opt-out when the requested metrics pipeline is inactive', () => {
-    const { configuration: c, carrier } = run({
-      OTEL_TRACES_EXPORTER: 'none',
-      DD_METRICS_OTEL_ENABLED: 'true',
-      OTEL_METRICS_EXPORTER: 'none',
-      OTEL_STARTUP_SAMPLE: 'true',
-    })
-    assert.equal(c.otlp_metrics_export_enabled, false)
-    assert.equal(c.OTEL_ENABLED, false)
-    assert.deepEqual(carrier, {})
-  })
 
   it('reflects the existing exporter-enable decisions rather than the raw OTel selectors', () => {
     const { configuration: c } = run({

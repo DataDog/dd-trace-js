@@ -15,9 +15,6 @@ const ddTraceDisabled = ddTraceEnabled === undefined
   ? !agentlessTracingEnabled && getValueFromEnvSources('OTEL_TRACES_EXPORTER') === 'none'
   : ddTraceEnabled === false
 
-const otelSignalsEnabled = getValueFromEnvSources('DD_LOGS_OTEL_ENABLED') ||
-  getValueFromEnvSources('DD_METRICS_OTEL_ENABLED')
-
-module.exports = (ddTraceDisabled && !otelSignalsEnabled) || inJestWorker
+module.exports = ddTraceDisabled || inJestWorker
   ? require('./noop/proxy')
   : require('./proxy')

@@ -475,39 +475,9 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
-  it('should preserve the OTel trace opt-out in the resolved configuration', () => {
-    process.env.OTEL_TRACES_EXPORTER = 'none'
-    const config = getConfig()
-    assert.strictEqual(config.DD_TRACE_ENABLED, false)
-    config.setRemoteConfig({ DD_TRACE_ENABLED: 'true' })
-    assert.strictEqual(config.DD_TRACE_ENABLED, true)
-    config.setRemoteConfig(null)
-    assert.strictEqual(config.DD_TRACE_ENABLED, false)
-  })
-
-  for (const enabled of [true, false]) {
-    it(`should prefer explicit DD trace settings (${enabled}) over the OTel trace opt-out`, () => {
-      process.env.OTEL_TRACES_EXPORTER = 'none'
-      process.env.DD_TRACE_ENABLED = String(enabled)
-      assert.strictEqual(getConfig().DD_TRACE_ENABLED, enabled)
-    })
-  }
-
-  it('should retain tracing when the OTLP protocol fallback disables OTLP export', () => {
-    process.env.OTEL_TRACES_EXPORTER = 'otlp'
-    process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
-    const config = getConfig()
-    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
-    assert.strictEqual(config.DD_TRACE_ENABLED, true)
-    config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
-    assert.strictEqual(config.DD_TRACE_ENABLED, true)
-  })
-
   it('should keep the real proxy when agentless mode disables the OTel trace exporter', () => {
     process.env.DD_AGENTLESS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'
-
-    assert.strictEqual(getConfig().DD_TRACE_ENABLED, true)
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')
@@ -518,8 +488,6 @@ describe('Config', () => {
   it('should keep the real proxy when tracing-only agentless mode disables the OTel trace exporter', () => {
     process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'
-
-    assert.strictEqual(getConfig().DD_TRACE_ENABLED, true)
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')

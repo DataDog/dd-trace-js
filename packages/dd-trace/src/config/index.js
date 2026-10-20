@@ -124,8 +124,6 @@ const changeTracker = {
  */
 function undo (config, source) {
   for (const name of changeTracker[source]) {
-    // A newly applied remote value supersedes the previous calculated value.
-    if (source === 'calculated' && trackedConfigOrigins.get(name) === 'remote_config') continue
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
@@ -370,16 +368,6 @@ class Config extends ConfigBase {
   #applyCalculated () {
     undo(this, 'calculated')
 
-    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
-      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-
-    // Preserve the entrypoint's trace opt-out when logs or metrics still need the real proxy.
-    // Apply it before protocol fallbacks can change OTEL_TRACES_EXPORTER to 'none'.
-    if (!trackedConfigOrigins.has('DD_TRACE_ENABLED') &&
-        !agentlessTracingEnabled && this.OTEL_TRACES_EXPORTER === 'none') {
-      setAndTrack(this, 'DD_TRACE_ENABLED', false)
-    }
-
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
         trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {
@@ -505,6 +493,9 @@ class Config extends ConfigBase {
     if (!trackedConfigOrigins.has('runtimeMetrics.enabled') && this.OTEL_METRICS_EXPORTER === 'none') {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
+
+    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
+      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
 
     // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
     // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
