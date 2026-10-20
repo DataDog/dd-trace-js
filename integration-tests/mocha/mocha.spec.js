@@ -5001,6 +5001,22 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ' ci-visibility/test-management/mocha-review-duplicates.js')
     })
 
+    it('finishes exactly one span per runtime and declaration skip', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      await runReviewFixture('mocha-review-runtime-skips', 0, events => {
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.strictEqual(tests.length, 4)
+        for (const test of tests) {
+          const skipped = test.meta[TEST_NAME] !== 'live control'
+          assert.strictEqual(test.meta[TEST_STATUS], skipped ? 'skip' : 'pass')
+          assert.strictEqual(test.meta[TEST_FINAL_STATUS], skipped ? 'skip' : 'pass')
+          assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'],
+            skipped ? 'true' : undefined)
+          assert.strictEqual(test.meta['test.test_management.no_auto_retry'], skipped ? 'true' : undefined)
+        }
+      })
+    })
+
     it('preserves annotations on exported skipped declarations', async () => {
       receiver.setSettings({ test_management: { enabled: true } })
       await runReviewFixture('mocha-review-exported', 0, events => {
