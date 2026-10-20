@@ -6112,6 +6112,17 @@ rules:
       }).featureFlags[name], true)
     })
 
+    it('resolves experimentation opt-out through central configuration with a code override', () => {
+      const name = 'DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE'
+      assert.strictEqual(getConfig().featureFlags[name], 'disabled')
+      process.env[name] = 'immediate'
+      assert.strictEqual(getConfig().featureFlags[name], 'immediate')
+      const config = getConfig({ featureFlags: { experimentationOptOutMode: 'disabled' } })
+      assert.strictEqual(config.featureFlags[name], 'disabled')
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'code')
+      delete process.env[name]
+    })
+
     it('reports the stable evaluation telemetry opt-out environment variable', () => {
       const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
       process.env[name] = 'true'

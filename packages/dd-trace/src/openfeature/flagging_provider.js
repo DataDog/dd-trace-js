@@ -2,7 +2,10 @@
 
 const { channel } = require('dc-polyfill')
 
-const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/openfeature-node-server')
+const {
+  DatadogNodeServerProvider,
+  ExperimentationOptOutMode,
+} = require('../../../../vendor/dist/@datadog/openfeature-node-server')
 const log = require('../log')
 const { debugChannel } = require('../log/channels')
 const configurationSource = require('./configuration_source')
@@ -32,9 +35,18 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @param {import('../config/config-base')} config - Tracer configuration object
    */
   constructor (tracer, config) {
+    const optOutMode = (config.featureFlags.DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE ?? '')
+      .trim().toLowerCase() || 'disabled'
+    if (optOutMode !== 'disabled' && optOutMode !== 'immediate') {
+      throw new Error('DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE must be disabled or immediate')
+    }
+    if (optOutMode === 'immediate' && ExperimentationOptOutMode?.Immediate !== 'immediate') {
+      throw new Error('The installed Feature Flags provider does not support immediate experimentation opt-out')
+    }
     super({
       exposureChannel: channel(EXPOSURE_CHANNEL),
       initializationTimeoutMs: config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
+      experimentationOptOutMode: optOutMode,
     })
 
     const enableOptOut =

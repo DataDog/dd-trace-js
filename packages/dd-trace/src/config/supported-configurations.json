@@ -948,6 +948,15 @@
         "default": "false"
       }
     ],
+    "DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "namespace": "featureFlags",
+        "configurationNames": ["featureFlags.experimentationOptOutMode"],
+        "default": "disabled"
+      }
+    ],
     "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE": [
       {
         "implementation": "A",

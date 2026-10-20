@@ -97,6 +97,19 @@ describe('FlaggingProvider', () => {
   })
 
   describe('constructor', () => {
+    it('rejects an unsupported experimentation opt-out mode', () => {
+      mockConfig.featureFlags.DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE = 'invalid'
+      assert.throws(() => new FlaggingProvider(mockTracer, mockConfig),
+        /DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE must be disabled or immediate/)
+    })
+
+    it('rejects immediate mode when the installed provider lacks support', () => {
+      mockConfig.featureFlags.DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE = 'immediate'
+      // The test stub intentionally represents the previous provider release.
+      assert.throws(() => new FlaggingProvider(mockTracer, mockConfig),
+        /installed Feature Flags provider does not support immediate experimentation opt-out/)
+    })
+
     it('should create exposure channel', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
