@@ -2371,6 +2371,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         // The first execution selects how many pre-registered EFD retries remain runnable.
         if (
+          !retryCtx?.noAutoRetry &&
           this.isEarlyFlakeDetectionEnabled &&
           efdCandidates.has(testName) &&
           event.test.invocations === 1 &&
@@ -2383,7 +2384,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         const isEfdRetry = retryCtx?.isEfdRetry === true
-        if (efdCandidates.has(testName)) {
+        if (!retryCtx?.noAutoRetry && efdCandidates.has(testName)) {
           let testStatuses = efdTestStatuses.get(testName)
           if (testStatuses) {
             testStatuses.push(status)
