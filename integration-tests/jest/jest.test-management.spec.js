@@ -741,6 +741,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     }
 
+    failingExclusionsIt('preserves no-done semantics for failing parameterized callbacks', async () => {
+      await runExclusions('test-failing-table-annotations', 1, spans => {
+        assert.strictEqual(spans.length, 3)
+        for (const span of spans) {
+          assert.strictEqual(span.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(span.meta[TEST_FINAL_STATUS], 'fail')
+        }
+      })
+    })
+
     it('executes annotated generator callbacks through Jest generator handling', async () => {
       await runExclusions('test-exclusions-generators', 0, spans => {
         assert.strictEqual(spans.length, 3)
