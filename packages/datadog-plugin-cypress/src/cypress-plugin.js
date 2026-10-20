@@ -1803,7 +1803,10 @@ class CypressPlugin {
           const isDisabled = testSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
 
           const finalStatus = getFinalStatus({
-            status: cypressTestStatus,
+            // Native experimental retries can fail in aggregate even when the last attempt passes.
+            status: retryKind === FINAL_STATUS_RETRY_KIND.none
+              ? CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+              : cypressTestStatus,
             retryKind,
             hasFailedAllAttempts,
             hasPassedAllAtfRetries,

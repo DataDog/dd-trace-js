@@ -55,6 +55,9 @@ if (getTestEnvironment('EXCLUSIONS_MODE') === 'mode-selection') {
   it('native experimental excluded', noAutoRetry(fail))
   it('native experimental control', fail)
   it('native experimental zero', { retries: 0 }, noAutoRetry(fail))
+} else if (getTestEnvironment('EXCLUSIONS_MODE') === 'experimental-mixed') {
+  let attempts = 0
+  it('native experimental excluded', noAutoRetry(() => { if (++attempts === 1) fail() }))
 } else if (getTestEnvironment('EXCLUSIONS_MODE') === 'explicit') {
   let executions = 0
   it('native retries', { retries: 2 }, noAutoRetry(() => {
