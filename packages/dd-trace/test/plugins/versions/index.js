@@ -6,10 +6,10 @@ const latests = require('./package.json').dependencies
 
 const exactVersionExp = /^=?\d+\.\d+\.\d+/
 
-// Exclude only unpublished majors so published releases on either side of a gap retain test coverage.
+// Exclude majors without stable releases so published releases on either side of a gap retain test coverage.
 const nonConsecutiveMajorPackages = new Map([
   ['graphql', '>=1 <14'],
-  ['@redis/client', '>=3 <5'],
+  ['@redis/client', '>=2 <5'],
   ['oracledb', '>=8 <26'],
 ])
 
@@ -89,7 +89,7 @@ function capSubrange (name, subrange) {
  *
  * @param {string} name The module name, e.g. `mongodb`.
  * @param {string[]} versions The declared version entries, e.g. `['>=3.3 <5', '5', '>=6']`.
- * @param {Map<string, string>} [nonConsecutiveMajors] Unpublished major ranges by module name; injectable for testing.
+ * @param {Map<string, string>} [nonConsecutiveMajors] Major ranges without stable releases, by module name.
  * @returns {Array<{ versionKey: string, range: string }>} Ordered, de-duplicated entries. `versionKey` is the folder
  *   suffix; `range` is the declaring entry it came from.
  */

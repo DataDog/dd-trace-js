@@ -76,11 +76,6 @@ describe('getVersionList', () => {
     assert.deepEqual(keys('graphql', ['>=0.10']), ['0.10.0', '0', ...publishedMajors])
   })
 
-  it('keeps every published major of @redis/client', () => {
-    const publishedMajors = Array.from({ length: major(latests['@redis/client']) - 4 }, (_, index) => String(index + 5))
-    assert.deepEqual(keys('@redis/client', ['>=2']), ['2.0.0', '2', ...publishedMajors])
-  })
-
   it('throws on an unparseable range', () => {
     assert.throws(() => getVersionList('mongodb', ['not-a-version']), /Invalid version range/)
   })
@@ -101,6 +96,14 @@ describe('resolvePluginVersions', () => {
       versions: ['5', '6'],
     },
   ]
+
+  it('keeps stable Redis majors from the instrumentation declarations', () => {
+    const declarations = getInstrumentation('redis').filter(({ name }) => name === '@redis/client')
+    const result = resolvePluginVersions({ name: '@redis/client', declarations, env: {} })
+    const stableMajors = Array.from({ length: major(latests['@redis/client']) - 4 }, (_, index) => String(index + 5))
+
+    assert.deepEqual(versionKeys(result), ['1.1.0', '1', ...stableMajors])
+  })
 
   for (const latest of ['7.0.1', '26.0.0']) {
     it(`keeps published OracleDB majors with the latest pinned to ${latest}`, () => {
