@@ -805,6 +805,20 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
+    it('executes frozen ordinary callbacks with either annotation', async () => {
+      await runExclusions('test-exclusions-frozen', 0, spans => {
+        assert.strictEqual(spans.length, 4)
+        for (const span of spans) {
+          assert.strictEqual(span.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(span.meta[TEST_FINAL_STATUS], 'pass')
+          const name = span.meta[TEST_NAME]
+          assert.strictEqual(span.meta[noAutoRetryTag], ['noAutoRetry', 'combined'].includes(name) ? 'true' : undefined)
+          assert.strictEqual(span.meta[preventFailureSuppressionTag],
+            ['preventFailureSuppression', 'combined'].includes(name) ? 'true' : undefined)
+        }
+      })
+    })
+
     it('executes annotated generator callbacks through Jest generator handling', async () => {
       await runExclusions('test-exclusions-generators', 0, spans => {
         assert.strictEqual(spans.length, 3)

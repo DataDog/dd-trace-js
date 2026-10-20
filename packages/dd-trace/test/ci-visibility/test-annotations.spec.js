@@ -14,6 +14,7 @@ describe('Test Optimization callback annotations', () => {
       assert.strictEqual(annotated.name, 'callback')
       assert.strictEqual(annotated.call({ offset: 1 }, 2, 3), 6)
       assert.notStrictEqual(annotated, callback)
+      assert.strictEqual(Object.isFrozen(annotated), true)
       assert.strictEqual(Object.isFrozen(callback), true)
     })
 
