@@ -63,7 +63,7 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
       return
     }
 
-    // Drop unsampled traces — OTLP endpoints have no agent-side sampling.
+    // Drop trace-level rejects: OTLP endpoints have no agent-side sampling.
     const priority = spans[0]?.metrics?.[SAMPLING_PRIORITY_KEY]
     if (priority !== undefined && priority < AUTO_KEEP) {
       return

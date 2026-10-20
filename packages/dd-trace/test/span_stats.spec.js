@@ -145,6 +145,83 @@ describe('SpanAggKey', () => {
       key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,')
   })
 
+  it('should retrieve HTTP method and status from OTel attributes', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        'http.request.method': 'PATCH',
+        [HTTP_ROUTE]: '/users/:id',
+      },
+      metrics: {
+        'http.response.status_code': 204,
+      },
+    }
+    const key = new SpanAggKey(span)
+
+    assert.strictEqual(key.method, 'PATCH')
+    assert.strictEqual(key.statusCode, 204)
+    assert.strictEqual(key.endpoint, '/users/:id')
+  })
+
+  it('should skip a malformed Datadog HTTP status and use the OTel attribute', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        [HTTP_STATUS_CODE]: '',
+        'http.response.status_code': '500',
+      },
+      metrics: {},
+    }
+
+    const key = new SpanAggKey(span)
+
+    assert.strictEqual(key.statusCode, 500)
+  })
+
+  it('should skip statuses only a coercion would accept, as the OTLP exporter does', () => {
+    for (const status of ['1e2', '0x10', ' 200 ', '1.5', '0200', '+1', '-0']) {
+      const key = new SpanAggKey({ ...basicSpan, meta: { [HTTP_STATUS_CODE]: status }, metrics: {} })
+
+      assert.strictEqual(key.statusCode, 0, `status ${JSON.stringify(status)} must not be aggregated`)
+    }
+  })
+
+  it('should preserve a signed integer status without applying HTTP range validation', () => {
+    const span = { ...basicSpan, meta: { [HTTP_STATUS_CODE]: '-1' }, metrics: {} }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, -1)
+  })
+
+  it('should preserve Datadog-first HTTP status precedence', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        [HTTP_STATUS_CODE]: '201',
+        'http.response.status_code': '202',
+      },
+      metrics: {
+        'http.response.status_code': 203,
+      },
+    }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, 201)
+  })
+
+  it('should prefer OTel meta status over the metric fallback', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        [HTTP_STATUS_CODE]: 'invalid',
+        'http.response.status_code': '202',
+      },
+      metrics: {
+        'http.response.status_code': 203,
+      },
+    }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, 202)
+  })
+
   it('should include HTTP method and endpoint in aggregation key', () => {
     const span = {
       ...basicSpan,
@@ -654,7 +731,7 @@ describe('SpanStatsProcessor', () => {
     assert.ok(otlpExporter.export.notCalled)
   })
 
-  it('should not call the legacy /v0.6/stats exporter when OTLP is enabled (mutual exclusion)', () => {
+  it('should not call the Datadog /v0.6/stats exporter when OTLP is enabled (mutual exclusion)', () => {
     exporter.export.resetHistory()
     otlpExporter.export.resetHistory()
     const p = new SpanStatsProcessor(config, otlpExporter)

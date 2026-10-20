@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const http = require('node:http')
 const https = require('node:https')
 
@@ -17,6 +18,7 @@ const { createOtlpSpanStatsExporter } = require('../../src/opentelemetry/metrics
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
 const { createOtlpTraceExporter } = require('../../src/opentelemetry/trace')
 const processTags = require('../../src/process-tags')
+const { SAMPLING_MECHANISM_SPAN, SPAN_SAMPLING_MECHANISM } = require('../../src/constants')
 const { SpanBuckets } = require('../../src/span_stats')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
@@ -253,6 +255,29 @@ describe('OpenTelemetry Traces', () => {
 
         assert.strictEqual(otlpSpan.flags, priority === undefined ? undefined : Number(priority > 0))
         assert.strictEqual(otlpSpan.traceState, undefined)
+      })
+    }
+
+    for (const otelTraceSemanticsEnabled of [false, true]) {
+      it(`uses each span's sampling priority with OTel semantics ${otelTraceSemanticsEnabled}`, () => {
+        const transformer = new OtlpTraceTransformer({}, otelTraceSemanticsEnabled)
+        const root = createMockSpan({ parent_id: id('0'), metrics: { _sampling_priority_v1: 2 } })
+        const child = createMockSpan({
+          span_id: id('abcdef1234567891'),
+          parent_id: root.span_id,
+          metrics: { _sampling_priority_v1: 0 },
+        })
+        const withoutPriority = createMockSpan({
+          span_id: id('abcdef1234567892'),
+          parent_id: root.span_id,
+          metrics: {},
+        })
+        const decoded = decodePayload(transformer.transformSpans([root, child, withoutPriority]))
+        const spans = decoded.resourceSpans[0].scopeSpans[0].spans
+
+        assert.strictEqual(spans[0].flags, 1)
+        assert.strictEqual(spans[1].flags, 0)
+        assert.strictEqual(Object.hasOwn(spans[2], 'flags'), false)
       })
     }
 
@@ -642,6 +667,87 @@ describe('OpenTelemetry Traces', () => {
         assert.strictEqual(attrs['http.status_code'], 200)
       })
 
+      // Typed as ints by the semantic conventions, but carried in `meta` as strings.
+      it('promotes int-typed OTel HTTP attributes from meta strings to intValue', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({
+          meta: {
+            'http.request.method': 'GET',
+            'http.response.status_code': '503',
+            'server.port': '8080',
+            'server.address': 'localhost',
+          },
+          metrics: {},
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+        const byKey = Object.fromEntries(attributes.map(({ key, value }) => [key, value]))
+
+        assert.deepStrictEqual(byKey['http.response.status_code'], { intValue: 503 })
+        assert.deepStrictEqual(byKey['server.port'], { intValue: 8080 })
+        // Everything else stays a string.
+        assert.deepStrictEqual(byKey['http.request.method'], { stringValue: 'GET' })
+        assert.deepStrictEqual(byKey['server.address'], { stringValue: 'localhost' })
+      })
+
+      it('omits a malformed int-typed OTel attribute', () => {
+        for (const status of [
+          'bogus', '', ' ', '0x10', '1e2', '1.5', '0200', '+1', '-0', '9007199254740992', '9'.repeat(400),
+        ]) {
+          const transformer = new OtlpTraceTransformer({}, true)
+          const span = createMockSpan({ meta: { 'http.response.status_code': status }, metrics: {} })
+
+          const decoded = decodePayload(transformer.transformSpans([span]))
+          const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+          assert.strictEqual(
+            attributes.find(({ key }) => key === 'http.response.status_code'),
+            undefined,
+            `status ${JSON.stringify(status)} must be omitted`
+          )
+        }
+      })
+
+      it('promotes the largest safe integer, the last accepted value', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({ meta: { 'server.port': '9007199254740991' }, metrics: {} })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+        const port = attributes.find(({ key }) => key === 'server.port')
+
+        assert.deepStrictEqual(port, { key: 'server.port', value: { intValue: 9007199254740991 } })
+      })
+
+      it('preserves signed integers without applying field-specific range validation', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({
+          meta: { 'http.response.status_code': '-1' },
+          metrics: { 'server.port': -1 },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+        const byKey = Object.fromEntries(attributes.map(({ key, value }) => [key, value]))
+
+        assert.deepStrictEqual(byKey['http.response.status_code'], { intValue: -1 })
+        assert.deepStrictEqual(byKey['server.port'], { intValue: -1 })
+      })
+
+      it('does not promote the int-typed keys when OTel semantics are disabled', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const span = createMockSpan({ meta: { 'server.port': '8080' }, metrics: {} })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+        assert.deepStrictEqual(
+          attributes.find(({ key }) => key === 'server.port').value,
+          { stringValue: '8080' }
+        )
+      })
+
       it('excludes error.message from attributes but still populates OTLP status', () => {
         const transformer = new OtlpTraceTransformer({}, true)
         const span = createMockSpan({
@@ -784,6 +890,23 @@ describe('OpenTelemetry Traces', () => {
       assert(!exportCalled, 'No HTTP request should be made for user-rejected traces')
     })
 
+    it('does not let single-span sampling metadata override a rejected trace decision', () => {
+      let exportCalled = false
+      sinon.stub(http, 'request').callsFake(() => {
+        exportCalled = true
+        return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
+      })
+
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+      const metrics = {
+        _sampling_priority_v1: 0,
+        [SPAN_SAMPLING_MECHANISM]: SAMPLING_MECHANISM_SPAN,
+      }
+
+      exporter.export([createMockSpan({ metrics })])
+      assert(!exportCalled, 'Single-span sampling is not supported by OTLP trace export')
+    })
+
     it('DatadogTracer uses the OTLP exporter when OTEL_TRACES_EXPORTER=otlp', () => {
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
       const loadTracer = proxyquire.noPreserveCache()
@@ -802,15 +925,72 @@ describe('OpenTelemetry Traces', () => {
         'Exporter should not be the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp')
     })
 
-    it('DatadogTracer prefers the Electron exporter over OTLP when OTEL_TRACES_EXPORTER=otlp', () => {
+    it('DatadogTracer disables OTel semantics and prefers the Electron exporter over OTLP', () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
       const loadTracer = proxyquire.noPreserveCache()
       const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
       const ElectronExporter = require('../../src/exporters/electron')
       const config = getConfigFresh({ experimental: { exporter: 'electron' } })
       const tracer = new DatadogTracer(config)
+      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
       assert(tracer._exporter instanceof ElectronExporter,
         'Exporter should be the Electron exporter even when OTEL_TRACES_EXPORTER=otlp')
+    })
+
+    it('DatadogTracer disables OTel semantics and keeps the Lambda log exporter without an OTLP endpoint', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+      const LogExporter = require('../../src/exporters/log')
+      sinon.stub(fs, 'existsSync').returns(false)
+
+      for (const key of [undefined, 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+        if (key) process.env[key] = ''
+        const config = getConfigFresh()
+        const tracer = new DatadogTracer(config)
+
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false, key)
+        assert(tracer._exporter instanceof LogExporter, key)
+        if (key) delete process.env[key]
+      }
+    })
+
+    it('DatadogTracer does not infer Lambda OTLP support from transport markers', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+      const AgentExporter = require('../../src/exporters/agent')
+      const existsSync = sinon.stub(fs, 'existsSync')
+
+      for (const marker of ['/opt/extensions/datadog-agent', '/tmp/datadog/mini_agent_ready']) {
+        existsSync.callsFake(path => path === marker)
+        const config = getConfigFresh()
+        const tracer = new DatadogTracer(config)
+
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false, marker)
+        assert(tracer._exporter instanceof AgentExporter, marker)
+      }
+    })
+
+    it('DatadogTracer uses OTLP semantics in Lambda with either explicit OTLP endpoint', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+      sinon.stub(fs, 'existsSync').returns(false)
+
+      for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+        process.env[key] = 'http://collector:4318'
+        const config = getConfigFresh()
+        const tracer = new DatadogTracer(config)
+
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true, key)
+        assert(tracer._exporter instanceof OtlpHttpTraceExporter, key)
+        delete process.env[key]
+      }
     })
   })
 

@@ -1,6 +1,10 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
+const {
+  INSTRUMENTATION_HTTP_RESOURCE,
+  otelHttpResourceName,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const normalizeError = require('./error')
@@ -23,18 +27,24 @@ class SupabaseGoTrueClientGetUserPlugin extends ClientPlugin {
   bindStart (ctx) {
     const method = 'GET'
     const url = stripQueryAndFragment(`${ctx.self?.url}/user`)
+    let resource = `${method} ${extractPathFromUrl(url)}`
+    const meta = {
+      component: 'supabase',
+      'span.kind': 'client',
+      'http.method': method,
+      'http.url': url,
+      'out.host': getHostname(url),
+    }
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      resource = otelHttpResourceName(method)
+      meta[INSTRUMENTATION_HTTP_RESOURCE] = resource
+    }
 
     this.startSpan('supabase.http.getuser', {
       service: { name: this.tracer._service },
       type: 'http',
-      resource: `${method} ${extractPathFromUrl(url)}`,
-      meta: {
-        component: 'supabase',
-        'span.kind': 'client',
-        'http.method': method,
-        'http.url': url,
-        'out.host': getHostname(url),
-      },
+      resource,
+      meta,
     }, ctx)
 
     return ctx.currentStore

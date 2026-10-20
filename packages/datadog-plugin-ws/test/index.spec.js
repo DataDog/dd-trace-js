@@ -623,6 +623,61 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with OTel semantics enabled', () => {
+        const connectClient = (path = `/${route}?active=true&password=secret`, options) => {
+          client = new WebSocket(`ws://127.0.0.1:${clientPort}${path}`, options)
+          return client
+        }
+
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          await agent.load(['ws'], [{
+            service: 'some',
+            traceWebsocketMessagesEnabled: true,
+            queryStringObfuscation: 'password=[^&]*',
+          }])
+          WebSocket = require(`../../../versions/ws@${version}`).get()
+
+          wsServer = new WebSocket.Server({ port: 0, host: '127.0.0.1' })
+          await once(wsServer, 'listening')
+          clientPort = wsServer.address().port
+        })
+
+        afterEach(() => {
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
+        })
+
+        afterEach(async () => {
+          await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          await agent.close()
+        })
+
+        it('uses OTel HTTP server attributes for the connection span', () => {
+          wsServer.on('connection', ws => ws.close())
+          connectClient(undefined, { headers: { 'user-agent': 'test-user-agent' } })
+
+          return agent.assertSomeTraces(traces => {
+            const span = findSpan(traces, span => span.name === 'web.request' && span.type === 'websocket')
+            assertObjectContains(span, {
+              resource: 'GET',
+              meta: {
+                'http.request.method': 'GET',
+                'network.peer.address': '127.0.0.1',
+                'url.query': 'active=true&<redacted>',
+                'user_agent.original': 'test-user-agent',
+              },
+            })
+          })
+        })
+      })
+
       describe('with service configuration', () => {
         const connectClient = (path = `/${route}?active=true`, options) => {
           client = new WebSocket(`ws://localhost:${clientPort}${path}`, options)

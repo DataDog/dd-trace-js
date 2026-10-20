@@ -4,6 +4,12 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const tags = require('../../../ext/tags.js')
 const { HTTP_HEADERS } = require('../../../ext/formats')
 const { getSegment } = require('../../dd-trace/src/util')
+const { getQsObfuscator, obfuscateQs } = require('../../dd-trace/src/plugins/util/url')
+const {
+  INSTRUMENTATION_HTTP_RESOURCE,
+  NETWORK_PEER_ADDRESS,
+  otelHttpResourceName,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const {
   createWebSocketSpanContext,
   hasTraceHeaders,
@@ -39,7 +45,11 @@ class WSServerPlugin extends TracingPlugin {
     const url = req.url
     const indexOfParam = url.indexOf('?')
     const route = indexOfParam === -1 ? url : url.slice(0, indexOfParam)
-    const uri = `${protocol}//${host}${route}`
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const requestTarget = otelSemantics
+      ? obfuscateQs({ queryStringObfuscation: getQsObfuscator(this.config) }, url)
+      : route
+    const uri = `${protocol}//${host}${requestTarget}`
     const resourceName = `${options.method} ${route}`
 
     ctx.args = { options }
@@ -48,17 +58,30 @@ class WSServerPlugin extends TracingPlugin {
     const childOf = this.tracer.extract(HTTP_HEADERS, req.headers)
 
     const service = this.serviceName({ pluginConfig: this.config })
+    const meta = {
+      'span.type': 'websocket',
+      'http.upgraded': 'websocket',
+      'http.method': options.method,
+      'http.url': uri,
+      'resource.name': resourceName,
+      'span.kind': 'server',
+    }
+    if (otelSemantics) {
+      const httpResource = otelHttpResourceName(options.method)
+      meta['resource.name'] = httpResource
+      meta[INSTRUMENTATION_HTTP_RESOURCE] = httpResource
+
+      const userAgent = options.headers['user-agent']
+      if (userAgent !== undefined) meta['http.useragent'] = userAgent
+
+      const peerAddress = req.socket?.remoteAddress
+      if (peerAddress) meta[NETWORK_PEER_ADDRESS] = peerAddress
+    }
+
     const span = this.startSpan(this.operationName(), {
       service,
       childOf,
-      meta: {
-        'span.type': 'websocket',
-        'http.upgraded': 'websocket',
-        'http.method': options.method,
-        'http.url': uri,
-        'resource.name': resourceName,
-        'span.kind': 'server',
-      },
+      meta,
 
     }, ctx)
     ctx.span = span
