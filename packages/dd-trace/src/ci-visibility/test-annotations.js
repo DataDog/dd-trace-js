@@ -46,6 +46,7 @@ function annotate (fn, annotation) {
       }),
     },
   })
+  if (Object.isFrozen(fn)) Object.freeze(annotated)
   return /** @type {T} */ (/** @type {unknown} */ (annotated))
 }
 
