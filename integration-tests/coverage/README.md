@@ -47,7 +47,7 @@ merge-lcov.js  (called by run-suite.js after mocha exits; converts every V8
 | File | Role |
 | --- | --- |
 | `runtime.js` | Shared constants/helpers (paths, env vars, `applyCoverageEnv`, `resolveCoverageRoot`, `getV8CoverageDir`). |
-| `run-suite.js` | Entry point. Resets the collector, points mocha's `NODE_V8_COVERAGE` at it, runs mocha, then the merger. |
+| `run-suite.js` | Entry point/module. Resets the collector, runs one or more covered mocha environments, then the merger. |
 | `register.js` | Preloaded into mocha; installs the `child_process` / `Worker` patches. |
 | `patch-child-process.js` | Rewrites options for `fork`/`spawn`/`exec`/`Worker` so every Node descendant inherits `NODE_V8_COVERAGE` and the bootstrap require. |
 | `child-bootstrap.js` | Preloaded into every child. Re-installs the patch (for deeper custom-env spawns) and flushes V8 coverage on the termination signals the harness uses to stop long-running fixtures. Does **no** instrumentation. |
