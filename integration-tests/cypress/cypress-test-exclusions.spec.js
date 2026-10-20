@@ -208,6 +208,28 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     })
   })
 
+  // Experimental strategy configuration was added in Cypress13.4.
+  const [major, minor] = version.split('.').map(Number)
+  const experimental = version === 'latest' || major > 13 || (major === 13 && minor >= 4) ? it : it.skip
+  experimental('preserves experimental native retry budgets and explicit zero overrides', async () => {
+    receiver.setSettings({ flaky_test_retries_enabled: false })
+    await run('experimental', 3, tests => {
+      assert.strictEqual(tests.length, 7)
+      for (const name of ['native experimental excluded', 'native experimental control']) {
+        const attempts = named(tests, name)
+        assert.strictEqual(attempts.length, 3, name)
+        for (const test of attempts) {
+          assert.strictEqual(test.meta[exclusion], name.endsWith('excluded') ? 'true' : undefined)
+        }
+        assert.strictEqual(attempts[1].meta['test.retry_reason'], 'external')
+        assert.strictEqual(attempts[2].meta['test.retry_reason'], 'external')
+      }
+      const zero = named(tests, 'native experimental zero')
+      assert.strictEqual(zero.length, 1)
+      assert.strictEqual(zero[0].meta[exclusion], 'true')
+    }, { CYPRESS_EXPERIMENTAL_RETRIES: 'true' })
+  })
+
   it('reads the public exclusion mode before declaring tests', async () => {
     await run('mode-selection', 0, tests => {
       assert.strictEqual(tests.length, 1)

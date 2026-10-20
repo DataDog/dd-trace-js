@@ -2098,12 +2098,17 @@ class CypressPlugin {
           this.isDynamicAtrEnabled = false
           this.flakyTestRetriesCount = 0
         }
+        let frameworkRetries = this.originalCypressRetries
+        if (typeof frameworkRetries !== 'number') {
+          const configured = this.originalCypressRetries?.[isTextTerminal ? 'runMode' : 'openMode']
+          frameworkRetries = configured === true
+            ? this.originalCypressRetries.experimentalOptions?.maxRetries ?? 0
+            : configured || 0
+        }
         const suitePayload = {
           isEarlyFlakeDetectionEnabled:
             this.isEarlyFlakeDetectionEnabled && hasEfdRetries(this.earlyFlakeDetectionRetryPolicy),
-          frameworkRetries: typeof this.originalCypressRetries === 'number'
-            ? this.originalCypressRetries
-            : this.originalCypressRetries?.[isTextTerminal ? 'runMode' : 'openMode'] || 0,
+          frameworkRetries,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
           earlyFlakeDetectionSchedulingRetryCount: this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
           isKnownTestsEnabled: this.isKnownTestsEnabled,
