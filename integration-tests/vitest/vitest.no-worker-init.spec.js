@@ -903,19 +903,21 @@ describe('vitest no-worker init instrumentation selection', () => {
   })
 
   describe('configureWorkerEnv', () => {
+    const runWithNodeOptions = options => execFileSync(process.execPath, [
+      '-e', 'process.stdout.write(globalThis.annotationOption)',
+    ], {
+      env: { ...process.env, NODE_OPTIONS: options },
+      encoding: 'utf8',
+    })
+
     for (const nodeOptions of [
       "--import=data:text/javascript,globalThis.annotationOption='ok'",
-      `  --import "data:text/javascript,globalThis.annotationOption='ok'"  `,
+      '  --import "data:text/javascript,globalThis.annotationOption=\'ok\'"  ',
     ]) {
       it(`preserves ordinary worker NODE_OPTIONS verbatim: ${nodeOptions}`, () => {
-        const script = 'process.stdout.write(globalThis.annotationOption)'
-        const run = options => execFileSync(process.execPath, ['-e', script], {
-          env: { ...process.env, NODE_OPTIONS: options },
-          encoding: 'utf8',
-        })
-        assert.strictEqual(run(nodeOptions), 'ok')
+        assert.strictEqual(runWithNodeOptions(nodeOptions), 'ok')
         const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: nodeOptions })
-        assert.strictEqual(run(env.NODE_OPTIONS), 'ok')
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), 'ok')
         assert.strictEqual(env.NODE_OPTIONS, nodeOptions)
       })
     }
@@ -929,14 +931,9 @@ describe('vitest no-worker init instrumentation selection', () => {
       it(`retains literal apostrophes when removing the annotation preload: ${preloadOption}`, () => {
         const userOptions = "--import=data:text/javascript,globalThis.annotationOption='ok'"
         const nodeOptions = `${userOptions} ${preloadOption}`
-        const script = 'process.stdout.write(globalThis.annotationOption)'
-        const run = options => execFileSync(process.execPath, ['-e', script], {
-          env: { ...process.env, NODE_OPTIONS: options },
-          encoding: 'utf8',
-        })
-        assert.strictEqual(run(nodeOptions), 'ok')
+        assert.strictEqual(runWithNodeOptions(nodeOptions), 'ok')
         const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: nodeOptions })
-        assert.strictEqual(run(env.NODE_OPTIONS), 'ok')
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), 'ok')
         assert.strictEqual(env.NODE_OPTIONS, userOptions)
       })
     }
