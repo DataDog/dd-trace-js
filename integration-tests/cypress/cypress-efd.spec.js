@@ -381,7 +381,7 @@ moduleTypes.forEach(({
 
               const testSession = events.find(event => event.type === 'test_session_end').content
               assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-            }, { hardTimeout: 60_000 })
+            }, { hardTimeout: 60_000, captureOutput: true })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -614,7 +614,7 @@ moduleTypes.forEach(({
 
               const testSession = events.find(event => event.type === 'test_session_end').content
               assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-            }, { hardTimeout: 60_000 })
+            }, { hardTimeout: 60_000, captureOutput: true })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -675,7 +675,7 @@ moduleTypes.forEach(({
 
               const testSession = events.find(event => event.type === 'test_session_end').content
               assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-            }, { hardTimeout: 60_000 })
+            }, { hardTimeout: 60_000, captureOutput: true })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -745,7 +745,7 @@ moduleTypes.forEach(({
               assertObjectContains(testSession.meta, {
                 [TEST_EARLY_FLAKE_ENABLED]: 'true',
               })
-            }, { hardTimeout: 60_000 })
+            }, { hardTimeout: 60_000, captureOutput: true })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -944,7 +944,7 @@ moduleTypes.forEach(({
               assertObjectContains(testSession.meta, {
                 [TEST_EARLY_FLAKE_ENABLED]: 'true',
               })
-            }, { hardTimeout: 60_000 })
+            }, { hardTimeout: 60_000, captureOutput: true })
 
         childProcess.stdout?.on('data', (data) => {
           testOutput += data.toString()

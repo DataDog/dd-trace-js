@@ -520,10 +520,10 @@ class FakeCiVisIntake extends FakeAgent {
    * @param {(payloads: object[]) => void} onPayload Assertion callback, invoked once
    *   on the post-exit buffer. Callers can read `childProcess.exitCode` immediately
    *   after the returned promise resolves.
-   * @param {{ gracePeriod?: number, hardTimeout?: number }} [options]
+   * @param {{ gracePeriod?: number, hardTimeout?: number, captureOutput?: boolean }} [options]
    */
   gatherPayloadsUntilChildExit (childProcess, payloadMatch, onPayload, options = {}) {
-    const { gracePeriod = 1000, hardTimeout = 30_000 } = options
+    const { gracePeriod = 1000, hardTimeout = 30_000, captureOutput = false } = options
     const payloads = []
     let stdout = ''
     let stderr = ''
@@ -539,8 +539,10 @@ class FakeCiVisIntake extends FakeAgent {
         settled = true
         this.off('message', messageHandler)
         childProcess.off('exit', exitHandler)
-        childProcess.stdout?.off('data', stdoutHandler)
-        childProcess.stderr?.off('data', stderrHandler)
+        if (captureOutput) {
+          childProcess.stdout?.off('data', stdoutHandler)
+          childProcess.stderr?.off('data', stderrHandler)
+        }
         clearTimeout(hardTimer)
         clearTimeout(graceTimer)
       }
@@ -586,13 +588,15 @@ class FakeCiVisIntake extends FakeAgent {
         cleanup()
         reject(new Error(
           `gatherPayloadsUntilChildExit: hard timeout of ${hardTimeout}ms expired (child still running)` +
-          `\nChild stdout:\n${stdout}\nChild stderr:\n${stderr}`
+          (captureOutput ? `\nChild stdout:\n${stdout}\nChild stderr:\n${stderr}` : '')
         ))
       }, hardTimeout)
 
       this.on('message', messageHandler)
-      childProcess.stdout?.on('data', stdoutHandler)
-      childProcess.stderr?.on('data', stderrHandler)
+      if (captureOutput) {
+        childProcess.stdout?.on('data', stdoutHandler)
+        childProcess.stderr?.on('data', stderrHandler)
+      }
 
       // Child may already have exited (very fast spawn-and-die).
       if (childProcess.exitCode !== null || childProcess.signalCode != null) {

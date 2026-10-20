@@ -43,7 +43,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
       (payloads) => {
         assert.strictEqual(payloads.length, 3)
       },
-      { gracePeriod: 50, hardTimeout: 5000 }
+      { gracePeriod: 50, hardTimeout: 5000, captureOutput: true }
     )
 
     intake.emit('message', { url: '/api/v2/citestcycle', payload: { i: 1 } })
@@ -152,7 +152,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
       child,
       () => false,
       () => assert.fail('onPayload must not run when no payloads matched'),
-      { gracePeriod: 50, hardTimeout: 5000 }
+      { gracePeriod: 50, hardTimeout: 5000, captureOutput: true }
     )
     const rejection = assert.rejects(promise, /child exited with no matching payloads/)
 
@@ -173,7 +173,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
       (payloads) => {
         assert.strictEqual(payloads.length, 5, 'expected five payloads')
       },
-      { gracePeriod: 50, hardTimeout: 5000 }
+      { gracePeriod: 50, hardTimeout: 5000, captureOutput: true }
     )
     const rejection = assert.rejects(promise, /expected five payloads/)
 
@@ -209,7 +209,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
     assert.strictEqual(child.listenerCount('exit'), 0)
   })
 
-  it('includes child stdout and stderr in the hard-timeout error and removes its output listeners', async () => {
+  it('does not capture child output by default', async () => {
     const child = fakeChildProcess()
     child.stdout = new PassThrough()
     child.stderr = new PassThrough()
@@ -222,6 +222,34 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
       () => false,
       () => assert.fail('onPayload must not run before child exit'),
       { hardTimeout: 100 }
+    )
+    const stdoutListeners = child.stdout.listeners('data')
+    const stderrListeners = child.stderr.listeners('data')
+    const rejection = assert.rejects(promise, {
+      message: 'gatherPayloadsUntilChildExit: hard timeout of 100ms expired (child still running)',
+    })
+
+    child.stdout.write('Output that should not appear in the timeout error\n')
+    child.stderr.write('Warning that should not appear in the timeout error\n')
+
+    await Promise.all([clock.tickAsync(100), rejection])
+    assert.deepStrictEqual(stdoutListeners, [stdoutListener])
+    assert.deepStrictEqual(stderrListeners, [stderrListener])
+  })
+
+  it('includes child stdout and stderr in the hard-timeout error when capture is enabled', async () => {
+    const child = fakeChildProcess()
+    child.stdout = new PassThrough()
+    child.stderr = new PassThrough()
+    const stdoutListener = sinon.spy()
+    const stderrListener = sinon.spy()
+    child.stdout.on('data', stdoutListener)
+    child.stderr.on('data', stderrListener)
+    const promise = intake.gatherPayloadsUntilChildExit(
+      child,
+      () => false,
+      () => assert.fail('onPayload must not run before child exit'),
+      { hardTimeout: 100, captureOutput: true }
     )
     const rejection = assert.rejects(promise, {
       message: 'gatherPayloadsUntilChildExit: hard timeout of 100ms expired (child still running)' +
@@ -248,7 +276,7 @@ describe('FakeCiVisIntake.gatherPayloadsUntilChildExit', () => {
       child,
       () => false,
       () => assert.fail('onPayload must not run before child exit'),
-      { hardTimeout: 100 }
+      { hardTimeout: 100, captureOutput: true }
     )
     const stdout = 'o'.repeat(64 * 1024 - 1) + '\n'
     const stderr = 'e'.repeat(64 * 1024 - 1) + '\n'
