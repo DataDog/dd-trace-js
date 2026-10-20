@@ -692,6 +692,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     #efdRetryGatesByName
     #expect
     #pendingPre30ConcurrentTests
+    /** @type {Map<object, { finish: (finalStatus?: string) => void, finalStatus: string }>|undefined} */
+    #pendingDescribeRetryFinishes
     /** @type {(() => void)|undefined} */
     #restoreSnapshotState
     /** @type {Set<string>|undefined} */
@@ -2084,6 +2086,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       if (event.name === 'run_start') {
+        this.#finishPendingDescribeRetries()
         this.#describeRetryAttempts = undefined
         this.#trackQuarantinedSnapshots()
         const registerResultHandler = retryResultHandlerRegistrations.get(this)
@@ -2119,6 +2122,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (event.name === 'concurrent_tests_start') {
         this.orderConcurrentEfdRetries(event.tests)
       } else if (event.name === 'test_start') {
+        const pendingFinish = this.#pendingDescribeRetryFinishes?.get(event.test)
+        if (pendingFinish) {
+          this.#pendingDescribeRetryFinishes?.delete(event.test)
+          // An actual replay makes the preceding execution nonterminal.
+          pendingFinish.finish()
+        }
         const testName = getJestTestName(event.test)
         const registeredConcurrentTestState = testContexts.get(event.test)?.concurrentTestState
         const concurrentTestState = this.concurrentTestStates.get(event.test.fn) ||
@@ -2551,9 +2560,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isAtrRetry = true
         }
 
+        /** @type {{ finish?: (finalStatus?: string) => void }|undefined} */
+        const deferredFinish = status === 'fail' && ctx.noAutoRetry &&
+          ctx.hasDescribeRetriesRemaining && !finalStatus
+          ? {}
+          : undefined
         testFinishCh.publish({
           ...ctx.currentStore,
           status,
+          deferredFinish,
           testStartLine: getTestLineStart(event.test.asyncError, this.testSuite),
           attemptToFixPassed,
           failedAllTests,
@@ -2563,6 +2578,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           earlyFlakeAbortReason: efdSlowAbortedTests.has(testName) ? 'slow' : undefined,
           promises,
         })
+        if (deferredFinish?.finish) {
+          this.#pendingDescribeRetryFinishes ??= new Map()
+          this.#pendingDescribeRetryFinishes.set(event.test, {
+            finish: deferredFinish.finish,
+            finalStatus: ctx.isQuarantined ? 'skip' : 'fail',
+          })
+        }
 
         if (promises.hitBreakpointPromise) {
           await promises.hitBreakpointPromise
@@ -2574,6 +2596,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           ctx.currentStore = undefined
         }
       } else if (event.name === 'run_finish') {
+        this.#finishPendingDescribeRetries()
         this.#restoreSnapshotState?.()
         this.#restoreSnapshotState = undefined
         this.removeDiscardedEfdRetries()
@@ -2774,7 +2797,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return efdResult.finalStatus || attemptToFixResult.finalStatus || atrResult.finalStatus
     }
 
+    #finishPendingDescribeRetries () {
+      const pendingFinishes = this.#pendingDescribeRetryFinishes
+      if (!pendingFinishes) return
+      this.#pendingDescribeRetryFinishes = undefined
+      for (const { finish, finalStatus } of pendingFinishes.values()) finish(finalStatus)
+    }
+
     teardown () {
+      this.#finishPendingDescribeRetries()
       this.#restoreSnapshotState?.()
       this.#restoreSnapshotState = undefined
       if (this._globalProxy?.propertyToValue) {

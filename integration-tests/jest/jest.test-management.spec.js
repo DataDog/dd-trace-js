@@ -707,6 +707,33 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     }
 
+    for (const mode of ['external-expect', 'uncaught-body', 'uncaught-after-all', 'owned-body']) {
+      describeRetriesIt(`finalizes terminal excluded describe failures (${mode})`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true })
+        await runExclusions('test-group-annotation-terminal', 1, spans => {
+          const expectedAttempts = mode === 'owned-body' ? 3 : 1
+          assert.strictEqual(spans.length, 2 * expectedAttempts + 1)
+          const marker = spans.find(span => span.meta[TEST_NAME] === 'later marker')
+          assert.ok(marker)
+          assert.strictEqual(marker.meta[TEST_STATUS], 'pass')
+          for (const name of ['native terminal bare', 'native terminal combined']) {
+            const attempts = spans.filter(span => span.meta[TEST_NAME] === name)
+            assert.strictEqual(attempts.length, expectedAttempts)
+            for (const attempt of attempts) {
+              assert.strictEqual(attempt.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(attempt.meta[noAutoRetryTag], 'true')
+              assert.ok(BigInt(attempt.start) + BigInt(attempt.duration) <= BigInt(marker.start),
+                'a completed test must end before the later marker starts')
+            }
+            for (const attempt of attempts.slice(0, -1)) {
+              assert.strictEqual(attempt.meta[TEST_FINAL_STATUS], undefined)
+            }
+            assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+          }
+        }, { EXCLUSIONS_TERMINAL_MODE: mode })
+      })
+    }
+
     describeRetriesIt('tracks nested describe retry attempts after earlier successful attempts', async () => {
       receiver.setSettings({ flaky_test_retries_enabled: true })
       await runExclusions('test-group-annotation-nested', 1, spans => {

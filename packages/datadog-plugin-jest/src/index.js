@@ -438,6 +438,7 @@ class JestPlugin extends CiPlugin {
       attemptToFixFailed,
       isAtrRetry,
       finalStatus,
+      deferredFinish,
       earlyFlakeAbortReason,
       promises,
     }) => {
@@ -469,6 +470,20 @@ class JestPlugin extends CiPlugin {
         'test',
         this.getTestTelemetryTags(span)
       )
+
+      if (deferredFinish) {
+        // Native describe retries can stop after later process errors or hooks.
+        // Delay publication, not the execution's monotonic end time or child cleanup.
+        const finishTime = span._getTime()
+        finishAllTraceSpans(span)
+        this.activeTestSpan = null
+        deferredFinish.finish = finalStatus => {
+          if (finalStatus) span.setTag(TEST_FINAL_STATUS, finalStatus)
+          span.finish(finishTime)
+          if (finalStatus) this.cancelDiBreakpointHitWait()
+        }
+        return
+      }
 
       const finish = () => {
         span.finish()
