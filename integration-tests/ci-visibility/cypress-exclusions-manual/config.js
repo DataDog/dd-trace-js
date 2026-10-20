@@ -2,8 +2,10 @@
 
 const { join } = require('node:path')
 const { defineConfig } = require('cypress')
+const getCypressTestEnvironment = require('../../cypress-test-environment')
 
 module.exports = defineConfig({
+  ...getCypressTestEnvironment(),
   video: false,
   screenshotOnRunFailure: false,
   e2e: {

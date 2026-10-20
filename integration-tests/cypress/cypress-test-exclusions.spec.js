@@ -208,6 +208,15 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     })
   })
 
+  it('reads the public exclusion mode before declaring tests', async () => {
+    await run('mode-selection', 0, tests => {
+      assert.strictEqual(tests.length, 1)
+      assert.strictEqual(tests[0].meta['test.name'], 'mode selected')
+      assert.strictEqual(tests[0].meta['test.status'], 'pass')
+      assert.strictEqual(tests[0].meta[exclusion], 'true')
+    })
+  })
+
   it('keeps manually loaded support harmless when tracing is disabled', async () => {
     childProcess = exec(
       './node_modules/.bin/cypress run --config-file ci-visibility/cypress-exclusions-manual/config.js', {
