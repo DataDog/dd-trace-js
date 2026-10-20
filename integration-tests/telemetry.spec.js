@@ -12,12 +12,12 @@ describe('telemetry', () => {
     // initialize.mjs always registers the asynchronous loader (module.register). register.js
     // registers the synchronous loader (module.registerHooks) on Node.js versions that support it.
     const setups = [
-      ['--import', 'dd-trace/initialize.mjs'],
-      ['--import', 'dd-trace/register.js', '--require', 'dd-trace/init'],
+      { execArgv: ['--import', 'dd-trace/initialize.mjs'], app: 'index.mjs' },
+      { execArgv: ['--import', 'dd-trace/register.js', '--require', 'dd-trace/init'], app: 'index.mjs' },
+      { execArgv: ['--import', 'dd-trace/register.js'], app: 'late-init.mjs' },
     ]
 
     let cwd
-    let appFile
     let agent
     let proc
 
@@ -25,7 +25,6 @@ describe('telemetry', () => {
 
     before(() => {
       cwd = sandboxCwd()
-      appFile = path.join(cwd, 'telemetry/esm-dependencies/index.mjs')
     })
 
     afterEach(async () => {
@@ -33,8 +32,8 @@ describe('telemetry', () => {
       await agent.stop()
     })
 
-    for (const execArgv of setups) {
-      it(`reports non-instrumented ESM-only packages with ${execArgv.join(' ')}`, async () => {
+    for (const { execArgv, app } of setups) {
+      it(`reports non-instrumented ESM-only packages with ${execArgv.join(' ')} (${app})`, async () => {
         agent = await new FakeAgent().start()
 
         const reported = new Set()
@@ -53,7 +52,7 @@ describe('telemetry', () => {
           timeout: 10_000,
         })
 
-        const spawned = spawnProc(appFile, {
+        const spawned = spawnProc(path.join(cwd, 'telemetry/esm-dependencies', app), {
           cwd,
           execArgv,
           env: {

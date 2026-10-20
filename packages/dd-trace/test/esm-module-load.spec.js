@@ -88,4 +88,19 @@ describe('esm-module-load', () => {
 
     assert.deepStrictEqual(published, ['file:///app/node_modules/nanoid/index.js'])
   })
+
+  it('keeps the reports published before anyone subscribes for late consumers', () => {
+    moduleLoadStartChannel.unsubscribe(onModuleLoadStart)
+    esmModuleLoad.getLoaderRegisterOptions()
+
+    esmModuleLoad.publishModuleLoad('file:///app/node_modules/nanoid/index.js')
+    port1.emit('message', 'file:///app/node_modules/axios/index.js')
+    clock.tick(100)
+
+    assert.deepStrictEqual(published, [])
+    assert.deepStrictEqual(esmModuleLoad.getPublishedModuleLoads(), [
+      'file:///app/node_modules/nanoid/index.js',
+      'file:///app/node_modules/axios/index.js',
+    ])
+  })
 })
