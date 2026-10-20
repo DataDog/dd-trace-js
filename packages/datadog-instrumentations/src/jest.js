@@ -266,15 +266,14 @@ let jestEachBind
 
 // Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
 const quarantinedFailingTests = new Set()
-const testAnnotations = new Map()
 
 /**
  * @param {string} suite
  * @param {string} name
+ * @param {{ mustFail: boolean, noAutoRetry: boolean }|undefined} annotations
  */
-function getEffectiveManagementProperties (suite, name) {
+function getEffectiveManagementProperties (suite, name, annotations) {
   const properties = testManagementTests?.jest?.suites?.[suite]?.tests?.[name]?.properties
-  const annotations = testAnnotations.get(`${suite} › ${name}`)
   if (!properties || !annotations) return properties
   return {
     ...properties,
@@ -458,9 +457,9 @@ function getAttemptToFixExecutionsFromJestResults (result) {
       ?.tests
     if (!testManagementTestsForSuite) continue
 
-    for (const { fullName, status } of testResults) {
+    for (const { fullName, status, _ddTestAnnotations } of testResults) {
       const testName = removeSeedSuffixFromTestName(fullName)
-      const testManagementTest = getEffectiveManagementProperties(testSuite, testName)
+      const testManagementTest = getEffectiveManagementProperties(testSuite, testName, _ddTestAnnotations)
       if (!testManagementTest?.attempt_to_fix) continue
       const testStatus = getTestStatusFromJestResult(status) ||
         (status === 'pending' || status === 'todo' ? 'skip' : undefined)
@@ -506,9 +505,9 @@ function recordTestManagementExecutionsFromJestResults (result, quarantineFailur
       ?.tests
     if (!testManagementTestsForSuite) continue
 
-    for (const { fullName, status } of testResults) {
+    for (const { fullName, status, _ddTestAnnotations } of testResults) {
       const testName = removeSeedSuffixFromTestName(fullName)
-      const testManagementTest = getEffectiveManagementProperties(testSuite, testName)
+      const testManagementTest = getEffectiveManagementProperties(testSuite, testName, _ddTestAnnotations)
       if (!testManagementTest) continue
 
       const name = `${testSuite} › ${testName}`
@@ -1587,9 +1586,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      */
     getTestPolicy (testName, testFn) {
       const { mustFail, noAutoRetry } = getTestAnnotations(testFn)
-      if (mustFail || noAutoRetry) {
-        testAnnotations.set(`${this.testSuite} › ${testName}`, { mustFail, noAutoRetry })
-      }
       const properties = this.isTestManagementTestsEnabled ? this.testManagementTestsForThisSuite : undefined
       return {
         mustFail,
@@ -2547,6 +2543,25 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.#restoreSnapshotState?.()
         this.#restoreSnapshotState = undefined
         this.removeDiscardedEfdRetries()
+        // Mirror Circus result ordering, including skipped tests and generated retry entries.
+        const entries = [state.rootDescribeBlock]
+        this.testResultAnnotations = []
+        const appendAnnotations = test => {
+          const { mustFail, noAutoRetry } = getTestAnnotations(test.fn)
+          this.testResultAnnotations.push({ mustFail, noAutoRetry })
+        }
+        while (entries.length) {
+          const entry = entries.pop()
+          if (hasTestsInChildren && entry.type === 'test') {
+            appendAnnotations(entry)
+          } else {
+            // Jest 24/25 report a describe block's own tests before its nested blocks.
+            if (!hasTestsInChildren) {
+              for (const test of entry.tests) appendAnnotations(test)
+            }
+            for (let index = entry.children.length - 1; index >= 0; index--) entries.push(entry.children[index])
+          }
+        }
         for (const [test, errors] of atrSuppressedErrors) {
           // Do not restore errors for non-ATF quarantined tests — they should stay suppressed
           // so Jest doesn't see the failure (prevents --bail from stopping the run).
@@ -2872,7 +2887,6 @@ function resetLibraryConfiguration () {
   isKnownTestsEnabled = false
   isTestManagementTestsEnabled = false
   testManagementTests = {}
-  testAnnotations.clear()
   testManagementAttemptToFixRetries = 0
   isImpactedTestsEnabled = false
   modifiedFiles = undefined
@@ -3224,7 +3238,6 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       resetSuiteSkippingRunState()
-      testAnnotations.clear()
       hasFinishedTestSession = false
 
       let shouldResetLibraryConfiguration = true
@@ -3424,20 +3437,21 @@ function getCliWrapper (isNewJestVersion) {
         const failedTests = result
           .results
           .testResults.flatMap(({ testResults, testFilePath: testSuiteAbsolutePath }) => (
-            testResults.map(({ fullName: testName, status }) => (
+            testResults.map(({ fullName: testName, status, _ddTestAnnotations }) => (
               {
                 // Strip seed suffix so the name matches what was reported via TEST_NAME.
                 testName: removeSeedSuffixFromTestName(testName),
                 testSuiteAbsolutePath,
                 status,
+                _ddTestAnnotations,
               }
             ))
           ))
           .filter(({ status }) => status === 'failed')
 
-        for (const { testName, testSuiteAbsolutePath } of failedTests) {
+        for (const { testName, testSuiteAbsolutePath, _ddTestAnnotations } of failedTests) {
           const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
-          const testManagementTest = getEffectiveManagementProperties(testSuite, testName)
+          const testManagementTest = getEffectiveManagementProperties(testSuite, testName, _ddTestAnnotations)
           if (testManagementTest?.quarantined && !testManagementTest?.attempt_to_fix) {
             numFailedQuarantinedTests++
             quarantineIgnoredNames.push(`${testSuite} › ${testName}`)
@@ -3742,6 +3756,9 @@ function jestAdapterWrapper (jestAdapter, jestVersion, isIitm, hookMeta) {
       testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
     })
     return adapter.apply(this, args).then(suiteResults => {
+      for (const [index, result] of suiteResults.testResults.entries()) {
+        result._ddTestAnnotations = environment.testResultAnnotations?.[index]
+      }
       const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
       let status = 'pass'
       if (skipped) {
@@ -4530,7 +4547,7 @@ function onMessageWrapper (onMessage) {
 
     const [code, data] = response
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
-      collectTestOptimizationSummariesFromTraces(data, { newTestsWithDynamicNames, testAnnotations })
+      collectTestOptimizationSummariesFromTraces(data, { newTestsWithDynamicNames })
       workerReportTraceCh.publish(data)
       return
     }
