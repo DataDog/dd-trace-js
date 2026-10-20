@@ -895,7 +895,7 @@ To protect a failure from both quarantine/disable and automatic retries, combine
 
 Each helper returns an annotated callback without modifying the original. Callback arguments, return values,
 errors, `this`, and arity are preserved. Apply the helper to the callback passed to `test.each` to protect every case.
-The helpers can be imported without initializing the tracer; enforcement requires the corresponding Jest or Mocha instrumentation.
+The helpers can be imported without initializing the tracer; enforcement requires the corresponding Jest, Mocha, or Playwright instrumentation.
 
 Test events report `test.test_management.prevent_failure_suppression` and `test.test_management.no_auto_retry`
 as `true` when the corresponding annotation is present; absent annotations omit the tag.
