@@ -8,6 +8,64 @@ const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc, assertObjectContains } = require('./helpers')
 
 describe('telemetry', () => {
+  describe('ESM dependencies', () => {
+    // initialize.mjs always registers the asynchronous loader (module.register). register.js
+    // registers the synchronous loader (module.registerHooks) on Node.js versions that support it.
+    const setups = [
+      ['--import', 'dd-trace/initialize.mjs'],
+      ['--import', 'dd-trace/register.js', '--require', 'dd-trace/init'],
+    ]
+
+    let cwd
+    let appFile
+    let agent
+    let proc
+
+    useSandbox(['axios', 'nanoid'])
+
+    before(() => {
+      cwd = sandboxCwd()
+      appFile = path.join(cwd, 'telemetry/esm-dependencies/index.mjs')
+    })
+
+    afterEach(async () => {
+      await stopProc(proc)
+      await agent.stop()
+    })
+
+    for (const execArgv of setups) {
+      it(`reports non-instrumented ESM-only packages with ${execArgv.join(' ')}`, async () => {
+        agent = await new FakeAgent().start()
+
+        const reported = new Set()
+
+        // Listen before spawning: the dependencies loaded at startup are sent before the app reports its port.
+        const telemetryReceived = agent.assertTelemetryReceived({
+          fn: ({ payload }) => {
+            for (const { name } of payload.payload.dependencies ?? []) {
+              reported.add(name)
+            }
+            assert.ok(reported.has('axios'), `axios not reported, got: ${[...reported].join(', ')}`)
+            assert.ok(reported.has('nanoid'), `nanoid not reported, got: ${[...reported].join(', ')}`)
+          },
+          requestType: 'app-dependencies-loaded',
+          resolveAtFirstSuccess: true,
+          timeout: 10_000,
+        })
+
+        const spawned = spawnProc(appFile, {
+          cwd,
+          execArgv,
+          env: {
+            DD_TRACE_AGENT_PORT: String(agent.port),
+          },
+        }).then(spawnedProc => { proc = spawnedProc })
+
+        await Promise.all([spawned, telemetryReceived])
+      })
+    }
+  })
+
   describe('dependencies', () => {
     let cwd
     let startupTestFile
