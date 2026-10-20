@@ -866,6 +866,9 @@ callback annotations from `dd-trace/test-optimization`. Apply them to individual
 fixture parameters remain available. Exclusions are resolved in the coordinator
 before disabling and retries; worker spans retain both annotation and backend
 assignment tags. Explicit project and suite retry settings remain available.
+Playwright retries serial groups together, so a group containing `noAutoRetry` also
+excludes Datadog automatic retries for its other members. Explicit native group
+and project retries remain available.
 
 ## Jest test automation exclusions
 
