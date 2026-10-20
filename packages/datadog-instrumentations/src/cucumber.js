@@ -826,7 +826,8 @@ function wrapRun (pl, isLatestVersion, version) {
     // Cucumber 7–10 workers construct runners directly, without the newer
     // runTestCase wrapper that reads the coordinator's configuration.
     if (getEnvironmentVariable('CUCUMBER_WORKER_ID') && satisfies(version, '>=7.0.0 <11.0.0')) {
-      readParallelWorkerAtrParameters(this.worldParameters)
+      frameworkRetryCount = this.worldParameters._ddFrameworkRetryCount || 0
+      if (satisfies(version, '>=8.0.0')) readParallelWorkerAtrParameters(this.worldParameters)
     }
 
     const testFileAbsolutePath = this.pickle.uri
@@ -1032,7 +1033,8 @@ function wrapRun (pl, isLatestVersion, version) {
 
         // Notice that ATR is handled using cucumber native retries features.
         // Therefore, if we reach this point, we are certain that it's the last ATR execution
-        const isLastAtrRetry = !testAnnotations.noAutoRetry && isFlakyTestRetriesEnabled &&
+        const isLastAtrRetry = satisfies(version, '>=8.0.0') &&
+          !testAnnotations.noAutoRetry && isFlakyTestRetriesEnabled &&
           !isAttemptToFix && !isEfdRetry &&
           numTestRetries > 0 && this.maxAttempts > 1
 

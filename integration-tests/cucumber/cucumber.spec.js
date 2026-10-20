@@ -691,7 +691,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 early_flake_detection: { enabled: false, slow_test_retries: { '5s': 3 } },
               })
               const messagesPath = `${cwd}/attempts.ndjson`
-              const { exitCode, output } = await run('budgets', {
+              const { events, exitCode, output } = await run('budgets', {
                 DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
                 DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: bucketConfig === 'custom' ? '1,2,3,4,5' : '',
               }, ['--name', '^duration 0$', '--format', `message:${messagesPath}`])
@@ -699,6 +699,10 @@ describe(`cucumber@${version} commonJS`, () => {
               // Cucumber 7 does not expose individual retry attempts as test spans.
               const messages = fs.readFileSync(messagesPath, 'utf8').trim().split('\n').map(line => JSON.parse(line))
               assert.strictEqual(messages.filter(message => message.testCaseStarted).length, 2)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 1)
+              assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+              assert.strictEqual(tests[0].meta[TEST_FINAL_STATUS], 'fail')
             })
           }
           return
