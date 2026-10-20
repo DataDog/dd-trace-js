@@ -347,6 +347,33 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, expectedExit, output)
     }
 
+    for (const annotated of [false, true]) {
+      it(`supports non-extensible custom environments (annotated=${annotated})`, async () => {
+        const env = {
+          CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jest-environment-dynamic-atr-duration.js',
+          DYNAMIC_ATR_PREVENT_EXTENSIONS: '1',
+          EXCLUSIONS_ANNOTATED_ENVIRONMENT: annotated ? '1' : '0',
+        }
+        // Establish the native environment contract before checking the traced run.
+        execSync(runTestsCommand, {
+          cwd,
+          env: {
+            ...process.env,
+            ...env,
+            NODE_OPTIONS: '',
+            TESTS_TO_RUN: 'test-management/test-exclusions-environment',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+          stdio: 'pipe',
+        })
+        await runExclusions('test-exclusions-environment', 0, spans => {
+          assert.strictEqual(spans.length, 1)
+          assert.strictEqual(spans[0].meta[TEST_STATUS], 'pass')
+          assert.strictEqual(spans[0].meta[noAutoRetryTag], annotated ? 'true' : undefined)
+        }, env)
+      })
+    }
+
     it('overrides quarantine and disable without reversing developer skips', async () => {
       receiver.setSettings({ test_management: { enabled: true } })
       const file = 'test-exclusions-policy'
