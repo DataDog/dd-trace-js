@@ -39,6 +39,7 @@ if (loadCh.hasSubscribers) {
 
 const noopTask = {
   'dd:testSuiteStart': () => null,
+  'dd:testDeclarations': () => null,
   'dd:beforeEach': () => ({}),
   'dd:afterEach': () => null,
   'dd:addTags': () => null,
