@@ -17,6 +17,36 @@ describe('Test Optimization callback annotations', () => {
       assert.strictEqual(Object.isFrozen(callback), true)
     })
 
+    it('preserves callable own properties, accessors, and methods without evaluating getters', () => {
+      const calls = []
+      const marker = Symbol('callback marker')
+      let reads = 0
+      const callback = Object.freeze(Object.defineProperties(function callable (value) {
+        calls.push(value)
+      }, {
+        _isMockFunction: { value: true },
+        mock: { get () { reads++; return { calls } } },
+        mockClear: { value: () => { calls.length = 0 } },
+        [marker]: { value: 'custom metadata', enumerable: true },
+      }))
+
+      const annotated = helper(callback)
+      assert.strictEqual(reads, 0)
+      assert.strictEqual(annotated._isMockFunction, true)
+      annotated(42)
+      assert.deepStrictEqual(annotated.mock.calls, [42])
+      annotated.mockClear()
+      assert.deepStrictEqual(annotated.mock.calls, [])
+      assert.strictEqual(annotated[marker], 'custom metadata')
+      for (const key of ['_isMockFunction', 'mock', 'mockClear', marker]) {
+        assert.deepStrictEqual(
+          Object.getOwnPropertyDescriptor(annotated, key),
+          Object.getOwnPropertyDescriptor(callback, key)
+        )
+      }
+      assert.strictEqual(Object.isFrozen(callback), true)
+    })
+
     it('preserves synchronous failures', () => {
       const error = new Error('original')
       assert.throws(helper(() => { throw error }), actual => actual === error)
