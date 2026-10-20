@@ -1,9 +1,10 @@
 'use strict'
 
-const Module = require('module')
+const Module = require('node:module')
 const dc = require('dc-polyfill')
 
 const log = require('../../../dd-trace/src/log')
+const { IS_SERVERLESS } = require('../../../dd-trace/src/serverless')
 const { activate, loadChannel } = require('./register.js')
 const {
   filename,
@@ -13,28 +14,49 @@ const {
 } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
+const { isNodeBuiltinModuleName } = require('./shared-utils')
 const { isRewriteActivationEnabled } = require('./rewriter/targets')
 const disabledInstrumentations = getDisabledInstrumentations()
 
-// register.js has now set up ritm (require-in-the-middle). In bundled
-// environments (webpack, esbuild), Node.js built-in modules required by
-// dd-trace internal modules (e.g. http from request.js) may have been loaded
-// before ritm was active. The bundler's module cache then returns those
-// pre-loaded modules for any subsequent require() calls, bypassing ritm.
-// Re-requiring them via the real Module.prototype.require ensures ritm applies
-// their instrumentation hooks.
-//
-// In regular Node.js, `module` is an instance of Module. In bundlers, the
-// module wrapper object is a plain object (not a Module instance), so we use
-// that to detect a bundled context and avoid unintended side-effects in
-// normal Node.js (e.g. shimmer-wrapping http before ESM modules load).
-if (!(module instanceof Module)) {
-  for (const name of ['http', 'https']) {
+// Built-ins cached by a bundle before register.js installed ritm must pass through
+// Node's real require again. Hooks mutate the shared exports object in place;
+// synchronizing afterwards also updates already-created native ESM named exports.
+const bundlerKey = Symbol.for('dd-trace:bundler')
+/** @type {import('./bundler-banner').BundlerRecord | undefined} */
+const existingRecord = globalThis[bundlerKey]
+/** @type {import('./bundler-banner').BundlerRecord} */
+const bundlerRecord = globalThis[bundlerKey] ??= { bundlers: [] }
+let builtinsPatched = false
+bundlerRecord.onBundle = patchBundledBuiltins
+
+// A plugin banner marks the process as bundled even when dd-trace is external or preloaded. Without one,
+// a bundled tracer is still recognizable because its module wrapper is not a Module instance.
+if (existingRecord || !(module instanceof Module)) {
+  patchBundledBuiltins()
+}
+
+function patchBundledBuiltins () {
+  if (builtinsPatched) return
+  // Mark before requiring to prevent re-entrant hooks and repeated failed loads.
+  builtinsPatched = true
+
+  let loaded = false
+  for (const name of Object.keys(hooks)) {
+    if (!isNodeBuiltinModuleName(name) || disabledInstrumentations.has(name)) continue
+    if (IS_SERVERLESS && hooks[name].serverless === false) continue
+
     try {
       Module.prototype.require.call(module, name)
-    } catch {
-      // Built-in not available in this environment, skip
+      loaded = true
+    } catch (error) {
+      log.error('Error instrumenting bundled built-in %s: %s', name, String(error?.message ?? error), error)
     }
+  }
+  if (!loaded) return
+  try {
+    Module.syncBuiltinESMExports()
+  } catch (error) {
+    log.error('Error synchronizing bundled built-in ESM exports: %s', String(error?.message ?? error), error)
   }
 }
 
