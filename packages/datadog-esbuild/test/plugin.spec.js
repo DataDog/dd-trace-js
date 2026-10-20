@@ -16,6 +16,7 @@ function captureOnLoad (initialOptions = {}) {
   ddPlugin.setup({
     esbuild: { transformSync: transformTypeScript },
     initialOptions,
+    onStart () {},
     /** @param {Function} callback */
     onEnd (callback) {
       onEnd = callback
@@ -39,26 +40,11 @@ function captureOnLoad (initialOptions = {}) {
   }
 }
 
-/**
- * @param {object} [initialOptions]
- */
-function loadBuiltinWrapper (initialOptions) {
-  const onLoad = captureOnLoad(initialOptions)
-  return onLoad({
-    path: '/_dd_esm_internal_/node:dns/promises._dd_esbuild_intercepted',
-    pluginData: {
-      internal: true,
-      isESM: true,
-      pkgOfInterest: true,
-      raw: 'node:dns/promises',
-    },
-  })
-}
-
 function captureOnResolve () {
   let onResolve
   ddPlugin.setup({
     initialOptions: {},
+    onStart () {},
     onEnd () {},
     /**
      * @param {object} options
@@ -88,19 +74,6 @@ describe('datadog-esbuild plugin', () => {
   })
 
   describe('ESM wrappers', () => {
-    it('uses the build directory to resolve imports in built-in module wrappers', async () => {
-      const absWorkingDir = path.dirname(process.cwd())
-      const result = await loadBuiltinWrapper({ absWorkingDir })
-
-      assert.strictEqual(result.resolveDir, absWorkingDir)
-    })
-
-    it('defaults the build directory to the current working directory', async () => {
-      const result = await loadBuiltinWrapper()
-
-      assert.strictEqual(result.resolveDir, process.cwd())
-    })
-
     it('uses the module directory to resolve imports in package wrappers', async () => {
       const onLoad = captureOnLoad()
       const modulePath = path.join(__dirname, 'resources/export-method.mjs')
@@ -177,6 +150,7 @@ describe('datadog-esbuild plugin', () => {
       const initialOptions = { banner: { js: '// existing\n' } }
       plugin.setup({
         initialOptions,
+        onStart () {},
         onEnd () {},
         onResolve () {},
         onLoad () {},

@@ -8,13 +8,13 @@ const { pathToFileURL, fileURLToPath } = require('node:url')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const createBundlerBanner = require('../datadog-instrumentations/src/helpers/bundler-banner')
 const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
 const { createEsmResolver } = require('./src/resolver')
 const { isESMFile, processModule } = require('./src/utils')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
-const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
 
 let rewriter
 
@@ -114,6 +114,12 @@ module.exports.setup = function (build) {
     )
   }
 
+  if (build.initialOptions.platform !== 'node') {
+    build.onStart(() => ({
+      warnings: [{ text: 'datadog-esbuild requires platform: "node" for Node.js builtin instrumentation.' }],
+    }))
+  }
+
   if (DD_IAST_ENABLED) {
     const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
     rewriter = iastRewriter.getRewriter()
@@ -171,6 +177,8 @@ ${build.initialOptions.banner.js}`
     log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
   }
 
+  build.initialOptions.banner.js = `${createBundlerBanner('esbuild')}\n${build.initialOptions.banner.js}`
+
   let resolver
 
   build.onEnd(async () => {
@@ -185,6 +193,9 @@ ${build.initialOptions.banner.js}`
       log.debug('EXTERNAL: %s', args.path)
       return
     }
+
+    // The startup banner marks the bundle; the runtime then patches native builtins and synchronizes ESM exports.
+    if (builtins.has(args.path)) return
 
     // TODO: Should this also check for namespace === 'file'?
     if (!modulesOfInterest.has(args.path) &&
@@ -219,8 +230,6 @@ ${build.initialOptions.banner.js}`
 
     const extracted = extractPackageAndModulePath(fullPathToModule)
 
-    const internal = builtins.has(args.path)
-
     // Only the generated wrapper module, and the real module importing itself, must reach the real module unwrapped.
     // Every other importer must get the wrapper regardless of whether it has already been loaded: onLoad runs
     // concurrently with onResolve, so tracking loaded modules makes which importer sees the wrapper depend on timing,
@@ -231,24 +240,6 @@ ${build.initialOptions.banner.js}`
     if (args.namespace === 'file' && (
       modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
     ) {
-      // Internal module like http/fs is imported and the build output is ESM
-      if (internal && args.kind === 'import-statement' && esmBuild && !isInterceptedImporter) {
-        fullPathToModule = `${INTERNAL_ESM_INTERCEPTED_PREFIX}${fullPathToModule}${ESM_INTERCEPTED_SUFFIX}`
-
-        return {
-          path: fullPathToModule,
-          pluginData: {
-            pkg: extracted?.pkg,
-            path: extracted?.path,
-            full: fullPathToModule,
-            raw: args.path,
-            pkgOfInterest: true,
-            kind: args.kind,
-            internal,
-            isESM: true,
-          },
-        }
-      }
       // The file namespace is used when requiring files from disk in userland
       if (extracted.pkg === null) return
 
@@ -259,12 +250,10 @@ ${build.initialOptions.banner.js}`
         pathToPackageJson = extractPackageAndModulePath(pathToPackageJson).pkgJson
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
-          if (!internal) {
-            log.warn(
-              'Unable to find "%s/package.json". Unless it\'s dead code this could cause a problem at runtime.',
-              extracted.pkg
-            )
-          }
+          log.warn(
+            'Unable to find "%s/package.json". Unless it\'s dead code this could cause a problem at runtime.',
+            extracted.pkg
+          )
           return
         }
         throw err
@@ -291,7 +280,6 @@ ${build.initialOptions.banner.js}`
             raw: args.path,
             pkgOfInterest: true,
             kind: args.kind,
-            internal,
             isESM,
           },
         }
@@ -329,14 +317,9 @@ ${build.initialOptions.banner.js}`
         if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
           args.path = args.path.slice(0, -ESM_INTERCEPTED_SUFFIX.length)
 
-          if (data.internal) {
-            args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
-          }
-
           resolver ??= createEsmResolver()
           const setters = await processModule({
             path: args.path,
-            internal: data.internal,
             context: { format: 'module' },
             excludeDefault: false,
             moduleSources: new Map(),
@@ -345,7 +328,7 @@ ${build.initialOptions.banner.js}`
           })
 
           const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
-          const toRegister = data.internal ? args.path : pathToFileURL(args.path)
+          const toRegister = pathToFileURL(args.path)
           // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
           contents = `
 import { register } from ${JSON.stringify(iitmPath)};
@@ -392,9 +375,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
       return {
         contents,
         loader: 'js',
-        resolveDir: data.internal
-          ? build.initialOptions.absWorkingDir ?? process.cwd()
-          : path.dirname(args.path),
+        resolveDir: path.dirname(args.path),
       }
     }
     if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {
