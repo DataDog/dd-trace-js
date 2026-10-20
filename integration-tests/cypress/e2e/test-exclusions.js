@@ -51,6 +51,10 @@ if (getTestEnvironment('EXCLUSIONS_MODE') === 'mode-selection') {
 } else if (getTestEnvironment('EXCLUSIONS_MODE') === 'global') {
   let executions = 0
   it('native retries', noAutoRetry(() => { if (++executions === 1) fail() }))
+} else if (getTestEnvironment('EXCLUSIONS_MODE') === 'experimental') {
+  it('native experimental excluded', noAutoRetry(fail))
+  it('native experimental control', fail)
+  it('native experimental zero', { retries: 0 }, noAutoRetry(fail))
 } else if (getTestEnvironment('EXCLUSIONS_MODE') === 'explicit') {
   let executions = 0
   it('native retries', { retries: 2 }, noAutoRetry(() => {
