@@ -250,6 +250,17 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     }, { CYPRESS_EXPERIMENTAL_RETRIES: 'true' })
   })
 
+  experimental('reports the native experimental aggregate failure when the last attempt passes', async () => {
+    receiver.setSettings({ flaky_test_retries_enabled: false })
+    await run('experimental-mixed', 1, tests => {
+      assert.strictEqual(tests.length, 3)
+      assert.strictEqual(tests[0].meta['test.status'], 'fail')
+      assert.strictEqual(tests.at(-1).meta['test.status'], 'pass')
+      assert.strictEqual(tests.at(-1).meta['test.final_status'], 'fail')
+      for (const test of tests.slice(1)) assert.strictEqual(test.meta['test.retry_reason'], 'external')
+    }, { CYPRESS_EXPERIMENTAL_RETRIES: 'true' })
+  })
+
   it('reads the public exclusion mode before declaring tests', async () => {
     await run('mode-selection', 0, tests => {
       assert.strictEqual(tests.length, 1)
