@@ -784,6 +784,40 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
     // @jest/globals was introduced in Jest 26; all other annotation cases also run on Jest 24.
     const concurrentExclusionsIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 26 ? it : it.skip
+    // injectGlobals: false was introduced in Jest 26.5.
+    const esmConcurrentIt = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=26.5.0') ? it : it.skip
+    esmConcurrentIt('protects ESM concurrent rows without injected globals', async () => {
+      const file = 'test-esm-concurrent-annotations'
+      const names = ['protected ESM row 1', 'protected ESM row 2']
+      receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        jest: {
+          suites: {
+            [`ci-visibility/test-management/${file}.mjs`]: {
+              tests: Object.fromEntries(names.map(name => [name, {
+                properties: { disabled: true, quarantined: true },
+              }])),
+            },
+          },
+        },
+      })
+      await runExclusions(file, 1, spans => {
+        assert.strictEqual(spans.length, 2)
+        for (const span of spans) {
+          assert.strictEqual(span.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(span.meta[TEST_FINAL_STATUS], 'fail')
+          assert.strictEqual(span.meta[preventFailureSuppressionTag], 'true')
+          assert.strictEqual(span.meta[noAutoRetryTag], 'true')
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+          assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+        }
+      }, {
+        DO_NOT_INJECT_GLOBALS: '1',
+        JEST_MODULE_FILE_EXTENSIONS: 'js,mjs,jsx,ts,tsx,json,node',
+        NODE_OPTIONS: '-r dd-trace/ci/init --experimental-vm-modules',
+      })
+    })
+
     concurrentExclusionsIt('protects concurrent parameterized callbacks imported from Jest globals', async () => {
       const file = 'test-exclusions-concurrent'
       receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
