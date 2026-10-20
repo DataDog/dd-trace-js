@@ -632,6 +632,31 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       }
     }
 
+    for (const combined of [false, true]) {
+      for (const excludedLast of [false, true]) {
+        it(`keeps excluded duplicate-name failures out of EFD summaries (combined=${combined}, last=${excludedLast})`,
+          async () => {
+            receiver.setSettings({
+              known_tests_enabled: true,
+              early_flake_detection: { enabled: true, slow_test_retries: { '5s': 2 } },
+            })
+            receiver.setKnownTests({ jest: { 'other.js': ['known test'] } })
+            await runExclusions('test-exclusions-efd-duplicates', 1, (spans, events) => {
+              const excluded = spans.filter(span => span.meta[noAutoRetryTag] === 'true')
+              const ordinary = spans.filter(span => span.meta[noAutoRetryTag] !== 'true')
+              assert.strictEqual(excluded.length, 1)
+              assert.strictEqual(excluded[0].meta[TEST_STATUS], 'fail')
+              assert.strictEqual(excluded[0].meta[TEST_FINAL_STATUS], 'fail')
+              assert.strictEqual(excluded[0].meta[preventFailureSuppressionTag], combined ? 'true' : undefined)
+              assert.strictEqual(ordinary.length, 3)
+              for (const span of ordinary) assert.strictEqual(span.meta[TEST_STATUS], 'pass')
+              const session = events.find(event => event.type === 'test_session_end')
+              assert.strictEqual(session.content.meta[TEST_STATUS], 'fail')
+            }, { EXCLUSIONS_COMBINED: combined ? '1' : '0', EXCLUSIONS_EXCLUDED_LAST: excludedLast ? '1' : '0' })
+          })
+      }
+    }
+
     it('finalizes annotated tests when beforeAll prevents explicit retries', async () => {
       receiver.setSettings({ flaky_test_retries_enabled: true })
       await runExclusions('test-exclusions-hook-terminal', 1, spans => {
