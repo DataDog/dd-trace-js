@@ -1,5 +1,7 @@
 'use strict'
 
+const { MessagePort } = require('node:worker_threads')
+
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
@@ -10,6 +12,12 @@ const SUPPORTED_SYNC_HOOKS_NODE_VERSION = {
   NODE_MINOR: 11,
   NODE_PATCH: 1,
 }
+
+// The asynchronous loader receives the port it reports unwrapped module loads through.
+const asyncLoaderOptions = sinon.match({
+  data: { moduleLoadPort: sinon.match.instanceOf(MessagePort) },
+  transferList: sinon.match.array,
+})
 
 describe('register.js', () => {
   let emitWarning
@@ -40,7 +48,7 @@ describe('register.js', () => {
 
     sinon.assert.notCalled(registerSyncLoaderHooks)
     sinon.assert.notCalled(supportsSyncHooks)
-    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
+    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL), asyncLoaderOptions)
     sinon.assert.notCalled(emitWarning)
   })
 
@@ -70,7 +78,7 @@ describe('register.js', () => {
     })
 
     sinon.assert.calledOnce(registerSyncLoaderHooks)
-    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
+    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL), asyncLoaderOptions)
     sinon.assert.calledOnceWithMatch(emitWarning, /dd-trace could not register synchronous loader hooks/)
   })
 
@@ -86,7 +94,7 @@ describe('register.js', () => {
     })
 
     sinon.assert.calledOnce(registerSyncLoaderHooks)
-    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
+    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL), asyncLoaderOptions)
     sinon.assert.calledOnceWithMatch(
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*sync hook failure/
@@ -104,7 +112,7 @@ describe('register.js', () => {
       supportsSyncHooks: () => true,
     })
 
-    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
+    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL), asyncLoaderOptions)
     sinon.assert.calledOnceWithMatch(
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*require\(esm\) is disabled/
@@ -121,7 +129,7 @@ describe('register.js', () => {
       supportsSyncHooks: () => true,
     })
 
-    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
+    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL), asyncLoaderOptions)
     sinon.assert.calledOnceWithMatch(
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*loader import failure/
@@ -137,7 +145,7 @@ describe('register.js', () => {
       supportsSyncHooks: () => { throw error },
     })
 
-    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
+    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL), asyncLoaderOptions)
     sinon.assert.calledOnceWithMatch(
       emitWarning,
       /dd-trace could not register synchronous loader hooks.*support detection failure/
