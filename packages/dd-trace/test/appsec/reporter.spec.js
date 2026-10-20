@@ -687,6 +687,18 @@ describe('reporter', () => {
           assert.strictEqual(Object.keys(typedResult.value).length, 256)
         })
 
+        it('should drop large binary bodies whose subarray throws', () => {
+          const overridden = new Uint8Array(257)
+          overridden.subarray = () => { throw new TypeError('subarray') }
+
+          class ThrowingSpecies extends Uint8Array {
+            static get [Symbol.species] () { throw new TypeError('species') }
+          }
+
+          assert.deepStrictEqual(Reporter.truncateRequestBody(overridden), { truncated: true })
+          assert.deepStrictEqual(Reporter.truncateRequestBody(new ThrowingSpecies(257)), { truncated: true })
+        })
+
         it('should not flag binary bodies at the element limit as truncated', () => {
           const { truncated, value } = Reporter.truncateRequestBody(Buffer.alloc(256, 1))
 

@@ -448,12 +448,16 @@ function truncateRequestBody (target, depth = 0) {
       }
 
       // `Buffer#toJSON` and `Object.keys` both materialize one entry per byte, so cut large binary views down
-      // before they are serialized.
+      // before they are serialized. Subclasses can override `subarray` or its species constructor, so guard it
+      // like `toJSON`.
       if (ArrayBuffer.isView(target) && target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE) {
-        const { value } = truncateRequestBody(
-          target.subarray(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE),
-          depth
-        )
+        let head
+        try {
+          head = target.subarray(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
+        } catch {
+          return { truncated: true }
+        }
+        const { value } = truncateRequestBody(head, depth)
         return { value, truncated: true }
       }
 
