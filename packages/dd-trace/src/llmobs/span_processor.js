@@ -396,7 +396,7 @@ class LLMObsSpanProcessor {
       !predictedDrop &&
       !routing.apiKey &&
       !routing.site &&
-      !this.#hasRepeatedTagKeys(event.tags)
+      !this.#hasCollidingTagKeys(event.tags)
   }
 
   /**
@@ -418,16 +418,17 @@ class LLMObsSpanProcessor {
   }
 
   /**
-   * The meta_struct tag map cannot losslessly represent repeated tag keys.
+   * The meta_struct tag map cannot losslessly represent repeated keys or keys
+   * that collide after agentless normalization.
    * @param {string[]} tags
    */
-  #hasRepeatedTagKeys (tags) {
+  #hasCollidingTagKeys (tags) {
     const keys = new Set()
     for (const tag of tags) {
       const separatorIndex = tag.indexOf(':')
       if (separatorIndex === -1) continue
 
-      const key = tag.slice(0, separatorIndex)
+      const key = tag.slice(0, separatorIndex).replaceAll('.', '_')
       if (keys.has(key)) return true
       keys.add(key)
     }

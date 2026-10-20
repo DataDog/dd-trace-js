@@ -1046,6 +1046,25 @@ describe('span processor', () => {
       sinon.assert.calledOnce(writer.append)
     })
 
+    it('uses the writer when tag keys collide after agentless normalization', () => {
+      const { span } = createSpan({
+        '_ml_obs.tags': {
+          'customer.tier': 'gold',
+          customer_tier: 'silver',
+        },
+      })
+
+      processor.process(span)
+      processor.processTrace({ spans: [span], willExport: true })
+
+      assert.strictEqual(span.meta_struct, undefined)
+      sinon.assert.calledOnce(writer.append)
+      assert.deepStrictEqual(writer.append.firstCall.args[0].tags.filter(tag => tag.startsWith('customer')), [
+        'customer.tier:gold',
+        'customer_tier:silver',
+      ])
+    })
+
     it('uses the writer for multi-tenant routing', () => {
       const routing = { apiKey: 'tenant-key', site: 'tenant.example' }
       const { span } = createSpan({
