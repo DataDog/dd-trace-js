@@ -137,6 +137,35 @@ describe('Cypress before:run handlers', () => {
 })
 
 describe('Cypress config', () => {
+  for (const testingType of ['e2e', 'component']) {
+    for (const hasSubscriber of [false, true]) {
+      it(`accepts browser teardown declarations when instrumentation is inactive (${testingType}, ` +
+        `subscriber=${hasSubscriber})`, async () => {
+        const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-noop-'))
+        const setupChannel = channel('ci:cypress:setup-node-events')
+        const inactiveSubscriber = () => {}
+        const handlers = {}
+        const resolved = { projectRoot: project, supportFile: false, isInteractive: false }
+        if (hasSubscriber) setupChannel.subscribe(inactiveSubscriber)
+        try {
+          const config = wrapConfig({ [testingType]: {} })
+          config[testingType].setupNodeEvents((event, handler) => { handlers[event] = handler }, resolved)
+
+          const tasks = handlers.task
+          assert.strictEqual(tasks['dd:testSuiteStart']({ testSuite: 'passing.cy.js' }), null)
+          assert.strictEqual(tasks['dd:testDeclarations']({
+            testSuite: 'passing.cy.js',
+            testAnnotations: [{ title: 'passes', noAutoRetry: true }],
+          }), null)
+        } finally {
+          if (hasSubscriber) setupChannel.unsubscribe(inactiveSubscriber)
+          await handlers['after:run']?.({})
+          fs.rmSync(project, { recursive: true, force: true })
+        }
+      })
+    }
+  }
+
   it('loads and wraps an ESM config', async () => {
     const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-config-'))
     const configFile = join(project, 'cypress.config.mjs')
