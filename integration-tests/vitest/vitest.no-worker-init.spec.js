@@ -953,7 +953,7 @@ describe('vitest no-worker init instrumentation selection', () => {
       `-r "${annotationPreload}"`,
       `--require="${annotationPreload}"`,
     ]) {
-      it(`retains literal apostrophes when removing the annotation preload: ${preloadOption}`, () => {
+      noWorkerPreloadIt(`retains literal apostrophes when removing the annotation preload: ${preloadOption}`, () => {
         const userOptions = "--import=data:text/javascript,globalThis.annotationOption='ok'"
         const nodeOptions = `${userOptions} ${preloadOption}`
         assert.strictEqual(runWithNodeOptions(nodeOptions), 'ok')
