@@ -2561,7 +2561,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         /** @type {{ finish?: (finalStatus?: string) => void }|undefined} */
-        const deferredFinish = status === 'fail' && ctx.noAutoRetry &&
+        const deferredFinish = ctx.noAutoRetry &&
           ctx.hasDescribeRetriesRemaining && !finalStatus
           ? {}
           : undefined
@@ -2582,7 +2582,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.#pendingDescribeRetryFinishes ??= new Map()
           this.#pendingDescribeRetryFinishes.set(event.test, {
             finish: deferredFinish.finish,
-            finalStatus: ctx.isQuarantined ? 'skip' : 'fail',
+            finalStatus: ctx.isQuarantined ? 'skip' : status,
           })
         }
 
@@ -2745,12 +2745,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       ctx
     ) {
       if (ctx.noAutoRetry) {
-        // Quarantine consumes the error before Circus decides whether to replay the describe.
-        if (ctx.hasDescribeRetryPolicy && ctx.isQuarantined) return 'skip'
+        // A sibling failure can replay every test, including passing and quarantined callbacks.
+        if (ctx.hasDescribeRetriesRemaining) return
         const retryCount = this.hasExplicitRetries ? Number(this.global[RETRY_TIMES]) : 0
         const hasPendingTestRetry = !ctx.hasDescribeRetryPolicy &&
           !ctx.hadErrorsBeforeExecution && numberOfTestInvocations <= retryCount
-        if (status === 'fail' && (ctx.hasDescribeRetriesRemaining || hasPendingTestRetry)) return
+        if (status === 'fail' && hasPendingTestRetry) return
         return ctx.isQuarantined ? 'skip' : status
       }
       const numberOfExecutedRetries = retriedTestsToNumAttempts.get(testName) ?? 0
