@@ -899,6 +899,7 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
     const shouldFinishTest = ctx && (
       test._ddReporterStartFailed ||
       test._ddReporterTerminalFailed ||
+      !test.fn ||
       !getAfterEachHooks(test).length ||
       (test._ddIsDisabled && !test._ddIsAttemptToFix)
     )
@@ -906,8 +907,8 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
     let testFinishInfo
     let isFinalAttempt = false
 
-    // If there are afterEach to be run, we don't finish the test yet.
-    // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
+    // If there are afterEach hooks to run, we don't finish the test yet.
+    // Static skips have no function and never execute hooks. Disabled tests also finish immediately.
     // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
     // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler
     // directly sets finalStatus without waiting for hooks
