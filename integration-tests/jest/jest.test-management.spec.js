@@ -770,6 +770,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
+    it('observes annotations on developer-skipped concurrent parameterized callbacks', async () => {
+      await runExclusions('test-skipped-concurrent-annotations', 0, spans => {
+        assert.strictEqual(spans.length, 5)
+        for (const span of spans.filter(span => span.meta[TEST_NAME] !== 'ordinary control')) {
+          assert.strictEqual(span.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(span.meta[noAutoRetryTag], 'true')
+          assert.strictEqual(span.meta[preventFailureSuppressionTag],
+            span.meta[TEST_NAME].startsWith('protected') ? 'true' : undefined)
+        }
+      })
+    })
+
     // @jest/globals was introduced in Jest 26; all other annotation cases also run on Jest 24.
     const concurrentExclusionsIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 26 ? it : it.skip
     concurrentExclusionsIt('protects concurrent parameterized callbacks imported from Jest globals', async () => {
