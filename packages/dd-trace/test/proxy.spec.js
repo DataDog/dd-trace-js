@@ -81,6 +81,7 @@ describe('TracerProxy', () => {
     }
 
     tracer = {
+      getStartupConfig: sinon.stub(),
       use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('test'),
       wrap: sinon.stub().returns('fn'),

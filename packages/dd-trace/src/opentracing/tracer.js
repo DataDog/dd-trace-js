@@ -24,7 +24,7 @@ class DatadogTracer {
    * @readonly
    * @type {import('../opentelemetry/startup-config').Pipelines}
    */
-  _startupPipelines
+  #startupConfig
 
   constructor (config, prioritySampler) {
     this._config = config
@@ -79,14 +79,22 @@ class DatadogTracer {
       [formats.LOG]: new LogPropagator(config),
       [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config),
     }
-    this._startupPipelines = {
+    this.#startupConfig = {
       tracing: true,
       traces,
-      spanMetrics: this._processor.otelSpanMetrics,
+      spanMetrics: this._processor.getSpanMetricsStartupConfig(),
     }
     if (config.reportHostname) {
       this._hostname = os.hostname()
     }
+  }
+
+  /**
+   * Returns the configuration captured when tracing initialized.
+   * @returns {import('../opentelemetry/startup-config').Pipelines}
+   */
+  getStartupConfig () {
+    return this.#startupConfig
   }
 
   startSpan (name, options = {}) {

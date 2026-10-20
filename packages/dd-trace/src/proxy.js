@@ -428,7 +428,7 @@ class Tracer extends NoopProxy {
           ? require('./standalone').configure(config)
           : undefined
         this._tracer = new DatadogTracer(config, prioritySampler)
-        startupPipelines = this._tracer._startupPipelines
+        startupPipelines = this._tracer.getStartupConfig()
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
