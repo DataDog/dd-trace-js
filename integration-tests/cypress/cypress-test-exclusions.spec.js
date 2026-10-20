@@ -208,6 +208,26 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     })
   })
 
+  it('keeps manually loaded support harmless when tracing is disabled', async () => {
+    childProcess = exec(
+      './node_modules/.bin/cypress run --config-file ci-visibility/cypress-exclusions-manual/config.js', {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          NODE_OPTIONS: '',
+          DD_TRACE_ENABLED: 'false',
+          CYPRESS_ROOT_SETUP_MODE: 'skip',
+        },
+      }
+    )
+    let output = ''
+    childProcess.stdout.on('data', chunk => { output += chunk })
+    childProcess.stderr.on('data', chunk => { output += chunk })
+    const [exitCode] = await once(childProcess, 'exit')
+    assert.strictEqual(exitCode, 0, output)
+    assert.doesNotMatch(output, /task.*was not handled/)
+  })
+
   for (const mode of ['fail', 'skip']) {
     it(`reports annotations when an earlier root setup hook must ${mode}`, async () => {
       await run(mode, mode === 'fail' ? 1 : 0, tests => {

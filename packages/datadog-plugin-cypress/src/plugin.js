@@ -12,6 +12,9 @@ const DD_CYPRESS_TASK_HANDLER = Symbol.for('dd-trace.cypress.task.handler')
 const DD_CYPRESS_NOOP_TASK_HANDLER = Symbol.for('dd-trace.cypress.noop-task.handler')
 
 const noopTask = {
+  'dd:testDeclarations': () => {
+    return null
+  },
   'dd:testSuiteStart': () => {
     return null
   },
