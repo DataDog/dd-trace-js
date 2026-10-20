@@ -5,13 +5,19 @@ const { defineConfig } = require('cypress')
 const getCypressTestEnvironment = require('./cypress-test-environment')
 
 const retries = Number(process.env.CYPRESS_RETRIES || 0)
+const experimentalRetries = process.env.CYPRESS_EXPERIMENTAL_RETRIES === 'true' && {
+  experimentalStrategy: 'detect-flake-but-always-fail',
+  experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+  runMode: true,
+  openMode: false,
+}
 
 module.exports = defineConfig({
   ...getCypressTestEnvironment(),
   defaultCommandTimeout: 1000,
-  retries: process.env.CYPRESS_RETRIES_AS_NUMBER === undefined
+  retries: experimentalRetries || (process.env.CYPRESS_RETRIES_AS_NUMBER === undefined
     ? { runMode: retries, openMode: 0 }
-    : Number(process.env.CYPRESS_RETRIES_AS_NUMBER),
+    : Number(process.env.CYPRESS_RETRIES_AS_NUMBER)),
   e2e: {
     ...(process.env.CYPRESS_TEST_ISOLATION === undefined
       ? {}
