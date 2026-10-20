@@ -1,11 +1,11 @@
 _v: 1
 name: protobufjs
 display_name: protobufjs
-description: Instruments protobufjs message encoding and decoding to collect schemas and enrich active spans when Data
-  Streams Monitoring is enabled.
+description: Instruments protobufjs message serialization and deserialization to collect schema metadata on active spans
+  when Data Streams Monitoring is enabled.
 packages:
 - name: protobufjs
 category:
-- other
+- serialization
 systems: []
 creation_date: '2024-10-04'

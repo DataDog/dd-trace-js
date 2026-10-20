@@ -6,6 +6,6 @@ description: Instruments avsc serialization and deserialization to attach Avro s
 packages:
 - name: avsc
 category:
-- other
+- serialization
 systems: []
 creation_date: '2024-10-04'
