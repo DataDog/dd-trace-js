@@ -152,4 +152,24 @@ describe('getServerToolUsageMetrics', () => {
     const response = { output: [{ type: 'web_search_call' }, { type: 'file_search_call' }, null] }
     assert.deepStrictEqual(getServerToolUsageMetrics(response), {})
   })
+
+  it('reads web searches from tool_usage over the item count', () => {
+    const response = {
+      output: [webSearchCall(), fileSearchCall()],
+      tool_usage: { image_gen: { total_tokens: 0 }, web_search: { num_requests: 3 } },
+    }
+    assert.deepStrictEqual(getServerToolUsageMetrics(response), { webSearchCount: 3, storageSearchCount: 1 })
+  })
+
+  it('omits the metric when tool_usage reports zero web searches', () => {
+    const response = { output: [webSearchCall()], tool_usage: { web_search: { num_requests: 0 } } }
+    assert.deepStrictEqual(getServerToolUsageMetrics(response), {})
+  })
+
+  for (const toolUsage of [undefined, null, {}, { image_gen: { total_tokens: 0 } }, { web_search: {} }]) {
+    it(`falls back to counting search actions when tool_usage is ${JSON.stringify(toolUsage)}`, () => {
+      const response = { output: [webSearchCall(), webSearchCall('completed', 'open_page')], tool_usage: toolUsage }
+      assert.deepStrictEqual(getServerToolUsageMetrics(response), { webSearchCount: 1 })
+    })
+  }
 })

@@ -199,17 +199,22 @@ function getModelProviderAndClient (baseUrl = '') {
 }
 
 /**
- * Count the billable server-side tool calls in an OpenAI Responses `output` array.
+ * Count the billable server-side tool calls in an OpenAI Responses response.
  *
- * OpenAI bills per tool call and `usage` doesn't report it, so each completed `web_search_call` /
- * `file_search_call` item counts once. For web search only `search` actions are billed.
+ * Web searches are read from the undocumented `tool_usage.web_search.num_requests` when present, otherwise
+ * counted from completed `web_search_call` items whose action is `search` (`open_page` / `find_in_page` steps are
+ * not billed). File searches have no usage counter, so each completed `file_search_call` item counts once.
  * Zero counts are omitted.
  *
- * @param {Record<string, unknown>} [response] - Any OpenAI response; only a Responses API `output` array is read
+ * @param {Record<string, unknown>} [response] - Any OpenAI response; only Responses API fields are read
  * @returns {{ webSearchCount?: number, storageSearchCount?: number }}
  */
 function getServerToolUsageMetrics (response) {
   const metrics = {}
+  const reportedWebSearches = response?.tool_usage?.web_search?.num_requests
+  const hasReportedWebSearches = typeof reportedWebSearches === 'number'
+  if (hasReportedWebSearches && reportedWebSearches > 0) metrics.webSearchCount = reportedWebSearches
+
   const output = response?.output
   if (!Array.isArray(output)) return metrics
 
@@ -217,6 +222,7 @@ function getServerToolUsageMetrics (response) {
     if (item?.status !== 'completed') continue
 
     if (item.type === 'web_search_call') {
+      if (hasReportedWebSearches) continue
       // Items without an action (older payloads) are assumed to be searches.
       const actionType = item.action?.type
       if (actionType !== undefined && actionType !== 'search') continue
