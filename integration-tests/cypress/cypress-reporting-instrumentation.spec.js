@@ -2285,6 +2285,7 @@ moduleTypes.forEach(({
       libraryConfigurationPromise: cypressPlugin.libraryConfigurationPromise,
       hasOriginalCypressRetries: cypressPlugin.hasOriginalCypressRetries,
       originalCypressRetries: cypressPlugin.originalCypressRetries,
+      configuredCypressRetries: cypressPlugin.configuredCypressRetries,
       tracer: cypressPlugin.tracer,
       finishedTestsByFile: cypressPlugin.finishedTestsByFile,
       hasTestsReported: cypressPlugin.hasTestsReported,
@@ -2305,6 +2306,7 @@ moduleTypes.forEach(({
       cypressPlugin.libraryConfigurationPromise = originalState.libraryConfigurationPromise
       cypressPlugin.hasOriginalCypressRetries = originalState.hasOriginalCypressRetries
       cypressPlugin.originalCypressRetries = originalState.originalCypressRetries
+      cypressPlugin.configuredCypressRetries = originalState.configuredCypressRetries
       cypressPlugin.tracer = originalState.tracer
       cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
       cypressPlugin.hasTestsReported = originalState.hasTestsReported
