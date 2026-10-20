@@ -597,6 +597,41 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     }
 
+    for (const parallel of [false, true]) {
+      for (const protectedLast of [false, true]) {
+        it('keeps duplicate declarations distinct (parallel=' + parallel + ', protectedLast=' + protectedLast + ')',
+          async () => {
+            receiver.setSettings({ test_management: { enabled: true } })
+            const tests = { 'same name': { properties: { quarantined: true } } }
+            receiver.setTestManagementTests({
+              jest: {
+                suites: {
+                  'ci-visibility/test-management/test-exclusions-duplicates.js': { tests },
+                  'ci-visibility/test-management/test-exclusions-collision-worker.js': { tests },
+                },
+              },
+            })
+            const file = parallel ? 'test-exclusions-(duplicates|collision-worker)' : 'test-exclusions-duplicates'
+            await runExclusions(file,
+              1, (spans, events) => {
+                assert.strictEqual(spans.length, parallel ? 6 : 3)
+                const protectedSpans = spans.filter(
+                  span => span.meta[preventFailureSuppressionTag] === 'true')
+                assert.strictEqual(protectedSpans.length, parallel ? 2 : 1)
+                for (const span of protectedSpans) {
+                  assert.strictEqual(span.meta[TEST_STATUS], 'fail')
+                  assert.strictEqual(span.meta[TEST_FINAL_STATUS], 'fail')
+                }
+                const session = events.find(event => event.type === 'test_session_end')
+                assert.strictEqual(session.content.meta[TEST_STATUS], 'fail')
+              }, {
+                ...(parallel ? { RUN_IN_PARALLEL: '1', EXCLUSIONS_REQUIRE_WORKER: '1' } : {}),
+                EXCLUSIONS_PROTECTED_LAST: protectedLast ? '1' : '0',
+              })
+          })
+      }
+    }
+
     it('finalizes annotated tests when beforeAll prevents explicit retries', async () => {
       receiver.setSettings({ flaky_test_retries_enabled: true })
       await runExclusions('test-exclusions-hook-terminal', 1, spans => {
