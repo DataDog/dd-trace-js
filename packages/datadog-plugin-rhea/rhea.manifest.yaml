@@ -8,5 +8,9 @@ packages:
 category:
 - messaging.consumer
 - messaging.producer
-systems: []
+systems:
+- activemq
+- eventhubs
+- rabbitmq
+- servicebus
 creation_date: '2019-12-19'
