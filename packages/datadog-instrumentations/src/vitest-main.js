@@ -1281,7 +1281,7 @@ function getCliOrStartVitestWrapper (frameworkVersion) {
   return function (oldCliOrStartVitest) {
     return function (...args) {
       const entrypoint = oldCliOrStartVitest.name
-      if (entrypoint === 'createVitest' || entrypoint === 'startVitest') {
+      if (testSessionStartCh.hasSubscribers && (entrypoint === 'createVitest' || entrypoint === 'startVitest')) {
         const isCreate = entrypoint === 'createVitest'
         const isLegacySignature = typeof args[0] === 'string'
         const overridesIndex = isCreate ? (isLegacySignature ? 2 : 1) : (isLegacySignature ? 3 : 2)
