@@ -26,6 +26,13 @@ describe('Test Optimization callback annotations', () => {
     assert.match(statement, /\b(?:Playwright|test framework)\b/)
   })
 
+  it('does not exclude Playwright from the shared helper support summary', () => {
+    const api = readFileSync(resolve(__dirname, '../../../../docs/API.md'), 'utf8')
+    const [, supported] = api.match(/These helpers currently target ([^.]+)\./) || []
+    if (supported) assert.match(supported, /\b(?:Playwright|test framework)\b/)
+    assert.match(api, /The legacy Jest Jasmine runner does not enforce (?:them|these helpers)\./)
+  })
+
   for (const helper of [preventFailureSuppression, noAutoRetry, fn => preventFailureSuppression(noAutoRetry(fn))]) {
     it('preserves parameters, this, return values, and callback arity', () => {
       const callback = Object.freeze(function callback (a, b) { return this.offset + a + b })
