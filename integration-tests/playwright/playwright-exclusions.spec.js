@@ -87,6 +87,15 @@ describe(`Playwright automation exclusions@${version}`, () => {
             assert.strictEqual(excluded.length, mode === 'atr' ? 1 : 3, output)
             assert.strictEqual(siblings.length, mode === 'atr' ? 1 : 3, output)
             assert.strictEqual(independent.length, 3, output)
+            if (mode !== 'atr') {
+              for (const attempts of [excluded, siblings]) {
+                const retries = attempts.filter(test => test.meta[TEST_IS_RETRY])
+                assert.strictEqual(retries.length, 2, output)
+                for (const test of retries) {
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext, test.meta[TEST_NAME])
+                }
+              }
+            }
             for (const test of excluded) {
               assert.strictEqual(test.meta['test.test_management.no_auto_retry'], 'true')
               assert.strictEqual(test.meta[TEST_STATUS], 'pass')
