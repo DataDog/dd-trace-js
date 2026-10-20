@@ -98,17 +98,30 @@ describe(`Playwright automation exclusions@${version}`, () => {
     }
   }
 
-  for (const mode of ['new', 'modified']) {
+  for (const mode of ['new', 'modified', 'Attempt to Fix']) {
     const run = supported ? it : it.skip
-    run(`excludes serial prerequisites and siblings from ${mode}-test EFD clones`, async () => {
+    const retryKind = mode === 'Attempt to Fix' ? mode : `${mode}-test EFD`
+    run(`excludes serial prerequisites and siblings from ${retryKind} clones`, async () => {
       const names = ['serial EFD group excluded prerequisite', 'serial EFD group dependent sibling',
         'independent EFD control']
       receiver.setSettings({
-        known_tests_enabled: true,
+        known_tests_enabled: mode !== 'Attempt to Fix',
         impacted_tests_enabled: mode === 'modified',
-        early_flake_detection: { enabled: true, slow_test_retries: { '5s': 2 }, faulty_session_threshold: 100 },
+        early_flake_detection: {
+          enabled: mode !== 'Attempt to Fix', slow_test_retries: { '5s': 2 }, faulty_session_threshold: 100,
+        },
+        test_management: { enabled: mode === 'Attempt to Fix', attempt_to_fix_retries: 2 },
       })
       receiver.setKnownTests({ playwright: mode === 'new' ? {} : { 'serial.js': names } })
+      receiver.setTestManagementTests({
+        playwright: {
+          suites: {
+            'serial.js': {
+              tests: Object.fromEntries(names.slice(1).map(name => [name, { properties: { attempt_to_fix: true } }])),
+            },
+          },
+        },
+      })
       const base = execSync('git rev-parse HEAD', { cwd, encoding: 'utf8' }).trim()
       const fixture = 'ci-visibility/playwright-serial-efd-exclusions/serial.js'
       if (mode === 'modified') {
@@ -137,9 +150,17 @@ describe(`Playwright automation exclusions@${version}`, () => {
             assert.strictEqual(attempts.length, count, `${name}: ${output}`)
             for (const test of attempts) {
               assert.strictEqual(test.meta[TEST_STATUS], 'pass', output)
-              assert.strictEqual(test.meta[mode === 'new' ? TEST_IS_NEW : TEST_IS_MODIFIED], 'true', name)
+              if (mode === 'Attempt to Fix') {
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX],
+                  name === names[0] ? undefined : 'true', name)
+              } else {
+                assert.strictEqual(test.meta[mode === 'new' ? TEST_IS_NEW : TEST_IS_MODIFIED], 'true', name)
+              }
             }
-            if (count === 1) assert.strictEqual(attempts[0].meta[TEST_IS_RETRY], undefined, name)
+            if (count === 1) {
+              assert.strictEqual(attempts[0].meta[TEST_IS_RETRY], undefined, name)
+              assert.strictEqual(attempts[0].meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined, name)
+            }
           }
           assert.strictEqual(tests.length, 5, output)
           const session = events.find(event => event.type === 'test_session_end').content

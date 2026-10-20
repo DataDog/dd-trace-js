@@ -465,7 +465,7 @@ function getTestProperties (test) {
     testManagementTests?.playwright?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
   const { mustFail, noAutoRetry } = getTestAnnotations(test.fn)
   return {
-    attemptToFix: attemptToFix && !noAutoRetry,
+    attemptToFix: attemptToFix && !noAutoRetry && !test._ddIsAutomaticRetryExcluded,
     disabled: disabled && !mustFail,
     quarantined: quarantined && !mustFail,
   }
