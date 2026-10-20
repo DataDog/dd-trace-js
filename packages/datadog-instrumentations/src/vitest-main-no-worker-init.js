@@ -1649,7 +1649,7 @@ function removeAnnotationsPreload (nodeOptions) {
     if (token === `--require=${VITEST_ANNOTATIONS_PRELOAD}` || token === `-r${VITEST_ANNOTATIONS_PRELOAD}`) continue
     filtered.push(token)
   }
-  return serializeNodeOptions(filtered)
+  return filtered.length === tokens.length ? nodeOptions : serializeNodeOptions(filtered)
 }
 
 function removeDatadogTestOptimizationNodeOptions (nodeOptions) {
