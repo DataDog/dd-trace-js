@@ -692,6 +692,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     #efdRetryGatesByName
     #expect
     #pendingPre30ConcurrentTests
+    #registeringConcurrentTestState
     /** @type {Map<object, { finish: (finalStatus?: string) => void, finalStatus: string }>|undefined} */
     #pendingDescribeRetryFinishes
     /** @type {(() => void)|undefined} */
@@ -958,7 +959,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             sourceTestFn: environment.concurrentTestSourceFns.get(testFn),
             timeout: args[0],
           })
-          return concurrentTest.call(this, testName, wrappedTestFn, ...args)
+          return environment.registerConcurrentTest(concurrentTest, this, testName, wrappedTestFn, ...args)
         }
       })
 
@@ -966,6 +967,25 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       setOriginalConcurrentTest(wrappedConcurrentTest, concurrentTest)
       this.wrappedConcurrentTestFunctions.add(wrappedConcurrentTest)
       this.bindConcurrentEach(wrappedConcurrentTest, methodName === 'failing')
+    }
+
+    /**
+     * Retains declaration identity when older Circus replaces the supplied callback.
+     *
+     * @param {Function} test
+     * @param {unknown} thisArg
+     * @param {string} testName
+     * @param {Function} testFn
+     * @param {...unknown} args
+     */
+    registerConcurrentTest (test, thisArg, testName, testFn, ...args) {
+      const previous = this.#registeringConcurrentTestState
+      this.#registeringConcurrentTestState = this.concurrentTestStates.get(testFn)
+      try {
+        return test.call(thisArg, testName, testFn, ...args)
+      } finally {
+        this.#registeringConcurrentTestState = previous
+      }
     }
 
     /**
@@ -1732,7 +1752,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
               timeout,
             }
           )
-          test.call(concurrentTestState.concurrentTestThisArg, testName, retryFn, timeout)
+          this.registerConcurrentTest(test, concurrentTestState.concurrentTestThisArg, testName, retryFn, timeout)
         } else if (this.global.test) {
           const test = mode === 'only' ? this.global.test.only : this.global.test
           // The child-count check below proves Jest added a node, so retries can share the test
@@ -1989,9 +2009,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       const testFullName = this.getTestNameFromAddTestEvent(event, state)
-      const concurrentTestContexts = this.concurrentTestContexts.get(testFullName)
       const concurrentTestState = this.concurrentTestStates.get(event.fn) ||
-        concurrentTestContexts?.at(-1)?.concurrentTestState
+        this.#registeringConcurrentTestState
       if (concurrentTestState && registeredTest?.fn === event.fn) {
         testContexts.set(registeredTest, concurrentTestState.ctx)
       }
@@ -2150,7 +2169,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let concurrentCtx = concurrentTestState?.ctx
         if (concurrentCtx) {
           this.removeConcurrentTestContext(testName, concurrentCtx)
-        } else {
+        } else if (event.test.concurrent) {
           concurrentCtx = this.getNextConcurrentTestContext(testName)
         }
         if (hasConcurrentTestsStartEvent && concurrentCtx?.efdRetryGates) {

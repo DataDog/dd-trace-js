@@ -374,6 +374,40 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     }
 
+    for (const policy of ['retries', 'quarantine', 'disable']) {
+      for (const serialFirst of [false, true]) {
+        it(`scopes concurrent annotations by declaration (policy=${policy}, serialFirst=${serialFirst})`, async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: policy === 'retries',
+            test_management: { enabled: true },
+          })
+          const properties = policy === 'quarantine'
+            ? { quarantined: true }
+            : policy === 'disable' ? { disabled: true } : {}
+          setProperties('test-concurrent-annotation-collision', ['same name'], properties)
+          await runExclusions('test-concurrent-annotation-collision', 0, spans => {
+            const tag = policy === 'retries' ? noAutoRetryTag : preventFailureSuppressionTag
+            const concurrent = spans.filter(span => span.meta[tag] === 'true')
+            const serial = spans.filter(span => span.meta[tag] === undefined)
+            assert.strictEqual(concurrent.length, 1)
+            assert.strictEqual(concurrent[0].meta[TEST_STATUS], 'pass')
+            assert.strictEqual(serial.length, policy === 'retries' ? 3 : 1)
+            assert.deepStrictEqual(serial.map(span => span.meta[TEST_STATUS]).sort(),
+              policy === 'retries' ? ['fail', 'fail', 'pass'] : policy === 'quarantine' ? ['fail'] : ['skip'])
+            if (policy === 'quarantine') {
+              assert.strictEqual(serial[0].meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            }
+            if (policy === 'disable') {
+              assert.strictEqual(serial[0].meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            }
+          }, {
+            EXCLUSIONS_COLLISION_POLICY: policy,
+            EXCLUSIONS_SERIAL_FIRST: serialFirst ? '1' : '0',
+          })
+        })
+      }
+    }
+
     it('overrides quarantine and disable without reversing developer skips', async () => {
       receiver.setSettings({ test_management: { enabled: true } })
       const file = 'test-exclusions-policy'
