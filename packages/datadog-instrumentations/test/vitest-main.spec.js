@@ -116,6 +116,51 @@ describe('vitest utilities', () => {
 })
 
 describe('vitest main instrumentation', () => {
+  for (const method of ['startVitest', 'createVitest']) {
+    for (const legacy of [false, true]) {
+      for (const active of [false, true]) {
+        const state = active ? 'active' : 'inactive'
+        const signature = legacy ? 'legacy' : 'current'
+        it(`preserves ${state} ${method} browser overrides (${signature})`, () => {
+          const hooks = []
+          const starts = []
+          proxyquire('../src/vitest-main', {
+            './helpers/instrument': {
+              ...require('../src/helpers/instrument'),
+              addHook (target, hook) { hooks.push({ target, hook }) },
+            },
+            './vitest-util': {
+              ...require('../src/vitest-util'),
+              testSessionStartCh: {
+                hasSubscribers: active,
+                publish (payload) { starts.push(payload) },
+              },
+            },
+          })
+          const api = {
+            startVitest (...args) { return args },
+            createVitest (...args) { return args },
+          }
+          const hook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/cli-api.*').hook
+          hook(api, legacy ? '3.2.6' : '5.0.1')
+
+          // Repeated calls must still inject into active sessions after the start event was published.
+          for (let call = 0; call < 2; call++) {
+            const overrides = active ? { plugins: [] } : Object.freeze({ plugins: Object.freeze([]) })
+            const args = legacy ? ['test', {}] : [{}]
+            if (method === 'startVitest') args.splice(legacy ? 1 : 0, 0, [])
+            args.push(overrides)
+            const result = api[method](...args)
+            assert.strictEqual(result[result.length - 1], overrides)
+            assert.strictEqual(overrides.plugins.length, active ? 1 : 0)
+            if (active) assert.strictEqual(overrides.plugins[0].name, 'datadog:vitest-browser-setup-file')
+          }
+          assert.strictEqual(starts.length, active ? 1 : 0)
+        })
+      }
+    }
+  }
+
   for (const method of ['start', 'reportCoverage']) {
     it(`preserves ${method} results and synchronous errors without subscribers`, () => {
       const hooks = []
