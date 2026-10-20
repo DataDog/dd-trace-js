@@ -184,6 +184,8 @@ describe('loader hook', () => {
         ['@scope/first', `${appUrl}node_modules/@scope/first/index.js`],
         ['@scope/second', `${appUrl}node_modules/@scope/second/dist/index.js`],
         ['nested', `${appUrl}node_modules/parent/node_modules/nested/index.js`],
+        ['pnpm-package', `${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/index.js`],
+        ['pnpm-package/other', `${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/other.js`],
         ['express', `${appUrl}node_modules/express/index.js`, 'commonjs'],
         ['./local.mjs', `${appUrl}local.mjs`],
         ['node:path', 'node:path', 'builtin'],
@@ -194,9 +196,10 @@ describe('loader hook', () => {
         `${appUrl}node_modules/@scope/first/index.js`,
         `${appUrl}node_modules/@scope/second/dist/index.js`,
         `${appUrl}node_modules/parent/node_modules/nested/index.js`,
+        `${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/index.js`,
       ])
       // Instrumented packages are wrapped and published by import-in-the-middle instead.
-      assert.match(urls[5], /node_modules\/express\/index\.js\?iitm=true$/)
+      assert.match(urls[7], /node_modules\/express\/index\.js\?iitm=true$/)
     })
 
     it('does not report without a port', () => {
