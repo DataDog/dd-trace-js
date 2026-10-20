@@ -682,6 +682,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   return class DatadogEnvironment extends BaseEnvironment {
     #activeDetachedEfdRetries
     #boundTestEach = new WeakSet()
+    #describeRetryAttempts
     #detachedEfdRetryConcurrency
     #detachedEfdRetryQueue
     #discardedEfdRetryTests
@@ -2080,6 +2081,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       if (event.name === 'run_start') {
+        this.#describeRetryAttempts = undefined
         this.#trackQuarantinedSnapshots()
         const registerResultHandler = retryResultHandlerRegistrations.get(this)
         retryResultHandlerRegistrations.delete(this)
@@ -2096,6 +2098,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.#efdRetryGatesByName?.size > 0
       ) {
         this.preparePre30ConcurrentTests(event.describeBlock, state)
+      }
+      if (event.name === 'describe_retry' && this.#describeRetryAttempts) {
+        const block = event.describeBlock
+        this.#describeRetryAttempts.set(block, (this.#describeRetryAttempts.get(block) ?? 0) + 1)
+        // Replaying a parent gives each nested describe a fresh native retry budget.
+        const blocks = [block]
+        while (blocks.length) {
+          for (const child of blocks.pop().children) {
+            if (child.type !== 'describeBlock') continue
+            this.#describeRetryAttempts.delete(child)
+            blocks.push(child)
+          }
+        }
       }
       if (event.name === 'concurrent_tests_start') {
         this.orderConcurrentEfdRetries(event.tests)
@@ -2189,6 +2204,21 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx.assignedManagementProperties = assignedManagementProperties
         ctx.mustFail = mustFail
         ctx.noAutoRetry = noAutoRetry
+        if (noAutoRetry && state.describeRetryOptions) {
+          ctx.hasDescribeRetryPolicy = false
+          ctx.hasDescribeRetriesRemaining = false
+          for (let block = event.test.parent; block; block = block.parent) {
+            const options = state.describeRetryOptions.get(block)
+            if (!options) continue
+            this.#describeRetryAttempts ??= new WeakMap()
+            ctx.hasDescribeRetryPolicy = true
+            const retryCount = Number.parseInt(options.numRetries, 10) || 0
+            if (retryCount > (this.#describeRetryAttempts.get(block) ?? 0)) {
+              ctx.hasDescribeRetriesRemaining = true
+              break
+            }
+          }
+        }
         ctx.hadErrorsBeforeExecution = event.test.errors.length > 0
         ctx.isDisabled = isDisabled
         ctx.isQuarantined = isQuarantined
@@ -2678,8 +2708,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       ctx
     ) {
       if (ctx.noAutoRetry) {
+        // Quarantine consumes the error before Circus decides whether to replay the describe.
+        if (ctx.hasDescribeRetryPolicy && ctx.isQuarantined) return 'skip'
         const retryCount = this.hasExplicitRetries ? Number(this.global[RETRY_TIMES]) : 0
-        if (status === 'fail' && !ctx.hadErrorsBeforeExecution && numberOfTestInvocations <= retryCount) return
+        const hasPendingTestRetry = !ctx.hasDescribeRetryPolicy &&
+          !ctx.hadErrorsBeforeExecution && numberOfTestInvocations <= retryCount
+        if (status === 'fail' && (ctx.hasDescribeRetriesRemaining || hasPendingTestRetry)) return
         return ctx.isQuarantined ? 'skip' : status
       }
       const numberOfExecutedRetries = retriedTestsToNumAttempts.get(testName) ?? 0
