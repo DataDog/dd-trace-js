@@ -354,6 +354,8 @@ class VitestPlugin extends CiPlugin {
       browserProjectName,
       testExecutionId,
       testStartLine,
+      startTime,
+      duration,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const extraTags = {
@@ -380,10 +382,11 @@ class VitestPlugin extends CiPlugin {
         testSuite,
         testSuiteSpan || this.testSuiteSpan,
         extraTags,
-        testExecutionId
+        testExecutionId,
+        startTime
       )
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(testSpan))
-      testSpan.finish()
+      testSpan.finish(Number.isFinite(duration) && duration >= 0 ? testSpan._startTime + duration : undefined)
     })
 
     this.addBind('ci:vitest:test-suite:start', (ctx) => {
