@@ -38,15 +38,16 @@ function wrapTestDeclaration (declaration) {
   }
 }
 
-// Mocha discards the callback of it.skip(). Capture annotations while it is still known.
+// Mocha discards the callback of skipped declarations. Leave executable declarations untouched
+// so Cypress captures their original callsite, including in WebKit's untrimmed stacks.
 for (const name of ['it', 'specify', 'xit', 'xspecify']) {
   const declareTest = globalThis[name]
   if (typeof declareTest !== 'function') continue
-  const wrapped = Object.assign(wrapTestDeclaration(declareTest), declareTest)
-  for (const modifier of ['only', 'skip']) {
-    if (typeof declareTest[modifier] === 'function') wrapped[modifier] = wrapTestDeclaration(declareTest[modifier])
+  if (name === 'xit' || name === 'xspecify') {
+    globalThis[name] = Object.assign(wrapTestDeclaration(declareTest), declareTest)
+  } else if (typeof declareTest.skip === 'function') {
+    declareTest.skip = wrapTestDeclaration(declareTest.skip)
   }
-  globalThis[name] = wrapped
 }
 
 let rumFlushWaitMillis = 500

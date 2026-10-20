@@ -23,7 +23,9 @@ const suite = 'cypress/e2e/test-exclusions.js'
 
 describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation exclusions`, function () {
   this.timeout(120000)
-  useSandbox(getCypressDependencies(version), true)
+  const dependencies = getCypressDependencies(version)
+  if (process.env.CYPRESS_TEST_BROWSER === 'webkit') dependencies.push('playwright-webkit@1.56.1')
+  useSandbox(dependencies, true)
   let cwd, receiver, childProcess, webApp
 
   before(async function () {
@@ -259,6 +261,22 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       assert.strictEqual(tests.at(-1).meta['test.final_status'], 'fail')
       for (const test of tests.slice(1)) assert.strictEqual(test.meta['test.retry_reason'], 'external')
     }, { CYPRESS_EXPERIMENTAL_RETRIES: 'true' })
+  })
+
+  it('preserves distinct native callsites for executable declarations', async () => {
+    const sourceSuite = 'cypress/e2e/declaration-source.cy.js'
+    const browserOption = process.env.CYPRESS_TEST_BROWSER ? ' --browser "$CYPRESS_TEST_BROWSER"' : ''
+    const webkitOption = process.env.CYPRESS_TEST_BROWSER === 'webkit' ? ' --config experimentalWebKitSupport=true' : ''
+    await run('source', 0, tests => {
+      assert.strictEqual(tests.length, 2)
+      const [ordinary] = named(tests, 'ordinary declaration source')
+      const [annotated] = named(tests, 'annotated declaration source')
+      assert.strictEqual(ordinary.meta['test.status'], 'pass')
+      assert.strictEqual(annotated.meta['test.status'], 'pass')
+      assert.strictEqual(ordinary.meta[exclusion], undefined)
+      assert.strictEqual(annotated.meta[exclusion], 'true')
+    }, { SPEC_PATTERN: sourceSuite },
+    `./node_modules/.bin/cypress run --spec ${sourceSuite}${browserOption}${webkitOption}`)
   })
 
   it('reads the public exclusion mode before declaring tests', async () => {
