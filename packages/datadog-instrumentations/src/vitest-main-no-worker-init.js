@@ -9,7 +9,7 @@ const satisfies = require('../../../vendor/dist/semifies')
 const { getDynamicAtrRetryCount } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const { EMPTY_EFD_RETRY_POLICY, hasEfdRetries } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   DYNAMIC_NAME_RE,
@@ -457,8 +457,8 @@ function deactivate (ctx) {
 
 function configureWorkerEnv (workerEnv, shouldSkipWorkerInit = false) {
   const originalNodeOptions = removeAnnotationsPreload(workerEnv.NODE_OPTIONS)
-  if (originalNodeOptions) workerEnv.NODE_OPTIONS = originalNodeOptions
-  else delete workerEnv.NODE_OPTIONS
+  if (originalNodeOptions === undefined) delete workerEnv.NODE_OPTIONS
+  else workerEnv.NODE_OPTIONS = originalNodeOptions
   if (!shouldSkipWorkerInit) {
     delete workerEnv[VITEST_NO_WORKER_INIT_ACTIVE_ENV]
     restoreDatadogTestOptimizationNodeOptions(workerEnv)
@@ -466,9 +466,11 @@ function configureWorkerEnv (workerEnv, shouldSkipWorkerInit = false) {
   }
 
   workerEnv[VITEST_NO_WORKER_INIT_ACTIVE_ENV] = '1'
-  rememberDatadogTestOptimizationNodeOptions(workerEnv.NODE_OPTIONS)
+  // Pool env objects omit inherited variables; adding our preload must retain the parent's options.
+  const inheritedNodeOptions = workerEnv.NODE_OPTIONS ?? getEnvironmentVariable('NODE_OPTIONS')
+  rememberDatadogTestOptimizationNodeOptions(inheritedNodeOptions)
 
-  const nodeOptions = removeDatadogTestOptimizationNodeOptions(workerEnv.NODE_OPTIONS)
+  const nodeOptions = removeDatadogTestOptimizationNodeOptions(inheritedNodeOptions)
   workerEnv.NODE_OPTIONS = serializeNodeOptions([
     ...splitNodeOptions(nodeOptions || ''), '--require', VITEST_ANNOTATIONS_PRELOAD,
   ])
