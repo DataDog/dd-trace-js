@@ -77,6 +77,77 @@ describe('Plugin', () => {
             assert.strictEqual(bodies[0].length, body.length)
           })
 
+          // Mirrors multipart parsers: the body only exists after the instrumentation's `preValidation` ran, so
+          // it is published from `preHandler`. Fastify 1 has no `preValidation` hook to set it from.
+          const describeLateBody = semver.intersects(version, '>=2') ? describe : describe.skip
+
+          describeLateBody('when the body is set after preValidation', () => {
+            let lateBody
+
+            beforeEach(async () => {
+              await app.close()
+
+              const fastify = getExport()
+              app = fastify({ bodyLimit: BODY_SIZE_BYTES * 2 })
+
+              if (semver.intersects(version, '>=3')) {
+                await app.register(require('../../../versions/middie').get())
+              }
+
+              app.addHook('preValidation', (request, reply, done) => {
+                request.body = lateBody
+                done()
+              })
+              app.post('/', (request, reply) => reply.send('DONE'))
+
+              await app.listen({ host: '127.0.0.1', port: 0 })
+              url = `http://127.0.0.1:${app.server.address().port}/`
+            })
+
+            const publishedBodies = {
+              'an object': () => ({ a: 1 }),
+              'an array': () => [1],
+              'a large string': () => 'A'.repeat(BODY_SIZE_BYTES),
+              'a large Buffer': () => Buffer.alloc(BODY_SIZE_BYTES),
+              'a large Uint8Array': () => new Uint8Array(BODY_SIZE_BYTES),
+              'a large array': () => new Array(BODY_SIZE_BYTES),
+            }
+
+            for (const [name, createBody] of Object.entries(publishedBodies)) {
+              it(`publishes ${name} body once without enumerating its elements`, async () => {
+                lateBody = createBody()
+
+                const res = await httpRequest.post(url)
+
+                assert.strictEqual(res.status, 200)
+                assert.strictEqual(bodies.length, 1)
+                assert.strictEqual(bodies[0], lateBody)
+              })
+            }
+
+            const unpublishedBodies = {
+              'an empty string': '',
+              'an empty object': {},
+              'an empty array': [],
+              'an empty Buffer': Buffer.alloc(0),
+              'an empty Uint8Array': new Uint8Array(0),
+              'a null': null,
+              'a number': 1,
+              'a boolean': true,
+            }
+
+            for (const [name, body] of Object.entries(unpublishedBodies)) {
+              it(`does not publish ${name} body`, async () => {
+                lateBody = body
+
+                const res = await httpRequest.post(url)
+
+                assert.strictEqual(res.status, 200)
+                assert.deepStrictEqual(bodies, [])
+              })
+            }
+          })
+
           it('does not publish an empty body', async () => {
             const res = await httpRequest.post(url)
 

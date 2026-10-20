@@ -447,6 +447,16 @@ function truncateRequestBody (target, depth = 0) {
         return { truncated: true }
       }
 
+      // `Buffer#toJSON` and `Object.keys` both materialize one entry per byte, so cut large binary views down
+      // before they are serialized.
+      if (ArrayBuffer.isView(target) && target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE) {
+        const { value } = truncateRequestBody(
+          target.subarray(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE),
+          depth
+        )
+        return { value, truncated: true }
+      }
+
       if (typeof target.toJSON === 'function') {
         try {
           return truncateRequestBody(target.toJSON(), depth + 1)

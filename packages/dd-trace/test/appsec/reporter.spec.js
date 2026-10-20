@@ -671,6 +671,29 @@ describe('reporter', () => {
           assert.strictEqual(truncatedRequestBody.specialValues.arrayWithToJSON.length, 4096)
         })
 
+        it('should truncate large binary bodies before serializing every byte', () => {
+          const size = 32 * 1024 * 1024
+          const buffer = Buffer.alloc(size, 1)
+          const toJSON = sinon.spy(buffer, 'toJSON')
+
+          const bufferResult = Reporter.truncateRequestBody(buffer)
+          const typedResult = Reporter.truncateRequestBody(new Uint8Array(size))
+
+          sinon.assert.notCalled(toJSON)
+          assert.strictEqual(bufferResult.truncated, true)
+          assert.strictEqual(bufferResult.value.type, 'Buffer')
+          assert.strictEqual(bufferResult.value.data.length, 256)
+          assert.strictEqual(typedResult.truncated, true)
+          assert.strictEqual(Object.keys(typedResult.value).length, 256)
+        })
+
+        it('should not flag binary bodies at the element limit as truncated', () => {
+          const { truncated, value } = Reporter.truncateRequestBody(Buffer.alloc(256, 1))
+
+          assert.strictEqual(truncated, false)
+          assert.strictEqual(value.data.length, 256)
+        })
+
         it('should set request body size exceeded when reporter request body has been truncated', () => {
           const config = getReporterConfig({
             DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true,
