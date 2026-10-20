@@ -870,7 +870,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             copyTestAnnotations(sourceTestFn, testFn)
             return test.call(this, testName, testFn, ...callArgs)
           }
-          const boundTest = bind(eachTest, true, needsEachError)
+          const boundTest = bind(eachTest, !needsEachError, needsEachError)
           const eachBind = boundTest.apply(this, eachArgs)
           return eachBind.apply(this, testArgs)
         }
