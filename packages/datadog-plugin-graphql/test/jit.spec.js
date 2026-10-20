@@ -65,7 +65,7 @@ async function waitForCollection (reference) {
  * @returns {Promise<void>}
  */
 async function assertGeneratedArgumentFactory (compilation, expectedStatements) {
-  const declaration = /^function (ddTraceArguments\d+) \(variableValues, cloneValue\) \{$/m.exec(compilation)
+  const declaration = /^function (ddTraceArguments\d+) \(variableValues, cloneValue(?:, __context)?\) \{$/m.exec(compilation)
   assert.ok(declaration, 'expected a named generated argument factory')
 
   const end = compilation.indexOf('\n}\n', declaration.index)
@@ -646,7 +646,7 @@ void generatedResolver
         delete nested.arguments
         delete nested.directives
 
-        const compiled = compileQuery(nestedSchema, document, undefined, { debug: true })
+        const compiled = compileQuery(nestedSchema, document, undefined, { debug: { enabled: true } })
         assert.strictEqual(
           typeof compiled.query,
           'function',
@@ -1391,7 +1391,7 @@ void generatedResolver
               errorSchema,
               graphql.parse(`query ${operationName} { items { value } }`),
               undefined,
-              { debug: true }
+              { debug: { enabled: true } }
             )
             const compilation = compiled.__DO_NOT_USE_THIS_OR_YOU_WILL_BE_FIRED_compilation
             assert.match(compilation, /jitRuntime\.resolveField/)
@@ -2217,7 +2217,7 @@ void generatedResolver
             }
           `),
           undefined,
-          { debug: true }
+          { debug: { enabled: true } }
         )
         const { query } = compiled
         await assertGeneratedArgumentFactory(
@@ -2919,11 +2919,11 @@ void generatedResolver
     })
   })
 
-  describe('graphql-jit 0.8 with repository-pinned GraphQL', () => {
+  describe('repository-pinned graphql-jit and GraphQL', () => {
     let compileQuery
     let graphql
 
-    useSandbox(["'graphql-jit@^0.8.0'", "'graphql'"], false, [])
+    useSandbox(["'graphql-jit'", "'graphql'"], false, [])
 
     before(() => {
       return agent.load('graphql')
@@ -2976,6 +2976,89 @@ void generatedResolver
       }
 
       assert.deepStrictEqual(resolverInfos, [{ user: {} }, { name: {} }])
+    })
+
+    it('preserves opaque scalar defaults and isolates mutable resolver arguments', async () => {
+      class OpaqueValue {
+        value = 'original'
+      }
+      const defaults = [
+        42n,
+        Symbol('default'),
+        identity,
+        Object.freeze(new OpaqueValue()),
+        Object.freeze(new Map([['value', 'original']])),
+      ]
+      const Opaque = new graphql.GraphQLScalarType({
+        name: 'OpaqueDefault',
+        serialize: identity,
+        parseValue: identity,
+        parseLiteral: () => undefined,
+      })
+      for (const defaultValue of defaults) {
+        const User = new graphql.GraphQLObjectType({
+          name: 'OpaqueUser',
+          fields: {
+            name: {
+              type: graphql.GraphQLString,
+              args: { value: { type: Opaque, defaultValue } },
+            },
+          },
+        })
+        const schema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'OpaqueQuery',
+            fields: { user: { type: User, resolve: () => ({ name: 'Ada' }) } },
+          }),
+        })
+        const document = graphql.parse('query OpaqueDefaults($value: OpaqueDefault) { user { name(value: $value) } }')
+        agent.reload('graphql', { enabled: false })
+        const native = compileQuery(schema, document)
+        assert.strictEqual(typeof native.query, 'function')
+        const expected = await native.query({}, {}, {})
+        agent.reload('graphql', { enabled: true })
+        const compiled = compileQuery(schema, document, undefined, { debug: { enabled: true } })
+        assert.strictEqual(typeof compiled.query, 'function')
+        await assertGeneratedArgumentFactory(compiled.__DO_NOT_USE_THIS_OR_YOU_WILL_BE_FIRED_compilation, [
+          '__context.literals.literal0',
+          'cloneValue === undefined',
+        ])
+
+        const resolverArguments = []
+        const mutableArguments = []
+        const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
+        const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
+        /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+        const onResolverStart = message => {
+          const info = materializeResolverInfo(message)
+          if (info.name) resolverArguments.push(info.name)
+        }
+        /** @param {{ args: { value?: OpaqueValue } }} message */
+        const onResolveStart = ({ args }) => {
+          if (!Object.hasOwn(args, 'value')) return
+          mutableArguments.push(args)
+          if (args.value?.value === 'original') args.value.value = 'mutated'
+        }
+        resolverStartChannel.subscribe(onResolverStart)
+        resolveStartChannel.subscribe(onResolveStart)
+        try {
+          for (let execution = 0; execution < 2; execution++) {
+            const result = await executeWithTrace(() => compiled.query({}, {}, {}), /OpaqueDefaults/)
+            assert.deepStrictEqual(result, expected)
+          }
+        } finally {
+          resolverStartChannel.unsubscribe(onResolverStart)
+          resolveStartChannel.unsubscribe(onResolveStart)
+        }
+        assert.strictEqual(resolverArguments.length, 2)
+        assert.strictEqual(mutableArguments.length, 2)
+        for (const args of resolverArguments) assert.strictEqual(args.value, defaultValue)
+        if (defaultValue instanceof OpaqueValue) {
+          assert.strictEqual(defaultValue.value, 'original')
+          assert.notStrictEqual(mutableArguments[0].value, defaultValue)
+          assert.notStrictEqual(mutableArguments[0].value, mutableArguments[1].value)
+        }
+      }
     })
   })
 })
