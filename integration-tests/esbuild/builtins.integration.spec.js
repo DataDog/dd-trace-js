@@ -5,15 +5,24 @@ const { execFile } = require('node:child_process')
 const fs = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
-const { promisify } = require('node:util')
 
 const ddPlugin = require('../../esbuild')
 const { sandboxCwd, useSandbox } = require('../helpers')
 const FakeAgent = require('../helpers/fake-agent')
 
-const execFileAsync = promisify(execFile)
 const tracerPath = require.resolve('../..')
 const initPath = require.resolve('../../init')
+
+/**
+ * @param {string[]} args
+ * @param {import('node:child_process').ExecFileOptions} options
+ * @returns {Promise<string>}
+ */
+function runNode (args, options) {
+  return new Promise((resolve, reject) => {
+    execFile(process.execPath, args, options, (error, stdout) => error ? reject(error) : resolve(String(stdout)))
+  })
+}
 
 /**
  * @param {'cjs' | 'esm'} format
@@ -23,20 +32,20 @@ const initPath = require.resolve('../../init')
 function application (format, prefix, preloaded) {
   const imports = format === 'esm'
     ? `import http, { request, createServer } from '${prefix}http';
-       import dns, { lookup } from '${prefix}dns';
-       import dnsPromises, { lookup as lookupPromise } from '${prefix}dns/promises';
-       import fs, { readFile } from '${prefix}fs';
-       import fsPromises, { readFile as readFilePromise } from '${prefix}fs/promises';`
+      import dns, { lookup } from '${prefix}dns';
+      import dnsPromises, { lookup as lookupPromise } from '${prefix}dns/promises';
+      import fs, { readFile } from '${prefix}fs';
+      import fsPromises, { readFile as readFilePromise } from '${prefix}fs/promises';`
     : `const http = require('${prefix}http');
-       const { request, createServer } = http;
-       const dns = require('${prefix}dns');
-       const { lookup } = dns;
-       const dnsPromises = require('${prefix}dns/promises');
-       const { lookup: lookupPromise } = dnsPromises;
-       const fs = require('${prefix}fs');
-       const { readFile } = fs;
-       const fsPromises = require('${prefix}fs/promises');
-       const { readFile: readFilePromise } = fsPromises;`
+      const { request, createServer } = http;
+      const dns = require('${prefix}dns');
+      const { lookup } = dns;
+      const dnsPromises = require('${prefix}dns/promises');
+      const { lookup: lookupPromise } = dnsPromises;
+      const fs = require('${prefix}fs');
+      const { readFile } = fs;
+      const fsPromises = require('${prefix}fs/promises');
+      const { readFile: readFilePromise } = fsPromises;`
   return `
     ${format === 'esm' ? `import tracer from ${JSON.stringify(tracerPath)};` : ''}
     ${format === 'cjs' ? `const tracer = require(${JSON.stringify(tracerPath)});` : ''}
@@ -155,8 +164,8 @@ for (const version of versions) {
       })
       const args = mode === 'preloaded' ? ['--require', initPath] : []
       args.push(path.join(directory, 'out', path.basename(entry)))
-      const [result] = await Promise.all([
-        execFileAsync(process.execPath, args, {
+      const [stdout] = await Promise.all([
+        runNode(args, {
           env: {
             ...process.env,
             DD_TRACE_AGENT_URL: `http://127.0.0.1:${agent.port}`,
@@ -169,7 +178,7 @@ for (const version of versions) {
         }),
         received,
       ])
-      assert.match(result.stdout, /builtins-ok/)
+      assert.match(stdout, /builtins-ok/)
     }
 
     for (const format of ['cjs', 'esm']) {
