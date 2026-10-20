@@ -1,15 +1,17 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { exec } = require('node:child_process')
+const { exec, execSync } = require('node:child_process')
 const { once } = require('node:events')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const satisfies = require('semifies')
 
 const { sandboxCwd, useSandbox, getCiVisAgentlessConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
-  TEST_NAME, TEST_STATUS, TEST_IS_RETRY, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES,
+  TEST_NAME, TEST_STATUS, TEST_IS_RETRY, TEST_IS_NEW, TEST_IS_MODIFIED, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, TEST_MANAGEMENT_IS_DISABLED, TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
@@ -94,6 +96,58 @@ describe(`Playwright automation exclusions@${version}`, () => {
         assert.strictEqual(exitCode, 1, output)
       })
     }
+  }
+
+  for (const mode of ['new', 'modified']) {
+    const run = supported ? it : it.skip
+    run(`excludes serial prerequisites and siblings from ${mode}-test EFD clones`, async () => {
+      const names = ['serial EFD group excluded prerequisite', 'serial EFD group dependent sibling',
+        'independent EFD control']
+      receiver.setSettings({
+        known_tests_enabled: true,
+        impacted_tests_enabled: mode === 'modified',
+        early_flake_detection: { enabled: true, slow_test_retries: { '5s': 2 }, faulty_session_threshold: 100 },
+      })
+      receiver.setKnownTests({ playwright: mode === 'new' ? {} : { 'serial.js': names } })
+      const base = execSync('git rev-parse HEAD', { cwd, encoding: 'utf8' }).trim()
+      const fixture = 'ci-visibility/playwright-serial-efd-exclusions/serial.js'
+      if (mode === 'modified') {
+        fs.appendFileSync(path.join(cwd, fixture), '\n// Changed on the test branch.\n')
+        execSync(`git add ${fixture}`, { cwd })
+        execSync('git commit -m "modify serial EFD fixture" --no-verify', { cwd, stdio: 'ignore' })
+      }
+      const head = execSync('git rev-parse HEAD', { cwd, encoding: 'utf8' }).trim()
+      child = exec('node node_modules/@playwright/test/cli.js test' +
+        ' --config ci-visibility/playwright-serial-efd-exclusions/playwright.config.js', {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA: base,
+          DD_GIT_COMMIT_HEAD_SHA: head,
+        },
+      })
+      child.stdout.on('data', chunk => { output += chunk.toString() })
+      child.stderr.on('data', chunk => { output += chunk.toString() })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(child,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          for (const [name, count] of names.map((name, index) => [name, index === 2 ? 3 : 1])) {
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+            assert.strictEqual(attempts.length, count, `${name}: ${output}`)
+            for (const test of attempts) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass', output)
+              assert.strictEqual(test.meta[mode === 'new' ? TEST_IS_NEW : TEST_IS_MODIFIED], 'true', name)
+            }
+            if (count === 1) assert.strictEqual(attempts[0].meta[TEST_IS_RETRY], undefined, name)
+          }
+          assert.strictEqual(tests.length, 5, output)
+          const session = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(session.meta[TEST_STATUS], 'pass', output)
+        }, { hardTimeout: 120_000 })
+      const [[exitCode]] = await Promise.all([once(child, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 0, output)
+    })
   }
 
   for (const mode of ['atr', 'efd', 'native']) {
