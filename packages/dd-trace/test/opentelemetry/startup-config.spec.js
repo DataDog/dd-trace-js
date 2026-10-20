@@ -29,6 +29,50 @@ describe('effective OTel startup configuration', () => {
     assert.equal('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT' in c, false)
   })
 
+  for (const { name, env, configured, enabled } of [
+    { name: 'defaults', env: {}, configured: false, enabled: false },
+    { name: 'DD opt-in', env: { DD_TRACE_OTEL_ENABLED: 'true' }, configured: true, enabled: true },
+    { name: 'OTel opt-in', env: { OTEL_SDK_DISABLED: 'false' }, configured: false, enabled: true },
+    {
+      name: 'DD opt-out over OTel opt-in',
+      env: { DD_TRACE_OTEL_ENABLED: 'false', OTEL_SDK_DISABLED: 'false' },
+      configured: false,
+      enabled: false,
+    },
+    {
+      name: 'OTel opt-out over DD opt-in',
+      env: { DD_TRACE_OTEL_ENABLED: 'true', OTEL_SDK_DISABLED: 'true' },
+      configured: true,
+      enabled: false,
+    },
+    {
+      name: 'invalid DD value with OTel opt-in',
+      env: { DD_TRACE_OTEL_ENABLED: 'maybe', OTEL_SDK_DISABLED: 'false' },
+      configured: false,
+      enabled: true,
+    },
+    {
+      name: 'invalid OTel value with DD opt-in',
+      env: { DD_TRACE_OTEL_ENABLED: 'true', OTEL_SDK_DISABLED: 'maybe' },
+      configured: true,
+      enabled: true,
+    },
+    {
+      name: 'both opt-ins',
+      env: { DD_TRACE_OTEL_ENABLED: 'true', OTEL_SDK_DISABLED: 'false' },
+      configured: true,
+      enabled: true,
+    },
+  ]) {
+    it(`reports startup bridge enablement independently of the configured DD flag: ${name}`, () => {
+      const result = run(env)
+      for (const output of [result.configuration, result.flare]) {
+        assert.equal(output.DD_TRACE_OTEL_ENABLED, configured)
+        assert.equal(output.OTEL_ENABLED, enabled)
+      }
+    })
+  }
+
   it('reports effective defaults, signal overrides and actual protocol fallbacks', () => {
     const { configuration: c } = run({
       ...allSignals,

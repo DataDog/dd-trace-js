@@ -1,17 +1,16 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
+const { resolve } = require('node:path')
 
 const { describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 
 describe('otel-sdk-trace', () => {
   /**
-   * Re-load `otel-sdk-trace.js` with the supplied config values stubbed in via
-   * `getValueFromEnvSources` and report whether it instrumented. `getValueFromEnvSources`
-   * already parses these registered boolean options, so the gate sees `true`,
-   * `false`, or `undefined` — never a raw string. Parsing tolerance ('1', 'maybe',
-   * '') is exercised in the config helper's own spec.
+   * Re-load `otel-sdk-trace.js` with real configuration parsing for the supplied
+   * environment values and report whether it instrumented.
    *
    * The real `datadog-shimmer` and `addHook` transforms run so the load reflects
    * production behavior; `capturedTransforms` collects the transforms so a test can
@@ -22,21 +21,31 @@ describe('otel-sdk-trace', () => {
    * @returns {{ instrumented: boolean, capturedTransforms: Array<(mod: object) => object> }}
    */
   function loadWithEnv (env, tracerStub = {}) {
-    const values = {
+    const originalEnv = process.env
+    process.env = { ...originalEnv }
+    for (const [name, value] of Object.entries({
       DD_TRACE_OTEL_ENABLED: env.ddTraceOtelEnabled,
       OTEL_SDK_DISABLED: env.otelSdkDisabled,
+    })) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = String(value)
     }
-    const capturedTransforms = []
-    proxyquire('../src/otel-sdk-trace', {
-      '../../dd-trace': tracerStub,
-      '../../dd-trace/src/config/helper': {
-        getValueFromEnvSources: (name) => values[name],
-      },
-      './helpers/instrument': {
-        addHook: (_options, transform) => capturedTransforms.push(transform),
-      },
-    })
-    return { instrumented: capturedTransforms.length > 0, capturedTransforms }
+    try {
+      const helper = proxyquire('../../dd-trace/src/config/helper', {
+        '../serverless': { IS_SERVERLESS: true },
+      })
+      const capturedTransforms = []
+      proxyquire('../src/otel-sdk-trace', {
+        '../../dd-trace': tracerStub,
+        '../../dd-trace/src/config/helper': helper,
+        './helpers/instrument': {
+          addHook: (_options, transform) => capturedTransforms.push(transform),
+        },
+      })
+      return { instrumented: capturedTransforms.length > 0, capturedTransforms }
+    } finally {
+      process.env = originalEnv
+    }
   }
 
   describe('gate precedence', () => {
@@ -71,6 +80,25 @@ describe('otel-sdk-trace', () => {
 
     it('treats a value the helper rejected (undefined) as unset', () => {
       assert.equal(loadWithEnv({ ddTraceOtelEnabled: undefined, otelSdkDisabled: undefined }).instrumented, false)
+    })
+  })
+
+  it('reports bridge enablement without loading SDK instrumentation', () => {
+    const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(DD_|_DD_|OTEL_)/.test(name)))
+    execFileSync(process.execPath, ['-e', `
+      const assert = require('node:assert/strict')
+      require('./').init({
+        appsec: false, iast: false, plugins: false, runtimeMetrics: false,
+        remoteConfig: { enabled: false }, startupLogs: false
+      })
+      const { tracerInfo } = require('./packages/dd-trace/src/startup-log')
+      assert.equal(JSON.parse(String(tracerInfo())).OTEL_ENABLED, true)
+      const hookPath = require.resolve('./packages/datadog-instrumentations/src/otel-sdk-trace')
+      assert.equal(require.cache[hookPath], undefined)
+      process.exit(0)
+    `], {
+      cwd: resolve(__dirname, '../../..'),
+      env: { ...inherited, OTEL_SDK_DISABLED: 'false' },
     })
   })
 
