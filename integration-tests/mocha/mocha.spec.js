@@ -5011,6 +5011,26 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ' ci-visibility/test-management/mocha-review-suite-only.js')
     })
 
+    for (const parallel of [false, true]) {
+      const run = parallel ? parallelIt : it
+      run(`preserves annotated TDD skip declarations (parallel=${parallel})`, async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+        await runReviewFixture('mocha-review-tdd-skips', 0, events => {
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 6)
+          for (const test of tests) {
+            const name = test.meta[TEST_NAME].replace('TDD skips ', '')
+            assert.strictEqual(test.meta[TEST_STATUS], name === 'live control' ? 'pass' : 'skip', name)
+            assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'],
+              ['combined', 'protected'].includes(name) ? 'true' : undefined, name)
+            assert.strictEqual(test.meta['test.test_management.no_auto_retry'],
+              ['combined', 'no retry'].includes(name) ? 'true' : undefined, name)
+          }
+        }, {}, `node node_modules/mocha/bin/mocha --ui tdd ${parallel ? '--parallel --jobs 2' : ''}` +
+          ' ci-visibility/test-management/mocha-review-tdd-skips.js')
+      })
+    }
+
     it('finishes exactly one span per runtime and declaration skip', async () => {
       receiver.setSettings({ test_management: { enabled: true } })
       await runReviewFixture('mocha-review-runtime-skips', 0, events => {

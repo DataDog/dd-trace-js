@@ -87,6 +87,23 @@ function addMochaRunHooks (versions, wrapMochaRun) {
  * @param {Function} Mocha
  */
 function preserveDeclarationAnnotations (context, Mocha) {
+  let declarationAnnotations
+  /** @param {Function} original */
+  function wrapDeclaration (original) {
+    return function (title, fn) {
+      const previousAnnotations = declarationAnnotations
+      // TDD test.skip delegates to test(title), dropping its callback and the returned Test.
+      declarationAnnotations ??= getTestAnnotations(fn)
+      try {
+        const test = original.apply(this, arguments)
+        if (test && !test.fn) test._ddDeclaredAnnotations = declarationAnnotations
+        return test
+      } finally {
+        declarationAnnotations = previousAnnotations
+      }
+    }
+  }
+
   for (const key of ['it', 'specify', 'test', 'xit', 'xspecify']) {
     const declare = context[key]
     if (typeof declare !== 'function') continue
@@ -100,16 +117,6 @@ function preserveDeclarationAnnotations (context, Mocha) {
         context[key][modifier] = shimmer.wrapFunction(declare[modifier], wrapDeclaration)
       }
     }
-  }
-}
-
-/** @param {Function} original */
-function wrapDeclaration (original) {
-  return function (title, fn) {
-    const test = original.apply(this, arguments)
-    // Mocha discards callbacks on skipped tests before constructing its Test object.
-    if (test && !test.fn) test._ddDeclaredAnnotations = getTestAnnotations(fn)
-    return test
   }
 }
 
