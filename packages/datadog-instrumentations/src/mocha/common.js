@@ -149,7 +149,7 @@ addHook({
     }
     const rowDeclaration = shimmer.wrapFunction(declare, wrapRow)
     for (const modifier of ['skip', 'only']) {
-      if (typeof declare[modifier] === 'function') {
+      if (typeof declare?.[modifier] === 'function') {
         rowDeclaration[modifier] = shimmer.wrapFunction(declare[modifier], wrapRow)
       }
     }
