@@ -14,3 +14,14 @@ annotated(42, 42);
 preventFailureSuppression(42);
 void result;
 void pending;
+
+const callableWithProperties = Object.assign((value: number): number => value, {
+  label: 'callback',
+  reset: (): void => {},
+});
+const annotatedCallable: typeof callableWithProperties = noAutoRetry(preventFailureSuppression(callableWithProperties));
+const callableLabel: string = annotatedCallable.label;
+annotatedCallable.reset();
+const callableResult: number = annotatedCallable(42);
+void callableLabel;
+void callableResult;

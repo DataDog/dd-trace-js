@@ -35,6 +35,7 @@ function annotate (fn, annotation) {
   }
   Object.setPrototypeOf(annotated, Object.getPrototypeOf(fn))
   Object.defineProperties(annotated, {
+    ...Object.getOwnPropertyDescriptors(fn),
     length: { value: fn.length },
     name: { value: fn.name },
     [annotationsKey]: {
