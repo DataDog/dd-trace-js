@@ -170,6 +170,30 @@ describe('IAST TaintTracking Operations', () => {
       assert.deepStrictEqual(result, expected)
     })
 
+    it('Given a valid iastContext and binary views should not enumerate their elements', () => {
+      const iastContext = {}
+      const transactionId = 'id'
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
+      const buffer = Buffer.alloc(1024)
+      const typedArray = new Uint8Array(1024)
+      const obj = { value: 'parent', buffer, typedArray }
+      const keys = sinon.spy(Object, 'keys')
+
+      try {
+        assert.strictEqual(taintTrackingOperations.taintObject(iastContext, buffer, null), buffer)
+        const result = taintTrackingOperations.taintObject(iastContext, obj, null)
+
+        const enumerated = keys.getCalls().map(call => call.args[0])
+        assert.ok(!enumerated.includes(buffer))
+        assert.ok(!enumerated.includes(typedArray))
+        sinon.assert.calledOnceWithExactly(taintedUtilsMock.newTaintedString, transactionId, 'parent', 'value', null)
+        assert.strictEqual(result.buffer, buffer)
+        assert.strictEqual(result.typedArray, typedArray)
+      } finally {
+        keys.restore()
+      }
+    })
+
     it('Should handle the exception', () => {
       const iastContext = {}
       const transactionId = 'id'

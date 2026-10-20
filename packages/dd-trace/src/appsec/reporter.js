@@ -431,6 +431,41 @@ function reportAttack ({ events: attackData, actions }, req, rootSpan) {
   }
 }
 
+/**
+ * @typedef {Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array | Int32Array | Uint32Array |
+ *   Float32Array | Float64Array | BigInt64Array | BigUint64Array | DataView} BinaryView
+ */
+
+const getTypedArrayLength = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), 'length').get
+
+/**
+ * Reads the length through the intrinsic getter, which an instance or subclass cannot override.
+ *
+ * @param {BinaryView} view
+ */
+function typedArrayLength (view) {
+  try {
+    return getTypedArrayLength.call(view)
+  } catch {
+    // `DataView` is not a typed array and exposes no indexed elements to serialize.
+    return 0
+  }
+}
+
+/**
+ * Copies the first elements by index, the one typed array access that user code cannot override, unlike `subarray`,
+ * `toJSON` or their species constructors. The result keeps the shape `Buffer#toJSON` and `Object.keys` produce.
+ *
+ * @param {BinaryView} view
+ */
+function truncateTypedArray (view) {
+  const data = new Array(COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
+  for (let i = 0; i < COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE; i++) {
+    data[i] = view[i]
+  }
+  return Buffer.isBuffer(view) ? { type: 'Buffer', data } : { ...data }
+}
+
 function truncateRequestBody (target, depth = 0) {
   switch (typeof target) {
     case 'string':
@@ -448,17 +483,9 @@ function truncateRequestBody (target, depth = 0) {
       }
 
       // `Buffer#toJSON` and `Object.keys` both materialize one entry per byte, so cut large binary views down
-      // before they are serialized. Subclasses can override `subarray` or its species constructor, so guard it
-      // like `toJSON`.
-      if (ArrayBuffer.isView(target) && target.length > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE) {
-        let head
-        try {
-          head = target.subarray(0, COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
-        } catch {
-          return { truncated: true }
-        }
-        const { value } = truncateRequestBody(head, depth)
-        return { value, truncated: true }
+      // before they are serialized.
+      if (ArrayBuffer.isView(target) && typedArrayLength(target) > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE) {
+        return { value: truncateTypedArray(target), truncated: true }
       }
 
       if (typeof target.toJSON === 'function') {

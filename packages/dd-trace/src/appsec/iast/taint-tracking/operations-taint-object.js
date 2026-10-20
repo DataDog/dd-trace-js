@@ -28,7 +28,9 @@ function taintObject (iastContext, object, type) {
           } else {
             result = tainted
           }
-        } else if (typeof value === 'object' && !visited.has(value)) {
+        } else if (typeof value === 'object' && !ArrayBuffer.isView(value) && !visited.has(value)) {
+          // Binary views are skipped above: they only hold numbers, so there is nothing to taint, and enumerating
+          // them would materialize one key per byte of a potentially large body.
           visited.add(value)
 
           for (const key of Object.keys(value)) {

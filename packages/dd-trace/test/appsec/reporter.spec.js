@@ -687,16 +687,35 @@ describe('reporter', () => {
           assert.strictEqual(Object.keys(typedResult.value).length, 256)
         })
 
-        it('should drop large binary bodies whose subarray throws', () => {
-          const overridden = new Uint8Array(257)
-          overridden.subarray = () => { throw new TypeError('subarray') }
+        it('should truncate large binary bodies without calling overridable methods', () => {
+          const throwing = () => { throw new TypeError('overridden') }
+
+          const throwingSubarray = new Uint8Array(257)
+          throwingSubarray.subarray = throwing
+
+          const selfSubarray = new Uint8Array(257)
+          selfSubarray.subarray = () => selfSubarray
+
+          const throwingLength = new Uint8Array(257)
+          Object.defineProperty(throwingLength, 'length', { get: throwing })
 
           class ThrowingSpecies extends Uint8Array {
-            static get [Symbol.species] () { throw new TypeError('species') }
+            static get [Symbol.species] () { throw new TypeError('overridden') }
           }
 
-          assert.deepStrictEqual(Reporter.truncateRequestBody(overridden), { truncated: true })
-          assert.deepStrictEqual(Reporter.truncateRequestBody(new ThrowingSpecies(257)), { truncated: true })
+          for (const body of [throwingSubarray, selfSubarray, throwingLength, new ThrowingSpecies(257)]) {
+            const { truncated, value } = Reporter.truncateRequestBody(body)
+
+            assert.strictEqual(truncated, true)
+            assert.strictEqual(Object.keys(value).length, 256)
+          }
+        })
+
+        it('should serialize a large DataView as an empty object', () => {
+          assert.deepStrictEqual(
+            Reporter.truncateRequestBody(new DataView(new ArrayBuffer(257))),
+            { value: {}, truncated: false }
+          )
         })
 
         it('should not flag binary bodies at the element limit as truncated', () => {
