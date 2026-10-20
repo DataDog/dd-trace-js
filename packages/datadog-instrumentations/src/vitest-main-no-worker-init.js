@@ -2,6 +2,7 @@
 
 const { readFileSync } = require('node:fs')
 const path = require('node:path')
+const Module = require('node:module')
 
 const satisfies = require('../../../vendor/dist/semifies')
 
@@ -301,6 +302,10 @@ function shouldUse (ctx, frameworkVersion, testSpecifications, options) {
     warnUnsupportedVersion(frameworkVersion)
     return false
   }
+
+  // The annotation preload requires this API; older runtimes keep normal worker initialization.
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  if (typeof Module.register !== 'function') return false
 
   const config = ctx?.config
   if (!config) return false

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const Module = require('node:module')
 const { exec, execSync } = require('node:child_process')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
@@ -158,6 +159,7 @@ describe('vitest no-worker init instrumentation selection', () => {
   })
 
   describe('shouldUse', () => {
+    const withRegister = typeof Module.register === 'function' ? it : it.skip
     it('rejects runs when the feature was not requested', () => {
       delete process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV]
 
@@ -169,10 +171,23 @@ describe('vitest no-worker init instrumentation selection', () => {
     })
 
     for (const pool of ['forks', 'threads']) {
-      it(`accepts isolated ${pool} runs`, () => {
+      withRegister(`accepts isolated ${pool} runs`, () => {
         assert.strictEqual(noWorkerInit.shouldUse({ config: { pool } }, '3.2.6', undefined, options), true)
       })
     }
+
+    it('falls back when module.register is unavailable', () => {
+      const descriptor = Object.getOwnPropertyDescriptor(Module, 'register')
+      Object.defineProperty(Module, 'register', { value: undefined, configurable: true })
+      try {
+        for (const pool of ['forks', 'threads']) {
+          assert.strictEqual(noWorkerInit.shouldUse({ config: { pool } }, '3.2.6', undefined, options), false)
+        }
+      } finally {
+        if (descriptor) Object.defineProperty(Module, 'register', descriptor)
+        else delete Module.register
+      }
+    })
 
     it('rejects root projects with isolate disabled', () => {
       assert.strictEqual(
@@ -916,13 +931,64 @@ describe('vitest no-worker init instrumentation selection', () => {
   })
 })
 
+const describeWithoutRegister = typeof Module.register === 'function' ? describe.skip : describe
+const describeWithRegister = typeof Module.register === 'function' ? describe : describe.skip
+
+describeWithoutRegister('vitest no-worker init without module.register', function () {
+  this.timeout(120000)
+  useSandbox(['vitest@3.2.6', 'vite@6.4.1', 'tinypool'], true)
+  let cwd, receiver, childProcess, testOutput
+  before(() => { cwd = sandboxCwd() })
+  beforeEach(async () => {
+    testOutput = ''
+    receiver = await new FakeCiVisIntake().start()
+  })
+  afterEach(async () => {
+    childProcess?.kill()
+    await receiver.stop()
+  })
+  function runVitest (env) {
+    childProcess = exec('./node_modules/.bin/vitest run', {
+      cwd,
+      env: getNoWorkerInitEnv(receiver, env),
+    })
+    childProcess.stdout.on('data', data => { testOutput += data })
+    childProcess.stderr.on('data', data => { testOutput += data })
+    return once(childProcess, 'exit').then(([exitCode]) => exitCode)
+  }
+  for (const pool of ['forks', 'threads']) {
+    it(`falls back to initialized ${pool} workers without module.register`, async () => {
+      const run = runVitest({
+        NODE_OPTIONS: '--loader dd-trace/loader-hook.mjs -r dd-trace/ci/init',
+        DD_INJECT_FORCE: 'true',
+        TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+        POOL_CONFIG: pool,
+        EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_INACTIVE: '1',
+        EXPECT_DD_TRACE_INIT: '1',
+      })
+      const events = receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = getEventContents(getEvents(payloads), 'test')
+          assert.strictEqual(tests.length, 1, testOutput)
+          assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass', testOutput)
+        })
+      const [exitCode] = await Promise.all([run, events]).catch(error => {
+        error.message += `\nVitest output:\n${testOutput}`
+        throw error
+      })
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+  }
+})
+
 SUPPORTED_VERSIONS.forEach((version) => {
-  describe(`vitest@${version} no-worker init`, () => {
+  describeWithRegister(`vitest@${version} no-worker init`, () => {
     const latestVitestIt = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
     let cwd, receiver, childProcess, testOutput
 
     useSandbox([
       `vitest@${version}`,
+      ...(NODE_MAJOR <= 18 ? ['vite@6.4.1'] : []),
       'tinypool',
     ], true)
 
