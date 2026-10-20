@@ -152,7 +152,7 @@ describe('otel-thread-ctx', () => {
       tagsUpdateCh,
       beforeCh: dc.channel('dd-trace:storage:before'),
       getActiveSpan: () => activeSpan,
-      ensureChannelsActivated: sinon.stub(),
+      acquireChannels: sinon.stub(),
     }
 
     webTagsCacheStub = {

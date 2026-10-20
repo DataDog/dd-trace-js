@@ -16,6 +16,18 @@ const ROUTE_DISCOVERY_COOLDOWN_MS = 60_000
 const REQUIRED_LOCAL_HEADERS = [EVP_ORIGIN_HEADER_NAME, EVP_ORIGIN_VERSION_HEADER_NAME]
 const STOP_NOOP = () => {}
 
+/**
+ * @typedef {(enabled: boolean, route?: import('./flag-evaluations').FlagEvaluationRoute) => void} DeliverySubscriber
+ */
+/**
+ * @typedef {object} DeliveryStrategy
+ * @property {Set<{notify: DeliverySubscriber}>} subscribers
+ * @property {() => void} stop
+ * @property {[boolean, import('./flag-evaluations').FlagEvaluationRoute?]} [result]
+ */
+/** @type {WeakMap<import('../../config/config-base'), DeliveryStrategy>} */
+const deliveryStrategies = new WeakMap()
+
 let missingRouteWarningLogged = false
 
 /**
@@ -167,18 +179,45 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
 }
 
 /**
- * Applies one event-delivery strategy that can be shared by all Feature Flags writers.
+ * Subscribes to the delivery strategy owned by this tracer configuration.
+ * The provider and exposure module receive the same configuration object from
+ * the tracer. Share their route transitions, but never share credentials across
+ * distinct configurations. The last subscriber owns discovery cleanup.
  *
  * @param {import('../../config/config-base')} config - Tracer configuration object
  * @param {(enabled: boolean, route?: import('./flag-evaluations').FlagEvaluationRoute) => void} setWriterEnabledValue
  *   Callback to set the writer enabled state
  */
 function setEventDeliveryStrategy (config, setWriterEnabledValue) {
-  if (config.featureFlags?.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'agentless') {
-    return setAgentlessStrategy(config, setWriterEnabledValue)
+  let strategy = deliveryStrategies.get(config)
+  const subscriber = { notify: setWriterEnabledValue }
+
+  if (strategy) {
+    strategy.subscribers.add(subscriber)
+    if (strategy.result) setWriterEnabledValue(...strategy.result)
+  } else {
+    strategy = { subscribers: new Set([subscriber]), stop: STOP_NOOP }
+    deliveryStrategies.set(config, strategy)
+    /** @type {DeliverySubscriber} */
+    const notify = (enabled, route) => {
+      // A Remote Config discovery already in flight cannot be canceled. Ignore
+      // its result after shutdown, including when the same config is reused.
+      if (deliveryStrategies.get(config) !== strategy) return
+      strategy.result = route === undefined ? [enabled] : [enabled, route]
+      for (const subscriber of strategy.subscribers) {
+        subscriber.notify(...strategy.result)
+      }
+    }
+    strategy.stop = config.featureFlags?.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'agentless'
+      ? setAgentlessStrategy(config, notify)
+      : setAgentStrategy(config, notify)
   }
 
-  return setAgentStrategy(config, setWriterEnabledValue)
+  return () => {
+    if (!strategy.subscribers.delete(subscriber) || strategy.subscribers.size !== 0) return
+    deliveryStrategies.delete(config)
+    strategy.stop()
+  }
 }
 
 module.exports = {

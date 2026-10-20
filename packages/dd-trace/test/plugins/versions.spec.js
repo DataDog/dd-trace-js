@@ -189,6 +189,20 @@ describe('resolvePluginVersions', () => {
     assert.equal(result.unversioned, '=2.115.0')
   })
 
+  for (const [nodeVersion, expected] of [['22.11.999', '4.29.1'], ['22.12.0', '5.12.5']]) {
+    it(`selects a compatible Fastify fixture for light-my-request on Node.js ${nodeVersion}`, () => {
+      const result = resolvePluginVersions({
+        name: 'fastify',
+        declarations: externals['light-my-request'].filter(({ name }) => name === 'fastify'),
+        nodeVersion,
+        honourEnvRange: false,
+        env: { PACKAGE_VERSION_RANGE: '6' },
+      })
+
+      assert.equal(maxSatisfying(['4.29.1', '5.12.5'], result.unversioned), expected)
+    })
+  }
+
   it('ignores the PACKAGE_VERSION_RANGE opt-in of a declaration outside the Node.js range', () => {
     const result = resolvePluginVersions({
       name: 'mongodb',

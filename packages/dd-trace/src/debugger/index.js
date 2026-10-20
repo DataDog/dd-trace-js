@@ -8,6 +8,7 @@ const dc = require('dc-polyfill')
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
 const telemetryMetrics = require('../telemetry/metrics')
+const { logGenericError } = require('../startup-log')
 const getDebuggerConfig = require('./config')
 const {
   DEBUGGER_DIAGNOSTICS_V1,
@@ -15,6 +16,7 @@ const {
   DEBUGGER_INPUT_V2,
   INSPECT_SEGMENT_GLOBAL_PROPERTY,
   METRICS_FLUSH_INTERVAL_MS,
+  WORKER_ERROR_REASON,
 } = require('./constants')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
 const { PauseDurationHistogram } = require('./pause-duration-histogram')
@@ -32,6 +34,8 @@ const { configureProbeSampler, installProbeSampler, uninstallProbeSampler } = re
 // and the worker does not keep the process alive, so without this hook everything counted since the last tick would
 // be lost when the application exits on its own.
 const TELEMETRY_APP_CLOSING_CHANNEL = 'datadog:telemetry:app-closing'
+
+const WORKER_FILENAME = join(__dirname, 'devtools_client', 'index.js')
 
 let worker = null
 let configChannel = null
@@ -139,7 +143,7 @@ function start (config, rcInstance) {
     inputPath = _inputPath
 
     worker = new Worker(
-      join(__dirname, 'devtools_client', 'index.js'),
+      WORKER_FILENAME,
       {
         name: 'dd-debugger',
         execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
@@ -165,7 +169,7 @@ function start (config, rcInstance) {
       )
     })
 
-    worker.on('error', (err) => logWorkerError(err))
+    worker.on('error', onWorkerError)
     worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 
     worker.once('exit', (code) => {
@@ -184,6 +188,24 @@ function start (config, rcInstance) {
     configChannel.port1.unref?.()
     configChannel.port2.unref?.()
   })
+}
+
+/**
+ * @param {Error & { code?: unknown, requireStack?: unknown }} error - The error emitted by the worker thread
+ */
+function onWorkerError (error) {
+  // Node.js reports an empty require stack when the module it cannot find is the worker entry point itself, rather
+  // than one of its dependencies. This happens when the dd-trace files are not on disk where dd-trace expects them,
+  // e.g. because dd-trace was bundled into the application, or because some of its files were not deployed.
+  if (error.code === 'MODULE_NOT_FOUND' && Array.isArray(error.requireStack) && error.requireStack.length === 0) {
+    logGenericError(
+      `Dynamic Instrumentation is disabled, because its worker thread could not load ${WORKER_FILENAME}. ` +
+      'Make sure dd-trace is installed as regular files on disk and is not bundled into the application.'
+    )
+    logWorkerError(error, WORKER_ERROR_REASON.WORKER_ENTRY_POINT_NOT_FOUND)
+    return
+  }
+  logWorkerError(error)
 }
 
 /**

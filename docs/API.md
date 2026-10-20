@@ -24,6 +24,40 @@ best-effort formatted `console.warn` and `console.error` calls made with an acti
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 `DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
 
+<h2 id="feature-flag-configuration">Feature Flag Configuration for SSR</h2>
+
+Use `dd-trace/openfeature/rules-based` to fetch rules and serialize configuration for browser initialization.
+These helpers do not initialize the tracer, register a provider, or enable tracking.
+The rules decoder is loaded only when this entrypoint is imported, not by `dd-trace/openfeature`
+or normal tracer or provider imports.
+
+```javascript
+import { fetchRulesConfiguration, configurationToString } from 'dd-trace/openfeature/rules-based.js'
+
+export async function getServerSideProps () {
+  const configuration = await fetchRulesConfiguration({
+    distributionChannel: 'client',
+    clientToken: process.env.DD_CLIENT_TOKEN,
+    env: process.env.DD_ENV,
+  })
+
+  return { props: { flagsConfiguration: configurationToString(configuration) } }
+}
+```
+
+The browser can parse `flagsConfiguration` with `configurationFromString` from
+`@datadog/openfeature-browser/rules-based` and pass the result to `DatadogCoreProvider.setConfiguration()`.
+Use your framework's safe SSR data serialization; do not interpolate the string directly into HTML or a script.
+
+**Only forward client-distributed configuration to browsers.** The fetch helper defaults to the `server` distribution
+channel, which requires `apiKey` instead of `clientToken`. Serialization does not remove server-only flags.
+The helper accepts explicit `env`, optional `site`, `timeoutMs` (default 5000), `signal`, and custom `fetch` options;
+it does not inherit tracer configuration or read environment variables automatically.
+Catch `ConfigurationFetchError` to handle loading failures using its `code` and optional HTTP `status`.
+
+Use `require('dd-trace/openfeature/rules-based')` for CommonJS or named imports from
+`dd-trace/openfeature/rules-based.js` for native Node.js ESM.
+
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 
 The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
@@ -49,6 +83,40 @@ The worker requires its JavaScript file and dependencies to be available at runt
 file does not automatically include the worker; the Datadog esbuild plugin does not currently package it. Keep `dd-trace`
 external to the bundle with its installed package available. If the worker cannot load, `flagevaluation` track EVP events
 are disabled for that provider and a bounded warning is logged; flag evaluations and existing exposure events continue.
+
+<h3 id="feature-flag-evaluation-telemetry-opt-out">Per-subject Evaluation Telemetry Opt-out</h3>
+
+Enable the context parameter before you first access `tracer.openfeature`:
+
+```javascript
+const tracer = require('dd-trace').init({
+  featureFlags: {
+    enableEvaluationTelemetryOptOutParameter: true
+  }
+})
+const { OpenFeature } = require('@openfeature/server-sdk')
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+const enabled = await OpenFeature.getClient().getBooleanValue('checkout', false, {
+  targetingKey: 'subject-id',
+  dd_evaluation_telemetry_opt_out: true
+})
+```
+
+The option defaults to `false`. The provider captures it at construction.
+Only boolean `true` in the merged `dd_evaluation_telemetry_opt_out` context attribute suppresses new evaluation EVP events,
+OpenTelemetry evaluation metrics, and automatic flag span tags. Strings, numbers, null, missing attributes, and false keep existing behavior.
+You can also enable per-subject opt-out with `DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED=true`.
+Explicit configuration takes precedence over this environment variable, including `false`.
+This enables the context parameter; it does not disable evaluation telemetry globally.
+
+The attribute remains available to targeting rules and exposure reporting, whether this option is enabled or disabled.
+Changing it can affect assignments through targeting rules and can produce another exposure under normal deduplication rules.
+
+The telemetry control does not change flag values, variants, reasons, defaults, experiment exposures,
+exposure deduplication, or customer hooks.
+Set the subject attribute before evaluation. Changes from After or Error hooks are not a supported opt-out API.
+Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.
+The option does not change protected/full-data reporting consent or debug logging.
 
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
@@ -102,6 +170,30 @@ tracer.use('openai', {
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-sdk"></h5>
+
+Amazon Nova 2 Sonic LLM Observability supports `InvokeModelWithBidirectionalStreamCommand` in
+`@aws-sdk/client-bedrock-runtime >=3.785.0` with model `amazon.nova-2-sonic-v1:0`, supplied as a model ID
+or a foundation-model ARN such as `arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-2-sonic-v1:0`.
+Spans use the canonical model ID; the identifier sent to AWS is unchanged. Inference-profile identifiers,
+cross-region prefixes, other model versions (including Nova 2.5 Sonic), and malformed ARNs pass through
+without Nova capture. The integration does not perform model-resolution API calls.
+Initialize the tracer with LLM Observability enabled before loading the AWS SDK. Each logical response
+creates a `nova sonic audio turn` workflow with a `nova sonic response` LLM child and, when timing is
+available, `user speech` and `agent speech` workflow children. Turns inherit the invocation's application
+workflow, if present, and share a conversation session ID.
+
+The LLM child contains transcripts, tool calls/results, token usage, and bounded inline WAV audio.
+Invalid or oversized audio falls back to text without dropping independently valid speech timing.
+Audio-token counts are subsets of the input/output token totals. Input speech offsets select the audio
+clip; time to first audio uses local receipt of `userSpeechEnd` and the first output audio. Output speech
+timing projects PCM playback, including queueing, underrun silence, and interruption cuts; it does not
+measure sound heard at a device. Input is observed as the SDK consumes it, which may precede transmission.
+
+Original Nova Sonic and restarting a different prompt on the same connection are unsupported. On a prompt
+restart, the integration flushes the first prompt and stops capturing that connection. Set
+`tracer.use('aws-sdk', { llmobs: false })` to disable Nova audio/turn capture. Standard Bedrock APM tracing
+for other operations is unaffected.
+
 <h5 id="azure-cosmos"></h5>
 <h5 id="azure-event-hubs"></h5>
 <h5 id="azure-functions"></h5>
@@ -621,6 +713,29 @@ Playwright (1.38.0 or later) and Cypress. Playwright uses `only-on-failure` scre
 unless the project already captures failures; existing capture options are preserved. Cypress enables
 `screenshotOnRunFailure` or `video`. Setting either flag to `false` disables that upload without modifying the
 framework's capture settings. The flags operate independently. Only automatic failure media is uploaded.
+
+For WebdriverIO 9 and later with the Mocha or Jasmine adapter, explicitly set
+`DD_TEST_FAILURE_VIDEOS_ENABLED=true` to record and upload failure videos automatically.
+Install [FFmpeg](https://ffmpeg.org/download.html) with the `libvpx` encoder and make the `ffmpeg` executable
+available on the WDIO worker's `PATH`. Check the installation with `ffmpeg -version` and `ffmpeg -encoders`.
+No WebdriverIO video reporter or additional dd-trace npm dependency is required. Encoding runs in a separate
+process and only for failed attempts. If FFmpeg is unavailable, recording is disabled and a warning is logged.
+When videos are enabled and both FFmpeg and video uploads are available, dd-trace defaults new sessions to
+`unhandledPromptBehavior: 'ignore'` so background screenshots preserve open dialogs. Explicit prompt policies
+are preserved. Recording is disabled with a warning
+if any session's negotiated policy allows screenshots to accept or dismiss dialogs. Policies are checked before
+each capture; reloading a session with an unsafe policy discards the active recording. Tests must handle their
+dialogs; other WebDriver commands no longer automatically dismiss them under the `ignore` policy.
+
+WebdriverIO recordings are screenshot sequences encoded as WebM, using the approach of
+[wdio-video-reporter](https://webdriver.io/docs/wdio-video-reporter/). They capture browser command results
+and sample idle periods every 500ms; browser dialogs and native UI outside screenshots are not recorded.
+Each failed attempt, including retries and test hook failures, gets its own upload. Passing and skipped
+attempts are discarded. Multiremote sessions produce separate videos for the same attempt.
+Videos are limited to 1280×720 pixels and use two frames per second. Temporary frames and videos are
+removed after completion. Raw frames share a 200 MiB budget per WDIO worker across capturing, encoding, and
+uploading attempts, released after file cleanup, with a limit of 16 megapixels per screenshot. Capture,
+encoding, or upload failures do not fail the test run.
 
 Set `DD_CODE_COVERAGE_FLAGS` to a comma-separated list of flags to attach to uploaded code coverage
 reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
