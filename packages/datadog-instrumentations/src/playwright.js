@@ -1082,7 +1082,8 @@ function testEndHandler ({
   const atrRetryCount = isDynamicAtrEnabled
     ? dynamicAtrRetryCountByTestKey.get(dynamicAtrTestKey) ?? test.retries
     : flakyTestRetriesCount
-  if (!getTestAnnotations(test.fn).noAutoRetry && isFlakyTestRetriesEnabled &&
+  if (!test._ddIsAutomaticRetryExcluded && !getTestAnnotations(test.fn).noAutoRetry &&
+    isFlakyTestRetriesEnabled &&
     !testProperties.attemptToFix && !test._ddIsEfdRetry &&
     !(test._ddIsNew || test._ddIsModified) &&
     atrRetryCount != null && atrRetryCount > 0 &&
@@ -1102,8 +1103,8 @@ function testEndHandler ({
       ? test.id ?? test._id
       : undefined
     const isAtrRetry = testResult?.retry > 0 &&
-      isFlakyTestRetriesEnabled && !getTestAnnotations(test.fn).noAutoRetry &&
-      hasAutomaticRetries(test, projects) &&
+      isFlakyTestRetriesEnabled && !test._ddIsAutomaticRetryExcluded &&
+      !getTestAnnotations(test.fn).noAutoRetry && hasAutomaticRetries(test, projects) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
@@ -1366,8 +1367,8 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       worker[kDdPlaywrightFailureVideos].push(videos)
     }
     const isAtrRetry = testResult?.retry > 0 &&
-      isFlakyTestRetriesEnabled && !getTestAnnotations(test.fn).noAutoRetry &&
-      hasAutomaticRetries(test, projects) &&
+      isFlakyTestRetriesEnabled && !test._ddIsAutomaticRetryExcluded &&
+      !getTestAnnotations(test.fn).noAutoRetry && hasAutomaticRetries(test, projects) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
