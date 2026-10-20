@@ -908,7 +908,7 @@ function finishTestSuiteIfDone (testSuiteAbsolutePath, projects) {
  * @param {object[]} projects
  */
 function hasAutomaticRetries (test, projects) {
-  if (!automaticRetryProjects.has(getTestProject(projects, test))) return false
+  if (test._ddIsAutomaticRetryExcluded || !automaticRetryProjects.has(getTestProject(projects, test))) return false
   for (let suite = test.parent; suite; suite = suite.parent) {
     if (suite._retries !== undefined) return false
   }
@@ -2247,12 +2247,14 @@ function processRootSuite (createRootSuiteReturnValue) {
       ? testManagementTests?.playwright?.suites
         ?.[getTestSuitePath(test._requireFile, rootDir)]?.tests?.[getTestFullname(test)]?.properties
       : undefined
+    test._ddIsAutomaticRetryExcluded = false
     if (isFlakyTestRetriesEnabled && hasAutomaticRetries(test, sessionProjects)) {
       let excludeRetries = getTestAnnotations(test.fn).noAutoRetry
       // Playwright reruns an entire serial group when any member requests a retry.
       for (let suite = test.parent; !excludeRetries && suite; suite = suite.parent) {
         excludeRetries = excludedSerialSuites.has(suite)
       }
+      test._ddIsAutomaticRetryExcluded = excludeRetries
       if (excludeRetries) test.retries = 0
     }
   }
