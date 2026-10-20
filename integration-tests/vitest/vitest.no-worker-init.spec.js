@@ -903,6 +903,21 @@ describe('vitest no-worker init instrumentation selection', () => {
   })
 
   describe('configureWorkerEnv', () => {
+    it('preserves inherited NODE_OPTIONS while respecting explicit empty worker options', () => {
+      const original = process.env.NODE_OPTIONS
+      process.env.NODE_OPTIONS = DEFAULT_NODE_OPTIONS
+      try {
+        const inherited = noWorkerInit.configureWorkerEnv({}, true)
+        assert.match(inherited.NODE_OPTIONS, /--no-warnings/)
+        assert.doesNotMatch(inherited.NODE_OPTIONS, /dd-trace\/ci\/init/)
+        const empty = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: '' }, true)
+        assert.doesNotMatch(empty.NODE_OPTIONS, /--no-warnings/)
+      } finally {
+        if (original === undefined) delete process.env.NODE_OPTIONS
+        else process.env.NODE_OPTIONS = original
+      }
+    })
+
     it('does not duplicate the annotation preload when configuring a reused no-worker environment', () => {
       const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: DEFAULT_NODE_OPTIONS }, true)
       const first = env.NODE_OPTIONS
