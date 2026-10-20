@@ -1276,10 +1276,12 @@ function reportFinalTestAttempt (testReport) {
         isQuarantined: testProperties.isQuarantined,
       })
     }
+    const attemptIndex = task.meta?.__ddTestOptCurrentAttemptIndex ?? 0
+    const attemptStartTime = task.meta?.__ddTestOptAttemptStartTimes?.[attemptIndex]
     const {
       isRumActive,
       testExecutionId,
-    } = getRumCorrelation(task)
+    } = getRumCorrelation(task, attemptIndex)
     testSkipCh.publish({
       ...browserEnvironment,
       testName,
@@ -1291,6 +1293,8 @@ function reportFinalTestAttempt (testReport) {
       isRumActive,
       isTestFrameworkWorker: true,
       requestErrorTags: state.requestErrorTags,
+      startTime: Number.isFinite(attemptStartTime) ? attemptStartTime : undefined,
+      duration: task.meta?.__ddTestOptAttemptDurations?.[attemptIndex],
       testStartLine: task.location?.line,
       testExecutionId,
       ...testSuiteStore,
