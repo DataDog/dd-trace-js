@@ -14,6 +14,7 @@ const {
   getSegment,
   stripQueryAndFragment,
   truncateString,
+  typedArrayLength,
 } = require('../src/util')
 
 const TRUES = [
@@ -134,6 +135,24 @@ describe('util', () => {
     assert.strictEqual(isEmpty(''), true)
     assert.strictEqual(isEmpty('a'), false)
     assert.strictEqual(isEmpty('a'.repeat(32 * 1024 * 1024)), false)
+  })
+
+  it('isEmpty and typedArrayLength do not call shadowed typed array length getters', () => {
+    const throwing = () => { throw new TypeError('length') }
+    const empty = Object.defineProperty(new Uint8Array(0), 'length', { get: throwing })
+    const nonEmpty = Object.defineProperty(new Uint8Array(2), 'length', { get: throwing })
+
+    class ShadowedLength extends Uint8Array {
+      get length () { throw new TypeError('length') }
+    }
+
+    assert.strictEqual(isEmpty(empty), true)
+    assert.strictEqual(isEmpty(nonEmpty), false)
+    assert.strictEqual(isEmpty(new ShadowedLength(2)), false)
+    assert.strictEqual(typedArrayLength(nonEmpty), 2)
+    assert.strictEqual(typedArrayLength(new ShadowedLength(3)), 3)
+    assert.strictEqual(typedArrayLength(Buffer.alloc(4)), 4)
+    assert.strictEqual(typedArrayLength(new DataView(new ArrayBuffer(5))), 0)
   })
 
   describe('getSegment', () => {

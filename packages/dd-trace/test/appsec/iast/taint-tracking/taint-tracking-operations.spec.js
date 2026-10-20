@@ -170,12 +170,12 @@ describe('IAST TaintTracking Operations', () => {
       assert.deepStrictEqual(result, expected)
     })
 
-    it('Given a valid iastContext and binary views should not enumerate their elements', () => {
+    it('Given a valid iastContext and large binary views should not enumerate their elements', () => {
       const iastContext = {}
       const transactionId = 'id'
       taintTrackingOperations.createTransaction(transactionId, iastContext)
-      const buffer = Buffer.alloc(1024)
-      const typedArray = new Uint8Array(1024)
+      const buffer = Buffer.alloc(1025)
+      const typedArray = new Uint8Array(1025)
       const obj = { value: 'parent', buffer, typedArray }
       const keys = sinon.spy(Object, 'keys')
 
@@ -192,6 +192,21 @@ describe('IAST TaintTracking Operations', () => {
       } finally {
         keys.restore()
       }
+    })
+
+    it('Given a valid iastContext and small binary views should taint their named properties', () => {
+      const iastContext = {}
+      const transactionId = 'id'
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
+      const buffer = Object.assign(Buffer.alloc(1024), { filename: 'buffer' })
+      const typedArray = Object.assign(new Uint8Array(1), { filename: 'typed' })
+
+      taintTrackingOperations.taintObject(iastContext, { buffer, typedArray }, null)
+
+      const { newTaintedString } = taintedUtilsMock
+      sinon.assert.calledTwice(newTaintedString)
+      sinon.assert.calledWithExactly(newTaintedString, transactionId, 'typed', 'typedArray.filename', null)
+      sinon.assert.calledWithExactly(newTaintedString, transactionId, 'buffer', 'buffer.filename', null)
     })
 
     it('Should handle the exception', () => {

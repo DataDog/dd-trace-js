@@ -1,6 +1,14 @@
 'use strict'
 
 const path = require('path')
+const { types: { isTypedArray } } = require('node:util')
+
+/**
+ * @typedef {Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array | Int32Array | Uint32Array |
+ *   Float32Array | Float64Array | BigInt64Array | BigUint64Array | DataView} BinaryView
+ */
+
+const getTypedArrayLength = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), 'length').get
 
 /**
  * `for-in` with an early return is the only allocation-free shape for
@@ -16,14 +24,25 @@ function isEmpty (obj) {
     // `for-in` materializes every index key up front, which exhausts memory on large bodies, so return as soon as
     // there are elements. Empty ones have no index keys to materialize, so check their own keys, which still detects
     // named properties without walking a Buffer's enumerable prototype methods.
+    const length = Array.isArray(obj) ? obj.length : typedArrayLength(obj)
     // eslint-disable-next-line no-restricted-syntax
-    return !(obj.length > 0) && Object.keys(obj).length === 0
+    return length === 0 && Object.keys(obj).length === 0
   }
   // `for-in` over a string also materializes every index key, so large raw string bodies need the same shortcut.
   if (typeof obj === 'string') return obj.length === 0
   // eslint-disable-next-line no-unreachable-loop
   for (const _ in obj) return false
   return true
+}
+
+/**
+ * Reads the element count through the intrinsic getter, which, unlike `view.length`, an instance or subclass cannot
+ * shadow with application code. A `DataView` exposes no indexed elements, so it counts as zero.
+ *
+ * @param {BinaryView} view
+ */
+function typedArrayLength (view) {
+  return isTypedArray(view) ? getTypedArrayLength.call(view) : 0
 }
 
 function isTrue (str) {
@@ -176,4 +195,5 @@ module.exports = {
   normalizePluginEnvName,
   formatKnuthRate,
   truncateString,
+  typedArrayLength,
 }

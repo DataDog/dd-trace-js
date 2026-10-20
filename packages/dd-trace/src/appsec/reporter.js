@@ -8,7 +8,7 @@ const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
-const { isEmpty, truncateString } = require('../util')
+const { isEmpty, truncateString, typedArrayLength } = require('../util')
 const { getActiveRequest } = require('./store')
 const {
   incrementWafInitMetric,
@@ -432,31 +432,10 @@ function reportAttack ({ events: attackData, actions }, req, rootSpan) {
 }
 
 /**
- * @typedef {Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array | Int32Array | Uint32Array |
- *   Float32Array | Float64Array | BigInt64Array | BigUint64Array | DataView} BinaryView
- */
-
-const getTypedArrayLength = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), 'length').get
-
-/**
- * Reads the length through the intrinsic getter, which an instance or subclass cannot override.
- *
- * @param {BinaryView} view
- */
-function typedArrayLength (view) {
-  try {
-    return getTypedArrayLength.call(view)
-  } catch {
-    // `DataView` is not a typed array and exposes no indexed elements to serialize.
-    return 0
-  }
-}
-
-/**
  * Copies the first elements by index, the one typed array access that user code cannot override, unlike `subarray`,
  * `toJSON` or their species constructors. The result keeps the shape `Buffer#toJSON` and `Object.keys` produce.
  *
- * @param {BinaryView} view
+ * @param {import('../util').BinaryView} view
  */
 function truncateTypedArray (view) {
   const data = new Array(COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
