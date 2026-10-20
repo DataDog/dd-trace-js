@@ -45,7 +45,7 @@ function wrapDeclaration (declaration, getCurrentSuite) {
           },
         }
       }
-      return result
+      return typeof result === 'function' ? wrapDeclaration(result, getCurrentSuite) : result
     },
     get (target, property, receiver) {
       const value = Reflect.get(target, property, receiver)
