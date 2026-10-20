@@ -3,6 +3,7 @@
 // Capture real timers at module load, before any test can install fake timers.
 const { performance } = require('perf_hooks')
 const { basename } = require('node:path')
+const { isDeepStrictEqual } = require('node:util')
 const dateNow = Date.now
 
 const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
@@ -456,6 +457,19 @@ function getFinalStatus ({
   }
 }
 
+/**
+ * Copies retry configuration without sharing nested experimental options with user code.
+ *
+ * @template T
+ * @param {T} retries
+ * @returns {T}
+ */
+function copyCypressRetries (retries) {
+  // Cypress 6 supports Node.js 12, which does not provide structuredClone.
+  // eslint-disable-next-line unicorn/prefer-structured-clone
+  return retries !== null && typeof retries === 'object' ? JSON.parse(JSON.stringify(retries)) : retries
+}
+
 class CypressPlugin {
   #pendingTestSuiteSpans = new Map()
 
@@ -845,14 +859,9 @@ class CypressPlugin {
   // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
     if (this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries) {
-      cypressConfig.retries = this.originalCypressRetries !== null &&
-        typeof this.originalCypressRetries === 'object'
-        ? { ...this.originalCypressRetries }
-        : this.originalCypressRetries
+      cypressConfig.retries = copyCypressRetries(this.originalCypressRetries)
     } else {
-      this.originalCypressRetries = cypressConfig.retries !== null && typeof cypressConfig.retries === 'object'
-        ? { ...cypressConfig.retries }
-        : cypressConfig.retries
+      this.originalCypressRetries = copyCypressRetries(cypressConfig.retries)
       this.hasOriginalCypressRetries = true
     }
     this.resetRunState()
@@ -950,6 +959,7 @@ class CypressPlugin {
           this.testManagementAttemptToFixRetries = testManagementAttemptToFixRetries
           this.isImpactedTestsEnabled = isImpactedTestsEnabled
         }
+        this.configuredCypressRetries = copyCypressRetries(this.cypressConfig.retries)
         return this.cypressConfig
       })
     return this.libraryConfigurationPromise
@@ -1186,12 +1196,22 @@ class CypressPlugin {
   }
 
   async beforeRun (details) {
+    // Manual setup can change the developer budget after awaiting init. Capture it
+    // before interactive reinitialization can restore the previous native value.
+    const finalRetries = copyCypressRetries(details.config?.retries ?? this.cypressConfig?.retries)
+    if (!this._isInit && !isDeepStrictEqual(finalRetries, this.configuredCypressRetries)) {
+      this.originalCypressRetries = finalRetries
+    }
     if (this._isInit) {
       // The user may not have returned the promise from the init function.
       await this.libraryConfigurationPromise
     } else {
       // Cypress open reuses the same plugin process for every interactive run.
       await this.init(this.tracer, this.cypressConfig)
+    }
+
+    if (!isDeepStrictEqual(finalRetries, this.configuredCypressRetries)) {
+      this.originalCypressRetries = finalRetries
     }
 
     this.command = getCypressCommand(details)
