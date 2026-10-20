@@ -92,7 +92,10 @@ describe('FlaggingProvider', () => {
       './debug-logging-hook': mockDebugLoggingHookClass,
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
       './writers/flag-eval-evp-hook': mockEVPHookClass,
-      '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
+      '../../../../vendor/dist/@datadog/openfeature-node-server': {
+        DatadogNodeServerProvider,
+        '@noCallThru': true,
+      },
     })
   })
 
