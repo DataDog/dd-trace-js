@@ -56,6 +56,41 @@ describe(`Playwright automation exclusions@${version}`, () => {
     assert.strictEqual(exitCode, 0, output)
   })
 
+  for (const mode of ['atr', 'project', 'suite']) {
+    const run = supported ? it : it.skip
+    run('keeps serial group exclusions while preserving ' + mode + ' retries', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      child = exec('node node_modules/@playwright/test/cli.js test' +
+        ' --config ci-visibility/playwright-serial-exclusions/playwright.config.js', {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+          EXCLUSION_NATIVE: mode,
+        },
+      })
+      child.stdout.on('data', chunk => { output += chunk.toString() })
+      child.stderr.on('data', chunk => { output += chunk.toString() })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(child,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          const excluded = tests.filter(test => test.meta[TEST_NAME] === 'serial group excluded callback')
+          const siblings = tests.filter(test => test.meta[TEST_NAME] === 'serial group ordinary sibling')
+          const independent = tests.filter(test => test.meta[TEST_NAME] === 'independent control')
+          assert.strictEqual(excluded.length, mode === 'atr' ? 1 : 3, output)
+          assert.strictEqual(siblings.length, mode === 'atr' ? 1 : 3, output)
+          assert.strictEqual(independent.length, 3, output)
+          for (const test of excluded) {
+            assert.strictEqual(test.meta['test.test_management.no_auto_retry'], 'true')
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          }
+        })
+      const [[exitCode]] = await Promise.all([once(child, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 1, output)
+    })
+  }
+
   for (const mode of ['atr', 'efd', 'native']) {
     const run = supported ? it : it.skip
     run(`preserves ${mode} policy and assigned tags`, async () => {

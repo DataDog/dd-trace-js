@@ -2235,13 +2235,26 @@ function processRootSuite (createRootSuiteReturnValue) {
   }
 
   const allTests = rootSuite.allTests()
+  const excludedSerialSuites = new Set()
+  for (const test of allTests) {
+    if (!getTestAnnotations(test.fn).noAutoRetry) continue
+    for (let suite = test.parent; suite; suite = suite.parent) {
+      if (suite._parallelMode === 'serial') excludedSerialSuites.add(suite)
+    }
+  }
   for (const test of allTests) {
     test._ddAssignedProperties = isTestManagementTestsEnabled
       ? testManagementTests?.playwright?.suites
         ?.[getTestSuitePath(test._requireFile, rootDir)]?.tests?.[getTestFullname(test)]?.properties
       : undefined
-    if (isFlakyTestRetriesEnabled &&
-      getTestAnnotations(test.fn).noAutoRetry && hasAutomaticRetries(test, sessionProjects)) test.retries = 0
+    if (isFlakyTestRetriesEnabled && hasAutomaticRetries(test, sessionProjects)) {
+      let excludeRetries = getTestAnnotations(test.fn).noAutoRetry
+      // Playwright reruns an entire serial group when any member requests a retry.
+      for (let suite = test.parent; !excludeRetries && suite; suite = suite.parent) {
+        excludeRetries = excludedSerialSuites.has(suite)
+      }
+      if (excludeRetries) test.retries = 0
+    }
   }
 
   if (isTestManagementTestsEnabled) {
