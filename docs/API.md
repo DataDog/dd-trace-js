@@ -4,6 +4,32 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 <h2 id="overview">Overview</h2>
 
+### Per-subject experimentation opt-out
+
+Set `DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE=immediate` before initializing the tracer.
+The default is `disabled`. An explicit `featureFlags.experimentationOptOutMode` option overrides the environment.
+
+```javascript
+const tracer = require('dd-trace').init()
+const { OpenFeature } = require('@openfeature/server-sdk')
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+const client = OpenFeature.getClient()
+const enabled = await client.getBooleanValue('new-route-planner', false, {
+  targetingKey: athlete.id,
+  ...(athlete.experimentationOptOutAt
+    ? { dd_experimentation_opt_out_at: athlete.experimentationOptOutAt }
+    : {}),
+})
+```
+
+Use a stored RFC3339 timestamp string. In immediate mode, any valid timestamp excludes the subject immediately.
+The provider skips exposure-logging allocations and continues through ordinary feature allocations.
+If none match, it returns the application's default value.
+Invalid timestamps return `INVALID_CONTEXT` and the application default.
+Disabled mode ignores this attribute. Evaluation telemetry remains independent.
+Unsupported mode values fail provider construction. The mode is fixed for the provider's lifetime.
+Immediate withdrawal can change an enrolled subject's experience; account for this in experiment analysis.
+
 The module exported by this library is an instance of the [Tracer](./interfaces/tracer.html) class.
 
 <h2 id="agentless-mode">Agentless mode</h2>

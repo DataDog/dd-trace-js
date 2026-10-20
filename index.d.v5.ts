@@ -857,6 +857,14 @@ declare namespace tracer {
      */
     featureFlags?: {
       /**
+       * Controls per-subject exclusion from experimentation using dd_experimentation_opt_out_at.
+       * Explicit configuration overrides the environment variable.
+       * Captured when the provider is constructed.
+       * @default 'disabled'
+       * @env DD_FEATURE_FLAGS_EXPERIMENTATION_OPT_OUT_MODE
+       */
+      experimentationOptOutMode?: 'disabled' | 'immediate'
+      /**
        * Allow boolean true in dd_evaluation_telemetry_opt_out to suppress evaluation events, metrics, and span tags.
        * Enabling this option does not change exposure events or flag evaluation results.
        * Captured when the provider is constructed.
