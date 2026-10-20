@@ -681,6 +681,66 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
+    for (const mode of ['recover', 'exhaust', 'zero', 'zero-with-global']) {
+      describeRetriesIt(`finalizes excluded describe retries only at their terminal attempt (${mode})`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true })
+        await runExclusions('test-group-annotation-status', 1, spans => {
+          const expectedAttempts = mode.startsWith('zero') ? 1 : 2
+          for (const name of ['native group bare', 'native group combined']) {
+            const attempts = spans.filter(span => span.meta[TEST_NAME] === name)
+            assert.strictEqual(attempts.length, expectedAttempts)
+            assert.strictEqual(attempts[0].meta[TEST_STATUS], 'fail')
+            for (const attempt of attempts.slice(0, -1)) {
+              assert.strictEqual(attempt.meta[TEST_FINAL_STATUS], undefined)
+            }
+            const terminal = mode === 'recover' ? 'pass' : 'fail'
+            assert.strictEqual(attempts.at(-1).meta[TEST_STATUS], terminal)
+            assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], terminal)
+            for (const attempt of attempts) assert.strictEqual(attempt.meta[noAutoRetryTag], 'true')
+          }
+          assert.strictEqual(spans.filter(span => span.meta[TEST_NAME] === 'native group ordinary sibling').length,
+            expectedAttempts)
+          const outside = spans.filter(span => span.meta[TEST_NAME] === 'outside excluded')
+          assert.strictEqual(outside.length, mode === 'zero-with-global' ? 2 : 1)
+          assert.strictEqual(outside.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+        }, { EXCLUSIONS_DESCRIBE_MODE: mode })
+      })
+    }
+
+    describeRetriesIt('tracks nested describe retry attempts after earlier successful attempts', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      await runExclusions('test-group-annotation-nested', 1, spans => {
+        for (const name of ['outer inner bare', 'outer inner combined']) {
+          const attempts = spans.filter(span => span.meta[TEST_NAME] === name)
+          assert.strictEqual(attempts.length, 4)
+          assert.deepStrictEqual(attempts.map(span => span.meta[TEST_STATUS]), ['fail', 'pass', 'fail', 'fail'])
+          assert.strictEqual(attempts[0].meta[TEST_FINAL_STATUS], undefined)
+          assert.strictEqual(attempts[2].meta[TEST_FINAL_STATUS], undefined)
+          assert.strictEqual(attempts[3].meta[TEST_FINAL_STATUS], 'fail')
+        }
+        assert.strictEqual(spans.filter(span => span.meta[TEST_NAME] === 'outer inner ordinary sibling').length, 4)
+        assert.strictEqual(spans.filter(span => span.meta[TEST_NAME] === 'outside excluded').length, 1)
+      })
+    })
+
+    for (const protect of [false, true]) {
+      describeRetriesIt(`preserves native describe quarantine policy (protected=${protect})`, async () => {
+        const file = 'test-group-annotation-quarantine'
+        receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+        setProperties(file, ['native group quarantined'], { quarantined: true })
+        await runExclusions(file, protect ? 1 : 0, spans => {
+          assert.strictEqual(spans.length, protect ? 2 : 1)
+          assert.strictEqual(spans.at(-1).meta[TEST_FINAL_STATUS], protect ? 'fail' : 'skip')
+          if (protect) assert.strictEqual(spans[0].meta[TEST_FINAL_STATUS], undefined)
+          for (const span of spans) {
+            assert.strictEqual(span.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            assert.strictEqual(span.meta[noAutoRetryTag], 'true')
+            assert.strictEqual(span.meta[preventFailureSuppressionTag], protect ? 'true' : undefined)
+          }
+        }, { EXCLUSIONS_PROTECT_QUARANTINE: protect ? '1' : '0' })
+      })
+    }
+
     it('executes annotated generator callbacks through Jest generator handling', async () => {
       await runExclusions('test-exclusions-generators', 0, spans => {
         assert.strictEqual(spans.length, 3)
