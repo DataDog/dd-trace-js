@@ -4,6 +4,7 @@ const path = require('path')
 const { fileURLToPath } = require('url')
 const dc = require('dc-polyfill')
 const parse = require('../../../../vendor/dist/module-details-from-path')
+const { getPublishedModuleLoads } = require('../esm-module-load')
 const requirePackageJson = require('../require-package-json')
 const { isTrue } = require('../../src/util')
 const { sendData } = require('./send-data')
@@ -84,6 +85,9 @@ function loadAllTheLoadedModules () {
     for (const filename of filenames) {
       onModuleLoad({ filename })
     }
+  }
+  for (const filename of getPublishedModuleLoads()) {
+    onModuleLoad({ filename })
   }
 }
 
