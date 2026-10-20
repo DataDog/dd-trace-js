@@ -5001,6 +5001,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ' ci-visibility/test-management/mocha-review-duplicates.js')
     })
 
+    it('preserves suite-only mocha-each declarations with the TDD interface', async () => {
+      await runReviewFixture('mocha-review-suite-only', 0, events => {
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.strictEqual(tests.length, 2)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_NAME]).sort(), ['row 1 passes', 'row 2 passes'])
+        for (const test of tests) assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+      }, {}, 'node node_modules/mocha/bin/mocha --ui tdd' +
+        ' ci-visibility/test-management/mocha-review-suite-only.js')
+    })
+
     it('finishes exactly one span per runtime and declaration skip', async () => {
       receiver.setSettings({ test_management: { enabled: true } })
       await runReviewFixture('mocha-review-runtime-skips', 0, events => {
