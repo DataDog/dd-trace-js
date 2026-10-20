@@ -7,13 +7,13 @@ const instrumentations = require('../datadog-instrumentations/src/helpers/instru
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
+const { getEnvironmentVariable } = require('../dd-trace/src/config/helper')
+const { isFalse } = require('../dd-trace/src/util')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
 
-// eslint-disable-next-line eslint-rules/eslint-process-env
-const DD_BUNDLER_INJECT_GIT_METADATA = process.env.DD_BUNDLER_INJECT_GIT_METADATA?.toLowerCase() !== 'false' &&
-  process.env.DD_BUNDLER_INJECT_GIT_METADATA !== '0'
+const DD_BUNDLER_INJECT_GIT_METADATA = !isFalse(getEnvironmentVariable('DD_BUNDLER_INJECT_GIT_METADATA'))
 
 for (const hook of Object.values(hooks)) {
   if (hook !== null && typeof hook === 'object') {

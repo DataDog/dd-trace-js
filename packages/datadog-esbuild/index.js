@@ -8,6 +8,8 @@ const { pathToFileURL, fileURLToPath } = require('node:url')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const { getEnvironmentVariable } = require('../dd-trace/src/config/helper')
+const { isFalse } = require('../dd-trace/src/util')
 const log = require('./src/log')
 const { createEsmResolver } = require('./src/resolver')
 const { isESMFile, processModule } = require('./src/utils')
@@ -60,9 +62,7 @@ for (const builtin of builtinModules) {
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
-// eslint-disable-next-line eslint-rules/eslint-process-env
-const DD_BUNDLER_INJECT_GIT_METADATA = process.env.DD_BUNDLER_INJECT_GIT_METADATA?.toLowerCase() !== 'false' &&
-  process.env.DD_BUNDLER_INJECT_GIT_METADATA !== '0'
+const DD_BUNDLER_INJECT_GIT_METADATA = !isFalse(getEnvironmentVariable('DD_BUNDLER_INJECT_GIT_METADATA'))
 
 module.exports.name = 'datadog-esbuild'
 
