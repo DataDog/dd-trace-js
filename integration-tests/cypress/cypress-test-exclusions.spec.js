@@ -175,6 +175,26 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     })
   }
 
+  for (const atrEnabled of [false, true]) {
+    it(`preserves native retries assigned after manual plugin initialization (ATR=${atrEnabled})`, async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
+      await run('late-native', 0, tests => {
+        for (const [name, count] of [
+          ['late native excluded', 3], ['late native control', 3], ['explicit local excluded', 2],
+        ]) {
+          const attempts = named(tests, name)
+          assert.strictEqual(attempts.length, count, name)
+          assert.strictEqual(attempts.at(-1).meta['test.status'], 'pass', name)
+          for (const retry of attempts.slice(1)) {
+            assert.strictEqual(retry.meta['test.retry_reason'],
+              atrEnabled && name === 'late native control' ? 'auto_test_retry' : 'external', name)
+          }
+        }
+      }, { NODE_OPTIONS: '' },
+      './node_modules/.bin/cypress run --config-file ci-visibility/cypress-late-native-retries/config.js')
+    })
+  }
+
   it('keeps a sole protected failure blocking', async () => {
     receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
     properties({ sole: { properties: { disabled: true, quarantined: true, attempt_to_fix: true } } })
