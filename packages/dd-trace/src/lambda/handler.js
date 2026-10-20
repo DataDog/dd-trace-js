@@ -13,6 +13,7 @@ const HANDLER_STREAMING = Symbol.for('aws.lambda.runtime.handler.streaming')
 const HANDLER_HIGHWATERMARK = Symbol.for('aws.lambda.runtime.handler.streaming.highWaterMark')
 const BEFORE_EXIT = Symbol.for('aws.lambda.beforeExit')
 const timeoutChannel = channel('apm:aws:lambda:timeout')
+const monitoredContexts = new WeakSet()
 // Always crash the flushes when a message is received
 // from this channel.
 timeoutChannel.subscribe(_ => {
@@ -72,10 +73,10 @@ function crashFlush () {
 exports.datadog = function datadog (lambdaHandler) {
   function monitored (...args) {
     const context = extractContext(args)
-    if (!context) return lambdaHandler.apply(this, args)
+    if (!context || monitoredContexts.has(context)) return Reflect.apply(lambdaHandler, this, args)
 
     const timeout = checkTimeout(context)
-    if (!timeout) return lambdaHandler.apply(this, args)
+    if (!timeout) return Reflect.apply(lambdaHandler, this, args)
 
     let completed = false
     /** @type {Array<[object, string | symbol, Function, Function]>} */
@@ -108,7 +109,9 @@ exports.datadog = function datadog (lambdaHandler) {
     if (completionMethods.length === 0) completionObservable = false
 
     try {
-      const result = lambdaHandler.apply(this, args)
+      // The outer completion adapter owns this context during synchronous dispatch to nested wrappers.
+      monitoredContexts.add(context)
+      const result = Reflect.apply(lambdaHandler, this, args)
       if (result && typeof result.then === 'function') {
         return result.then(value => {
           clear()
@@ -126,14 +129,16 @@ exports.datadog = function datadog (lambdaHandler) {
     } catch (error) {
       clear()
       throw error
+    } finally {
+      monitoredContexts.delete(context)
     }
   }
 
   // The shim uses arity and the runtime's streaming metadata to choose how to invoke the handler.
   Object.defineProperty(monitored, 'length', { value: getDataProperty(lambdaHandler, 'length') ?? 0 })
-  for (const symbol of [HANDLER_STREAMING, HANDLER_HIGHWATERMARK]) {
-    const value = getDataProperty(lambdaHandler, symbol)
-    if (value !== undefined) monitored[symbol] = value
+  for (const name of [HANDLER_STREAMING, HANDLER_HIGHWATERMARK, '_ddWrapped']) {
+    const value = getDataProperty(lambdaHandler, name)
+    if (value !== undefined) monitored[name] = value
   }
   return monitored
 }

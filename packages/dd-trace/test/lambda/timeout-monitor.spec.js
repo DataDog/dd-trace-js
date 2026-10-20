@@ -107,6 +107,40 @@ describe('Lambda timeout monitor', () => {
     assert.strictEqual(clock.countTimers(), 0)
   })
 
+  it('monitors the selected completion promise instead of a nested handler return', async () => {
+    const inner = datadog((_event, _context, _callback) => ({ incidental: true }))
+    const handler = datadog((event, context) => Promise.resolve(inner(event, context, () => {})))
+    assert.deepStrictEqual(await handler({}, context), { incidental: true })
+    assert.strictEqual(clock.countTimers(), 0)
+    clock.tick(100)
+    assert.strictEqual(killAll.callCount, 0)
+  })
+
+  it('keeps one monitor while a nested callback handler remains pending', async () => {
+    let complete = notCaptured
+    const inner = datadog((_event, _context, callback) => { complete = callback })
+    const handler = datadog((event, context) => new Promise(resolve => inner(event, context, resolve)))
+    const result = handler({}, context)
+    assert.strictEqual(clock.countTimers(), 1)
+    clock.tick(75)
+    assert.strictEqual(killAll.callCount, 1)
+    complete('done')
+    assert.strictEqual(await result, 'done')
+    assert.strictEqual(clock.countTimers(), 0)
+  })
+
+  it('does not suppress a later monitor after a nested handler throws', () => {
+    const error = new Error('handler failure')
+    const inner = datadog(() => { throw error })
+    const failed = datadog((event, context) => inner(event, context))
+    assert.throws(() => failed({}, context), error)
+    const pending = datadog(() => new Promise(() => {}))
+    pending({}, context)
+    assert.strictEqual(clock.countTimers(), 1)
+    clock.tick(75)
+    assert.strictEqual(killAll.callCount, 1)
+  })
+
   for (const unref of [undefined, () => null]) {
     it(`keeps the timer handle when unref ${unref ? 'returns null' : 'is unavailable'}`, () => {
       const setTimeout = global.setTimeout

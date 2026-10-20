@@ -6,6 +6,7 @@ const path = require('node:path')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const proxyquire = require('proxyquire').noPreserveCache()
+const sinon = require('sinon')
 
 const instrumentations = require('../../../datadog-instrumentations/src/helpers/instrumentations')
 
@@ -50,7 +51,8 @@ describe('lambda', () => {
 
       const { hookCalls } = loadLambdaWithHookSpy()
 
-      assert.strictEqual(hookCalls.length, 1)
+      assert.strictEqual(hookCalls.length, 2)
+      assert.deepStrictEqual(hookCalls[1].modules, ['datadog-lambda-js'])
       const indexPath = path.resolve('/var/task', './api/src/', 'index')
       assert.deepStrictEqual(hookCalls[0].modules, [
         `${indexPath}.js`,
@@ -66,7 +68,7 @@ describe('lambda', () => {
 
       const { hookCalls } = loadLambdaWithHookSpy()
 
-      assert.strictEqual(hookCalls.length, 1)
+      assert.strictEqual(hookCalls.length, 2)
       const handlerPath = path.resolve('/var/task', '', 'handler')
       assert.deepStrictEqual(hookCalls[0].modules, [
         `${handlerPath}.js`,
@@ -116,6 +118,73 @@ describe('lambda', () => {
       delete instrumentations[fixturePath]
     })
 
+    for (const symbol of [
+      Symbol.for('aws.lambda.runtime.handler.streaming'),
+      Symbol.for('aws.lambda.runtime.handler.streaming.highWaterMark'),
+    ]) {
+      for (const inherited of [false, true]) {
+        for (const asynchronous of [false, true]) {
+          const placement = inherited ? 'inherited' : 'own'
+          const kind = asynchronous ? 'async' : 'sync'
+          it(`does not restore an ${placement} ${symbol.description} getter on a ${kind} handler`, async () => {
+            process.env.LAMBDA_TASK_ROOT = '/var/task'
+            process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
+            const { hookCalls } = loadLambdaWithHookSpy()
+            const fixturePath = `${path.resolve('/var/task', '', 'handler')}.js`
+            const userHandler = asynchronous ? async () => 'original' : () => 'original'
+            const target = inherited ? Object.create(Object.getPrototypeOf(userHandler)) : userHandler
+            if (inherited) Object.setPrototypeOf(userHandler, target)
+            Object.defineProperty(target, symbol, {
+              get () { throw new Error('handler metadata getter must not run') },
+            })
+
+            try {
+              const fakeModule = { myEntry: userHandler }
+              const patchedModule = hookCalls[0].onrequire(fakeModule, fixturePath, undefined, '0.0.0')
+              assert.notStrictEqual(patchedModule.myEntry, userHandler)
+              // The Lambda shim reads these properties after the tracer's module hook has returned.
+              assert.strictEqual(patchedModule.myEntry[symbol], undefined)
+              assert.strictEqual(await patchedModule.myEntry({}, {}), 'original')
+            } finally {
+              delete instrumentations[fixturePath]
+            }
+          })
+        }
+      }
+    }
+
+    for (const inherited of [false, true]) {
+      it(`preserves ${inherited ? 'inherited' : 'own'} frozen streaming metadata through the module hook`, () => {
+        process.env.LAMBDA_TASK_ROOT = '/var/task'
+        process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
+        const { hookCalls } = loadLambdaWithHookSpy()
+        const fixturePath = `${path.resolve('/var/task', '', 'handler')}.js`
+        const userHandler = function (event, responseStream, context) { return context }
+        const target = inherited ? Object.create(Function.prototype) : userHandler
+        if (inherited) Object.setPrototypeOf(userHandler, target)
+        const streaming = Symbol.for('aws.lambda.runtime.handler.streaming')
+        const highWaterMark = Symbol.for('aws.lambda.runtime.handler.streaming.highWaterMark')
+        Object.defineProperties(target, {
+          [streaming]: { value: 'response' },
+          [highWaterMark]: { value: 0 },
+        })
+        Object.freeze(userHandler)
+
+        try {
+          const fakeModule = { myEntry: userHandler }
+          const patchedModule = hookCalls[0].onrequire(fakeModule, fixturePath, undefined, '0.0.0')
+          assert.notStrictEqual(patchedModule.myEntry, userHandler)
+          assert.strictEqual(patchedModule.myEntry[streaming], 'response')
+          assert.strictEqual(patchedModule.myEntry[highWaterMark], 0)
+          assert.strictEqual(patchedModule.myEntry.length, 3)
+          const context = {}
+          assert.strictEqual(patchedModule.myEntry({}, {}, context), context)
+        } finally {
+          delete instrumentations[fixturePath]
+        }
+      })
+    }
+
     it('wraps the datadog export when the datadog-lambda-js Hook callback fires', () => {
       process.env.LAMBDA_TASK_ROOT = '/var/task'
 
@@ -128,6 +197,43 @@ describe('lambda', () => {
       assert.notStrictEqual(fakeModule.datadog, datadogOriginal)
       // Exercise the inner wrapper produced by `patchDatadogLambdaHandler`.
       assert.strictEqual(typeof fakeModule.datadog(() => 'user'), 'function')
+    })
+
+    it('wraps the shim completion adapter even when a raw handler path is configured', async () => {
+      process.env.LAMBDA_TASK_ROOT = '/var/task'
+      process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
+      const { hookCalls } = loadLambdaWithHookSpy()
+      const fixturePath = `${path.resolve('/var/task', '', 'handler')}.js`
+      const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      const oldTracer = global._ddtrace
+      const killAll = sinon.spy()
+      global._ddtrace = {
+        _tracer: {
+          _config: { DD_APM_FLUSH_DEADLINE_MILLISECONDS: 25 },
+          _processor: { killAll },
+          scope: () => ({ active: () => null }),
+        },
+      }
+
+      try {
+        const app = { myEntry: (_event, _context) => ({ ok: true }) }
+        hookCalls[0].onrequire(app, fixturePath, undefined, '0.0.0')
+        const moduleExports = {
+          promisifiedHandler: handler => (event, context) => Promise.resolve(handler(event, context, () => {})),
+        }
+        const original = moduleExports.promisifiedHandler
+        hookCalls[1].onrequire(moduleExports, 'datadog-lambda-js/dist/utils/handler.js', undefined, '12.143.0')
+        assert.notStrictEqual(moduleExports.promisifiedHandler, original)
+        const handler = moduleExports.promisifiedHandler(app.myEntry)
+        assert.deepStrictEqual(await handler({}, { getRemainingTimeInMillis: () => 100 }), { ok: true })
+        assert.strictEqual(clock.countTimers(), 0)
+        clock.tick(100)
+        assert.strictEqual(killAll.callCount, 0)
+      } finally {
+        clock.restore()
+        global._ddtrace = oldTracer
+        delete instrumentations[fixturePath]
+      }
     })
 
     it('logs hook errors without unwinding the loop', () => {

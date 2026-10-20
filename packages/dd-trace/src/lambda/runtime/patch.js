@@ -23,10 +23,26 @@ function patchDatadogLambdaHandler (datadogHandler) {
   return userHandler => datadogHandler(datadog(userHandler))
 }
 
+/** @param {object} moduleExports */
+function patchPromisifiedHandlerModule (moduleExports) {
+  shimmer.wrap(moduleExports, 'promisifiedHandler', promisify => {
+    return handler => datadog(promisify(handler))
+  })
+  return moduleExports
+}
+
 /** @param {string} handlerPath */
 function patchLambdaModule (handlerPath) {
   return lambdaModule => {
-    shimmer.wrap(lambdaModule, handlerPath, patchLambdaHandler)
+    const descriptor = Object.getOwnPropertyDescriptor(lambdaModule, handlerPath)
+    if (typeof descriptor?.value === 'function') {
+      // The monitor copies Lambda metadata without invoking application accessors or Proxy traps.
+      // Generic shimmer wrapping would copy the original properties back onto that safe wrapper.
+      descriptor.value = datadog(descriptor.value)
+      Object.defineProperty(lambdaModule, handlerPath, descriptor)
+    } else {
+      shimmer.wrap(lambdaModule, handlerPath, patchLambdaHandler)
+    }
     return lambdaModule
   }
 }
@@ -38,6 +54,9 @@ function patchLambdaHandler (lambdaHandler) {
 
 const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
 const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
+
+// Observe the shim's selected completion Promise inside the invocation span's async scope.
+addHook({ name: 'datadog-lambda-js', file: 'dist/utils/handler.js' }, patchPromisifiedHandlerModule)
 
 if (originalLambdaHandler === undefined) {
   addHook({ name: 'datadog-lambda-js' }, patchDatadogLambdaModule)
