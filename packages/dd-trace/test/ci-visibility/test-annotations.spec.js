@@ -9,7 +9,7 @@ const { preventFailureSuppression, noAutoRetry } = require('../../../../test-opt
 // Exercise the public helpers without depending on their metadata representation.
 describe('Test Optimization callback annotations', () => {
   it('documents Mocha annotation enforcement without a Jest-only disclaimer', () => {
-    const api = readFileSync(resolve(__dirname, '../../../../docs/API.md'), 'utf8')
+    const api = readFileSync(resolve(__dirname, '../../../../docs/API.md'), 'utf8').replace(/\r\n/g, '\n')
     const exclusions = api.slice(api.indexOf('## Mocha test automation exclusions'))
     const [, mocha] = api.match(/## Mocha test automation exclusions\n([\s\S]*?)(?:\n## |$)/) || []
     assert.ok(mocha, 'Mocha exclusion helper support must be documented')
