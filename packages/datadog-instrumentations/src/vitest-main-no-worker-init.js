@@ -1755,7 +1755,8 @@ function splitNodeOptions (nodeOptions) {
       continue
     }
 
-    if (char === '"' || char === "'") {
+    // NODE_OPTIONS uses double quotes for grouping; apostrophes belong to option values.
+    if (char === '"') {
       quote = char
       continue
     }

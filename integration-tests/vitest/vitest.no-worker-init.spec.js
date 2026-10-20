@@ -920,6 +920,27 @@ describe('vitest no-worker init instrumentation selection', () => {
       })
     }
 
+    const annotationPreload = require.resolve('../../ci/vitest-annotations-register')
+    for (const preloadOption of [
+      `--require "${annotationPreload}"`,
+      `-r "${annotationPreload}"`,
+      `--require="${annotationPreload}"`,
+    ]) {
+      it(`retains literal apostrophes when removing the annotation preload: ${preloadOption}`, () => {
+        const userOptions = "--import=data:text/javascript,globalThis.annotationOption='ok'"
+        const nodeOptions = `${userOptions} ${preloadOption}`
+        const script = 'process.stdout.write(globalThis.annotationOption)'
+        const run = options => execFileSync(process.execPath, ['-e', script], {
+          env: { ...process.env, NODE_OPTIONS: options },
+          encoding: 'utf8',
+        })
+        assert.strictEqual(run(nodeOptions), 'ok')
+        const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: nodeOptions })
+        assert.strictEqual(run(env.NODE_OPTIONS), 'ok')
+        assert.strictEqual(env.NODE_OPTIONS, userOptions)
+      })
+    }
+
     it('preserves inherited NODE_OPTIONS while respecting explicit empty worker options', () => {
       const original = process.env.NODE_OPTIONS
       process.env.NODE_OPTIONS = DEFAULT_NODE_OPTIONS
