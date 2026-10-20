@@ -707,6 +707,33 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     }
 
+    for (const replay of [false, true]) {
+      describeRetriesIt(`finalizes passing excluded describe executions only after actual replay (replay=${replay})`,
+        async () => {
+          const file = 'test-group-annotation-passing'
+          receiver.setSettings({ flaky_test_retries_enabled: true, test_management: { enabled: true } })
+          setProperties(file, ['native passing quarantined'], { quarantined: true })
+          await runExclusions(file, 0, spans => {
+            const marker = spans.find(span => span.meta[TEST_NAME] === 'later marker')
+            for (const name of ['bare', 'combined', 'quarantined']) {
+              const attempts = spans.filter(span => span.meta[TEST_NAME] === `native passing ${name}`)
+              assert.strictEqual(attempts.length, replay ? 2 : 1)
+              for (const attempt of attempts) {
+                assert.strictEqual(attempt.meta[TEST_STATUS], 'pass')
+                assert.strictEqual(attempt.meta[noAutoRetryTag], 'true')
+                assert.ok(BigInt(attempt.start) + BigInt(attempt.duration) <= BigInt(marker.start))
+              }
+              for (const attempt of attempts.slice(0, -1)) {
+                assert.strictEqual(attempt.meta[TEST_FINAL_STATUS], undefined)
+              }
+              assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], name === 'quarantined' ? 'skip' : 'pass')
+            }
+            assert.strictEqual(spans.filter(span => span.meta[TEST_NAME] === 'native passing ordinary sibling').length,
+              replay ? 2 : 1)
+          }, { EXCLUSIONS_PASSING_REPLAY: replay ? '1' : '0' })
+        })
+    }
+
     for (const mode of ['external-expect', 'uncaught-body', 'uncaught-after-all', 'owned-body']) {
       describeRetriesIt(`finalizes terminal excluded describe failures (${mode})`, async () => {
         receiver.setSettings({ flaky_test_retries_enabled: true })
