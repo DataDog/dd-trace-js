@@ -71,6 +71,7 @@ describe(`Playwright automation exclusions@${version}`, () => {
       })
       child.stdout.on('data', chunk => { output += chunk.toString() })
       child.stderr.on('data', chunk => { output += chunk.toString() })
+      // CI V8 coverage makes these multi-test retry workloads exceed the default 30s child budget.
       const eventsPromise = receiver.gatherPayloadsUntilChildExit(child,
         ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const tests = payloads.flatMap(({ payload }) => payload.events)
@@ -85,7 +86,7 @@ describe(`Playwright automation exclusions@${version}`, () => {
             assert.strictEqual(test.meta['test.test_management.no_auto_retry'], 'true')
             assert.strictEqual(test.meta[TEST_STATUS], 'pass')
           }
-        })
+        }, { hardTimeout: 120_000 })
       const [[exitCode]] = await Promise.all([once(child, 'exit'), eventsPromise])
       assert.strictEqual(exitCode, 1, output)
     })
@@ -133,6 +134,7 @@ describe(`Playwright automation exclusions@${version}`, () => {
       })
       child.stdout.on('data', chunk => { output += chunk.toString() })
       child.stderr.on('data', chunk => { output += chunk.toString() })
+      // CI V8 coverage makes these multi-test retry workloads exceed the default 30s child budget.
       const eventsPromise = receiver.gatherPayloadsUntilChildExit(child,
         ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const tests = payloads.flatMap(({ payload }) => payload.events)
@@ -168,7 +170,7 @@ describe(`Playwright automation exclusions@${version}`, () => {
           assert.strictEqual(skipped.meta[TEST_STATUS], 'skip')
           assert.strictEqual(skipped.meta['test.test_management.no_auto_retry'], 'true')
           assert.strictEqual(skipped.meta['test.test_management.prevent_failure_suppression'], 'true')
-        })
+        }, { hardTimeout: 120_000 })
       const [[exitCode]] = await Promise.all([once(child, 'exit'), eventsPromise])
       assert.strictEqual(exitCode, 1, output)
     })
