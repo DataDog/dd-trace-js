@@ -1311,15 +1311,17 @@ describe('sdk', () => {
         })
       })
 
-      it('emits the manifest named after the span on the span event', () => {
-        llmobs.trace({ kind: 'agent', name: 'travel_desk_span' }, () => {
+      it('emits the manifest named after the span on the APM span', () => {
+        let agentSpan
+        llmobs.trace({ kind: 'agent', name: 'travel_desk_span' }, span => {
+          agentSpan = span
           llmobs.annotate({ agent: { model: 'gpt-4o' } })
         })
 
-        const event = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
-        assert.deepStrictEqual(event.meta.metadata, {
+        assert.deepStrictEqual(agentSpan.meta_struct._llmobs.meta.metadata, {
           _dd: { agent_manifest: { framework: 'manual', model: 'gpt-4o', name: 'travel_desk_span' } },
         })
+        sinon.assert.notCalled(LLMObsSpanWriter.prototype.append)
       })
 
       it('shallow-updates the manifest across repeated annotations', () => {
@@ -1613,8 +1615,8 @@ describe('sdk', () => {
       }
 
       function emittedEvent (name) {
-        const call = LLMObsSpanWriter.prototype.append.getCalls().find(call => call.args[0].name === name)
-        return call?.args[0]
+        const call = LLMObsSpanProcessor.prototype.process.getCalls().find(call => call.args[0]._name === name)
+        return call?.args[0].meta_struct?._llmobs
       }
 
       function createPluginTagger () {
