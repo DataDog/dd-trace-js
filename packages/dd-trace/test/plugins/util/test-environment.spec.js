@@ -4,12 +4,15 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { describe, it } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const msgpack = require('@msgpack/msgpack')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
+const { AgentlessCiVisibilityEncoder } = require('../../../src/encode/agentless-ci-visibility')
+const id = require('../../../src/id')
 
 const cachedExecStub = sinon.stub().returns('')
 
@@ -41,12 +44,122 @@ const { getCIMetadata } = ciModule
 const userProvidedGit = proxyquire('../../../src/plugins/util/user-provided-git', {
   '../../config': freshConfig,
 })
-const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
+const { getTestEnvironmentMetadata, getTestLevelsMetadataTags } = proxyquire('../../../src/plugins/util/test', {
   './ci': ciModule,
   './git': {
     getGitMetadata,
   },
   './user-provided-git': userProvidedGit,
+})
+
+describe('Test Parallelization environment metadata', () => {
+  let originalEnv
+
+  beforeEach(() => {
+    originalEnv = process.env
+    process.env = {
+      GITLAB_CI: 'true',
+      CI_JOB_ID: 'run-job-789',
+      CI_JOB_NAME: 'tests',
+      CI_JOB_URL: 'https://gitlab.com/project/-/jobs/789',
+      CI_PIPELINE_ID: 'run-pipeline-456',
+      CI_PIPELINE_URL: 'https://gitlab.com/project/-/pipelines/456',
+    }
+  })
+
+  afterEach(() => {
+    process.env = originalEnv
+  })
+
+  it('keeps the planning and execution jobs distinct on every test level', () => {
+    process.env.DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    const planEnv = {
+      DD_TEST_PARALLELIZATION_PLAN_PROVIDER_NAME: 'plan-provider_name',
+      DD_TEST_PARALLELIZATION_PLAN_PIPELINE_ID: 'plan-pipeline_id',
+      DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NAME: 'plan-pipeline_name',
+      DD_TEST_PARALLELIZATION_PLAN_PIPELINE_DISPLAY_NAME: 'plan-pipeline_display_name',
+      DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NUMBER: 'plan-pipeline_number',
+      DD_TEST_PARALLELIZATION_PLAN_PIPELINE_URL: 'https://gitlab.com/plan/pipeline_url',
+      DD_TEST_PARALLELIZATION_PLAN_JOB_ID: 'plan-job_id',
+      DD_TEST_PARALLELIZATION_PLAN_JOB_NAME: 'plan-job_name',
+      DD_TEST_PARALLELIZATION_PLAN_JOB_URL: 'https://gitlab.com/plan/job_url',
+      DD_TEST_PARALLELIZATION_PLAN_STAGE_NAME: 'plan-stage_name',
+    }
+    Object.assign(process.env, planEnv)
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    const expectedPlanTags = {
+      'test.parallelization.enabled': 'true',
+      'test.parallelization.plan.provider.name': 'plan-provider_name',
+      'test.parallelization.plan.pipeline.id': 'plan-pipeline_id',
+      'test.parallelization.plan.pipeline.name': 'plan-pipeline_name',
+      'test.parallelization.plan.pipeline.display_name': 'plan-pipeline_display_name',
+      'test.parallelization.plan.pipeline.number': 'plan-pipeline_number',
+      'test.parallelization.plan.pipeline.url': 'https://gitlab.com/plan/pipeline_url',
+      'test.parallelization.plan.job.id': 'plan-job_id',
+      'test.parallelization.plan.job.name': 'plan-job_name',
+      'test.parallelization.plan.job.url': 'https://gitlab.com/plan/job_url',
+      'test.parallelization.plan.stage.name': 'plan-stage_name',
+    }
+    assertObjectContains(metadata, {
+      ...expectedPlanTags,
+      'ci.job.id': 'run-job-789',
+      'ci.job.name': 'tests',
+      'ci.job.url': 'https://gitlab.com/project/-/jobs/789',
+      'ci.pipeline.id': 'run-pipeline-456',
+    })
+    const testLevelsTags = getTestLevelsMetadataTags(metadata)
+    assertObjectContains(testLevelsTags, expectedPlanTags)
+
+    const encoder = new AgentlessCiVisibilityEncoder({ flush () {} }, { tags: {} })
+    encoder.addMetadataTags({ test_levels: testLevelsTags })
+    const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
+    for (const type of eventTypes) {
+      encoder.encode([{
+        trace_id: id('1234abcd1234abcd'),
+        span_id: id('1234abcd1234abcd'),
+        parent_id: id('1234abcd1234abcd'),
+        type,
+        name: 'mocha.test',
+        resource: 'example',
+        service: 'example',
+        error: 0,
+        start: 0,
+        duration: 1,
+        meta: { ...metadata },
+        metrics: {},
+      }])
+    }
+    const payload = msgpack.decode(encoder.makePayload(), { useBigInt64: true })
+    assert.deepStrictEqual(payload.events.map(({ type }) => type), eventTypes)
+    for (const event of payload.events) {
+      assertObjectContains({ ...payload.metadata.test_levels, ...event.content.meta }, {
+        ...expectedPlanTags,
+        'ci.job.id': 'run-job-789',
+      })
+    }
+  })
+
+  for (const enabled of [undefined, '', 'false', '0', 'invalid']) {
+    it(`ignores planning metadata when parallelization is ${String(enabled)}`, () => {
+      if (enabled !== undefined) process.env.DD_TEST_PARALLELIZATION_ENABLED = enabled
+      process.env.DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'stale-plan-job'
+      const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+      assert.deepStrictEqual(Object.keys(metadata).filter(key => key.startsWith('test.parallelization.')), [])
+    })
+  }
+
+  for (const enabled of ['true', 'TRUE', '1']) {
+    it(`supports ${enabled} without inventing missing planning-job metadata`, () => {
+      process.env = {
+        DD_TEST_PARALLELIZATION_ENABLED: enabled,
+        DD_TEST_PARALLELIZATION_PLAN_JOB_ID: '',
+      }
+      const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+      assert.deepStrictEqual(getTestLevelsMetadataTags(metadata), {
+        'test.parallelization.enabled': 'true',
+      })
+    })
+  }
 })
 
 describe('test environment data', () => {

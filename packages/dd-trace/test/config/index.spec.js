@@ -134,6 +134,18 @@ describe('Config', () => {
       )
     })
 
+    it('reads the internal planning-job environment', () => {
+      process.env.DD_TEST_PARALLELIZATION_ENABLED = 'true'
+      process.env.DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'plan-job-123'
+      process.env.DD_TEST_PARALLELIZATION_PLAN_JOB_URL = 'https://gitlab.com/project/-/jobs/123'
+      assert.strictEqual(getEnvironmentVariable('DD_TEST_PARALLELIZATION_ENABLED'), 'true')
+      assert.strictEqual(getEnvironmentVariable('DD_TEST_PARALLELIZATION_PLAN_JOB_ID'), 'plan-job-123')
+      assert.strictEqual(
+        getEnvironmentVariable('DD_TEST_PARALLELIZATION_PLAN_JOB_URL'),
+        'https://gitlab.com/project/-/jobs/123'
+      )
+    })
+
     it('should return aliased value', () => {
       process.env.DATADOG_API_KEY = '12345'
       assert.strictEqual(getEnvironmentVariable('DATADOG_API_KEY'), '12345')
