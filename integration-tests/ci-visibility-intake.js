@@ -525,15 +525,22 @@ class FakeCiVisIntake extends FakeAgent {
   gatherPayloadsUntilChildExit (childProcess, payloadMatch, onPayload, options = {}) {
     const { gracePeriod = 1000, hardTimeout = 30_000 } = options
     const payloads = []
+    let stdout = ''
+    let stderr = ''
 
     return new Promise((resolve, reject) => {
       let settled = false
       let graceTimer = null
 
+      const stdoutHandler = chunk => { stdout = (stdout + chunk.toString()).slice(-64 * 1024) }
+      const stderrHandler = chunk => { stderr = (stderr + chunk.toString()).slice(-64 * 1024) }
+
       const cleanup = () => {
         settled = true
         this.off('message', messageHandler)
         childProcess.off('exit', exitHandler)
+        childProcess.stdout?.off('data', stdoutHandler)
+        childProcess.stderr?.off('data', stderrHandler)
         clearTimeout(hardTimer)
         clearTimeout(graceTimer)
       }
@@ -578,11 +585,14 @@ class FakeCiVisIntake extends FakeAgent {
         if (settled) return
         cleanup()
         reject(new Error(
-          `gatherPayloadsUntilChildExit: hard timeout of ${hardTimeout}ms expired (child still running)`
+          `gatherPayloadsUntilChildExit: hard timeout of ${hardTimeout}ms expired (child still running)` +
+          `\nChild stdout:\n${stdout}\nChild stderr:\n${stderr}`
         ))
       }, hardTimeout)
 
       this.on('message', messageHandler)
+      childProcess.stdout?.on('data', stdoutHandler)
+      childProcess.stderr?.on('data', stderrHandler)
 
       // Child may already have exited (very fast spawn-and-die).
       if (childProcess.exitCode !== null || childProcess.signalCode != null) {
