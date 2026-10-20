@@ -281,11 +281,13 @@ function shouldRunEarlyFlakeDetection () {
 }
 
 function isTestEfdManaged (test) {
-  return !getTestAnnotations(test.fn).noAutoRetry && (!!test._ddIsEfdManagedTest || (
-    (test._ddIsNew || test._ddIsModified) &&
-    !test._ddIsAttemptToFix &&
-    shouldRunEarlyFlakeDetection()
-  ))
+  return !test._ddIsAutomaticRetryExcluded && !getTestAnnotations(test.fn).noAutoRetry && (
+    !!test._ddIsEfdManagedTest || (
+      (test._ddIsNew || test._ddIsModified) &&
+      !test._ddIsAttemptToFix &&
+      shouldRunEarlyFlakeDetection()
+    )
+  )
 }
 
 function getFileSuiteRepeatEachIndex (fileSuite) {
@@ -2246,15 +2248,14 @@ function processRootSuite (createRootSuiteReturnValue) {
         ?.[getTestSuitePath(test._requireFile, rootDir)]?.tests?.[getTestFullname(test)]?.properties
       : undefined
     test._ddIsAutomaticRetryExcluded = false
-    if (isFlakyTestRetriesEnabled && hasAutomaticRetries(test, sessionProjects)) {
-      let excludeRetries = getTestAnnotations(test.fn).noAutoRetry
-      // Playwright reruns an entire serial group when any member requests a retry.
-      for (let suite = test.parent; !excludeRetries && suite; suite = suite.parent) {
-        excludeRetries = excludedSerialSuites.has(suite)
-      }
-      test._ddIsAutomaticRetryExcluded = excludeRetries
-      if (excludeRetries) test.retries = 0
+    const hasInjectedRetries = isFlakyTestRetriesEnabled && hasAutomaticRetries(test, sessionProjects)
+    let excludeRetries = getTestAnnotations(test.fn).noAutoRetry
+    // Serial retries need every prerequisite, so exclude the group from both ATR and EFD.
+    for (let suite = test.parent; !excludeRetries && suite; suite = suite.parent) {
+      excludeRetries = excludedSerialSuites.has(suite)
     }
+    test._ddIsAutomaticRetryExcluded = excludeRetries
+    if (hasInjectedRetries && excludeRetries) test.retries = 0
   }
 
   if (isTestManagementTestsEnabled) {
@@ -2314,7 +2315,7 @@ function processRootSuite (createRootSuiteReturnValue) {
     const fileSuitesWithImpactedTestsToProjects = new Map()
     for (const impactedTest of impactedTests) {
       impactedTest._ddIsModified = true
-      if (!getTestAnnotations(impactedTest.fn).noAutoRetry &&
+      if (!impactedTest._ddIsAutomaticRetryExcluded &&
         shouldRunEarlyFlakeDetection() && impactedTest.expectedStatus !== 'skipped' &&
         !impactedTest._ddIsAttemptToFix) {
         // Prevent ATR or `--retries` from retrying tests that EFD manages.
@@ -2329,7 +2330,7 @@ function processRootSuite (createRootSuiteReturnValue) {
     // If something changes in the file, all tests in the file are impacted, except attempt-to-fix tests managed above.
     applyRetriesToTests(
       fileSuitesWithImpactedTestsToProjects,
-      (test) => !test._ddIsAttemptToFix && !getTestAnnotations(test.fn).noAutoRetry,
+      (test) => !test._ddIsAttemptToFix && !test._ddIsAutomaticRetryExcluded,
       [
         '_ddIsModified',
         '_ddIsEfdRetry',
@@ -2362,7 +2363,7 @@ function processRootSuite (createRootSuiteReturnValue) {
       const fileSuitesWithNewTestsToProjects = new Map()
       for (const newTest of newTests) {
         newTest._ddIsNew = true
-        if (!getTestAnnotations(newTest.fn).noAutoRetry &&
+        if (!newTest._ddIsAutomaticRetryExcluded &&
           shouldRunEarlyFlakeDetection() && newTest.expectedStatus !== 'skipped' &&
           !newTest._ddIsModified && !newTest._ddIsAttemptToFix) {
           // Prevent ATR or `--retries` from retrying tests that EFD manages.
@@ -2377,7 +2378,7 @@ function processRootSuite (createRootSuiteReturnValue) {
 
       applyRetriesToTests(
         fileSuitesWithNewTestsToProjects,
-        (test) => !test._ddIsAttemptToFix && !getTestAnnotations(test.fn).noAutoRetry && isNewTest(test),
+        (test) => !test._ddIsAttemptToFix && !test._ddIsAutomaticRetryExcluded && isNewTest(test),
         [
           '_ddIsNew',
           '_ddIsEfdRetry',
