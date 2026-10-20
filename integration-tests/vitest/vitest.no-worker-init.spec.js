@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const Module = require('node:module')
-const { exec, execSync } = require('node:child_process')
+const { exec, execFileSync, execSync } = require('node:child_process')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
@@ -903,6 +903,23 @@ describe('vitest no-worker init instrumentation selection', () => {
   })
 
   describe('configureWorkerEnv', () => {
+    for (const nodeOptions of [
+      "--import=data:text/javascript,globalThis.annotationOption='ok'",
+      `  --import "data:text/javascript,globalThis.annotationOption='ok'"  `,
+    ]) {
+      it(`preserves ordinary worker NODE_OPTIONS verbatim: ${nodeOptions}`, () => {
+        const script = 'process.stdout.write(globalThis.annotationOption)'
+        const run = options => execFileSync(process.execPath, ['-e', script], {
+          env: { ...process.env, NODE_OPTIONS: options },
+          encoding: 'utf8',
+        })
+        assert.strictEqual(run(nodeOptions), 'ok')
+        const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: nodeOptions })
+        assert.strictEqual(run(env.NODE_OPTIONS), 'ok')
+        assert.strictEqual(env.NODE_OPTIONS, nodeOptions)
+      })
+    }
+
     it('preserves inherited NODE_OPTIONS while respecting explicit empty worker options', () => {
       const original = process.env.NODE_OPTIONS
       process.env.NODE_OPTIONS = DEFAULT_NODE_OPTIONS
