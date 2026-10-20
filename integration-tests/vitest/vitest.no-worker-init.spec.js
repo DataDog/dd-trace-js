@@ -922,6 +922,31 @@ describe('vitest no-worker init instrumentation selection', () => {
       })
     }
 
+    // The annotation preload requires module.register, available starting with Node 18.19.
+    const noWorkerPreloadIt = typeof Module.register === 'function' ? it : it.skip
+    const uncPath = String.raw`\\server\share\vitest-annotations-register.js`
+    const regexpImport = String.raw`data:text/javascript,globalThis.annotationOption=/\p{L}/u.test('a')&&'ok'`
+    const uncImport = `data:text/javascript,globalThis.annotationOption=${JSON.stringify(uncPath)}`
+    for (const [name, userOptions, expected] of [
+      ['unquoted backslashes', `--import=${regexpImport}`, 'ok'],
+      ['quoted backslashes', `--import=${JSON.stringify(regexpImport)}`, 'ok'],
+      ['UNC separators', `--import=${JSON.stringify(uncImport)}`, uncPath],
+      ['quoted whitespace', "--import=\"data:text/javascript,globalThis.annotationOption=\n'ok'\"", 'ok'],
+    ]) {
+      noWorkerPreloadIt(`round-trips ${name} through worker preload append, reuse, and cleanup`, () => {
+        assert.strictEqual(runWithNodeOptions(userOptions), expected)
+        const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: userOptions }, true)
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), expected)
+        const firstOptions = env.NODE_OPTIONS
+        noWorkerInit.configureWorkerEnv(env, true)
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), expected)
+        assert.strictEqual(env.NODE_OPTIONS, firstOptions)
+        noWorkerInit.configureWorkerEnv(env)
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), expected)
+        assert.ok(!env.NODE_OPTIONS.includes(annotationPreload))
+      })
+    }
+
     const annotationPreload = require.resolve('../../ci/vitest-annotations-register')
     for (const preloadOption of [
       `--require "${annotationPreload}"`,

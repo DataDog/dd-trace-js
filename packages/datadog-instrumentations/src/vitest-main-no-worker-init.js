@@ -1742,9 +1742,9 @@ function splitNodeOptions (nodeOptions) {
     const char = nodeOptions[index]
 
     if (quote) {
-      if (char === '\\' && nodeOptions[index + 1] === quote) {
-        token += quote
-        index++
+      // Node treats a backslash inside double quotes as escaping the next character.
+      if (char === '\\' && index + 1 < nodeOptions.length) {
+        token += nodeOptions[++index]
         continue
       }
 
@@ -1785,7 +1785,8 @@ function serializeNodeOptions (tokens) {
   for (const token of tokens) {
     if (hasSerializedToken) serializedTokens += ' '
     if (NODE_OPTIONS_QUOTE_RE.test(token)) {
-      serializedTokens += JSON.stringify(token)
+      // Escape only Node's grouping syntax; JSON would turn literal whitespace into escape letters.
+      serializedTokens += `"${token.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)}"`
     } else {
       serializedTokens += token
     }
