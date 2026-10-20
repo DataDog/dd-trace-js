@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
 const instrumentations = require('../../../datadog-instrumentations/src/helpers/instrumentations')
+const log = require('../../src/log')
 
 const oldEnv = process.env
 
@@ -117,6 +118,36 @@ describe('lambda', () => {
       assert.notStrictEqual(fakeModule.myEntry, userHandler)
       delete instrumentations[fixturePath]
     })
+
+    for (const configurable of [false, true]) {
+      for (const writable of [false, true]) {
+        it(`respects raw handler export descriptors (configurable=${configurable}, writable=${writable})`, () => {
+          process.env.LAMBDA_TASK_ROOT = '/var/task'
+          process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
+          const { hookCalls } = loadLambdaWithHookSpy()
+          const fixturePath = `${path.resolve('/var/task', '', 'handler')}.js`
+          const userHandler = () => 'original'
+          const fakeModule = {}
+          Object.defineProperty(fakeModule, 'myEntry', { value: userHandler, configurable, writable })
+          if (!configurable && !writable) Object.freeze(fakeModule)
+          const error = sinon.spy(log, 'error')
+
+          try {
+            const patchedModule = hookCalls[0].onrequire(fakeModule, fixturePath, undefined, '0.0.0')
+            assert.strictEqual(patchedModule, fakeModule)
+            assert.strictEqual(patchedModule.myEntry === userHandler, !configurable && !writable)
+            assert.strictEqual(patchedModule.myEntry(), 'original')
+            const descriptor = Object.getOwnPropertyDescriptor(patchedModule, 'myEntry')
+            assert.strictEqual(descriptor.configurable, configurable)
+            assert.strictEqual(descriptor.writable, writable)
+            sinon.assert.notCalled(error)
+          } finally {
+            error.restore()
+            delete instrumentations[fixturePath]
+          }
+        })
+      }
+    }
 
     for (const symbol of [
       Symbol.for('aws.lambda.runtime.handler.streaming'),

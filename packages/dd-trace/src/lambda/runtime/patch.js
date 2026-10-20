@@ -36,6 +36,7 @@ function patchLambdaModule (handlerPath) {
   return lambdaModule => {
     const descriptor = Object.getOwnPropertyDescriptor(lambdaModule, handlerPath)
     if (typeof descriptor?.value === 'function') {
+      if (!descriptor.configurable && !descriptor.writable) return lambdaModule
       // The monitor copies Lambda metadata without invoking application accessors or Proxy traps.
       // Generic shimmer wrapping would copy the original properties back onto that safe wrapper.
       descriptor.value = datadog(descriptor.value)

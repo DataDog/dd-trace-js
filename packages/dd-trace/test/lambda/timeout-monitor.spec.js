@@ -180,6 +180,223 @@ describe('Lambda timeout monitor', () => {
     assert.strictEqual(killAll.callCount, 0)
   })
 
+  describe('legacy callback completion', () => {
+    let callback
+    let complete
+
+    beforeEach(() => {
+      complete = sinon.spy()
+      let waitForEmptyEventLoop = true
+      Object.defineProperty(context, 'callbackWaitsForEmptyEventLoop', {
+        configurable: true,
+        get: () => waitForEmptyEventLoop,
+        set (value) { waitForEmptyEventLoop = value },
+      })
+      globalThis[BEFORE_EXIT] = () => complete()
+      // Legacy RIC replaces its listener on a successful callback and waits for event-loop drain.
+      let finished = false
+      callback = sinon.spy(function (error, result) {
+        if (finished) return
+        finished = true
+        globalThis[BEFORE_EXIT] = () => {}
+        if (error != null || !context.callbackWaitsForEmptyEventLoop) complete(error, result)
+        else globalThis[BEFORE_EXIT] = () => complete(error, result)
+        return 'callback result'
+      })
+    })
+
+    for (const synchronous of [false, true]) {
+      for (const outcome of ['drain', 'timeout']) {
+        it(`monitors event-loop ${outcome} after a ${synchronous ? 'sync' : 'async'} successful callback`, () => {
+          const pendingHandle = setTimeout(() => {}, 1000)
+          const receiver = {}
+          let invokeCallback = notCaptured
+          const handler = datadog((_event, _context, cb) => {
+            invokeCallback = () => cb.call(receiver, null, 'done')
+            if (synchronous) assert.strictEqual(invokeCallback(), 'callback result')
+          })
+          handler({}, context, callback)
+          if (!synchronous) {
+            clock.tick(10)
+            assert.strictEqual(invokeCallback(), 'callback result')
+          }
+          assert.strictEqual(callback.firstCall.thisValue, receiver)
+          assert.deepStrictEqual(callback.firstCall.args, [null, 'done'])
+          assert.strictEqual(complete.callCount, 0)
+          assert.strictEqual(clock.countTimers(), 2, 'the invocation still owns its monitor and referenced handle')
+          clock.tick(outcome === 'timeout' ? 75 : 10)
+          assert.strictEqual(killAll.callCount, outcome === 'timeout' ? 1 : 0)
+          if (outcome === 'timeout') {
+            assert.strictEqual(span.addTags.firstCall.args[0]['error.type'], 'Impending Timeout')
+            assert.strictEqual(span.finish.callCount, 1)
+          }
+          clearTimeout(pendingHandle)
+          globalThis[BEFORE_EXIT]()
+          assert.strictEqual(complete.callCount, 1)
+          assert.deepStrictEqual(complete.firstCall.args, [null, 'done'])
+          assert.strictEqual(clock.countTimers(), 0)
+          clock.tick(100)
+          assert.strictEqual(killAll.callCount, outcome === 'timeout' ? 1 : 0)
+        })
+      }
+    }
+
+    for (const wait of [false, true]) {
+      for (const error of [null, new Error('callback failure')]) {
+        if (wait && !error) continue
+        it(`clears an immediately completed callback (wait=${wait}, error=${!!error})`, () => {
+          context.callbackWaitsForEmptyEventLoop = wait
+          const handler = datadog((_event, _context, cb) => cb(error, 'done'))
+          assert.strictEqual(handler({}, context, callback), 'callback result')
+          assert.strictEqual(complete.callCount, 1)
+          assert.deepStrictEqual(complete.firstCall.args, [error, 'done'])
+          assert.strictEqual(clock.countTimers(), 0)
+          clock.tick(100)
+          assert.strictEqual(killAll.callCount, 0)
+        })
+      }
+    }
+
+    for (const value of [{}, false]) {
+      it(`keeps a legacy ${typeof value} return monitored when RIC supplies a callback`, () => {
+        const handler = datadog(() => value)
+        assert.strictEqual(handler({}, context, callback), value)
+        clock.tick(75)
+        assert.strictEqual(killAll.callCount, 1)
+        assert.strictEqual(callback.callCount, 0)
+        globalThis[BEFORE_EXIT]()
+        assert.strictEqual(complete.callCount, 1)
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+
+    it('clears a non-runtime callback that does not replace the beforeExit listener', () => {
+      const callback = sinon.stub().returns('done')
+      const handler = datadog((_event, _context, cb) => cb(null, 'done'))
+      assert.strictEqual(handler({}, context, callback), 'done')
+      assert.strictEqual(callback.callCount, 1)
+      assert.strictEqual(clock.countTimers(), 0)
+      clock.tick(100)
+      assert.strictEqual(killAll.callCount, 0)
+    })
+
+    it('preserves an asynchronous callback failure while waiting for event-loop drain', () => {
+      const error = new Error('runtime callback failure')
+      let invokeCallback = notCaptured
+      const handler = datadog((_event, _context, cb) => { invokeCallback = cb })
+      handler({}, context, () => { throw error })
+      assert.throws(() => invokeCallback(null, 'done'), candidate => candidate === error)
+      assert.strictEqual(clock.countTimers(), 0)
+      clock.tick(100)
+      assert.strictEqual(killAll.callCount, 0)
+    })
+
+    for (const error of [null, new Error('ignored late callback error')]) {
+      it(`ignores repeated callback completion while waiting for drain (error=${!!error})`, () => {
+        let invokeCallback = notCaptured
+        const handler = datadog((_event, _context, cb) => { invokeCallback = cb })
+        handler({}, context, callback)
+        invokeCallback(null, 'first result')
+        context.callbackWaitsForEmptyEventLoop = false
+        invokeCallback(error, 'ignored result')
+        assert.strictEqual(complete.callCount, 0)
+        assert.strictEqual(clock.countTimers(), 1)
+        clock.tick(75)
+        assert.strictEqual(killAll.callCount, 1)
+        globalThis[BEFORE_EXIT]()
+        assert.deepStrictEqual(complete.firstCall.args, [null, 'first result'])
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+
+    for (const outcome of ['fulfill', 'reject', 'throw', 'context']) {
+      it(`ignores ${outcome} after a native callback has selected event-loop drain`, async () => {
+        const error = new Error('ignored handler failure')
+        const nativeDone = context.done = sinon.spy()
+        const handler = datadog((_event, ctx, cb) => {
+          cb(null, 'first result')
+          if (outcome === 'throw') throw error
+          if (outcome === 'context') ctx.done(null, 'ignored result')
+          if (outcome === 'fulfill') return Promise.resolve('ignored result')
+          if (outcome === 'reject') return Promise.reject(error)
+        })
+        if (outcome === 'throw') assert.throws(() => handler({}, context, callback), candidate => candidate === error)
+        else if (outcome === 'reject') {
+          await assert.rejects(handler({}, context, callback), candidate => candidate === error)
+        } else await handler({}, context, callback)
+        assert.strictEqual(complete.callCount, 0)
+        assert.strictEqual(clock.countTimers(), 1)
+        clock.tick(75)
+        assert.strictEqual(killAll.callCount, 1)
+        globalThis[BEFORE_EXIT]()
+        assert.deepStrictEqual(complete.firstCall.args, [null, 'first result'])
+        assert.strictEqual(context.done, nativeDone)
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+
+    it('tolerates a throwing callbackWaitsForEmptyEventLoop accessor', () => {
+      Object.defineProperty(context, 'callbackWaitsForEmptyEventLoop', {
+        get () { throw new Error('cannot inspect callback completion') },
+      })
+      const callback = sinon.stub().returns('done')
+      const handler = datadog((_event, _context, cb) => cb(null, 'done'))
+      assert.strictEqual(handler({}, context, callback), 'done')
+      assert.strictEqual(callback.callCount, 1)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('clears when a callback removes the runtime completion listener', () => {
+      const handler = datadog((_event, _context, cb) => cb(null, 'done'))
+      handler({}, context, () => { delete globalThis[BEFORE_EXIT] })
+      assert.strictEqual(clock.countTimers(), 0)
+      clock.tick(100)
+      assert.strictEqual(killAll.callCount, 0)
+    })
+
+    it('clears when the replacement runtime listener cannot be wrapped', () => {
+      const descriptor = Object.getOwnPropertyDescriptor(globalThis, BEFORE_EXIT)
+      const handler = datadog((_event, _context, cb) => cb(null, 'done'))
+      try {
+        handler({}, context, () => {
+          Object.defineProperty(globalThis, BEFORE_EXIT, { value: () => {}, writable: false, configurable: true })
+        })
+        assert.strictEqual(clock.countTimers(), 0)
+        clock.tick(100)
+        assert.strictEqual(killAll.callCount, 0)
+      } finally {
+        Object.defineProperty(globalThis, BEFORE_EXIT, descriptor)
+      }
+    })
+
+    it('preserves a newer listener when context completion fires inside the callback', () => {
+      context.done = sinon.spy()
+      const replacement = () => {}
+      const handler = datadog((_event, _context, cb) => cb(null, 'done'))
+      handler({}, context, () => {
+        context.done(null, 'done')
+        globalThis[BEFORE_EXIT] = replacement
+      })
+      assert.strictEqual(globalThis[BEFORE_EXIT], replacement)
+      assert.strictEqual(clock.countTimers(), 0)
+      clock.tick(100)
+      assert.strictEqual(killAll.callCount, 0)
+    })
+
+    it('clears selected Promise completion while the legacy event loop remains busy', async () => {
+      const pendingHandle = setTimeout(() => {}, 1000)
+      const inner = datadog((_event, _context, cb) => cb(null, 'done'))
+      const handler = datadog((event, context) => new Promise(resolve => {
+        inner(event, context, (_error, result) => resolve(result))
+      }))
+      assert.strictEqual(await handler({}, context), 'done')
+      assert.strictEqual(clock.countTimers(), 1, 'only the referenced application handle remains')
+      clock.tick(100)
+      assert.strictEqual(killAll.callCount, 0)
+      clearTimeout(pendingHandle)
+    })
+  })
+
   it('does not leak an idle invocation timer into the next warm invocation', () => {
     const handler = datadog(() => undefined)
     for (let invocation = 0; invocation < 3; invocation++) {
