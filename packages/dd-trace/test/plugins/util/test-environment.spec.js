@@ -71,6 +71,7 @@ describe('Test Parallelization environment metadata', () => {
 
   beforeEach(() => {
     originalEnv = process.env
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ddtest-plan-metadata-'))
     process.env = {
       GITLAB_CI: 'true',
       CI_JOB_ID: 'run-job-789',
@@ -79,7 +80,6 @@ describe('Test Parallelization environment metadata', () => {
       CI_PIPELINE_ID: 'run-pipeline-456',
       CI_PIPELINE_URL: 'https://gitlab.com/project/-/pipelines/456',
     }
-    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ddtest-plan-metadata-'))
     const planDirectory = path.join(directory, '.testoptimization')
     fs.mkdirSync(planDirectory)
     metadataPath = path.join(planDirectory, 'plan-metadata.json')
@@ -259,6 +259,67 @@ describe('Test Parallelization environment metadata', () => {
       assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
     })
   }
+
+  for (const locator of ['TEST_OPTIMIZATION_MANIFEST_FILE', 'DD_TEST_OPTIMIZATION_MANIFEST_FILE']) {
+    for (const runfilesSource of ['RUNFILES_DIR', 'RUNFILES_MANIFEST_FILE', 'TEST_SRCDIR']) {
+      it(`resolves a Bazel runfile through ${runfilesSource} and ${locator}`, () => {
+        process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+        const logicalManifest = 'workspace/.testoptimization/manifest.txt'
+        const runfilesRoot = path.join(directory, 'runfiles with spaces')
+        const artifactDirectory = path.join(runfilesRoot, 'workspace', '.testoptimization')
+        fs.mkdirSync(artifactDirectory, { recursive: true })
+        fs.writeFileSync(path.join(artifactDirectory, 'manifest.txt'), '1\n')
+        fs.copyFileSync(metadataPath, path.join(artifactDirectory, 'plan-metadata.json'))
+        process.env[locator] = logicalManifest
+        if (runfilesSource === 'RUNFILES_MANIFEST_FILE') {
+          const runfilesManifest = path.join(directory, 'RUNFILES_MANIFEST')
+          fs.writeFileSync(runfilesManifest, [
+            'malformed',
+            ' unmatched-entry',
+            'other-workspace/file.txt ignored',
+            `${logicalManifest} `,
+            `${logicalManifest} ${path.join(artifactDirectory, 'manifest.txt')}`,
+            '',
+          ].join('\n'))
+          process.env.RUNFILES_MANIFEST_FILE = runfilesManifest
+        } else {
+          process.env[runfilesSource] = runfilesRoot
+        }
+        cwdStub.returns(path.join(directory, 'test-worker'))
+        const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+        assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'plan-job_id')
+        assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
+      })
+    }
+  }
+
+  it('falls back to TEST_SRCDIR when the runfiles manifest cannot be read', () => {
+    process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    const artifactDirectory = path.join(directory, 'workspace', '.testoptimization')
+    fs.mkdirSync(artifactDirectory, { recursive: true })
+    fs.writeFileSync(path.join(artifactDirectory, 'manifest.txt'), '1\n')
+    fs.copyFileSync(metadataPath, path.join(artifactDirectory, 'plan-metadata.json'))
+    const runfilesManifest = path.join(directory, 'RUNFILES_MANIFEST')
+    fs.writeFileSync(runfilesManifest, '')
+    process.env.TEST_OPTIMIZATION_MANIFEST_FILE = 'workspace/.testoptimization/manifest.txt'
+    process.env.RUNFILES_DIR = path.join(directory, 'missing-runfiles')
+    process.env.RUNFILES_MANIFEST_FILE = runfilesManifest
+    process.env.TEST_SRCDIR = directory
+    readFileStub = sinon.stub(fs, 'readFileSync').callThrough()
+    readFileStub.withArgs(runfilesManifest).throws(Object.assign(new Error('access denied'), { code: 'EACCES' }))
+    cwdStub.returns(path.join(directory, 'test-worker'))
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'plan-job_id')
+  })
+
+  it('keeps only the enabled tag when a logical runfile cannot be resolved', () => {
+    process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    process.env.TEST_OPTIMIZATION_MANIFEST_FILE = 'missing-workspace/.testoptimization/manifest.txt'
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    assert.strictEqual(metadata['test.parallelization.enabled'], 'true')
+    assert.strictEqual(metadata['test.parallelization.plan.job.id'], undefined)
+    assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
+  })
 
   it('prefers the explicit manifest location over an unrelated local artifact', () => {
     process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'

@@ -5,6 +5,7 @@ const fs = require('fs')
 const { URL } = require('url')
 const { stripVTControlCharacters } = require('node:util')
 const { getLageTestSessionName } = require('../../ci-visibility/lage')
+const resolveRunfilePath = require('../../ci-visibility/resolve-runfile-path')
 const log = require('../../log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const { getSegment } = require('../../util')
@@ -829,8 +830,11 @@ function getTestParallelizationPlanMetadata () {
     if (!metadataFile) {
       // The manifest locator belongs to DDTest's artifact protocol, rather than tracer configuration.
       // eslint-disable-next-line eslint-rules/eslint-process-env
-      const manifestFile = process.env.TEST_OPTIMIZATION_MANIFEST_FILE || process.env.DD_TEST_OPTIMIZATION_MANIFEST_FILE
-      const planDirectory = manifestFile ? path.dirname(manifestFile) : path.join(process.cwd(), '.testoptimization')
+      const env = process.env
+      const manifestFile = env.TEST_OPTIMIZATION_MANIFEST_FILE || env.DD_TEST_OPTIMIZATION_MANIFEST_FILE
+      const planDirectory = manifestFile
+        ? path.dirname(resolveRunfilePath(manifestFile, env))
+        : path.join(process.cwd(), '.testoptimization')
       metadataFile = path.join(planDirectory, 'plan-metadata.json')
     }
     const { tags } = JSON.parse(fs.readFileSync(metadataFile, 'utf8'))
