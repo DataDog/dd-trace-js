@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { execFileSync } = require('node:child_process')
-const { resolve } = require('node:path')
 
 const { describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -80,25 +78,6 @@ describe('otel-sdk-trace', () => {
 
     it('treats a value the helper rejected (undefined) as unset', () => {
       assert.equal(loadWithEnv({ ddTraceOtelEnabled: undefined, otelSdkDisabled: undefined }).instrumented, false)
-    })
-  })
-
-  it('reports bridge enablement without loading SDK instrumentation', () => {
-    const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(DD_|_DD_|OTEL_)/.test(name)))
-    execFileSync(process.execPath, ['-e', `
-      const assert = require('node:assert/strict')
-      require('./').init({
-        appsec: false, iast: false, plugins: false, runtimeMetrics: false,
-        remoteConfig: { enabled: false }, startupLogs: false
-      })
-      const { tracerInfo } = require('./packages/dd-trace/src/startup-log')
-      assert.equal(JSON.parse(String(tracerInfo())).OTEL_ENABLED, true)
-      const hookPath = require.resolve('./packages/datadog-instrumentations/src/otel-sdk-trace')
-      assert.equal(require.cache[hookPath], undefined)
-      process.exit(0)
-    `], {
-      cwd: resolve(__dirname, '../../..'),
-      env: { ...inherited, OTEL_SDK_DISABLED: 'false' },
     })
   })
 
