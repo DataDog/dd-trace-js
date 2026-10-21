@@ -51,11 +51,17 @@ function shaHash (checkpointString) {
   return Buffer.from(crypto.createHash('sha256').update(checkpointString).digest().subarray(0, 8))
 }
 
-/** @param {string[]} edgeTags */
-function isSortedStrings (edgeTags) {
+/** @param {unknown[]} edgeTags */
+function isStringArray (edgeTags) {
   for (let i = 0; i < edgeTags.length; i++) {
     if (typeof edgeTags[i] !== 'string') return false
   }
+  return true
+}
+
+/** @param {string[]} edgeTags */
+function isSortedStrings (edgeTags) {
+  if (!isStringArray(edgeTags)) return false
   for (let i = 1; i < edgeTags.length; i++) {
     if (edgeTags[i - 1] > edgeTags[i]) return false
   }
@@ -69,7 +75,7 @@ function isSortedStrings (edgeTags) {
  * @param {Buffer} parentHash
  * @param {bigint | null} propagationHashBigInt - Optional propagation hash for process/container tags
  */
-function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt = null) {
+function computeHashFromCache (service, env, edgeTags, parentHash, propagationHashBigInt) {
   // Default `sort()` orders all-string arrays by UTF-16 code units, like `<`, so skipping it on an array that is
   // already sorted leaves the same array.
   if (!isSortedStrings(edgeTags)) {
@@ -98,6 +104,7 @@ function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt 
   if (cachedPathwayHashes >= MAX_CACHED_PATHWAY_HASHES) {
     cache.clear()
     cachedPathwayHashes = 0
+    clearRecentPathwayHashes()
     entry = undefined
   }
 
@@ -122,6 +129,71 @@ function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt 
   entry.byParent.set(parentKey, value)
   cachedPathwayHashes++
   return value
+}
+
+// Consecutive checkpoints repeat the same inputs (every message of a batch, and a consume -> produce pipeline
+// alternates between two), so check the most recent ones before walking the trie. Two slots cover that alternation.
+const RECENT_PATHWAY_HASH_SLOTS = 2
+const recentService = new Array(RECENT_PATHWAY_HASH_SLOTS)
+const recentEnv = new Array(RECENT_PATHWAY_HASH_SLOTS)
+const recentPropagationHash = new Array(RECENT_PATHWAY_HASH_SLOTS)
+/** @type {Array<string[] | undefined>} Sorted private copies; never the caller's array. */
+const recentEdgeTags = new Array(RECENT_PATHWAY_HASH_SLOTS)
+const recentParentLow = new Array(RECENT_PATHWAY_HASH_SLOTS)
+const recentParentHigh = new Array(RECENT_PATHWAY_HASH_SLOTS)
+/** @type {Array<Buffer | undefined>} */
+const recentHash = new Array(RECENT_PATHWAY_HASH_SLOTS)
+let nextRecentSlot = 0
+
+// The trie returns the same Buffer instance for a key until it is cleared, and checkpoint buckets key on that
+// identity, so the recent hashes must be dropped together with the trie.
+function clearRecentPathwayHashes () {
+  for (let slot = 0; slot < RECENT_PATHWAY_HASH_SLOTS; slot++) {
+    recentEdgeTags[slot] = undefined
+    recentHash[slot] = undefined
+  }
+}
+
+/**
+ * @param {string} service
+ * @param {string} env
+ * @param {string[]} edgeTags
+ * @param {Buffer} parentHash
+ * @param {bigint | null} propagationHashBigInt - Optional propagation hash for process/container tags
+ */
+function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt = null) {
+  if (!Buffer.isBuffer(parentHash) || parentHash.length !== 8) {
+    return computeHashFromCache(service, env, edgeTags, parentHash, propagationHashBigInt)
+  }
+  const parentLow = parentHash.readUInt32LE(0)
+  const parentHigh = parentHash.readUInt32LE(4)
+  for (let slot = 0; slot < RECENT_PATHWAY_HASH_SLOTS; slot++) {
+    const tags = recentEdgeTags[slot]
+    if (
+      tags === undefined || tags.length !== edgeTags.length ||
+      recentParentLow[slot] !== parentLow || recentParentHigh[slot] !== parentHigh ||
+      recentService[slot] !== service || recentEnv[slot] !== env ||
+      recentPropagationHash[slot] !== propagationHashBigInt
+    ) continue
+    let i = 0
+    while (i < tags.length && tags[i] === edgeTags[i]) i++
+    if (i === tags.length) return recentHash[slot]
+  }
+
+  const hash = computeHashFromCache(service, env, edgeTags, parentHash, propagationHashBigInt)
+  // computeHashFromCache sorted edgeTags in place; only all-string arrays are memoized.
+  if (isStringArray(edgeTags)) {
+    const slot = nextRecentSlot
+    nextRecentSlot = (slot + 1) % RECENT_PATHWAY_HASH_SLOTS
+    recentService[slot] = service
+    recentEnv[slot] = env
+    recentPropagationHash[slot] = propagationHashBigInt
+    recentEdgeTags[slot] = [...edgeTags]
+    recentParentLow[slot] = parentLow
+    recentParentHigh[slot] = parentHigh
+    recentHash[slot] = hash
+  }
+  return hash
 }
 
 /**

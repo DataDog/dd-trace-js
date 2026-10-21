@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
 
 const { describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
@@ -19,6 +20,17 @@ const {
 const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
 
 describe('encoding', () => {
+  function sha (input) {
+    return Buffer.from(crypto.createHash('sha256').update(input).digest().subarray(0, 8))
+  }
+
+  function uncachedHash (service, env, edgeTags, parentHash, propagationHash = null) {
+    const hashableEdgeTags = edgeTags.filter(tag => tag !== 'manual_checkpoint:true').sort()
+    const baseString = `${service}${env}${hashableEdgeTags.join('')}`
+    const hashInput = propagationHash ? `${baseString}:${propagationHash.toString(16)}` : baseString
+    return sha(Buffer.concat([sha(hashInput), parentHash], 16).toString())
+  }
+
   it('hash should always give the same value', () => {
     // note: we use a different hash function than the one used in the other languages,
     // so if you switch language, the hash will change.
@@ -69,17 +81,6 @@ describe('encoding', () => {
   })
 
   describe('cache', () => {
-    function sha (input) {
-      return Buffer.from(crypto.createHash('sha256').update(input).digest().subarray(0, 8))
-    }
-
-    function uncachedHash (service, env, edgeTags, parentHash, propagationHash = null) {
-      const hashableEdgeTags = edgeTags.filter(tag => tag !== 'manual_checkpoint:true').sort()
-      const baseString = `${service}${env}${hashableEdgeTags.join('')}`
-      const hashInput = propagationHash ? `${baseString}:${propagationHash.toString(16)}` : baseString
-      return sha(Buffer.concat([sha(hashInput), parentHash], 16).toString())
-    }
-
     it('should equal the uncached computation for parents that differ only in non-UTF-8 bytes', () => {
       const edgeTags = ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka']
       const parents = [
@@ -248,6 +249,175 @@ describe('encoding', () => {
           assert.deepStrictEqual(computePathwayHash('test-service', 'test-env', [...edgeTags], parent), expected)
         }
       }
+    })
+  })
+
+  describe('recent hash memo', () => {
+    const parentA = Buffer.from('0102030405060708', 'hex')
+
+    function key (overrides = {}) {
+      return {
+        service: 'memo-service',
+        env: 'memo-env',
+        edgeTags: ['direction:in', 'group:memo', 'topic:memo', 'type:kafka'],
+        parent: parentA,
+        propagationHash: null,
+        ...overrides,
+      }
+    }
+
+    function compute (k, hashFn = computePathwayHash) {
+      return hashFn(k.service, k.env, [...k.edgeTags], k.parent, k.propagationHash)
+    }
+
+    function assertMatchesUncached (keys) {
+      for (const k of keys) {
+        assert.deepStrictEqual(
+          compute(k),
+          uncachedHash(k.service, k.env, k.edgeTags, k.parent, k.propagationHash)
+        )
+      }
+    }
+
+    it('should equal the uncached computation for repeated, alternating and cycling keys', () => {
+      const a = key()
+      const b = key({ edgeTags: ['direction:out', 'topic:memo', 'type:kafka'] })
+      const c = key({ edgeTags: ['direction:in', 'topic:other', 'type:kafka'] })
+
+      assertMatchesUncached([a, a, a])
+      assertMatchesUncached([a, b, a, b, a, b])
+      assertMatchesUncached([a, b, c, a, b, c, a])
+    })
+
+    it('should tell keys apart that differ in a single component', () => {
+      const base = key()
+      const variants = [
+        base,
+        key({ edgeTags: ['direction:in', 'group:memo', 'topic:memx', 'type:kafka'] }),
+        key({ env: 'memo-env2' }),
+        key({ service: 'memo-service2' }),
+        key({ parent: Buffer.from('ff02030405060708', 'hex') }),
+        key({ parent: Buffer.from('01020304050607ff', 'hex') }),
+        key({ propagationHash: 0n }),
+        key({ propagationHash: 1n }),
+        key({ propagationHash: BigInt('0x123456789abcdef0') }),
+        key({ edgeTags: [...base.edgeTags, 'manual_checkpoint:true'] }),
+        key({ edgeTags: base.edgeTags.slice(0, 3) }),
+      ]
+
+      assertMatchesUncached(variants)
+      assertMatchesUncached([...variants].reverse())
+      assertMatchesUncached([variants[0], variants[1], variants[0], variants[1]])
+    })
+
+    it('should return the same instance for an equal key with another parent buffer and fresh tag strings', () => {
+      const name = 'instance'
+      const first = computePathwayHash(
+        'memo-service', 'memo-env', ['direction:in', 'topic:' + name, 'type:kafka'], Buffer.from(parentA)
+      )
+      const second = computePathwayHash(
+        'memo-service', 'memo-env', ['direction:in', ['topic', name].join(':'), 'type:kafka'], Buffer.from(parentA)
+      )
+
+      assert.strictEqual(second, first)
+    })
+
+    it('should return the instance the trie would return after it was cleared while the key was recent', () => {
+      const loadFreshPathway = proxyquire.noPreserveCache()
+      const { computePathwayHash: freshComputePathwayHash } = loadFreshPathway('../../src/datastreams/pathway', {})
+      const distinctKey = i => key({ edgeTags: ['direction:in', `topic:clear-${i}`, 'type:kafka'] })
+      for (let i = 0; i < 499; i++) {
+        compute(distinctKey(i), freshComputePathwayHash)
+      }
+
+      const k = key()
+      const first = compute(k, freshComputePathwayHash)
+      compute(distinctKey(499), freshComputePathwayHash)
+      const afterClear = compute(k, freshComputePathwayHash)
+
+      assert.deepStrictEqual(afterClear, uncachedHash(k.service, k.env, k.edgeTags, k.parent))
+      assert.deepStrictEqual(first, afterClear)
+      assert.notStrictEqual(afterClear, first)
+      assert.strictEqual(compute(k, freshComputePathwayHash), afterClear)
+    })
+
+    it('should not be affected by later mutation of the caller edge tags', () => {
+      const edgeTags = ['direction:in', 'topic:mutated', 'type:kafka']
+      const original = [...edgeTags]
+      const first = computePathwayHash('memo-service', 'memo-env', edgeTags, parentA)
+
+      edgeTags[1] = 'topic:changed'
+      edgeTags.push('zzz:extra')
+
+      assert.deepStrictEqual(computePathwayHash('memo-service', 'memo-env', [...original], parentA), first)
+      assert.deepStrictEqual(
+        computePathwayHash('memo-service', 'memo-env', edgeTags, parentA),
+        uncachedHash('memo-service', 'memo-env', ['direction:in', 'topic:changed', 'type:kafka', 'zzz:extra'], parentA)
+      )
+    })
+
+    it('should follow the parent buffer when it is mutated in place', () => {
+      const parent = Buffer.from('1111111111111111', 'hex')
+      const edgeTags = ['direction:in', 'topic:parent-mutation', 'type:kafka']
+
+      const before = computePathwayHash('memo-service', 'memo-env', [...edgeTags], parent)
+      parent[7] = 0x22
+      const after = computePathwayHash('memo-service', 'memo-env', [...edgeTags], parent)
+
+      const beforeParent = Buffer.from('1111111111111111', 'hex')
+      const afterParent = Buffer.from('1111111111111122', 'hex')
+      assert.deepStrictEqual(before, uncachedHash('memo-service', 'memo-env', edgeTags, beforeParent))
+      assert.deepStrictEqual(after, uncachedHash('memo-service', 'memo-env', edgeTags, afterParent))
+    })
+
+    it('should sort unsorted caller edge tags in place on a miss and on a hit, and leave sorted ones untouched', () => {
+      const sorted = ['direction:in', 'topic:sorting', 'type:kafka']
+      const unsorted = () => ['type:kafka', 'direction:in', 'topic:sorting']
+
+      const firstTags = unsorted()
+      const first = computePathwayHash('memo-service', 'memo-env', firstTags, parentA)
+      const secondTags = unsorted()
+      const second = computePathwayHash('memo-service', 'memo-env', secondTags, parentA)
+      const sortedTags = [...sorted]
+      const third = computePathwayHash('memo-service', 'memo-env', sortedTags, parentA)
+
+      assert.deepStrictEqual(firstTags, sorted)
+      assert.deepStrictEqual(secondTags, sorted)
+      assert.deepStrictEqual(sortedTags, sorted)
+      assert.strictEqual(second, first)
+      assert.strictEqual(third, first)
+    })
+
+    it('should give the same result as the uncached computation for non-string edge tags', () => {
+      const parent = parentA
+      const withNumber = () => ['direction:in', 3, 'type:kafka']
+
+      const first = computePathwayHash('memo-service', 'memo-env', withNumber(), parent)
+      const second = computePathwayHash('memo-service', 'memo-env', withNumber(), parent)
+      const currentHash = sha('memo-servicememo-env' + withNumber().sort().join(''))
+      const expected = sha(Buffer.concat([currentHash, parent], 16).toString())
+
+      assert.deepStrictEqual(first, expected)
+      assert.deepStrictEqual(second, expected)
+    })
+
+    it('should handle parents that are not 8 bytes long', () => {
+      const edgeTags = ['direction:in', 'topic:odd-parent', 'type:kafka']
+      for (const parent of [Buffer.alloc(0), Buffer.alloc(16, 7), Buffer.alloc(3, 1)]) {
+        for (let pass = 0; pass < 2; pass++) {
+          assert.deepStrictEqual(
+            computePathwayHash('memo-service', 'memo-env', [...edgeTags], parent),
+            uncachedHash('memo-service', 'memo-env', edgeTags, parent)
+          )
+        }
+      }
+    })
+
+    it('should throw for a parent that is not a buffer', () => {
+      assert.throws(
+        () => computePathwayHash('memo-service', 'memo-env', ['direction:in'], undefined),
+        TypeError
+      )
     })
   })
 
