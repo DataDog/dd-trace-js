@@ -279,6 +279,48 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     `./node_modules/.bin/cypress run --spec ${sourceSuite}${browserOption}${webkitOption}`)
   })
 
+  it('retains annotations inside explicitly pending suites without executing their callbacks', async () => {
+    const pendingSuite = 'cypress/e2e/skipped-suite-annotations.js'
+    const browserOption = process.env.CYPRESS_TEST_BROWSER ? ' --browser "$CYPRESS_TEST_BROWSER"' : ''
+    const webkit = process.env.CYPRESS_TEST_BROWSER === 'webkit'
+    const nativeConfig = webkit ? 'supportFile=false,experimentalWebKitSupport=true' : 'supportFile=false'
+    const tracingConfig = webkit ? ' --config experimentalWebKitSupport=true' : ''
+    const nativeCommand = `./node_modules/.bin/cypress run --spec ${pendingSuite}` +
+      ` --config ${nativeConfig}${browserOption}`
+    childProcess = exec(nativeCommand, {
+      cwd,
+      env: {
+        ...getCiVisEvpProxyConfig(receiver.port),
+        NODE_OPTIONS: '',
+        DD_TRACE_ENABLED: 'false',
+        SPEC_PATTERN: pendingSuite,
+      },
+    })
+    let output = ''
+    childProcess.stdout.on('data', chunk => { output += chunk })
+    childProcess.stderr.on('data', chunk => { output += chunk })
+    const [exitCode] = await once(childProcess, 'exit')
+    assert.strictEqual(exitCode, 0, output)
+    assert.match(output, /1 passing/)
+    assert.match(output, /20 pending/)
+    assert.doesNotMatch(output, /skipped callback executed/)
+
+    await run('pending-suite', 0, tests => {
+      assert.strictEqual(tests.length, 21)
+      const skipped = tests.filter(test => test.meta['test.status'] === 'skip')
+      assert.strictEqual(skipped.length, 20)
+      for (const test of skipped) {
+        const name = test.meta['test.name']
+        const both = name.endsWith('both flags') || name.endsWith('nested skip flags')
+        assert.strictEqual(test.meta[protection], both || name.endsWith('protected flag') ? 'true' : undefined, name)
+        assert.strictEqual(test.meta[exclusion], both || name.endsWith('retry flag') ? 'true' : undefined, name)
+      }
+      const [executed] = named(tests, 'execution after pending declarations')
+      assert.strictEqual(executed.meta['test.status'], 'pass')
+    }, { SPEC_PATTERN: pendingSuite },
+    `./node_modules/.bin/cypress run --spec ${pendingSuite}${tracingConfig}${browserOption}`)
+  })
+
   it('reads the public exclusion mode before declaring tests', async () => {
     await run('mode-selection', 0, tests => {
       assert.strictEqual(tests.length, 1)
