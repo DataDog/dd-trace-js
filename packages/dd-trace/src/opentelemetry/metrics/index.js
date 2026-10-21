@@ -70,7 +70,11 @@ function initializeOpenTelemetryMetrics (config) {
   registerTelemetryFlusher(done => reader.forceFlush(done))
 
   registerResourceAttributeRefresh(exporter, () => buildGeneralResourceAttributes(config))
-  return registered ? { protocol: exporter.transformer.protocol } : undefined
+  if (!registered) return
+  return {
+    protocol: exporter.transformer.protocol,
+    resourceAttributes: exporter.getStartupResourceAttributes(),
+  }
 }
 
 /**

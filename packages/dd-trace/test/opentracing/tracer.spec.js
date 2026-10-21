@@ -65,6 +65,7 @@ describe('Tracer', () => {
     AgentExporter = sinon.stub().returns(agentExporter)
     otlpExporter = {
       export: sinon.spy(),
+      getStartupResourceAttributes: sinon.stub().returns({}),
     }
     createOtlpTraceExporter = sinon.stub().returns(otlpExporter)
     createOtlpSpanStatsExporter = sinon.stub()
@@ -153,7 +154,7 @@ describe('Tracer', () => {
   })
 
   it('returns the initialized tracing and span-metrics configuration after later changes', () => {
-    const spanMetrics = { protocol: 'http/protobuf' }
+    const spanMetrics = { protocol: 'http/protobuf', resourceAttributes: { 'service.name': 'stats-service' } }
     config.OTEL_TRACES_EXPORTER = 'otlp'
     config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
     config.OTEL_TRACES_SPAN_METRICS_ENABLED = true
@@ -167,7 +168,7 @@ describe('Tracer', () => {
 
     assert.deepEqual(startupConfig, {
       tracing: true,
-      traces: { protocol: 'http/json' },
+      traces: { protocol: 'http/json', resourceAttributes: {} },
       spanMetrics,
     })
     config.OTEL_TRACES_EXPORTER = 'none'

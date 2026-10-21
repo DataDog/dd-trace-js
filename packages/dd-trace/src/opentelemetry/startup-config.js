@@ -1,5 +1,7 @@
 'use strict'
 
+const { isDeepStrictEqual } = require('node:util')
+
 const { getLogLevel } = require('../log/writer')
 
 const SUPPORTED_PROPAGATORS = new Set([
@@ -7,7 +9,10 @@ const SUPPORTED_PROPAGATORS = new Set([
 ])
 
 /**
- * @typedef {Readonly<{ protocol: string }>} InitializedExporter
+ * @typedef {Readonly<{
+ *   protocol: string,
+ *   resourceAttributes: Readonly<Record<string, unknown>>,
+ * }>} InitializedExporter
  * @typedef {Readonly<{
  *   tracing?: boolean,
  *   traces?: InitializedExporter,
@@ -29,17 +34,10 @@ function startupConfig (config, rules, pipelines = {}) {
   const metrics = !!pipelines.metrics
   const logs = !!pipelines.logs
   const spanMetrics = !!pipelines.spanMetrics
-  const { service, env, version, 'runtime-id': runtimeId, ...tags } = config.tags
-  /** @type {Record<string, unknown>} */
-  const attributes = {}
-  for (const [key, value] of Object.entries({
-    'deployment.environment.name': config.env,
-    'service.version': config.version,
-    ...tags,
-  })) {
-    if (isAttributeValue(value)) attributes[key] = value
-    else if (Array.isArray(value) && value.every(isAttributeValue)) attributes[key] = [...value]
-  }
+  const resources = [pipelines.traces, pipelines.metrics, pipelines.logs, pipelines.spanMetrics]
+    .filter(exporter => exporter !== undefined)
+    .map(exporter => exporter.resourceAttributes)
+  const attributes = commonResourceAttributes(resources)
 
   /** @type {Record<string, unknown>} */
   const out = {
@@ -50,7 +48,9 @@ function startupConfig (config, rules, pipelines = {}) {
     DD_METRICS_OTEL_ENABLED: !!config.DD_METRICS_OTEL_ENABLED,
     DD_LOGS_OTEL_ENABLED: !!config.DD_LOGS_OTEL_ENABLED,
     OTEL_LOG_LEVEL: getLogLevel(),
-    OTEL_SERVICE_NAME: config.service,
+    OTEL_SERVICE_NAME: typeof attributes['service.name'] === 'string'
+      ? attributes['service.name']
+      : undefined,
     OTEL_RESOURCE_ATTRIBUTES: attributes,
     OTEL_LOGS_EXPORTER: logs ? 'otlp' : 'none',
     OTEL_TRACES_SPAN_METRICS_ENABLED: spanMetrics,
@@ -103,6 +103,32 @@ function startupConfig (config, rules, pipelines = {}) {
     out.OTEL_BLRP_MAX_EXPORT_BATCH_SIZE = config.OTEL_BSP_MAX_EXPORT_BATCH_SIZE
   }
   return out
+}
+
+/**
+ * @param {Readonly<Record<string, unknown>>[]} resources
+ * @returns {Record<string, unknown>}
+ */
+function commonResourceAttributes (resources) {
+  const [reference, ...others] = resources
+  /** @type {Record<string, unknown>} */
+  const shared = {}
+
+  if (!reference) return shared
+
+  for (const [key, value] of Object.entries(reference)) {
+    const supported = isAttributeValue(value) ||
+      (Array.isArray(value) && value.every(isAttributeValue))
+    if (!supported) continue
+
+    const matchesEveryResource = others.every(resource =>
+      Object.hasOwn(resource, key) && isDeepStrictEqual(resource[key], value))
+    if (!matchesEveryResource) continue
+
+    shared[key] = Array.isArray(value) ? [...value] : value
+  }
+
+  return shared
 }
 
 /** @param {unknown} value */

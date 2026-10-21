@@ -133,10 +133,7 @@ describe('startup logging', () => {
       DD_LOGS_OTEL_ENABLED: false,
       OTEL_ENABLED: false,
       OTEL_LOG_LEVEL: 'none',
-      OTEL_SERVICE_NAME: 'test',
-      OTEL_RESOURCE_ATTRIBUTES: {
-        'deployment.environment.name': 'production',
-      },
+      OTEL_RESOURCE_ATTRIBUTES: {},
       OTEL_LOGS_EXPORTER: 'none',
       OTEL_TRACES_SPAN_METRICS_ENABLED: false,
     })

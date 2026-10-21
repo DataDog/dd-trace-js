@@ -51,7 +51,10 @@ class DatadogTracer {
     if (exportOtlpTraces) {
       const { createOtlpTraceExporter } = require('../opentelemetry/trace')
       this._exporter = createOtlpTraceExporter(config)
-      traces = { protocol: this._exporter.protocol }
+      traces = {
+        protocol: this._exporter.protocol,
+        resourceAttributes: this._exporter.getStartupResourceAttributes(),
+      }
     } else {
       const Exporter = getExporter(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
       this._exporter = new Exporter(config, this._prioritySampler)

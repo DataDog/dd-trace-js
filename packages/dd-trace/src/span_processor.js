@@ -52,7 +52,12 @@ class SpanProcessor {
         !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
-      if (otlpStatsExporter) this.#spanMetricsStartupConfig = { protocol: otlpStatsExporter.protocol }
+      if (otlpStatsExporter) {
+        this.#spanMetricsStartupConfig = {
+          protocol: otlpStatsExporter.protocol,
+          resourceAttributes: otlpStatsExporter.getStartupResourceAttributes(),
+        }
+      }
     }
 
     this._spanSampler = new SpanSampler(config.sampler)

@@ -4,25 +4,36 @@ const assert = require('node:assert/strict')
 const { fork } = require('node:child_process')
 const { once } = require('node:events')
 const http = require('node:http')
+const os = require('node:os')
 
 const { describe, it } = require('mocha')
 
 require('../setup/core')
-const { fixture, runStartup: run } = require('../helpers/config')
+const { fixture, getConfigFresh, runStartup: run } = require('../helpers/config')
+const startupConfig = require('../../src/opentelemetry/startup-config')
 const { getProtobufTypes } = require('../../src/opentelemetry/otlp/protobuf_loader')
 
 const allSignals = {
   OTEL_TRACES_EXPORTER: 'otlp',
+  OTEL_TRACES_SPAN_METRICS_ENABLED: 'false',
   DD_LOGS_OTEL_ENABLED: 'true',
   DD_METRICS_OTEL_ENABLED: 'true',
 }
 
 describe('effective OTel startup configuration', () => {
   it('reports resolved defaults without advertising inactive exporters', () => {
-    const { configuration: c } = run()
+    const { configuration: c, flare } = run({}, {
+      service: 'native-service', env: 'native-env', version: 'native-version', tags: { custom: 'native-tag' },
+    })
     assert.equal(c.OTEL_ENABLED, false)
     assert.equal(c.OTEL_LOG_LEVEL, 'none')
-    assert.equal(c.OTEL_SERVICE_NAME, c.service)
+    assert.equal(c.service, 'native-service')
+    assert.equal(c.env, 'native-env')
+    assert.equal(c.tags.custom, 'native-tag')
+    for (const output of [c, flare]) {
+      assert.equal('OTEL_SERVICE_NAME' in output, false)
+      assert.deepEqual(output.OTEL_RESOURCE_ATTRIBUTES, {})
+    }
     assert.equal(c.OTEL_PROPAGATORS, 'datadog,tracecontext,baggage')
     assert.equal('OTEL_TRACES_SAMPLER' in c, false)
     assert.equal(c.OTEL_LOGS_EXPORTER, 'none')
@@ -150,6 +161,110 @@ describe('effective OTel startup configuration', () => {
     assert.equal('OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE' in c, false)
   })
 
+  for (const [signal, setting] of [
+    ['logs', 'DD_LOGS_OTEL_ENABLED'],
+    ['metrics', 'DD_METRICS_OTEL_ENABLED'],
+    ['span metrics', 'OTEL_TRACES_SPAN_METRICS_ENABLED'],
+  ]) {
+    it(`reports the initialized ${signal} resource, including its hostname`, () => {
+      const result = run({ [setting]: 'true' }, { reportHostname: true, tags: { 'host.name': 'configured-host' } })
+      assert.equal(result.configuration.OTEL_RESOURCE_ATTRIBUTES['host.name'], os.hostname())
+      assert.equal(result.flare.OTEL_RESOURCE_ATTRIBUTES['host.name'], os.hostname())
+    })
+  }
+
+  it('reports the shared exported service name instead of the configured default', () => {
+    const result = run(allSignals, { service: 'configured-service', tags: { 'service.name': 'resource-service' } })
+    for (const output of [result.configuration, result.flare]) {
+      assert.equal(output.OTEL_SERVICE_NAME, 'resource-service')
+      assert.equal(output.OTEL_RESOURCE_ATTRIBUTES['service.name'], 'resource-service')
+    }
+  })
+
+  for (const [key, configured, resource] of [
+    ['service.name', 'configured-service', 'resource-service'],
+    ['service.version', 'configured-version', 'resource-version'],
+    ['deployment.environment.name', 'configured-env', 'resource-env'],
+  ]) {
+    it(`omits ${key} when span metrics and other resources disagree`, () => {
+      const result = run({ ...allSignals, OTEL_TRACES_SPAN_METRICS_ENABLED: 'true' }, {
+        service: key === 'service.name' ? configured : 'same-service',
+        version: key === 'service.version' ? configured : 'same-version',
+        env: key === 'deployment.environment.name' ? configured : 'same-env',
+        tags: { [key]: resource },
+      })
+      for (const output of [result.configuration, result.flare]) {
+        assert.equal(key in output.OTEL_RESOURCE_ATTRIBUTES, false)
+        if (key === 'service.name') assert.equal('OTEL_SERVICE_NAME' in output, false)
+        else assert.equal(output.OTEL_SERVICE_NAME, 'same-service')
+      }
+    })
+  }
+
+  it('includes automatically initialized span metrics when checking shared resources', () => {
+    const result = run({
+      OTEL_TRACES_EXPORTER: 'otlp', DD_LOGS_OTEL_ENABLED: 'true', DD_METRICS_OTEL_ENABLED: 'true',
+    }, { service: 'configured-service', tags: { 'service.name': 'resource-service' } })
+    for (const output of [result.configuration, result.flare]) {
+      assert.equal(output.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+      assert.equal('OTEL_SERVICE_NAME' in output, false)
+      assert.equal('service.name' in output.OTEL_RESOURCE_ATTRIBUTES, false)
+    }
+  })
+
+  it('omits attributes absent from another active resource', () => {
+    const result = run({ ...allSignals, OTEL_TRACES_SPAN_METRICS_ENABLED: 'true' }, {
+      service: 'same-service', tags: { custom: 'not-a-span-metrics-resource-attribute' },
+    })
+    for (const output of [result.configuration, result.flare]) {
+      assert.equal('custom' in output.OTEL_RESOURCE_ATTRIBUTES, false)
+      assert.equal(output.OTEL_SERVICE_NAME, 'same-service')
+      assert.equal(output.OTEL_RESOURCE_ATTRIBUTES['service.name'], 'same-service')
+    }
+  })
+
+  it('reports only common scalar and array resource values', () => {
+    const first = {
+      'service.name': 'same-service',
+      list: ['a', 1, true],
+      scalar: 42,
+      different: ['first'],
+      missing: 'present-in-two',
+      typed: 1,
+    }
+    const second = {
+      'service.name': 'same-service',
+      list: ['a', 1, true],
+      scalar: 42,
+      different: ['second'],
+      missing: 'present-in-two',
+      typed: '1',
+    }
+    const third = { 'service.name': 'same-service', list: ['a', 1, true], scalar: 42, different: ['first'], typed: 1 }
+    const config = getConfigFresh()
+    const result = startupConfig(config, [], {
+      metrics: { protocol: 'http/protobuf', resourceAttributes: first },
+      logs: { protocol: 'http/json', resourceAttributes: second },
+      spanMetrics: { protocol: 'http/protobuf', resourceAttributes: third },
+    })
+    assert.equal(result.OTEL_SERVICE_NAME, 'same-service')
+    assert.deepEqual(result.OTEL_RESOURCE_ATTRIBUTES, {
+      'service.name': 'same-service', list: ['a', 1, true], scalar: 42,
+    })
+    first.list.push('later')
+    assert.deepEqual(result.OTEL_RESOURCE_ATTRIBUTES.list, ['a', 1, true])
+  })
+
+  it('does not substitute the configured service when an active resource omits it', () => {
+    const result = startupConfig(getConfigFresh({ service: 'configured-service' }), [], {
+      logs: { protocol: 'http/json', resourceAttributes: { 'service.name': 'resource-service' } },
+      metrics: { protocol: 'http/json', resourceAttributes: {} },
+    })
+    assert.equal(result.OTEL_SERVICE_NAME, undefined)
+    assert.equal('OTEL_SERVICE_NAME' in JSON.parse(JSON.stringify(result)), false)
+    assert.deepEqual(result.OTEL_RESOURCE_ATTRIBUTES, {})
+  })
+
   for (const [rate, name] of [[0, 'always_off'], [0.25, 'traceidratio'], [1, 'always_on']]) {
     it(`reports the normalized parent-based sampler for rate ${rate}`, () => {
       const { configuration: c } = run({ OTEL_TRACES_SAMPLER: 'always_off' }, { sampleRate: rate })
@@ -255,7 +370,7 @@ describe('effective OTel startup configuration', () => {
   })
 
   it('snapshots only supported resource attribute values', () => {
-    const { configuration: c } = run({}, {
+    const { configuration: c } = run({ DD_LOGS_OTEL_ENABLED: 'true' }, {
       tags: { scalar: 42, list: ['initial'], object: { unsupported: true }, nested: [['unsupported']] },
     })
     assert.equal(c.OTEL_RESOURCE_ATTRIBUTES.scalar, 42)
@@ -278,6 +393,7 @@ describe('effective OTel startup configuration', () => {
 
   it('uses resolved code/DD precedence, service, tags and logger state', () => {
     const { configuration: c } = run({
+      DD_LOGS_OTEL_ENABLED: 'true',
       OTEL_SERVICE_NAME: 'otel-service',
       DD_SERVICE: 'dd-service',
       DD_ENV: 'test',
@@ -354,6 +470,32 @@ describe('effective OTel startup configuration', () => {
       version: 'dd-tag-version',
     },
     {
+      name: 'service-name resource overrides are reported without changing the tracer service',
+      options: {
+        service: 'configured-service',
+        env: 'code-env',
+        version: 'code-version',
+        tags: { custom: 'wire', 'service.name': 'resource-service' },
+      },
+      service: 'resource-service',
+      envName: 'code-env',
+      version: 'code-version',
+    },
+    ...[false, true].map(reportHostname => ({
+      name: `differing hostnames with reportHostname=${reportHostname}`,
+      env: {},
+      options: {
+        reportHostname,
+        env: 'code-env',
+        version: 'code-version',
+        tags: { custom: 'wire', 'host.name': 'configured-host' },
+      },
+      service: 'wire-service',
+      envName: 'code-env',
+      version: 'code-version',
+      hostname: reportHostname ? undefined : 'configured-host',
+    })),
+    {
       name: 'explicit programmatic resource keys retain existing exporter precedence',
       options: {
         env: 'code-env',
@@ -414,10 +556,14 @@ describe('effective OTel startup configuration', () => {
         })])
         child.send('stop')
         await exited
-        const { configuration: c } = JSON.parse(stdout.split('STARTUP_RESULT ')[1])
+        const { configuration: c, flare } = JSON.parse(stdout.split('STARTUP_RESULT ')[1])
         assert.equal(c.OTEL_SERVICE_NAME, scenario.service)
         assert.equal(c.OTEL_RESOURCE_ATTRIBUTES['deployment.environment.name'], scenario.envName)
         assert.equal(c.OTEL_RESOURCE_ATTRIBUTES['service.version'], scenario.version)
+        if ('hostname' in scenario) {
+          assert.equal(c.OTEL_RESOURCE_ATTRIBUTES['host.name'], scenario.hostname)
+          assert.equal(flare.OTEL_RESOURCE_ATTRIBUTES['host.name'], scenario.hostname)
+        }
         const { protoLogsService, protoMetricsService } = getProtobufTypes()
         for (const [signal, decoder, resourceKey] of [
           ['TRACES', undefined, 'resourceSpans'], ['LOGS', protoLogsService, 'resourceLogs'],
@@ -431,6 +577,13 @@ describe('effective OTel startup configuration', () => {
           assert.equal(request.headers['content-type'], decoder ? 'application/x-protobuf' : 'application/json')
           const payload = decoder ? decoder.decode(request.body) : JSON.parse(request.body)
           const attributes = payload[resourceKey][0].resource.attributes
+          if ('hostname' in scenario) {
+            const expected = signal === 'TRACES'
+              ? 'configured-host'
+              : scenario.options.reportHostname ? os.hostname() : 'configured-host'
+            assert.ok(attributes.some(attribute => attribute.key === 'host.name' &&
+              attribute.value.stringValue === expected))
+          }
           assert.ok(attributes.some(attribute => attribute.key === 'service.name' &&
             attribute.value.stringValue === c.OTEL_SERVICE_NAME))
           for (const [key, value] of [

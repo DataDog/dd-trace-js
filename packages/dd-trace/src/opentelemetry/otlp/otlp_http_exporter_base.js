@@ -22,6 +22,12 @@ const legacyStorage = storage('legacy')
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
+  /**
+   * @readonly
+   * @type {Readonly<Record<string, unknown>>}
+   */
+  #startupResourceAttributes
+
   #transport = https
   #serverlessDeliveryTracker
 
@@ -34,8 +40,12 @@ class OtlpHttpExporterBase {
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
+   * @param {import('@opentelemetry/api').Attributes} [resourceAttributes] - Resource passed to the transformer
    */
-  constructor (url, headers, timeout, protocol, signalType) {
+  constructor (url, headers, timeout, protocol, signalType, resourceAttributes = {}) {
+    this.#startupResourceAttributes = Object.fromEntries(Object.entries(resourceAttributes).map(([key, value]) => [
+      key, Array.isArray(value) ? [...value] : value,
+    ]))
     this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this.protocol = protocol
     this.signalType = signalType
@@ -57,6 +67,14 @@ class OtlpHttpExporterBase {
       `encoding:${isJson ? 'json' : 'protobuf'}`,
     ]
     this.#applyUrl(url)
+  }
+
+  /**
+   * Returns the resource captured at construction, before later identity refreshes.
+   * @returns {Readonly<Record<string, unknown>>}
+   */
+  getStartupResourceAttributes () {
+    return this.#startupResourceAttributes
   }
 
   /**

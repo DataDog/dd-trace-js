@@ -91,7 +91,8 @@ describe('SpanProcessor', () => {
   })
 
   it('should configure span stats when enabled outside standalone AppSec', () => {
-    const otlpStatsExporter = { protocol: 'http/protobuf' }
+    const resourceAttributes = { 'service.name': 'stats-service' }
+    const otlpStatsExporter = { protocol: 'http/protobuf', getStartupResourceAttributes: () => resourceAttributes }
     const stats = {}
     config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
     config.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = false
@@ -101,7 +102,7 @@ describe('SpanProcessor', () => {
 
     sinon.assert.calledOnceWithExactly(SpanStatsProcessor, config, otlpStatsExporter)
     assert.strictEqual(processor._stats, stats)
-    assert.deepEqual(processor.getSpanMetricsStartupConfig(), { protocol: 'http/protobuf' })
+    assert.deepEqual(processor.getSpanMetricsStartupConfig(), { protocol: 'http/protobuf', resourceAttributes })
   })
 
   it('should not configure span stats in standalone AppSec', () => {
