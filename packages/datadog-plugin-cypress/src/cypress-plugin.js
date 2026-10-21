@@ -3,6 +3,7 @@
 // Capture real timers at module load, before any test can install fake timers.
 const { performance } = require('perf_hooks')
 const { basename } = require('node:path')
+const { isDeepStrictEqual } = require('node:util')
 const dateNow = Date.now
 
 const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
@@ -67,6 +68,8 @@ const {
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION,
+  TEST_MANAGEMENT_NO_AUTO_RETRY,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
   getLibraryCapabilitiesTags,
@@ -420,7 +423,8 @@ function getFinalStatusRetryKind ({
     return FINAL_STATUS_RETRY_KIND.efd
   }
 
-  if (finishedTestAttempts.length > 1 && (isDynamicAtrEnabled || flakyTestRetriesCount > 0)) {
+  if (!finishedTest.noAutoRetry && finishedTestAttempts.length > 1 &&
+    (isDynamicAtrEnabled || flakyTestRetriesCount > 0)) {
     return FINAL_STATUS_RETRY_KIND.atr
   }
 
@@ -451,6 +455,19 @@ function getFinalStatus ({
     default:
       return status
   }
+}
+
+/**
+ * Copies retry configuration without sharing nested experimental options with user code.
+ *
+ * @template T
+ * @param {T} retries
+ * @returns {T}
+ */
+function copyCypressRetries (retries) {
+  // Cypress 6 supports Node.js 12, which does not provide structuredClone.
+  // eslint-disable-next-line unicorn/prefer-structured-clone
+  return retries !== null && typeof retries === 'object' ? JSON.parse(JSON.stringify(retries)) : retries
 }
 
 class CypressPlugin {
@@ -489,6 +506,7 @@ class CypressPlugin {
   hasForcedToRunSuites = false
   hasUnskippableSuites = false
   unskippableSuites = []
+  testAnnotationsBySuite = new Map()
   knownTests = []
   isTestManagementTestsEnabled = false
   testManagementAttemptToFixRetries = 0
@@ -590,6 +608,7 @@ class CypressPlugin {
     this.isTestManagementTestsEnabled = false
     this.testManagementAttemptToFixRetries = 0
     this.testManagementTests = undefined
+    this.testAnnotationsBySuite = new Map()
     this.isImpactedTestsEnabled = false
     this.modifiedFiles = []
     this.attemptToFixExecutions = new Map()
@@ -840,14 +859,9 @@ class CypressPlugin {
   // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
     if (this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries) {
-      cypressConfig.retries = this.originalCypressRetries !== null &&
-        typeof this.originalCypressRetries === 'object'
-        ? { ...this.originalCypressRetries }
-        : this.originalCypressRetries
+      cypressConfig.retries = copyCypressRetries(this.originalCypressRetries)
     } else {
-      this.originalCypressRetries = cypressConfig.retries !== null && typeof cypressConfig.retries === 'object'
-        ? { ...cypressConfig.retries }
-        : cypressConfig.retries
+      this.originalCypressRetries = copyCypressRetries(cypressConfig.retries)
       this.hasOriginalCypressRetries = true
     }
     this.resetRunState()
@@ -945,6 +959,7 @@ class CypressPlugin {
           this.testManagementAttemptToFixRetries = testManagementAttemptToFixRetries
           this.isImpactedTestsEnabled = isImpactedTestsEnabled
         }
+        this.configuredCypressRetries = copyCypressRetries(this.cypressConfig.retries)
         return this.cypressConfig
       })
     return this.libraryConfigurationPromise
@@ -1079,7 +1094,8 @@ class CypressPlugin {
   }
 
   getTestSpan ({
-    testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined, startTime,
+    testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined,
+    isAttemptToFix, annotations, startTime,
   }) {
     const testSuiteTags = {
       [TEST_MODULE]: TEST_FRAMEWORK_NAME,
@@ -1124,6 +1140,10 @@ class CypressPlugin {
       incrementCountMetric(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
       testSpanMetadata[TEST_ITR_FORCED_RUN] = 'true'
     }
+
+    if (annotations && annotations.mustFail) testSpanMetadata[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] = 'true'
+    if (annotations && annotations.noAutoRetry) testSpanMetadata[TEST_MANAGEMENT_NO_AUTO_RETRY] = 'true'
+    if (isAttemptToFix) testSpanMetadata[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
 
     if (isDisabled) {
       testSpanMetadata[TEST_MANAGEMENT_IS_DISABLED] = 'true'
@@ -1176,12 +1196,22 @@ class CypressPlugin {
   }
 
   async beforeRun (details) {
+    // Manual setup can change the developer budget after awaiting init. Capture it
+    // before interactive reinitialization can restore the previous native value.
+    const finalRetries = copyCypressRetries(details.config?.retries ?? this.cypressConfig?.retries)
+    if (!this._isInit && !isDeepStrictEqual(finalRetries, this.configuredCypressRetries)) {
+      this.originalCypressRetries = finalRetries
+    }
     if (this._isInit) {
       // The user may not have returned the promise from the init function.
       await this.libraryConfigurationPromise
     } else {
       // Cypress open reuses the same plugin process for every interactive run.
       await this.init(this.tracer, this.cypressConfig)
+    }
+
+    if (!isDeepStrictEqual(finalRetries, this.configuredCypressRetries)) {
+      this.originalCypressRetries = finalRetries
     }
 
     this.command = getCypressCommand(details)
@@ -1564,9 +1594,15 @@ class CypressPlugin {
 
     // Get tests that didn't go through `dd:afterEach`
     // and create a skipped test span for each of them
+    const annotationOffsets = new Map()
     for (const { title } of cypressTests) {
       const cypressTestName = title.join(' ')
-      const isTestFinished = finishedTests.some(({ testName }) => cypressTestName === testName)
+      const declarationIndex = annotationOffsets.get(cypressTestName) || 0
+      const annotations = this.testAnnotationsBySuite.get(spec.relative)?.get(cypressTestName)?.[declarationIndex]
+      annotationOffsets.set(cypressTestName, declarationIndex + 1)
+      const isTestFinished = annotations?.testId
+        ? finishedTests.some(({ testId }) => testId === annotations.testId)
+        : finishedTests.some(({ testName }) => cypressTestName === testName)
 
       if (isTestFinished) {
         continue
@@ -1581,7 +1617,7 @@ class CypressPlugin {
 
       // Recovered tests that never ran have no execution time; keep them at the recorded suite end.
       const skippedTestSpan = this.getTestSpan({
-        testName: cypressTestName, testSuite: spec.relative, testSourceFile, startTime: finishTime,
+        testName: cypressTestName, testSuite: spec.relative, testSourceFile, annotations, startTime: finishTime,
       })
       skippedTestSpan.setTag(TEST_FINAL_STATUS, 'skip')
 
@@ -1598,19 +1634,21 @@ class CypressPlugin {
 
       if (isDisabled) {
         skippedTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
-      } else if (isQuarantined) {
+      }
+      if (isQuarantined) {
         skippedTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
       }
 
+      if (isAttemptToFix) skippedTestSpan.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
       recordTestManagementExecution({
         testSuite: spec.relative,
         testName: cypressTestName,
         status: 'skip',
-        isAttemptToFix,
-        isDisabled,
-        isQuarantined,
+        isAttemptToFix: isAttemptToFix && !annotations?.noAutoRetry,
+        isDisabled: isDisabled && !annotations?.mustFail,
+        isQuarantined: isQuarantined && !annotations?.mustFail,
       })
-      if (isAttemptToFix) {
+      if (isAttemptToFix && !annotations?.noAutoRetry) {
         recordAttemptToFixExecution(this.attemptToFixExecutions, {
           testSuite: spec.relative,
           testName: cypressTestName,
@@ -1668,6 +1706,7 @@ class CypressPlugin {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
           const isAtrRetry = attemptIndex > 0 &&
             this.isFlakyTestRetriesEnabled &&
+            !finishedTest.noAutoRetry &&
             !finishedTest.isAttemptToFix &&
             !finishedTest.isEfdRetry
           if (attemptIndex > 0) {
@@ -1703,7 +1742,8 @@ class CypressPlugin {
 
         // Update test status - but NOT for non-ATF quarantined tests where we intentionally
         // report 'fail' to Datadog even though Cypress sees it as 'pass'
-        const isQuarantinedTest = finishedTest.testSpan?.context()?.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true'
+        const isQuarantinedTest = !finishedTest.mustFail &&
+          finishedTest.testSpan?.context()?.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true'
         if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
@@ -1717,8 +1757,8 @@ class CypressPlugin {
           testName,
           status: testManagementTags[TEST_STATUS] || cypressTestStatus,
           isAttemptToFix: finishedTest.isAttemptToFix,
-          isDisabled: testManagementTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-          isQuarantined: testManagementTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+          isDisabled: !finishedTest.mustFail && testManagementTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+          isQuarantined: !finishedTest.mustFail && testManagementTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
         })
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
@@ -1766,12 +1806,15 @@ class CypressPlugin {
           const isDisabled = testSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
 
           const finalStatus = getFinalStatus({
-            status: cypressTestStatus,
+            // Native retries use Cypress's aggregate outcome; managed attempts retain their own policy.
+            status: retryKind === FINAL_STATUS_RETRY_KIND.none && !isDatadogManagedAttempt
+              ? CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+              : cypressTestStatus,
             retryKind,
             hasFailedAllAttempts,
             hasPassedAllAtfRetries,
-            isQuarantined,
-            isDisabled,
+            isQuarantined: isQuarantined && !finishedTest.mustFail,
+            isDisabled: isDisabled && !finishedTest.mustFail,
           })
 
           if (finalStatus) {
@@ -2048,9 +2091,29 @@ class CypressPlugin {
     if (finishPromises.length > 0) return Promise.all(finishPromises).then(() => null)
   }
 
+  /**
+   * @param {string} testSuite Suite path shared with Cypress results.
+   * @param {object[]} testAnnotations Declaration metadata from the browser.
+   */
+  recordTestDeclarations (testSuite, testAnnotations) {
+    const declarationsByName = new Map()
+    for (const annotation of testAnnotations) {
+      if (!declarationsByName.has(annotation.testName)) declarationsByName.set(annotation.testName, [])
+      declarationsByName.get(annotation.testName).push(annotation)
+    }
+    this.testAnnotationsBySuite.set(testSuite, declarationsByName)
+  }
+
   getTasks () {
     return {
-      'dd:testSuiteStart': ({ testSuite, testSuiteAbsolutePath, isTextTerminal: browserIsTextTerminal }) => {
+      'dd:testDeclarations': ({ testSuite, testAnnotations }) => {
+        this.recordTestDeclarations(testSuite, testAnnotations)
+        return null
+      },
+      'dd:testSuiteStart': ({
+        testSuite, testSuiteAbsolutePath, isTextTerminal: browserIsTextTerminal, testAnnotations = [],
+      }) => {
+        this.recordTestDeclarations(testSuite, testAnnotations)
         // Cypress 6 omits the execution mode from the Node plugin configuration.
         const isTextTerminal = this.cypressConfig.isTextTerminal ?? browserIsTextTerminal
         if (!isTextTerminal) {
@@ -2058,9 +2121,17 @@ class CypressPlugin {
           this.isDynamicAtrEnabled = false
           this.flakyTestRetriesCount = 0
         }
+        let frameworkRetries = this.originalCypressRetries
+        if (typeof frameworkRetries !== 'number') {
+          const configured = this.originalCypressRetries?.[isTextTerminal ? 'runMode' : 'openMode']
+          frameworkRetries = configured === true
+            ? this.originalCypressRetries.experimentalOptions?.maxRetries ?? 0
+            : configured || 0
+        }
         const suitePayload = {
           isEarlyFlakeDetectionEnabled:
             this.isEarlyFlakeDetectionEnabled && hasEfdRetries(this.earlyFlakeDetectionRetryPolicy),
+          frameworkRetries,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
           earlyFlakeDetectionSchedulingRetryCount: this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
           isKnownTestsEnabled: this.isKnownTestsEnabled,
@@ -2083,7 +2154,7 @@ class CypressPlugin {
       },
       'dd:beforeEach': (test) => {
         this.hasTestsReported = true
-        const { testId, testName, testSuite, isEfdRetry, efdRetryIndex } = test
+        const { testId, testName, testSuite, isEfdRetry, efdRetryIndex, annotations } = test
         if (isEfdRetry && this.shouldSkipEfdRetry(testSuite, testName, efdRetryIndex)) {
           return { shouldSkip: true, shouldDiscard: true }
         }
@@ -2114,12 +2185,12 @@ class CypressPlugin {
           return { shouldSkip: true }
         }
 
-        if (isAttemptToFix) {
+        if (isAttemptToFix && !annotations?.noAutoRetry) {
           logAttemptToFixTestExecution(testSuite, testName, this.loggedAttemptToFixTests)
         }
 
         // For disabled tests (not attemptToFix), skip them
-        if (!isAttemptToFix && isDisabled) {
+        if ((!isAttemptToFix || annotations?.noAutoRetry) && isDisabled && !annotations?.mustFail) {
           return { shouldSkip: true }
         }
         // Quarantined tests (not attemptToFix) run normally but their failures are caught
@@ -2133,6 +2204,8 @@ class CypressPlugin {
             isForcedToRun,
             isDisabled,
             isQuarantined,
+            isAttemptToFix,
+            annotations,
           })
         }
 
@@ -2157,6 +2230,7 @@ class CypressPlugin {
           isNew,
           isEfdRetry,
           isAttemptToFix,
+          annotations,
           isModified,
           duration,
           isQuarantined: isQuarantinedFromSupport,
@@ -2187,7 +2261,7 @@ class CypressPlugin {
           }
           this.tracer._tracer._exporter.exportCoverage(formattedCoverage)
         }
-        const isEfdManagedTest = (isNew || isModified) &&
+        const isEfdManagedTest = !annotations?.noAutoRetry && (isNew || isModified) &&
           this.isEarlyFlakeDetectionEnabled &&
           hasEfdRetries(this.earlyFlakeDetectionRetryPolicy) &&
           !isAttemptToFix
@@ -2202,6 +2276,7 @@ class CypressPlugin {
         }
         // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
         if (
+          !annotations?.noAutoRetry &&
           this.isDynamicAtrEnabled &&
           this.isFlakyTestRetriesEnabled &&
           !isAttemptToFix &&
@@ -2302,14 +2377,14 @@ class CypressPlugin {
             testSuite,
             testName,
             status: testStatus,
-            isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-            isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+            isDisabled: !annotations?.mustFail && activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+            isQuarantined: !annotations?.mustFail && activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
           })
         }
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
         const dynamicAtrRetryCount = this.getDynamicAtrRetryCountForTest(testSuite, testId)
         const atrRetryCount = this.isDynamicAtrEnabled ? dynamicAtrRetryCount : this.flakyTestRetriesCount
-        if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
+        if (!annotations?.noAutoRetry && this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
           atrRetryCount > 0 && testStatuses.length === atrRetryCount + 1 &&
           testStatuses.every(status => status === 'fail')) {
           this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
@@ -2358,6 +2433,8 @@ class CypressPlugin {
           isEfdRetry,
           isEfdManagedTest,
           isAttemptToFix,
+          mustFail: annotations?.mustFail,
+          noAutoRetry: annotations?.noAutoRetry,
         }
         if (this.finishedTestsByFile[testSuite]) {
           this.finishedTestsByFile[testSuite].push(finishedTest)

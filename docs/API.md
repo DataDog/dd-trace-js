@@ -918,3 +918,19 @@ ATR, EFD and Attempt to Fix. Explicit native retries on a test or suite remain
 available and are reported as framework retries. Developer skips and TIA retain
 their ordinary selection semantics. Backend-assigned property tags remain visible
 when the execution policy is overridden; observed annotation tags are true-only.
+
+## Cypress test automation exclusions
+
+With Cypress 12 and later, annotate the callback passed to `it` or `specify` using
+`preventFailureSuppression` and `noAutoRetry` from `dd-trace/test-optimization`.
+Both helpers compose in the same way as the Jest examples above. Skipped declarations,
+loop-generated cases, and allowed native retries retain their annotation tags.
+
+`preventFailureSuppression` overrides Datadog quarantine and disabling while preserving
+normal test selection, explicit skips, and Test Impact Analysis. `noAutoRetry` excludes
+Datadog ATR, EFD, and Attempt to Fix. Explicit Cypress retries configured on a test,
+suite, or globally remain available and are reported as framework retries. Test isolation
+must remain enabled for Datadog automatic retry controls to apply.
+
+Management tags continue to describe backend assignments. Annotation tags describe the
+observed callback, and effective execution/final status follows the exclusions.
