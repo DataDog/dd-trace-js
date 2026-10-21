@@ -7,7 +7,13 @@ const { describe, it } = require('mocha')
 const { getAllBaggageItems } = require('../../dd-trace/src/baggage')
 const getConfig = require('../../dd-trace/src/config')
 const TextMapPropagator = require('../../dd-trace/src/opentracing/propagation/text_map')
-const { convertToTextMap, getKafkaMessageSize } = require('../src/utils')
+const {
+  convertToTextMap,
+  getClusterIdEdgeTag,
+  getGroupEdgeTag,
+  getKafkaMessageSize,
+  getTopicEdgeTag,
+} = require('../src/utils')
 
 /** @param {Record<string, string | string[]> | null} source */
 const nullPrototype = (source) => source && Object.assign(Object.create(null), source)
@@ -146,6 +152,34 @@ describe('getKafkaMessageSize', () => {
   for (const [name, message, expected] of sizes) {
     it(name, () => {
       assert.strictEqual(getKafkaMessageSize(message), expected)
+    })
+  }
+})
+
+describe('edge tag helpers', () => {
+  const helpers = [
+    ['getTopicEdgeTag', getTopicEdgeTag, 'topic'],
+    ['getGroupEdgeTag', getGroupEdgeTag, 'group'],
+    ['getClusterIdEdgeTag', getClusterIdEdgeTag, 'kafka_cluster_id'],
+  ]
+
+  for (const [name, helper, prefix] of helpers) {
+    describe(name, () => {
+      it('returns the template literal string for string, undefined and number inputs', () => {
+        for (const input of ['orders', undefined, 42]) {
+          assert.strictEqual(helper(input), `${prefix}:${input}`)
+          assert.strictEqual(helper(input), `${prefix}:${input}`)
+        }
+      })
+
+      it('keeps returning correct strings after more than 1000 distinct inputs', () => {
+        for (let round = 0; round < 2; round++) {
+          for (let i = 0; i < 2500; i++) {
+            assert.strictEqual(helper(`name-${i}`), `${prefix}:name-${i}`)
+          }
+        }
+        assert.strictEqual(helper('orders'), `${prefix}:orders`)
+      })
     })
   }
 })

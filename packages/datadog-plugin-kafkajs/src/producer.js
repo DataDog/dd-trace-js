@@ -2,7 +2,7 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams')
-const { getKafkaMessageSize } = require('./utils')
+const { getClusterIdEdgeTag, getKafkaMessageSize, getTopicEdgeTag } = require('./utils')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
@@ -78,10 +78,10 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     for (const message of messages) {
       if (message !== null && typeof message === 'object') {
         const payloadSize = getKafkaMessageSize(message)
-        const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
+        const edgeTags = ['direction:out', getTopicEdgeTag(topic), 'type:kafka']
 
         if (clusterId) {
-          edgeTags.push(`kafka_cluster_id:${clusterId}`)
+          edgeTags.push(getClusterIdEdgeTag(clusterId))
         }
 
         const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)

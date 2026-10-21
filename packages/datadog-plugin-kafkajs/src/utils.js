@@ -79,7 +79,37 @@ function getKafkaMessageSize (message) {
   return size
 }
 
+const MAX_EDGE_TAGS_PER_KIND = 1000
+
+/**
+ * Memoizes `${prefix}${value}` strings. Repeated checkpoints on the same topic or group get the same string
+ * instance, which lets the pathway hash cache look it up without hashing a fresh string each time.
+ *
+ * @param {string} prefix
+ * @returns {(value: unknown) => string}
+ */
+function createEdgeTagMemo (prefix) {
+  /** @type {Map<unknown, string>} */
+  const memo = new Map()
+  return function getEdgeTag (value) {
+    let edgeTag = memo.get(value)
+    if (edgeTag === undefined) {
+      if (memo.size >= MAX_EDGE_TAGS_PER_KIND) memo.clear()
+      edgeTag = `${prefix}${value}`
+      memo.set(value, edgeTag)
+    }
+    return edgeTag
+  }
+}
+
+const getTopicEdgeTag = createEdgeTagMemo('topic:')
+const getGroupEdgeTag = createEdgeTagMemo('group:')
+const getClusterIdEdgeTag = createEdgeTagMemo('kafka_cluster_id:')
+
 module.exports = {
   convertToTextMap,
+  getClusterIdEdgeTag,
+  getGroupEdgeTag,
   getKafkaMessageSize,
+  getTopicEdgeTag,
 }

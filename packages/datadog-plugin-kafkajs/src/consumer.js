@@ -2,7 +2,13 @@
 
 const dc = require('dc-polyfill')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { convertToTextMap, getKafkaMessageSize } = require('./utils')
+const {
+  convertToTextMap,
+  getClusterIdEdgeTag,
+  getGroupEdgeTag,
+  getKafkaMessageSize,
+  getTopicEdgeTag,
+} = require('./utils')
 const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
 const beforeFinishCh = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
 
@@ -73,9 +79,9 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     const { span } = ctx.currentStore
     const payloadSize = getKafkaMessageSize(message)
     this.tracer.decodeDataStreamsContext(headers)
-    const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
+    const edgeTags = ['direction:in', getGroupEdgeTag(groupId), getTopicEdgeTag(topic), 'type:kafka']
     if (clusterId) {
-      edgeTags.push(`kafka_cluster_id:${clusterId}`)
+      edgeTags.push(getClusterIdEdgeTag(clusterId))
     }
     this.tracer.setCheckpoint(edgeTags, span, payloadSize)
   }
