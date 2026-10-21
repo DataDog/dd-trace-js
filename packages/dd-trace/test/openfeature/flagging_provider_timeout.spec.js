@@ -160,6 +160,26 @@ describe('FlaggingProvider Initialization Timeout', () => {
     sinon.assert.notCalled(log.errorWithoutTelemetry)
   })
 
+  for (const configuration of [undefined, null]) {
+    it(`does not log configuration availability for a ${configuration} update`, async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const promise = provider.initialize()
+      log.debug.resetHistory()
+
+      provider.setConfiguration(configuration)
+      // Upstream 2.4.0 settles initialization even for configuration removal.
+      await promise
+
+      assert.strictEqual(provider.getConfiguration(), configuration)
+      sinon.assert.notCalled(log.debug)
+
+      await clock.tickAsync(30000)
+      provider.setConfiguration({ flags: {} })
+      sinon.assert.notCalled(log.errorWithoutTelemetry)
+      sinon.assert.notCalled(log.debug)
+    })
+  }
+
   it('logs only the first configuration before the initialization promise settles', async () => {
     const provider = new FlaggingProvider(mockTracer, mockConfig)
     const promise = provider.initialize()
