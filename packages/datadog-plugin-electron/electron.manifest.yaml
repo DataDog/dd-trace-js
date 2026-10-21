@@ -1,0 +1,13 @@
+_v: 1
+name: electron
+display_name: Electron
+description: Instruments Electron HTTP requests and inter-process message sending, receiving, and handling between main
+  and renderer processes.
+packages:
+- name: electron
+category:
+- http.client
+- messaging.consumer
+- messaging.producer
+systems: []
+creation_date: '2026-05-13'
