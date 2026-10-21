@@ -2,11 +2,8 @@
 
 const { isDeepStrictEqual } = require('node:util')
 
+const { VALID_PROPAGATION_STYLES } = require('../config/parsers')
 const { getLogLevel } = require('../log/writer')
-
-const SUPPORTED_PROPAGATORS = new Set([
-  'datadog', 'tracecontext', 'b3', 'b3 single header', 'b3multi', 'baggage', 'none',
-])
 
 /**
  * @typedef {Readonly<{
@@ -63,7 +60,7 @@ function startupConfig (config, rules, pipelines = {}) {
     const { inject, extract } = config.tracePropagationStyle
     if (config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'continue' &&
         inject.length === extract.length &&
-        inject.every((name, i) => name === extract[i] && SUPPORTED_PROPAGATORS.has(name))) {
+        inject.every((name, i) => name === extract[i] && VALID_PROPAGATION_STYLES.has(name))) {
       const propagators = inject.filter(name => name !== 'none')
         .map(name => name === 'b3 single header' ? 'b3' : name)
       out.OTEL_PROPAGATORS = propagators.join(',') || 'none'
