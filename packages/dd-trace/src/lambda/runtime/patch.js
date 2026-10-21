@@ -57,6 +57,7 @@ const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
 const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 
 // Observe the shim's selected completion Promise inside the invocation span's async scope.
+// The npm package keeps dist/; Lambda layer builds place its contents directly in the package root.
 addHook({ name: 'datadog-lambda-js', file: 'dist/utils/handler.js' }, patchPromisifiedHandlerModule)
 addHook({ name: 'datadog-lambda-js', file: 'utils/handler.js' }, patchPromisifiedHandlerModule)
 
