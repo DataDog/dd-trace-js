@@ -490,7 +490,8 @@ for (const version of versions) {
     })
 
     describe('failure videos', () => {
-      const it = createScenarioIt(global.it, 1)
+      const it = createScenarioIt(global.it, concurrency)
+      const serialIt = createScenarioIt(global.it, 1)
       const videoEnv = { DD_TEST_FAILURE_VIDEOS_ENABLED: 'true', DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false' }
 
       before(() => {
@@ -500,7 +501,7 @@ for (const version of versions) {
 
       for (const framework of ['mocha', 'jasmine']) {
         for (const [classic, multiremote] of [[true, false], [false, false], [true, true]]) {
-          const browserTest = process.env.WEBDRIVERIO_REAL_BROWSER === 'true' ? it : it.skip
+          const browserTest = process.env.WEBDRIVERIO_REAL_BROWSER === 'true' ? serialIt : serialIt.skip
           const protocol = multiremote ? 'Classic multiremote with frozen capabilities' : classic ? 'Classic' : 'BiDi'
           browserTest(`records playable ${framework} video in real Chrome (${protocol})`, async () => {
             await runScenario('videosBrowser', 0, ({ media, tests }) => {
@@ -554,7 +555,7 @@ for (const version of versions) {
         }
       }
 
-      const browserTest = process.env.WEBDRIVERIO_REAL_BROWSER === 'true' ? it : it.skip
+      const browserTest = process.env.WEBDRIVERIO_REAL_BROWSER === 'true' ? serialIt : serialIt.skip
       for (const retry of [false, true]) {
         browserTest(`waits for final Chrome captures without teardown hooks (retry=${retry})`, async () => {
           await runScenario('videosBrowserNoHooks', 0, ({ media, tests }) => {
