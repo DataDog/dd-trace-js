@@ -14,6 +14,7 @@ const {
   getKafkaMessageSize,
   getTopicEdgeTag,
 } = require('../src/utils')
+const { getSizeOrZero } = require('../../dd-trace/src/datastreams')
 
 /** @param {Record<string, string | string[]> | null} source */
 const nullPrototype = (source) => source && Object.assign(Object.create(null), source)
@@ -154,6 +155,79 @@ describe('getKafkaMessageSize', () => {
       assert.strictEqual(getKafkaMessageSize(message), expected)
     })
   }
+
+  describe('header key size memo', () => {
+    // The size formula without the header key memo or the inline value fast path.
+    function referenceSize ({ key, value, headers }) {
+      let size = getSizeOrZero(key) + getSizeOrZero(value)
+      if (headers === undefined || headers === null) return size
+      if (Array.isArray(headers)) return size + getSizeOrZero(headers)
+      for (const headerKey of Object.keys(headers)) {
+        const headerValue = headers[headerKey]
+        const keySize = Buffer.byteLength(headerKey, 'utf8')
+        size += (Array.isArray(headerValue) ? keySize * headerValue.length : keySize) + getSizeOrZero(headerValue)
+      }
+      return size
+    }
+
+    const messages = [
+      ['string key and value', { key: 'key', value: 'value' }],
+      ['Buffer key and value', { key: Buffer.from('k'), value: Buffer.from('vv') }],
+      ['ArrayBuffer key and value', { key: new ArrayBuffer(3), value: new ArrayBuffer(5) }],
+      ['Uint8Array key and value', { key: new Uint8Array([1, 2]), value: new Uint8Array([3, 4, 5]) }],
+      ['number key and value', { key: 42, value: 1234 }],
+      ['null key and value', { key: null, value: null }],
+      ['undefined key and value', {}],
+      ['non-ASCII string key and value', { key: 'clé', value: '\u{1F600}' }],
+      ['lone surrogate value', { key: 'k', value: '\uD800' }],
+      [
+        'string, Buffer, undefined, number and null header values',
+        { headers: { text: 'abc', binary: Buffer.from([1, 2]), missing: undefined, count: 7, empty: null } },
+      ],
+      [
+        'repeated header values',
+        { key: 'k', headers: { repeated: ['a', Buffer.from('bc'), undefined], none: [] } },
+      ],
+      [
+        'non-ASCII header keys',
+        { headers: { clé: 'v', '\u{1F600}': Buffer.from('v'), '\uD800': 'v', ключ: ['a', 'b'] } },
+      ],
+      ['native header list', { key: 'k', headers: [{ clé: 'text' }, { 'x-key': Buffer.from('abc') }, null] }],
+      ['empty native header list', { key: 'k', headers: [] }],
+      ['null headers', { key: 'k', headers: null }],
+    ]
+
+    for (const [name, message] of messages) {
+      it(`matches the reference formula for ${name}`, () => {
+        assert.strictEqual(getKafkaMessageSize(message), referenceSize(message))
+      })
+    }
+
+    it('returns the same size when the same message is sized twice', () => {
+      const message = { key: 'key', value: 'value', headers: { traceparent: 'abc', 'x-datadog-trace-id': '123' } }
+      const first = getKafkaMessageSize(message)
+      assert.strictEqual(getKafkaMessageSize(message), first)
+    })
+
+    it('stays correct after more than 1000 distinct header keys evicted the memo', () => {
+      const distinctKeys = Array.from({ length: 1500 }, (_, index) => `header-key-${index}-\u00e9`)
+      const messagesWithManyKeys = []
+      for (let start = 0; start < distinctKeys.length; start += 10) {
+        const headers = {}
+        for (const headerKey of distinctKeys.slice(start, start + 10)) {
+          headers[headerKey] = headerKey.length % 2 ? 'v' : ['a', 'b']
+        }
+        messagesWithManyKeys.push({ key: 'k', value: 'v', headers })
+      }
+
+      for (const message of messagesWithManyKeys) {
+        assert.strictEqual(getKafkaMessageSize(message), referenceSize(message))
+      }
+      for (const message of messagesWithManyKeys.slice(0, 20)) {
+        assert.strictEqual(getKafkaMessageSize(message), referenceSize(message))
+      }
+    })
+  })
 })
 
 describe('edge tag helpers', () => {

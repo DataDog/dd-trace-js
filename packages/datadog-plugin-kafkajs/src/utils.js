@@ -57,6 +57,37 @@ function convertToTextMap (bufferMap) {
   return textMap
 }
 
+const MAX_HEADER_KEY_SIZES = 1000
+
+/** @type {Map<string, number>} */
+const headerKeySizes = new Map()
+
+/**
+ * Header keys repeat on every message and the native `byteLength` call dominates sizing, so memoize it per key.
+ *
+ * @param {string} headerKey
+ */
+function getHeaderKeySize (headerKey) {
+  let size = headerKeySizes.get(headerKey)
+  if (size === undefined) {
+    if (headerKeySizes.size >= MAX_HEADER_KEY_SIZES) headerKeySizes.clear()
+    size = Buffer.byteLength(headerKey)
+    headerKeySizes.set(headerKey, size)
+  }
+  return size
+}
+
+/**
+ * Handles the two hot shapes inline and defers to `getSizeOrZero` for every other type.
+ *
+ * @param {unknown} value
+ */
+function getValueSize (value) {
+  if (typeof value === 'string') return Buffer.byteLength(value)
+  if (Buffer.isBuffer(value)) return value.length
+  return getSizeOrZero(value)
+}
+
 /**
  * A KafkaJS header value array becomes one wire record per element, so its key
  * counts once per value. A native header array already holds one record per
@@ -67,14 +98,16 @@ function convertToTextMap (bufferMap) {
  */
 function getKafkaMessageSize (message) {
   const { key, value, headers } = message
-  let size = getSizeOrZero(key) + getSizeOrZero(value)
+  let size = getValueSize(key) + getValueSize(value)
   if (headers === undefined || headers === null) return size
   if (Array.isArray(headers)) return size + getSizeOrZero(headers)
 
   for (const headerKey of Object.keys(headers)) {
     const headerValue = headers[headerKey]
-    const keySize = Buffer.byteLength(headerKey, 'utf8')
-    size += (Array.isArray(headerValue) ? keySize * headerValue.length : keySize) + getSizeOrZero(headerValue)
+    const keySize = getHeaderKeySize(headerKey)
+    size += Array.isArray(headerValue)
+      ? keySize * headerValue.length + getSizeOrZero(headerValue)
+      : keySize + getValueSize(headerValue)
   }
   return size
 }
@@ -102,6 +135,8 @@ function createEdgeTagMemo (prefix) {
   }
 }
 
+// Edge tags are built in `Array.prototype.sort()` order (`direction:` < `group:` < `kafka_cluster_id:` < `topic:`
+// < `type:`) so `computePathwayHash` can skip its sort.
 const getTopicEdgeTag = createEdgeTagMemo('topic:')
 const getGroupEdgeTag = createEdgeTagMemo('group:')
 const getClusterIdEdgeTag = createEdgeTagMemo('kafka_cluster_id:')

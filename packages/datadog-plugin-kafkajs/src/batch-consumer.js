@@ -46,10 +46,16 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
       if (!this.config.dsmEnabled) continue
       const payloadSize = getKafkaMessageSize(message)
       this.tracer.decodeDataStreamsContext(headers)
-      const edgeTags = ['direction:in', getGroupEdgeTag(groupId), getTopicEdgeTag(topic), 'type:kafka']
-      if (clusterId) {
-        edgeTags.push(getClusterIdEdgeTag(clusterId))
-      }
+      // Sorted order, see utils.js.
+      const edgeTags = clusterId
+        ? [
+            'direction:in',
+            getGroupEdgeTag(groupId),
+            getClusterIdEdgeTag(clusterId),
+            getTopicEdgeTag(topic),
+            'type:kafka',
+          ]
+        : ['direction:in', getGroupEdgeTag(groupId), getTopicEdgeTag(topic), 'type:kafka']
       this.tracer.setCheckpoint(edgeTags, null, payloadSize)
     }
 

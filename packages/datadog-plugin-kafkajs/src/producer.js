@@ -78,11 +78,10 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     for (const message of messages) {
       if (message !== null && typeof message === 'object') {
         const payloadSize = getKafkaMessageSize(message)
-        const edgeTags = ['direction:out', getTopicEdgeTag(topic), 'type:kafka']
-
-        if (clusterId) {
-          edgeTags.push(getClusterIdEdgeTag(clusterId))
-        }
+        // Sorted order, see utils.js.
+        const edgeTags = clusterId
+          ? ['direction:out', getClusterIdEdgeTag(clusterId), getTopicEdgeTag(topic), 'type:kafka']
+          : ['direction:out', getTopicEdgeTag(topic), 'type:kafka']
 
         const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
         if (!disableHeaderInjection) {

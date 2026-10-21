@@ -179,6 +179,53 @@ describe('Plugin', () => {
             }
           })
 
+          describe('edge tag order', () => {
+            let setCheckpointStub
+            let edgeTagsAtCallTime
+
+            beforeEach(() => {
+              edgeTagsAtCallTime = []
+              const setCheckpoint = DataStreamsProcessor.prototype.setCheckpoint
+              setCheckpointStub = sinon.stub(DataStreamsProcessor.prototype, 'setCheckpoint')
+                .callsFake(function (edgeTags, ...rest) {
+                  // computeHash sorts in place, so copy before delegating.
+                  edgeTagsAtCallTime.push([...edgeTags])
+                  return setCheckpoint.call(this, edgeTags, ...rest)
+                })
+            })
+
+            afterEach(() => {
+              setCheckpointStub.restore()
+            })
+
+            /** @param {string} direction */
+            function assertSortedWithClusterId (direction) {
+              const callTags = edgeTagsAtCallTime.filter(edgeTags => edgeTags[0] === direction)
+              assert.ok(callTags.length > 0, `Expected a ${direction} checkpoint`)
+              for (const edgeTags of callTags) {
+                assert.deepStrictEqual(edgeTags, [...edgeTags].sort())
+                assert.ok(edgeTags.some(edgeTag => edgeTag.startsWith('kafka_cluster_id:')), inspect(edgeTags))
+              }
+            }
+
+            it('Should build the produce edge tags already sorted', async () => {
+              await sendMessages(kafka, testTopic, messages)
+              assertSortedWithClusterId('direction:out')
+            })
+
+            for (const handler of ['eachMessage', 'eachBatch']) {
+              it(`Should build the consume (${handler}) edge tags already sorted`, async () => {
+                const consumption = new EventEmitter()
+                await consumer.run({ [handler]: async () => consumption.emit('complete') })
+                await Promise.all([
+                  once(consumption, 'complete'),
+                  sendMessages(kafka, testTopic, messages),
+                ])
+                assertSortedWithClusterId('direction:in')
+              })
+            }
+          })
+
           it('Should set a message payload size when producing a message', async () => {
             const messages = [{ key: 'key1', value: 'test2' }]
             if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
