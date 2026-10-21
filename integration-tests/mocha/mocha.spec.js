@@ -7563,6 +7563,42 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.strictEqual(exitCode, expectedExit, testOutput)
     }
 
+    for (const mode of ['native control', 'annotated ATR', 'unannotated ATR']) {
+      it(`preserves native retry budgets with ${mode}`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true })
+        const env = {
+          EXCLUSION_NO_RETRY: mode === 'unannotated ATR' ? '0' : '1',
+          EXCLUSION_COUNT_ATTEMPTS: '1',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+        }
+        const command = 'node node_modules/mocha/bin/mocha --retries 1' +
+          ' ci-visibility/test-management/test-exclusions-mocha.js'
+        if (mode === 'native control') {
+          childProcess = exec(command, {
+            cwd,
+            env: { ...getCiVisAgentlessConfig(receiver.port), ...env, NODE_OPTIONS: '' },
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+          const [exitCode] = await once(childProcess, 'exit')
+          assert.strictEqual(exitCode, 1, testOutput)
+        } else {
+          await runReviewFixture('test-exclusions-mocha', 1, events => {
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === 'annotated test')
+            assert.ok(attempts.length > 0, testOutput)
+            for (const test of attempts) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(test.meta['test.test_management.no_auto_retry'],
+                mode === 'annotated ATR' ? 'true' : undefined)
+            }
+          }, env, command)
+        }
+        const expectedAttempts = mode === 'unannotated ATR' ? 4 : 2
+        assert.strictEqual((testOutput.match(/exclusion-body-attempt/g) || []).length, expectedAttempts, testOutput)
+      })
+    }
+
     parallelIt('clears annotation observations between parallel runs', async () => {
       receiver.setSettings({ test_management: { enabled: true } })
       receiver.setTestManagementTests({

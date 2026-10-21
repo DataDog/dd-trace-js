@@ -639,6 +639,8 @@ function getOnTestHandler (isMain) {
     restoreRunnableFunction(test)
 
     inheritDatadogPropertiesFromRetriedTest(test)
+    // Mocha 5/6 clones lack _retriedTest, but retain the annotated callback.
+    test._ddTestAnnotations ||= test._ddDeclaredAnnotations || getTestAnnotations(test.fn)
 
     if (isInFailedSuite(test.parent)) {
       recordRetryTrackedAttempt(test)
