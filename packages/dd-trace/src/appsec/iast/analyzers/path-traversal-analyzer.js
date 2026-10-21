@@ -33,7 +33,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
       const fs = storage(APPSEC_FS_STORAGE).getStore()
       const outOfReqOrChild = !fs?.root
 
-      // we could filter out all the nested fs.operations based on store.fs.root
+      // we could filter out all the nested fs.operations based on fs.root
       // but if we spect a store in the context to be present we are going to exclude
       // all out_of_the_request fs.operations
       // AppsecFsPlugin must be enabled

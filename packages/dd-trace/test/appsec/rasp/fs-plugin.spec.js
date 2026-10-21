@@ -242,5 +242,58 @@ describe('AppsecFsPlugin', () => {
         }
       })
     })
+
+    describe('apm:fs:operation with the tracing fs plugin enabled', () => {
+      let fs
+      let tracer
+
+      afterEach(() => agent.close())
+
+      beforeEach(async () => {
+        tracer = await agent.load('fs', undefined, { flushInterval: 1 })
+        fs = require('fs')
+      })
+
+      function assertBothPluginsTrackOperation () {
+        const roots = []
+        const onStart = () => {
+          roots.push(storage(APPSEC_FS_STORAGE).getStore()?.root)
+        }
+
+        const promise = agent.assertSomeTraces(traces => {
+          const parent = traces[0].find(span => span.name === 'parent')
+          const readFileSpan = traces[0].find(span => span.resource === 'readFileSync')
+
+          assertObjectContains(readFileSpan, { name: 'fs.operation', parent_id: parent.span_id })
+        })
+
+        try {
+          storage(APPSEC_FS_STORAGE).enterWith(undefined)
+
+          opStartCh.subscribe(onStart)
+
+          tracer.trace('parent', () => {
+            fs.readFileSync(path.join(__dirname, 'fs-plugin.spec.js'))
+          })
+        } finally {
+          opStartCh.unsubscribe(onStart)
+        }
+
+        assert.deepStrictEqual(roots, [true, false, false, false])
+
+        return promise
+      }
+
+      it('should keep its state when enabled before the tracing fs plugin', () => {
+        return assertBothPluginsTrackOperation()
+      })
+
+      it('should keep its state when enabled after the tracing fs plugin', () => {
+        appsecFsPlugin.disable()
+        appsecFsPlugin.enable()
+
+        return assertBothPluginsTrackOperation()
+      })
+    })
   })
 })
