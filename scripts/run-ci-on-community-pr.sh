@@ -103,12 +103,14 @@ git worktree add --detach "$WORKTREE_DIR"
 cd "$WORKTREE_DIR"
 
 git fetch origin
+TEMP_BRANCH_OID=$(git ls-remote origin "refs/heads/$TEMP_BRANCH" | cut -f1)
 gh pr checkout "$PR_ID" --repo DataDog/dd-trace-js --force --detach
 if [ "$SIGN_COMMITS" = true ]; then
   BASE_COMMIT=$(gh pr view "$PR_ID" --repo DataDog/dd-trace-js --json baseRefOid --jq '.baseRefOid')
   git rebase --force-rebase --gpg-sign "$BASE_COMMIT"
 fi
-git push --force-with-lease origin "HEAD:refs/heads/$TEMP_BRANCH"
+git push --force-with-lease="refs/heads/$TEMP_BRANCH:$TEMP_BRANCH_OID" \
+  origin "HEAD:refs/heads/$TEMP_BRANCH"
 
 if [ -z "$EXISTING_TEMP_BRANCH" ]; then
   gh pr create \
