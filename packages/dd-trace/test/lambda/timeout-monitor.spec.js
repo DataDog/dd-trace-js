@@ -165,6 +165,96 @@ describe('Lambda timeout monitor', () => {
     })
   }
 
+  describe('numeric timer handles', () => {
+    let setTimeoutStub
+    let clearTimeoutStub
+
+    beforeEach(() => {
+      const setTimeout = global.setTimeout
+      const clearTimeout = global.clearTimeout
+      const timers = new Map()
+      let nextId = 0
+      setTimeoutStub = sinon.stub(global, 'setTimeout').callsFake((...args) => {
+        const id = nextId++
+        timers.set(id, setTimeout(...args))
+        return id
+      })
+      clearTimeoutStub = sinon.stub(global, 'clearTimeout').callsFake(id => {
+        clearTimeout(timers.get(id))
+        timers.delete(id)
+      })
+    })
+
+    afterEach(() => {
+      setTimeoutStub.restore()
+      clearTimeoutStub.restore()
+    })
+
+    for (const outcome of ['return', 'throw', 'fulfill', 'reject', 'callback', 'context', 'beforeExit']) {
+      it(`cleans up timer ID zero on ${outcome} completion`, async () => {
+        const result = { ok: true }
+        const error = new Error('user failure')
+        let complete = notCaptured
+        context.done = () => result
+        globalThis[BEFORE_EXIT] = () => result
+        const handlers = {
+          return: () => result,
+          throw: () => { throw error },
+          fulfill: () => Promise.resolve(result),
+          reject: () => Promise.reject(error),
+          callback: (_event, _context, cb) => { complete = cb },
+          context: () => { complete = () => context.done() },
+          beforeExit: () => { complete = () => globalThis[BEFORE_EXIT]() },
+        }
+        const handler = datadog(handlers[outcome])
+        const invoke = () => handler({}, context, outcome === 'callback' ? () => result : undefined)
+        if (outcome === 'throw') assert.throws(invoke, candidate => candidate === error)
+        else if (outcome === 'reject') await assert.rejects(invoke(), candidate => candidate === error)
+        else if (['callback', 'context', 'beforeExit'].includes(outcome)) {
+          assert.strictEqual(invoke(), undefined)
+          assert.strictEqual(clock.countTimers(), 1)
+          assert.strictEqual(complete(null, result), result)
+        } else assert.strictEqual(await invoke(), result)
+        sinon.assert.calledOnceWithExactly(clearTimeoutStub, 0)
+        assert.strictEqual(clock.countTimers(), 0)
+        clock.tick(100)
+        sinon.assert.notCalled(killAll)
+        sinon.assert.notCalled(span.addTags)
+      })
+    }
+
+    it('flushes a pending invocation with timer ID zero at its deadline', () => {
+      const handler = datadog(() => new Promise(() => {}))
+      handler({}, context)
+      clock.tick(74)
+      sinon.assert.notCalled(killAll)
+      clock.tick(1)
+      sinon.assert.calledOnce(killAll)
+      assert.strictEqual(span.addTags.firstCall.args[0]['error.type'], 'Impending Timeout')
+      sinon.assert.calledOnce(span.finish)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('does not let timer ID zero from a completed invocation flush a later invocation', async () => {
+      delete globalThis[BEFORE_EXIT]
+      const completed = datadog(() => undefined)
+      completed({}, context)
+      clock.tick(25)
+      let complete = notCaptured
+      const handler = datadog(() => new Promise(resolve => { complete = resolve }))
+      const invocation = handler({}, context)
+      clock.tick(50)
+      sinon.assert.notCalled(killAll)
+      assert.strictEqual(clock.countTimers(), 1)
+      complete('done')
+      assert.strictEqual(await invocation, 'done')
+      assert.deepStrictEqual(clearTimeoutStub.args, [[0], [1]])
+      clock.tick(100)
+      sinon.assert.notCalled(killAll)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+  })
+
   for (const failure of ['getter', 'method', 'non-callable']) {
     for (const outcome of ['return', 'throw', 'reject', 'callback']) {
       it(`continues with the handler ${outcome} when timer unref has a failing ${failure}`, async () => {
@@ -227,6 +317,47 @@ describe('Lambda timeout monitor', () => {
     assert.strictEqual(clock.countTimers(), 0)
     assert.strictEqual(killAll.callCount, 0)
   })
+
+  for (const name of ['done', 'succeed', 'fail', BEFORE_EXIT]) {
+    for (const failure of ['getter', 'method', 'non-callable']) {
+      for (const outcome of ['return', 'throw']) {
+        it(`preserves ${String(name)} ${outcome} with a failing own apply ${failure}`, () => {
+          const target = name === BEFORE_EXIT ? globalThis : context
+          const receiver = {}
+          const args = [null, { ok: true }]
+          const result = {}
+          const error = new Error('completion failure')
+          let calls = 0
+          let applyReads = 0
+          const original = target[name] = function (...received) {
+            calls++
+            assert.strictEqual(this, receiver)
+            assert.deepStrictEqual(received, args)
+            if (outcome === 'throw') throw error
+            return result
+          }
+          const failApply = () => {
+            applyReads++
+            throw new Error('application apply must not run')
+          }
+          if (failure === 'getter') Object.defineProperty(original, 'apply', { get: failApply })
+          else original.apply = failure === 'method' ? failApply : 1
+          const handler = datadog(() => undefined)
+          handler({}, context)
+          assert.strictEqual(clock.countTimers(), 1)
+          const invoke = () => Reflect.apply(target[name], receiver, args)
+          if (outcome === 'throw') assert.throws(invoke, candidate => candidate === error)
+          else assert.strictEqual(invoke(), result)
+          assert.strictEqual(calls, 1)
+          assert.strictEqual(applyReads, 0)
+          assert.strictEqual(target[name], original)
+          assert.strictEqual(clock.countTimers(), 0)
+          clock.tick(100)
+          sinon.assert.notCalled(killAll)
+        })
+      }
+    }
+  }
 
   describe('legacy callback completion', () => {
     let callback

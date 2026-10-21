@@ -27,6 +27,7 @@ function patchDatadogLambdaHandler (datadogHandler) {
 /**
  * Wraps datadog-lambda-js's promisifiedHandler factory, which wraps the customer's handler.
  * The timeout monitor surrounds that adapter to observe the completion Promise selected by datadog-lambda-js.
+ * Legacy RIC completes returned Promises through context.succeed without waiting for event-loop drain.
  *
  * @param {object} moduleExports
  */

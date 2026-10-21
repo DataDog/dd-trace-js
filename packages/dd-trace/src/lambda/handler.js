@@ -82,7 +82,7 @@ exports.datadog = function datadog (lambdaHandler) {
     if (!context || monitoredContexts.has(context)) return Reflect.apply(lambdaHandler, this, args)
 
     const timeout = checkTimeout(context)
-    if (!timeout) return Reflect.apply(lambdaHandler, this, args)
+    if (timeout === undefined) return Reflect.apply(lambdaHandler, this, args)
 
     let completed = false
     let callbackPending = false
@@ -227,7 +227,7 @@ function wrapCompletion (target, name, clear, completionMethods) {
 function onCompletion (callback, clear) {
   return function (...args) {
     clear()
-    return callback.apply(this, args)
+    return Reflect.apply(callback, this, args)
   }
 }
 
