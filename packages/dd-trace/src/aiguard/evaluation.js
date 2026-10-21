@@ -1,13 +1,11 @@
 'use strict'
 
 const {
-  BASE_SERVICE,
   ERROR,
   HTTP_CLIENT_IP,
   HTTP_USERAGENT,
   MANUAL_DROP,
   MANUAL_KEEP,
-  MEASURED,
   NETWORK_CLIENT_IP,
   RESOURCE_NAME,
   SAMPLING_PRIORITY,
@@ -19,7 +17,7 @@ const createRfdc = require('../../../../vendor/dist/rfdc')
 const clone = createRfdc({ proto: false, circles: false })
 const { USER_ID, USER_SESSION_ID } = require('../appsec/addresses')
 const { getActiveRequest } = require('../appsec/store')
-const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, HOSTNAME_KEY, ORIGIN_KEY } = require('../constants')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, PROCESS_ID, SAMPLING_PRIORITY_KEY } = require('../constants')
 const log = require('../log')
 const { keepTrace } = require('../priority_sampler')
 const { extractIp } = require('../plugins/util/ip_extractor')
@@ -169,7 +167,8 @@ const SERVICE_ENTRY_TAG_MAPPINGS = [
 ]
 
 // Backend extra tags never override what the tracer computes itself, nor keys that control the
-// span or its trace (sampling, service, resource, error state).
+// span or its trace (sampling, service, resource, error state). Internal _dd keys are covered by
+// isReservedExtraTag instead of being listed here.
 const RESERVED_EXTRA_TAGS = new Set([
   TAGS.ACTION_TAG_KEY,
   TAGS.REASON_TAG_KEY,
@@ -186,19 +185,31 @@ const RESERVED_EXTRA_TAGS = new Set([
   RESOURCE_NAME,
   SPAN_TYPE,
   SPAN_KIND,
-  MEASURED,
-  BASE_SERVICE,
   ERROR,
   ERROR_TYPE,
   ERROR_MESSAGE,
   ERROR_STACK,
-  HOSTNAME_KEY,
-  ORIGIN_KEY,
+  SAMPLING_PRIORITY_KEY,
+  PROCESS_ID,
   'analytics.event',
+  'language',
+  'runtime-id',
   'service.version',
   'version',
   'env',
 ])
+
+/**
+ * Returns whether a backend extra tag key must not be set on the span.
+ *
+ * @param {string} key
+ */
+function isReservedExtraTag (key) {
+  // _dd is the tracer's internal namespace (_dd.*, _dd1.*): the span formatter writes sampling,
+  // top-level and propagation keys there and a span tag with the same key would overwrite them.
+  // This is not an AI Guard namespace filter; the backend owns ai_guard.* keys.
+  return key.startsWith('_dd') || RESERVED_EXTRA_TAGS.has(key)
+}
 
 const RESERVED_EXTRA_META_STRUCT_KEYS = new Set(['messages', 'attack_categories', 'sds', 'tag_probs'])
 
@@ -245,7 +256,7 @@ function applyExtraTags (span, metaStruct, extraTags) {
       continue
     }
 
-    if (RESERVED_EXTRA_TAGS.has(key)) {
+    if (isReservedExtraTag(key)) {
       log.debug('AI Guard: ignoring reserved extra tag %s', key)
     } else {
       span.setTag(key, tagValue)

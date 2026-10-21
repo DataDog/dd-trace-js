@@ -852,6 +852,42 @@ describe('AIGuard SDK', () => {
       })
     })
 
+    it('never overwrites tracer-internal keys written by the span formatter', async () => {
+      mockExtraTags({
+        '_dd.top_level': 0,
+        '_dd.rule_psr': 0.5,
+        '_dd1.sr.eausr': 1,
+        '_dd.p.dm': 'forged',
+        '_dd.tags.process': 'forged',
+        '_dd.custom': 'x',
+        _sampling_priority_v1: 0,
+        process_id: 1,
+        language: 'forged',
+        'runtime-id': 'forged',
+        'dd.custom': 'kept',
+      })
+
+      const result = await aiguard.evaluate(messages)
+
+      assert.strictEqual(result.action, 'ALLOW')
+      await assertSpan(span => {
+        // The SDK span is the root span here, so the formatter writes its root and chunk tags on it.
+        assert.strictEqual(span.parent_id.toString(10), '0')
+        assert.strictEqual(span.metrics['_dd.top_level'], 1)
+        assert.strictEqual(span.metrics._sampling_priority_v1, USER_KEEP)
+        assert.strictEqual(span.metrics.process_id, process.pid)
+        assert.strictEqual(span.meta.language, 'javascript')
+        assert.strictEqual(span.meta['_dd.p.dm'], `-${SAMPLING_MECHANISM_AI_GUARD}`)
+        assert.match(span.meta['_dd.tags.process'], /entrypoint\.name:/)
+        assert.match(span.meta['runtime-id'], /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/)
+        for (const key of ['_dd.rule_psr', '_dd1.sr.eausr', '_dd.custom']) {
+          assert.ok(!Object.hasOwn(span.metrics, key), `Unexpected metric ${key}`)
+          assert.ok(!Object.hasOwn(span.meta, key), `Unexpected tag ${key}`)
+        }
+        assert.strictEqual(span.meta['dd.custom'], 'kept')
+      })
+    })
+
     it('does not add ai_guard.redacted when the redaction kill-switch is off', async () => {
       const disabled = new AIGuard(tracer, {
         ...config,
