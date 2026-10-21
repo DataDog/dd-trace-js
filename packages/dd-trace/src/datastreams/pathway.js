@@ -16,7 +16,11 @@ const log = require('../log')
 const { encodeVarintInto, decodeVarint } = require('./encoding')
 const { writeFnv64LE } = require('./fnv')
 
-const cache = new LRUCache({ max: 500 })
+const MAX_CACHED_PATHWAY_HASHES = 500
+// Hashes with the same bytes can belong to separate stats points. Keep the full tag set in the node key.
+/** @type {Map<string, { nodeHash: Buffer, byParent: Map<string, Buffer> }>} */
+const cache = new Map()
+let cachedPathwayHashes = 0
 const seeds = new LRUCache({ max: 100 })
 const ENTRY_PARENT_HASH = Buffer.alloc(8)
 let nextSeedId = 0
@@ -156,31 +160,51 @@ function computeHash (service, env, edgeTags, parentHash, processTags, container
     }
   }
   const seed = nodeHashSeed(service, env, processTags, containerTagsHash)
-  const key = pathwayCachePrefix(seed, edgeTags.join('\0')) + parentHash.toString('hex')
-  return cache.get(key) ?? cachePathwayHash(key, seed, Buffer.from(hashedEdgeTags(edgeTags), 'utf8'), parentHash)
+  const key = pathwayCacheKey(seed, edgeTags.join('\0'))
+  return cachePathwayHash(key, seed, edgeTags, parentHash)
 }
 
 /**
  * @param {HashSeed} seed
  * @param {string} edgeKey
  */
-function pathwayCachePrefix (seed, edgeKey) {
-  return `${seed.id}\0${edgeKey}\0`
+function pathwayCacheKey (seed, edgeKey) {
+  return `${seed.id}\0${edgeKey}`
 }
 
 /**
  * @param {string} key
  * @param {HashSeed} seed
- * @param {Buffer} tagBytes
+ * @param {string[] | Buffer} tags Sorted edge tags or precomputed HTTP tag bytes.
  * @param {Buffer} parentHash
  */
-function cachePathwayHash (key, seed, tagBytes, parentHash) {
+function cachePathwayHash (key, seed, tags, parentHash) {
+  let entry = cache.get(key)
+  const parentKey = parentHash.toString('latin1')
+  const cached = entry?.byParent.get(parentKey)
+  if (cached !== undefined) return cached
+
+  if (cachedPathwayHashes >= MAX_CACHED_PATHWAY_HASHES) {
+    cache.clear()
+    cachedPathwayHashes = 0
+    entry = undefined
+  }
+
+  if (entry === undefined) {
+    const tagBytes = Array.isArray(tags) ? Buffer.from(hashedEdgeTags(tags), 'utf8') : tags
+    const nodeHash = Buffer.allocUnsafe(8)
+    writeFnv64LE(tagBytes, nodeHash, 0, seed.state)
+    entry = { nodeHash, byParent: new Map() }
+    cache.set(key, entry)
+  }
+
   const pathwayInput = Buffer.alloc(16)
-  writeFnv64LE(tagBytes, pathwayInput, 0, seed.state)
+  entry.nodeHash.copy(pathwayInput, 0)
   parentHash.copy(pathwayInput, 8)
   const value = Buffer.allocUnsafe(8)
   writeFnv64LE(pathwayInput, value, 0)
-  cache.set(key, value)
+  entry.byParent.set(parentKey, value)
+  cachedPathwayHashes++
   return value
 }
 
@@ -192,21 +216,20 @@ function prepareHttpEdgeTags (direction) {
   const edgeKey = edgeTags.join('\0')
   const tagBytes = Buffer.from(edgeTags.join(''), 'utf8')
   let fixedSeed
-  let keyPrefix
+  let key
   let rootHash
 
   fixedEdgeTags.set(edgeTags, (service, env, parentHash, processTags, containerTagsHash) => {
     const seed = nodeHashSeed(service, env, processTags, containerTagsHash)
     if (seed !== fixedSeed) {
       fixedSeed = seed
-      keyPrefix = pathwayCachePrefix(seed, edgeKey)
+      key = pathwayCacheKey(seed, edgeKey)
       rootHash = undefined
     }
     const isRoot = parentHash === ENTRY_PARENT_HASH
     if (isRoot && rootHash !== undefined) return rootHash
 
-    const key = keyPrefix + parentHash.toString('hex')
-    const hash = cache.get(key) ?? cachePathwayHash(key, seed, tagBytes, parentHash)
+    const hash = cachePathwayHash(key, seed, tagBytes, parentHash)
     if (isRoot) rootHash = hash
     return hash
   })

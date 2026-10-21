@@ -397,6 +397,20 @@ describe('computePathwayHash', () => {
       assert.strictEqual(again, first)
     })
 
+    it('recomputes the same hash after the cache fills with distinct parents', () => {
+      const edgeTags = ['direction:in', 'topic:t', 'type:kafka']
+      const parent = u64(0n)
+      const first = computePathwayHash('svc-eviction', 'env', edgeTags, parent)
+
+      for (let index = 1n; index <= 500n; index++) {
+        computePathwayHash('svc-eviction', 'env', edgeTags, u64(index))
+      }
+
+      const recomputed = computePathwayHash('svc-eviction', 'env', edgeTags, parent)
+      assert.notStrictEqual(recomputed, first)
+      assert.deepStrictEqual(recomputed, first)
+    })
+
     it('serves a cached hash only for the same process tags and container tags hash', () => {
       const processTags = 'entrypoint.basedir:src,entrypoint.name:server,entrypoint.type:script,' +
         'entrypoint.workdir:orders,package.json.name:orders-api,svc.user:true'
