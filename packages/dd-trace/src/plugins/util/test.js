@@ -1556,8 +1556,7 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
   let updated = false
   for (const [statementId, statementLocation] of Object.entries(fileCoverage.data.statementMap)) {
     const startLine = statementLocation?.start?.line
-    if (!isLineCoveredByBitmap(skippedBitmap, startLine)) continue
-    if (fileCoverage.data.s[statementId] > 0) continue
+    if (!isLineCoveredByBitmap(skippedBitmap, startLine) || fileCoverage.data.s[statementId] > 0) continue
 
     fileCoverage.data.s[statementId] = 1
     updated = true
@@ -2256,8 +2255,7 @@ function recordTestManagementExecution (execution, executions = testManagementEx
  * }} execution
  */
 function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
-  if (!execution?.testName) return
-  if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
+  if (!execution?.testName || getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
 
   const { testSuite, testName, status, isDisabled, isQuarantined } = execution
   const identity = getTestOptimizationIdentity(testSuite, testName)
