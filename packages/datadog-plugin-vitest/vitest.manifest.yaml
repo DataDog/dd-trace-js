@@ -1,0 +1,12 @@
+_v: 1
+name: vitest
+display_name: Vitest
+description: Instruments Vitest test, suite, module, and session lifecycles for Test Optimization, including results,
+  code coverage, test skipping, retries, test management, and failed-test replay.
+packages:
+- name: tinypool
+- name: vitest
+category:
+- test.execution
+systems: []
+creation_date: '2024-06-28'

@@ -78,6 +78,7 @@ const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   'packages/dd-trace/src/config/stable.js',
   'packages/dd-trace/src/debugger/index.js',
   'packages/dd-trace/src/log/index.js',
+  'packages/dd-trace/src/plugins/util/test.js', // Reads DDTest's artifact locator and its existing alias.
   'packages/dd-trace/src/telemetry/session-propagation.js',
 ]
 

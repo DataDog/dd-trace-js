@@ -37,7 +37,7 @@ describe('Dynamic Instrumentation', function () {
         requestType: 'generate-metrics',
         timeout: METRICS_FLUSH_INTERVAL_MS * 2,
         resolveAtFirstSuccess: true,
-        namespace: 'live_debugger',
+        namespace: 'debugger',
       })
 
       const firstResult = once(t.agent, 'debugger-input')

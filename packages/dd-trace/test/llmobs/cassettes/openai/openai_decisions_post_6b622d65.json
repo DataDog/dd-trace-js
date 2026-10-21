@@ -1,0 +1,58 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/decisions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "application/json",
+      "User-Agent": "OpenAI/JS 7.30.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "7.30.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.23.2",
+      "Content-Type": "application/json",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "440"
+    },
+    "body": "{\"model\":\"gpt-6-luna\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Classify this image.\"},{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4IyeHFTEMLQkAid1GAXiz9RcAAAAASUVORK5CYII=\"}]}],\"questions\":[{\"type\":\"choice\",\"name\":\"color\",\"instructions\":\"What is the dominant color of the image?\",\"choices\":[{\"value\":\"red\"},{\"value\":\"green\"},{\"value\":\"blue\"}]}]}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Fri, 09 Oct 2026 17:25:23 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "180000000",
+      "x-ratelimit-remaining-requests": "29987",
+      "x-ratelimit-remaining-tokens": "179973414",
+      "x-ratelimit-reset-requests": "26ms",
+      "x-ratelimit-reset-tokens": "8ms",
+      "vary": "origin, access-control-request-method, access-control-request-headers",
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "x-request-id,retry-after,server-timing-total, CF-Ray",
+      "server-timing-total": "47.427",
+      "openai-processing-ms": "47",
+      "x-request-id": "req_3d3c1e9ea083480dbb2332910bfebc1b",
+      "x-openai-proxy-wasm": "v0.1",
+      "Server": "cloudflare",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "__cf_bm=FOU3qeHiBqPHg3chI9znhQ6XtU6JG193lD5UlzL9880-1791566723.1148605-1.0.1.1-dwIIh86i2bv8E_MsJqgmimwjp19JXbIKsYE2sB696gm8NdBAxi8j.MjbJ2KHIa0H5NtL1yMOjrKpKwHmp5M28MfiDcFGP3MMOmgonsUz3Xv6hSk0Zrj4vl91HaFVldIo; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Fri, 09 Oct 2026 17:55:23 GMT",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Encoding": "gzip",
+      "CF-RAY": "a47f15937e17aff6-EWR",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\"model\":\"gpt-6-luna\",\"answers\":[{\"type\":\"choice\",\"name\":\"color\",\"choice\":\"red\",\"probabilities\":[{\"value\":\"red\",\"probability\":1.0},{\"value\":\"green\",\"probability\":0.0},{\"value\":\"blue\",\"probability\":0.0}],\"confidence\":1.0}],\"usage\":{\"input_tokens\":121,\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":121}}"
+  }
+}

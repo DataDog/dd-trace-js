@@ -62,6 +62,8 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'FUNCTION_TARGET',
   'FUNCTIONS_EXTENSION_VERSION',
   'FUNCTIONS_WORKER_RUNTIME',
+  // azure container app detection (azure-functions plugin aas/aca prefix)
+  'CONTAINER_APP_NAME',
   'GCP_PROJECT',
   'K_SERVICE',
   'VERCEL',

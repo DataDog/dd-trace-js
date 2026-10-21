@@ -4,7 +4,7 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 <h2 id="overview">Overview</h2>
 
-The module exported by this library is an instance of the [Tracer](./interfaces/tracer.html) class.
+The module exported by this library is an instance of the [Tracer](./interfaces/Tracer.html) class.
 
 <h2 id="agentless-mode">Agentless mode</h2>
 
@@ -23,6 +23,40 @@ best-effort formatted `console.warn` and `console.error` calls made with an acti
 `DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false` to disable this behavior. Set `DD_LOGS_OTEL_ENABLED=true` to use the
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 `DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
+
+<h2 id="feature-flag-configuration">Feature Flag Configuration for SSR</h2>
+
+Use `dd-trace/openfeature/rules-based` to fetch rules and serialize configuration for browser initialization.
+These helpers do not initialize the tracer, register a provider, or enable tracking.
+The rules decoder is loaded only when this entrypoint is imported, not by `dd-trace/openfeature`
+or normal tracer or provider imports.
+
+```javascript
+import { fetchRulesConfiguration, configurationToString } from 'dd-trace/openfeature/rules-based.js'
+
+export async function getServerSideProps () {
+  const configuration = await fetchRulesConfiguration({
+    distributionChannel: 'client',
+    clientToken: process.env.DD_CLIENT_TOKEN,
+    env: process.env.DD_ENV,
+  })
+
+  return { props: { flagsConfiguration: configurationToString(configuration) } }
+}
+```
+
+The browser can parse `flagsConfiguration` with `configurationFromString` from
+`@datadog/openfeature-browser/rules-based` and pass the result to `DatadogCoreProvider.setConfiguration()`.
+Use your framework's safe SSR data serialization; do not interpolate the string directly into HTML or a script.
+
+**Only forward client-distributed configuration to browsers.** The fetch helper defaults to the `server` distribution
+channel, which requires `apiKey` instead of `clientToken`. Serialization does not remove server-only flags.
+The helper accepts explicit `env`, optional `site`, `timeoutMs` (default 5000), `signal`, and custom `fetch` options;
+it does not inherit tracer configuration or read environment variables automatically.
+Catch `ConfigurationFetchError` to handle loading failures using its `code` and optional HTTP `status`.
+
+Use `require('dd-trace/openfeature/rules-based')` for CommonJS or named imports from
+`dd-trace/openfeature/rules-based.js` for native Node.js ESM.
 
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 
@@ -49,6 +83,40 @@ The worker requires its JavaScript file and dependencies to be available at runt
 file does not automatically include the worker; the Datadog esbuild plugin does not currently package it. Keep `dd-trace`
 external to the bundle with its installed package available. If the worker cannot load, `flagevaluation` track EVP events
 are disabled for that provider and a bounded warning is logged; flag evaluations and existing exposure events continue.
+
+<h3 id="feature-flag-evaluation-telemetry-opt-out">Per-subject Evaluation Telemetry Opt-out</h3>
+
+Enable the context parameter before you first access `tracer.openfeature`:
+
+```javascript
+const tracer = require('dd-trace').init({
+  featureFlags: {
+    enableEvaluationTelemetryOptOutParameter: true
+  }
+})
+const { OpenFeature } = require('@openfeature/server-sdk')
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+const enabled = await OpenFeature.getClient().getBooleanValue('checkout', false, {
+  targetingKey: 'subject-id',
+  dd_evaluation_telemetry_opt_out: true
+})
+```
+
+The option defaults to `false`. The provider captures it at construction.
+Only boolean `true` in the merged `dd_evaluation_telemetry_opt_out` context attribute suppresses new evaluation EVP events,
+OpenTelemetry evaluation metrics, and automatic flag span tags. Strings, numbers, null, missing attributes, and false keep existing behavior.
+You can also enable per-subject opt-out with `DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED=true`.
+Explicit configuration takes precedence over this environment variable, including `false`.
+This enables the context parameter; it does not disable evaluation telemetry globally.
+
+The attribute remains available to targeting rules and exposure reporting, whether this option is enabled or disabled.
+Changing it can affect assignments through targeting rules and can produce another exposure under normal deduplication rules.
+
+The telemetry control does not change flag values, variants, reasons, defaults, experiment exposures,
+exposure deduplication, or customer hooks.
+Set the subject attribute before evaluation. Changes from After or Error hooks are not a supported opt-out API.
+Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.
+The option does not change protected/full-data reporting consent or debug logging.
 
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
@@ -103,6 +171,30 @@ tracer.use('openai', {
 <h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-lambda"></h5>
 <h5 id="aws-sdk"></h5>
+
+Amazon Nova 2 Sonic LLM Observability supports `InvokeModelWithBidirectionalStreamCommand` in
+`@aws-sdk/client-bedrock-runtime >=3.785.0` with model `amazon.nova-2-sonic-v1:0`, supplied as a model ID
+or a foundation-model ARN such as `arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-2-sonic-v1:0`.
+Spans use the canonical model ID; the identifier sent to AWS is unchanged. Inference-profile identifiers,
+cross-region prefixes, other model versions (including Nova 2.5 Sonic), and malformed ARNs pass through
+without Nova capture. The integration does not perform model-resolution API calls.
+Initialize the tracer with LLM Observability enabled before loading the AWS SDK. Each logical response
+creates a `nova sonic audio turn` workflow with a `nova sonic response` LLM child and, when timing is
+available, `user speech` and `agent speech` workflow children. Turns inherit the invocation's application
+workflow, if present, and share a conversation session ID.
+
+The LLM child contains transcripts, tool calls/results, token usage, and bounded inline WAV audio.
+Invalid or oversized audio falls back to text without dropping independently valid speech timing.
+Audio-token counts are subsets of the input/output token totals. Input speech offsets select the audio
+clip; time to first audio uses local receipt of `userSpeechEnd` and the first output audio. Output speech
+timing projects PCM playback, including queueing, underrun silence, and interruption cuts; it does not
+measure sound heard at a device. Input is observed as the SDK consumes it, which may precede transmission.
+
+Original Nova Sonic and restarting a different prompt on the same connection are unsupported. On a prompt
+restart, the integration flushes the first prompt and stops capturing that connection. Set
+`tracer.use('aws-sdk', { llmobs: false })` to disable Nova audio/turn capture. Standard Bedrock APM tracing
+for other operations is unaffected.
+
 <h5 id="azure-cosmos"></h5>
 <h5 id="azure-event-hubs"></h5>
 <h5 id="azure-functions"></h5>
@@ -181,99 +273,99 @@ tracer.use('openai', {
 <h5 id="ws"></h5>
 <h3 id="integrations-list">Available Plugins</h3>
 
-* [aerospike](./interfaces/export_.plugins.aerospike.html)
-* [ai](./interfaces/export_.plugins.ai.html)
-* [amqp10](./interfaces/export_.plugins.amqp10.html)
-* [amqplib](./interfaces/export_.plugins.amqplib.html)
-* [anthropic](./interfaces/export_.plugins.anthropic.html)
-* [claude-agent-sdk](./interfaces/export_.plugins.claude_agent_sdk.html)
-* [apollo](./interfaces/export_.plugins.apollo.html)
-* [avsc](./interfaces/export_.plugins.avsc.html)
-* [aws-durable-execution-sdk-js](./interfaces/export_.plugins.aws_durable_execution_sdk_js.html)
-* [aws-lambda](./interfaces/export_.plugins.aws_lambda.html)
-* [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
-* [azure-cosmos](./interfaces/export_.plugins.azure_cosmos.html)
-* [azure-event-hubs](./interfaces/export_.plugins.azure_event_hubs.html)
-* [azure-functions](./interfaces/export_.plugins.azure_functions.html)
-* [azure-service-bus](./interfaces/export_.plugins.azure_service_bus.html)
-* [azure-durable-functions](./interfaces/export_.plugins.azure_durable_functions.html)
-* [browser-bunyan](./interfaces/export_.plugins.browser_bunyan.html)
-* [bullmq](./interfaces/export_.plugins.bullmq.html)
-* [bunyan](./interfaces/export_.plugins.bunyan.html)
-* [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
-* [child_process](./interfaces/export_.plugins.child_process.html)
-* [confluentinc-kafka-javascript](./interfaces/export_.plugins.confluentinc_kafka_javascript.html)
-* [connect](./interfaces/export_.plugins.connect.html)
-* [couchbase](./interfaces/export_.plugins.couchbase.html)
-* [cucumber](./interfaces/export_.plugins.cucumber.html)
-* [cypress](./interfaces/export_.plugins.cypress.html)
-* [dns](./interfaces/export_.plugins.dns.html)
-* [elasticsearch](./interfaces/export_.plugins.elasticsearch.html)
-* [electron](./interfaces/export_.plugins.electron.html)
-* [express](./interfaces/export_.plugins.express.html)
-* [fastify](./interfaces/export_.plugins.fastify.html)
-* [fetch](./interfaces/export_.plugins.fetch.html)
-* [find-my-way](./interfaces/export_.plugins.find_my_way.html)
-* [fs](./interfaces/export_.plugins.fs.html)
-* [google-cloud-pubsub](./interfaces/export_.plugins.google_cloud_pubsub.html)
-* [google-cloud-vertexai](./interfaces/export_.plugins.google_cloud_vertexai.html)
-* [google-genai](./interfaces/export_.plugins.google_genai.html)
-* [graphql](./interfaces/export_.plugins.graphql.html)
-* [grpc](./interfaces/export_.plugins.grpc.html)
-* [hapi](./interfaces/export_.plugins.hapi.html)
-* [hono](./interfaces/export_.plugins.hono.html)
-* [http](./interfaces/export_.plugins.http.html)
-* [http2](./interfaces/export_.plugins.http2.html)
-* [ioredis](./interfaces/export_.plugins.ioredis.html)
-* [iovalkey](./interfaces/export_.plugins.iovalkey.html)
-* [jest](./interfaces/export_.plugins.jest.html)
-* [kafkajs](./interfaces/export_.plugins.kafkajs.html)
-* [koa](./interfaces/export_.plugins.koa.html)
-* [langchain](./interfaces/export_.plugins.langchain.html)
-* [langgraph](./interfaces/export_.plugins.langgraph.html)
-* [mariadb](./interfaces/export_.plugins.mariadb.html)
-* [memcached](./interfaces/export_.plugins.memcached.html)
-* [microgateway-core](./interfaces/export_.plugins.microgateway_core.html)
-* [mocha](./interfaces/export_.plugins.mocha.html)
-* [modelcontextprotocol-sdk](./interfaces/export_.plugins.modelcontextprotocol_sdk.html)
-* [moleculer](./interfaces/export_.plugins.moleculer.html)
-* [mongodb-core](./interfaces/export_.plugins.mongodb_core.html)
-* [mongoose](./interfaces/export_.plugins.mongoose.html)
-* [mysql](./interfaces/export_.plugins.mysql.html)
-* [mysql2](./interfaces/export_.plugins.mysql2.html)
-* [nats](./interfaces/export_.plugins.nats.html)
-* [net](./interfaces/export_.plugins.net.html)
-* [next](./interfaces/export_.plugins.next.html)
-* [nyc](./interfaces/export_.plugins.nyc.html)
-* [openai](./interfaces/export_.plugins.openai.html)
-* [openai-agents](./interfaces/export_.plugins.openai_agents.html)
-* [opensearch](./interfaces/export_.plugins.opensearch.html)
-* [oracledb](./interfaces/export_.plugins.oracledb.html)
-* [pg](./interfaces/export_.plugins.pg.html)
-* [pino](./interfaces/export_.plugins.pino.html)
-* [playwright](./interfaces/export_.plugins.playwright.html)
-* [postgres](./interfaces/export_.plugins.postgres.html)
-* [prisma](./interfaces/export_.plugins.prisma.html)
-* [protobufjs](./interfaces/export_.plugins.protobufjs.html)
-* [redis](./interfaces/export_.plugins.redis.html)
-* [restify](./interfaces/export_.plugins.restify.html)
-* [rhea](./interfaces/export_.plugins.rhea.html)
-* [router](./interfaces/export_.plugins.router.html)
-* [selenium](./interfaces/export_.plugins.selenium.html)
-* [sharedb](./interfaces/export_.plugins.sharedb.html)
-* [supabase](./interfaces/export_.plugins.supabase.html)
-* [tedious](./interfaces/export_.plugins.tedious.html)
-* [undici](./interfaces/export_.plugins.undici.html)
-* [vitest](./interfaces/export_.plugins.vitest.html)
-* [web](./interfaces/export_.plugins.web.html)
-* [winston](./interfaces/export_.plugins.winston.html)
-* [ws](./interfaces/export_.plugins.ws.html)
+* [aerospike](./interfaces/plugins.aerospike.html)
+* [ai](./interfaces/plugins.ai.html)
+* [amqp10](./interfaces/plugins.amqp10.html)
+* [amqplib](./interfaces/plugins.amqplib.html)
+* [anthropic](./interfaces/plugins.anthropic.html)
+* [claude-agent-sdk](./interfaces/plugins.claude_agent_sdk.html)
+* [apollo](./interfaces/plugins.apollo.html)
+* [avsc](./interfaces/plugins.avsc.html)
+* [aws-durable-execution-sdk-js](./interfaces/plugins.aws_durable_execution_sdk_js.html)
+* [aws-lambda](./interfaces/plugins.aws_lambda.html)
+* [aws-sdk](./interfaces/plugins.aws_sdk.html)
+* [azure-cosmos](./interfaces/plugins.azure_cosmos.html)
+* [azure-event-hubs](./interfaces/plugins.azure_event_hubs.html)
+* [azure-functions](./interfaces/plugins.azure_functions.html)
+* [azure-service-bus](./interfaces/plugins.azure_service_bus.html)
+* [azure-durable-functions](./interfaces/plugins.azure_durable_functions.html)
+* [browser-bunyan](./interfaces/plugins.browser_bunyan.html)
+* [bullmq](./interfaces/plugins.bullmq.html)
+* [bunyan](./interfaces/plugins.bunyan.html)
+* [cassandra-driver](./interfaces/plugins.cassandra_driver.html)
+* [child_process](./interfaces/plugins.child_process.html)
+* [confluentinc-kafka-javascript](./interfaces/plugins.confluentinc_kafka_javascript.html)
+* [connect](./interfaces/plugins.connect.html)
+* [couchbase](./interfaces/plugins.couchbase.html)
+* [cucumber](./interfaces/plugins.cucumber.html)
+* [cypress](./interfaces/plugins.cypress.html)
+* [dns](./interfaces/plugins.dns.html)
+* [elasticsearch](./interfaces/plugins.elasticsearch.html)
+* [electron](./interfaces/plugins.electron.html)
+* [express](./interfaces/plugins.express.html)
+* [fastify](./interfaces/plugins.fastify.html)
+* [fetch](./interfaces/plugins.fetch.html)
+* [find-my-way](./interfaces/plugins.find_my_way.html)
+* [fs](./interfaces/plugins.fs.html)
+* [google-cloud-pubsub](./interfaces/plugins.google_cloud_pubsub.html)
+* [google-cloud-vertexai](./interfaces/plugins.google_cloud_vertexai.html)
+* [google-genai](./interfaces/plugins.google_genai.html)
+* [graphql](./interfaces/plugins.graphql.html)
+* [grpc](./interfaces/plugins.grpc.html)
+* [hapi](./interfaces/plugins.hapi.html)
+* [hono](./interfaces/plugins.hono.html)
+* [http](./interfaces/plugins.http.html)
+* [http2](./interfaces/plugins.http2.html)
+* [ioredis](./interfaces/plugins.ioredis.html)
+* [iovalkey](./interfaces/plugins.iovalkey.html)
+* [jest](./interfaces/plugins.jest.html)
+* [kafkajs](./interfaces/plugins.kafkajs.html)
+* [koa](./interfaces/plugins.koa.html)
+* [langchain](./interfaces/plugins.langchain.html)
+* [langgraph](./interfaces/plugins.langgraph.html)
+* [mariadb](./interfaces/plugins.mariadb.html)
+* [memcached](./interfaces/plugins.memcached.html)
+* [microgateway-core](./interfaces/plugins.microgateway_core.html)
+* [mocha](./interfaces/plugins.mocha.html)
+* [modelcontextprotocol-sdk](./interfaces/plugins.modelcontextprotocol_sdk.html)
+* [moleculer](./interfaces/plugins.moleculer.html)
+* [mongodb-core](./interfaces/plugins.mongodb_core.html)
+* [mongoose](./interfaces/plugins.mongoose.html)
+* [mysql](./interfaces/plugins.mysql.html)
+* [mysql2](./interfaces/plugins.mysql2.html)
+* [nats](./interfaces/plugins.nats.html)
+* [net](./interfaces/plugins.net.html)
+* [next](./interfaces/plugins.next.html)
+* [nyc](./interfaces/plugins.nyc.html)
+* [openai](./interfaces/plugins.openai.html)
+* [openai-agents](./interfaces/plugins.openai_agents.html)
+* [opensearch](./interfaces/plugins.opensearch.html)
+* [oracledb](./interfaces/plugins.oracledb.html)
+* [pg](./interfaces/plugins.pg.html)
+* [pino](./interfaces/plugins.pino.html)
+* [playwright](./interfaces/plugins.playwright.html)
+* [postgres](./interfaces/plugins.postgres.html)
+* [prisma](./interfaces/plugins.prisma.html)
+* [protobufjs](./interfaces/plugins.protobufjs.html)
+* [redis](./interfaces/plugins.redis.html)
+* [restify](./interfaces/plugins.restify.html)
+* [rhea](./interfaces/plugins.rhea.html)
+* [router](./interfaces/plugins.router.html)
+* [selenium](./interfaces/plugins.selenium.html)
+* [sharedb](./interfaces/plugins.sharedb.html)
+* [supabase](./interfaces/plugins.supabase.html)
+* [tedious](./interfaces/plugins.tedious.html)
+* [undici](./interfaces/plugins.undici.html)
+* [vitest](./interfaces/plugins.vitest.html)
+* [web](./interfaces/plugins.web.html)
+* [winston](./interfaces/plugins.winston.html)
+* [ws](./interfaces/plugins.ws.html)
 
 <h2 id="manual-instrumentation">Manual Instrumentation</h2>
 
-If you aren’t using supported library instrumentation (see [Compatibility](https://docs.datadoghq.com/tracing/setup/nodejs/#compatibility)), you may want to manually instrument your code.
+If you aren’t using supported library instrumentation (see [Compatibility](https://docs.datadoghq.com/tracing/trace_collection/compatibility/nodejs/)), you may want to manually instrument your code.
 
-This can be done using the [tracer.trace()](./interfaces/tracer.html#trace) and the [tracer.wrap()](./interfaces/tracer.html#wrap) methods which handle the span lifecycle and scope management automatically. In some rare cases the scope needs to be handled manually as well in which case the [tracer.scope()](./interfaces/tracer.html#scope) method is provided.
+This can be done using the [tracer.trace()](./interfaces/Tracer.html#trace) and the [tracer.wrap()](./interfaces/Tracer.html#wrap) methods which handle the span lifecycle and scope management automatically. In some rare cases the scope needs to be handled manually as well in which case the [tracer.scope()](./interfaces/Tracer.html#scope) method is provided.
 
 The different ways to use the above methods are described below.
 
@@ -468,11 +560,11 @@ scope.activate(outerSpan, () => {
 })
 ```
 
-See the [API documentation](./interfaces/scope.html) for more details.
+See the [API documentation](./interfaces/Scope.html) for more details.
 
 <h2 id="opentracing-api">OpenTracing Compatibility</h2>
 
-This library is OpenTracing compliant. Use the [OpenTracing API](https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog Tracer is initialized and used as a global tracer:
+This library is OpenTracing compliant. Use the [OpenTracing API](https://github.com/opentracing/opentracing-javascript) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog Tracer is initialized and used as a global tracer:
 
 ```javascript
 const tracer = require('dd-trace').init()
@@ -612,7 +704,7 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 <h3 id="tracer-settings">Tracer settings</h3>
 
-Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
+Options can be configured as a parameter to the [init()](./interfaces/Tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
 
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
 

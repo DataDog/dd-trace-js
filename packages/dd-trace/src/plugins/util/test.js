@@ -5,6 +5,7 @@ const fs = require('fs')
 const { URL } = require('url')
 const { stripVTControlCharacters } = require('node:util')
 const { getLageTestSessionName } = require('../../ci-visibility/lage')
+const resolveRunfilePath = require('../../ci-visibility/resolve-runfile-path')
 const log = require('../../log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const { getSegment } = require('../../util')
@@ -250,8 +251,11 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_module_end',
   'test_session_end',
 ]
+const TEST_PARALLELIZATION_ENABLED = 'test.parallelization.enabled'
+const TEST_PARALLELIZATION_PLAN_TAG_PREFIX = 'test.parallelization.plan.'
 const TEST_LEVELS_METADATA = 'test_levels'
 const TEST_LEVELS_METADATA_TAGS = [
+  TEST_PARALLELIZATION_ENABLED,
   CI_JOB_ID,
   CI_JOB_NAME,
   CI_JOB_URL,
@@ -809,10 +813,47 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata,
   }
+  if (/^(true|1)$/i.test(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'))) {
+    metadata[TEST_PARALLELIZATION_ENABLED] = 'true'
+    Object.assign(metadata, getTestParallelizationPlanMetadata())
+  }
   if (config && config.service) {
     metadata['service.name'] = config.service
   }
   return removeInvalidMetadata(metadata)
+}
+
+/** @returns {Record<string, string>} */
+function getTestParallelizationPlanMetadata () {
+  try {
+    let metadataFile = getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE')
+    if (!metadataFile) {
+      // The manifest locator belongs to DDTest's artifact protocol, rather than tracer configuration.
+      // eslint-disable-next-line eslint-rules/eslint-process-env
+      const env = process.env
+      const manifestFile = env.TEST_OPTIMIZATION_MANIFEST_FILE || env.DD_TEST_OPTIMIZATION_MANIFEST_FILE
+      const planDirectory = manifestFile
+        ? path.dirname(resolveRunfilePath(manifestFile, env))
+        : path.join(process.cwd(), '.testoptimization')
+      metadataFile = path.join(planDirectory, 'plan-metadata.json')
+    }
+    const { tags } = JSON.parse(fs.readFileSync(metadataFile, 'utf8'))
+    if (!tags || typeof tags !== 'object' || Array.isArray(tags) ||
+        Object.values(tags).some(value => typeof value !== 'string')) {
+      return {}
+    }
+    const metadata = {}
+    for (const [tag, value] of Object.entries(tags)) {
+      if (tag.startsWith(TEST_PARALLELIZATION_PLAN_TAG_PREFIX) &&
+          tag.length > TEST_PARALLELIZATION_PLAN_TAG_PREFIX.length && value) {
+        metadata[tag] = value
+      }
+    }
+    return metadata
+  } catch (err) {
+    log.debug('Failed to read DDTest plan metadata: %s', err.message)
+    return {}
+  }
 }
 
 function getTestParametersString (parametersByTestName, testName) {
@@ -842,6 +883,11 @@ function getTestLevelsMetadataTags (testEnvironmentMetadata) {
     const key = TEST_LEVELS_METADATA_TAGS[i]
     const value = testEnvironmentMetadata[key]
     if (value !== undefined) {
+      testLevelsMetadataTags[key] = value
+    }
+  }
+  for (const [key, value] of Object.entries(testEnvironmentMetadata)) {
+    if (key.startsWith(TEST_PARALLELIZATION_PLAN_TAG_PREFIX) && value !== undefined) {
       testLevelsMetadataTags[key] = value
     }
   }
@@ -1556,8 +1602,7 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
   let updated = false
   for (const [statementId, statementLocation] of Object.entries(fileCoverage.data.statementMap)) {
     const startLine = statementLocation?.start?.line
-    if (!isLineCoveredByBitmap(skippedBitmap, startLine)) continue
-    if (fileCoverage.data.s[statementId] > 0) continue
+    if (!isLineCoveredByBitmap(skippedBitmap, startLine) || fileCoverage.data.s[statementId] > 0) continue
 
     fileCoverage.data.s[statementId] = 1
     updated = true
@@ -2256,8 +2301,7 @@ function recordTestManagementExecution (execution, executions = testManagementEx
  * }} execution
  */
 function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
-  if (!execution?.testName) return
-  if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
+  if (!execution?.testName || getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
 
   const { testSuite, testName, status, isDisabled, isQuarantined } = execution
   const identity = getTestOptimizationIdentity(testSuite, testName)

@@ -45,7 +45,6 @@ const legacyStorage = storage('legacy')
 const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB
 
 function sanitizedExec (
-  cmd,
   flags,
   operationMetric,
   durationMetric,
@@ -61,7 +60,7 @@ function sanitizedExec (
       startTime = Date.now()
     }
     try {
-      let result = cachedExec(cmd, flags, { stdio: 'pipe' }).toString()
+      let result = cachedExec('git', flags, { stdio: 'pipe' }).toString()
 
       if (shouldTrim) {
         result = result.replaceAll(/(\r\n|\n|\r)/g, '')
@@ -106,7 +105,6 @@ function isGitAvailable () {
 
 function isShallowRepository () {
   return sanitizedExec(
-    'git',
     ['rev-parse', '--is-shallow-repository'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'check_shallow' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'check_shallow' } },
@@ -115,7 +113,7 @@ function isShallowRepository () {
 }
 
 function getGitVersion () {
-  const gitVersionString = sanitizedExec('git', ['version'])
+  const gitVersionString = sanitizedExec(['version'])
   const gitVersionMatches = /** @type {RegExpMatch} */ (gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/))
   try {
     return {
@@ -138,8 +136,8 @@ function unshallowRepository (parentOnly = false) {
     log.warn('Git version is <2.27, so git unshallow will not proceed')
     return
   }
-  const defaultRemoteName = sanitizedExec('git', ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
-  const revParseHead = sanitizedExec('git', ['rev-parse', 'HEAD'])
+  const defaultRemoteName = sanitizedExec(['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
+  const revParseHead = sanitizedExec(['rev-parse', 'HEAD'])
 
   const baseGitOptions = [
     'fetch',
@@ -167,7 +165,6 @@ function unshallowRepository (parentOnly = false) {
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
     )
     const upstreamRemote = sanitizedExec(
-      'git',
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']
     )
     flags = [
@@ -186,7 +183,6 @@ function unshallowRepository (parentOnly = false) {
       )
       // We use sanitizedExec here because if this last option fails, we'll give up.
       sanitizedExec(
-        'git',
         baseGitOptions,
         null,
         null,
@@ -199,7 +195,6 @@ function unshallowRepository (parentOnly = false) {
 
 function getRepositoryUrl () {
   return sanitizedExec(
-    'git',
     ['config', '--get', 'remote.origin.url'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_repository' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_repository' } },
@@ -233,7 +228,6 @@ function getGitDiff (baseCommit, targetCommit) {
     flags.push(targetCommit)
   }
   return sanitizedExec(
-    'git',
     flags,
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'diff' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'diff' } },
@@ -244,7 +238,6 @@ function getGitDiff (baseCommit, targetCommit) {
 
 function getGitRemoteName () {
   const upstreamRemote = sanitizedExec(
-    'git',
     ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
@@ -256,7 +249,6 @@ function getGitRemoteName () {
   }
 
   const remotes = sanitizedExec(
-    'git',
     ['remote'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
@@ -269,7 +261,6 @@ function getGitRemoteName () {
 
 function getSourceBranch () {
   return sanitizedExec(
-    'git',
     ['rev-parse', '--abbrev-ref', 'HEAD'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_source_branch' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_source_branch' } },
@@ -315,7 +306,6 @@ function checkAndFetchBranch (branch, remoteName) {
 
 function getLocalBranches (remoteName) {
   const localBranches = sanitizedExec(
-    'git',
     ['for-each-ref', '--format=%(refname:short)', `refs/remotes/${remoteName}`],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
@@ -331,7 +321,6 @@ function getLocalBranches (remoteName) {
 
 function getMergeBase (baseBranch, sourceBranch) {
   return sanitizedExec(
-    'git',
     ['merge-base', baseBranch, sourceBranch],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
@@ -341,7 +330,6 @@ function getMergeBase (baseBranch, sourceBranch) {
 
 function getCounts (sourceBranch, candidateBranch) {
   const counts = sanitizedExec(
-    'git',
     ['rev-list', '--left-right', '--count', `${candidateBranch}...${sourceBranch}`],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_counts' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_counts' } },
@@ -460,7 +448,6 @@ function generatePackFilesForCommits (commitsToUpload) {
 
 function getRepositoryRoot () {
   return sanitizedExec(
-    'git',
     ['rev-parse', '--show-toplevel']
   )
 }
@@ -488,13 +475,13 @@ function getGitMetadata (ciMetadata) {
     committerName,
     committerEmail,
     committerDate,
-  ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
+  ] = sanitizedExec(['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
 
   const tags = {
     [GIT_COMMIT_MESSAGE]:
-      commitMessage || sanitizedExec('git', ['show', '-s', '--format=%B'], null, null, null, false),
-    [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
-    [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
+      commitMessage || sanitizedExec(['show', '-s', '--format=%B'], null, null, null, false),
+    [GIT_BRANCH]: branch || sanitizedExec(['rev-parse', '--abbrev-ref', 'HEAD']),
+    [GIT_COMMIT_SHA]: commitSHA || sanitizedExec(['rev-parse', 'HEAD']),
     [CI_WORKSPACE_PATH]: ciWorkspacePath || getRepositoryRoot(),
   }
 
@@ -513,7 +500,6 @@ function getGitMetadata (ciMetadata) {
       headCommitterEmail,
       headCommitMessage,
     ] = sanitizedExec(
-      'git',
       [
         'show',
         '-s',
@@ -539,7 +525,7 @@ function getGitMetadata (ciMetadata) {
 
   const entries = [
     GIT_REPOSITORY_URL,
-    filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
+    filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec(['ls-remote', '--get-url'])),
     GIT_COMMIT_AUTHOR_DATE, authorDate,
     GIT_COMMIT_AUTHOR_NAME, ciAuthorName || authorName,
     GIT_COMMIT_AUTHOR_EMAIL, ciAuthorEmail || authorEmail,
@@ -563,7 +549,6 @@ function getGitInformationDiscrepancy () {
   const gitRepositoryUrl = getRepositoryUrl()
 
   const gitCommitSHA = sanitizedExec(
-    'git',
     ['rev-parse', 'HEAD'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_sha' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_sha' } },
@@ -577,7 +562,6 @@ function fetchHeadCommitSha (headSha) {
   const remoteName = getGitRemoteName()
 
   sanitizedExec(
-    'git',
     [
       'fetch',
       '--update-shallow',

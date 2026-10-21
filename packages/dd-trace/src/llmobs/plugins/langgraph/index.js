@@ -76,7 +76,7 @@ class NextStreamLLMObsPlugin extends LLMObsPlugin {
     const { streamInputs: inputs, chunks } = streamData
     const input = inputs == null ? undefined : formatIO(inputs)
     const lastChunk = chunks.length > 0 ? chunks.at(-1) : undefined
-    const output = !hasError && lastChunk != null ? formatIO(lastChunk) : undefined
+    const output = hasError || lastChunk == null ? undefined : formatIO(lastChunk)
 
     this._tagger.tagTextIO(span, input, output)
 
