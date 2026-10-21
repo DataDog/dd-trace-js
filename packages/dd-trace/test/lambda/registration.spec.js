@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { EventEmitter } = require('node:events')
 const path = require('node:path')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -398,6 +399,97 @@ describe('lambda', () => {
             clock.restore()
             global._ddtrace = oldTracer
             delete instrumentations[fixturePath]
+          }
+        })
+      }
+
+      for (const outcome of ['undefined', 'null', 'false', 'zero', 'object', 'artifact',
+        'fulfill', 'reject', 'throw', 'timeout']) {
+        it(`handles ${outcome} streaming returns through the unmarked ${file} adapter`, async () => {
+          process.env.LAMBDA_TASK_ROOT = '/var/task'
+          process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
+          const { hookCalls } = loadLambdaWithHookSpy()
+          const fixturePath = `${path.resolve('/var/task', '', 'handler')}.js`
+          const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+          const oldTracer = global._ddtrace
+          const beforeExit = Symbol.for('aws.lambda.beforeExit')
+          const oldBeforeExit = globalThis[beforeExit]
+          const killAll = sinon.spy()
+          const span = { addTags: sinon.spy(), finish: sinon.spy() }
+          const warmSpan = { addTags: sinon.spy(), finish: sinon.spy() }
+          let activeSpan = span
+          global._ddtrace = {
+            _tracer: {
+              _config: { DD_APM_FLUSH_DEADLINE_MILLISECONDS: 25 },
+              _processor: { killAll },
+              scope: () => ({ active: () => activeSpan }),
+            },
+          }
+          globalThis[beforeExit] = () => {}
+
+          try {
+            const stream = {}
+            const context = { getRemainingTimeInMillis: () => 100 }
+            const error = new Error('streaming handler failure')
+            const values = { undefined, null: null, false: false, zero: 0, object: {}, artifact: new EventEmitter() }
+            let complete = _result => assert.fail('The streaming handler did not capture its completion')
+            const streaming = Symbol.for('aws.lambda.runtime.handler.streaming')
+            const raw = (event, responseStream, ctx) => {
+              assert.strictEqual(responseStream, stream)
+              assert.strictEqual(ctx, context)
+              if (event.pending || outcome === 'timeout') return new Promise(resolve => { complete = resolve })
+              if (outcome === 'throw') throw error
+              if (outcome === 'fulfill') return Promise.resolve('done')
+              if (outcome === 'reject') return Promise.reject(error)
+              return values[outcome]
+            }
+            raw[streaming] = 'response'
+            const app = hookCalls[0].onrequire({ myEntry: raw }, fixturePath, undefined, '0.0.0')
+            const moduleExports = {
+              promisifiedHandler: handler => {
+                assert.strictEqual(handler[streaming], 'response')
+                // datadog-lambda-js's streaming adapter forwards all three arguments but omits the marker.
+                return (event, responseStream, context) => handler(event, responseStream, context)
+              },
+            }
+            hookCalls[1].onrequire(moduleExports, `datadog-lambda-js/${file}`, undefined, '12.143.0')
+            const handler = moduleExports.promisifiedHandler(app.myEntry)
+            assert.strictEqual(handler[streaming], undefined)
+            const invoke = () => handler({}, stream, context)
+            if (outcome === 'throw') assert.throws(invoke, candidate => candidate === error)
+            else if (outcome === 'reject') await assert.rejects(invoke(), candidate => candidate === error)
+            else if (outcome === 'timeout') {
+              const invocation = invoke()
+              clock.tick(74)
+              sinon.assert.notCalled(killAll)
+              clock.tick(1)
+              sinon.assert.calledOnce(killAll)
+              assert.strictEqual(span.addTags.firstCall.args[0]['error.type'], 'Impending Timeout')
+              complete('done')
+              assert.strictEqual(await invocation, 'done')
+            } else assert.strictEqual(await invoke(), outcome === 'fulfill' ? 'done' : values[outcome])
+            assert.strictEqual(clock.countTimers(), 0, 'the first invocation must release its monitor')
+
+            // RIC replaces its before-exit listener between invocations, so cleanup cannot rely on the old listener.
+            globalThis[beforeExit] = () => {}
+            clock.tick(25)
+            activeSpan = warmSpan
+            const warmInvocation = handler({ pending: true }, stream, context)
+            clock.tick(50)
+            assert.strictEqual(killAll.callCount, outcome === 'timeout' ? 1 : 0)
+            sinon.assert.notCalled(warmSpan.addTags)
+            sinon.assert.notCalled(warmSpan.finish)
+            assert.strictEqual(clock.countTimers(), 1, 'the warm invocation must retain its own monitor')
+            complete('warm result')
+            assert.strictEqual(await warmInvocation, 'warm result')
+            clock.tick(100)
+            assert.strictEqual(killAll.callCount, outcome === 'timeout' ? 1 : 0)
+            assert.strictEqual(clock.countTimers(), 0)
+          } finally {
+            clock.restore()
+            global._ddtrace = oldTracer
+            if (oldBeforeExit === undefined) delete globalThis[beforeExit]
+            else globalThis[beforeExit] = oldBeforeExit
           }
         })
       }

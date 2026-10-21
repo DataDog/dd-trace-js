@@ -237,7 +237,8 @@ function onCompletion (callback, clear) {
  * @param {number} contextIndex
  */
 function isCallbackCompletion (handler, result, contextIndex) {
-  if (handler[HANDLER_STREAMING] === 'response') return false
+  // datadog-lambda-js's unmarked streaming adapter still receives context as its third argument.
+  if (contextIndex === 2 || handler[HANDLER_STREAMING] === 'response') return false
   if ((handler.length >= 3 && contextIndex !== 2) || result === undefined) return true
   if (result === null || typeof result !== 'object') return false
   for (let target = result; target !== null && !isProxy(target); target = Object.getPrototypeOf(target)) {
