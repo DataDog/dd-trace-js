@@ -78,12 +78,11 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
     const { span } = ctx.currentStore
     const payloadSize = getKafkaMessageSize(message)
-    this.tracer.decodeDataStreamsContext(headers)
     // Sorted order, see utils.js.
     const edgeTags = clusterId
       ? ['direction:in', getGroupEdgeTag(groupId), getClusterIdEdgeTag(clusterId), getTopicEdgeTag(topic), 'type:kafka']
       : ['direction:in', getGroupEdgeTag(groupId), getTopicEdgeTag(topic), 'type:kafka']
-    this.tracer.setCheckpoint(edgeTags, span, payloadSize)
+    this.tracer._decodeAndSetCheckpoint(headers, edgeTags, span, payloadSize)
   }
 
   bindStart (ctx) {

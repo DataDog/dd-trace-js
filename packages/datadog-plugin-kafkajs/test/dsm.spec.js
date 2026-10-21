@@ -11,8 +11,9 @@ const sinon = require('sinon')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 
+const { DsmPathwayCodec: LazyDsmPathwayCodec } = require('../../dd-trace/src/datastreams')
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { computePathwayHash, DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -110,6 +111,31 @@ describe('Plugin', () => {
             assert.strictEqual(setDataStreamsContextSpy.args[0][0].hash, expectedProducerHash)
           })
 
+          it('Should enter the DSM context once for a multi-message send and chain its checkpoints', async () => {
+            const sentMessages = [
+              { key: 'k0', value: 'v0' },
+              { key: 'k1', value: 'v1' },
+              { key: 'k2', value: 'v2' },
+            ]
+            // Consecutive producer checkpoints keep the entry as their closest opposite-direction parent.
+            const expectedHashes = sentMessages.map(() => expectedProducerHash)
+
+            const encodeSpy = sinon.spy(LazyDsmPathwayCodec, 'encode')
+            try {
+              await sendMessages(kafka, testTopic, sentMessages)
+            } finally {
+              encodeSpy.restore()
+            }
+
+            sinon.assert.calledOnce(setDataStreamsContextSpy)
+            assert.deepStrictEqual(setDataStreamsContextSpy.lastCall.args[0].hash, expectedHashes[2])
+            // The plugin encodes into a copy of each message's headers, so read them back from the encode calls.
+            assert.deepStrictEqual(
+              encodeSpy.getCalls().map(call => DsmPathwayCodec.decode(call.args[1]).hash),
+              expectedHashes
+            )
+          })
+
           it('Should set one checkpoint per topic on sendBatch', async () => {
             const expectedAHash = getDsmPathwayHash(topicAOut, true, ENTRY_PARENT_HASH)
             const expectedBHash = getDsmPathwayHash(topicBOut, true, ENTRY_PARENT_HASH)
@@ -145,7 +171,7 @@ describe('Plugin', () => {
 
           it('Should decode the DSM context from the carrier used to extract the span parent', async () => {
             const extractSpy = sinon.spy(tracer._tracer, 'extract')
-            const decodeSpy = sinon.spy(tracer._tracer, 'decodeDataStreamsContext')
+            const decodeSpy = sinon.spy(tracer._tracer, '_decodeAndSetCheckpoint')
             const consumption = new EventEmitter()
             try {
               await consumer.run({

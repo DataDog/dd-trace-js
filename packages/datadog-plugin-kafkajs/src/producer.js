@@ -75,19 +75,24 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     if (!this.config.dsmEnabled) return
     const { topic, messages, clusterId, disableHeaderInjection, currentStore: { span } } = ctx
 
-    for (const message of messages) {
-      if (message !== null && typeof message === 'object') {
-        const payloadSize = getKafkaMessageSize(message)
-        // Sorted order, see utils.js.
-        const edgeTags = clusterId
-          ? ['direction:out', getClusterIdEdgeTag(clusterId), getTopicEdgeTag(topic), 'type:kafka']
-          : ['direction:out', getTopicEdgeTag(topic), 'type:kafka']
+    const checkpointRun = this.tracer._startCheckpointRun()
+    try {
+      for (const message of messages) {
+        if (message !== null && typeof message === 'object') {
+          const payloadSize = getKafkaMessageSize(message)
+          // Sorted order, see utils.js.
+          const edgeTags = clusterId
+            ? ['direction:out', getClusterIdEdgeTag(clusterId), getTopicEdgeTag(topic), 'type:kafka']
+            : ['direction:out', getTopicEdgeTag(topic), 'type:kafka']
 
-        const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-        if (!disableHeaderInjection) {
-          DsmPathwayCodec.encode(dataStreamsContext, message.headers)
+          const dataStreamsContext = checkpointRun.setCheckpoint(edgeTags, span, payloadSize)
+          if (!disableHeaderInjection) {
+            DsmPathwayCodec.encode(dataStreamsContext, message.headers)
+          }
         }
       }
+    } finally {
+      checkpointRun.end()
     }
   }
 

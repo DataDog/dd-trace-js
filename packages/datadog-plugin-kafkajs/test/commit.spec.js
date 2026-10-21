@@ -15,9 +15,7 @@ describe('kafkajs producer start', () => {
    * @param {Record<string, string | Buffer | Array<string | Buffer>>} [headers]
    */
   function checkpointPayloadSize (headers) {
-    const setCheckpoint = sinon.stub()
-    const plugin = new KafkajsProducerPlugin({ setCheckpoint }, {})
-    plugin.config = { dsmEnabled: true }
+    const { plugin, setCheckpoint } = makePlugin()
 
     plugin.start({
       topic: 'topic',
@@ -26,6 +24,14 @@ describe('kafkajs producer start', () => {
     })
 
     return setCheckpoint.firstCall.args[2]
+  }
+
+  function makePlugin () {
+    const setCheckpoint = sinon.stub()
+    const end = sinon.stub()
+    const plugin = new KafkajsProducerPlugin({ _startCheckpointRun: () => ({ setCheckpoint, end }) }, {})
+    plugin.config = { dsmEnabled: true }
+    return { plugin, setCheckpoint, end }
   }
 
   it('counts the header key once per repeated value', () => {
@@ -44,6 +50,35 @@ describe('kafkajs producer start', () => {
   it('sizes a message the caller sent without headers', () => {
     assert.strictEqual(checkpointPayloadSize(undefined), 8)
   })
+
+  it('ends the checkpoint run once, after every message', () => {
+    const { plugin, setCheckpoint, end } = makePlugin()
+
+    plugin.start({
+      topic: 'topic',
+      messages: [{ value: 'a' }, null, { value: 'b' }, { value: 'c' }],
+      currentStore: { span: {} },
+    })
+
+    sinon.assert.calledThrice(setCheckpoint)
+    sinon.assert.calledOnce(end)
+    assert.ok(end.firstCall.calledAfter(setCheckpoint.thirdCall))
+  })
+
+  it('ends the checkpoint run once when a checkpoint throws', () => {
+    const { plugin, setCheckpoint, end } = makePlugin()
+    const error = new Error('checkpoint failed')
+    setCheckpoint.onSecondCall().throws(error)
+
+    assert.throws(() => plugin.start({
+      topic: 'topic',
+      messages: [{ value: 'a' }, { value: 'b' }, { value: 'c' }],
+      currentStore: { span: {} },
+    }), error)
+
+    sinon.assert.calledTwice(setCheckpoint)
+    sinon.assert.calledOnce(end)
+  })
 })
 
 describe('kafkajs consumer start', () => {
@@ -52,10 +87,7 @@ describe('kafkajs consumer start', () => {
    */
   function checkpointPayloadSize (headers) {
     const setCheckpoint = sinon.stub()
-    const plugin = new KafkajsConsumerPlugin({
-      decodeDataStreamsContext: sinon.stub(),
-      setCheckpoint,
-    }, {})
+    const plugin = new KafkajsConsumerPlugin({ _decodeAndSetCheckpoint: setCheckpoint }, {})
     plugin.config = { dsmEnabled: true }
 
     plugin.start({
@@ -65,7 +97,7 @@ describe('kafkajs consumer start', () => {
       currentStore: { span: {} },
     })
 
-    return setCheckpoint.firstCall.args[2]
+    return setCheckpoint.firstCall.args[3]
   }
 
   it('counts every repeated KafkaJS header key', () => {
@@ -86,9 +118,8 @@ describe('kafkajs batch consumer start', () => {
   it('counts every repeated header key for each message', () => {
     const setCheckpoint = sinon.stub()
     const plugin = new KafkajsBatchConsumerPlugin({
-      decodeDataStreamsContext: sinon.stub(),
+      _decodeAndSetCheckpoint: setCheckpoint,
       extract: sinon.stub(),
-      setCheckpoint,
     }, {})
     plugin.config = { dsmEnabled: true }
     plugin.startSpan = sinon.stub().returns({ addLink: sinon.stub() })
@@ -105,7 +136,7 @@ describe('kafkajs batch consumer start', () => {
       currentStore: {},
     })
 
-    assert.strictEqual(setCheckpoint.firstCall.args[2], 52)
+    assert.strictEqual(setCheckpoint.firstCall.args[3], 52)
   })
 })
 

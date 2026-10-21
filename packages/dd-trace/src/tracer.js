@@ -73,6 +73,28 @@ class DatadogTracer extends Tracer {
     return this._dataStreamsManager.decodeDataStreamsContext(carrier)
   }
 
+  /**
+   * Internal: same end state as `decodeDataStreamsContext(carrier)` followed by `setCheckpoint(...)`, entering the
+   * store once.
+   *
+   * @param {Record<string, string>|undefined} carrier
+   * @param {string[]} edgeTags
+   * @param {import('./opentracing/span')|null} span
+   * @param {number} [payloadSize]
+   * @param {number} [pathwayContextSize] See `DataStreamsProcessor#setCheckpoint`.
+   * @returns {object|undefined}
+   */
+  _decodeAndSetCheckpoint (carrier, edgeTags, span, payloadSize = 0, pathwayContextSize) {
+    return this._dataStreamsManager._decodeAndSetCheckpoint(carrier, edgeTags, span, payloadSize, pathwayContextSize)
+  }
+
+  /**
+   * Internal: starts a synchronous run of checkpoints that enters the store once, on `end()`.
+   */
+  _startCheckpointRun () {
+    return this._dataStreamsManager._startCheckpointRun()
+  }
+
   setOffset (offsetData) {
     return this._dataStreamsProcessor.setOffset(offsetData)
   }

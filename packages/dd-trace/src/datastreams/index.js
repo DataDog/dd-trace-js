@@ -82,6 +82,8 @@ const DataStreamsCheckpointer = lazyClass(() => require('./checkpointer').DataSt
 const DataStreamsManager = lazyClass(() => require('./manager').DataStreamsManager, [
   'setCheckpoint',
   'decodeDataStreamsContext',
+  '_decodeAndSetCheckpoint',
+  '_startCheckpointRun',
   'trackTransaction',
 ])
 
