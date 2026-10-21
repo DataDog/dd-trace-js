@@ -161,8 +161,10 @@ exports.datadog = function datadog (lambdaHandler) {
       }
       // An observed callback can complete later regardless of arity or an incidental return value.
       // Otherwise, retain monitoring only when context/runtime completion is observable and expected.
+      // The shim streaming adapter omits its marker but still receives context as argument three.
       if (!callbackObservable &&
-          (!completionObservable || !isCallbackCompletion(monitored, result, contextIndex))) clear()
+          (contextIndex === 2 || !completionObservable ||
+            !isCallbackCompletion(monitored, result, contextIndex))) clear()
       return result
     } catch (error) {
       clearOnHandlerCompletion()

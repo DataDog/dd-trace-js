@@ -244,6 +244,19 @@ describe('Lambda facade and hook composition', () => {
     })
   }
 
+  it('retains legacy context completion in the third argument through the facade', async () => {
+    let complete
+    const wrapped = facade.wrap((_event, _placeholder, context) => { complete = context.succeed })
+    const result = wrapped({}, {}, context)
+    await Promise.resolve()
+    assert.strictEqual(traces.length, 0)
+    assert.strictEqual(clock.countTimers(), 1)
+    complete('done')
+    assert.strictEqual(await result, 'done')
+    assertExactlyOneLambdaSpan(traces)
+    assert.strictEqual(clock.countTimers(), 0)
+  })
+
   for (const completion of ['throw', 'reject']) {
     it(`cleans up a streaming ${completion} through the public facade`, async () => {
       const error = new Error('stream failure')
