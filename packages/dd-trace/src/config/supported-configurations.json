@@ -937,6 +937,17 @@
         "default": "false"
       }
     ],
+    "DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "namespace": "featureFlags",
+        "configurationNames": [
+          "featureFlags.enableEvaluationTelemetryOptOutParameter"
+        ],
+        "default": "false"
+      }
+    ],
     "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE": [
       {
         "implementation": "A",

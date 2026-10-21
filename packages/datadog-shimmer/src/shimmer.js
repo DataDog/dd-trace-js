@@ -335,7 +335,8 @@ function assertMethod (target, name, method) {
 function assertNotClass (target) {
   // Frozen functions also have a non-writable `prototype`; inspect their source only then.
   if ('prototype' in target &&
-      Object.getOwnPropertyDescriptor(target, 'prototype').writable === false &&
+      // Bound generators inherit `prototype` without owning one, so the descriptor may still be missing.
+      Object.getOwnPropertyDescriptor(target, 'prototype')?.writable === false &&
       (!Object.isFrozen(target) || Function.prototype.toString.call(target).startsWith('class'))) {
     throw new TypeError('Target is a native class constructor and cannot be wrapped.')
   }

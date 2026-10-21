@@ -3457,6 +3457,7 @@ versions.forEach(version => {
     const scenarios = [
       'empty-shard', 'empty-shard-default', 'empty-file', 'empty-file-disallowed', 'setup-error', 'normal', 'skipped',
       'no-candidates', 'no-candidates-default', 'no-candidates-sharded', 'no-candidates-sharded-default',
+      'collected-only',
     ]
     for (const scenario of scenarios) {
       // Vitest 1.6 aborts global setup before the session finalizer can be installed.
@@ -3472,7 +3473,7 @@ versions.forEach(version => {
             ? 'zero_test_shard'
             : scenario === 'empty-file' || scenario.startsWith('no-candidates')
               ? 'zero_tests'
-              : scenario === 'skipped' ? 'all_tests_skipped' : undefined
+              : ['skipped', 'collected-only'].includes(scenario) ? 'all_tests_skipped' : undefined
         const skipReason = reason === 'zero_test_shard'
           ? 'No tests were assigned to this shard'
           : reason === 'zero_tests'
@@ -3489,6 +3490,7 @@ versions.forEach(version => {
               ...getCiVisEvpProxyConfig(receiver.port),
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+              DD_INJECT_FORCE: 'true',
               EMPTY_SESSION_SCENARIO: scenario,
             },
           }
@@ -3505,7 +3507,10 @@ versions.forEach(version => {
             const tests = events.filter(event => event.type === 'test')
             assert.strictEqual(sessions.length, 1, output)
             assert.strictEqual(modules.length, 1, output)
-            assert.strictEqual(tests.length, ['normal', 'skipped'].includes(scenario) ? 1 : 0, output)
+            assert.strictEqual(tests.length, ['normal', 'skipped', 'collected-only'].includes(scenario) ? 1 : 0, output)
+            if (scenario === 'collected-only') {
+              assert.strictEqual(tests[0].content.meta[TEST_STATUS], 'skip', output)
+            }
             for (const event of [...sessions, ...modules]) {
               assert.strictEqual(event.content.meta[TEST_STATUS], expectedStatus, output)
               assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], reason, output)

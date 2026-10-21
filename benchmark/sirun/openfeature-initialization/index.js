@@ -49,8 +49,8 @@ async function initialize () {
 async function main () {
   for (let i = 0; i < warmup; i++) await initialize()
 
-  const start = process.hrtime.bigint()
   guard.loopStart()
+  const start = process.hrtime.bigint()
   for (let i = 0; i < operations; i++) await initialize()
   const elapsedNs = Number(process.hrtime.bigint() - start)
   guard.done()
