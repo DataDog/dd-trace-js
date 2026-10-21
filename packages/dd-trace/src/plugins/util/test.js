@@ -825,11 +825,15 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
 /** @returns {Record<string, string>} */
 function getTestParallelizationPlanMetadata () {
   try {
-    // The manifest locator belongs to DDTest's artifact protocol, rather than tracer configuration.
-    // eslint-disable-next-line eslint-rules/eslint-process-env
-    const manifestFile = process.env.TEST_OPTIMIZATION_MANIFEST_FILE || process.env.DD_TEST_OPTIMIZATION_MANIFEST_FILE
-    const planDirectory = manifestFile ? path.dirname(manifestFile) : path.join(process.cwd(), '.testoptimization')
-    const { tags } = JSON.parse(fs.readFileSync(path.join(planDirectory, 'plan-metadata.json'), 'utf8'))
+    let metadataFile = getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE')
+    if (!metadataFile) {
+      // The manifest locator belongs to DDTest's artifact protocol, rather than tracer configuration.
+      // eslint-disable-next-line eslint-rules/eslint-process-env
+      const manifestFile = process.env.TEST_OPTIMIZATION_MANIFEST_FILE || process.env.DD_TEST_OPTIMIZATION_MANIFEST_FILE
+      const planDirectory = manifestFile ? path.dirname(manifestFile) : path.join(process.cwd(), '.testoptimization')
+      metadataFile = path.join(planDirectory, 'plan-metadata.json')
+    }
+    const { tags } = JSON.parse(fs.readFileSync(metadataFile, 'utf8'))
     if (!tags || typeof tags !== 'object' || Array.isArray(tags) ||
         Object.values(tags).some(value => typeof value !== 'string')) {
       return {}

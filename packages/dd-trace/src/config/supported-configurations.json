@@ -2149,6 +2149,14 @@
         "description": "Internal: Identifies test processes started by ddtest run."
       }
     ],
+    "_DD_TEST_PARALLELIZATION_METADATA_FILE": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "description": "Internal: Absolute path to planning metadata supplied by ddtest run."
+      }
+    ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",

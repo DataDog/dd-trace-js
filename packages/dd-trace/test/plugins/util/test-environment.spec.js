@@ -154,6 +154,7 @@ describe('Test Parallelization environment metadata', () => {
   for (const enabled of [undefined, '', 'false', '0', 'invalid']) {
     it(`does not read the artifact when parallelization is ${String(enabled)}`, () => {
       if (enabled !== undefined) process.env._DD_TEST_PARALLELIZATION_ENABLED = enabled
+      process.env._DD_TEST_PARALLELIZATION_METADATA_FILE = metadataPath
       readFileStub = sinon.stub(fs, 'readFileSync').callThrough()
       const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
       assert.deepStrictEqual(Object.keys(metadata).filter(key => key.startsWith('test.parallelization.')), [])
@@ -218,6 +219,44 @@ describe('Test Parallelization environment metadata', () => {
       cwdStub.returns(path.join(directory, 'test-worker'))
       const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
       assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'plan-job_id')
+    })
+  }
+
+  for (const locator of ['TEST_OPTIMIZATION_MANIFEST_FILE', 'DD_TEST_OPTIMIZATION_MANIFEST_FILE']) {
+    it(`reads the explicit metadata file independently of a custom ${locator} and working directory`, () => {
+      process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+      process.env._DD_TEST_PARALLELIZATION_METADATA_FILE = metadataPath
+      process.env[locator] = path.join(directory, 'custom-cache', 'manifest.txt')
+      cwdStub.returns(path.join(directory, 'test-worker'))
+      const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+      assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'plan-job_id')
+      assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
+    })
+  }
+
+  it('uses the explicit metadata file instead of another plan beside a custom manifest', () => {
+    process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    process.env._DD_TEST_PARALLELIZATION_METADATA_FILE = metadataPath
+    const otherPlan = path.join(directory, 'other-plan')
+    fs.mkdirSync(otherPlan)
+    fs.writeFileSync(path.join(otherPlan, 'plan-metadata.json'), JSON.stringify({
+      tags: { 'test.parallelization.plan.job.id': 'wrong-plan' },
+    }))
+    process.env.TEST_OPTIMIZATION_MANIFEST_FILE = path.join(otherPlan, 'manifest.txt')
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'plan-job_id')
+  })
+
+  for (const failure of ['missing', 'corrupt']) {
+    it(`keeps only the enabled tag when the explicit file is ${failure}, despite another readable artifact`, () => {
+      process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+      const explicitMetadata = path.join(directory, 'explicit-plan-metadata.json')
+      process.env._DD_TEST_PARALLELIZATION_METADATA_FILE = explicitMetadata
+      if (failure === 'corrupt') fs.writeFileSync(explicitMetadata, '{invalid json')
+      const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+      assert.strictEqual(metadata['test.parallelization.enabled'], 'true')
+      assert.strictEqual(metadata['test.parallelization.plan.job.id'], undefined)
+      assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
     })
   }
 
