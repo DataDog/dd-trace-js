@@ -252,16 +252,16 @@ const TEST_LEVEL_EVENT_TYPES = [
 ]
 const TEST_PARALLELIZATION_ENABLED = 'test.parallelization.enabled'
 const TEST_PARALLELIZATION_PLAN_ENV_VARS = {
-  'test.parallelization.plan.provider.name': 'DD_TEST_PARALLELIZATION_PLAN_PROVIDER_NAME',
-  'test.parallelization.plan.pipeline.id': 'DD_TEST_PARALLELIZATION_PLAN_PIPELINE_ID',
-  'test.parallelization.plan.pipeline.name': 'DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NAME',
-  'test.parallelization.plan.pipeline.display_name': 'DD_TEST_PARALLELIZATION_PLAN_PIPELINE_DISPLAY_NAME',
-  'test.parallelization.plan.pipeline.number': 'DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NUMBER',
-  'test.parallelization.plan.pipeline.url': 'DD_TEST_PARALLELIZATION_PLAN_PIPELINE_URL',
-  'test.parallelization.plan.job.id': 'DD_TEST_PARALLELIZATION_PLAN_JOB_ID',
-  'test.parallelization.plan.job.name': 'DD_TEST_PARALLELIZATION_PLAN_JOB_NAME',
-  'test.parallelization.plan.job.url': 'DD_TEST_PARALLELIZATION_PLAN_JOB_URL',
-  'test.parallelization.plan.stage.name': 'DD_TEST_PARALLELIZATION_PLAN_STAGE_NAME',
+  'test.parallelization.plan.provider.name': '_DD_TEST_PARALLELIZATION_PLAN_PROVIDER_NAME',
+  'test.parallelization.plan.pipeline.id': '_DD_TEST_PARALLELIZATION_PLAN_PIPELINE_ID',
+  'test.parallelization.plan.pipeline.name': '_DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NAME',
+  'test.parallelization.plan.pipeline.display_name': '_DD_TEST_PARALLELIZATION_PLAN_PIPELINE_DISPLAY_NAME',
+  'test.parallelization.plan.pipeline.number': '_DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NUMBER',
+  'test.parallelization.plan.pipeline.url': '_DD_TEST_PARALLELIZATION_PLAN_PIPELINE_URL',
+  'test.parallelization.plan.job.id': '_DD_TEST_PARALLELIZATION_PLAN_JOB_ID',
+  'test.parallelization.plan.job.name': '_DD_TEST_PARALLELIZATION_PLAN_JOB_NAME',
+  'test.parallelization.plan.job.url': '_DD_TEST_PARALLELIZATION_PLAN_JOB_URL',
+  'test.parallelization.plan.stage.name': '_DD_TEST_PARALLELIZATION_PLAN_STAGE_NAME',
 }
 const TEST_LEVELS_METADATA = 'test_levels'
 const TEST_LEVELS_METADATA_TAGS = [
@@ -826,7 +826,7 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
   }
   // These process-only values describe the plan that started this worker.
   // Keep the execution job's normal CI metadata intact.
-  if (/^(true|1)$/i.test(getEnvironmentVariable('DD_TEST_PARALLELIZATION_ENABLED'))) {
+  if (/^(true|1)$/i.test(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'))) {
     metadata[TEST_PARALLELIZATION_ENABLED] = 'true'
     for (const [tag, envVar] of Object.entries(TEST_PARALLELIZATION_PLAN_ENV_VARS)) {
       const value = getEnvironmentVariable(envVar)

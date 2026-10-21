@@ -135,13 +135,13 @@ describe('Config', () => {
     })
 
     it('reads the internal planning-job environment', () => {
-      process.env.DD_TEST_PARALLELIZATION_ENABLED = 'true'
-      process.env.DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'plan-job-123'
-      process.env.DD_TEST_PARALLELIZATION_PLAN_JOB_URL = 'https://gitlab.com/project/-/jobs/123'
-      assert.strictEqual(getEnvironmentVariable('DD_TEST_PARALLELIZATION_ENABLED'), 'true')
-      assert.strictEqual(getEnvironmentVariable('DD_TEST_PARALLELIZATION_PLAN_JOB_ID'), 'plan-job-123')
+      process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+      process.env._DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'plan-job-123'
+      process.env._DD_TEST_PARALLELIZATION_PLAN_JOB_URL = 'https://gitlab.com/project/-/jobs/123'
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'), 'true')
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_PLAN_JOB_ID'), 'plan-job-123')
       assert.strictEqual(
-        getEnvironmentVariable('DD_TEST_PARALLELIZATION_PLAN_JOB_URL'),
+        getEnvironmentVariable('_DD_TEST_PARALLELIZATION_PLAN_JOB_URL'),
         'https://gitlab.com/project/-/jobs/123'
       )
     })

@@ -72,18 +72,18 @@ describe('Test Parallelization environment metadata', () => {
   })
 
   it('keeps the planning and execution jobs distinct on every test level', () => {
-    process.env.DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
     const planEnv = {
-      DD_TEST_PARALLELIZATION_PLAN_PROVIDER_NAME: 'plan-provider_name',
-      DD_TEST_PARALLELIZATION_PLAN_PIPELINE_ID: 'plan-pipeline_id',
-      DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NAME: 'plan-pipeline_name',
-      DD_TEST_PARALLELIZATION_PLAN_PIPELINE_DISPLAY_NAME: 'plan-pipeline_display_name',
-      DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NUMBER: 'plan-pipeline_number',
-      DD_TEST_PARALLELIZATION_PLAN_PIPELINE_URL: 'https://gitlab.com/plan/pipeline_url',
-      DD_TEST_PARALLELIZATION_PLAN_JOB_ID: 'plan-job_id',
-      DD_TEST_PARALLELIZATION_PLAN_JOB_NAME: 'plan-job_name',
-      DD_TEST_PARALLELIZATION_PLAN_JOB_URL: 'https://gitlab.com/plan/job_url',
-      DD_TEST_PARALLELIZATION_PLAN_STAGE_NAME: 'plan-stage_name',
+      _DD_TEST_PARALLELIZATION_PLAN_PROVIDER_NAME: 'plan-provider_name',
+      _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_ID: 'plan-pipeline_id',
+      _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NAME: 'plan-pipeline_name',
+      _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_DISPLAY_NAME: 'plan-pipeline_display_name',
+      _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NUMBER: 'plan-pipeline_number',
+      _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_URL: 'https://gitlab.com/plan/pipeline_url',
+      _DD_TEST_PARALLELIZATION_PLAN_JOB_ID: 'plan-job_id',
+      _DD_TEST_PARALLELIZATION_PLAN_JOB_NAME: 'plan-job_name',
+      _DD_TEST_PARALLELIZATION_PLAN_JOB_URL: 'https://gitlab.com/plan/job_url',
+      _DD_TEST_PARALLELIZATION_PLAN_STAGE_NAME: 'plan-stage_name',
     }
     Object.assign(process.env, planEnv)
     const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
@@ -141,18 +141,25 @@ describe('Test Parallelization environment metadata', () => {
 
   for (const enabled of [undefined, '', 'false', '0', 'invalid']) {
     it(`ignores planning metadata when parallelization is ${String(enabled)}`, () => {
-      if (enabled !== undefined) process.env.DD_TEST_PARALLELIZATION_ENABLED = enabled
-      process.env.DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'stale-plan-job'
+      if (enabled !== undefined) process.env._DD_TEST_PARALLELIZATION_ENABLED = enabled
+      process.env._DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'stale-plan-job'
       const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
       assert.deepStrictEqual(Object.keys(metadata).filter(key => key.startsWith('test.parallelization.')), [])
     })
   }
 
+  it('does not enable parallelization from the public variable names', () => {
+    process.env.DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    process.env.DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'public-plan-job'
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    assert.deepStrictEqual(Object.keys(metadata).filter(key => key.startsWith('test.parallelization.')), [])
+  })
+
   for (const enabled of ['true', 'TRUE', '1']) {
     it(`supports ${enabled} without inventing missing planning-job metadata`, () => {
       process.env = {
-        DD_TEST_PARALLELIZATION_ENABLED: enabled,
-        DD_TEST_PARALLELIZATION_PLAN_JOB_ID: '',
+        _DD_TEST_PARALLELIZATION_ENABLED: enabled,
+        _DD_TEST_PARALLELIZATION_PLAN_JOB_ID: '',
       }
       const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
       assert.deepStrictEqual(getTestLevelsMetadataTags(metadata), {
