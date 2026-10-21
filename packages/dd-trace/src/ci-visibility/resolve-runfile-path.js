@@ -41,8 +41,7 @@ function resolveFromManifest (filePath, runfilesManifest) {
     const lines = fs.readFileSync(runfilesManifest, 'utf8').split('\n')
     for (const line of lines) {
       const separatorIndex = line.indexOf(' ')
-      if (separatorIndex <= 0) continue
-      if (line.slice(0, separatorIndex) !== filePath) continue
+      if (separatorIndex <= 0 || line.slice(0, separatorIndex) !== filePath) continue
 
       const resolvedPath = line.slice(separatorIndex + 1).trim()
       if (resolvedPath) return resolvedPath

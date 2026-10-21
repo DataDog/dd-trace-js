@@ -3,7 +3,7 @@ import { afterEach, beforeAll, beforeEach, inject } from 'vitest'
 // Instrumentation-less setup for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
 // It applies Test Optimization execution changes without initializing dd-trace and also supports Browser Mode.
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
-const SERIALIZED_CONTEXT_PREFIX = '\u0000dd-vitest-context:'
+const SERIALIZED_CONTEXT_PREFIX = '\0dd-vitest-context:'
 const providedContext = getProvidedContext()
 const isNoWorkerInitActive = providedContext.isActive ?? getIsNoWorkerInitActive()
 const attemptToFixTests = providedContext.attemptToFixTests || {}
@@ -220,9 +220,8 @@ function getNextAttemptIndex (task) {
  */
 function prepareRumCorrelation (task, attemptIndex) {
   // A per-origin cookie cannot identify overlapping attempts without racing.
-  if (!isRumCorrelationEnabled || isConcurrentTask(task)) return
-
   if (
+    !isRumCorrelationEnabled || isConcurrentTask(task) ||
     typeof window === 'undefined' ||
     typeof document === 'undefined' ||
     typeof rumTestExecutionIdCookieName !== 'string'
@@ -289,8 +288,7 @@ function getRum () {
  * @param {object|undefined} rum
  */
 function getIsRumActive (rum) {
-  if (!rum) return false
-  if (typeof rum.getInternalContext !== 'function') return false
+  if (!rum || typeof rum.getInternalContext !== 'function') return false
 
   try {
     return !!rum.getInternalContext()
@@ -770,8 +768,13 @@ function getEarlyFlakeDetectionSuiteCandidate (suite) {
 
     const testSuite = getTestSuite(task)
     const testName = getTestName(task)
-    if (attemptToFixTests[testSuite]?.[testName] || disabledTests[testSuite]?.[testName]) continue
-    if (!isEarlyFlakeDetectionTest(testSuite, testName)) continue
+    if (
+      attemptToFixTests[testSuite]?.[testName] ||
+      disabledTests[testSuite]?.[testName] ||
+      !isEarlyFlakeDetectionTest(testSuite, testName)
+    ) {
+      continue
+    }
 
     candidate ||= {
       hasNewTest: false,
