@@ -34,7 +34,13 @@ function checkTimeout (context) {
   const timeout = setTimeout(() => {
     timeoutChannel.publish()
   }, Math.max(0, remainingTimeInMillis - apmFlushDeadline))
-  timeout.unref?.()
+  try {
+    timeout.unref?.()
+  } catch (error) {
+    clearTimeout(timeout)
+    log.error('Error unreferencing Lambda timeout monitor: %s', error)
+    return
+  }
   return timeout
 }
 
@@ -174,6 +180,22 @@ exports.datadog = function datadog (lambdaHandler) {
   for (const name of [HANDLER_STREAMING, HANDLER_HIGHWATERMARK, '_ddWrapped']) {
     const value = getDataProperty(lambdaHandler, name)
     if (value !== undefined) monitored[name] = value
+  }
+  if (!isProxy(lambdaHandler)) {
+    for (const name of Reflect.ownKeys(lambdaHandler)) {
+      if (name === 'arguments' || name === 'caller') continue
+      const descriptor = Object.getOwnPropertyDescriptor(lambdaHandler, name)
+      if (!Object.hasOwn(descriptor, 'value')) continue
+      const existing = Object.getOwnPropertyDescriptor(monitored, name)
+      if (existing?.configurable === false) {
+        // Intrinsic function slots such as prototype cannot change their descriptor shape.
+        if (existing.writable) {
+          Object.defineProperty(monitored, name, { value: descriptor.value, writable: descriptor.writable })
+        }
+      } else {
+        Object.defineProperty(monitored, name, descriptor)
+      }
+    }
   }
   return monitored
 }

@@ -1,6 +1,7 @@
 'use strict'
 
 const path = require('path')
+const { types: { isModuleNamespaceObject } } = require('node:util')
 
 const { datadog } = require('../handler')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
@@ -40,11 +41,14 @@ function patchLambdaModule (handlerPath) {
       // The monitor copies Lambda metadata without invoking application accessors or Proxy traps.
       // Generic shimmer wrapping would copy the original properties back onto that safe wrapper.
       descriptor.value = datadog(descriptor.value)
-      Object.defineProperty(lambdaModule, handlerPath, descriptor)
-    } else {
-      shimmer.wrap(lambdaModule, handlerPath, patchLambdaHandler)
+      // Native ESM namespaces reject replacement even when their export reports writable: true.
+      const exports = isModuleNamespaceObject(lambdaModule)
+        ? Object.create(lambdaModule, Object.getOwnPropertyDescriptors(lambdaModule))
+        : lambdaModule
+      Object.defineProperty(exports, handlerPath, descriptor)
+      return exports
     }
-    return lambdaModule
+    return shimmer.wrap(lambdaModule, handlerPath, patchLambdaHandler) ?? lambdaModule
   }
 }
 

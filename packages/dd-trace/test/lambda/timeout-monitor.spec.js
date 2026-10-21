@@ -165,6 +165,54 @@ describe('Lambda timeout monitor', () => {
     })
   }
 
+  for (const failure of ['getter', 'method', 'non-callable']) {
+    for (const outcome of ['return', 'throw', 'reject', 'callback']) {
+      it(`continues with the handler ${outcome} when timer unref has a failing ${failure}`, async () => {
+        const setTimeout = global.setTimeout
+        const unrefError = new Error('timer unref failure')
+        const stub = sinon.stub(global, 'setTimeout').callsFake((...args) => {
+          const timer = setTimeout(...args)
+          if (failure === 'getter') {
+            Object.defineProperty(timer, 'unref', { get () { throw unrefError } })
+          } else {
+            timer.unref = failure === 'method' ? () => { throw unrefError } : 1
+          }
+          return timer
+        })
+        try {
+          const receiver = {}
+          const event = {}
+          const result = {}
+          const error = new Error('user failure')
+          const callback = sinon.stub().returns(result)
+          let called = false
+          const handler = datadog(function (ev, ctx, cb) {
+            called = true
+            assert.strictEqual(this, receiver)
+            assert.strictEqual(ev, event)
+            assert.strictEqual(ctx, context)
+            assert.strictEqual(cb, callback)
+            if (outcome === 'throw') throw error
+            if (outcome === 'reject') return Promise.reject(error)
+            return outcome === 'callback' ? cb(null, result) : result
+          })
+          const invoke = () => handler.call(receiver, event, context, callback)
+          if (outcome === 'throw') assert.throws(invoke, candidate => candidate === error)
+          else if (outcome === 'reject') await assert.rejects(invoke(), candidate => candidate === error)
+          else assert.strictEqual(invoke(), result)
+          assert.strictEqual(called, true)
+          if (outcome === 'callback') sinon.assert.calledOnceWithExactly(callback, null, result)
+          assert.strictEqual(clock.countTimers(), 0)
+          clock.tick(100)
+          sinon.assert.notCalled(killAll)
+          sinon.assert.notCalled(span.addTags)
+        } finally {
+          stub.restore()
+        }
+      })
+    }
+  }
+
   it('cleans up at runtime beforeExit completion and preserves the runtime callback contract', () => {
     const original = globalThis[BEFORE_EXIT] = sinon.stub().returns('runtime result')
     const receiver = {}
