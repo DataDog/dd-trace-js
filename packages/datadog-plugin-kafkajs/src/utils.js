@@ -1,5 +1,7 @@
 'use strict'
 
+const { Buffer } = require('node:buffer')
+
 const { getSizeOrZero } = require('../../dd-trace/src/datastreams')
 
 /** @typedef {string | Buffer | null | undefined} KafkaHeaderValue */

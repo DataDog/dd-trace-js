@@ -3,6 +3,7 @@
 // encoding used here is sha256
 // other languages use FNV1
 // this inconsistency is ok because hashes do not need to be consistent across services
+const { Buffer } = require('node:buffer')
 const crypto = require('crypto')
 const {
   hasDsmBase64,

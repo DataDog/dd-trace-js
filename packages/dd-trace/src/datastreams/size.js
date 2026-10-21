@@ -1,5 +1,6 @@
 'use strict'
 
+const { Buffer } = require('node:buffer')
 const { types } = require('util')
 
 // Byte cost of the `,"dd-pathway-ctx-base64":"<28 chars>"` field a producer adds to a JSON carrier.
