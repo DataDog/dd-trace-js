@@ -130,6 +130,9 @@ versions.forEach((version) => {
 
     useSandbox([
       `vitest@${version}`,
+      // Vite 8.3.5's source-map parser rejects the Buffers returned by Vitest's server runner.
+      // TODO: remove the pin once Vitest reads cached server modules as UTF-8.
+      ...(version === 'latest' ? ['vite@8.3.4'] : []),
       `@vitest/coverage-istanbul@${version}`,
       `@vitest/coverage-v8@${version}`,
       '@types/node',
@@ -3442,7 +3445,10 @@ versions.forEach(version => {
     this.timeout(60_000)
     let receiver, childProcess
 
-    useSandbox([`vitest@${version}`], false, ['./integration-tests/ci-visibility/vitest-empty-sessions'])
+    useSandbox([
+      `vitest@${version}`,
+      ...(version === 'latest' ? ['vite@8.3.4'] : []),
+    ], false, ['./integration-tests/ci-visibility/vitest-empty-sessions'])
 
     beforeEach(async () => {
       receiver = await new FakeCiVisIntake().start()
