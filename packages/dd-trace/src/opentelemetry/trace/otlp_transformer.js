@@ -168,8 +168,8 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
 
     return {
       traceId: span.trace_id.toTraceIdHex(traceIdHigh).padStart(32, '0'),
-      spanId: this.#idToBytes(span.span_id, 8),
-      parentSpanId: (parentId && !parentId.equals(ZERO_ID)) ? this.#idToBytes(parentId, 8) : undefined,
+      spanId: this.#spanIdToHex(span.span_id),
+      parentSpanId: (parentId && !parentId.equals(ZERO_ID)) ? this.#spanIdToHex(parentId) : undefined,
       traceState: span.trace_state,
       name: span.resource,
       kind: this.#mapSpanKind(span.meta?.['span.kind']),
@@ -338,26 +338,9 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     }
   }
 
-  /**
-   * Converts a DD Identifier object to a hex-encoded string of the specified byte length.
-   * Pads with leading zeros if the identifier buffer is shorter than the target.
-   * Per the OTLP http/json spec, trace-ids and span-ids must be hex-encoded strings.
-   *
-   * @param {Identifier} identifier - DD Identifier
-   * @param {number} targetLength - Target byte length (16 for trace ID, 8 for span ID)
-   */
-  #idToBytes (identifier, targetLength) {
-    const buffer = identifier.toBuffer()
-    if (buffer.length === targetLength) {
-      return Buffer.from(buffer).toString('hex')
-    }
-    if (buffer.length > targetLength) {
-      return Buffer.from(buffer.slice(buffer.length - targetLength)).toString('hex')
-    }
-    // Pad with leading zeros to reach target length.
-    const result = Buffer.alloc(targetLength)
-    Buffer.from(buffer).copy(result, targetLength - buffer.length)
-    return result.toString('hex')
+  /** @param {Identifier} identifier */
+  #spanIdToHex (identifier) {
+    return identifier.toString(16).slice(-16)
   }
 
   /**
