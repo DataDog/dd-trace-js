@@ -18,14 +18,27 @@ const { encodeVarintInto, decodeVarint } = require('./encoding')
 const MAX_CACHED_PATHWAY_HASHES = 500
 
 /**
- * Keyed by the exact string that is hashed for the current node (service, env, edge tags and propagation hash).
- * Each entry holds that string's hash and the final hashes per parent hash, keyed losslessly by the parent's
- * bytes so distinct parent hashes never share an entry.
+ * @typedef {object} PathwayHashEntry
+ * @property {Buffer} currentHash - Hash of the service, env, edge tags and propagation hash of the node.
+ * @property {Map<string, Buffer>} byParent - Final hashes keyed losslessly by the parent's bytes, so distinct parent
+ *   hashes never share an entry.
+ */
+
+/**
+ * Trie keyed on the components that make up the hash input: service, env, each hashable edge tag in sorted order and
+ * finally the propagation hash. A cache hit walks it without building a key string, so the per-checkpoint strings
+ * are never flattened and hashed. It keys more finely than the hash input (for example `['ab', 'c']` and
+ * `['a', 'bc']` get separate leaves), so two inputs whose hashes differ never share a leaf.
  *
- * @type {Map<string, { currentHash: Buffer, byParent: Map<string, Buffer> }>}
+ * @type {Map<unknown, Map<unknown, unknown>>}
  */
 const cache = new Map()
 let cachedPathwayHashes = 0
+
+// Stands for an absent (null or zero) propagation hash. A symbol cannot equal an edge tag or a bigint.
+const NO_PROPAGATION_HASH = Symbol('noPropagationHash')
+
+const MANUAL_CHECKPOINT_TAG = 'manual_checkpoint:true'
 
 const PATHWAY_CONTEXT_BYTES = 20
 
@@ -38,6 +51,17 @@ function shaHash (checkpointString) {
   return Buffer.from(crypto.createHash('sha256').update(checkpointString).digest().subarray(0, 8))
 }
 
+/** @param {string[]} edgeTags */
+function isSortedStrings (edgeTags) {
+  for (let i = 0; i < edgeTags.length; i++) {
+    if (typeof edgeTags[i] !== 'string') return false
+  }
+  for (let i = 1; i < edgeTags.length; i++) {
+    if (edgeTags[i - 1] > edgeTags[i]) return false
+  }
+  return true
+}
+
 /**
  * @param {string} service
  * @param {string} env
@@ -46,19 +70,24 @@ function shaHash (checkpointString) {
  * @param {bigint | null} propagationHashBigInt - Optional propagation hash for process/container tags
  */
 function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt = null) {
-  edgeTags.sort()
-  const hashableEdgeTags = edgeTags.includes('manual_checkpoint:true')
-    ? edgeTags.filter(item => item !== 'manual_checkpoint:true')
-    : edgeTags
+  // Default `sort()` orders all-string arrays by UTF-16 code units, like `<`, so skipping it on an array that is
+  // already sorted leaves the same array.
+  if (!isSortedStrings(edgeTags)) {
+    edgeTags.sort()
+  }
 
-  const joinedEdgeTags = hashableEdgeTags.join('')
-  const baseString = `${service}${env}${joinedEdgeTags}`
-  const hashInput = propagationHashBigInt ? `${baseString}:${propagationHashBigInt.toString(16)}` : baseString
-
-  // The hash input excludes parentHash, which is combined with it via a second sha pass to produce the final hash.
-  // A fan-in node with different parents therefore gets distinct entries under the same hash input.
-  let entry = cache.get(hashInput)
+  const propagationKey = propagationHashBigInt || NO_PROPAGATION_HASH
   const parentKey = parentHash.toString('latin1')
+
+  let node = cache.get(service)?.get(env)
+  for (let i = 0; node !== undefined && i < edgeTags.length; i++) {
+    const tag = edgeTags[i]
+    if (tag !== MANUAL_CHECKPOINT_TAG) {
+      node = node.get(tag)
+    }
+  }
+  /** @type {PathwayHashEntry | undefined} */
+  let entry = node?.get(propagationKey)
   if (entry !== undefined) {
     const cached = entry.byParent.get(parentKey)
     if (cached !== undefined) {
@@ -73,14 +102,40 @@ function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt 
   }
 
   if (entry === undefined) {
+    const hashableEdgeTags = edgeTags.includes(MANUAL_CHECKPOINT_TAG)
+      ? edgeTags.filter(item => item !== MANUAL_CHECKPOINT_TAG)
+      : edgeTags
+    const baseString = `${service}${env}${hashableEdgeTags.join('')}`
+    const hashInput = propagationHashBigInt ? `${baseString}:${propagationHashBigInt.toString(16)}` : baseString
+
+    // The hash input excludes parentHash, which is combined with it via a second sha pass to produce the final hash.
+    // A fan-in node with different parents therefore gets distinct entries under the same hash input.
     entry = { currentHash: shaHash(hashInput), byParent: new Map() }
-    cache.set(hashInput, entry)
+    let leaf = getOrCreate(getOrCreate(cache, service), env)
+    for (const tag of hashableEdgeTags) {
+      leaf = getOrCreate(leaf, tag)
+    }
+    leaf.set(propagationKey, entry)
   }
 
   const value = shaHash(Buffer.concat([entry.currentHash, parentHash], 16).toString())
   entry.byParent.set(parentKey, value)
   cachedPathwayHashes++
   return value
+}
+
+/**
+ * @param {Map<unknown, unknown>} map
+ * @param {unknown} key
+ * @returns {Map<unknown, unknown>}
+ */
+function getOrCreate (map, key) {
+  let child = map.get(key)
+  if (child === undefined) {
+    child = new Map()
+    map.set(key, child)
+  }
+  return child
 }
 
 /**

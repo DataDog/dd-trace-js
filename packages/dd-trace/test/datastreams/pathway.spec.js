@@ -167,6 +167,88 @@ describe('encoding', () => {
         }
       }
     })
+
+    it('should leave the caller edge tags in the order sort() would and match the uncached computation', () => {
+      const parent = Buffer.from('0000000000000000', 'hex')
+      const inputs = [
+        ['type:kafka', 'direction:in', 'topic:a'],
+        ['direction:in', 'topic:a', 'type:kafka'],
+        ['type:kafka', 'topic:a', 'direction:in'],
+        ['direction:in', 'topic:a', 'topic:a', 'type:kafka'],
+        ['type:kafka', 'topic:a', 'topic:a', 'direction:in'],
+        ['a:1', 'Z:1'],
+        ['Z:1', 'a:1'],
+        ['\u{1F600}', '\uFFFF'],
+        ['\uFFFF', '\u{1F600}'],
+      ]
+
+      for (const input of inputs) {
+        for (let pass = 0; pass < 2; pass++) {
+          const edgeTags = [...input]
+          const actual = computePathwayHash('test-service', 'test-env', edgeTags, parent)
+          assert.deepStrictEqual(edgeTags, [...input].sort())
+          assert.deepStrictEqual(actual, uncachedHash('test-service', 'test-env', input, parent))
+        }
+      }
+    })
+
+    it('should not share a cache entry between tag sequences that join to the same string', () => {
+      const parent = Buffer.from('0000000000000000', 'hex')
+      const sequences = [['ab', 'c'], ['a', 'bc'], ['direction:in'], ['direction:in', 'type:kafka']]
+
+      for (const order of [sequences, [...sequences].reverse()]) {
+        for (const tags of order) {
+          const expected = uncachedHash('test-service', 'test-env', tags, parent)
+          assert.deepStrictEqual(computePathwayHash('test-service', 'test-env', [...tags], parent), expected)
+        }
+      }
+    })
+
+    it('should not share a cache entry between an undefined and an "undefined" service or env', () => {
+      const parent = Buffer.from('0000000000000000', 'hex')
+      const tags = ['direction:in', 'type:kafka']
+      const pairs = [
+        [undefined, 'test-env'],
+        ['undefined', 'test-env'],
+        ['test-service', undefined],
+        ['test-service', 'undefined'],
+      ]
+
+      for (const order of [pairs, [...pairs].reverse()]) {
+        for (const [service, env] of order) {
+          const expected = uncachedHash(service, env, tags, parent)
+          assert.deepStrictEqual(computePathwayHash(service, env, [...tags], parent), expected)
+        }
+      }
+    })
+
+    it('should keep null, zero and distinct propagation hashes on the same tags apart', () => {
+      const parent = Buffer.from('0000000000000000', 'hex')
+      const tags = ['direction:in', 'type:kafka']
+      const propagationHashes = [null, 0n, 1n, BigInt('0x123456789abcdef0')]
+
+      for (const order of [propagationHashes, [...propagationHashes].reverse()]) {
+        for (const propagationHash of order) {
+          const expected = uncachedHash('test-service', 'test-env', tags, parent, propagationHash)
+          assert.deepStrictEqual(
+            computePathwayHash('test-service', 'test-env', [...tags], parent, propagationHash),
+            expected
+          )
+        }
+      }
+    })
+
+    it('should stay correct after more than 500 distinct edge tag sets and recomputation after a clear', () => {
+      const parent = Buffer.from('0000000000000001', 'hex')
+
+      for (let round = 0; round < 2; round++) {
+        for (let i = 0; i < 1200; i++) {
+          const edgeTags = ['direction:in', `topic:topic-${i}`, 'type:kafka']
+          const expected = uncachedHash('test-service', 'test-env', edgeTags, parent)
+          assert.deepStrictEqual(computePathwayHash('test-service', 'test-env', [...edgeTags], parent), expected)
+        }
+      }
+    })
   })
 
   it('encoding and decoding should be a no op', () => {
