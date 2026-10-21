@@ -34,6 +34,7 @@ const {
 } = require('./state')
 const log = require('./log')
 const { ackInstalled } = require('./status')
+const WorkerError = require('./worker-error')
 
 /**
  * @typedef {import('inspector').Debugger.SetBreakpointReturnType} SetBreakpointResponse
@@ -365,9 +366,11 @@ async function updateBreakpointInternal (breakpoint, probe) {
     await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
   } catch (err) {
     if (probe) markForRetry(probe)
-    throw Object.assign(new Error(`Error replacing breakpoint ${context}`, { cause: err }), {
-      reason: WORKER_ERROR_REASON.BREAKPOINT_REPLACEMENT_FAILED,
-    })
+    throw new WorkerError(
+      `Error replacing breakpoint ${context}`,
+      WORKER_ERROR_REASON.BREAKPOINT_REPLACEMENT_FAILED,
+      { cause: err }
+    )
   }
   breakpointToProbes.delete(breakpoint.id)
   if (probe) {
@@ -388,9 +391,11 @@ async function updateBreakpointInternal (breakpoint, probe) {
       samplingIndexToProbe.delete(detached.samplingIndex)
       markForRetry(detached)
     }
-    throw Object.assign(new Error(`Error setting breakpoint ${context}`, { cause: err }), {
-      reason: WORKER_ERROR_REASON.BREAKPOINT_REPLACEMENT_FAILED,
-    })
+    throw new WorkerError(
+      `Error setting breakpoint ${context}`,
+      WORKER_ERROR_REASON.BREAKPOINT_REPLACEMENT_FAILED,
+      { cause: err }
+    )
   }
   breakpoint.id = result.breakpointId
   breakpointToProbes.set(result.breakpointId, probesAtLocation)
