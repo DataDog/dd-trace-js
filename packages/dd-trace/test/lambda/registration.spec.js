@@ -230,42 +230,60 @@ describe('lambda', () => {
       assert.strictEqual(typeof fakeModule.datadog(() => 'user'), 'function')
     })
 
-    it('wraps the shim completion adapter even when a raw handler path is configured', async () => {
-      process.env.LAMBDA_TASK_ROOT = '/var/task'
-      process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
-      const { hookCalls } = loadLambdaWithHookSpy()
-      const fixturePath = `${path.resolve('/var/task', '', 'handler')}.js`
-      const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-      const oldTracer = global._ddtrace
-      const killAll = sinon.spy()
-      global._ddtrace = {
-        _tracer: {
-          _config: { DD_APM_FLUSH_DEADLINE_MILLISECONDS: 25 },
-          _processor: { killAll },
-          scope: () => ({ active: () => null }),
-        },
-      }
+    for (const file of ['dist/utils/handler.js', 'utils/handler.js']) {
+      for (const pending of [false, true]) {
+        it(`${pending ? 'monitors pending' : 'clears completed'} shim invocations through ${file}`, async () => {
+          process.env.LAMBDA_TASK_ROOT = '/var/task'
+          process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
+          const { hookCalls } = loadLambdaWithHookSpy()
+          const fixturePath = `${path.resolve('/var/task', '', 'handler')}.js`
+          const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+          const oldTracer = global._ddtrace
+          const killAll = sinon.spy()
+          global._ddtrace = {
+            _tracer: {
+              _config: { DD_APM_FLUSH_DEADLINE_MILLISECONDS: 25 },
+              _processor: { killAll },
+              scope: () => ({ active: () => null }),
+            },
+          }
 
-      try {
-        const app = { myEntry: (_event, _context) => ({ ok: true }) }
-        hookCalls[0].onrequire(app, fixturePath, undefined, '0.0.0')
-        const moduleExports = {
-          promisifiedHandler: handler => (event, context) => Promise.resolve(handler(event, context, () => {})),
-        }
-        const original = moduleExports.promisifiedHandler
-        hookCalls[1].onrequire(moduleExports, 'datadog-lambda-js/dist/utils/handler.js', undefined, '12.143.0')
-        assert.notStrictEqual(moduleExports.promisifiedHandler, original)
-        const handler = moduleExports.promisifiedHandler(app.myEntry)
-        assert.deepStrictEqual(await handler({}, { getRemainingTimeInMillis: () => 100 }), { ok: true })
-        assert.strictEqual(clock.countTimers(), 0)
-        clock.tick(100)
-        assert.strictEqual(killAll.callCount, 0)
-      } finally {
-        clock.restore()
-        global._ddtrace = oldTracer
-        delete instrumentations[fixturePath]
+          try {
+            const app = { myEntry: (_event, _context) => ({ ok: true }) }
+            hookCalls[0].onrequire(app, fixturePath, undefined, '0.0.0')
+            let complete
+            const completion = new Promise(resolve => { complete = resolve })
+            const moduleExports = {
+              promisifiedHandler: handler => (event, context) => {
+                handler(event, context, () => {})
+                return completion
+              },
+            }
+            const original = moduleExports.promisifiedHandler
+            hookCalls[1].onrequire(moduleExports, `datadog-lambda-js/${file}`, undefined, '12.143.0')
+            assert.notStrictEqual(moduleExports.promisifiedHandler, original)
+            const handler = moduleExports.promisifiedHandler(app.myEntry)
+            const invocation = handler({}, { getRemainingTimeInMillis: () => 100 })
+            assert.strictEqual(clock.countTimers(), 1)
+            if (pending) {
+              clock.tick(74)
+              assert.strictEqual(killAll.callCount, 0)
+              clock.tick(1)
+              assert.strictEqual(killAll.callCount, 1)
+            }
+            complete({ ok: true })
+            assert.deepStrictEqual(await invocation, { ok: true })
+            assert.strictEqual(clock.countTimers(), 0)
+            clock.tick(100)
+            assert.strictEqual(killAll.callCount, pending ? 1 : 0)
+          } finally {
+            clock.restore()
+            global._ddtrace = oldTracer
+            delete instrumentations[fixturePath]
+          }
+        })
       }
-    })
+    }
 
     it('logs hook errors without unwinding the loop', () => {
       process.env.LAMBDA_TASK_ROOT = '/var/task'

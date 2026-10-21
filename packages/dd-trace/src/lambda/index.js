@@ -64,9 +64,12 @@ if (!getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',').in
 
   // The published ESM shim imports this helper before initializing the tracer.
   // Revisit cached copies through the registered hook without loading a shim early.
-  const helperSuffix = path.join('datadog-lambda-js', 'dist', 'utils', 'handler.js')
+  const helperSuffixes = [
+    path.join('datadog-lambda-js', 'dist', 'utils', 'handler.js'),
+    path.join('datadog-lambda-js', 'utils', 'handler.js'),
+  ]
   for (const filename of Object.keys(require.cache)) {
-    if (!filename.endsWith(path.sep + helperSuffix)) continue
+    if (!helperSuffixes.some(suffix => filename.endsWith(path.sep + suffix))) continue
     try {
       require(filename)
     } catch (error) {
