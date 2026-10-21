@@ -99,7 +99,7 @@ module.exports = {
     },
     {
       name: '@aws-sdk/client-bedrock-runtime',
-      versions: ['>=3.422.0'],
+      versions: ['>=3.422.0', '>=3.785.0'],
     },
   ],
   bullmq: [
@@ -487,7 +487,13 @@ module.exports = {
   'light-my-request': [
     {
       name: 'fastify',
+      versions: ['>=3 <5'],
+      node: '<22.12.0',
+    },
+    {
+      name: 'fastify',
       versions: ['>=3'],
+      node: '>=22.12.0',
     },
   ],
   mariadb: [

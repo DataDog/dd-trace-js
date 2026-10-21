@@ -25,6 +25,8 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
+  TEST_FAILURE_VIDEO_UPLOADED,
+  TEST_FAILURE_VIDEO_UPLOAD_ERROR,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
@@ -97,8 +99,12 @@ function startWebDriverServer () {
             browserVersion: 'test',
             'goog:chromeOptions': {},
             platformName: process.platform,
+            unhandledPromptBehavior: body.capabilities.alwaysMatch.unhandledPromptBehavior ??
+              'dismiss and notify',
           },
         }
+      } else if (request.method === 'GET' && request.url?.endsWith('/screenshot')) {
+        value = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII='
       } else if (request.method === 'GET' && request.url === '/status') {
         value = { ready: true, message: '' }
       } else if (request.method === 'GET' && request.url?.endsWith('/window')) {
@@ -207,6 +213,21 @@ function countRequests (payloads, requestPath) {
  */
 function getLogRequests (payloads) {
   return payloads.filter(({ url }) => url.startsWith('/api/v2/logs?'))
+}
+
+/** @param {object[]} payloads - Events and media received from a managed retry run */
+function assertFailureVideos (payloads) {
+  const videos = payloads.filter(({ media }) => media?.contentType === 'video/webm')
+  const tests = getEvents(payloads).filter(event => event.type === 'test').map(event => event.content)
+  const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+  assert.ok(failedTests.length > 0)
+  assert.strictEqual(videos.length, failedTests.length)
+  for (const test of tests) {
+    const failed = test.meta[TEST_STATUS] === 'fail'
+    assert.strictEqual(test.meta[TEST_FAILURE_VIDEO_UPLOADED], failed ? 'true' : undefined)
+    assert.strictEqual(test.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+    assert.strictEqual(videos.filter(({ media }) => media.traceId === test.trace_id.toString()).length, failed ? 1 : 0)
+  }
 }
 
 for (const version of versions) {
@@ -565,6 +586,7 @@ for (const version of versions) {
 
           const scenario = framework === 'jasmine' ? 'jasmineEfdPassing' : 'efd'
           await runScenario(scenario, 1, payloads => {
+            assertFailureVideos(payloads)
             const events = getEvents(payloads)
             const session = events.find(event => event.type === 'test_session_end').content
             const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
@@ -616,7 +638,7 @@ for (const version of versions) {
               assert.strictEqual(filteredTests[0].meta[TEST_FINAL_STATUS], 'skip')
               assert.strictEqual(filteredTests[0].meta[TEST_IS_RETRY], undefined)
             }
-          })
+          }, { DD_TEST_FAILURE_VIDEOS_ENABLED: 'true' })
         })
 
         it('uses the first attempt duration to select the EFD retry count', async () => {
@@ -858,6 +880,7 @@ for (const version of versions) {
           })
 
           await runScenario('atrBoth', 1, payloads => {
+            assertFailureVideos(payloads)
             const events = getEvents(payloads)
             const session = events.find(event => event.type === 'test_session_end').content
             const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
@@ -885,6 +908,7 @@ for (const version of versions) {
             assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
           }, {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
           }, 1)
         })
 
@@ -1067,7 +1091,7 @@ for (const version of versions) {
                 'test-management.e2e.js': {
                   tests: {
                     'WebdriverIO Test Management fails every attempt to fix': {
-                      properties: { attempt_to_fix: true },
+                      properties: { attempt_to_fix: true, disabled: true },
                     },
                     'WebdriverIO Test Management has mixed attempt to fix results': {
                       properties: { attempt_to_fix: true },
@@ -1088,6 +1112,7 @@ for (const version of versions) {
           })
 
           await runScenario('testManagement', 1, payloads => {
+            assertFailureVideos(payloads)
             const events = getEvents(payloads)
             const session = events.find(event => event.type === 'test_session_end').content
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -1128,7 +1153,7 @@ for (const version of versions) {
             assert.strictEqual(finalMixed.meta[TEST_FINAL_STATUS], 'fail')
             assert.strictEqual(finalMixed.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
             assert.strictEqual(finalMixed.meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
-          }, {}, 1)
+          }, { DD_TEST_FAILURE_VIDEOS_ENABLED: 'true' }, 1)
         })
 
         {
@@ -1230,6 +1255,9 @@ for (const version of versions) {
                 'atr-always-fail.e2e.js': {
                   tests: {
                     'WebdriverIO ATR fails every retry': {
+                      properties: { quarantined: true },
+                    },
+                    'WebdriverIO ATR always fails fails every retry': {
                       properties: { quarantined: true },
                     },
                   },
@@ -1482,6 +1510,7 @@ for (const version of versions) {
 
           const scenario = framework === 'jasmine' ? 'failedTestReplayBothAndImpacted' : 'failedTestReplayAndImpacted'
           await runScenario(scenario, 1, payloads => {
+            assertFailureVideos(payloads)
             const tests = getEvents(payloads)
               .filter(event => event.type === 'test')
               .map(event => event.content)
@@ -1517,8 +1546,30 @@ for (const version of versions) {
             }
           }, {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
             _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
           })
+        })
+
+        it('uploads the terminal failure video with Failed Test Replay and no teardown hooks', async () => {
+          receiver.setSettings({
+            di_enabled: true,
+            flaky_test_retries_count: 1,
+            flaky_test_retries_enabled: true,
+          })
+          await runScenario('atrAlwaysFails', 1, payloads => {
+            assertFailureVideos(payloads)
+            const tests = getEvents(payloads).filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+            assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+            const finalRetry = tests.find(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(finalRetry.meta[TEST_FINAL_STATUS], 'fail')
+            assert.strictEqual(finalRetry.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
+          }, {
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          }, 1)
         })
 
         it('falls back safely when policy requests fail', async () => {

@@ -12,9 +12,7 @@ const errorCh = channel('apm:iovalkey:command:error')
 
 addHook({ name: 'iovalkey', versions: ['>=0.0.1'] }, Valkey => {
   shimmer.wrap(Valkey.prototype, 'sendCommand', sendCommand => function (command, stream) {
-    if (!startCh.hasSubscribers) return sendCommand.apply(this, arguments)
-
-    if (!command?.promise) return sendCommand.apply(this, arguments)
+    if (!startCh.hasSubscribers || !command?.promise) return sendCommand.apply(this, arguments)
 
     const options = this.options || {}
     const connectionName = options.connectionName
@@ -22,7 +20,7 @@ addHook({ name: 'iovalkey', versions: ['>=0.0.1'] }, Valkey => {
 
     const ctx = { command: command.name, args: command.args, connectionOptions, connectionName }
     return startCh.runStores(ctx, () => {
-      command.promise.then(() => finish(finishCh, errorCh, ctx), err => finish(finishCh, errorCh, ctx, err))
+      command.promise.then(() => finish(ctx), err => finish(ctx, err))
 
       try {
         return sendCommand.apply(this, arguments)
@@ -37,7 +35,11 @@ addHook({ name: 'iovalkey', versions: ['>=0.0.1'] }, Valkey => {
   return Valkey
 })
 
-function finish (finishCh, errorCh, ctx, error) {
+/**
+ * @param {Record<string, unknown> & { error?: Error }} ctx
+ * @param {Error} [error]
+ */
+function finish (ctx, error) {
   if (error) {
     ctx.error = error
     errorCh.publish(ctx)

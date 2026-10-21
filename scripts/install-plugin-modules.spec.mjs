@@ -13,6 +13,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const { getAllInstrumentations, getInstrumentation, getInstrumentationNames } = require(
   '../packages/dd-trace/test/setup/helpers/load-inst'
 )
+const { getHooks } = require('../packages/datadog-instrumentations/src/helpers/instrument')
 
 const pureIntegrations = {
   'azure-cosmos': '@azure/cosmos',
@@ -20,6 +21,11 @@ const pureIntegrations = {
   langchain: '@langchain/core',
   langgraph: '@langchain/langgraph',
   mercurius: 'mercurius',
+}
+
+const subscriberOnlyIntegrations = {
+  'claude-agent-sdk': ['@anthropic-ai/claude-agent-sdk'],
+  'aws-durable-execution-sdk-js': ['@aws/durable-execution-sdk-js'],
 }
 
 describe('plugin fixture discovery', () => {
@@ -35,9 +41,22 @@ describe('plugin fixture discovery', () => {
   })
 
   it('prefers real hybrid instrumentation modules over rewriter metadata', () => {
-    const declarations = getInstrumentation('claude-agent-sdk')
-    assert.ok(declarations.length > 0)
-    assert.ok(declarations.every(declaration => declaration.file === null))
+    const declarations = getInstrumentation('graphql')
+    for (const file of ['language/printer.js', 'language/visitor.js', 'utilities/index.js']) {
+      assert.deepEqual(declarations.find(declaration => declaration.file === file), {
+        name: 'graphql',
+        file,
+        versions: ['>=0.10'],
+      })
+    }
+  })
+
+  it('uses exact rewriter declarations for subscriber-only runtime setup', () => {
+    for (const [plugin, names] of Object.entries(subscriberOnlyIntegrations)) {
+      const expected = [...getHooks(names).values()]
+      assert.ok(expected.length > 0, `${plugin} should have rewriter declarations`)
+      assert.deepEqual(getInstrumentation(plugin), expected)
+    }
   })
 
   it('discovers each integration once without treating the rewriter registry as an integration', () => {

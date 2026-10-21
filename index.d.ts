@@ -218,7 +218,6 @@ interface Tracer extends opentracing.Tracer {
    * @env DD_FEATURE_FLAGS_ENABLED
    * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
    * @env DD_FLAGGING_EVALUATION_COUNTS_ENABLED
-   * @beta This feature is in preview and not ready for production use
    */
   openfeature: tracer.OpenFeatureProvider;
 
@@ -275,7 +274,7 @@ interface Tracer extends opentracing.Tracer {
    *
    * Removes all baggage items from the current context and returns the new context.
    *
-   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#remove-all-values
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#clear-baggage-in-the-context
    */
   removeAllBaggageItems (): Record<string, string>;
 }
@@ -819,6 +818,22 @@ declare namespace tracer {
     site?: string;
 
     /**
+     * Feature Flags configuration.
+     */
+    featureFlags?: {
+      /**
+       * Allow boolean true in dd_evaluation_telemetry_opt_out to suppress evaluation events, metrics, and span tags.
+       * The attribute remains available to targeting rules and exposure reporting.
+       * Enabling this option does not change exposure events or flag evaluation results.
+       * Captured when the provider is constructed.
+       * Explicit configuration takes precedence over the environment variable, including false.
+       * @default false
+       * @env DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED
+       */
+      enableEvaluationTelemetryOptOutParameter?: boolean
+    }
+
+    /**
      * Experimental features can be enabled individually using key / value pairs.
      * @default {}
      */
@@ -890,8 +905,6 @@ declare namespace tracer {
 
       /**
        * Configuration for Feature Flagging & Experimentation.
-       *
-       * @beta This feature is in preview and not ready for production use
        */
       flaggingProvider?: {
         /**
@@ -1728,8 +1741,6 @@ declare namespace tracer {
    *
    * Wraps @datadog/openfeature-node-server with agentless and Agent Remote Config delivery.
    * Implements the OpenFeature Provider interface for flag evaluation.
-   *
-   * @beta This feature is in preview and not ready for production use
    */
   export interface OpenFeatureProvider {
     /**
@@ -2494,14 +2505,14 @@ declare namespace tracer {
     /**
      * This plugin patches the [browser-bunyan](https://github.com/philmander/browser-bunyan)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface browser_bunyan extends Integration {}
 
     /**
      * This plugin automatically instruments the
-     * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
+     * [bullmq](https://www.npmjs.com/package/bullmq) message queue library.
      */
     interface bullmq extends Instrumentation {
       /**
@@ -2522,7 +2533,7 @@ declare namespace tracer {
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface bunyan extends Integration {}
@@ -2975,7 +2986,7 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [langgraph](https://github.com/npmjs/package/langgraph) library.
+     * [langgraph](https://www.npmjs.com/package/@langchain/langgraph) library.
      */
     interface langgraph extends Instrumentation, LLMObsIntegration {}
 
@@ -3011,7 +3022,7 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
+     * [modelcontextprotocol-sdk](https://www.npmjs.com/package/@modelcontextprotocol/sdk) library.
      */
     interface modelcontextprotocol_sdk extends Instrumentation, LLMObsIntegration {}
 
@@ -3190,7 +3201,7 @@ declare namespace tracer {
     /**
      * This plugin patches the [pino](http://getpino.io)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface pino extends Integration {}
@@ -3361,7 +3372,7 @@ declare namespace tracer {
     /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface winston extends Integration {}
@@ -3652,7 +3663,7 @@ declare namespace tracer {
        * key/value pair separated by an equals sign `=`. Spaces and horizontal tabs
        * surrounding `list-members` are ignored. There can be a maximum of 32
        * `list-members` in a `list`.
-       * More Info: https://www.w3.org/TR/trace-context/#tracestate-field
+       * More Info: https://www.w3.org/TR/trace-context/#tracestate-header
        *
        * Examples:
        *     Single tracing system (generic format):
@@ -3857,7 +3868,8 @@ declare namespace tracer {
 
       /**
        * Sets inputs, outputs, tags, metadata, and metrics as provided for a given LLM Observability span.
-       * Note that with the exception of tags, this method will override any existing values for the provided fields.
+       * Note that with the exception of tags and agent, this method will override any existing values for the provided fields.
+       * Agent fields update earlier agent annotations one top-level field at a time.
        *
        * For example:
        * ```javascript
@@ -3882,7 +3894,7 @@ declare namespace tracer {
        * ```
        *
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
-       * @param options An object containing the inputs, outputs, tags, metadata, tool definitions, and metrics to set on the span.
+       * @param options An object containing the inputs, outputs, tags, metadata, tool definitions, metrics, and agent to set on the span.
        */
       annotate (options: llmobs.AnnotationOptions): void
       annotate (span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
@@ -4808,6 +4820,81 @@ declare namespace tracer {
       version? : string
     }
 
+    interface AgentToolParameter {
+      type?: string,
+      required?: boolean
+    }
+
+    /**
+     * A plain JSON Schema object with `type: 'object'`, which is how it is told apart from a parameter map.
+     * Schema-library objects (for example Zod schemas) must be converted first, for example with
+     * `z.toJSONSchema()`, or they are dropped.
+     */
+    interface AgentToolJsonSchema {
+      type: 'object',
+      properties: { [param: string]: { type?: string, [key: string]: unknown } },
+      required?: string[]
+    }
+
+    interface AgentTool {
+      name: string,
+      description?: string,
+      /**
+       * Parameters as `{ [param]: { type, required } }`, or a JSON Schema object, which is flattened to the
+       * same shape.
+       */
+      parameters?: { [param: string]: AgentToolParameter } | AgentToolJsonSchema
+    }
+
+    /**
+     * Inference parameters reported in an agent manifest. Keys are accepted in snake_case or camelCase and
+     * reported in snake_case. Other keys are dropped, since provider-specific settings can carry secrets.
+     */
+    interface AgentModelSettings {
+      frequency_penalty?: number,
+      frequencyPenalty?: number,
+      logit_bias?: { [token: string]: number },
+      logitBias?: { [token: string]: number },
+      logprobs?: boolean,
+      max_tokens?: number,
+      maxTokens?: number,
+      parallel_tool_calls?: boolean,
+      parallelToolCalls?: boolean,
+      presence_penalty?: number,
+      presencePenalty?: number,
+      seed?: number,
+      stop_sequences?: string[],
+      stopSequences?: string[],
+      temperature?: number,
+      timeout?: number,
+      tool_choice?: string,
+      toolChoice?: string,
+      top_k?: number,
+      topK?: number,
+      top_logprobs?: number,
+      topLogprobs?: number,
+      top_p?: number,
+      topP?: number
+    }
+
+    /**
+     * Declares the agent an `agent` span represents, reported as the agent's manifest. Only applies to
+     * `agent` spans. Unreportable values are dropped with a warning, and unset values (`undefined`, `null`,
+     * `''`, `[]`) leave what an earlier annotation declared in place.
+     */
+    interface Agent {
+      /** The agent's name. Defaults to the agent span's name. */
+      name?: string,
+      /** The system instructions the agent runs with. */
+      instructions?: string,
+      /** The model the agent is configured to call. */
+      model?: string,
+      /** Inference parameters. Replaces the settings an earlier annotation declared as a whole. */
+      modelSettings?: AgentModelSettings,
+      /** The tools the agent can call. Replaces tools declared by an earlier annotation. */
+      tools?: AgentTool[]
+    }
+
     /**
      * Annotation options for LLM Observability spans.
      */
@@ -4858,7 +4945,12 @@ declare namespace tracer {
        * A list of ToolDefinition object that represents the tools available to the LLM for this span
        * Each definition requires a `name` and optionally accepts `description`, `schema`, and `version`.
        * */
-      toolDefinitions?: ToolDefinition[]
+      toolDefinitions?: ToolDefinition[],
+
+      /**
+       * Declares the agent this span represents. Only used on `agent` spans.
+       */
+      agent?: Agent
     }
 
     interface AnnotationContextOptions {
@@ -4883,6 +4975,13 @@ declare namespace tracer {
        * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
        */
       prompt?: Prompt,
+
+      /**
+       * Declares the agent running in this context, read when the context is entered. The manifest is
+       * reported on every `agent` span in the context, nested ones included. Use `annotate` on a nested agent
+       * span to declare its own agent.
+       */
+      agent?: Agent,
     }
 
     interface RoutingContextOptions {

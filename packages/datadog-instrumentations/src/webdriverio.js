@@ -6,6 +6,7 @@ const realSetTimeout = setTimeout
 const { AsyncResource } = require('node:async_hooks')
 const { fileURLToPath } = require('node:url')
 
+const { createFinalFlushTimeoutError, FINAL_FLUSH_TIMEOUT } = require('../../dd-trace/src/ci-visibility/final-flush')
 const { EMPTY_EFD_RETRY_POLICY } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
@@ -30,6 +31,9 @@ const {
   SCREENSHOT_UPLOAD_RESPONSE,
   sendWebdriverioWorkerMessage,
   SUITE_FINISH,
+  VIDEO_UPLOAD,
+  VIDEO_UPLOAD_FLUSH,
+  VIDEO_UPLOAD_RESPONSE,
   WEBDRIVERIO_WORKER_ENV,
   WEBDRIVERIO_WORKER_EVENT,
   WEBDRIVERIO_WORKER_ORIGIN,
@@ -52,6 +56,8 @@ const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const modifiedFilesCh = channel('ci:mocha:modified-files')
 const screenshotCapabilitiesCh = channel('ci:webdriverio:screenshot:capabilities')
 const screenshotUploadCh = channel('ci:webdriverio:screenshot:upload')
+const videoCapabilitiesCh = channel('ci:webdriverio:video:capabilities')
+const videoUploadCh = channel('ci:webdriverio:video:upload')
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
@@ -59,8 +65,10 @@ const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
 const jasmineAdapterInitCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
+const mochaAdapterInitCh = tracingChannel('orchestrion:@wdio/mocha-framework:MochaAdapter_init')
 const baseReporterWaitForSyncCh = tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync')
 const runnerRunCh = tracingChannel('orchestrion:@wdio/runner:Runner_run')
+const runnerStartSessionCh = tracingChannel('orchestrion:@wdio/runner:Runner_startSession')
 const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
 const launcherStartInstanceCh = tracingChannel('orchestrion:@wdio/cli:Launcher_startInstance')
 const configParserShardCh = tracingChannel('orchestrion:@wdio/config:ConfigParser_shard')
@@ -80,7 +88,7 @@ const TEST_FRAMEWORK = 'webdriverio'
 const SET_RUM_COOKIE_SCRIPT = 'cookie => { globalThis.document.cookie = cookie }'
 const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
-let jasmineWorkerRequestId = 0
+let workerRequestId = 0
 
 const loadCh = channel('dd-trace:instrumentation:load')
 if (loadCh.hasSubscribers) {
@@ -289,8 +297,7 @@ async function preloadRumNavigation () {
   try {
     const browser = this
     const testExecutionId = getRumTestExecutionId(browser)
-    if (!canCorrelateRumBrowser(browser)) return
-    if (!rumRunnerBrowsers.has(browser)) return
+    if (!canCorrelateRumBrowser(browser) || !rumRunnerBrowsers.has(browser)) return
 
     retainRumBrowser(browser)
     if (!testExecutionId) return
@@ -363,9 +370,7 @@ async function handleRumNavigation (context) {
       log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
     }
     const testExecutionId = getRumTestExecutionId(browser, isRumActive)
-    if (sampledOut) return
-
-    if (!testExecutionId) {
+    if (sampledOut || !testExecutionId) {
       return
     }
     if (!isRumActive && browser.isBidi) return
@@ -957,6 +962,8 @@ function waitForRumTestStart (context) {
  * @property {boolean|undefined} hasTests
  * @property {number|undefined} exitCode
  * @property {number|undefined} retries
+ * @property {AbortController|undefined} videoController
+ * @property {ReturnType<typeof setTimeout>|undefined} videoFlushTimer
  */
 
 /**
@@ -1019,6 +1026,7 @@ function createWorkerConfiguration () {
     isItrEnabled: false,
     isKnownTestsEnabled: false,
     isTestFailureScreenshotsEnabled: false,
+    isTestFailureVideosEnabled: false,
     isSuitesSkippingEnabled: false,
     isTestDynamicInstrumentationEnabled: false,
     isTestManagementTestsEnabled: false,
@@ -1032,22 +1040,23 @@ function createWorkerConfiguration () {
 }
 
 /**
- * Configures a Jasmine worker and waits for its coordinator-owned optimization settings.
+ * Configures a framework worker before browser session creation using its coordinator-owned settings.
  *
  * @param {{_jrunner?: {env?: {addReporter?: (reporter: object) => void}}, _specs?: string[]}} adapter
  * @param {{
  *   resolveCallback?: (onDone: () => void) => void,
  *   rejectCallback?: (onDone: () => void) => void
  * }} context
+ * @param {'mocha'|'jasmine'} testFrameworkAdapter
  */
-function initializeJasmineWorker (adapter, context) {
+function initializeFrameworkWorker (adapter, context, testFrameworkAdapter) {
   if (!isWebdriverioWorker) {
     return
   }
 
   const specs = adapter?._specs || []
 
-  if (jasmineDoneCh.hasSubscribers) {
+  if (testFrameworkAdapter === JASMINE_FRAMEWORK_ADAPTER && jasmineDoneCh.hasSubscribers) {
     adapter?._jrunner?.env?.addReporter?.({
       /**
        * Publishes run-level failures that are absent from suiteDone.
@@ -1066,11 +1075,11 @@ function initializeJasmineWorker (adapter, context) {
    * @param {() => void} onDone
    */
   const waitForCoordinator = onDone => {
-    const requestId = `${process.pid}-${++jasmineWorkerRequestId}`
+    const requestId = `${process.pid}-${++workerRequestId}`
     let finished = false
 
     /**
-     * Releases Jasmine initialization exactly once.
+     * Releases framework initialization exactly once.
      *
      * @param {object} [configuration]
      */
@@ -1087,7 +1096,7 @@ function initializeJasmineWorker (adapter, context) {
         repositoryRoot: configuration.repositoryRoot,
         specs,
         testFramework: TEST_FRAMEWORK,
-        testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
+        testFrameworkAdapter,
       })
       onDone()
     }
@@ -1111,7 +1120,7 @@ function initializeJasmineWorker (adapter, context) {
       name: WORKER_READY,
       content: {
         requestId,
-        testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
+        testFrameworkAdapter,
       },
     }, error => {
       if (error) {
@@ -1327,6 +1336,9 @@ function configureCoordinator (state, response) {
   const screenshotCapabilities = {}
   screenshotCapabilitiesCh.publish(screenshotCapabilities)
   configuration.isTestFailureScreenshotsEnabled = screenshotCapabilities.enabled === true
+  const videoCapabilities = {}
+  videoCapabilitiesCh.publish(videoCapabilities)
+  configuration.isTestFailureVideosEnabled = videoCapabilities.enabled === true
 
   configuration.repositoryRoot = repositoryRoot
   if (err || !libraryConfig) {
@@ -1667,6 +1679,13 @@ function handleWorkerMessage (state, workerRecord, message) {
     return
   }
 
+  if (message.name === WORKER_READY || message.name === CONFIGURATION_REQUEST) {
+    // Watch mode reuses the worker. Keep old requests cancelled while the new run gets a fresh signal.
+    clearTimeout(workerRecord.videoFlushTimer)
+    workerRecord.videoFlushTimer = undefined
+    workerRecord.videoController?.abort(new Error('WebdriverIO video run completed'))
+    workerRecord.videoController = undefined
+  }
   if (message.name === WORKER_READY) {
     initializeCoordinator(state, configuration => {
       if (state.testFrameworkAdapter === JASMINE_FRAMEWORK_ADAPTER) {
@@ -1687,25 +1706,51 @@ function handleWorkerMessage (state, workerRecord, message) {
     handleConfigurationRequest(state, workerRecord, message)
     return
   }
-  if (message.name === SCREENSHOT_UPLOAD) {
+  if (message.name === VIDEO_UPLOAD_FLUSH) {
+    if (message.content?.complete) {
+      clearTimeout(workerRecord.videoFlushTimer)
+      workerRecord.videoFlushTimer = undefined
+      // The worker may have reached its own deadline before the coordinator's timer fires.
+      workerRecord.videoController?.abort(new Error('WebdriverIO video flush completed'))
+      return
+    }
+    const controller = workerRecord.videoController ??= new AbortController()
+    workerRecord.videoFlushTimer ??= setTimeout(() => {
+      controller.abort(createFinalFlushTimeoutError())
+    }, FINAL_FLUSH_TIMEOUT)
+    workerRecord.videoFlushTimer.unref?.()
+    return
+  }
+  if (message.name === SCREENSHOT_UPLOAD || message.name === VIDEO_UPLOAD) {
+    const isVideo = message.name === VIDEO_UPLOAD
+    const uploadCh = isVideo ? videoUploadCh : screenshotUploadCh
     const { requestId, ...content } = message.content || {}
     const respond = (error) => sendWorkerMessage(workerRecord, {
       origin: 'datadog',
-      name: SCREENSHOT_UPLOAD_RESPONSE,
+      name: isVideo ? VIDEO_UPLOAD_RESPONSE : SCREENSHOT_UPLOAD_RESPONSE,
       content: {
         error: error?.message,
         requestId,
       },
     })
-    if (!requestId || !screenshotUploadCh.hasSubscribers) {
-      respond(new Error('WebdriverIO screenshot upload is not available'))
-    } else {
+    if (requestId && uploadCh.hasSubscribers) {
       try {
-        screenshotUploadCh.publish({ ...content, onDone: respond })
+        let signal
+        if (isVideo) {
+          workerRecord.videoController ??= new AbortController()
+          signal = workerRecord.videoController.signal
+        }
+        uploadCh.publish({
+          ...content,
+          signal,
+          onDone: respond,
+        })
       } catch (error) {
-        log.error('WebdriverIO screenshot upload error: %s', error?.message || String(error))
+        log.error('WebdriverIO media upload error: %s', error?.message || String(error))
         respond(error)
       }
+    } else {
+      respond(new Error('WebdriverIO media upload is not available'))
     }
     return
   }
@@ -1732,6 +1777,8 @@ function handleWorkerMessage (state, workerRecord, message) {
  * @param {object} exit
  */
 function handleWorkerExit (state, workerRecord, exit) {
+  clearTimeout(workerRecord.videoFlushTimer)
+  workerRecord.videoController?.abort(new Error('WebdriverIO worker exited during video upload'))
   state.activeWorkers--
   workerRecord.exitCode = exit.exitCode
   workerRecord.retries = exit.retries
@@ -1768,6 +1815,8 @@ function registerWorker (state, worker, specs) {
     hasTests: undefined,
     exitCode: undefined,
     retries: undefined,
+    videoController: undefined,
+    videoFlushTimer: undefined,
   }
   state.activeWorkers++
   if (state.activeWorkers > state.maxActiveWorkers) {
@@ -1917,6 +1966,44 @@ function waitForRumCleanupBeforeSessionEnd (context) {
   context.rumCleanupCallback = cleanupAllRumBrowsers
 }
 
+/**
+ * Opted-in background screenshots must not dismiss dialogs. Preserve explicit customer policies.
+ *
+ * @param {{
+ *   arguments: [{framework?: string, sessionId?: string, automationProtocol?: string}, object],
+ *   self: {_isMultiremote?: boolean, _isMultiRemote?: boolean}
+ * }} context
+ */
+function configureVideoPromptBehavior (context) {
+  if (!testFinishCh.hasSubscribers || getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) !== true) return
+  const [config, capabilities] = context.arguments
+  if (!SUPPORTED_FRAMEWORK_ADAPTERS.has(config?.framework) || 'sessionId' in config ||
+    config.automationProtocol === './protocol-stub.js') return
+  try {
+    const videoCapabilities = {}
+    videoCapabilitiesCh.publish(videoCapabilities)
+    if (!videoCapabilities.enabled) return
+    /** @param {{unhandledPromptBehavior?: unknown}} caps - Capabilities for one browser session. */
+    const withDefault = caps => caps && caps.unhandledPromptBehavior === undefined
+      ? { ...caps, unhandledPromptBehavior: 'ignore' }
+      : caps
+    // Prepare every session before replacing the argument, so a read failure cannot leave partial defaults.
+    context.arguments[1] = (context.self._isMultiremote || context.self._isMultiRemote)
+      ? Object.fromEntries(Object.entries(capabilities).map(([name, options]) => {
+        const session = { ...options }
+        session.capabilities = withDefault(session.capabilities)
+        return [name, session]
+      }))
+      : withDefault(capabilities)
+  } catch (error) {
+    log.error('Error configuring WebdriverIO video prompt handling: %s', error?.message || String(error))
+  }
+}
+
+runnerStartSessionCh.start.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (configureVideoPromptBehavior)
+)
+
 baseReporterWaitForSyncCh.asyncEnd.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForLogSubmissionAtWorkerExit)
 )
@@ -1974,7 +2061,17 @@ executeAsyncCh.subscribe({
 // @ts-expect-error See the partial tracing-channel subscriber above.
 jasmineAdapterInitCh.subscribe({
   asyncEnd (context) {
-    initializeJasmineWorker(context.result || context.self, context)
+    initializeFrameworkWorker(context.result || context.self, context, JASMINE_FRAMEWORK_ADAPTER)
+  },
+})
+
+// @ts-expect-error See the partial tracing-channel subscriber above.
+mochaAdapterInitCh.subscribe({
+  asyncEnd (context) {
+    // Mocha normally receives worker settings in run(), after WebdriverIO creates its browser session.
+    if (getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true) {
+      initializeFrameworkWorker(context.result || context.self, context, MOCHA_FRAMEWORK_ADAPTER)
+    }
   },
 })
 

@@ -204,6 +204,98 @@ describe('OpenFeature event delivery strategy', () => {
     firstStop()
     secondStop()
   })
+
+  it('shares discovery and sticky fallback between both subscribers, including a late subscriber', () => {
+    const config = agentlessConfig()
+    const directRoute = directEVPRoute()
+    const otherWriter = sinon.spy()
+    createDirectEVPRoute.returns(directRoute)
+
+    const stop = setEventDeliveryStrategy(config, setWriterEnabledValue)
+    const stopOther = setEventDeliveryStrategy(config, otherWriter)
+    sinon.assert.calledOnce(discoverEVPProxy)
+    discoverEVPProxy.firstCall.args[2](null, { url: config.url, basePath: '/evp_proxy/v4' })
+
+    const localRoute = setWriterEnabledValue.firstCall.args[1]
+    assert.strictEqual(otherWriter.firstCall.args[1], localRoute)
+    localRoute.onFallback()
+    sinon.assert.calledWithExactly(setWriterEnabledValue, true, directRoute)
+    sinon.assert.calledWithExactly(otherWriter, true, directRoute)
+
+    const lateWriter = sinon.spy()
+    const stopLate = setEventDeliveryStrategy(config, lateWriter)
+    sinon.assert.calledOnceWithExactly(lateWriter, true, directRoute)
+    sinon.assert.calledOnce(discoverEVPProxy)
+    stop()
+    stopOther()
+    stopLate()
+  })
+
+  it('keeps one recovery alive for the remaining consumer and stops it after the last unsubscribe', async () => {
+    const config = agentlessConfig()
+    const otherWriter = sinon.spy()
+    discoverEVPProxy.yields(new Error('Receiver unavailable'))
+    const stop = setEventDeliveryStrategy(config, setWriterEnabledValue)
+    const stopOther = setEventDeliveryStrategy(config, otherWriter)
+    sinon.assert.calledOnce(discoverEVPProxy)
+    sinon.assert.calledOnceWithExactly(otherWriter, false)
+    assert.strictEqual(clock.countTimers(), 1)
+
+    stop()
+    stop()
+    discoverEVPProxy.onSecondCall().yields(null, { url: config.url, basePath: '/evp_proxy/v4' })
+    await clock.tickAsync(60_000)
+    sinon.assert.calledTwice(discoverEVPProxy)
+    sinon.assert.calledOnce(setWriterEnabledValue)
+    assert.strictEqual(otherWriter.secondCall.args[0], true)
+
+    otherWriter.secondCall.args[1].onUnavailable()
+    assert.strictEqual(clock.countTimers(), 1)
+    stopOther()
+    assert.strictEqual(clock.countTimers(), 0)
+    await clock.tickAsync(60_000)
+    sinon.assert.calledTwice(discoverEVPProxy)
+  })
+
+  for (const source of ['remote_config', 'agentless']) {
+    it(`ignores stale ${source} discovery after the last consumer closes and starts fresh on reuse`, () => {
+      const config = agentlessConfig()
+      config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = source
+      const otherWriter = sinon.spy()
+      const stop = setEventDeliveryStrategy(config, setWriterEnabledValue)
+      const stopOther = setEventDeliveryStrategy(config, otherWriter)
+      stop()
+      stopOther()
+
+      const newWriter = sinon.spy()
+      const stopNew = setEventDeliveryStrategy(config, newWriter)
+      sinon.assert.calledTwice(discoverEVPProxy)
+      discoverEVPProxy.firstCall.args[2](null, { url: config.url, basePath: '/evp_proxy/v2' })
+      sinon.assert.notCalled(setWriterEnabledValue)
+      sinon.assert.notCalled(otherWriter)
+      sinon.assert.notCalled(newWriter)
+      discoverEVPProxy.secondCall.args[2](null, { url: config.url, basePath: '/evp_proxy/v2' })
+      sinon.assert.calledOnce(newWriter)
+      stopNew()
+    })
+  }
+
+  it('never shares routes or credentials across separate tracer configurations', () => {
+    const firstConfig = agentlessConfig()
+    const secondConfig = { ...agentlessConfig(), DD_API_KEY: 'different-api-key' }
+    const otherWriter = sinon.spy()
+    const directRoute = directEVPRoute()
+    createDirectEVPRoute.withArgs(secondConfig).returns(directRoute)
+    discoverEVPProxy.yields(null)
+
+    const stop = setEventDeliveryStrategy(firstConfig, setWriterEnabledValue)
+    const stopOther = setEventDeliveryStrategy(secondConfig, otherWriter)
+    sinon.assert.calledTwice(discoverEVPProxy)
+    sinon.assert.calledOnceWithExactly(setWriterEnabledValue, false)
+    sinon.assert.calledOnceWithExactly(otherWriter, true, directRoute)
+    stop()
+    stopOther()
+  })
 })
 
 /**

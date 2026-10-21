@@ -134,6 +134,22 @@ describe('Config', () => {
       )
     })
 
+    it('leaves the private parallelization runtime parameters unset by default', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config._DD_TEST_PARALLELIZATION_METADATA_FILE, undefined)
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE'), undefined)
+      assert.strictEqual(config._DD_TEST_PARALLELIZATION_ENABLED, undefined)
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'), undefined)
+    })
+
+    it('reads the internal parallelization runtime parameters', () => {
+      process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+      process.env._DD_TEST_PARALLELIZATION_METADATA_FILE = '/tmp/plan-metadata.json'
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE'), '/tmp/plan-metadata.json')
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'), 'true')
+    })
+
     it('should return aliased value', () => {
       process.env.DATADOG_API_KEY = '12345'
       assert.strictEqual(getEnvironmentVariable('DATADOG_API_KEY'), '12345')
@@ -6094,6 +6110,45 @@ rules:
         },
       })
       assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'flaggingProvider'), false)
+    })
+
+    it('disables evaluation telemetry opt-out by default and accepts the provider option', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
+      assert.strictEqual(getConfig().featureFlags[name], false)
+      process.env[name] = 'true'
+      assert.strictEqual(getConfig().featureFlags[name], true)
+      const config = getConfig({
+        featureFlags: { enableEvaluationTelemetryOptOutParameter: false },
+      })
+      assert.strictEqual(config.featureFlags[name], false)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'code')
+      delete process.env[name]
+      assert.strictEqual(getConfig({
+        featureFlags: { enableEvaluationTelemetryOptOutParameter: true },
+      }).featureFlags[name], true)
+    })
+
+    it('reports the stable evaluation telemetry opt-out environment variable', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
+      process.env[name] = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags[name], true)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'env_var')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name, value: true, origin: 'env_var' },
+      ])
+    })
+
+    it('accepts false for the stable evaluation telemetry opt-out environment variable', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
+      process.env[name] = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags[name], false)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'env_var')
     })
 
     it('reads the configuration source environment variable', () => {

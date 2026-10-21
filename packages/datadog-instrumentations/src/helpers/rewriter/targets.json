@@ -45,6 +45,7 @@
   "@wdio/config/build/node/index.js": "@wdio/config",
   "@wdio/jasmine-framework/build/index.js": "@wdio/jasmine-framework",
   "@wdio/local-runner/build/index.js": "@wdio/local-runner",
+  "@wdio/mocha-framework/build/index.js": "@wdio/mocha-framework",
   "@wdio/runner/build/index.js": "@wdio/runner",
   "@wdio/utils/build/index.js": "@wdio/utils",
   "ai/dist/index.js": "ai",

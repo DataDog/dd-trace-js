@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
 const { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
-const { devNull, tmpdir } = require('node:os')
+const { tmpdir } = require('node:os')
 const path = require('node:path')
 
 const { describe, it } = require('mocha')
@@ -21,7 +21,6 @@ describe('OpenFeature benchmark output', function () {
             VARIANT: 'typical',
             OPERATIONS: '100',
             WARMUP: '0',
-            STARTUP_GUARD_REPORT: devNull,
           }
           delete env.SIRUN_READY_FD
           delete env.SIRUN_VARIANT

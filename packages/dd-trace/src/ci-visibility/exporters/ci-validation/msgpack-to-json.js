@@ -224,7 +224,7 @@ class MsgpackJsonConverter {
    * @param {number} value decoded floating-point value
    */
   #writeFloat (value) {
-    if (!Number.isFinite(value)) throw new Error('MessagePack validation payload contains a non-finite number.')
+    if (!Number.isFinite(value)) throw new TypeError('MessagePack validation payload contains a non-finite number.')
     this.#writer.write(Object.is(value, -0) ? '-0' : String(value))
   }
 

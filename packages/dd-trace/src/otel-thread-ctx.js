@@ -32,7 +32,7 @@ const {
   enterCh,
   spanFinishCh,
   getActiveSpan,
-  ensureChannelsActivated,
+  acquireChannels,
 } = require('./storage-channels')
 const {
   finalEndpoint,
@@ -371,7 +371,7 @@ function start () {
   getContext = ns.getContext
   clearContext = ns.clearContext
 
-  ensureChannelsActivated(isACFActive)
+  acquireChannels(false)
   enterCh.subscribe(onEnter)
   spanFinishCh.subscribe(onSpanFinished)
   // Endpoint updates come from the shared web-tags cache's transition channels

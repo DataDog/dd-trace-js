@@ -1,13 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const guard = require('../startup-guard')
 
-// eslint-disable-next-line import/order -- the startup guard must load before the native addon
 const { DDWAF } = require('@datadog/native-appsec')
 
-const samples = require('../appsec/waf-samples.json')
 const rules = require('../../../packages/dd-trace/src/appsec/recommended.json')
+const samples = require('../appsec/waf-samples.json')
+const guard = require('../startup-guard')
 
 const operations = Number(process.env.OPERATIONS)
 const sample = samples[process.env.WAF_SAMPLE]
@@ -64,6 +63,6 @@ guard.loopStart()
 for (let i = 0; i < operations; i++) {
   runRequest(false)
 }
-guard.done(0.1)
+guard.done()
 
 waf.dispose()

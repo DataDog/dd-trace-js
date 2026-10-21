@@ -20,6 +20,7 @@ const {
 } = require('../../packages/dd-trace/src/ci-visibility/rum')
 const {
   testErrorCh,
+  testSkipCh,
   testStartCh,
   testSuiteFinishCh,
   testSuiteStartCh,
@@ -642,6 +643,61 @@ describe('vitest no-worker init instrumentation selection', () => {
       }
 
       assert.deepStrictEqual(testStartLines, [42])
+    })
+
+    for (const correlateFinalAttempt of [true, false]) {
+      it(`uses the skipped attempt's RUM metadata when correlation succeeds: ${correlateFinalAttempt}`, () => {
+        const ctx = getNoWorkerReporterContext()
+        const skippedTests = []
+        const onTestSkip = context => skippedTests.push(context)
+        testSkipCh.subscribe(onTestSkip)
+
+        try {
+          configureNoWorkerReporter(ctx)
+          const { file, task } = createReporterTestFile()
+          file.pool = 'browser'
+          task.result.state = 'skip'
+          task.meta.__ddTestOptCurrentAttemptIndex = 1
+          task.meta.__ddTestOptRumTestExecutionIds = correlateFinalAttempt ? ['101', '102'] : ['101']
+          task.meta.__ddTestOptRumActive = correlateFinalAttempt ? [true, true] : [true]
+          task.meta.__ddTestOptAttemptStartTimes = [1000, 2000]
+          task.meta.__ddTestOptAttemptDurations = [10, 20]
+          ctx.reporters[0].onTestCaseResult({ task })
+          ctx.reporters[0].onFinished([file])
+        } finally {
+          testSkipCh.unsubscribe(onTestSkip)
+        }
+
+        assert.strictEqual(skippedTests.length, 1)
+        assert.strictEqual(skippedTests[0].testExecutionId, correlateFinalAttempt ? '102' : undefined)
+        assert.strictEqual(skippedTests[0].isRumActive, correlateFinalAttempt)
+        assert.strictEqual(skippedTests[0].startTime, 2000)
+        assert.strictEqual(skippedTests[0].duration, 20)
+      })
+    }
+
+    it('leaves statically skipped tests without attempt timing or RUM correlation', () => {
+      const ctx = getNoWorkerReporterContext()
+      const skippedTests = []
+      const onTestSkip = context => skippedTests.push(context)
+      testSkipCh.subscribe(onTestSkip)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        const { file, task } = createReporterTestFile()
+        task.mode = 'skip'
+        task.result = undefined
+        ctx.reporters[0].onTestCaseResult({ task })
+        ctx.reporters[0].onFinished([file])
+      } finally {
+        testSkipCh.unsubscribe(onTestSkip)
+      }
+
+      assert.strictEqual(skippedTests.length, 1)
+      assert.strictEqual(skippedTests[0].testExecutionId, undefined)
+      assert.strictEqual(skippedTests[0].isRumActive, undefined)
+      assert.strictEqual(skippedTests[0].startTime, undefined)
+      assert.strictEqual(skippedTests[0].duration, undefined)
     })
 
     it('removes Vitest browser URL metadata from reported errors', () => {

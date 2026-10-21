@@ -78,8 +78,8 @@ if (asyncDisposeSymbol === undefined) {
 }
 
 class AbortError extends Error {
-  constructor (message) {
-    super(message)
+  constructor () {
+    super('Aborted')
     this.name = 'AbortError'
   }
 }
@@ -599,7 +599,7 @@ function wrapResolve (resolve, isJit = false) {
     }
 
     if (rootCtx.abortController?.signal.aborted) {
-      throw new AbortError('Aborted')
+      throw new AbortError()
     }
 
     if (!traceResolver) {
@@ -736,7 +736,7 @@ function resolveCompiledJitField (rootCtx, descriptorId, resolve, self, source, 
   }
 
   if (rootCtx.abortController?.signal.aborted) {
-    throw new AbortError('Aborted')
+    throw new AbortError()
   }
 
   const depth = config.countListIndices ? descriptor.pathDepth : descriptor.selectionDepth
@@ -930,7 +930,7 @@ function resolveJitDefaultInvocation (rootCtx, descriptorId, source, path, argum
     }
   }
   if (rootCtx.abortController?.signal.aborted) {
-    throw new AbortError('Aborted')
+    throw new AbortError()
   }
 
   const depth = rootCtx.config.countListIndices ? descriptor.pathDepth : descriptor.selectionDepth

@@ -14,6 +14,47 @@ const configDefaultsPath = join(repositoryRoot, 'packages', 'dd-trace', 'src', '
 const securityControls = 'SANITIZER:COMMAND_INJECTION:sanitizer/index.js:sanitize'
 const sanitizerUrl = 'file:///app/sanitizer/index.js'
 
+describe('initialize.mjs', () => {
+  it('initializes ESM instrumentation without deprecated loader warnings', () => {
+    const result = initializeEsm()
+
+    assert.doesNotMatch(result.stderr, /\[DEP0205\]/)
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.match(result.stdout, /^true\n/)
+  })
+
+  it('initializes ESM instrumentation when require(esm) is disabled', function () {
+    if (!process.allowedNodeEnvironmentFlags.has('--no-experimental-require-module')) {
+      // Older runtimes do not expose require(esm) or its disabling flag.
+      this.skip()
+    }
+
+    const result = initializeEsm(['--no-experimental-require-module'])
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.match(result.stdout, /^true\n/)
+  })
+})
+
+/**
+ * @param {string[]} [execArgv]
+ */
+function initializeEsm (execArgv = []) {
+  return spawnSync(process.execPath, [
+    ...execArgv,
+    '--import', pathToFileURL(join(repositoryRoot, 'initialize.mjs')).href,
+    join(repositoryRoot, 'integration-tests/init/instrument.mjs'),
+  ], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      NODE_OPTIONS: '',
+      DD_INJECT_FORCE: 'true',
+      DD_TRACE_STARTUP_LOGS: 'false',
+    },
+  })
+}
+
 describe('loader hook', () => {
   let temporaryDirectory
   let localConfigPath
