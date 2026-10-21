@@ -176,6 +176,40 @@ function haveRootTestsFinished (rootTests) {
   return true
 }
 
+/**
+ * @param {{ file: string }} test
+ */
+function startRootSuite (test) {
+  const ctx = testFileToSuiteCtx.get(test.file)
+  if (ctx?._pendingRootStart) {
+    ctx._pendingRootStart = false
+    testSuiteStartCh.runStores(ctx, () => {})
+  }
+}
+
+/**
+ * @param {string} file
+ * @param {'pass' | 'fail' | 'skip'} status
+ * @param {object} [runner] Defers coverage reset until this runner's suite-end reporters finish.
+ */
+function finishRootSuite (file, status, runner) {
+  const ctx = testFileToSuiteCtx.get(file)
+  if (!ctx) {
+    log.warn('No ctx found for suite', file)
+    return
+  }
+
+  if (global.__coverage__) {
+    const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
+    testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
+    mergeCoverage(global.__coverage__, originalCoverageMap)
+    if (runner) runnersWithPendingCoverageReset.add(runner)
+    else resetCoverage(global.__coverage__)
+  }
+
+  testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+}
+
 function getSuitePath (suite) {
   return getTestSuitePath(suite.file, process.cwd())
 }
@@ -1306,7 +1340,7 @@ addHook({
     // Populated during the root 'suite' event so the normal finish path can include them
     // in mixed-file status calculation.
     const rootTestsByFile = new Map()
-    // Counts how many original tests per pure-root file still need their final attempt.
+    // Counts how many selected tests per pure-root file still need their final attempt.
     // Hits zero when the last test's lifecycle completes, triggering the suite finish.
     const rootPendingCountByFile = new Map()
     const rootFinalizationPendingCountByFile = new Map()
@@ -1379,33 +1413,18 @@ addHook({
       }
       rootPendingCountByFile.delete(file)
 
-      const ctx = testFileToSuiteCtx.get(file)
-      if (!ctx) {
-        log.warn('No ctx found for suite', file)
-        return
-      }
-
       const rootTests = rootTestsByFile.get(file) || []
-      const status = getRootSuiteStatus(rootTests)
-
-      if (global.__coverage__) {
-        const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
-        testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
-        mergeCoverage(global.__coverage__, originalCoverageMap)
-        resetCoverage(global.__coverage__)
-      }
-
-      testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+      finishRootSuite(file, getRootSuiteStatus(rootTests))
     }
 
-    function finishRootSuiteFallbackForFile (file) {
+    function finishRootSuiteFallbackForFile (file, runner) {
       const ctx = testFileToSuiteCtx.get(file)
       if (!ctx || !rootPendingCountByFile.has(file)) return
 
       const rootTests = rootTestsByFile.get(file) || []
       const status = haveRootTestsFinished(rootTests) ? getRootSuiteStatus(rootTests) : 'fail'
       rootPendingCountByFile.delete(file)
-      testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+      finishRootSuite(file, status, runner)
     }
 
     function finishRootSuiteAfterFinalAttempt (test) {
@@ -1436,13 +1455,7 @@ addHook({
     this.prependListener('test', getOnTestHandler(true))
     // Reporters are registered before Runner#run, so prepend this after the test handler
     // to start the suite first and preserve the test event if a reporter throws.
-    this.prependListener('test', function (test) {
-      const ctx = testFileToSuiteCtx.get(test.file)
-      if (ctx?._pendingRootStart) {
-        ctx._pendingRootStart = false
-        testSuiteStartCh.runStores(ctx, () => {})
-      }
-    })
+    this.prependListener('test', startRootSuite)
 
     // Reporters are registered before this run wrapper. Prepend terminal handlers
     // so a reporter error cannot strand a test span that Mocha already completed.
@@ -1482,6 +1495,8 @@ addHook({
     this.prependListener('fail', getOnFailHandler(true, config))
 
     this.prependListener('pending', getOnPendingHandler())
+    // Static skips emit 'pending' without 'test', so their suite must start here too.
+    this.prependListener('pending', startRootSuite)
 
     this.prependListener('suite', function (suite) {
       if (suite.root) {
@@ -1499,9 +1514,14 @@ addHook({
         // below. Since 'suite' fires for root first, in the mixed case the ctx is created
         // here and the describe-based handler finds it already set.
         if (suite.root && suite.tests.length > 0) {
+          const { _grep: grep, _invert: invert } = this
+          const lastIndex = grep.lastIndex
+          const selectedTests = suite.tests.filter(test => grep.test(test.fullTitle()) !== !!invert)
+          // Inspecting a stateful grep must not change which tests Mocha subsequently selects.
+          if (grep.lastIndex !== lastIndex) grep.lastIndex = lastIndex
           const files = new Set(suite.tests.map(test => test.file).filter(Boolean))
           for (const file of files) {
-            const testsForFile = suite.tests.filter(t => t.file === file)
+            const testsForFile = selectedTests.filter(t => t.file === file)
             rootTestsByFile.set(file, testsForFile)
             // Only track the countdown for pure root-level files.
             // Mixed files are finished by the normal 'suite end' path.
@@ -1542,10 +1562,10 @@ addHook({
     this.prependListener('suite end', function (suite) {
       if (suite.root) {
         // Normal case: pure root-level files are finished by the 'test end' / 'hook end'
-        // listeners via finishRootSuiteForFile. Two edge cases remain here:
+        // listeners via finishRootSuiteForFile. Fallback cases remain here:
         //
-        // 1. All-pending: no 'test' event fired, _pendingRootStart is still true.
-        //    Start and immediately finish with 'skip'.
+        // 1. Unstarted file: no 'test' or 'pending' event fired (e.g. all tests
+        //    were filtered out). Start and immediately finish with 'skip'.
         //
         // 2. Aborted mid-run (e.g. a beforeEach hook failure): Mocha skips remaining
         //    tests and jumps straight to 'suite end'. rootPendingCountByFile still has
@@ -1572,7 +1592,7 @@ addHook({
               continue
             }
 
-            finishRootSuiteFallbackForFile(test.file)
+            finishRootSuiteFallbackForFile(test.file, this)
           }
         }
         return

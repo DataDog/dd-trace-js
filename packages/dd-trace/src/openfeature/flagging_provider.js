@@ -18,6 +18,9 @@ const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
  * Extends DatadogNodeServerProvider to add tracer integration and configuration management.
  */
 class FlaggingProvider extends DatadogNodeServerProvider {
+  // Track this wrapper's logging lifecycle without reading the upstream provider's private state.
+  #waitingForConfiguration = false
+
   /** @type {SpanEnrichmentHook | undefined} */
   #spanEnrichmentHook
 
@@ -80,6 +83,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   initialize (context) {
     log.debug('Feature Flags: waiting for provider initialization...')
 
+    this.#waitingForConfiguration = !this.getConfiguration()
     const promise = super.initialize(context)
 
     // `DatadogNodeServerProvider#initialize` starts a timer that is never unref'd, which would
@@ -88,26 +92,43 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // TODO: remove once `@datadog/openfeature-node-server` unrefs this timer itself.
     this.initController?.timeoutId?.unref?.()
 
-    // Only observes the outcome for logging; `promise` itself is returned unmodified below.
-    // Guarded so a logger failure can never leave the derived promise unhandled.
-    promise.then(
-      () => {
-        try {
-          log.debug('Feature Flags: provider initialized successfully')
-        } catch { /* logging failure must not crash the process */ }
-      },
-      (error) => {
-        try {
-          // errorWithoutTelemetry avoids inflating telemetry volume for every routine init timeout.
-          log.errorWithoutTelemetry(
-            'Feature Flags: provider failed to initialize: %s',
-            error instanceof Error ? error.message : String(error)
-          )
-        } catch { /* logging failure must not crash the process */ }
-      }
-    )
+    if (this.getConfiguration()) this.#logInitialConfiguration()
 
     return promise
+  }
+
+  /**
+   * @param {Parameters<DatadogNodeServerProvider['setConfiguration']>[0]} configuration
+   */
+  setConfiguration (configuration) {
+    const wasWaiting = this.#waitingForConfiguration
+    super.setConfiguration(configuration)
+    this.#waitingForConfiguration = false
+    if (wasWaiting && configuration != null) this.#logInitialConfiguration()
+  }
+
+  /**
+   * @param {unknown} error
+   */
+  setError (error) {
+    const wasWaiting = this.#waitingForConfiguration
+    super.setError(error)
+    this.#waitingForConfiguration = false
+    if (!wasWaiting) return
+
+    try {
+      // Avoid inflating telemetry volume for routine initialization timeouts.
+      log.errorWithoutTelemetry(
+        'Feature Flags: provider failed to initialize: %s',
+        error instanceof Error ? error.message : String(error)
+      )
+    } catch { /* logging failure must not affect initialization */ }
+  }
+
+  #logInitialConfiguration () {
+    try {
+      log.debug('Feature Flags: initial configuration available')
+    } catch { /* logging failure must not affect initialization */ }
   }
 
   /**
