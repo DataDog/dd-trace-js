@@ -134,6 +134,13 @@ describe('Config', () => {
       )
     })
 
+    it('leaves the private parallelization marker unset by default', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config._DD_TEST_PARALLELIZATION_ENABLED, undefined)
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'), undefined)
+    })
+
     it('reads the internal planning-job environment', () => {
       process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
       process.env._DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'plan-job-123'

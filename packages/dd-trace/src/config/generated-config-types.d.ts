@@ -3,7 +3,7 @@
 
 export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
-  _DD_TEST_PARALLELIZATION_ENABLED: boolean;
+  _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
   _DD_TEST_PARALLELIZATION_PLAN_JOB_ID: string | undefined;
   _DD_TEST_PARALLELIZATION_PLAN_JOB_NAME: string | undefined;
   _DD_TEST_PARALLELIZATION_PLAN_JOB_URL: string | undefined;
@@ -618,7 +618,7 @@ export interface GeneratedConfig {
 
 export interface GeneratedEnvVarConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
-  _DD_TEST_PARALLELIZATION_ENABLED: boolean;
+  _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
   _DD_TEST_PARALLELIZATION_PLAN_JOB_ID: string | undefined;
   _DD_TEST_PARALLELIZATION_PLAN_JOB_NAME: string | undefined;
   _DD_TEST_PARALLELIZATION_PLAN_JOB_URL: string | undefined;

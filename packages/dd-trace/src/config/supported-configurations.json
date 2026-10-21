@@ -2145,7 +2145,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
+        "default": null,
         "description": "Internal: Identifies test processes started by ddtest run."
       }
     ],
