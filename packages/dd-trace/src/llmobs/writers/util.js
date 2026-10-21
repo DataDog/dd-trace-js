@@ -28,7 +28,7 @@ function setAgentStrategy (config, setWritersAgentlessValue) {
     const hasEndpoint = Array.isArray(endpoints) &&
       endpoints.some(endpoint => typeof endpoint === 'string' && endpoint.startsWith(EVP_PROXY_AGENT_BASE_PATH))
     setWritersAgentlessValue(!hasEndpoint)
-  }, { retry: false })
+  }, { keepProcessAlive: true })
 }
 
 function parseResponseAndLog (err, code, eventsLength, url, eventType) {

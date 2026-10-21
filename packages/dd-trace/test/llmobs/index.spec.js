@@ -641,7 +641,7 @@ describe('module', () => {
 
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
-          sinon.assert.calledWith(fetchAgentInfoStub, config.url, sinon.match.func, { retry: false })
+          sinon.assert.calledWithExactly(fetchAgentInfoStub, config.url, sinon.match.func, { keepProcessAlive: true })
         })
       })
 

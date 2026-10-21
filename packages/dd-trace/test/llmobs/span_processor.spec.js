@@ -1065,6 +1065,17 @@ describe('span processor', () => {
       ])
     })
 
+    it('attaches boolean arrays to meta_struct', () => {
+      const metadata = { flags: [true, false], nested: [{ enabled: false, flags: [false, true] }] }
+      const { span } = createSpan({ '_ml_obs.meta.metadata': metadata })
+
+      processor.process(span)
+      processor.processTrace({ spans: [span], willExport: true })
+
+      assert.deepStrictEqual(span.meta_struct._llmobs.meta.metadata, metadata)
+      sinon.assert.notCalled(writer.append)
+    })
+
     it('uses the writer for multi-tenant routing', () => {
       const routing = { apiKey: 'tenant-key', site: 'tenant.example' }
       const { span } = createSpan({
