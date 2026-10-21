@@ -175,7 +175,7 @@ exports.datadog = function datadog (lambdaHandler) {
     }
   }
 
-  // The shim uses arity and the runtime's streaming metadata to choose how to invoke the handler.
+  // datadog-lambda-js uses arity and the runtime's streaming metadata to choose how to invoke the handler.
   Object.defineProperty(monitored, 'length', { value: getDataProperty(lambdaHandler, 'length') ?? 0 })
   for (const name of [HANDLER_STREAMING, HANDLER_HIGHWATERMARK, '_ddWrapped']) {
     const value = getDataProperty(lambdaHandler, name)

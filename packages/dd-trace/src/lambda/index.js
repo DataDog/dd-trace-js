@@ -62,8 +62,8 @@ if (!getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',').in
     return moduleExports
   })
 
-  // The published ESM shim imports this helper before initializing the tracer.
-  // Revisit cached copies through the registered hook without loading a shim early.
+  // The published datadog-lambda-js ESM entrypoint imports this helper before initializing the tracer.
+  // Revisit cached copies through the registered hook without loading datadog-lambda-js early.
   const helperSuffixes = [
     path.join('datadog-lambda-js', 'dist', 'utils', 'handler.js'),
     path.join('datadog-lambda-js', 'utils', 'handler.js'),

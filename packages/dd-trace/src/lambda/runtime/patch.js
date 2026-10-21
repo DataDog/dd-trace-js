@@ -26,7 +26,7 @@ function patchDatadogLambdaHandler (datadogHandler) {
 
 /**
  * Wraps datadog-lambda-js's promisifiedHandler factory, which wraps the customer's handler.
- * The timeout monitor surrounds the resulting adapter to follow the shim's selected completion Promise.
+ * The timeout monitor surrounds that adapter to observe the completion Promise selected by datadog-lambda-js.
  *
  * @param {object} moduleExports
  */
@@ -65,7 +65,7 @@ function patchLambdaHandler (lambdaHandler) {
 const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
 const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 
-// Observe the shim's selected completion Promise inside the invocation span's async scope.
+// Observe the completion Promise selected by datadog-lambda-js inside the invocation span's async scope.
 // The npm package keeps dist/; Lambda layer builds place its contents directly in the package root.
 addHook({ name: 'datadog-lambda-js', file: 'dist/utils/handler.js' }, patchPromisifiedHandlerModule)
 addHook({ name: 'datadog-lambda-js', file: 'utils/handler.js' }, patchPromisifiedHandlerModule)

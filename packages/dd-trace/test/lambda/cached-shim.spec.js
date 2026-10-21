@@ -5,7 +5,7 @@ const { spawnSync } = require('node:child_process')
 
 const { describe, it } = require('mocha')
 
-describe('cached Lambda shim completion adapter', () => {
+describe('cached datadog-lambda-js completion adapter', () => {
   for (const disabled of [false, true]) {
     it(`${disabled ? 'preserves' : 'patches'} cached application and layer copies`, () => {
       const script = `
@@ -51,7 +51,7 @@ describe('cached Lambda shim completion adapter', () => {
   }
 
   for (const directory of ['dist', '']) {
-    it(`does not eagerly load an available ${directory || 'published'} shim helper`, () => {
+    it(`does not eagerly load an available ${directory || 'published'} datadog-lambda-js helper`, () => {
       const script = `
         const assert = require('node:assert/strict')
         const fs = require('node:fs')
@@ -66,7 +66,7 @@ describe('cached Lambda shim completion adapter', () => {
           fs.writeFileSync(path.join(base, 'package.json'), JSON.stringify({
             name: 'datadog-lambda-js', version: '12.143.0', main: path.join(directory, 'index.js')
           }))
-          fs.writeFileSync(helper, 'throw new Error("shim helper must not be loaded eagerly")')
+          fs.writeFileSync(helper, 'throw new Error("datadog-lambda-js helper must not be loaded eagerly")')
           process.env.AWS_LAMBDA_FUNCTION_NAME = 'unloaded-helper-test'
           process.env.LAMBDA_TASK_ROOT = root
           process.env.DD_LAMBDA_HANDLER = 'handler.handler'

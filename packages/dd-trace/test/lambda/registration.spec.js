@@ -291,7 +291,7 @@ describe('lambda', () => {
               const fakeModule = { myEntry: userHandler }
               const patchedModule = hookCalls[0].onrequire(fakeModule, fixturePath, undefined, '0.0.0')
               assert.notStrictEqual(patchedModule.myEntry, userHandler)
-              // The Lambda shim reads these properties after the tracer's module hook has returned.
+              // datadog-lambda-js reads these properties after the tracer's module hook has returned.
               assert.strictEqual(patchedModule.myEntry[symbol], undefined)
               assert.strictEqual(await patchedModule.myEntry({}, {}), 'original')
             } finally {
@@ -350,7 +350,7 @@ describe('lambda', () => {
 
     for (const file of ['dist/utils/handler.js', 'utils/handler.js']) {
       for (const pending of [false, true]) {
-        it(`${pending ? 'monitors pending' : 'clears completed'} shim invocations through ${file}`, async () => {
+        it(`${pending ? 'monitors pending' : 'clears completed'} datadog-lambda-js handlers via ${file}`, async () => {
           process.env.LAMBDA_TASK_ROOT = '/var/task'
           process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
           const { hookCalls } = loadLambdaWithHookSpy()
