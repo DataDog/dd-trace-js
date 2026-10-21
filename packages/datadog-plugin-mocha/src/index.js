@@ -853,7 +853,7 @@ class MochaPlugin extends CiPlugin {
       const store = storage('legacy').getStore()
       // skipped through it.skip, so the span is not created yet
       // for this test
-      if (!store) {
+      if (!ctx.currentStore) {
         const span = this.startTestSpan(ctx)
 
         ctx.parentStore = store
@@ -1926,6 +1926,12 @@ class MochaPlugin extends CiPlugin {
     } = testInfo
 
     const extraTags = {}
+    const { testAnnotations, assignedProperties } = testInfo
+    if (testAnnotations?.mustFail) extraTags['test.test_management.prevent_failure_suppression'] = 'true'
+    if (testAnnotations?.noAutoRetry) extraTags['test.test_management.no_auto_retry'] = 'true'
+    if (assignedProperties?.attempt_to_fix) extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+    if (assignedProperties?.disabled) extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+    if (assignedProperties?.quarantined) extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     const testParametersString = getTestParametersString(this._testTitleToParams, title)
     if (testParametersString) {
       extraTags[TEST_PARAMETERS] = testParametersString

@@ -2,6 +2,7 @@
 
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
+const { getTestAnnotations, copyTestAnnotations } = require('../../../dd-trace/src/ci-visibility/test-annotations')
 const { getCallSites } = require('../../../dd-trace/src/plugins/util/stacktrace')
 const { DD_MAJOR } = require('../../../../version')
 const { testToStartLine } = require('./utils')
@@ -38,6 +39,11 @@ function addMochaRunHooks (versions, wrapMochaRun) {
     }
     metadata = { moduleBaseDir: hookMeta?.moduleBaseDir }
     patchedMochaConstructors.set(Mocha, metadata)
+    shimmer.wrap(Mocha.prototype, 'ui', ui => function () {
+      const result = ui.apply(this, arguments)
+      this.suite.on('pre-require', context => preserveDeclarationAnnotations(context, Mocha))
+      return result
+    })
     return wrapMochaRun(Mocha, frameworkVersion, metadata)
   }
 
@@ -76,6 +82,61 @@ function addMochaRunHooks (versions, wrapMochaRun) {
   }, wrapMochaPackage)
 }
 
+/**
+ * @param {object} context
+ * @param {Function} Mocha
+ */
+function preserveDeclarationAnnotations (context, Mocha) {
+  let declarationAnnotations
+  /** @param {Function} original */
+  function wrapDeclaration (original) {
+    return function (title, fn) {
+      const previousAnnotations = declarationAnnotations
+      // TDD test.skip delegates to test(title), dropping its callback and the returned Test.
+      declarationAnnotations ??= getTestAnnotations(fn)
+      try {
+        const test = original.apply(this, arguments)
+        if (test && !test.fn) test._ddDeclaredAnnotations = declarationAnnotations
+        return test
+      } finally {
+        declarationAnnotations = previousAnnotations
+      }
+    }
+  }
+
+  for (const key of ['it', 'specify', 'test', 'xit', 'xspecify']) {
+    const declare = context[key]
+    if (typeof declare !== 'function') continue
+    context[key] = shimmer.wrapFunction(declare, wrapDeclaration)
+    // Older Mocha interfaces copy declarations to exports before this listener runs.
+    for (const exported of ['it', 'specify', 'test', 'xit', 'xspecify']) {
+      if (Mocha[exported] === declare) Mocha[exported] = context[key]
+    }
+    for (const modifier of ['skip', 'only']) {
+      if (typeof declare[modifier] === 'function') {
+        context[key][modifier] = shimmer.wrapFunction(declare[modifier], wrapDeclaration)
+      }
+    }
+  }
+}
+
+// Carry declaration policy alongside each serialized execution, including duplicate full titles.
+addHook({
+  name: 'mocha',
+  versions: ['>=8.0.0'],
+  filePattern: String.raw`lib/test\.(?:c?js)$`,
+}, TestPackage => {
+  const Test = TestPackage.Test ?? TestPackage
+  shimmer.wrap(Test.prototype, 'serialize', serialize => function () {
+    const serialized = serialize.apply(this, arguments)
+    const { mustFail, noAutoRetry } = this._ddTestAnnotations || this._ddDeclaredAnnotations ||
+      getTestAnnotations(this.fn)
+    serialized._ddTestAnnotations = { mustFail, noAutoRetry }
+    return serialized
+  })
+  return TestPackage
+})
+
 // mocha-each support
 addHook({
   name: 'mocha-each',
@@ -86,15 +147,33 @@ addHook({
   patched.add(mochaEach)
 
   return shimmer.wrapFunction(mochaEach, mochaEach => function (...args) {
-    const [params] = args
-    const { it, ...rest } = mochaEach.apply(this, args)
-    return {
-      it: function (title) {
-        parameterizedTestCh.publish({ title, params })
-        it.apply(this, arguments)
-      },
-      ...rest,
+    const [params, declare = global.it] = args
+    let sourceTestFn
+    /** @param {Function} original */
+    const wrapRow = original => function (title, fn) {
+      copyTestAnnotations(sourceTestFn, fn)
+      return original.apply(this, arguments)
     }
+    const rowDeclaration = shimmer.wrapFunction(declare, wrapRow)
+    for (const modifier of ['skip', 'only']) {
+      if (typeof declare?.[modifier] === 'function') {
+        rowDeclaration[modifier] = shimmer.wrapFunction(declare[modifier], wrapRow)
+      }
+    }
+    const declarations = mochaEach.call(this, params, rowDeclaration, ...args.slice(2))
+    /** @param {Function} original */
+    const wrapEachDeclaration = original => function (title, fn) {
+      sourceTestFn = fn
+      parameterizedTestCh.publish({ title, params })
+      return original.apply(this, arguments)
+    }
+    declarations.it = shimmer.wrapFunction(declarations.it, wrapEachDeclaration)
+    for (const modifier of ['skip', 'only']) {
+      if (typeof declarations.it[modifier] === 'function') {
+        declarations.it[modifier] = shimmer.wrapFunction(declarations.it[modifier], wrapEachDeclaration)
+      }
+    }
+    return declarations
   })
 })
 

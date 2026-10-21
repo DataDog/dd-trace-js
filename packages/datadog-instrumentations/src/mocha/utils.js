@@ -2,6 +2,8 @@
 
 const { performance } = require('node:perf_hooks')
 
+const { getTestAnnotations } = require('../../../dd-trace/src/ci-visibility/test-annotations')
+
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const {
   getEfdRetryCountForDuration,
@@ -137,7 +139,13 @@ function getTestProperties (test, testManagementTests) {
   const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } =
     testManagementTests?.mocha?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
 
-  return { isAttemptToFix, isDisabled, isQuarantined }
+  const { mustFail, noAutoRetry } =
+    test._ddTestAnnotations || test._ddDeclaredAnnotations || getTestAnnotations(test.fn)
+  return {
+    isAttemptToFix: isAttemptToFix && !noAutoRetry,
+    isDisabled: isDisabled && !mustFail,
+    isQuarantined: isQuarantined && !mustFail,
+  }
 }
 
 function isNewTest (test, knownTests) {
@@ -255,7 +263,8 @@ function isDatadogManagedRetryTest (test, config) {
  * }} config
  */
 function isEarlyFlakeDetectionTest (test, config) {
-  return !test._ddIsAttemptToFix &&
+  return !getTestAnnotations(test.fn).noAutoRetry && !test._ddTestAnnotations?.noAutoRetry &&
+    !test._ddIsAttemptToFix &&
     !test._ddIsDisabled &&
     config.isEarlyFlakeDetectionEnabled &&
     hasEfdRetries(config.earlyFlakeDetectionRetryPolicy) &&
@@ -278,6 +287,8 @@ function retryTest (test, numRetries, tags, retryPolicy) {
   }
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
+    clonedTest._ddTestAnnotations = test._ddTestAnnotations
+    clonedTest._ddAssignedProperties = test._ddAssignedProperties
     disableMochaRetries(clonedTest)
     datadogRetryOriginals.set(clonedTest, test)
     suite.addTest(clonedTest)
@@ -372,6 +383,8 @@ function resetRunState (rootSuite) {
         if (test._retriedTest) originalRetriesByTest.delete(test._retriedTest)
       }
 
+      delete test._ddAssignedProperties
+      delete test._ddTestAnnotations
       delete test._ddIsAttemptToFix
       delete test._ddIsDisabled
       delete test._ddIsQuarantined
@@ -454,7 +467,7 @@ function recordRetryTrackedAttempt (test) {
   if (isNew) {
     recordTestAttempt(newTests, test)
   }
-  if (!isAttemptToFix && (isNew || isModified)) {
+  if (!test._ddTestAnnotations?.noAutoRetry && !isAttemptToFix && (isNew || isModified)) {
     recordTestAttempt(efdTests, test)
   }
 }
@@ -519,6 +532,8 @@ function suppressSyntheticTestLifecycle (test) {
 function inheritDatadogPropertiesFromRetriedTest (test) {
   const retriedTest = test._retriedTest
   if (!retriedTest) return
+  test._ddTestAnnotations = retriedTest._ddTestAnnotations
+  test._ddAssignedProperties = retriedTest._ddAssignedProperties
 
   if (retriedTest._ddIsDisabled) {
     test._ddIsDisabled = true
@@ -559,7 +574,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
           return onRunnableFinished.apply(this, arguments)
         }
       }
-    } else if (libraryConfig?.isFlakyTestRetriesEnabled) {
+    } else if (libraryConfig?.isFlakyTestRetriesEnabled && !test._ddTestAnnotations?.noAutoRetry) {
       if (!originalRetriesByTest.has(test)) {
         const originalRetries = originalRetriesByTest.get(test._retriedTest) ?? test.retries()
         originalRetriesByTest.set(test, originalRetries)
@@ -624,6 +639,8 @@ function getOnTestHandler (isMain) {
     restoreRunnableFunction(test)
 
     inheritDatadogPropertiesFromRetriedTest(test)
+    // Mocha 5/6 clones lack _retriedTest, but retain the annotated callback.
+    test._ddTestAnnotations ||= test._ddDeclaredAnnotations || getTestAnnotations(test.fn)
 
     if (isInFailedSuite(test.parent)) {
       recordRetryTrackedAttempt(test)
@@ -654,6 +671,8 @@ function getOnTestHandler (isMain) {
     }
 
     const testInfo = {
+      assignedProperties: test._ddAssignedProperties,
+      testAnnotations: test._ddTestAnnotations || test._ddDeclaredAnnotations || getTestAnnotations(test.fn),
       testName: test.fullTitle(),
       testSuiteAbsolutePath,
       title,
@@ -666,6 +685,7 @@ function getOnTestHandler (isMain) {
 
     testInfo.isNew = isNew
     testInfo.isEfdRetry = isEfdRetry
+    testInfo.assignedProperties = test._ddAssignedProperties
     testInfo.isAttemptToFix = isAttemptToFix
     testInfo.isDisabled = isDisabled
     testInfo.isQuarantined = isQuarantined
@@ -774,7 +794,7 @@ function getTestFinishInfo (test, status, config, error) {
   const originalTest = test._retriedTest || test
   if (
     config.isDynamicAtrEnabled &&
-    config.isFlakyTestRetriesEnabled &&
+    config.isFlakyTestRetriesEnabled && !test._ddTestAnnotations?.noAutoRetry &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry &&
     !dynamicAtrRetryCountByTest.has(originalTest) &&
@@ -803,7 +823,7 @@ function getTestFinishInfo (test, status, config, error) {
   // Mocha aborts native retries on hook failure, even when the retry budget is not exhausted.
   const isTerminalHookFailure = test._ddHookFailed && !isDatadogManagedRetryTest(test, config)
   const isLastAtrAttempt = isTerminalHookFailure || getIsLastRetry(test) ||
-    (config.isFlakyTestRetriesEnabled && status === 'pass')
+    (config.isFlakyTestRetriesEnabled && !test._ddTestAnnotations?.noAutoRetry && status === 'pass')
 
   // Needed for the getFinalStatus call. This is because EFD does NOT tag as
   // EFD retry the first run of the test. It only tags as retries the clones
@@ -826,18 +846,19 @@ function getTestFinishInfo (test, status, config, error) {
   }
 
   // ATR: mark terminal attempts when every executed attempt failed.
-  if (config.isFlakyTestRetriesEnabled && !test._ddIsAttemptToFix && !test._ddIsEfdRetry &&
+  if (config.isFlakyTestRetriesEnabled && !test._ddTestAnnotations?.noAutoRetry &&
+    !test._ddIsAttemptToFix && !test._ddIsEfdRetry &&
     isLastAtrAttempt && testStatuses.every(status => status === 'fail')) {
     hasFailedAllRetries = true
   }
 
   const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
-  const isAtrRetry = config.isFlakyTestRetriesEnabled &&
+  const isAtrRetry = config.isFlakyTestRetriesEnabled && !test._ddTestAnnotations?.noAutoRetry &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry
   const isFinalAttempt = isTerminalHookFailure || status !== 'fail' || test._currentRetry >= test._retries
 
-  const { isFlakyTestRetriesEnabled } = config
+  const isFlakyTestRetriesEnabled = config.isFlakyTestRetriesEnabled && !test._ddTestAnnotations?.noAutoRetry
   const { _ddIsAttemptToFix, _ddIsQuarantined, _ddIsDisabled } = test
 
   const finalStatus = getFinalStatus({
@@ -1180,7 +1201,7 @@ function getOnTestRetryHandler (config) {
   return function (test, err) {
     const isFirstAttempt = test._currentRetry === 0
     const isDynamicAtrTest = config.isDynamicAtrEnabled &&
-      config.isFlakyTestRetriesEnabled &&
+      config.isFlakyTestRetriesEnabled && !test._ddTestAnnotations?.noAutoRetry &&
       !test._ddIsAttemptToFix &&
       !isEarlyFlakeDetectionTest(test, config)
     if (isDynamicAtrTest && isFirstAttempt) {
@@ -1216,7 +1237,7 @@ function publishTestRetry (test, err, config) {
   if (ctx) {
     const willBeRetried = test._currentRetry < test._retries
     const isAtrRetry = !isFirstAttempt &&
-      config.isFlakyTestRetriesEnabled &&
+      config.isFlakyTestRetriesEnabled && !test._ddTestAnnotations?.noAutoRetry &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
     const promises = {}
@@ -1248,6 +1269,8 @@ function getOnPendingHandler () {
     } = test
 
     const testInfo = {
+      assignedProperties: test._ddAssignedProperties,
+      testAnnotations: test._ddTestAnnotations || test._ddDeclaredAnnotations || getTestAnnotations(test.fn),
       testName: test.fullTitle(),
       testSuiteAbsolutePath,
       title,
@@ -1274,6 +1297,15 @@ function getOnPendingHandler () {
 // Hook to add retries to tests if Test Management or EFD is enabled
 function getRunTestsWrapper (runTests, config) {
   return function (suite) {
+    for (const test of suite.tests) {
+      test._ddTestAnnotations = test.fn
+        ? getTestAnnotations(originalFns.get(test.fn) || test.fn)
+        : test._ddDeclaredAnnotations || getTestAnnotations()
+      test._ddAssignedProperties = config.isTestManagementTestsEnabled
+        ? config.testManagementTests?.mocha?.suites
+          ?.[getTestSuitePath(test.file, process.cwd())]?.tests?.[test.fullTitle()]?.properties
+        : undefined
+    }
     if (config.isTestManagementTestsEnabled) {
       suite.tests.forEach((test) => {
         const { isAttemptToFix, isDisabled, isQuarantined } = getTestProperties(test, config.testManagementTests)

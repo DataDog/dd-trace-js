@@ -7544,6 +7544,355 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   })
 
+  context('test automation exclusions', () => {
+    const runReviewFixture = async (file, expectedExit, check, env = {}, command) => {
+      childProcess = exec(command || `node node_modules/mocha/bin/mocha ci-visibility/test-management/${file}.js`, {
+        cwd,
+        env: { ...getCiVisAgentlessConfig(receiver.port), DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2', ...env },
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          check(payloads.flatMap(({ payload }) => payload.events))
+        })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise]).catch(error => {
+        error.message += `\nMocha output:\n${testOutput}`
+        throw error
+      })
+      assert.strictEqual(exitCode, expectedExit, testOutput)
+    }
+
+    for (const mode of ['native control', 'annotated ATR', 'unannotated ATR']) {
+      it(`preserves native retry budgets with ${mode}`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true })
+        const env = {
+          EXCLUSION_NO_RETRY: mode === 'unannotated ATR' ? '0' : '1',
+          EXCLUSION_COUNT_ATTEMPTS: '1',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+        }
+        const command = 'node node_modules/mocha/bin/mocha --retries 1' +
+          ' ci-visibility/test-management/test-exclusions-mocha.js'
+        if (mode === 'native control') {
+          childProcess = exec(command, {
+            cwd,
+            env: { ...getCiVisAgentlessConfig(receiver.port), ...env, NODE_OPTIONS: '' },
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+          const [exitCode] = await once(childProcess, 'exit')
+          assert.strictEqual(exitCode, 1, testOutput)
+        } else {
+          await runReviewFixture('test-exclusions-mocha', 1, events => {
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === 'annotated test')
+            assert.ok(attempts.length > 0, testOutput)
+            for (const test of attempts) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(test.meta['test.test_management.no_auto_retry'],
+                mode === 'annotated ATR' ? 'true' : undefined)
+            }
+          }, env, command)
+        }
+        const expectedAttempts = mode === 'unannotated ATR' ? 4 : 2
+        assert.strictEqual((testOutput.match(/exclusion-body-attempt/g) || []).length, expectedAttempts, testOutput)
+      })
+    }
+
+    parallelIt('clears annotation observations between parallel runs', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        mocha: {
+          suites: {
+            'ci-visibility/test-management/mocha-review-repeated.js': {
+              tests: { 'same test': { properties: { quarantined: true } } },
+            },
+          },
+        },
+      })
+      await runReviewFixture('mocha-review-repeated', 0, events => {
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.strictEqual(tests.length, 2)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['pass', 'fail'])
+        assert.strictEqual(tests[0].meta['test.test_management.prevent_failure_suppression'], 'true')
+        assert.strictEqual(tests[1].meta['test.test_management.prevent_failure_suppression'], undefined)
+        assert.match(testOutput, /failures: 0,0/)
+      }, {}, 'node ci-visibility/run-mocha-review-repeated.js')
+    })
+
+    parallelIt('preserves per-execution protection for duplicate parallel titles', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        mocha: {
+          suites: {
+            'ci-visibility/test-management/mocha-review-duplicates.js': {
+              tests: { duplicate: { properties: { quarantined: true } } },
+            },
+          },
+        },
+      })
+      await runReviewFixture('mocha-review-duplicates', 1, events => {
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.strictEqual(tests.length, 3)
+        assert.strictEqual(tests.find(test => test.meta['test.test_management.prevent_failure_suppression'] === 'true')
+          .meta['test.test_management.prevent_failure_suppression'], 'true')
+        assert.strictEqual(tests.find(test => test.meta[TEST_STATUS] === 'pass')
+          .meta['test.test_management.no_auto_retry'], 'true')
+      }, {}, 'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ci-visibility/test-management/mocha-review-duplicates.js')
+    })
+
+    it('preserves suite-only mocha-each declarations with the TDD interface', async () => {
+      await runReviewFixture('mocha-review-suite-only', 0, events => {
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.strictEqual(tests.length, 2)
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_NAME]).sort(), ['row 1 passes', 'row 2 passes'])
+        for (const test of tests) assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+      }, {}, 'node node_modules/mocha/bin/mocha --ui tdd' +
+        ' ci-visibility/test-management/mocha-review-suite-only.js')
+    })
+
+    for (const parallel of [false, true]) {
+      const run = parallel ? parallelIt : it
+      run(`preserves annotated TDD skip declarations (parallel=${parallel})`, async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+        await runReviewFixture('mocha-review-tdd-skips', 0, events => {
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 6)
+          for (const test of tests) {
+            const name = test.meta[TEST_NAME].replace('TDD skips ', '')
+            assert.strictEqual(test.meta[TEST_STATUS], name === 'live control' ? 'pass' : 'skip', name)
+            assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'],
+              ['combined', 'protected'].includes(name) ? 'true' : undefined, name)
+            assert.strictEqual(test.meta['test.test_management.no_auto_retry'],
+              ['combined', 'no retry'].includes(name) ? 'true' : undefined, name)
+          }
+        }, {}, `node node_modules/mocha/bin/mocha --ui tdd ${parallel ? '--parallel --jobs 2' : ''}` +
+          ' ci-visibility/test-management/mocha-review-tdd-skips.js')
+      })
+    }
+
+    it('finishes exactly one span per runtime and declaration skip', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      await runReviewFixture('mocha-review-runtime-skips', 0, events => {
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.strictEqual(tests.length, 4)
+        for (const test of tests) {
+          const skipped = test.meta[TEST_NAME] !== 'live control'
+          assert.strictEqual(test.meta[TEST_STATUS], skipped ? 'skip' : 'pass')
+          assert.strictEqual(test.meta[TEST_FINAL_STATUS], skipped ? 'skip' : 'pass')
+          assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'],
+            skipped ? 'true' : undefined)
+          assert.strictEqual(test.meta['test.test_management.no_auto_retry'], skipped ? 'true' : undefined)
+        }
+      })
+    })
+
+    it('preserves annotations on exported skipped declarations', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      await runReviewFixture('mocha-review-exported', 0, events => {
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.strictEqual(tests.length, 4)
+        for (const test of tests) {
+          const skipped = test.meta[TEST_NAME] !== 'live control'
+          assert.strictEqual(test.meta[TEST_STATUS], skipped ? 'skip' : 'pass')
+          assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'],
+            skipped ? 'true' : undefined)
+          assert.strictEqual(test.meta['test.test_management.no_auto_retry'], skipped ? 'true' : undefined)
+        }
+      })
+    })
+
+    for (const parallel of [false, true]) {
+      for (const only of [false, true]) {
+        // Mocha rejects exclusive suites when parallel mode is enabled.
+        const run = parallel && only ? it.skip : parallel ? parallelIt : it
+        run(`preserves mocha-each declaration annotations (parallel=${parallel}, only=${only})`, async () => {
+          // Mocha 6 stopped treating every empty-titled suite as a root suite.
+          const namePrefix = only && mochaMajor >= 6 ? ' ' : ''
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          })
+          receiver.setTestManagementTests({
+            mocha: {
+              suites: {
+                'ci-visibility/test-management/mocha-review-each.js': {
+                  tests: Object.fromEntries(['case 1', 'case 2', 'passing 3'].map(name => [`${namePrefix}${name}`, {
+                    properties: { disabled: true, quarantined: true, attempt_to_fix: true },
+                  }])),
+                },
+              },
+            },
+          })
+          await runReviewFixture('mocha-review-each', 2, events => {
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 4, testOutput)
+            for (const test of tests) {
+              const name = test.meta[TEST_NAME].trim()
+              assert.strictEqual(test.meta[TEST_STATUS],
+                name.startsWith('case') ? 'fail' : name.startsWith('passing') ? 'pass' : 'skip', name)
+              assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'], 'true', name)
+              assert.strictEqual(test.meta['test.test_management.no_auto_retry'], 'true', name)
+              if (!name.startsWith('skipped')) {
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true', name)
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true', name)
+                assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true', name)
+              }
+            }
+          }, { MOCHA_REVIEW_ONLY: only ? '1' : '0' },
+          `node node_modules/mocha/bin/mocha ${parallel ? '--parallel --jobs 2' : ''}` +
+            ' ci-visibility/test-management/mocha-review-each.js')
+        })
+      }
+    }
+
+    for (const parallel of [false, true]) {
+      for (const scenario of [
+        {
+          name: 'combined annotations',
+          protect: true,
+          noRetry: true,
+          properties: {
+            attempt_to_fix: true, disabled: true, quarantined: true,
+          },
+          count: 1,
+          exit: 1,
+          status: 'fail',
+        },
+        {
+          name: 'retry exclusion retains quarantine',
+          noRetry: true,
+          properties: {
+            attempt_to_fix: true, quarantined: true,
+          },
+          count: 1,
+          exit: 0,
+          status: 'fail',
+        },
+        {
+          name: 'retry exclusion retains disabling',
+          noRetry: true,
+          properties: {
+            attempt_to_fix: true, disabled: true,
+          },
+          count: 1,
+          exit: 0,
+          status: 'skip',
+        },
+        {
+          name: 'protection permits ATR',
+          needsRetryEvents: true,
+          protect: true,
+          properties: { quarantined: true },
+          count: 3,
+          exit: 1,
+          status: 'fail',
+        },
+        {
+          name: 'explicit retries remain',
+          needsRetryEvents: true,
+          noRetry: true,
+          native: true,
+          properties: {},
+          count: 3,
+          exit: 1,
+          status: 'fail',
+        },
+        {
+          name: 'retry exclusion prevents EFD',
+          noRetry: true,
+          efd: true,
+          properties: {},
+          count: 1,
+          exit: 1,
+          status: 'fail',
+        },
+        {
+          name: 'passing protection stays passing',
+          protect: true,
+          noRetry: true,
+          pass: true,
+          properties: { disabled: true },
+          count: 1,
+          exit: 0,
+          status: 'pass',
+        },
+      ]) {
+        const run = scenario.needsRetryEvents && !supportsMochaRetryEvents
+          ? it.skip
+          : parallel ? parallelIt : it
+        run(`${scenario.name} in ${parallel ? 'parallel' : 'serial'} mode`, async () => {
+          receiver.setKnownTests({ mocha: {} })
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            known_tests_enabled: scenario.efd === true,
+            early_flake_detection: { enabled: scenario.efd === true, slow_test_retries: { '5s': 2 } },
+            test_management: {
+              enabled: true, attempt_to_fix_retries: 2,
+            },
+          })
+          receiver.setTestManagementTests({
+            mocha: {
+              suites: {
+                'ci-visibility/test-management/test-exclusions-mocha.js': {
+                  tests: {
+                    'annotated test': { properties: scenario.properties },
+                  },
+                },
+              },
+            },
+          })
+          childProcess = exec(
+            `node node_modules/mocha/bin/mocha ${parallel ? '--parallel --jobs 2' : ''}` +
+            ` ${scenario.native ? '--retries 2' : ''}` +
+            ' ci-visibility/test-management/test-exclusions-mocha.js', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+                EXCLUSION_PROTECT: scenario.protect ? '1' : '0',
+                EXCLUSION_NO_RETRY: scenario.noRetry ? '1' : '0',
+                EXCLUSION_PASS: scenario.pass ? '1' : '0',
+              },
+            })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              const attempts = tests.filter(test => test.meta[TEST_NAME] === 'annotated test')
+              assert.strictEqual(attempts.length, scenario.count, testOutput)
+              for (const test of attempts) {
+                assert.strictEqual(test.meta[TEST_STATUS], scenario.status)
+                assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'],
+                  scenario.protect ? 'true' : undefined)
+                assert.strictEqual(test.meta['test.test_management.no_auto_retry'],
+                  scenario.noRetry ? 'true' : undefined)
+                for (const [property, tag] of [
+                  ['attempt_to_fix', TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX],
+                  ['disabled', TEST_MANAGEMENT_IS_DISABLED],
+                  ['quarantined', TEST_MANAGEMENT_IS_QUARANTINED],
+                ]) assert.strictEqual(test.meta[tag], scenario.properties[property] ? 'true' : undefined)
+                if (scenario.noRetry) {
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON],
+                    scenario.native && test.meta[TEST_IS_RETRY] ? TEST_RETRY_REASON_TYPES.ext : undefined)
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined)
+                }
+              }
+              const skipped = tests.find(test => test.meta[TEST_NAME] === 'developer skip')
+              assert.strictEqual(skipped.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(skipped.meta['test.test_management.no_auto_retry'], 'true', testOutput)
+              assert.strictEqual(skipped.meta['test.test_management.prevent_failure_suppression'], 'true')
+            })
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, scenario.exit, testOutput)
+        })
+      }
+    }
+  })
+
   context('test management', () => {
     context('attempt to fix', () => {
       beforeEach(() => {
