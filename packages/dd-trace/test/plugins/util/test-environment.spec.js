@@ -55,17 +55,18 @@ const { getTestEnvironmentMetadata, getTestLevelsMetadataTags } = proxyquire('..
 
 describe('Test Parallelization environment metadata', () => {
   let originalEnv, directory, metadataPath, cwdStub, readFileStub
-  const planCI = {
-    'ci.provider.name': 'plan-provider_name',
-    'ci.pipeline.id': 'plan-pipeline_id',
-    'ci.pipeline.name': 'plan-pipeline_name',
-    'ci.pipeline.display_name': 'plan-pipeline_display_name',
-    'ci.pipeline.number': 'plan-pipeline_number',
-    'ci.pipeline.url': 'https://gitlab.com/plan/pipeline_url',
-    'ci.job.id': 'plan-job_id',
-    'ci.job.name': 'plan-job_name',
-    'ci.job.url': 'https://gitlab.com/plan/job_url',
-    'ci.stage.name': 'plan-stage_name',
+  const planTags = {
+    'test.parallelization.plan.provider.name': 'plan-provider_name',
+    'test.parallelization.plan.pipeline.id': 'plan-pipeline_id',
+    'test.parallelization.plan.pipeline.name': 'plan-pipeline_name',
+    'test.parallelization.plan.pipeline.display_name': 'plan-pipeline_display_name',
+    'test.parallelization.plan.pipeline.number': 'plan-pipeline_number',
+    'test.parallelization.plan.pipeline.url': 'https://gitlab.com/plan/pipeline_url',
+    'test.parallelization.plan.job.id': 'plan-job_id',
+    'test.parallelization.plan.job.name': 'plan-job_name',
+    'test.parallelization.plan.job.url': 'https://gitlab.com/plan/job_url',
+    'test.parallelization.plan.stage.name': 'plan-stage_name',
+    'test.parallelization.plan.custom': 'planner-defined-value',
   }
 
   beforeEach(() => {
@@ -82,7 +83,7 @@ describe('Test Parallelization environment metadata', () => {
     const planDirectory = path.join(directory, '.testoptimization')
     fs.mkdirSync(planDirectory)
     metadataPath = path.join(planDirectory, 'plan-metadata.json')
-    fs.writeFileSync(metadataPath, JSON.stringify({ ciTags: planCI }))
+    fs.writeFileSync(metadataPath, JSON.stringify({ tags: planTags }))
     cwdStub = sinon.stub(process, 'cwd').returns(directory)
   })
 
@@ -109,6 +110,7 @@ describe('Test Parallelization environment metadata', () => {
       'test.parallelization.plan.job.name': 'plan-job_name',
       'test.parallelization.plan.job.url': 'https://gitlab.com/plan/job_url',
       'test.parallelization.plan.stage.name': 'plan-stage_name',
+      'test.parallelization.plan.custom': 'planner-defined-value',
     }
     assertObjectContains(metadata, {
       ...expectedPlanTags,
@@ -183,8 +185,9 @@ describe('Test Parallelization environment metadata', () => {
   }
 
   for (const content of [
-    '{invalid json', 'null', '[]', '{}', '{"ciTags":null}', '{"ciTags":[]}',
-    '{"ciTags":"invalid"}', '{"ciTags":{"ci.job.id":"plan-123","ci.job.name":42}}',
+    '{invalid json', 'null', '[]', '{}', '{"tags":null}', '{"tags":[]}', '{"tags":"invalid"}',
+    '{"tags":{"test.parallelization.plan.job.id":"plan-123","test.parallelization.plan.job.name":42}}',
+    '{"ciTags":{"ci.job.id":"old-schema"}}',
   ]) {
     it(`keeps only the enabled tag for malformed metadata: ${content}`, () => {
       process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
@@ -223,21 +226,25 @@ describe('Test Parallelization environment metadata', () => {
     const otherPlan = path.join(directory, 'other-plan')
     fs.mkdirSync(otherPlan)
     fs.writeFileSync(path.join(otherPlan, 'plan-metadata.json'), JSON.stringify({
-      ciTags: { 'ci.job.id': 'other-plan' },
+      tags: { 'test.parallelization.plan.job.id': 'other-plan' },
     }))
     process.env.TEST_OPTIMIZATION_MANIFEST_FILE = path.join(otherPlan, 'manifest.txt')
     const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
     assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'other-plan')
   })
 
-  it('omits empty fields and unknown tags, and ignores former metadata environment variables', () => {
+  it('omits empty and out-of-namespace tags, and ignores former metadata environment variables', () => {
     process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
     process.env._DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'stale-plan'
     process.env.DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'stale-public-plan'
     fs.writeFileSync(metadataPath, JSON.stringify({
-      ciTags: {
-        'ci.job.name': 'plan',
-        'ci.job.id': '',
+      tags: {
+        'test.parallelization.plan.job.name': 'plan',
+        'test.parallelization.plan.job.id': '',
+        'test.parallelization.plan.': 'bare-prefix',
+        'test.parallelization.plans.job.id': 'incorrect-prefix',
+        'test.parallelization.enabled': 'false',
+        'ci.job.id': 'must-not-override-worker',
         'ci.workspace_path': '/private/workspace',
         DD_API_KEY: 'must-not-be-a-tag',
       },
@@ -250,6 +257,9 @@ describe('Test Parallelization environment metadata', () => {
       'test.parallelization.enabled': 'true',
       'test.parallelization.plan.job.name': 'plan',
     })
+    assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
+    assert.strictEqual(metadata.DD_API_KEY, undefined)
+    assert.strictEqual(metadata['ci.workspace_path'], undefined)
   })
 })
 

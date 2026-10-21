@@ -251,22 +251,10 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_session_end',
 ]
 const TEST_PARALLELIZATION_ENABLED = 'test.parallelization.enabled'
-const TEST_PARALLELIZATION_PLAN_TAGS = {
-  'test.parallelization.plan.provider.name': CI_PROVIDER_NAME,
-  'test.parallelization.plan.pipeline.id': CI_PIPELINE_ID,
-  'test.parallelization.plan.pipeline.name': CI_PIPELINE_NAME,
-  'test.parallelization.plan.pipeline.display_name': CI_PIPELINE_DISPLAY_NAME,
-  'test.parallelization.plan.pipeline.number': CI_PIPELINE_NUMBER,
-  'test.parallelization.plan.pipeline.url': CI_PIPELINE_URL,
-  'test.parallelization.plan.job.id': CI_JOB_ID,
-  'test.parallelization.plan.job.name': CI_JOB_NAME,
-  'test.parallelization.plan.job.url': CI_JOB_URL,
-  'test.parallelization.plan.stage.name': CI_STAGE_NAME,
-}
+const TEST_PARALLELIZATION_PLAN_TAG_PREFIX = 'test.parallelization.plan.'
 const TEST_LEVELS_METADATA = 'test_levels'
 const TEST_LEVELS_METADATA_TAGS = [
   TEST_PARALLELIZATION_ENABLED,
-  ...Object.keys(TEST_PARALLELIZATION_PLAN_TAGS),
   CI_JOB_ID,
   CI_JOB_NAME,
   CI_JOB_URL,
@@ -841,14 +829,17 @@ function getTestParallelizationPlanMetadata () {
     // eslint-disable-next-line eslint-rules/eslint-process-env
     const manifestFile = process.env.TEST_OPTIMIZATION_MANIFEST_FILE || process.env.DD_TEST_OPTIMIZATION_MANIFEST_FILE
     const planDirectory = manifestFile ? path.dirname(manifestFile) : path.join(process.cwd(), '.testoptimization')
-    const { ciTags } = JSON.parse(fs.readFileSync(path.join(planDirectory, 'plan-metadata.json'), 'utf8'))
-    if (!ciTags || typeof ciTags !== 'object' || Array.isArray(ciTags) ||
-        Object.values(ciTags).some(value => typeof value !== 'string')) {
+    const { tags } = JSON.parse(fs.readFileSync(path.join(planDirectory, 'plan-metadata.json'), 'utf8'))
+    if (!tags || typeof tags !== 'object' || Array.isArray(tags) ||
+        Object.values(tags).some(value => typeof value !== 'string')) {
       return {}
     }
     const metadata = {}
-    for (const [tag, ciTag] of Object.entries(TEST_PARALLELIZATION_PLAN_TAGS)) {
-      if (ciTags[ciTag]) metadata[tag] = ciTags[ciTag]
+    for (const [tag, value] of Object.entries(tags)) {
+      if (tag.startsWith(TEST_PARALLELIZATION_PLAN_TAG_PREFIX) &&
+          tag.length > TEST_PARALLELIZATION_PLAN_TAG_PREFIX.length && value) {
+        metadata[tag] = value
+      }
     }
     return metadata
   } catch (err) {
@@ -884,6 +875,11 @@ function getTestLevelsMetadataTags (testEnvironmentMetadata) {
     const key = TEST_LEVELS_METADATA_TAGS[i]
     const value = testEnvironmentMetadata[key]
     if (value !== undefined) {
+      testLevelsMetadataTags[key] = value
+    }
+  }
+  for (const [key, value] of Object.entries(testEnvironmentMetadata)) {
+    if (key.startsWith(TEST_PARALLELIZATION_PLAN_TAG_PREFIX) && value !== undefined) {
       testLevelsMetadataTags[key] = value
     }
   }
