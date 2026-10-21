@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { exec } = require('node:child_process')
+const { exec, execFileSync } = require('node:child_process')
 const { once } = require('node:events')
 
 const { sandboxCwd, useSandbox, getCiVisAgentlessConfig, stopCiVisTestEnv } = require('../helpers')
@@ -198,6 +198,40 @@ for (const version of versions) {
         assert.strictEqual(tests[0].meta['test.final_status'], 'skip')
         assert.strictEqual(tests[0].meta[protection], undefined)
         assert.strictEqual(tests[0].meta[exclusion], undefined)
+      })
+    })
+
+    // Configured tags were introduced in Vitest 4.1; the minimum-version fixture has no tags API.
+    const tagRetryIt = version === 'latest' ? it : it.skip
+    tagRetryIt('preserves native retries inherited from configured tags', async () => {
+      // The same annotated fixture must pass natively before verifying instrumentation.
+      execFileSync(process.execPath, ['./node_modules/vitest/vitest.mjs', 'run'], {
+        cwd,
+        env: { ...process.env, NODE_OPTIONS: '', TEST_DIR: suite, EXCLUSIONS_MODE: 'native-tags' },
+        encoding: 'utf8',
+      })
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      await run('native-tags', 0, tests => {
+        assert.strictEqual(tests.length, 4)
+        for (const name of ['native tagged retries', 'inherited tags native inherited retries']) {
+          const attempts = named(tests, name)
+          assert.strictEqual(attempts.length, 2)
+          assert.strictEqual(attempts[1].meta['test.status'], 'pass')
+          assert.strictEqual(attempts[1].meta[exclusion], 'true')
+          assert.strictEqual(attempts[1].meta['test.retry_reason'], 'external')
+        }
+      })
+    })
+
+    tagRetryIt('blocks automatic retries for configured tags without native retries', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      await run('plain-tags', 1, tests => {
+        assert.strictEqual(tests.length, 4)
+        const excluded = named(tests, 'excluded tagged')
+        assert.strictEqual(excluded.length, 1)
+        assert.strictEqual(excluded[0].meta[exclusion], 'true')
+        assert.strictEqual(excluded[0].meta['test.is_retry'], undefined)
+        assert.strictEqual(named(tests, 'control tagged').length, 3)
       })
     })
 

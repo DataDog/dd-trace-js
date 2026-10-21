@@ -41,7 +41,7 @@ function wrapDeclaration (declaration, getCurrentSuite) {
           __ddTestOptAnnotations: {
             mustFail: annotations.mustFail,
             noAutoRetry: annotations.noAutoRetry,
-            hasFrameworkRetry,
+            hasFrameworkRetry: hasFrameworkRetry || task.meta?.__ddTestOptHasFrameworkRetry === true,
           },
         }
       }

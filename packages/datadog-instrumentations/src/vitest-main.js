@@ -1055,6 +1055,15 @@ function configureFlakyTestRetries (ctx, testSpecifications, frameworkVersion) {
   const projectNames = []
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
     if (!config.retry || config.retry.__ddTestOptAtr) {
+      // Tag retries are resolved during declaration, after the callback's own options were captured.
+      if (config.tags) {
+        config.tags = config.tags.map(tag => tag.retry === undefined
+          ? tag
+          : {
+              ...tag,
+              meta: { ...tag.meta, __ddTestOptHasFrameworkRetry: true },
+            })
+      }
       // The serializable marker survives task inheritance and setup refreshes, unlike numeric retry counts.
       config.retry = usesRetryMarker ? { count: retryCount, __ddTestOptAtr: true } : retryCount
       configured = true

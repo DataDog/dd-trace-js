@@ -24,6 +24,16 @@ if (process.env.EXCLUSIONS_MODE === 'policy') {
   test('sole', preventFailureSuppression(noAutoRetry(fail)))
 } else if (process.env.EXCLUSIONS_MODE === 'removed') {
   test('sole', fail)
+} else if (process.env.EXCLUSIONS_MODE === 'native-tags') {
+  let directExecutions = 0
+  test('native tagged retries', { tags: 'flaky' }, noAutoRetry(() => { if (++directExecutions === 1) fail() }))
+  describe('inherited tags', { tags: 'flaky' }, () => {
+    let inheritedExecutions = 0
+    test('native inherited retries', noAutoRetry(() => { if (++inheritedExecutions === 1) fail() }))
+  })
+} else if (process.env.EXCLUSIONS_MODE === 'plain-tags') {
+  test('excluded tagged', { tags: 'plain' }, noAutoRetry(fail))
+  test('control tagged', { tags: 'plain' }, fail)
 } else if (process.env.EXCLUSIONS_MODE === 'native-suite') {
   describe('suite retries', { retry: 2 }, () => {
     let executions = 0
