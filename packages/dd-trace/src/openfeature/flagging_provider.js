@@ -17,6 +17,9 @@ const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
  * Extends DatadogNodeServerProvider to add tracer integration and configuration management.
  */
 class FlaggingProvider extends DatadogNodeServerProvider {
+  // Track this wrapper's logging lifecycle without reading the upstream provider's private state.
+  #waitingForConfiguration = false
+
   /** @type {SpanEnrichmentHook | undefined} */
   #spanEnrichmentHook
 
@@ -74,6 +77,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   initialize (context) {
     log.debug('Feature Flags: waiting for provider initialization...')
 
+    this.#waitingForConfiguration = !this.getConfiguration()
     const promise = super.initialize(context)
 
     // `DatadogNodeServerProvider#initialize` starts a timer that is never unref'd, which would
@@ -91,18 +95,20 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @param {Parameters<DatadogNodeServerProvider['setConfiguration']>[0]} configuration
    */
   setConfiguration (configuration) {
-    const isInitializing = this.initController?.isInitializing()
+    const wasWaiting = this.#waitingForConfiguration
     super.setConfiguration(configuration)
-    if (isInitializing) this.#logInitialConfiguration()
+    this.#waitingForConfiguration = false
+    if (wasWaiting) this.#logInitialConfiguration()
   }
 
   /**
    * @param {unknown} error
    */
   setError (error) {
-    const isInitializing = this.initController?.isInitializing()
+    const wasWaiting = this.#waitingForConfiguration
     super.setError(error)
-    if (!isInitializing) return
+    this.#waitingForConfiguration = false
+    if (!wasWaiting) return
 
     try {
       // Avoid inflating telemetry volume for routine initialization timeouts.

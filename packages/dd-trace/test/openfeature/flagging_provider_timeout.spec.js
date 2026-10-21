@@ -152,6 +152,43 @@ describe('FlaggingProvider Initialization Timeout', () => {
     sinon.assert.notCalled(log.errorWithoutTelemetry)
   })
 
+  it('does not log errors before initialization starts', () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+    provider.setError(new Error('before initialization'))
+
+    sinon.assert.notCalled(log.errorWithoutTelemetry)
+  })
+
+  it('logs only the first configuration before the initialization promise settles', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    const promise = provider.initialize()
+    log.debug.resetHistory()
+
+    provider.setConfiguration({ flags: {} })
+    provider.setConfiguration({ flags: {} })
+    await promise
+
+    sinon.assert.calledOnceWithExactly(log.debug, 'Feature Flags: initial configuration available')
+  })
+
+  it('logs a new initialization attempt after an error', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    const promise = provider.initialize()
+    const error = new Error('first initialization failed')
+    const rejection = assert.rejects(promise, error)
+    provider.setError(error)
+    await rejection
+
+    const retry = provider.initialize()
+    log.debug.resetHistory()
+    provider.setConfiguration({ flags: {} })
+    await retry
+
+    sinon.assert.calledOnceWithExactly(log.debug, 'Feature Flags: initial configuration available')
+    sinon.assert.calledOnce(log.errorWithoutTelemetry)
+  })
+
   it('preserves successful initialization if configuration logging throws', async () => {
     const provider = new FlaggingProvider(mockTracer, mockConfig)
     const promise = provider.initialize()
