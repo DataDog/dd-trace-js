@@ -1803,8 +1803,8 @@ class CypressPlugin {
           const isDisabled = testSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
 
           const finalStatus = getFinalStatus({
-            // Native experimental retries can fail in aggregate even when the last attempt passes.
-            status: retryKind === FINAL_STATUS_RETRY_KIND.none
+            // Native retries use Cypress's aggregate outcome; managed attempts retain their own policy.
+            status: retryKind === FINAL_STATUS_RETRY_KIND.none && !isDatadogManagedAttempt
               ? CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
               : cypressTestStatus,
             retryKind,
