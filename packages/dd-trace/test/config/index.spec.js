@@ -141,16 +141,9 @@ describe('Config', () => {
       assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'), undefined)
     })
 
-    it('reads the internal planning-job environment', () => {
+    it('reads the internal parallelization marker', () => {
       process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
-      process.env._DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'plan-job-123'
-      process.env._DD_TEST_PARALLELIZATION_PLAN_JOB_URL = 'https://gitlab.com/project/-/jobs/123'
       assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'), 'true')
-      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_PLAN_JOB_ID'), 'plan-job-123')
-      assert.strictEqual(
-        getEnvironmentVariable('_DD_TEST_PARALLELIZATION_PLAN_JOB_URL'),
-        'https://gitlab.com/project/-/jobs/123'
-      )
     })
 
     it('should return aliased value', () => {

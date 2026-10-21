@@ -4,16 +4,6 @@
 export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
   _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_JOB_ID: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_JOB_NAME: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_JOB_URL: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_DISPLAY_NAME: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_ID: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NAME: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NUMBER: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_URL: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PROVIDER_NAME: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_STAGE_NAME: string | undefined;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   aiguard: {
     DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
@@ -619,16 +609,6 @@ export interface GeneratedConfig {
 export interface GeneratedEnvVarConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
   _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_JOB_ID: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_JOB_NAME: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_JOB_URL: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_DISPLAY_NAME: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_ID: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NAME: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_NUMBER: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PIPELINE_URL: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_PROVIDER_NAME: string | undefined;
-  _DD_TEST_PARALLELIZATION_PLAN_STAGE_NAME: string | undefined;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   DATADOG_API_KEY: string | undefined;
   DD_ACTION_EXECUTION_ID: string | undefined;
