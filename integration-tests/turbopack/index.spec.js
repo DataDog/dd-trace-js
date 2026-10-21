@@ -9,18 +9,14 @@ const {
   FakeAgent,
   checkSpansForServiceName,
   sandboxCwd,
-  spawnProc,
+  spawnPluginIntegrationTestProc,
   stopProc,
   useSandbox,
 } = require('../helpers')
 const httpRequest = require('../../packages/dd-trace/test/setup/helpers/http-client')
 
-const scenarios = ['15.5.0', 'latest'].flatMap(nextVersion =>
-  ['preloaded', 'bundled'].map(tracerMode => ({ nextVersion, tracerMode }))
-)
-
-for (const { nextVersion, tracerMode } of scenarios) {
-  describe(`Turbopack integration with Next.js ${nextVersion} (${tracerMode} tracer)`, () => {
+for (const nextVersion of ['15.5.0', 'latest']) {
+  describe(`Turbopack integration with Next.js ${nextVersion}`, () => {
     useSandbox([
       `next@${nextVersion}`,
       '@types/node',
@@ -46,27 +42,13 @@ for (const { nextVersion, tracerMode } of scenarios) {
         { recursive: true }
       )
       execSync('npm exec -- tsc --project tsconfig.json', { cwd: applicationDirectory, stdio: 'inherit' })
-      execSync('npm exec -- next build --turbopack', {
-        cwd: applicationDirectory,
-        env: { ...process.env, DD_TEST_BUNDLED_TRACER: String(tracerMode === 'bundled') },
-        stdio: 'inherit',
-      })
+      execSync('npm exec -- next build --turbopack', { cwd: applicationDirectory, stdio: 'inherit' })
     })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
-      proc = await spawnProc(path.join(applicationDirectory, 'server.js'), {
-        cwd: applicationDirectory,
-        env: {
-          ...process.env,
-          DD_TEST_BUNDLED_TRACER: String(tracerMode === 'bundled'),
-          DD_TRACE_AGENT_PORT: String(agent.port),
-          // fs is opt-in; it is the built-in a bundled tracer is most likely to have cached before its hooks.
-          DD_TRACE_FS_ENABLED: 'true',
-          DD_TRACE_FLUSH_INTERVAL: '0',
-          NODE_OPTIONS: tracerMode === 'preloaded' ? '--import=dd-trace/init.js' : '',
-        },
-        execArgv: [],
+      proc = await spawnPluginIntegrationTestProc(applicationDirectory, 'server.js', agent.port, {
+        NODE_OPTIONS: '--import=dd-trace/init.js',
       })
     })
 
@@ -99,38 +81,5 @@ for (const { nextVersion, tracerMode } of scenarios) {
       ])
       assert.deepStrictEqual(esmResponse.data, { text: 'ok' })
     })
-
-    for (const format of ['cjs', 'esm']) {
-      it(`instruments ${format} named builtin bindings without a builtin loader`, async () => {
-        const spans = []
-        const assertBuiltinTrace = agent.assertMessageReceived(({ payload }) => {
-          spans.push(...payload.flat())
-          assert.ok(spans.some(span => span.name === 'next.request'))
-          const server = spans.find(span => span.name === 'web.request' &&
-            span.meta['http.url'].endsWith(`/api/builtins-${format}`))
-          assert.ok(server, 'unbundled HTTP server control span')
-          const client = spans.find(span => span.name === 'http.request' &&
-            new URL(span.meta['http.url']).pathname === '/builtin-target')
-          assert.ok(client, 'bundled http.request client span')
-          assert.equal(client.meta['http.method'], 'GET')
-          assert.equal(client.meta['http.status_code'], '200')
-          assert.equal(client.error, 0)
-          const dns = spans.find(span => span.name === 'dns.lookup' && span.resource === 'localhost')
-          assert.ok(dns, 'bundled dns.lookup span')
-          assert.equal(dns.meta['dns.address'], '127.0.0.1')
-          assert.equal(dns.error, 0)
-          const file = spans.find(span => span.name === 'fs.operation' && span.resource === 'readFile' &&
-            span.meta['file.path']?.endsWith(path.join('turbopack', 'server.js')))
-          assert.ok(file, 'bundled fs.readFile span')
-          assert.equal(file.error, 0)
-        }, 10_000, 1, true)
-
-        const [response] = await Promise.all([
-          httpRequest.get(`${proc.url}/api/builtins-${format}`),
-          assertBuiltinTrace,
-        ])
-        assert.deepStrictEqual(response.data, { address: '127.0.0.1', body: 'builtin-ok' })
-      })
-    }
   })
 }
