@@ -239,10 +239,18 @@ function mergeChunkUsage (usage, chunk) {
   const mergedUsage = usage ?? { input_tokens: 0, output_tokens: 0 }
   mergedUsage.output_tokens = chunk.usage.output_tokens
 
+  // `message_delta` counts are cumulative; input grows past the `message_start` count when server
+  // tools (e.g. web search) feed results back into the model
+  const inputTokens = chunk.usage.input_tokens
+  if (inputTokens != null) mergedUsage.input_tokens = inputTokens
+
   const cacheCreationTokens = chunk.usage.cache_creation_input_tokens
   const cacheReadTokens = chunk.usage.cache_read_input_tokens
   if (cacheCreationTokens) mergedUsage.cache_creation_input_tokens = cacheCreationTokens
   if (cacheReadTokens) mergedUsage.cache_read_input_tokens = cacheReadTokens
+
+  const serverToolUse = chunk.usage.server_tool_use
+  if (serverToolUse) mergedUsage.server_tool_use = serverToolUse
 
   return mergedUsage
 }
@@ -279,6 +287,13 @@ function extractUsage (result) {
     metrics.cacheWrite5mTokens = cacheWriteTokens
     metrics.cacheWrite1hTokens = 0
   }
+
+  // Read the usage counter, not server_tool_use blocks: dynamic filtering nests searches under code
+  // execution, and `response_inclusion: "excluded"` drops the blocks while the searches are still billed.
+  // Failed searches aren't billed and are already excluded. web_fetch_requests is skipped because web
+  // fetch has no per-call price.
+  const webSearchRequests = usage.server_tool_use?.web_search_requests
+  if (webSearchRequests > 0) metrics.webSearchCount = webSearchRequests
 
   return metrics
 }

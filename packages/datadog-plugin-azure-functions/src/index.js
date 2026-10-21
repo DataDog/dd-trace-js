@@ -2,6 +2,7 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const web = require('../../dd-trace/src/plugins/util/web')
+const { getIsAzureContainerApp } = require('../../dd-trace/src/serverless')
 
 const triggerMap = {
   deleteRequest: 'Http',
@@ -52,7 +53,6 @@ class AzureFunctionsPlugin extends TracingPlugin {
         req,
         ctx
       )
-
       span._integrationName = 'azure-functions'
       span.context().setTag('component', 'azure-functions')
       span.addTags(meta)
@@ -102,9 +102,11 @@ class AzureFunctionsPlugin extends TracingPlugin {
 }
 
 function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
+  const prefix = getIsAzureContainerApp() ? 'aca' : 'aas'
+
   let meta = {
-    'aas.function.name': functionName,
-    'aas.function.trigger': mapTriggerTag(methodName),
+    [`${prefix}.function.name`]: functionName,
+    [`${prefix}.function.trigger`]: mapTriggerTag(methodName),
     'span.type': 'serverless',
   }
 

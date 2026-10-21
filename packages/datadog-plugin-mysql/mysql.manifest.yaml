@@ -1,0 +1,12 @@
+_v: 1
+name: mysql
+display_name: MySQL
+description: Instruments MySQL queries and connection-pool acquisition, with optional database-monitoring propagation and
+  SQL-injection analysis.
+packages:
+- name: mysql
+category:
+- db.client
+systems:
+- mysql
+creation_date: '2018-05-10'

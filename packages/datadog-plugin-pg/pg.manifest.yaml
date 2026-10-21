@@ -1,0 +1,11 @@
+_v: 1
+name: pg
+display_name: node-postgres
+description: Instruments SQL queries and connection pool acquisition through pg, including native clients and streaming queries.
+packages:
+- name: pg
+category:
+- db.client
+systems:
+- postgresql
+creation_date: '2018-03-27'

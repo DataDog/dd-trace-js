@@ -441,16 +441,15 @@ function validateCiWiring (repositoryRoot, ciWiring, prefix, errors) {
   if (typeof ciWiring.reviewComplete !== 'boolean') errors.push(`${prefix}.reviewComplete must be a boolean.`)
   validateStringArray(ciWiring.unresolved, `${prefix}.unresolved`, errors)
 
-  if (!isObject(ciWiring.initialization) ||
-    !INITIALIZATION_STATUSES.has(ciWiring.initialization.status)) {
-    errors.push(`${prefix}.initialization.status must be configured, not_configured, or unknown.`)
-  } else {
+  if (isObject(ciWiring.initialization) && INITIALIZATION_STATUSES.has(ciWiring.initialization.status)) {
     validateStringArray(ciWiring.initialization.evidence, `${prefix}.initialization.evidence`, errors)
-  }
-  if (!isObject(ciWiring.transport) || !TRANSPORT_MODES.has(ciWiring.transport.mode)) {
-    errors.push(`${prefix}.transport.mode must be agent, agentless, none, or unknown.`)
   } else {
+    errors.push(`${prefix}.initialization.status must be configured, not_configured, or unknown.`)
+  }
+  if (isObject(ciWiring.transport) && TRANSPORT_MODES.has(ciWiring.transport.mode)) {
     validateStringArray(ciWiring.transport.evidence, `${prefix}.transport.evidence`, errors)
+  } else {
+    errors.push(`${prefix}.transport.mode must be agent, agentless, none, or unknown.`)
   }
 }
 
