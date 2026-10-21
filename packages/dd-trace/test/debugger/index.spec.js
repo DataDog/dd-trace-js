@@ -257,7 +257,9 @@ describe('debugger/index', () => {
 
       sinon.assert.calledOnceWithExactly(ack, error)
       assert.strictEqual(DynamicInstrumentation.isStarted(), true)
-      const [entry] = logCollector.drain()
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      const [entry] = entries
       assert.strictEqual(entry.message,
         '[debugger] worker thread error name=Error code=unknown ' +
         'reason=probe_installation_failed action=modify phase=install')
@@ -299,7 +301,9 @@ describe('debugger/index', () => {
       const onMessage = messageChannels[0].port2.on.getCalls().find(call => call.args[0] === 'message').args[1]
       onMessage({ ackId: 1, error: new Error('boom'), reason: 'probe_installation_failed', action: {}, phase: 42 })
 
-      const [entry] = logCollector.drain()
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      const [entry] = entries
       assert.strictEqual(entry.message,
         '[debugger] worker thread error name=Error code=unknown reason=probe_installation_failed')
     })
@@ -320,7 +324,9 @@ describe('debugger/index', () => {
 
       sinon.assert.calledOnceWithExactly(ack, undefined)
       assert.strictEqual(DynamicInstrumentation.isStarted(), true)
-      const [entry] = logCollector.drain()
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      const [entry] = entries
       assert.strictEqual(entry.message, '[debugger:devtools_client] Probe state mismatch reason=probe_state_mismatch')
       assert.ok(!entry.stack_trace.includes('customer-secret'))
     })

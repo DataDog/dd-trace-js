@@ -210,7 +210,7 @@ describe('breakpoints', function () {
 
       await addProbe({ where: { sourceFile: 'test.js', lines: ['20'] } })
 
-      assert.strictEqual(stateMock.breakpointToProbes.get(breakpointId).get('probe-1'), installed)
+      assert.strictEqual(stateMock.breakpointToProbes.get(breakpointId)?.get('probe-1'), installed)
       assert.strictEqual(stateMock.samplingIndexToProbe.get(installed.samplingIndex), installed)
     })
 
@@ -584,7 +584,7 @@ describe('breakpoints', function () {
           phase: 'install',
         })
         assert.strictEqual(stateMock.probeToLocation.has('probe-2'), false)
-        assert.strictEqual(stateMock.breakpointToProbes.get(breakpointId).size, 1)
+        assert.strictEqual(stateMock.breakpointToProbes.get(breakpointId)?.size, 1)
 
         if (nextAction === 'remove') {
           sessionMock.post.resetHistory()
@@ -1295,11 +1295,15 @@ describe('breakpoints', function () {
       sessionMock.post.withArgs('Debugger.setBreakpoint').rejects(new Error('inspector failure'))
 
       // The replacement fails while removing the old version, before the new version is installed
-      await assert.rejects(breakpoints.modifyBreakpoint(genProbeConfig({ version: 2 })), (err) => {
-        assert.strictEqual(err.reason, 'breakpoint_replacement_failed')
-        assert.strictEqual(err.phase, undefined)
-        return true
-      })
+      await assert.rejects(
+        breakpoints.modifyBreakpoint(genProbeConfig({ version: 2 })),
+        /** @param {Error & { reason?: string, phase?: string }} err */
+        (err) => {
+          assert.strictEqual(err.reason, 'breakpoint_replacement_failed')
+          assert.strictEqual(err.phase, undefined)
+          return true
+        }
+      )
       assert.strictEqual(stateMock.probeToLocation.size, 0)
       assert.strictEqual(stateMock.locationToBreakpoint.size, 0)
       assert.strictEqual(stateMock.breakpointToProbes.size, 0)
@@ -1663,7 +1667,7 @@ describe('breakpoints', function () {
       scriptLoadingStabilizedCallback()
       await waitForQueuedOperations()
 
-      assert.strictEqual(stateMock.breakpointToProbes.get('bp-script-2:9:0').get('probe-1'), probe)
+      assert.strictEqual(stateMock.breakpointToProbes.get('bp-script-2:9:0')?.get('probe-1'), probe)
       sinon.assert.calledOnceWithExactly(ackInstalled, probe)
     })
 
@@ -1741,7 +1745,8 @@ describe('breakpoints', function () {
  * @param {object} [config.where] The location information. Defaults to a test file on line 10.
  * @param {object} [config.when] The condition for the probe.
  *   { json: { eq: [{ ref: 'foo' }, 42] }, dsl: 'foo = 42' } by default.
- * @returns {{ id: string; version: number; where: object; when?: object; }}
+ * @param {object[]} [config.segments] The template segments, when the template has to be compiled.
+ * @returns {{ id: string; version: number; where: object; when?: object; [key: string]: unknown }}
  */
 function genProbeConfig ({ id, version, where, when, ...rest } = {}) {
   /** @type {{ id: string; version: number; where: object; when?: object; [key: string]: unknown }} */
