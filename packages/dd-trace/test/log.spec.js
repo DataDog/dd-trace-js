@@ -527,6 +527,40 @@ describe('log', () => {
         logWriter = loadWriter('../src/log/writer', {})
       })
 
+      describe('getLogLevel', () => {
+        afterEach(() => logWriter.configure(false))
+
+        it('reports the normalized level used to filter messages', () => {
+          for (const [input, expected, debugCalls, errorCalls] of [
+            [undefined, 'debug', 1, 1],
+            [' WARN ', 'warn', 0, 1],
+            ['critical', 'error', 0, 1],
+            ['off', 'off', 0, 0],
+            ['invalid', 'debug', 1, 1],
+          ]) {
+            logger.debug.resetHistory()
+            logger.error.resetHistory()
+            logWriter.configure(true, input, logger)
+
+            log.debug('filtered-debug')
+            log.error(error)
+
+            assert.equal(logWriter.getLogLevel(), expected)
+            assert.equal(logger.debug.callCount, debugCalls)
+            assert.equal(logger.error.callCount, errorCalls)
+          }
+        })
+
+        it('reports disabled logging and follows later reconfiguration', () => {
+          logWriter.configure(true, 'warn')
+          assert.equal(logWriter.getLogLevel(), 'warn')
+          logWriter.configure(false, 'error')
+          assert.equal(logWriter.getLogLevel(), 'none')
+          logWriter.configure(true, 'info')
+          assert.equal(logWriter.getLogLevel(), 'info')
+        })
+      })
+
       describe('error', () => {
         it('should call logger error', () => {
           logWriter.error(error)

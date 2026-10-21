@@ -2,7 +2,6 @@
 
 const { storage } = require('../../../datadog-core')
 const { LogChannel } = require('./channels')
-const Level = require('./levels')
 
 const legacyStorage = storage('legacy')
 
@@ -62,7 +61,7 @@ function trace (log) {
 
 function getLogLevel () {
   if (!enabled) return 'none'
-  return Object.keys(Level).find(name => Level[name] === logChannel._level) ?? 'none'
+  return logChannel.getLevel()
 }
 
 module.exports = { configure, error, warn, info, debug, trace, getLogLevel }
