@@ -50,6 +50,35 @@ for (const name of ['it', 'specify', 'xit', 'xspecify']) {
   }
 }
 
+/** @param {Function} declaration */
+function wrapSkippedSuiteDeclaration (declaration) {
+  return function () {
+    const declarations = ['it', 'specify'].map(name => [name, globalThis[name]])
+    try {
+      for (const [name, declareTest] of declarations) {
+        if (typeof declareTest !== 'function') continue
+        const wrapped = Object.assign(wrapTestDeclaration(declareTest), declareTest)
+        if (typeof declareTest.only === 'function') wrapped.only = wrapTestDeclaration(declareTest.only)
+        globalThis[name] = wrapped
+      }
+      return declaration.apply(this, arguments)
+    } finally {
+      for (const [name, declareTest] of declarations) globalThis[name] = declareTest
+    }
+  }
+}
+
+// Pending suites discard even plain it() callbacks. Capture them only during their synchronous declaration.
+for (const name of ['describe', 'context', 'xdescribe', 'xcontext']) {
+  const declareSuite = globalThis[name]
+  if (typeof declareSuite !== 'function') continue
+  if (name === 'xdescribe' || name === 'xcontext') {
+    globalThis[name] = wrapSkippedSuiteDeclaration(declareSuite)
+  } else if (typeof declareSuite.skip === 'function') {
+    declareSuite.skip = wrapSkippedSuiteDeclaration(declareSuite.skip)
+  }
+}
+
 let rumFlushWaitMillis = 500
 let rumTestExecutionIdCookieName
 
