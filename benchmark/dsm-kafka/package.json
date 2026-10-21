@@ -1,0 +1,9 @@
+{
+  "name": "dsm-kafka-benchmark",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kafka produce/consume overhead benchmark for DSM on-by-default work. Tracer comes from the enclosing worktree, not from npm.",
+  "dependencies": {
+    "kafkajs": "2.2.4"
+  }
+}
