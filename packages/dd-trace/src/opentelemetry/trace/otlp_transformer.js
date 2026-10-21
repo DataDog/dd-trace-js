@@ -169,7 +169,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     return {
       traceId: span.trace_id.toTraceIdHex(traceIdHigh).padStart(32, '0'),
       spanId: this.#spanIdToHex(span.span_id),
-      parentSpanId: (parentId && !parentId.equals(ZERO_ID)) ? this.#spanIdToHex(parentId) : undefined,
+      parentSpanId: parentId && !parentId.equals(ZERO_ID) ? this.#spanIdToHex(parentId) : undefined,
       traceState: span.trace_state,
       name: span.resource,
       kind: this.#mapSpanKind(span.meta?.['span.kind']),
