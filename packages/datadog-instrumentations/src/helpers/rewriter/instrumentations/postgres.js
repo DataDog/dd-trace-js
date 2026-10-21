@@ -25,11 +25,7 @@ for (const filePath of ['src/connection.js', 'cjs/src/connection.js']) {
     astQuery: 'Program',
     transform: 'postgresQueryAcquire',
     channelName: 'query:acquire',
-  })
-}
-
-for (const filePath of ['src/connection.js', 'cjs/src/connection.js']) {
-  instrumentations.push({
+  }, {
     module: {
       name: 'postgres',
       versionRange: '>=3.0.0',
