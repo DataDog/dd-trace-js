@@ -3,7 +3,8 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { exec, execSync } = require('node:child_process')
+const Module = require('node:module')
+const { exec, execFileSync, execSync } = require('node:child_process')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
@@ -158,6 +159,7 @@ describe('vitest no-worker init instrumentation selection', () => {
   })
 
   describe('shouldUse', () => {
+    const withRegister = typeof Module.register === 'function' ? it : it.skip
     it('rejects runs when the feature was not requested', () => {
       delete process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV]
 
@@ -169,10 +171,23 @@ describe('vitest no-worker init instrumentation selection', () => {
     })
 
     for (const pool of ['forks', 'threads']) {
-      it(`accepts isolated ${pool} runs`, () => {
+      withRegister(`accepts isolated ${pool} runs`, () => {
         assert.strictEqual(noWorkerInit.shouldUse({ config: { pool } }, '3.2.6', undefined, options), true)
       })
     }
+
+    it('falls back when module.register is unavailable', () => {
+      const descriptor = Object.getOwnPropertyDescriptor(Module, 'register')
+      Object.defineProperty(Module, 'register', { value: undefined, configurable: true })
+      try {
+        for (const pool of ['forks', 'threads']) {
+          assert.strictEqual(noWorkerInit.shouldUse({ config: { pool } }, '3.2.6', undefined, options), false)
+        }
+      } finally {
+        if (descriptor) Object.defineProperty(Module, 'register', descriptor)
+        else delete Module.register
+      }
+    })
 
     it('rejects root projects with isolate disabled', () => {
       assert.strictEqual(
@@ -876,13 +891,109 @@ describe('vitest no-worker init instrumentation selection', () => {
     })
   })
 
+  describe('browser declaration plugin', () => {
+    it('installs only once when start and create reuse the same Vite overrides', () => {
+      const existing = { name: 'existing plugin' }
+      const overrides = { plugins: [existing] }
+      assert.strictEqual(noWorkerInit.addBrowserAnnotationPlugin(overrides), overrides)
+      noWorkerInit.addBrowserAnnotationPlugin(overrides)
+      assert.strictEqual(overrides.plugins.length, 2)
+      assert.strictEqual(overrides.plugins[0], existing)
+    })
+  })
+
   describe('configureWorkerEnv', () => {
+    const runWithNodeOptions = options => execFileSync(process.execPath, [
+      '-e', 'process.stdout.write(globalThis.annotationOption)',
+    ], {
+      env: { ...process.env, NODE_OPTIONS: options },
+      encoding: 'utf8',
+    })
+
+    for (const nodeOptions of [
+      "--import=data:text/javascript,globalThis.annotationOption='ok'",
+      '  --import "data:text/javascript,globalThis.annotationOption=\'ok\'"  ',
+    ]) {
+      it(`preserves ordinary worker NODE_OPTIONS verbatim: ${nodeOptions}`, () => {
+        assert.strictEqual(runWithNodeOptions(nodeOptions), 'ok')
+        const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: nodeOptions })
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), 'ok')
+        assert.strictEqual(env.NODE_OPTIONS, nodeOptions)
+      })
+    }
+
+    // The annotation preload requires module.register, available starting with Node 18.19.
+    const noWorkerPreloadIt = typeof Module.register === 'function' ? it : it.skip
+    const uncPath = String.raw`\\server\share\vitest-annotations-register.js`
+    const regexpImport = String.raw`data:text/javascript,globalThis.annotationOption=/\p{L}/u.test('a')&&'ok'`
+    const uncImport = `data:text/javascript,globalThis.annotationOption=${JSON.stringify(uncPath)}`
+    for (const [name, userOptions, expected] of [
+      ['unquoted backslashes', `--import=${regexpImport}`, 'ok'],
+      ['quoted backslashes', `--import=${JSON.stringify(regexpImport)}`, 'ok'],
+      ['UNC separators', `--import=${JSON.stringify(uncImport)}`, uncPath],
+      ['quoted whitespace', "--import=\"data:text/javascript,globalThis.annotationOption=\n'ok'\"", 'ok'],
+    ]) {
+      noWorkerPreloadIt(`round-trips ${name} through worker preload append, reuse, and cleanup`, () => {
+        assert.strictEqual(runWithNodeOptions(userOptions), expected)
+        const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: userOptions }, true)
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), expected)
+        const firstOptions = env.NODE_OPTIONS
+        noWorkerInit.configureWorkerEnv(env, true)
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), expected)
+        assert.strictEqual(env.NODE_OPTIONS, firstOptions)
+        noWorkerInit.configureWorkerEnv(env)
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), expected)
+        assert.ok(!env.NODE_OPTIONS.includes(annotationPreload))
+      })
+    }
+
+    const annotationPreload = require.resolve('../../ci/vitest-annotations-register')
+    for (const preloadOption of [
+      `--require "${annotationPreload}"`,
+      `-r "${annotationPreload}"`,
+      `--require="${annotationPreload}"`,
+    ]) {
+      noWorkerPreloadIt(`retains literal apostrophes when removing the annotation preload: ${preloadOption}`, () => {
+        const userOptions = "--import=data:text/javascript,globalThis.annotationOption='ok'"
+        const nodeOptions = `${userOptions} ${preloadOption}`
+        assert.strictEqual(runWithNodeOptions(nodeOptions), 'ok')
+        const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: nodeOptions })
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), 'ok')
+        assert.strictEqual(env.NODE_OPTIONS, userOptions)
+      })
+    }
+
+    it('preserves inherited NODE_OPTIONS while respecting explicit empty worker options', () => {
+      const original = process.env.NODE_OPTIONS
+      process.env.NODE_OPTIONS = DEFAULT_NODE_OPTIONS
+      try {
+        const inherited = noWorkerInit.configureWorkerEnv({}, true)
+        assert.match(inherited.NODE_OPTIONS, /--no-warnings/)
+        assert.doesNotMatch(inherited.NODE_OPTIONS, /dd-trace\/ci\/init/)
+        const empty = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: '' }, true)
+        assert.doesNotMatch(empty.NODE_OPTIONS, /--no-warnings/)
+      } finally {
+        if (original === undefined) delete process.env.NODE_OPTIONS
+        else process.env.NODE_OPTIONS = original
+      }
+    })
+
+    it('does not duplicate the annotation preload when configuring a reused no-worker environment', () => {
+      const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: DEFAULT_NODE_OPTIONS }, true)
+      const first = env.NODE_OPTIONS
+      noWorkerInit.configureWorkerEnv(env, true)
+      assert.strictEqual(env.NODE_OPTIONS, first)
+      noWorkerInit.configureWorkerEnv(env)
+      assert.strictEqual(env.NODE_OPTIONS, DEFAULT_NODE_OPTIONS)
+    })
+
     it('restores Datadog NODE_OPTIONS when no-worker mode falls back', () => {
       const noWorkerEnv = noWorkerInit.configureWorkerEnv({
         NODE_OPTIONS: DEFAULT_NODE_OPTIONS,
       }, true)
 
-      assert.strictEqual(noWorkerEnv.NODE_OPTIONS, '--no-warnings')
+      assert.strictEqual(noWorkerEnv.NODE_OPTIONS,
+        `--no-warnings --require ${require.resolve('../../ci/vitest-annotations-register')}`)
       assert.strictEqual(noWorkerEnv.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE, '1')
 
       const workerEnv = noWorkerInit.configureWorkerEnv({
@@ -895,13 +1006,64 @@ describe('vitest no-worker init instrumentation selection', () => {
   })
 })
 
+const describeWithoutRegister = typeof Module.register === 'function' ? describe.skip : describe
+const describeWithRegister = typeof Module.register === 'function' ? describe : describe.skip
+
+describeWithoutRegister('vitest no-worker init without module.register', function () {
+  this.timeout(120000)
+  useSandbox(['vitest@3.2.6', 'vite@6.4.1', 'tinypool'], true)
+  let cwd, receiver, childProcess, testOutput
+  before(() => { cwd = sandboxCwd() })
+  beforeEach(async () => {
+    testOutput = ''
+    receiver = await new FakeCiVisIntake().start()
+  })
+  afterEach(async () => {
+    childProcess?.kill()
+    await receiver.stop()
+  })
+  function runVitest (env) {
+    childProcess = exec('./node_modules/.bin/vitest run', {
+      cwd,
+      env: getNoWorkerInitEnv(receiver, env),
+    })
+    childProcess.stdout.on('data', data => { testOutput += data })
+    childProcess.stderr.on('data', data => { testOutput += data })
+    return once(childProcess, 'exit').then(([exitCode]) => exitCode)
+  }
+  for (const pool of ['forks', 'threads']) {
+    it(`falls back to initialized ${pool} workers without module.register`, async () => {
+      const run = runVitest({
+        NODE_OPTIONS: '--loader dd-trace/loader-hook.mjs -r dd-trace/ci/init',
+        DD_INJECT_FORCE: 'true',
+        TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+        POOL_CONFIG: pool,
+        EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_INACTIVE: '1',
+        EXPECT_DD_TRACE_INIT: '1',
+      })
+      const events = receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = getEventContents(getEvents(payloads), 'test')
+          assert.strictEqual(tests.length, 1, testOutput)
+          assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass', testOutput)
+        })
+      const [exitCode] = await Promise.all([run, events]).catch(error => {
+        error.message += `\nVitest output:\n${testOutput}`
+        throw error
+      })
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+  }
+})
+
 SUPPORTED_VERSIONS.forEach((version) => {
-  describe(`vitest@${version} no-worker init`, () => {
+  describeWithRegister(`vitest@${version} no-worker init`, () => {
     const latestVitestIt = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
     let cwd, receiver, childProcess, testOutput
 
     useSandbox([
       `vitest@${version}`,
+      ...(NODE_MAJOR <= 18 ? ['vite@6.4.1'] : []),
       'tinypool',
     ], true)
 

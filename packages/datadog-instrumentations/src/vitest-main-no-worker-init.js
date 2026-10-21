@@ -1,13 +1,15 @@
 'use strict'
 
+const { readFileSync } = require('node:fs')
 const path = require('node:path')
+const Module = require('node:module')
 
 const satisfies = require('../../../vendor/dist/semifies')
 
 const { getDynamicAtrRetryCount } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const { EMPTY_EFD_RETRY_POLICY, hasEfdRetries } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   DYNAMIC_NAME_RE,
@@ -73,11 +75,56 @@ const VITEST_NO_WORKER_INIT_V5_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-v5-setup.mjs'
 )
+const VITEST_ANNOTATIONS_PRELOAD = require.resolve('../../../ci/vitest-annotations-register')
+const DECLARATION_ANNOTATIONS_MODULE = 'virtual:dd-vitest-test-declaration-annotations'
+const declarationAnnotationsSource = readFileSync(
+  require.resolve('../../dd-trace/src/ci-visibility/test-declaration-annotations'), 'utf8'
+).replace('module.exports = { wrapDeclaration }', 'export { wrapDeclaration }')
 const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
   name: 'datadog:vitest-browser-setup-file',
   config: configureVitestBrowserSetupFile,
   configResolved: allowVitestBrowserSetupFile,
+  resolveId (id) {
+    if (id === DECLARATION_ANNOTATIONS_MODULE) return `\0${id}`
+  },
+  load (id) {
+    if (id === `\0${DECLARATION_ANNOTATIONS_MODULE}`) return declarationAnnotationsSource
+  },
+  transform: transformBrowserTestDeclarations,
 }
+/**
+ * Captures browser declarations before fixture and parameterized callback wrappers replace the annotated callback.
+ *
+ * @param {string} code
+ * @param {string} id
+ */
+function transformBrowserTestDeclarations (code, id) {
+  if (!/(?:@vitest\/runner\/dist\/(?:index|chunk[^/]*)|vitest\/dist\/chunks\/run[^/]*|\.vite\/.*\/deps\/[^/]+)\.js$/
+    .test(id.split('?')[0])) return
+  if (!code.includes('function getCurrentSuite(')) return
+  const bindings = new Set()
+  const transformed = code.replaceAll(/export\s*\{([^}]+)\}/g, (statement, specifiers) => {
+    const replacements = specifiers.split(',').map(specifier => {
+      const matched = /^\s*(test|it)(?:\s+as\s+(\w+))?\s*$/.exec(specifier)
+      if (!matched) return specifier
+      const [, local, exported = local] = matched
+      bindings.add(local)
+      return ` __ddAnnotated_${local} as ${exported}`
+    })
+    return `export {${replacements.join(',')}}`
+  })
+  if (!bindings.size) return
+  let declarations = ''
+  for (const name of bindings) {
+    declarations += `const __ddAnnotated_${name} = __ddWrapDeclaration(${name}, getCurrentSuite)\n`
+  }
+  return {
+    code: `import { wrapDeclaration as __ddWrapDeclaration } from '${DECLARATION_ANNOTATIONS_MODULE}'\n` +
+      `${transformed}\n${declarations}\n`,
+    map: null,
+  }
+}
+
 const VITEST_NO_WORKER_INIT_ISOLATE_WARNING =
   `${VITEST_NO_WORKER_INIT_REQUEST_ENV} is ignored because Vitest isolate is disabled. ` +
   'The lighter Vitest worker path only works when each test file runs in an isolated worker.'
@@ -256,6 +303,10 @@ function shouldUse (ctx, frameworkVersion, testSpecifications, options) {
     return false
   }
 
+  // The annotation preload requires this API; older runtimes keep normal worker initialization.
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  if (typeof Module.register !== 'function') return false
+
   const config = ctx?.config
   if (!config) return false
 
@@ -405,6 +456,9 @@ function deactivate (ctx) {
 }
 
 function configureWorkerEnv (workerEnv, shouldSkipWorkerInit = false) {
+  const originalNodeOptions = removeAnnotationsPreload(workerEnv.NODE_OPTIONS)
+  if (originalNodeOptions === undefined) delete workerEnv.NODE_OPTIONS
+  else workerEnv.NODE_OPTIONS = originalNodeOptions
   if (!shouldSkipWorkerInit) {
     delete workerEnv[VITEST_NO_WORKER_INIT_ACTIVE_ENV]
     restoreDatadogTestOptimizationNodeOptions(workerEnv)
@@ -412,14 +466,14 @@ function configureWorkerEnv (workerEnv, shouldSkipWorkerInit = false) {
   }
 
   workerEnv[VITEST_NO_WORKER_INIT_ACTIVE_ENV] = '1'
-  rememberDatadogTestOptimizationNodeOptions(workerEnv.NODE_OPTIONS)
+  // Pool env objects omit inherited variables; adding our preload must retain the parent's options.
+  const inheritedNodeOptions = workerEnv.NODE_OPTIONS ?? getEnvironmentVariable('NODE_OPTIONS')
+  rememberDatadogTestOptimizationNodeOptions(inheritedNodeOptions)
 
-  const nodeOptions = removeDatadogTestOptimizationNodeOptions(workerEnv.NODE_OPTIONS)
-  if (nodeOptions) {
-    workerEnv.NODE_OPTIONS = nodeOptions
-  } else {
-    delete workerEnv.NODE_OPTIONS
-  }
+  const nodeOptions = removeDatadogTestOptimizationNodeOptions(inheritedNodeOptions)
+  workerEnv.NODE_OPTIONS = serializeNodeOptions([
+    ...splitNodeOptions(nodeOptions || ''), '--require', VITEST_ANNOTATIONS_PRELOAD,
+  ])
   return workerEnv
 }
 
@@ -462,6 +516,23 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
 }
 
 /**
+ * Installs declaration capture before Vitest creates its Vite server and dependency optimizer.
+ *
+ * @param {{ plugins?: object[] }|undefined} viteOverrides
+ */
+function addBrowserAnnotationPlugin (viteOverrides = {}) {
+  if (!Object.isExtensible(viteOverrides) ||
+    (viteOverrides.plugins && !Object.isExtensible(viteOverrides.plugins))) {
+    viteOverrides = { ...viteOverrides, plugins: [...(viteOverrides.plugins || [])] }
+  }
+  viteOverrides.plugins ||= []
+  if (!viteOverrides.plugins.includes(VITEST_BROWSER_SETUP_FILE_PLUGIN)) {
+    viteOverrides.plugins.push(VITEST_BROWSER_SETUP_FILE_PLUGIN)
+  }
+  return viteOverrides
+}
+
+/**
  * Resolves the Vitest runner from the browser project's dependency tree.
  *
  * @param {{
@@ -469,6 +540,50 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
  * }} viteConfig
  */
 function configureVitestBrowserSetupFile (viteConfig) {
+  viteConfig.optimizeDeps ||= {}
+  let viteMajor = 0
+  try {
+    // Vite belongs to the test project; the tracer does not depend on it.
+    // eslint-disable-next-line n/no-missing-require
+    const vitePackage = require.resolve('vite/package.json', { paths: [viteConfig.root || process.cwd()] })
+    viteMajor = JSON.parse(readFileSync(vitePackage, 'utf8')).version.split('.')[0]
+  } catch {}
+  if (viteMajor >= 8) {
+    viteConfig.optimizeDeps.rolldownOptions ||= {}
+    viteConfig.optimizeDeps.rolldownOptions.plugins ||= []
+    if (!viteConfig.optimizeDeps.rolldownOptions.plugins.some(plugin =>
+      plugin?.name === 'datadog:vitest-browser-declarations')) {
+      viteConfig.optimizeDeps.rolldownOptions.plugins.push({
+        name: 'datadog:vitest-browser-declarations',
+        resolveId: VITEST_BROWSER_SETUP_FILE_PLUGIN.resolveId,
+        load: VITEST_BROWSER_SETUP_FILE_PLUGIN.load,
+        transform: transformBrowserTestDeclarations,
+      })
+    }
+  } else {
+    viteConfig.optimizeDeps.esbuildOptions ||= {}
+    viteConfig.optimizeDeps.esbuildOptions.plugins ||= []
+    if (!viteConfig.optimizeDeps.esbuildOptions.plugins.some(plugin =>
+      plugin.name === 'datadog-vitest-browser-declarations')) {
+      viteConfig.optimizeDeps.esbuildOptions.plugins.push({
+        name: 'datadog-vitest-browser-declarations',
+        setup (build) {
+          build.onResolve({ filter: /^virtual:dd-vitest-test-declaration-annotations$/ }, () => ({
+            path: DECLARATION_ANNOTATIONS_MODULE,
+            namespace: 'dd-vitest-annotations',
+          }))
+          build.onLoad({ filter: /.*/, namespace: 'dd-vitest-annotations' }, () => ({
+            contents: declarationAnnotationsSource,
+            loader: 'js',
+          }))
+          build.onLoad({ filter: /(?:@vitest\/runner\/dist\/(?:index|chunk[^/]*)|vitest\/dist\/chunks\/run[^/]*)\.js$/ }, args => {
+            const transformed = transformBrowserTestDeclarations(readFileSync(args.path, 'utf8'), args.path)
+            if (transformed) return { contents: transformed.code, loader: 'js', resolveDir: path.dirname(args.path) }
+          })
+        },
+      })
+    }
+  }
   viteConfig.resolve ||= {}
   viteConfig.resolve.dedupe ||= []
 
@@ -921,7 +1036,8 @@ function createMainProcessReporter (reporterState) {
     )
     const knownTests = testProperties?.knownTests
     const testManagementProperties = testProperties?.testManagementTests?.[testName] || {}
-    const isAttemptToFix = testManagementProperties.isAttemptToFix
+    const annotations = task.meta?.__ddTestOptAnnotations || {}
+    const isAttemptToFix = testManagementProperties.isAttemptToFix && !annotations.noAutoRetry
     const isNew = !!(
       !isAttemptToFix &&
       state.isKnownTestsEnabled &&
@@ -931,19 +1047,22 @@ function createMainProcessReporter (reporterState) {
     )
     const isModified = testProperties?.isModified === true
     const { flakyTestRetriesConfiguration } = testOptimizationData
-    const isFlakyTestRetries = !!flakyTestRetriesConfiguration && isFlakyTestRetriesEnabledForTask({
-      isFlakyTestRetriesEnabled: state.isFlakyTestRetriesEnabled,
-      isDynamicAtrEnabled: state.isDynamicAtrEnabled,
-      flakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
-      flakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
-    }, task)
+    const isFlakyTestRetries = !annotations.noAutoRetry && !!flakyTestRetriesConfiguration &&
+      isFlakyTestRetriesEnabledForTask({
+        isFlakyTestRetriesEnabled: state.isFlakyTestRetriesEnabled,
+        isDynamicAtrEnabled: state.isDynamicAtrEnabled,
+        flakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
+        flakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
+      }, task)
 
     return {
       isAttemptToFix,
-      isDisabled: testManagementProperties.isDisabled,
+      annotations,
+      assignedProperties: testManagementProperties,
+      isDisabled: testManagementProperties.isDisabled && !annotations.mustFail,
       isEarlyFlakeDetection: task.meta?.__ddTestOptEfdRetries !== undefined,
       isFlakyTestRetries,
-      isQuarantined: testManagementProperties.isQuarantined,
+      isQuarantined: testManagementProperties.isQuarantined && !annotations.mustFail,
       isModified,
       isNew,
       testSuite,
@@ -1284,12 +1403,13 @@ function reportFinalTestAttempt (testReport) {
     } = getRumCorrelation(task, attemptIndex)
     testSkipCh.publish({
       ...browserEnvironment,
+      annotations: testProperties.annotations,
       testName,
       testSuiteAbsolutePath,
       isNew: testProperties.isNew,
-      isAttemptToFix: testProperties.isAttemptToFix,
-      isDisabled: testProperties.isDisabled,
-      isQuarantined: testProperties.isQuarantined,
+      isAttemptToFix: testProperties.assignedProperties.isAttemptToFix,
+      isDisabled: testProperties.assignedProperties.isDisabled,
+      isQuarantined: testProperties.assignedProperties.isQuarantined,
       isRumActive,
       isTestFrameworkWorker: true,
       requestErrorTags: state.requestErrorTags,
@@ -1370,9 +1490,10 @@ function reportTestAttempt (testReport, attempt) {
     isRetry: attempt.isRetry,
     isNew: testProperties.isNew,
     hasDynamicName: testProperties.hasDynamicName,
-    isAttemptToFix: testProperties.isAttemptToFix,
-    isDisabled: testProperties.isDisabled,
-    isQuarantined: testProperties.isQuarantined,
+    annotations: testProperties.annotations,
+    isAttemptToFix: testProperties.assignedProperties.isAttemptToFix,
+    isDisabled: testProperties.assignedProperties.isDisabled,
+    isQuarantined: testProperties.assignedProperties.isQuarantined,
     isModified: testProperties.isModified,
     isRetryReasonEfd: attempt.isRetryReasonEfd,
     isRetryReasonAttemptToFix: testProperties.isAttemptToFix && attempt.isRetry,
@@ -1519,6 +1640,23 @@ function recomputeTaskState (task) {
   return status
 }
 
+/** @param {string|undefined} nodeOptions */
+function removeAnnotationsPreload (nodeOptions) {
+  if (!nodeOptions) return nodeOptions
+  const tokens = splitNodeOptions(nodeOptions)
+  const filtered = []
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]
+    if ((token === '--require' || token === '-r') && tokens[index + 1] === VITEST_ANNOTATIONS_PRELOAD) {
+      index++
+      continue
+    }
+    if (token === `--require=${VITEST_ANNOTATIONS_PRELOAD}` || token === `-r${VITEST_ANNOTATIONS_PRELOAD}`) continue
+    filtered.push(token)
+  }
+  return filtered.length === tokens.length ? nodeOptions : serializeNodeOptions(filtered)
+}
+
 function removeDatadogTestOptimizationNodeOptions (nodeOptions) {
   if (!nodeOptions) return nodeOptions
 
@@ -1608,9 +1746,9 @@ function splitNodeOptions (nodeOptions) {
     const char = nodeOptions[index]
 
     if (quote) {
-      if (char === '\\' && nodeOptions[index + 1] === quote) {
-        token += quote
-        index++
+      // Node treats a backslash inside double quotes as escaping the next character.
+      if (char === '\\' && index + 1 < nodeOptions.length) {
+        token += nodeOptions[++index]
         continue
       }
 
@@ -1622,7 +1760,8 @@ function splitNodeOptions (nodeOptions) {
       continue
     }
 
-    if (char === '"' || char === "'") {
+    // NODE_OPTIONS uses double quotes for grouping; apostrophes belong to option values.
+    if (char === '"') {
       quote = char
       continue
     }
@@ -1650,7 +1789,8 @@ function serializeNodeOptions (tokens) {
   for (const token of tokens) {
     if (hasSerializedToken) serializedTokens += ' '
     if (NODE_OPTIONS_QUOTE_RE.test(token)) {
-      serializedTokens += JSON.stringify(token)
+      // Escape only Node's grouping syntax; JSON would turn literal whitespace into escape letters.
+      serializedTokens += `"${token.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)}"`
     } else {
       serializedTokens += token
     }
@@ -1869,6 +2009,7 @@ function safeWorkspaceProject (ctx) {
 }
 
 module.exports = {
+  addBrowserAnnotationPlugin,
   configure,
   deactivate,
   configureWorkerEnv,
