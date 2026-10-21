@@ -61,3 +61,11 @@ Chat/Responses usage fields. Preserve audio counts as `input_audio_tokens` and
 `input_token_details.cached_tokens_details.audio_tokens` as `cache_audio_read_tokens`.
 All are subsets of the inclusive totals. Keep explicit zero values; omit absent or
 invalid counts so the backend can distinguish unknown cache splits from zero audio.
+
+Keep reported text and image counts as `input_text_tokens`, `output_text_tokens`,
+and `input_image_tokens`. Map cached text/image intersections from
+`input_token_details.cached_tokens_details` to `cache_text_read_tokens` and
+`cache_image_read_tokens`. All modality counts include their cached subset. Never
+infer text from total minus audio, or cached text from cached total minus cached
+audio: images and incomplete provider details make those subtractions ambiguous.
+Optional counts must be nonnegative safe integers; preserve reported zero values.

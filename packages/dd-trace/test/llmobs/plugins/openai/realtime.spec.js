@@ -235,21 +235,48 @@ describe('integrations', () => {
 
           for (const { name, details, expected } of [
             {
-              name: 'mixed audio and cached audio',
+              name: 'text, audio, image and cached token details',
               details: {
                 input_token_details: {
                   text_tokens: 200,
                   audio_tokens: 4800,
+                  image_tokens: 0,
                   cached_tokens: 4000,
-                  cached_tokens_details: { text_tokens: 100, audio_tokens: 3900 },
+                  cached_tokens_details: { text_tokens: 100, audio_tokens: 3900, image_tokens: 0 },
                 },
                 output_token_details: { text_tokens: 100, audio_tokens: 1200 },
               },
               expected: {
+                input_text_tokens: 200,
                 input_audio_tokens: 4800,
+                input_image_tokens: 0,
+                output_text_tokens: 100,
                 output_audio_tokens: 1200,
                 cache_read_input_tokens: 4000,
+                cache_text_read_tokens: 100,
                 cache_audio_read_tokens: 3900,
+                cache_image_read_tokens: 0,
+              },
+            },
+            {
+              name: 'positive image and cached image counts',
+              details: {
+                input_token_details: {
+                  text_tokens: 200,
+                  audio_tokens: 4700,
+                  image_tokens: 100,
+                  cached_tokens: 4000,
+                  cached_tokens_details: { text_tokens: 100, audio_tokens: 3850, image_tokens: 50 },
+                },
+              },
+              expected: {
+                input_text_tokens: 200,
+                input_audio_tokens: 4700,
+                input_image_tokens: 100,
+                cache_read_input_tokens: 4000,
+                cache_text_read_tokens: 100,
+                cache_audio_read_tokens: 3850,
+                cache_image_read_tokens: 50,
               },
             },
             { name: 'absent details', details: {}, expected: {} },
@@ -259,22 +286,39 @@ describe('integrations', () => {
               expected: {},
             },
             {
-              name: 'cached usage without an audio breakdown',
+              name: 'cached usage without a modality breakdown',
               details: { input_token_details: { audio_tokens: 4800, cached_tokens: 4000 } },
               expected: { input_audio_tokens: 4800, cache_read_input_tokens: 4000 },
             },
             {
-              name: 'explicit zero audio counts',
+              name: 'partial text and image details',
+              details: {
+                input_token_details: { image_tokens: 100, cached_tokens_details: { text_tokens: 80 } },
+                output_token_details: { text_tokens: 100 },
+              },
+              expected: { input_image_tokens: 100, cache_text_read_tokens: 80, output_text_tokens: 100 },
+            },
+            {
+              name: 'explicit zero modality and cache counts',
               details: {
                 input_token_details: {
-                  audio_tokens: 0, cached_tokens: 0, cached_tokens_details: { audio_tokens: 0 },
+                  text_tokens: 0,
+                  image_tokens: 0,
+                  audio_tokens: 0,
+                  cached_tokens: 0,
+                  cached_tokens_details: { text_tokens: 0, image_tokens: 0, audio_tokens: 0 },
                 },
-                output_token_details: { audio_tokens: 0 },
+                output_token_details: { text_tokens: 0, audio_tokens: 0 },
               },
               expected: {
+                input_text_tokens: 0,
+                input_image_tokens: 0,
                 input_audio_tokens: 0,
+                output_text_tokens: 0,
                 output_audio_tokens: 0,
                 cache_read_input_tokens: 0,
+                cache_text_read_tokens: 0,
+                cache_image_read_tokens: 0,
                 cache_audio_read_tokens: 0,
               },
             },
@@ -282,9 +326,13 @@ describe('integrations', () => {
               name: 'invalid optional counts',
               details: {
                 input_token_details: {
-                  audio_tokens: -1, cached_tokens: true, cached_tokens_details: { audio_tokens: '3' },
+                  text_tokens: true,
+                  image_tokens: 1.5,
+                  audio_tokens: -1,
+                  cached_tokens: true,
+                  cached_tokens_details: { text_tokens: '3', image_tokens: -2, audio_tokens: '3' },
                 },
-                output_token_details: { audio_tokens: 1.5 },
+                output_token_details: { text_tokens: Number.MAX_SAFE_INTEGER + 1, audio_tokens: 1.5 },
               },
               expected: {},
             },
@@ -298,6 +346,71 @@ describe('integrations', () => {
               })
             })
           }
+
+          for (const value of [null, -1, true, '3', 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+            it(`omits invalid named counts (${JSON.stringify(value)}) independently of valid audio`, async () => {
+              sessionCreated()
+              spokenTurn({
+                usage: {
+                  input_tokens: 5000,
+                  output_tokens: 1300,
+                  input_token_details: {
+                    audio_tokens: 4800,
+                    text_tokens: value,
+                    image_tokens: value,
+                    cached_tokens_details: { text_tokens: value, image_tokens: value },
+                  },
+                  output_token_details: { audio_tokens: 1200, text_tokens: value },
+                },
+              })
+              const { llmobsSpans } = await getEvents(4)
+              assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, {
+                input_tokens: 5000,
+                output_tokens: 1300,
+                total_tokens: 6300,
+                input_audio_tokens: 4800,
+                output_audio_tokens: 1200,
+              })
+            })
+          }
+
+          it('preserves named counts when aggregate usage is absent', async () => {
+            sessionCreated()
+            spokenTurn({
+              usage: {
+                input_token_details: { text_tokens: 200, image_tokens: 100 },
+                output_token_details: { text_tokens: 100 },
+              },
+            })
+            const { llmobsSpans } = await getEvents(4)
+            assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, {
+              input_text_tokens: 200, input_image_tokens: 100, output_text_tokens: 100,
+            })
+          })
+
+          it('preserves the largest safe integer named count', async () => {
+            sessionCreated()
+            spokenTurn({
+              usage: {
+                input_token_details: {
+                  text_tokens: Number.MAX_SAFE_INTEGER,
+                  image_tokens: Number.MAX_SAFE_INTEGER,
+                  cached_tokens_details: {
+                    text_tokens: Number.MAX_SAFE_INTEGER, image_tokens: Number.MAX_SAFE_INTEGER,
+                  },
+                },
+                output_token_details: { text_tokens: Number.MAX_SAFE_INTEGER },
+              },
+            })
+            const { llmobsSpans } = await getEvents(4)
+            assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, {
+              input_text_tokens: Number.MAX_SAFE_INTEGER,
+              input_image_tokens: Number.MAX_SAFE_INTEGER,
+              cache_text_read_tokens: Number.MAX_SAFE_INTEGER,
+              cache_image_read_tokens: Number.MAX_SAFE_INTEGER,
+              output_text_tokens: Number.MAX_SAFE_INTEGER,
+            })
+          })
 
           it('models a spoken turn as a workflow root with user speech, llm and agent speech', async () => {
             sessionCreated()
