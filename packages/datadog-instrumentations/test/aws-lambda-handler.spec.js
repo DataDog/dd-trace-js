@@ -5,7 +5,7 @@ const { EventEmitter } = require('node:events')
 
 const { describe, it } = require('mocha')
 
-const { promisifiedHandler } = require('../src/handler-utils')
+const { promisifiedHandler } = require('../src/helpers/lambda-handler')
 
 describe('Lambda handler utilities', () => {
   it('supports callback, promise, and synchronous handlers', async () => {

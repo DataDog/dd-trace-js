@@ -13,7 +13,7 @@ const {
 const {
   HANDLER_STREAMING,
   STREAM_RESPONSE,
-} = require('../../datadog-plugin-aws-lambda/src/handler-utils')
+} = require('../../datadog-instrumentations/src/helpers/lambda-handler')
 
 describe('aws-lambda instrumentation', () => {
   const subscriptions = []

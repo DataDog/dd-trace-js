@@ -6,7 +6,9 @@ const {
   HANDLER_STREAMING,
   STREAM_RESPONSE,
   promisifiedHandler,
-} = require('../../datadog-plugin-aws-lambda/src/handler-utils')
+  copyHandlerMetadata,
+  getDataProperty,
+} = require('./helpers/lambda-handler')
 
 // Read through the process-global registry so two dd-trace copies (layer + bundled) resolve the
 // same marker. The value is the wrapper itself, so a second wrap of the same handler returns the
@@ -23,17 +25,19 @@ const invocationChannel = dc.tracingChannel('datadog:aws-lambda:invoke')
  *
  * @param {Function} handler Customer Lambda handler.
  * @param {Record<string, unknown>} [config] Per-handler configuration overrides.
+ * @param {(handler: Function) => Function} [monitor] Observes the selected completion inside invocation scope.
  * @returns {Function} Wrapped handler, or the existing wrapper when already marked.
  */
-function wrapHandler (handler, config) {
+function wrapHandler (handler, config, monitor) {
   if (typeof handler !== 'function') {
     throw new TypeError('AWS Lambda handler must be a function')
   }
   const existing = getWrappedHandler(handler)
   if (existing !== undefined && config?.forceWrap !== true) return existing
 
-  const isResponseStream = handler[HANDLER_STREAMING] === STREAM_RESPONSE
-  const invoke = promisifiedHandler(handler)
+  const isResponseStream = getDataProperty(handler, HANDLER_STREAMING) === STREAM_RESPONSE
+  const completion = promisifiedHandler(handler)
+  const invoke = monitor ? monitor(completion) : completion
 
   function wrappedHandler (...args) {
     const contextIndex = isResponseStream ? 2 : findContextIndex(args)
@@ -51,8 +55,8 @@ function wrapHandler (handler, config) {
 
   wrappers.set(handler, wrappedHandler)
   wrappers.set(wrappedHandler, wrappedHandler)
-  wrappedHandler[WRAPPED] = wrappedHandler
-  if (isResponseStream) wrappedHandler[HANDLER_STREAMING] = STREAM_RESPONSE
+  Object.defineProperty(wrappedHandler, WRAPPED, { value: wrappedHandler })
+  copyHandlerMetadata(handler, wrappedHandler)
 
   return wrappedHandler
 }
@@ -81,7 +85,7 @@ function findContextIndex (args) {
  * @returns {Function|undefined} Existing invocation wrapper.
  */
 function getWrappedHandler (handler) {
-  return wrappers.get(handler) || handler[WRAPPED]
+  return wrappers.get(handler) || getDataProperty(handler, WRAPPED)
 }
 
 module.exports = {

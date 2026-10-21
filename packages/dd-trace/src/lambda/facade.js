@@ -3,7 +3,7 @@
 const tracer = require('../../../..')
 const { AUTO_KEEP } = require('../../../../ext/priority')
 const { writeDatadogTraceId, writeDatadogParentId, writeDatadogSamplingPriority } = require('../carrier')
-const { wrapLambdaHandler } = require('./handler')
+const { wrapLambdaHandler } = require('./wrap')
 
 /**
  * Wraps an AWS Lambda handler with the dd-trace Lambda invocation lifecycle.

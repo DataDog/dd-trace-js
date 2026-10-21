@@ -1,34 +1,53 @@
 'use strict'
 
-const dc = require('dc-polyfill')
-
+const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
+const { copyHandlerMetadata, getDataProperty, isCallbackCompletion } =
+  require('../../../datadog-instrumentations/src/helpers/lambda-handler')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const log = require('../log')
-const { getWrappedHandler, wrapHandler } = require('../../../datadog-instrumentations/src/aws-lambda')
-const { HANDLER_STREAMING, isCallbackCompletion } = require('../../../datadog-plugin-aws-lambda/src/handler-utils')
-const { extractContext } = require('./context')
 const { ImpendingTimeout } = require('./runtime/errors')
+const { extractContext } = require('./context')
 
-// Read through the process-global registry so two dd-trace copies agree, matching the span
-// wrapper's marker. Memoizing here is what keeps the composed instrumentation idempotent: without
-// it every re-patch hands `wrapHandler` a fresh inner function, its own marker cannot match, and
-// the span wrappers stack.
-const MONITORED = Symbol.for('dd-trace.lambda.timeout-monitored')
-const monitorsKey = Symbol.for('dd-trace.lambda.timeout-monitors')
-const monitors = globalThis[monitorsKey] ??= new WeakMap()
-
-const timeoutChannel = dc.channel('apm:aws:lambda:timeout')
-timeoutChannel.subscribe(() => {
+const BEFORE_EXIT = Symbol.for('aws.lambda.beforeExit')
+const timeoutChannel = channel('apm:aws:lambda:timeout')
+const monitoredContexts = new WeakSet()
+// Always crash the flushes when a message is received
+// from this channel.
+timeoutChannel.subscribe(_ => {
   crashFlush()
 })
 
 /**
- * Tags the in-flight invocation span with an impending-timeout error, kills the remaining
- * unfinished spans so they are not lost, and finishes the span.
+ * Publishes to the `apm:aws:lambda:timeout` channel when
+ * the AWS Lambda run time is about to end.
  *
- * Deliberately span-agnostic: it decorates whatever span is active rather than one it created.
- * That is what lets the monitor compose with either owner of the invocation span — the
- * pre-migration datadog-lambda-js wrapper today, the aws-lambda plugin after the migration.
+ * @param {object} context AWS Lambda context object.
+ */
+function checkTimeout (context) {
+  const remainingTimeInMillis = context.getRemainingTimeInMillis()
+  const apmFlushDeadline = global._ddtrace?._tracer?._config?.DD_APM_FLUSH_DEADLINE_MILLISECONDS
+  if (!Number.isFinite(remainingTimeInMillis) || !Number.isFinite(apmFlushDeadline)) return
+
+  const timeout = setTimeout(() => {
+    timeoutChannel.publish()
+  }, Math.max(0, remainingTimeInMillis - apmFlushDeadline))
+  try {
+    timeout.unref?.()
+  } catch (error) {
+    clearTimeout(timeout)
+    log.error('Error unreferencing Lambda timeout monitor: %s', error)
+    return
+  }
+  return timeout
+}
+
+/**
+ * Grabs the current span, adds an error for an impending timeout.
+ *
+ * After that, it calls `killAll` on the tracer processor
+ * in order to kill remaining unfinished spans.
+ *
+ * Once that is done, it finishes the last span.
  */
 function crashFlush () {
   const tracer = global._ddtrace._tracer
@@ -50,137 +69,140 @@ function crashFlush () {
 }
 
 /**
- * Arms the impending-timeout guard for one invocation.
- *
- * Read from the tracer config rather than plugin config on purpose: the monitor has to work when
- * the aws-lambda plugin is not creating a span, which is the default while the pre-migration shim
- * still owns the invocation span.
- *
- * @param {object} context AWS Lambda context object.
- */
-function armTimeout (context) {
-  const apmFlushDeadline = global._ddtrace?._tracer?._config?.DD_APM_FLUSH_DEADLINE_MILLISECONDS
-  // The public facade can be used before tracing is initialized, or with tracing disabled.
-  if (!Number.isFinite(apmFlushDeadline)) return
-  const remainingTimeInMillis = context.getRemainingTimeInMillis()
-  if (!Number.isFinite(remainingTimeInMillis)) return
-
-  return setTimeout(() => {
-    timeoutChannel.publish()
-  }, Math.max(0, remainingTimeInMillis - apmFlushDeadline))
-}
-
-/**
- * Wraps a Lambda handler with impending-timeout monitoring, and nothing else.
- *
- * This creates no span. Whoever owns the invocation span wraps *outside* this, so that the span is
- * active when the timer fires and `crashFlush` can find it through the scope. Both eras compose the
- * same way: `shimDatadog(withTimeoutMonitor(handler))` before the migration,
- * `wrapHandler(withTimeoutMonitor(handler))` after it.
+ * Monitors an AWS Lambda handler for impending timeouts without creating a span.
  *
  * @param {Function} lambdaHandler a Lambda handler function.
- * @param {boolean} [reuseSpan] Reuse a promoted span wrapper unless explicitly force-wrapping.
- * @returns {Function} The monitored handler.
  */
-function withTimeoutMonitor (lambdaHandler, reuseSpan = true) {
-  if (typeof lambdaHandler !== 'function') throw new TypeError('AWS Lambda handler must be a function')
-  const monitored = monitors.get(lambdaHandler) || lambdaHandler[MONITORED]
-  // A monitor-only hook may subsequently be promoted by the facade. Follow that promotion so a
-  // later hook neither adds a second span nor puts a timer outside the existing invocation scope.
-  if (monitored !== undefined) return (reuseSpan && getWrappedHandler(monitored)) || monitored
-
-  function timeoutMonitoredHandler (...args) {
+exports.datadog = function datadog (lambdaHandler) {
+  function monitored (...args) {
     const context = extractContext(args)
-    // A handler invoked without a Lambda context has no deadline to guard.
-    if (!context) return lambdaHandler.apply(this, args)
+    if (!context || monitoredContexts.has(context)) return Reflect.apply(lambdaHandler, this, args)
 
-    const timer = armTimeout(context)
-    if (timer === undefined) return lambdaHandler.apply(this, args)
-    // Clearing on *either* outcome matters: the pre-PR3 version only cleared on fulfilment, so a
-    // rejected invocation left the timer armed and it fired against a later invocation in the same
-    // warm container, calling killAll() on an unrelated trace.
-    const restorations = []
+    const timeout = checkTimeout(context)
+    if (timeout === undefined) return Reflect.apply(lambdaHandler, this, args)
+
     let completed = false
+    let callbackPending = false
+    /** @type {Array<[object, string | symbol, Function, Function]>} */
+    const completionMethods = []
     const clear = () => {
       if (completed) return
       completed = true
-      clearTimeout(timer)
-      for (const [name, original, wrapped] of restorations) {
-        // A reused context may already belong to a later invocation.
-        if (context[name] === wrapped) context[name] = original
+      clearTimeout(timeout)
+      for (const [target, name, original, wrapped] of completionMethods) {
+        try {
+          if (target[name] === wrapped) Reflect.set(target, name, original)
+        } catch (error) {
+          log.error('Error restoring Lambda completion %s: %s', name, error)
+        }
       }
     }
+    const clearOnHandlerCompletion = () => {
+      // Once a native callback selects event-loop drain, later handler signals are ignored by RIC.
+      if (!callbackPending) clear()
+    }
+
     const contextIndex = args.indexOf(context)
-    if (contextIndex !== 2 && typeof args[2] === 'function') {
-      args[2] = onCompletion(args[2], clear)
-    }
+    const callbackObservable = contextIndex !== 2 && typeof args[2] === 'function'
+    let completionObservable = true
     for (const name of ['done', 'succeed', 'fail']) {
-      if (typeof context[name] !== 'function') continue
-      const original = context[name]
-      const wrapped = onCompletion(original, clear)
-      restorations.push([name, original, wrapped])
-      context[name] = wrapped
+      if (!wrapCompletion(context, name, clearOnHandlerCompletion, completionMethods)) completionObservable = false
+    }
+    // Legacy Lambda runtimes complete idle invocations through this callback instead of the handler's callback.
+    if (!wrapCompletion(globalThis, BEFORE_EXIT, clear, completionMethods)) completionObservable = false
+    // Newer runtimes complete from the return value and expose no legacy completion hooks.
+    if (completionMethods.length === 0) completionObservable = false
+
+    if (callbackObservable) {
+      const callback = args[2]
+      const beforeExitObservable = completionMethods.at(-1)?.[1] === BEFORE_EXIT
+      let callbackInvoked = false
+      args[2] = function (...callbackArgs) {
+        if (completed || callbackInvoked) return Reflect.apply(callback, this, callbackArgs)
+        callbackInvoked = true
+        let beforeExit
+        try {
+          if (beforeExitObservable && callbackArgs[0] == null && context.callbackWaitsForEmptyEventLoop) {
+            beforeExit = getDataProperty(globalThis, BEFORE_EXIT)
+          }
+        } catch (error) {
+          log.error('Error reading Lambda callback completion: %s', error)
+        }
+        if (typeof beforeExit !== 'function') clear()
+        try {
+          const result = Reflect.apply(callback, this, callbackArgs)
+          if (!completed) {
+            // A successful legacy callback installs a new listener while waiting for event-loop drain.
+            const replacement = getDataProperty(globalThis, BEFORE_EXIT)
+            if (typeof replacement !== 'function' || replacement === beforeExit ||
+                !wrapCompletion(globalThis, BEFORE_EXIT, clear, completionMethods)) clear()
+            else callbackPending = true
+          }
+          return result
+        } catch (error) {
+          clear()
+          throw error
+        }
+      }
     }
 
-    let result
     try {
-      result = lambdaHandler.apply(this, args)
+      // The outer completion adapter owns this context during synchronous dispatch to nested wrappers.
+      monitoredContexts.add(context)
+      const result = Reflect.apply(lambdaHandler, this, args)
+      if (result && typeof result.then === 'function') {
+        return result.then(value => {
+          clearOnHandlerCompletion()
+          return value
+        }, error => {
+          clearOnHandlerCompletion()
+          throw error
+        })
+      }
+      // An observed callback can complete later regardless of arity or an incidental return value.
+      // Otherwise, retain monitoring only when context/runtime completion is observable and expected.
+      if (!callbackObservable &&
+          (!completionObservable || !isCallbackCompletion(monitored, result, contextIndex))) clear()
+      return result
     } catch (error) {
-      clear()
+      clearOnHandlerCompletion()
       throw error
+    } finally {
+      monitoredContexts.delete(context)
     }
-    if (result !== undefined && typeof result?.then === 'function') {
-      return result.then(
-        (value) => { clear(); return value },
-        (error) => { clear(); throw error }
-      )
-    }
-    if (!isCallbackCompletion(lambdaHandler, result, contextIndex)) clear()
-    return result
   }
 
-  monitors.set(lambdaHandler, timeoutMonitoredHandler)
-  monitors.set(timeoutMonitoredHandler, timeoutMonitoredHandler)
-  timeoutMonitoredHandler[MONITORED] = timeoutMonitoredHandler
-  // The released shim uses declared arity to distinguish callback handlers, and this symbol to
-  // choose (event, stream, context). A rest-argument wrapper must not erase either contract.
-  Object.defineProperty(timeoutMonitoredHandler, 'length', { value: lambdaHandler.length })
-  if (lambdaHandler[HANDLER_STREAMING] !== undefined) {
-    timeoutMonitoredHandler[HANDLER_STREAMING] = lambdaHandler[HANDLER_STREAMING]
-  }
-
-  return timeoutMonitoredHandler
+  copyHandlerMetadata(lambdaHandler, monitored)
+  return monitored
 }
 
 /**
- * Observes completion without changing the caller's callback arguments, receiver, or return value.
- *
- * @param {Function} callback Original callback.
- * @param {Function} clear Invocation-local timer cleanup.
- * @returns {Function} Completion observer.
+ * @param {object} target
+ * @param {string | symbol} name
+ * @param {() => void} clear
+ * @param {Array<[object, string | symbol, Function, Function]>} completionMethods
+ */
+function wrapCompletion (target, name, clear, completionMethods) {
+  try {
+    const original = target[name]
+    if (typeof original !== 'function') return true
+    const wrapped = onCompletion(original, clear)
+    if (!Reflect.set(target, name, wrapped) || target[name] !== wrapped) return false
+    completionMethods.push([target, name, original, wrapped])
+    return true
+  } catch (error) {
+    log.error('Error wrapping Lambda completion %s: %s', name, error)
+    return false
+  }
+}
+
+/**
+ * @param {Function} callback
+ * @param {() => void} clear
  */
 function onCompletion (callback, clear) {
-  return function monitoredCompletion (...args) {
+  return function (...args) {
     clear()
-    return callback.apply(this, args)
+    return Reflect.apply(callback, this, args)
   }
 }
-
-/**
- * Common facade/hook composition: span owner outside, timeout monitor inside.
- *
- * @param {Function} handler Customer handler.
- * @param {Record<string, unknown>} [config] Per-handler overrides.
- * @returns {Function} Instrumented handler.
- */
-function wrapLambdaHandler (handler, config) {
-  // forceWrap(rawHandler) replaces its wrapper, not wraps its previous span wrapper again.
-  // An explicitly supplied already-wrapped handler can still be force-wrapped, as before.
-  const wrapped = wrapHandler(withTimeoutMonitor(handler, config?.forceWrap !== true), config)
-  // Do not stamp a previously returned wrapper: callers can freeze it before re-patching.
-  monitors.set(wrapped, wrapped)
-  return wrapped
-}
-
-exports.withTimeoutMonitor = withTimeoutMonitor
-exports.wrapLambdaHandler = wrapLambdaHandler

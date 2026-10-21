@@ -1020,6 +1020,8 @@ export default [
       // root facade re-export. Anything on this list must stay ES2021 / Node 18 compatible.
       'lambda.js',
       'packages/dd-trace/src/lambda/facade.js',
+      'packages/dd-trace/src/lambda/wrap.js',
+      'packages/datadog-instrumentations/src/helpers/lambda-handler.js',
       'packages/datadog-instrumentations/src/aws-lambda.js',
       'packages/datadog-plugin-aws-lambda/**/*.js',
     ],

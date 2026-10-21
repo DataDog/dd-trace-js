@@ -1,11 +1,13 @@
 'use strict'
 
 const path = require('path')
+const { types: { isModuleNamespaceObject } } = require('node:util')
 
-const { withTimeoutMonitor, wrapLambdaHandler } = require('../handler')
+const { datadog } = require('../handler')
+const { withTimeoutMonitor, wrapLambdaHandler } = require('../wrap')
+const { isTrue } = require('../../util')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
-const { isTrue } = require('../../util')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const {
   extractModuleNameAndHandlerPath,
@@ -19,68 +21,44 @@ function patchDatadogLambdaModule (datadogLambdaModule) {
   return datadogLambdaModule
 }
 
-/**
- * Whether dd-trace creates the `aws.lambda` invocation span. Transitional, default off.
- *
- * While the pre-migration datadog-lambda-js still owns the invocation span, dd-trace must not
- * create a second one: the released shim does not know
- * `Symbol.for('dd-trace.lambda.wrapped')`, and dd-trace deliberately does not claim the shim's
- * `_ddWrapped` marker, so both would wrap and export two root `aws.lambda` spans in two separate
- * traces. Off preserves the pre-PR3 division of ownership — dd-trace's Lambda support was timeout
- * monitoring only and never produced a span.
- *
- * This gates span ownership, not all Lambda behavior: the shared timeout monitor, hook
- * registration, and plugin-manager configuration still run with it off. Explicit facade
- * wrapping is opt-in and does not depend on this gate.
- *
- * Enabling it is for migration testing and knowingly double-spans against the old shim. The gate
- * goes away once the shim delegates to `dd-trace/lambda` and the marker makes wrapping idempotent.
- *
- * Migration-internal knob: registered in supported-configurations.json (env access validation
- * requires it) but intentionally not mapped to a customer-facing config option.
- */
-function ddTraceOwnsInvocationSpan () {
-  return isTrue(getValueFromEnvSources('DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS'))
-}
-
-/**
- * Composes the two independent concerns, innermost first.
- *
- * Timeout monitoring always applies; span creation is gated. The monitor has to sit *inside* the
- * span-creating wrapper so the span is active when its timer fires.
- *
- * @param {Function} lambdaHandler Customer handler.
- * @param {Record<string, unknown>} [config] Per-handler overrides.
- * @returns {Function} Instrumented handler.
- */
-function instrumentLambdaHandler (lambdaHandler, config) {
-  return ddTraceOwnsInvocationSpan() ? wrapLambdaHandler(lambdaHandler, config) : withTimeoutMonitor(lambdaHandler)
-}
-
 /** @param {Function} datadogHandler */
 function patchDatadogLambdaHandler (datadogHandler) {
-  return function monitoredDatadog (userHandler, ...args) {
-    return datadogHandler.call(this, instrumentLambdaHandler(userHandler, args[0]), ...args)
+  return function (userHandler, ...args) {
+    return Reflect.apply(datadogHandler, this, [instrumentLambdaHandler(userHandler, args[0]), ...args])
   }
+}
+
+/**
+ * Wraps datadog-lambda-js's promisifiedHandler factory, which wraps the customer's handler.
+ * The timeout monitor surrounds that adapter to observe the completion Promise selected by datadog-lambda-js.
+ * Legacy RIC completes returned Promises through context.succeed without waiting for event-loop drain.
+ *
+ * @param {object} moduleExports
+ */
+function patchPromisifiedHandlerModule (moduleExports) {
+  shimmer.wrap(moduleExports, 'promisifiedHandler', promisify => {
+    return handler => datadog(promisify(handler))
+  })
+  return moduleExports
 }
 
 /** @param {string} handlerPath */
 function patchLambdaModule (handlerPath) {
   return lambdaModule => {
     const descriptor = Object.getOwnPropertyDescriptor(lambdaModule, handlerPath)
-    if (descriptor?.writable && typeof descriptor.value === 'function') {
-      const wrapped = patchLambdaHandler(descriptor.value)
-      // A cached wrapper may have been frozen by the caller. Reinstall it without shimmer
-      // trying to copy the original function's properties onto it again.
-      if (Object.isExtensible(wrapped)) {
-        shimmer.wrap(lambdaModule, handlerPath, () => wrapped)
-      } else {
-        Object.defineProperty(lambdaModule, handlerPath, { ...descriptor, value: wrapped })
-      }
-      return lambdaModule
+    if (typeof descriptor?.value === 'function') {
+      if (!descriptor.configurable && !descriptor.writable) return lambdaModule
+      // The monitor copies Lambda metadata without invoking application accessors or Proxy traps.
+      // Generic shimmer wrapping would copy the original properties back onto that safe wrapper.
+      descriptor.value = instrumentLambdaHandler(descriptor.value)
+      // Native ESM namespaces reject replacement even when their export reports writable: true.
+      const exports = isModuleNamespaceObject(lambdaModule)
+        ? Object.create(lambdaModule, Object.getOwnPropertyDescriptors(lambdaModule))
+        : lambdaModule
+      Object.defineProperty(exports, handlerPath, descriptor)
+      return exports
     }
-    shimmer.wrap(lambdaModule, handlerPath, patchLambdaHandler)
-    return lambdaModule
+    return shimmer.wrap(lambdaModule, handlerPath, patchLambdaHandler) ?? lambdaModule
   }
 }
 
@@ -89,8 +67,29 @@ function patchLambdaHandler (lambdaHandler) {
   return instrumentLambdaHandler(lambdaHandler)
 }
 
+/**
+ * Default-off migration gate: only the final shim may delegate invocation-span ownership.
+ * Old shims retain timeout monitoring, including their selected-completion helper hooks.
+ * Explicit facade wrapping is opt-in and independent of this gate. Retiring the gate requires
+ * proven ownership routing for supported old shims, or an explicit support retirement.
+ *
+ * @param {Function} handler Customer handler.
+ * @param {Record<string, unknown>} [config] Per-handler overrides.
+ * @returns {Function} Monitored or invocation-wrapped handler.
+ */
+function instrumentLambdaHandler (handler, config) {
+  return isTrue(getValueFromEnvSources('DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS'))
+    ? wrapLambdaHandler(handler, config)
+    : withTimeoutMonitor(handler)
+}
+
 const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
 const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
+
+// Observe the completion Promise selected by datadog-lambda-js inside the invocation span's async scope.
+// The npm package keeps dist/; Lambda layer builds place its contents directly in the package root.
+addHook({ name: 'datadog-lambda-js', file: 'dist/utils/handler.js' }, patchPromisifiedHandlerModule)
+addHook({ name: 'datadog-lambda-js', file: 'utils/handler.js' }, patchPromisifiedHandlerModule)
 
 if (originalLambdaHandler === undefined) {
   addHook({ name: 'datadog-lambda-js' }, patchDatadogLambdaModule)

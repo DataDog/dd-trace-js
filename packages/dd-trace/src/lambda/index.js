@@ -42,7 +42,6 @@ if (!listDisablesLambda(getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIO
 
       return moduleExports
     })
-    return
   }
 
   const moduleToPatch = 'datadog-lambda-js'
@@ -63,4 +62,19 @@ if (!listDisablesLambda(getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIO
 
     return moduleExports
   })
+
+  // The published datadog-lambda-js ESM entrypoint imports this helper before initializing the tracer.
+  // Revisit cached copies through the registered hook without loading datadog-lambda-js early.
+  const helperSuffixes = [
+    path.join('datadog-lambda-js', 'dist', 'utils', 'handler.js'),
+    path.join('datadog-lambda-js', 'utils', 'handler.js'),
+  ]
+  for (const filename of Object.keys(require.cache)) {
+    if (!helperSuffixes.some(suffix => filename.endsWith(path.sep + suffix))) continue
+    try {
+      require(filename)
+    } catch (error) {
+      log.error('Error executing cached lambda hook for datadog-lambda-js: %s', error)
+    }
+  }
 }

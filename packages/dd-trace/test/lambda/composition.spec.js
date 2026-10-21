@@ -9,7 +9,7 @@ const proxyquire = require('proxyquire').noCallThru()
 const agent = require('../plugins/agent')
 const { invocationChannel } = require('../../../datadog-instrumentations/src/aws-lambda')
 const { HANDLER_STREAMING, STREAM_RESPONSE, promisifiedHandler } =
-  require('../../../datadog-plugin-aws-lambda/src/handler-utils')
+  require('../../../datadog-instrumentations/src/helpers/lambda-handler')
 const { assertExactlyOneLambdaSpan } = require('./helpers')
 
 describe('Lambda facade and hook composition', () => {
@@ -59,7 +59,7 @@ describe('Lambda facade and hook composition', () => {
     else delete process.env.DD_LAMBDA_HANDLER
     proxyquire('../../src/lambda/runtime/patch', {
       '../../../../datadog-instrumentations/src/helpers/instrument': {
-        addHook: (options, hook) => hooks.push(hook),
+        addHook: (options, hook) => { if (!options.file) hooks.push(hook) },
       },
     })
     if (branch === 'layer') return hooks[0]({ handler }).handler
@@ -130,6 +130,83 @@ describe('Lambda facade and hook composition', () => {
           }
         })
       }
+    }
+  }
+
+  for (const entry of ['facade', 'layer', 'npm']) {
+    for (const shape of ['plain', 'rest', 'default']) {
+      it(`clears the selected synchronous ${shape} completion through ${entry}`, async () => {
+        process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
+        let lateCallback
+        const value = { ok: true }
+        const handlers = {
+          plain: (_event, _context) => value,
+          rest: (...args) => { lateCallback = args[2]; return value },
+          default: (_event, _context, callback = () => {}) => { lateCallback = callback; return value },
+        }
+        const handler = handlers[shape]
+        const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+        assert.strictEqual(await wrapped({}, context, () => {}), value)
+        assertExactlyOneLambdaSpan(traces)
+        // Watching the raw handler would retain this timer because a callback was supplied,
+        // even though the completion adapter selected the synchronous return.
+        assert.strictEqual(clock.countTimers(), 0)
+
+        let complete
+        const warm = facade.wrap((_event, _context, callback) => { complete = callback })
+        const result = warm({}, context)
+        assert.strictEqual(clock.countTimers(), 1)
+        lateCallback?.(null, 'late')
+        await Promise.resolve()
+        assert.strictEqual(clock.countTimers(), 1, 'late completion must not clear the warm invocation timer')
+        complete(null, 'warm')
+        assert.strictEqual(await result, 'warm')
+        assert.strictEqual(clock.countTimers(), 0)
+        clock.tick(100)
+        assert.strictEqual(traces.flat().filter(span => span.error).length, 0)
+      })
+    }
+
+    it(`preserves safe streaming metadata through ${entry}`, async () => {
+      process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
+      const highWaterMark = Symbol.for('aws.lambda.runtime.handler.streaming.highWaterMark')
+      const handler = (_event, _stream, _context) => Promise.resolve('streamed')
+      handler[HANDLER_STREAMING] = STREAM_RESPONSE
+      handler[highWaterMark] = 16384
+      const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+      assert.strictEqual(wrapped[HANDLER_STREAMING], STREAM_RESPONSE)
+      assert.strictEqual(wrapped[highWaterMark], 16384)
+      assert.strictEqual(wrapped.length, 3)
+      assert.strictEqual(await wrapped({}, {}, context), 'streamed')
+      assertExactlyOneLambdaSpan(traces)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    for (const shape of ['accessors', 'proxy']) {
+      it(`does not execute ${shape} when composing ${entry}`, async () => {
+        process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
+        const unexpected = sinon.stub().throws(new Error('metadata access must not run'))
+        let handler = () => 'safe'
+        if (shape === 'proxy') {
+          handler = new Proxy(handler, {
+            get: unexpected,
+            getOwnPropertyDescriptor: unexpected,
+            getPrototypeOf: unexpected,
+            ownKeys: unexpected,
+          })
+        } else {
+          for (const name of ['length', 'apply', '_ddWrapped', HANDLER_STREAMING,
+            Symbol.for('aws.lambda.runtime.handler.streaming.highWaterMark'),
+            Symbol.for('dd-trace.lambda.wrapped')]) {
+            Object.defineProperty(handler, name, { get: unexpected })
+          }
+        }
+        const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+        assert.strictEqual(await wrapped({}, context), 'safe')
+        assert.strictEqual(unexpected.callCount, 0)
+        assertExactlyOneLambdaSpan(traces)
+        assert.strictEqual(clock.countTimers(), 0)
+      })
     }
   }
 

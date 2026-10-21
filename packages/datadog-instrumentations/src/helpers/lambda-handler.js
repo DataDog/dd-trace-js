@@ -1,8 +1,10 @@
 'use strict'
 
 const { EventEmitter } = require('node:events')
+const { types: { isProxy } } = require('node:util')
 
 const HANDLER_STREAMING = Symbol.for('aws.lambda.runtime.handler.streaming')
+const HANDLER_HIGHWATERMARK = Symbol.for('aws.lambda.runtime.handler.streaming.highWaterMark')
 const STREAM_RESPONSE = 'response'
 
 function noop () {}
@@ -14,14 +16,14 @@ function noop () {}
  * @returns {Function} Promise-returning handler.
  */
 function promisifiedHandler (handler) {
-  if (handler[HANDLER_STREAMING] === STREAM_RESPONSE) {
+  if (getDataProperty(handler, HANDLER_STREAMING) === STREAM_RESPONSE) {
     return function responseStreamHandler (...args) {
       // A synchronous throw has to become a rejection, as it does for buffered handlers. Letting it
       // escape makes tracingChannel.tracePromise skip asyncStart/asyncEnd, which leaves the
       // invocation span unfinished (never exported) and the impending-timeout timer armed to fire
       // against a later invocation in the same warm container.
       try {
-        return Promise.resolve(handler.apply(this, args))
+        return Promise.resolve(Reflect.apply(handler, this, args))
       } catch (error) {
         return Promise.reject(error)
       }
@@ -70,7 +72,7 @@ function promisifiedHandler (handler) {
     // the original. The AWS runtime always supplies a callback in the third argument, so treating a
     // supplied callback as proof of callback-style completion would make every synchronous handler
     // wait forever on a callback it never calls.
-    const takesCallback = handler.length >= 3 && contextIndex !== 2
+    const takesCallback = getDataProperty(handler, 'length') >= 3 && contextIndex !== 2
     const invocationArgs = [...args]
     const suppliedCallbackIndex = findCallbackIndex(invocationArgs, contextIndex)
     if (suppliedCallbackIndex !== -1) {
@@ -81,7 +83,7 @@ function promisifiedHandler (handler) {
 
     let result
     try {
-      result = handler.apply(this, invocationArgs)
+      result = Reflect.apply(handler, this, invocationArgs)
     } catch (error) {
       return Promise.reject(error)
     }
@@ -116,33 +118,75 @@ function findCallbackIndex (args, contextIndex) {
 }
 
 /**
- * Detects common server and emitter artifacts whose real completion arrives through context callbacks.
- *
- * @param {unknown} result Handler return value.
+ * @param {Function} handler
+ * @param {unknown} result
+ * @param {number} contextIndex
  */
-function looksLikeSideEffectArtifact (result) {
-  return result !== null && typeof result === 'object' &&
-    ((typeof result.listen === 'function' && typeof result.close === 'function') ||
-      (typeof result.on === 'function' && typeof result.emit === 'function') ||
-      result instanceof EventEmitter ||
-      (result.constructor && /Server|Socket|Emitter/i.test(result.constructor.name)))
+function isCallbackCompletion (handler, result, contextIndex) {
+  if (getDataProperty(handler, HANDLER_STREAMING) === 'response') return false
+  if ((getDataProperty(handler, 'length') >= 3 && contextIndex !== 2) || result === undefined) return true
+  if (result === null || typeof result !== 'object') return false
+  for (let target = result; target !== null && !isProxy(target); target = Object.getPrototypeOf(target)) {
+    if (target === EventEmitter.prototype) return true
+  }
+  if ((typeof getDataProperty(result, 'listen') === 'function' &&
+      typeof getDataProperty(result, 'close') === 'function') ||
+      (typeof getDataProperty(result, 'on') === 'function' &&
+      typeof getDataProperty(result, 'emit') === 'function')) return true
+  const name = getDataProperty(getDataProperty(result, 'constructor'), 'name')
+  return typeof name === 'string' && /Server|Socket|Emitter/i.test(name)
 }
 
 /**
- * Whether a non-thenable return still needs a callback or legacy context completion signal.
- * Shared with the span-agnostic timeout monitor so it cannot finish ahead of the invocation.
+ * Reads metadata without executing application getters or Proxy traps.
  *
- * @param {Function} handler Customer handler.
- * @param {unknown} result Non-thenable handler return value.
- * @param {number} contextIndex Lambda context position.
+ * @param {unknown} target
+ * @param {string | symbol} name
  */
-function isCallbackCompletion (handler, result, contextIndex) {
-  return handler[HANDLER_STREAMING] !== STREAM_RESPONSE &&
-    ((handler.length >= 3 && contextIndex !== 2) || result === undefined || looksLikeSideEffectArtifact(result))
+function getDataProperty (target, name) {
+  if (target === null || (typeof target !== 'object' && typeof target !== 'function')) return
+  while (target !== null && !isProxy(target)) {
+    const descriptor = Object.getOwnPropertyDescriptor(target, name)
+    if (descriptor) return descriptor.value
+    target = Object.getPrototypeOf(target)
+  }
+}
+
+/**
+ * Copies data properties without running customer metadata getters or Proxy traps.
+ *
+ * @param {Function} handler Original handler.
+ * @param {Function} wrapped Wrapper to receive safe metadata.
+ */
+function copyHandlerMetadata (handler, wrapped) {
+  // datadog-lambda-js uses arity and the runtime's streaming metadata to choose how to invoke the handler.
+  Object.defineProperty(wrapped, 'length', { value: getDataProperty(handler, 'length') ?? 0 })
+  for (const name of [HANDLER_STREAMING, HANDLER_HIGHWATERMARK, '_ddWrapped']) {
+    const value = getDataProperty(handler, name)
+    if (value !== undefined) wrapped[name] = value
+  }
+  if (!isProxy(handler)) {
+    for (const name of Reflect.ownKeys(handler)) {
+      if (name === 'arguments' || name === 'caller') continue
+      const descriptor = Object.getOwnPropertyDescriptor(handler, name)
+      if (!Object.hasOwn(descriptor, 'value')) continue
+      const existing = Object.getOwnPropertyDescriptor(wrapped, name)
+      if (existing?.configurable === false) {
+        // Intrinsic function slots such as prototype cannot change their descriptor shape.
+        if (existing.writable) {
+          Object.defineProperty(wrapped, name, { value: descriptor.value, writable: descriptor.writable })
+        }
+      } else {
+        Object.defineProperty(wrapped, name, descriptor)
+      }
+    }
+  }
 }
 
 module.exports = {
   HANDLER_STREAMING,
+  copyHandlerMetadata,
+  getDataProperty,
   STREAM_RESPONSE,
   isCallbackCompletion,
   promisifiedHandler,
