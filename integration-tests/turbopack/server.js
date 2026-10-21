@@ -10,13 +10,7 @@ const handle = nextApp.getRequestHandler()
 async function start () {
   await nextApp.prepare()
 
-  const server = createServer((request, response) => {
-    if (request.url.startsWith('/builtin-target?')) {
-      response.end('builtin-ok')
-      return
-    }
-    handle(request, response)
-  })
+  const server = createServer((request, response) => handle(request, response))
   server.listen(0, () => {
     const port = server.address().port
     process.send({ port })
