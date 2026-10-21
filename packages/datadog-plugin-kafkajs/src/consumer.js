@@ -64,7 +64,10 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
   start (ctx) {
     if (!this.config.dsmEnabled) return
     const { topic, message, groupId, clusterId } = ctx.extractedArgs || ctx
-    const headers = convertToTextMap(message?.headers)
+    // bindStart already parsed these headers for the same message; reuse them unless the message changed.
+    const headers = ctx.dsmHeaderSource !== undefined && ctx.dsmHeaderSource === message?.headers
+      ? ctx.dsmHeaderTextMap
+      : convertToTextMap(message?.headers)
     if (!headers) return
 
     const { span } = ctx.currentStore
@@ -82,6 +85,12 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
     let childOf
     const headers = convertToTextMap(message?.headers)
+    if (this.config.dsmEnabled) {
+      // Read by start() so it does not parse the same headers again.
+      // dsmHeaderSource is the raw headers object that dsmHeaderTextMap (null if absent) was built from.
+      ctx.dsmHeaderTextMap = headers
+      ctx.dsmHeaderSource = message?.headers
+    }
     if (headers) {
       childOf = this.tracer.extract('text_map', headers)
     }

@@ -143,6 +143,28 @@ describe('Plugin', () => {
             }
           })
 
+          it('Should decode the DSM context from the carrier used to extract the span parent', async () => {
+            const extractSpy = sinon.spy(tracer._tracer, 'extract')
+            const decodeSpy = sinon.spy(tracer._tracer, 'decodeDataStreamsContext')
+            const consumption = new EventEmitter()
+            try {
+              await consumer.run({
+                eachMessage: async () => consumption.emit('complete'),
+              })
+              await Promise.all([
+                once(consumption, 'complete'),
+                sendMessages(kafka, testTopic, messages),
+              ])
+              const extractCall = extractSpy.getCalls().find(call => call.args[0] === 'text_map')
+              assert.ok(extractCall, 'Expected a text_map extract call')
+              sinon.assert.calledOnce(decodeSpy)
+              assert.strictEqual(decodeSpy.firstCall.args[0], extractCall.args[1])
+            } finally {
+              extractSpy.restore()
+              decodeSpy.restore()
+            }
+          })
+
           it('Should set a checkpoint on consume (eachBatch)', async () => {
             const runArgs = []
             await consumer.run({
