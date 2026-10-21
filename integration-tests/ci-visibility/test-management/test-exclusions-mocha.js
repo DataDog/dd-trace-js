@@ -3,6 +3,7 @@
 const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
 
 function callback () {
+  if (process.env.EXCLUSION_COUNT_ATTEMPTS === '1') process.stdout.write('exclusion-body-attempt\n')
   if (process.env.EXCLUSION_PASS !== '1') throw new Error('protected failure')
 }
 let annotated = callback
