@@ -294,6 +294,135 @@ describe('encoding', () => {
     assert.strictEqual(decodedPathway.edgeStartNs, ctx.edgeStartNs)
   })
 
+  describe('base64 encode memo', () => {
+    const pathwayStartNs = 1685673482722000000
+    const edgeStartNs = 1685673506404000000
+
+    function reference (ctx) {
+      return encodePathwayContext(ctx).toString('base64')
+    }
+
+    function withHash (bytes, overrides) {
+      return { hash: Buffer.from(bytes, 'hex'), pathwayStartNs, edgeStartNs, ...overrides }
+    }
+
+    it('should match the unmemoized encoding for repeated and changed contexts', () => {
+      const contexts = [
+        withHash('67b0b35e65c0acfa'),
+        withHash('67b0b35e65c0acfa'),
+        withHash('66b0b35e65c0acfa'),
+        withHash('67b0b35e65c0acfb'),
+        withHash('67b0b35e65c0acfb', { pathwayStartNs: pathwayStartNs + 1e6 }),
+        withHash('67b0b35e65c0acfb', { pathwayStartNs: pathwayStartNs + 1e6, edgeStartNs: edgeStartNs + 1e6 }),
+        withHash('67b0b35e65c0acfb', { pathwayStartNs: pathwayStartNs + 1e6, edgeStartNs: edgeStartNs + 1e6 }),
+        withHash('67b0b35e65c0acfa'),
+        withHash('67b0b35e65c0acfa', { pathwayStartNs: -0, edgeStartNs: 0 }),
+        withHash('67b0b35e65c0acfa', { pathwayStartNs: 0, edgeStartNs: -0 }),
+        withHash('67b0b35e65c0acfa', { pathwayStartNs: Number.MAX_SAFE_INTEGER * 1e6, edgeStartNs }),
+        withHash('67b0b35e65c0acfa'),
+      ]
+      for (const ctx of contexts) {
+        assert.strictEqual(encodePathwayContextBase64(ctx), reference(ctx))
+      }
+    })
+
+    it('should return the same string for sub-millisecond changes that round to the same millisecond', () => {
+      const first = withHash('67b0b35e65c0acfa')
+      const second = withHash('67b0b35e65c0acfa', {
+        pathwayStartNs: pathwayStartNs + 4e5,
+        edgeStartNs: edgeStartNs - 4e5,
+      })
+      const third = withHash('67b0b35e65c0acfa', { pathwayStartNs: pathwayStartNs + 6e5 })
+
+      assert.strictEqual(encodePathwayContextBase64(first), reference(first))
+      assert.strictEqual(encodePathwayContextBase64(second), reference(second))
+      assert.strictEqual(reference(second), reference(first))
+      assert.strictEqual(encodePathwayContextBase64(third), reference(third))
+      assert.notStrictEqual(reference(third), reference(first))
+    })
+
+    it('should match the unmemoized encoding for a NaN timestamp before and after a memoized context', () => {
+      const valid = withHash('67b0b35e65c0acfa')
+      const invalid = withHash('67b0b35e65c0acfa', { edgeStartNs: Number.NaN })
+
+      assert.strictEqual(encodePathwayContextBase64(valid), reference(valid))
+      assert.strictEqual(encodePathwayContextBase64(invalid), reference(invalid))
+      assert.strictEqual(encodePathwayContextBase64(invalid), reference(invalid))
+      assert.strictEqual(encodePathwayContextBase64(valid), reference(valid))
+    })
+
+    it('should encode the new bytes after the same hash buffer is mutated in place', () => {
+      const ctx = withHash('67b0b35e65c0acfa')
+      const before = encodePathwayContextBase64(ctx)
+      ctx.hash[7] = 0x01
+      const after = encodePathwayContextBase64(ctx)
+
+      assert.strictEqual(before, reference(withHash('67b0b35e65c0acfa')))
+      assert.strictEqual(after, reference(withHash('67b0b35e65c0ac01')))
+      assert.notStrictEqual(after, before)
+    })
+
+    it('should match the unmemoized encoding for hashes that are not 8 bytes long', () => {
+      const ctx = withHash('67b0b35e65c0acfa')
+      const long = withHash('67b0b35e65c0acfa0102')
+      const short = withHash('67b0b35e')
+
+      assert.strictEqual(encodePathwayContextBase64(ctx), reference(ctx))
+      assert.strictEqual(encodePathwayContextBase64(long), reference(long))
+      assert.strictEqual(encodePathwayContextBase64(short), reference(short))
+      assert.strictEqual(encodePathwayContextBase64(ctx), reference(ctx))
+    })
+  })
+
+  describe('base64 decode memo', () => {
+    const valid = 'Z7CzXmXArPrE58Cfj2LI2cOfj2I='
+    const other = encodePathwayContextBase64({
+      hash: Buffer.from('0102030405060708', 'hex'),
+      pathwayStartNs: 1685673482723000000,
+      edgeStartNs: 1685673506405000000,
+    })
+    // 8 hash bytes followed by a varint that never terminates
+    const truncated = Buffer.concat([Buffer.alloc(8), Buffer.from([0x80, 0x80])]).toString('base64')
+
+    function reference (input) {
+      if (input == null || input.length < 8) return
+      const text = Buffer.isBuffer(input) ? input.toString() : input
+      return decodePathwayContext(Buffer.from(text, 'base64'))
+    }
+
+    it('should match the unmemoized decoding for repeated, alternating and invalid inputs', () => {
+      const inputs = [
+        valid, valid, other, valid, other, other,
+        Buffer.from(valid), valid, undefined, null, 'short', '', truncated, truncated, '!!!!!!!!!!!!', valid,
+      ]
+      for (const input of inputs) {
+        assert.deepStrictEqual(decodePathwayContextBase64(input), reference(input))
+      }
+    })
+
+    it('should return null, not undefined, for an invalid context of sufficient length', () => {
+      assert.strictEqual(decodePathwayContextBase64(truncated), null)
+      assert.strictEqual(decodePathwayContextBase64(truncated), null)
+    })
+
+    it('should return a new object on every call', () => {
+      const first = decodePathwayContextBase64(valid)
+      const second = decodePathwayContextBase64(valid)
+
+      assert.deepStrictEqual(second, first)
+      assert.notStrictEqual(second, first)
+    })
+
+    it('should not leak a caller mutation into the next decode', () => {
+      const first = decodePathwayContextBase64(valid)
+      first.pathwayStartNs = 1
+      first.edgeStartNs = 2
+      first.extra = true
+
+      assert.deepStrictEqual(decodePathwayContextBase64(valid), reference(valid))
+    })
+  })
+
   it('should encode and decode to the same value when using the PathwayCodec', () => {
     const ctx = {
       pathwayStartNs: 1685673482722000000,

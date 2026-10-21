@@ -154,6 +154,15 @@ function encodePathwayContext (dataStreamsContext) {
   return Buffer.from(pathwayScratch.subarray(0, PATHWAY_CONTEXT_BYTES))
 }
 
+// Consecutive messages of one producer batch share the hash and the pathway start, and the edge start is a
+// millisecond timestamp, so they usually encode to the same string. The encoding is a pure function of the hash bytes
+// and the two rounded millisecond values, which is what the memo is keyed on.
+let lastEncodedHashLow
+let lastEncodedHashHigh
+let lastEncodedPathwayStartMs
+let lastEncodedEdgeStartMs
+let lastEncodedBase64
+
 /**
  * @param {object} dataStreamsContext
  * @param {Buffer} dataStreamsContext.hash
@@ -161,8 +170,27 @@ function encodePathwayContext (dataStreamsContext) {
  * @param {number} dataStreamsContext.edgeStartNs
  */
 function encodePathwayContextBase64 (dataStreamsContext) {
-  const encodedPathway = encodePathwayContext(dataStreamsContext)
-  return encodedPathway.toString('base64')
+  const { hash } = dataStreamsContext
+  if (!Buffer.isBuffer(hash) || hash.length !== 8) {
+    return encodePathwayContext(dataStreamsContext).toString('base64')
+  }
+  const pathwayStartMs = Math.round(dataStreamsContext.pathwayStartNs / 1e6)
+  const edgeStartMs = Math.round(dataStreamsContext.edgeStartNs / 1e6)
+  const hashLow = hash.readUInt32LE(0)
+  const hashHigh = hash.readUInt32LE(4)
+  if (
+    hashLow !== lastEncodedHashLow ||
+    hashHigh !== lastEncodedHashHigh ||
+    pathwayStartMs !== lastEncodedPathwayStartMs ||
+    edgeStartMs !== lastEncodedEdgeStartMs
+  ) {
+    lastEncodedBase64 = encodePathwayContext(dataStreamsContext).toString('base64')
+    lastEncodedHashLow = hashLow
+    lastEncodedHashHigh = hashHigh
+    lastEncodedPathwayStartMs = pathwayStartMs
+    lastEncodedEdgeStartMs = edgeStartMs
+  }
+  return lastEncodedBase64
 }
 
 /**
@@ -187,7 +215,14 @@ function decodePathwayContext (pathwayContext) {
   return { hash: pathwayHash, pathwayStartNs: pathwayStartMs * 1e6, edgeStartNs: edgeStartMs * 1e6 }
 }
 
+// Consecutive messages of one producer batch carry the same base64 context, and decoding is a pure function of it.
+let lastDecodedBase64
+/** @type {ReturnType<typeof decodePathwayContext> | undefined} */
+let lastDecodedContext
+
 /**
+ * The returned `hash` may be shared between calls; do not mutate it.
+ *
  * @param {string | Buffer} pathwayContext
  * @returns {ReturnType<typeof decodePathwayContext>|undefined}
  */
@@ -198,8 +233,19 @@ function decodePathwayContextBase64 (pathwayContext) {
   if (Buffer.isBuffer(pathwayContext)) {
     pathwayContext = pathwayContext.toString()
   }
-  const encodedPathway = Buffer.from(pathwayContext, 'base64')
-  return decodePathwayContext(encodedPathway)
+  if (typeof pathwayContext !== 'string') {
+    return decodePathwayContext(Buffer.from(pathwayContext, 'base64'))
+  }
+  if (pathwayContext !== lastDecodedBase64) {
+    lastDecodedContext = decodePathwayContext(Buffer.from(pathwayContext, 'base64'))
+    lastDecodedBase64 = pathwayContext
+  }
+  // A fresh object per call, so a caller mutating its context cannot affect the next message.
+  return lastDecodedContext && {
+    hash: lastDecodedContext.hash,
+    pathwayStartNs: lastDecodedContext.pathwayStartNs,
+    edgeStartNs: lastDecodedContext.edgeStartNs,
+  }
 }
 
 const DsmPathwayCodec = {
