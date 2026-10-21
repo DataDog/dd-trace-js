@@ -107,7 +107,6 @@ describe('CI duration report', () => {
       job({
         id: 1,
         name: 'End-to-end #9 / express4',
-
         end: 756,
         steps: [
           step({ name: 'Run FAST scenario', start: 1, end: 31 }),
@@ -117,7 +116,6 @@ describe('CI duration report', () => {
       job({
         id: 2,
         name: 'End-to-end #4 / express5',
-
         end: 700,
         steps: [
           step({ name: 'Run APPSEC_RASP scenario', start: 5, end: 477 }),
@@ -127,7 +125,6 @@ describe('CI duration report', () => {
       job({
         id: 3,
         name: 'End-to-end #12 / express4-typescript',
-
         end: 650,
         steps: [
           step({ name: 'Run DEBUGGER_REPLAY scenario', start: 5, end: 409 }),
@@ -314,7 +311,6 @@ describe('CI duration report', () => {
       job({
         id: 4,
         name: 'End-to-end #9 / express4',
-
         end: 756,
         steps: [step({ name: 'Run FEATURE_FLAGS scenario', start: 31, end: 602 })],
       }),
