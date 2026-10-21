@@ -134,6 +134,22 @@ describe('Config', () => {
       )
     })
 
+    it('leaves the private parallelization runtime parameters unset by default', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config._DD_TEST_PARALLELIZATION_METADATA_FILE, undefined)
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE'), undefined)
+      assert.strictEqual(config._DD_TEST_PARALLELIZATION_ENABLED, undefined)
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'), undefined)
+    })
+
+    it('reads the internal parallelization runtime parameters', () => {
+      process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+      process.env._DD_TEST_PARALLELIZATION_METADATA_FILE = '/tmp/plan-metadata.json'
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE'), '/tmp/plan-metadata.json')
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'), 'true')
+    })
+
     it('should return aliased value', () => {
       process.env.DATADOG_API_KEY = '12345'
       assert.strictEqual(getEnvironmentVariable('DATADOG_API_KEY'), '12345')
