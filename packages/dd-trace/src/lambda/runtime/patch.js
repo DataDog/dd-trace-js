@@ -24,7 +24,12 @@ function patchDatadogLambdaHandler (datadogHandler) {
   return userHandler => datadogHandler(datadog(userHandler))
 }
 
-/** @param {object} moduleExports */
+/**
+ * Wraps datadog-lambda-js's promisifiedHandler factory, which wraps the customer's handler.
+ * The timeout monitor surrounds the resulting adapter to follow the shim's selected completion Promise.
+ *
+ * @param {object} moduleExports
+ */
 function patchPromisifiedHandlerModule (moduleExports) {
   shimmer.wrap(moduleExports, 'promisifiedHandler', promisify => {
     return handler => datadog(promisify(handler))
