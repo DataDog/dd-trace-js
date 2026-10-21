@@ -79,7 +79,7 @@ addInstrumentations(instrumentations, '>=0.7.0 <0.8.5 || >=0.8.7 <0.9.0', 'dist/
 addInstrumentations(instrumentations, '>=0.8.5 <0.8.7', 'dist/cjs/execution.js')
 addInstrumentations(instrumentations, '>=0.8.5 <0.8.7', 'dist/esm/execution.js')
 addInstrumentations(instrumentations, '>=0.8.7 <0.9.0', 'dist/execution.mjs')
-addInstrumentations(instrumentations, '>=0.9.1 <0.10.0', 'dist/cjs/execution.js')
-addInstrumentations(instrumentations, '>=0.9.1 <0.10.0', 'dist/esm/execution.js')
+addInstrumentations(instrumentations, '>=0.9.0 <0.10.0', 'dist/cjs/execution.js')
+addInstrumentations(instrumentations, '>=0.9.0 <0.10.0', 'dist/esm/execution.js')
 
 module.exports = instrumentations

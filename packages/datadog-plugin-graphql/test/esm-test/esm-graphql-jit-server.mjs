@@ -8,10 +8,18 @@ import { compileQuery } from 'graphql-jit'
 
 tracer.use('graphql', { source: true })
 
+const opaqueDefault = { value: 'original' }
+opaqueDefault.self = opaqueDefault
+Object.freeze(opaqueDefault)
+const Opaque = new graphql.GraphQLScalarType({
+  name: 'ESMOpaque',
+  /** @param {unknown} value */
+  serialize: value => value,
+})
 const User = new graphql.GraphQLObjectType({
   name: 'User',
   fields: {
-    name: { type: graphql.GraphQLString },
+    name: { type: graphql.GraphQLString, args: { value: { type: Opaque, defaultValue: opaqueDefault } } },
   },
 })
 
@@ -47,6 +55,7 @@ const resolverCalls = {}
 dc.channel('datadog:graphql:resolver:start').subscribe((message) => {
   const resolverInfo = message.createResolverInfo(message)
   const [fieldName] = Object.keys(resolverInfo)
+  if (fieldName === 'name' && resolverInfo.name.value !== opaqueDefault) throw new Error('opaque default changed')
   resolverCalls[fieldName] = (resolverCalls[fieldName] ?? 0) + 1
 })
 

@@ -1,5 +1,7 @@
 'use strict'
 
+const { isProxy } = require('node:util/types')
+
 /**
  * @typedef {{
  *   collapsedPath: string,
@@ -290,7 +292,9 @@ function createGraphqlJitRuntime ({
     }, fieldNodes[0], createFieldMetadata)
     descriptor.staticArguments = args.values
     descriptor.hasArgumentVariables = args.missing.length !== 0
-    const argumentFactory = compileArgumentFactory(context, descriptor, args.missing, stringifyArguments)
+    const argumentFactory = field.args.length === 0
+      ? 'undefined'
+      : compileArgumentFactory(context, descriptor, args.missing, stringifyArguments)
 
     const shouldTrace = '__context.ddTrace !== undefined && ' +
       '(__context.ddTrace.jitTraceAll || ' +
@@ -385,16 +389,42 @@ function createDescriptor (context, compilerPath, input, fieldNode, createFieldM
  */
 function compileArgumentFactory (context, descriptor, missing, stringifyArguments) {
   let literalIndex = 0
-  const argumentSource = stringifyArguments(descriptor.staticArguments, hoist)
+  let argumentValues = descriptor.staticArguments
+  let literalAssignments = ''
+  const argumentKeys = Object.keys(argumentValues)
+  for (const key of argumentKeys) {
+    const value = argumentValues[key]
+    if (value !== null && (typeof value === 'object' || typeof value === 'function' ||
+      typeof value === 'bigint' || typeof value === 'symbol')) {
+      // Older emitters cannot hoist opaque defaults; property resolvers never serialize them natively.
+      const literalValues = new Set()
+      const ancestors = new Set()
+      const visited = new WeakSet()
+      for (const key of argumentKeys) {
+        collectArgumentLiterals(argumentValues[key], literalValues, ancestors, visited)
+      }
+      if (literalValues.size !== 0) {
+        const literals = new Map()
+        argumentValues = /** @type {Record<string, unknown>} */ (
+          prepareArgumentLiterals(argumentValues, literalValues, literals, 'args')
+        )
+        for (const [path, value] of literals) {
+          literalAssignments += `  ${path} = __context.literals.${hoist(value)}\n`
+        }
+      }
+      break
+    }
+  }
+  const argumentSource = stringifyArguments(argumentValues, hoist)
   if (missing.length === 0 && argumentSource === '{}') return 'undefined'
-
   const name = `ddTraceArguments${descriptor.id}`
   const hasLiterals = descriptor.literals !== undefined
   const parameters = hasLiterals ? 'variableValues, cloneValue, __context' : 'variableValues, cloneValue'
-  let source = `function ${name} (${parameters}) {\n  const args = `
-  source += hasLiterals
-    ? `cloneValue === undefined ? ${argumentSource} : cloneValue(${argumentSource})\n`
-    : `${argumentSource}\n`
+  let source = `function ${name} (${parameters}) {\n  const args = ${argumentSource}\n`
+  source += literalAssignments
+  if (descriptor.literals !== undefined) {
+    source += '  const ownedArgs = cloneValue === undefined ? args : cloneValue(args)\n'
+  }
   const pathsByVariable = new Map()
 
   for (const { path, valueNode } of missing) {
@@ -417,12 +447,13 @@ function compileArgumentFactory (context, descriptor, missing, stringifyArgument
       : cloneValue(variableValues[${quotedName}])
 `
     for (const path of paths) {
-      source += `    ${compileArgumentPath(path)} = ${variableSource}\n`
+      source += `    ${compileArgumentPath(path, descriptor.literals === undefined ? 'args' : 'ownedArgs')}` +
+        ` = ${variableSource}\n`
     }
     source += '  }\n'
   }
 
-  source += '  return args\n}\n'
+  source += `  return ${descriptor.literals === undefined ? 'args' : 'ownedArgs'}\n}\n`
   context.hoistedFunctions.push(source)
   return name
 
@@ -437,13 +468,78 @@ function compileArgumentFactory (context, descriptor, missing, stringifyArgument
 
 /**
  * @param {ArgumentPath} path
+ * @param {string} [root]
  */
-function compileArgumentPath (path) {
-  let source = 'args'
+function compileArgumentPath (path, root = 'args') {
+  let source = root
   for (let current = path; current !== undefined; current = current.prev) {
     source += `[${quoteString(current.key)}]`
   }
   return source
+}
+
+/**
+ * @param {unknown} value
+ * @param {Set<unknown>} literalValues
+ * @param {Map<string, unknown>} literals
+ * @param {string} path
+ * @returns {unknown}
+ */
+function prepareArgumentLiterals (value, literalValues, literals, path) {
+  if (literalValues.has(value)) {
+    literals.set(path, value)
+    return null
+  }
+  if (value === null || typeof value !== 'object' || value instanceof Date) return value
+
+  const prepared = Array.isArray(value) ? new Array(value.length) : Object.create(null)
+  for (const key of Object.keys(value)) {
+    prepared[key] = prepareArgumentLiterals(value[key], literalValues, literals, `${path}[${quoteString(key)}]`)
+  }
+  return prepared
+}
+
+/**
+ * @param {unknown} value
+ * @param {Set<unknown>} literals
+ * @param {Set<object>} ancestors
+ * @param {WeakSet<object>} visited
+ */
+function collectArgumentLiterals (value, literals, ancestors, visited) {
+  if (typeof value !== 'object') {
+    if (typeof value === 'bigint' || typeof value === 'symbol' || typeof value === 'function') literals.add(value)
+    return
+  }
+  if (value === null) return
+  if (isProxy(value)) {
+    literals.add(value)
+    return
+  }
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype === Date.prototype && !Object.hasOwn(value, 'toJSON')) return
+  if ((prototype !== Object.prototype && prototype !== null && prototype !== Array.prototype) ||
+    'toJSON' in value || ancestors.has(value)) {
+    literals.add(value)
+    return
+  }
+  if (visited.has(value)) return
+  const keys = Object.keys(value)
+  if (Array.isArray(value) &&
+    (keys.length !== value.length || keys.some((key, index) => key !== String(index)))) {
+    literals.add(value)
+    return
+  }
+  ancestors.add(value)
+  for (const key of keys) {
+    const property = Object.getOwnPropertyDescriptor(value, key)
+    if (!Object.hasOwn(property, 'value')) {
+      literals.add(value)
+      break
+    }
+    collectArgumentLiterals(property.value, literals, ancestors, visited)
+  }
+  ancestors.delete(value)
+  visited.add(value)
 }
 
 /**

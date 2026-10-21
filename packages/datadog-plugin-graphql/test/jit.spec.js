@@ -99,6 +99,104 @@ async function executeWithTrace (execute, spanResourceMatch, assertTraces = noop
   return result
 }
 
+/**
+ * @param {typeof import('graphql')} graphql
+ * @param {typeof import('graphql-jit').compileQuery} compileQuery
+ * @param {unknown} defaultValue
+ * @param {'field-default' | 'input-default' | 'literal' | 'list-default'} producer
+ * @param {boolean} consumerFirst
+ */
+async function assertOpaqueArgumentSource (graphql, compileQuery, defaultValue, producer, consumerFirst) {
+  const Opaque = new graphql.GraphQLScalarType({
+    name: 'SourceOpaque', serialize: identity, parseValue: identity, parseLiteral: () => defaultValue,
+  })
+  const Input = new graphql.GraphQLInputObjectType({
+    name: 'SourceInput',
+    fields: {
+      opaque: { type: Opaque, defaultValue },
+      text: { type: graphql.GraphQLString },
+    },
+  })
+  const nested = producer === 'input-default' || producer === 'literal'
+  const args = nested
+    ? { input: { type: Input } }
+    : {
+        opaque: {
+          type: producer === 'list-default' ? new graphql.GraphQLList(Opaque) : Opaque,
+          defaultValue: producer === 'list-default' ? Object.freeze([defaultValue]) : defaultValue,
+        },
+        text: { type: graphql.GraphQLString },
+      }
+  const User = new graphql.GraphQLObjectType({
+    name: 'SourceUser', fields: { name: { type: graphql.GraphQLString, args } },
+  })
+  const schema = new graphql.GraphQLSchema({
+    query: new graphql.GraphQLObjectType({
+      name: 'SourceQuery', fields: { user: { type: User, resolve: () => ({ name: 'Ada' }) } },
+    }),
+  })
+  const selection = producer === 'input-default'
+    ? 'input: { text: $text }'
+    : producer === 'literal' ? 'input: { opaque: "literal", text: $text }' : 'text: $text'
+  const document = graphql.parse(`query OpaqueSources($text: String) { user { name(${selection}) } }`)
+  agent.reload('graphql', { enabled: false })
+  const native = compileQuery(schema, document)
+  assert.strictEqual(typeof native.query, 'function')
+  const expected = await native.query({}, {}, {})
+  const readonly = []
+  const mutable = []
+  const readChannel = dc.channel('datadog:graphql:resolver:start')
+  const mutableChannel = dc.channel('apm:graphql:resolve:start')
+  /** @param {Record<string, unknown>} args */
+  const getValue = args => nested ? args.input.opaque : producer === 'list-default' ? args.opaque[0] : args.opaque
+  /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+  const read = message => {
+    const info = materializeResolverInfo(message)
+    if (info.name) readonly.push(getValue(info.name))
+  }
+  /** @param {{ args: Record<string, unknown> }} message */
+  const mutate = ({ args }) => {
+    if (!Object.hasOwn(args, nested ? 'input' : 'opaque')) return
+    const value = getValue(args)
+    mutable.push(value)
+    if (value?.value === 'original') value.value = 'mutated'
+    if (value?.extra?.value === 'original') value.extra.value = 'mutated'
+    if (Object.hasOwn(value, '__proto__')) Reflect.get(value, '__proto__').value = 'mutated'
+  }
+  if (!consumerFirst) agent.reload('graphql', { enabled: true, variables: ['id', 'name'] })
+  readChannel.subscribe(read)
+  mutableChannel.subscribe(mutate)
+  try {
+    if (consumerFirst) agent.reload('graphql', { enabled: true, variables: ['id', 'name'] })
+    const compiled = compileQuery(schema, document, undefined, { debug: { enabled: true } })
+    assert.strictEqual(typeof compiled.query, 'function')
+    await assertGeneratedArgumentFactory(compiled.__DO_NOT_USE_THIS_OR_YOU_WILL_BE_FIRED_compilation,
+      ['__context.literals.literal0', 'cloneValue === undefined'])
+    for (const variables of [{}, { text: 'provided' }, {}]) {
+      const result = await executeWithTrace(() => compiled.query({}, {}, variables), /OpaqueSources/)
+      assert.deepStrictEqual(result, expected)
+    }
+  } finally {
+    readChannel.unsubscribe(read)
+    mutableChannel.unsubscribe(mutate)
+  }
+  assert.strictEqual(readonly.length, 3)
+  assert.strictEqual(mutable.length, 3)
+  for (const value of readonly) assert.strictEqual(value, defaultValue)
+  if (defaultValue !== null && typeof defaultValue === 'object') {
+    assert.notStrictEqual(mutable[0], defaultValue)
+    assert.notStrictEqual(mutable[0], mutable[1])
+    if (defaultValue.self) assert.strictEqual(mutable[0].self, mutable[0])
+    if (defaultValue.value) assert.strictEqual(defaultValue.value, 'original')
+    if (defaultValue.extra) assert.strictEqual(defaultValue.extra.value, 'original')
+    if (Object.hasOwn(defaultValue, '__proto__')) {
+      assert.strictEqual(Object.hasOwn(mutable[0], '__proto__'), true)
+      assert.notStrictEqual(Reflect.get(mutable[0], '__proto__'), Reflect.get(defaultValue, '__proto__'))
+      assert.strictEqual(Reflect.get(defaultValue, '__proto__').value, 'original')
+    }
+  }
+}
+
 describe('Plugin', () => {
   describe('graphql-jit', () => {
     let graphql
@@ -2490,6 +2588,180 @@ void generatedResolver
         assert.deepStrictEqual(tags, ['caller-owned'])
       })
 
+      it('preserves opaque values from each argument compiler source', async () => {
+        const cyclic = { value: 'original' }
+        cyclic.self = cyclic
+        Object.freeze(cyclic)
+        let toJSONCalls = 0
+        const throwing = Object.freeze({
+          value: 'original',
+          toJSON () {
+            toJSONCalls++
+            throw new Error('unexpected toJSON')
+          },
+        })
+        const extraArray = Object.freeze(Object.assign([], { extra: Object.freeze({ value: 'original' }) }))
+        const sparseArray = Object.freeze(Object.assign(new Array(1), { extra: Object.freeze({ value: 'original' }) }))
+        const protoArray = Object.freeze(Object.defineProperty([], '__proto__', {
+          enumerable: true, value: Object.freeze({ value: 'original' }),
+        }))
+        for (const consumerFirst of [false, true]) {
+          for (const producer of ['field-default', 'input-default', 'literal', 'list-default']) {
+            for (const value of [42n, cyclic, throwing, extraArray, sparseArray, protoArray]) {
+              await assertOpaqueArgumentSource(graphql, compileQuery, value, producer, consumerFirst)
+              assert.strictEqual(toJSONCalls, 0)
+            }
+          }
+        }
+      })
+
+      it('patches variables beside opaque list literals without retaining mutations', async () => {
+        class ListValue {
+          value = 'original'
+        }
+        const fixed = Object.freeze(new ListValue())
+        const Opaque = new graphql.GraphQLScalarType({
+          name: 'ListOpaque', serialize: identity, parseValue: identity, parseLiteral: () => fixed,
+        })
+        const User = new graphql.GraphQLObjectType({
+          name: 'ListUser',
+          fields: {
+            name: {
+              type: graphql.GraphQLString,
+              args: { values: { type: new graphql.GraphQLList(Opaque) } },
+            },
+          },
+        })
+        const schema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'ListQuery', fields: { user: { type: User, resolve: () => ({ name: 'Ada' }) } },
+          }),
+        })
+        const document = graphql.parse(
+          'query OpaqueList($value: ListOpaque) { user { name(values: ["fixed", $value]) } }'
+        )
+        const compiled = compileQuery(schema, document)
+        assert.strictEqual(typeof compiled.query, 'function')
+        const seen = []
+        const channel = dc.channel('datadog:graphql:resolver:start')
+        /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+        const read = message => {
+          const info = materializeResolverInfo(message)
+          if (info.name) seen.push(info.name.values)
+        }
+        channel.subscribe(read)
+        try {
+          for (const value of ['first', 'second']) {
+            const result = await executeWithTrace(() => compiled.query({}, {}, { value }), /OpaqueList/)
+            assert.deepStrictEqual(result.data, { user: { name: 'Ada' } })
+          }
+        } finally {
+          channel.unsubscribe(read)
+        }
+        assert.deepStrictEqual(seen, [[fixed, 'first'], [fixed, 'second']])
+        assert.notStrictEqual(seen[0], seen[1])
+      })
+
+      it('retains the native emitter normalization for ordinary defaults', async () => {
+        const Opaque = new graphql.GraphQLScalarType({
+          name: 'NormalizedOpaque', serialize: identity, parseValue: identity,
+        })
+        const shared = { value: 'shared' }
+        const args = {
+          date: { type: Opaque, defaultValue: new Date(123) },
+          numbers: { type: Opaque, defaultValue: [NaN, NaN, Infinity, Infinity, -Infinity, -Infinity, -0] },
+          shared: { type: Opaque, defaultValue: { left: shared, right: shared } },
+          plain: { type: Opaque, defaultValue: Object.assign(Object.create(null), { value: 'plain' }) },
+          toJSON: { type: Opaque, defaultValue: { value: 'argument' } },
+          text: { type: graphql.GraphQLString },
+        }
+        let expectedArguments
+        const User = new graphql.GraphQLObjectType({
+          name: 'NormalizedUser',
+          fields: {
+            expected: {
+              type: graphql.GraphQLString,
+              args,
+              /**
+               * @param {unknown} source
+               * @param {Record<string, unknown>} args
+               */
+              resolve (source, args) { expectedArguments = args; return 'ok' },
+            },
+            actual: { type: graphql.GraphQLString, args },
+          },
+        })
+        const schema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'NormalizedQuery', fields: { user: { type: User, resolve: () => ({ actual: 'ok' }) } },
+          }),
+        })
+        const document = graphql.parse(
+          'query Normalized($text: String) { user { expected(text: $text) actual(text: $text) } }'
+        )
+        const compiled = compileQuery(schema, document)
+        assert.strictEqual(typeof compiled.query, 'function')
+        let actualArguments
+        const channel = dc.channel('datadog:graphql:resolver:start')
+        /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+        const read = message => {
+          const info = materializeResolverInfo(message)
+          if (info.actual) actualArguments = info.actual
+        }
+        channel.subscribe(read)
+        try {
+          const result = await executeWithTrace(() => compiled.query({}, {}, {}), /Normalized/)
+          assert.deepStrictEqual(result.data, { user: { expected: 'ok', actual: 'ok' } })
+        } finally {
+          channel.unsubscribe(read)
+        }
+        assert.deepStrictEqual(actualArguments, expectedArguments)
+      })
+
+      it('does not inspect opaque defaults without argument consumers', async () => {
+        let calls = 0
+        const getter = Object.freeze(Object.defineProperty({}, 'value', {
+          enumerable: true,
+          get () { calls++; throw new Error('unexpected accessor') },
+        }))
+        const proxy = new Proxy({}, {
+          getPrototypeOf () { calls++; throw new Error('unexpected proxy introspection') },
+        })
+        const revoked = Proxy.revocable({}, {})
+        revoked.revoke()
+        const Opaque = new graphql.GraphQLScalarType({ name: 'AccessorOpaque', serialize: identity })
+        for (const defaultValue of [getter, proxy, revoked.proxy]) {
+          const User = new graphql.GraphQLObjectType({
+            name: 'AccessorUser',
+            fields: {
+              value: {
+                type: graphql.GraphQLString,
+                args: { getter: { type: Opaque, defaultValue } },
+              },
+            },
+          })
+          const schema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'AccessorQuery',
+              fields: { user: { type: User, resolve: () => ({ value: 'ok' }) } },
+            }),
+          })
+          const document = graphql.parse('query Accessors { user { value } }')
+          agent.reload('graphql', { enabled: false })
+          const native = compileQuery(schema, document)
+          assert.strictEqual(calls, 0)
+          assert.strictEqual(typeof native.query, 'function')
+          const expected = await native.query({}, {}, {})
+          agent.reload('graphql', { enabled: true, variables: ['id', 'name'] })
+          const compiled = compileQuery(schema, document)
+          assert.strictEqual(calls, 0)
+          assert.strictEqual(typeof compiled.query, 'function')
+          const result = await executeWithTrace(() => compiled.query({}, {}, {}), /Accessors/)
+          assert.strictEqual(calls, 0)
+          assert.deepStrictEqual(result, expected)
+        }
+      })
+
       it('shares frozen defaults unless a subscriber may mutate them', async () => {
         const opaqueObjectDefault = Object.freeze({ kind: 'opaque' })
         const schemaFilterDefault = Object.freeze({ extra: 'preserved', name: 'schema' })
@@ -3057,6 +3329,107 @@ void generatedResolver
           assert.strictEqual(defaultValue.value, 'original')
           assert.notStrictEqual(mutableArguments[0].value, defaultValue)
           assert.notStrictEqual(mutableArguments[0].value, mutableArguments[1].value)
+        }
+      }
+    })
+  })
+
+  describe('graphql-jit 0.9.0 scalar defaults', () => {
+    let compileQuery
+    let graphql
+
+    useSandbox(["'graphql-jit@0.9.0'", "'graphql'"], false, [])
+
+    before(() => agent.load('graphql'))
+    before(() => {
+      const sandboxRequire = createRequire(join(sandboxCwd(), 'package.json'))
+      compileQuery = sandboxRequire('graphql-jit').compileQuery
+      graphql = sandboxRequire('graphql')
+    })
+    after(() => agent.close())
+
+    it('preserves ignored defaults when compiling instrumented fields', async () => {
+      const Opaque = new graphql.GraphQLScalarType({
+        name: 'LegacyOpaque',
+        serialize: identity,
+        parseValue: identity,
+        parseLiteral: () => undefined,
+      })
+      const cyclic = { value: 'original' }
+      cyclic.self = cyclic
+      Object.freeze(cyclic)
+      let toJSONCalls = 0
+      const throwing = Object.freeze({
+        value: 'original',
+        toJSON () {
+          toJSONCalls++
+          throw new Error('unexpected toJSON')
+        },
+      })
+      for (const defaultValue of [42n, cyclic, throwing]) {
+        const User = new graphql.GraphQLObjectType({
+          name: 'LegacyUser',
+          fields: {
+            name: {
+              type: graphql.GraphQLString,
+              args: { value: { type: Opaque, defaultValue } },
+            },
+          },
+        })
+        const schema = new graphql.GraphQLSchema({
+          query: new graphql.GraphQLObjectType({
+            name: 'LegacyQuery',
+            fields: { user: { type: User, resolve: () => ({ name: 'Ada' }) } },
+          }),
+        })
+        const document = graphql.parse('query LegacyDefaults($value: LegacyOpaque) { user { name(value: $value) } }')
+        agent.reload('graphql', { enabled: false })
+        const native = compileQuery(schema, document)
+        assert.strictEqual(typeof native.query, 'function')
+        const expected = await native.query({}, {}, {})
+        agent.reload('graphql', { enabled: true })
+        const compiled = compileQuery(schema, document)
+        assert.strictEqual(toJSONCalls, 0)
+        assert.strictEqual(typeof compiled.query, 'function')
+        const readonly = []
+        const mutable = []
+        const readChannel = dc.channel('datadog:graphql:resolver:start')
+        const mutableChannel = dc.channel('apm:graphql:resolve:start')
+        /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+        const read = message => {
+          const info = materializeResolverInfo(message)
+          if (info.name) readonly.push(info.name)
+        }
+        /** @param {{ args: { value?: { value?: string } } }} message */
+        const mutate = ({ args }) => {
+          if (!Object.hasOwn(args, 'value')) return
+          mutable.push(args)
+          if (args.value?.value === 'original') args.value.value = 'mutated'
+        }
+        readChannel.subscribe(read)
+        mutableChannel.subscribe(mutate)
+        try {
+          for (const variables of [{}, { value: undefined }, { value: null }, { value: 0 },
+            { value: false }, { value: '' }, { value: 'provided' }, {}]) {
+            const result = await executeWithTrace(() => compiled.query({}, {}, variables), /LegacyDefaults/)
+            assert.deepStrictEqual(result, expected)
+            assert.strictEqual(readonly.at(-1).value,
+              Object.hasOwn(variables, 'value') ? variables.value ?? null : defaultValue)
+          }
+          const invalid = compiled.query({}, {}, { value: NaN })
+          assert.match(invalid.errors[0].message, /Variable "\$value" got invalid value NaN/)
+        } finally {
+          readChannel.unsubscribe(read)
+          mutableChannel.unsubscribe(mutate)
+        }
+        assert.strictEqual(toJSONCalls, 0)
+        assert.strictEqual(readonly.length, 8)
+        assert.strictEqual(mutable.length, 8)
+        if (defaultValue !== null && typeof defaultValue === 'object') {
+          assert.strictEqual(defaultValue.value, 'original')
+          assert.notStrictEqual(mutable[0].value, defaultValue)
+          assert.notStrictEqual(mutable[0].value, mutable.at(-1).value)
+          if (defaultValue === cyclic) assert.strictEqual(mutable[0].value.self, mutable[0].value)
         }
       }
     })

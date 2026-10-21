@@ -976,24 +976,6 @@ function getJitDefaultArguments (rootCtx, descriptor, argumentFactory, mutable) 
 function cloneArgumentValue (value, clones) {
   if (value === null || typeof value !== 'object') return value
 
-  // Lists get their own branch: Object.keys materializes the index strings and
-  // the clone is then filled through them instead of by index.
-  if (Array.isArray(value)) {
-    const { length } = value
-    if (length === 0) return value
-
-    clones ??= new WeakMap()
-    const cached = clones.get(value)
-    if (cached !== undefined) return cached
-
-    const clone = new Array(length)
-    clones.set(value, clone)
-    for (let index = 0; index < length; index++) {
-      clone[index] = cloneArgumentValue(value[index], clones)
-    }
-    return clone
-  }
-
   const keys = Object.keys(value)
   if (keys.length === 0) return value
 
@@ -1001,10 +983,15 @@ function cloneArgumentValue (value, clones) {
   const cached = clones.get(value)
   if (cached !== undefined) return cached
 
-  const clone = {}
+  const clone = Array.isArray(value) ? new Array(value.length) : {}
   clones.set(value, clone)
   for (const name of keys) {
-    clone[name] = cloneArgumentValue(value[name], clones)
+    const child = cloneArgumentValue(value[name], clones)
+    if (name === '__proto__') {
+      Object.defineProperty(clone, name, { configurable: true, enumerable: true, writable: true, value: child })
+    } else {
+      clone[name] = child
+    }
   }
   return clone
 }

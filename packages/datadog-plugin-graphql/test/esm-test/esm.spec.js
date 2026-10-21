@@ -162,7 +162,8 @@ describe('Plugin (ESM)', () => {
     let agent
     let proc
 
-    withVersions('graphql', 'graphql-jit', '0.8.5 || >=0.8.7 <0.10.0', (version, moduleName, resolvedVersion) => {
+    /** @param {string} resolvedVersion */
+    function defineJitTests (resolvedVersion) {
       useSandbox([`'graphql-jit@${resolvedVersion}'`, "'graphql@17.0.2'"], false, [
         './packages/datadog-plugin-graphql/test/esm-test/*'])
 
@@ -210,6 +211,11 @@ describe('Plugin (ESM)', () => {
           })
         })()])
       }).timeout(50000)
+    }
+
+    withVersions('graphql', 'graphql-jit', '0.8.5 || >=0.8.7 <0.10.0', (version, moduleName, resolvedVersion) => {
+      defineJitTests(resolvedVersion)
     })
+    describe('graphql-jit 0.9.0', () => defineJitTests('0.9.0'))
   })
 })
