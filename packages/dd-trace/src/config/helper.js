@@ -44,6 +44,7 @@ applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 // - `deprecations`: Record<deprecatedEnvVar, string> (message suffix)
 const aliases = {}
 const deprecations = {}
+const b3SingleHeaderAlias = /(^|,)\s*b3\s*(?=,|$)/gi
 
 for (const [canonical, configuration] of Object.entries(supportedConfigurations)) {
   for (const implementation of configuration) {
@@ -115,6 +116,17 @@ function loadStableConfig () {
   stableConfigWarnings = instance.warnings
 }
 
+/**
+ * @param {string} name
+ * @param {string | undefined} value
+ */
+function getAliasValue (name, value) {
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases
+  return name === 'OTEL_PROPAGATORS' && typeof value === 'string'
+    ? value.replaceAll(b3SingleHeaderAlias, '$1b3 single header')
+    : value
+}
+
 function getValueFromSource (name, source) {
   if (source[name] !== undefined) {
     return source[name]
@@ -123,7 +135,7 @@ function getValueFromSource (name, source) {
   if (aliases[name]) {
     for (const alias of aliases[name]) {
       if (source[alias] !== undefined) {
-        return source[alias]
+        return getAliasValue(alias, source[alias])
       }
     }
   }
@@ -329,7 +341,7 @@ module.exports = {
           // In case that more than a single alias exist, use the one defined first in our own order
           for (const alias of aliases[aliasToCanonical[key]]) {
             if (source[alias] !== undefined) {
-              configs[aliasToCanonical[key]] = value
+              configs[aliasToCanonical[key]] = getAliasValue(key, value)
               break
             }
           }

@@ -1,6 +1,7 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert/strict')
+
 const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -237,6 +238,39 @@ describe('config-helper env resolution', () => {
 
     assert.strictEqual(getValueFromEnvSources('OTEL_LOG_LEVEL'), 'debug')
     assert.strictEqual(getValueFromEnvSources('DD_TRACE_LOG_LEVEL'), 'debug')
+  })
+
+  for (const source of ['env', 'local', 'fleet']) {
+    it(`normalizes OTEL b3 from ${source} configuration`, () => {
+      const propagators = 'B3, b3multi, b3'
+      const entries = { OTEL_PROPAGATORS: propagators }
+      if (source === 'env') process.env.OTEL_PROPAGATORS = propagators
+      const StableConfigStub = sinon.stub().callsFake(function () {
+        this.localEntries = source === 'local' ? entries : {}
+        this.fleetEntries = source === 'fleet' ? entries : {}
+        this.warnings = []
+      })
+      loadModule({
+        '../serverless': { IS_SERVERLESS: false },
+        './stable': StableConfigStub,
+      })
+
+      assert.deepStrictEqual(getValueFromEnvSources('DD_TRACE_PROPAGATION_STYLE'), [
+        'b3 single header',
+        'b3multi',
+        'b3 single header',
+      ])
+    })
+  }
+
+  it('preserves the OTEL single-header meaning on v6', () => {
+    process.env.OTEL_PROPAGATORS = 'b3'
+    const helper = proxyquire('../../src/config/helper', {
+      '../../../../version': { DD_MAJOR: 6 },
+      './supported-configurations.json': structuredClone(require('../../src/config/supported-configurations.json')),
+    })
+
+    assert.strictEqual(helper.getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE'), 'b3 single header')
   })
 
   describe('with stable config and env vars', () => {

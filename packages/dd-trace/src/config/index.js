@@ -127,6 +127,7 @@ function undo (config, source) {
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
+  changeTracker[source].clear()
 }
 
 function get (object, path) {
@@ -342,6 +343,7 @@ class Config extends ConfigBase {
    *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
   setRemoteConfig (options) {
+    undo(this, 'calculated')
     // Replace the complete RC layer so omitted fields fall back to their previous source.
     // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
     undo(this, 'remote_config')
@@ -366,8 +368,6 @@ class Config extends ConfigBase {
 
   // Handles values calculated from a mixture of options and env vars
   #applyCalculated () {
-    undo(this, 'calculated')
-
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
         trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {
@@ -454,10 +454,12 @@ class Config extends ConfigBase {
 
     // TODO: Remove the experimental env vars as a major or deprecate the option?
     if (this.experimental?.b3) {
-      if (!this.tracePropagationStyle.inject.includes('b3')) {
+      if (!this.tracePropagationStyle.inject.includes('b3multi') &&
+          !this.tracePropagationStyle.inject.includes('b3')) {
         this.tracePropagationStyle.inject.push('b3')
       }
-      if (!this.tracePropagationStyle.extract.includes('b3')) {
+      if (!this.tracePropagationStyle.extract.includes('b3multi') &&
+          !this.tracePropagationStyle.extract.includes('b3')) {
         this.tracePropagationStyle.extract.push('b3')
       }
       if (!this.tracePropagationStyle.inject.includes('b3 single header')) {
@@ -693,6 +695,14 @@ class Config extends ConfigBase {
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
         setAndTrack(this, configName, this[alias])
+      }
+    }
+
+    for (const styles of Object.values(this.tracePropagationStyle)) {
+      for (let index = 0; index < styles.length; index++) {
+        if (styles[index] === 'b3') {
+          styles[index] = DD_MAJOR < 6 ? 'b3multi' : 'b3 single header'
+        }
       }
     }
 
