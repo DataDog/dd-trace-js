@@ -52,14 +52,20 @@ const TRAIT_KINDS = new Map([
   ['sync', 'Sync'],
 ])
 const DISCOVERY_METADATA = new Map([
+  ['.agents/skills/apm-integrations/agents/openai.yaml', 'apm-integrations'],
   ['.agents/skills/serverless-integrations/agents/openai.yaml', 'serverless-integrations'],
 ])
 const TOTAL_TOKEN_BUDGET = 4000
 const SKILL_TOKEN_BUDGETS = new Map([
+  ['.agents/skills/apm-integrations/SKILL.md', 1400],
+  ['.agents/skills/apm-integrations/references/orchestrion.md', 600],
+  ['.agents/skills/apm-integrations/references/shimmer.md', 250],
+  ['.agents/skills/apm-integrations/references/testing.md', 560],
   ['.agents/skills/serverless-integrations/SKILL.md', 800],
   ['.agents/skills/serverless-integrations/references/testing-guide.md', 350],
 ])
 const SKILL_DIRECTORIES = [
+  '.agents/skills/apm-integrations',
   '.agents/skills/serverless-integrations',
 ]
 const CONCRETE_PATH_PREFIXES = [
