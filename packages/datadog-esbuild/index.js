@@ -15,6 +15,9 @@ const { createEsmResolver } = require('./src/resolver')
 const { isESMFile, processModule } = require('./src/utils')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
+const PLUGIN_NAMESPACE = 'datadog-esbuild'
+const STARTUP_MODULE = 'dd-trace:esbuild-startup'
+const STARTUP_MODULE_FILTER = /^dd-trace:esbuild-startup$/
 
 let rewriter
 
@@ -130,11 +133,41 @@ module.exports.setup = function (build) {
   const externalModules = new Set(build.initialOptions.external || [])
   build.initialOptions.banner ??= {}
   build.initialOptions.banner.js ??= ''
+
+  // Startup code that has to run before any bundled module.
+  let startupCode = createBundlerBanner('esbuild')
+
+  // Bake DD_GIT_* into the startup code unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
+  if (DD_BUNDLER_INJECT_GIT_METADATA) {
+    const gitMetadata = getGitMetadata()
+    if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
+      const { repositoryURL, commitSHA } = gitMetadata
+      startupCode += `
+if (typeof process === 'object' && process !== null &&
+    process.env !== null && typeof process.env === 'object') {
+  ${repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = ${JSON.stringify(repositoryURL)};` : ''}
+  ${commitSHA ? `process.env.DD_GIT_COMMIT_SHA = ${JSON.stringify(commitSHA)};` : ''}
+}`
+
+      log.debug(
+        'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
+        gitMetadata.repositoryURL || 'not available',
+        gitMetadata.commitSHA || 'not available'
+      )
+    } else {
+      log.warn('No git metadata available - skipping injection')
+    }
+  } else {
+    log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
+  }
+
   if (DD_IAST_ENABLED) {
-    build.initialOptions.banner.js =
-      `globalThis.__DD_ESBUILD_IAST_${isSourceMapEnabled ? 'WITH_SM' : 'WITH_NO_SM'} = true;
-      ${isSourceMapEnabled ? `globalThis.__DD_ESBUILD_BASEPATH = '${require('../dd-trace/src/util').ddBasePath}';` : ''}
-${build.initialOptions.banner.js}`
+    startupCode += `
+globalThis.__DD_ESBUILD_IAST_${isSourceMapEnabled ? 'WITH_SM' : 'WITH_NO_SM'} = true;`
+    if (isSourceMapEnabled) {
+      startupCode += `
+globalThis.__DD_ESBUILD_BASEPATH = ${JSON.stringify(require('../dd-trace/src/util').ddBasePath)};`
+    }
   }
 
   const esmBuild = isESMBuild(build)
@@ -151,33 +184,18 @@ globalThis.__dirname ??= $dd_dirname(globalThis.__filename);
 ${build.initialOptions.banner.js}`
   }
 
-  // Bake DD_GIT_* into the banner unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
-  if (DD_BUNDLER_INJECT_GIT_METADATA) {
-    const gitMetadata = getGitMetadata()
-    if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
-      build.initialOptions.banner ??= {}
-      build.initialOptions.banner.js ??= ''
-
-      build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null &&
-    process.env !== null && typeof process.env === 'object') {
-  ${gitMetadata.repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = '${gitMetadata.repositoryURL}';` : ''}
-  ${gitMetadata.commitSHA ? `process.env.DD_GIT_COMMIT_SHA = '${gitMetadata.commitSHA}';` : ''}
-}
-${build.initialOptions.banner.js}`
-
-      log.debug(
-        'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
-        gitMetadata.repositoryURL || 'not available',
-        gitMetadata.commitSHA || 'not available'
-      )
-    } else {
-      log.warn('No git metadata available - skipping injection')
-    }
+  if (esmBuild || !build.initialOptions.bundle) {
+    // ESM output is always strict, so code ahead of it cannot disable strict mode. Without bundling there is no
+    // module graph to inject into.
+    build.initialOptions.banner.js = `${startupCode}\n${build.initialOptions.banner.js}`
   } else {
-    log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
+    // esbuild places banners ahead of the "use strict" directive it emits for CommonJS and IIFE output, so code
+    // there would turn the directive into a plain expression and the whole bundle into sloppy mode. An injected
+    // module stays behind the directive and still runs before every other bundled module.
+    build.initialOptions.inject = [STARTUP_MODULE, ...build.initialOptions.inject ?? []]
+    build.onResolve({ filter: STARTUP_MODULE_FILTER }, () => ({ path: STARTUP_MODULE, namespace: PLUGIN_NAMESPACE }))
+    build.onLoad({ filter: /.*/, namespace: PLUGIN_NAMESPACE }, () => ({ contents: startupCode, loader: 'js' }))
   }
-
-  build.initialOptions.banner.js = `${createBundlerBanner('esbuild')}\n${build.initialOptions.banner.js}`
 
   let resolver
 
@@ -194,7 +212,7 @@ ${build.initialOptions.banner.js}`
       return
     }
 
-    // The startup banner marks the bundle; the runtime then patches native builtins and synchronizes ESM exports.
+    // The startup code marks the bundle; the runtime then patches native builtins and synchronizes ESM exports.
     if (builtins.has(args.path)) return
 
     // TODO: Should this also check for namespace === 'file'?

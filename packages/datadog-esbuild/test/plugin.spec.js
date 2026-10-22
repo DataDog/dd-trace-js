@@ -2,8 +2,10 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const vm = require('node:vm')
 const { describe, it } = require('mocha')
 
+const createBundlerBanner = require('../../datadog-instrumentations/src/helpers/bundler-banner')
 const ddPlugin = require('../index')
 const transformTypeScript = require('./helpers/transform-typescript')
 
@@ -58,7 +60,79 @@ function captureOnResolve () {
   return onResolve
 }
 
+/**
+ * @param {object} initialOptions
+ */
+function setupPlugin (initialOptions) {
+  const onResolve = []
+  const onLoad = []
+  ddPlugin.setup({
+    initialOptions,
+    onStart () {},
+    onEnd () {},
+    /**
+     * @param {object} options
+     * @param {Function} callback
+     */
+    onResolve (options, callback) {
+      onResolve.push({ options, callback })
+    },
+    /**
+     * @param {object} options
+     * @param {Function} callback
+     */
+    onLoad (options, callback) {
+      onLoad.push({ options, callback })
+    },
+  })
+  return { onResolve, onLoad }
+}
+
 describe('datadog-esbuild plugin', () => {
+  describe('startup code', () => {
+    const marker = createBundlerBanner('esbuild')
+
+    it('injects it behind the "use strict" directive of CommonJS and IIFE bundles', () => {
+      for (const format of ['cjs', 'iife', undefined]) {
+        const initialOptions = { bundle: true, format, inject: ['./user-inject.js'], banner: { js: '/* user */' } }
+        const { onResolve, onLoad } = setupPlugin(initialOptions)
+
+        assert.deepStrictEqual(initialOptions.inject, ['dd-trace:esbuild-startup', './user-inject.js'])
+        assert.equal(initialOptions.banner.js, '/* user */', 'nothing executable may precede the directive')
+
+        // Registered ahead of the catch-all callbacks, which would otherwise claim the virtual module.
+        const resolved = onResolve[0]
+        assert.match('dd-trace:esbuild-startup', resolved.options.filter)
+        assert.doesNotMatch('./dd-trace:esbuild-startup', resolved.options.filter)
+        const { path: modulePath, namespace } = resolved.callback({ path: 'dd-trace:esbuild-startup' })
+        assert.equal(onLoad[0].options.namespace, namespace)
+
+        const { contents, loader } = onLoad[0].callback({ path: modulePath, namespace })
+        assert.equal(loader, 'js')
+        assert.equal(contents.slice(0, marker.length), marker)
+        const context = vm.createContext({})
+        vm.runInContext(`'use strict';${contents}`, context)
+        assert.equal(vm.runInContext('globalThis[Symbol.for("dd-trace:bundler")].bundlers.join()', context), 'esbuild')
+      }
+    })
+
+    it('keeps it in the banner for ESM output, which is always strict', () => {
+      const initialOptions = { bundle: true, format: 'esm' }
+      setupPlugin(initialOptions)
+
+      assert.equal(initialOptions.inject, undefined)
+      assert.equal(initialOptions.banner.js.slice(0, marker.length), marker)
+    })
+
+    it('keeps it in the banner without bundling, where nothing can be injected', () => {
+      const initialOptions = { format: 'cjs' }
+      setupPlugin(initialOptions)
+
+      assert.equal(initialOptions.inject, undefined)
+      assert.equal(initialOptions.banner.js.slice(0, marker.length), marker)
+    })
+  })
+
   it('ignores builtins without a package path', () => {
     const onResolve = captureOnResolve()
 

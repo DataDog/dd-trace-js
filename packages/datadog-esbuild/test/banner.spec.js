@@ -10,12 +10,20 @@ const vm = require('node:vm')
 const { sandboxCwd, useSandbox } = require('../../../integration-tests/helpers')
 const ddPlugin = require('../index')
 
-/** @param {string} code */
-function record (code) {
-  const banner = code.split('\n').find(line => line.includes('Symbol.for("dd-trace:bundler")'))
-  assert.ok(banner, 'bundle must start with the Datadog bundler banner')
-  const context = vm.createContext({})
-  vm.runInContext(banner, context)
+/**
+ * @param {string} code
+ * @param {vm.Context} [context]
+ */
+function record (code, context = vm.createContext({})) {
+  const banner = code.split('\n').find(line => line.startsWith('((r,b)=>'))
+  if (banner) {
+    // ESM output keeps the startup code as a banner line; the rest of the file cannot run as a script.
+    vm.runInContext(banner, context)
+  } else {
+    // CommonJS and IIFE output inject it as a bundled module, so it only runs with the bundle.
+    const runBundle = vm.runInContext(`(function (require, module, exports) {${code}\n})`, context)
+    runBundle(require, { exports: {} }, {})
+  }
   return JSON.parse(vm.runInContext('JSON.stringify(globalThis[Symbol.for("dd-trace:bundler")])', context))
 }
 
@@ -77,6 +85,21 @@ describe('esbuild bundler banner', () => {
     const code = execFileSync(process.execPath, ['--eval', source], { encoding: 'utf8' })
     assert.deepEqual(record(code), { bundlers: ['esbuild'] })
   })
+
+  for (const format of ['cjs', 'iife']) {
+    it(`keeps a ${format} bundle in strict mode`, async () => {
+      const result = await build({
+        format,
+        stdin: { contents: "'use strict'\nglobalThis.strict = (function () { return this })() === undefined" },
+        write: false,
+      })
+      const code = result.outputFiles[0].text
+      const context = vm.createContext({})
+
+      assert.deepEqual(record(code, context), { bundlers: ['esbuild'] })
+      assert.equal(context.strict, true)
+    })
+  }
 
   it('preserves user banners', async () => {
     const userBanner = 'globalThis.userBanner = true;'
