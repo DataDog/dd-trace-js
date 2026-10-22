@@ -232,6 +232,7 @@ jobs:
           flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}
 
   integration-webdriverio:
+    needs: selenium-image
     strategy:
       fail-fast: false
       matrix:
@@ -253,6 +254,11 @@ jobs:
       integration-webdriverio (${{ matrix.webdriverio-version }},
       node-${{ matrix.node-version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.selenium-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node
@@ -271,16 +277,10 @@ jobs:
       - name: Clear uploaded instrumentation JUnit reports
         if: "!cancelled() && steps.webdriverio_instrumentation_upload.outcome == 'success'"
         run: rm -f ./*.xml
-      - name: Install FFmpeg for video recording and validation
-        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
-        with:
-          max_attempts: 3
-          # Healthy installs take ~20s, but a slow mirror can crawl past the job's time budget. The inner timeout
-          # runs as root so it can stop apt; timeout_minutes is only a backstop.
-          timeout_minutes: 5
-          retry_wait_seconds: 30
-          command: >-
-            sudo timeout 3m sh -c 'dpkg --configure -a && apt-get update && apt-get install -y --no-install-recommends ffmpeg'
+      - name: Configure Git safe directory
+        # The WebdriverIO job runs in a container where the checkout can be owned by a different UID.
+        # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Use installed Chrome and ChromeDriver
         if: matrix.spec == 'webdriverio'
         run: |
@@ -390,7 +390,7 @@ jobs:
           flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}
 
   selenium-image:
-    name: Ensure Selenium Docker image
+    name: Ensure browser Docker image
     runs-on: ubuntu-latest
     permissions:
       contents: read
