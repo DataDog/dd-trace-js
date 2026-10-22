@@ -5,6 +5,7 @@ const path = require('path')
 const fs = require('fs')
 
 const log = require('../../log')
+const { getEnvironmentVariables } = require('../../config/helper')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -560,7 +561,11 @@ function getGitInformationDiscrepancy () {
 
 function fetchHeadCommitSha (headSha) {
   try {
-    cachedExec('git', ['cat-file', '-e', headSha])
+    cachedExec('git', ['cat-file', '-e', headSha], {
+      stdio: 'pipe',
+      // Older Git versions ignore GIT_NO_LAZY_FETCH, so also disallow transports for this local-only probe.
+      env: { ...getEnvironmentVariables(), GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
+    })
     return
   } catch {
     // The commit is missing locally; fetch it without downloading its history.

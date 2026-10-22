@@ -870,7 +870,10 @@ describe('fetchHeadCommitSha', () => {
 
     fetchHeadCommitSha('abc123')
 
-    sinon.assert.calledOnceWithExactly(cachedExecStub, 'git', ['cat-file', '-e', 'abc123'])
+    sinon.assert.calledOnceWithExactly(cachedExecStub, 'git', ['cat-file', '-e', 'abc123'], {
+      stdio: 'pipe',
+      env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
+    })
   })
 
   it('fetches only the missing head commit', () => {
@@ -912,6 +915,7 @@ describe('fetchHeadCommitSha', () => {
 describe('PR head metadata in shallow repositories', () => {
   let directory
   let checkout
+  let remote
   let headSha
   let getGitMetadata
   let cachedExecSpy
@@ -927,7 +931,7 @@ describe('PR head metadata in shallow repositories', () => {
 
   beforeEach(() => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-pr-head-'))
-    const remote = path.join(directory, 'remote.git')
+    remote = path.join(directory, 'remote.git')
     checkout = path.join(directory, 'checkout')
     git(directory, ['init', '--bare', remote])
     git(remote, ['config', 'uploadpack.allowFilter', 'true'])
@@ -1012,4 +1016,35 @@ done
     assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
     assert.ok(cachedExecSpy.getCalls().every(call => call.args[1][0] !== 'fetch'))
   })
+
+  for (const legacyGit of [false, true]) {
+    const suffix = legacyGit ? ' without GIT_NO_LAZY_FETCH support' : ''
+    it(`does not lazily fetch head history in a shallow partial clone${suffix}`, () => {
+      fs.rmSync(checkout, { recursive: true, force: true })
+      git(directory, [
+        'clone', '--depth=1', '--filter=blob:none', '--no-checkout', '--branch', 'juan-fernandez/merge',
+        pathToFileURL(remote).href, checkout,
+      ])
+      assert.strictEqual(git(checkout, ['config', '--get', 'remote.origin.promisor']), 'true')
+      if (legacyGit) {
+        // Simulate Git versions predating GIT_NO_LAZY_FETCH; the transport guard must still prevent lazy downloads.
+        getGitMetadata = proxyquire('../../../src/plugins/util/git', {
+          './git-cache': {
+            cachedExec: (command, flags, options) => cachedExecSpy(command, flags, {
+              ...options,
+              env: { ...process.env, ...options?.env, GIT_NO_LAZY_FETCH: '0' },
+            }),
+          },
+        }).getGitMetadata
+      }
+
+      const metadata = getGitMetadata({ headCommitSha: headSha })
+
+      assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+      assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '1')
+      const fetchedCommits = git(checkout, ['cat-file', '--batch-all-objects', '--batch-check=%(objecttype)'])
+        .split('\n').filter(type => type === 'commit')
+      assert.strictEqual(fetchedCommits.length, 2)
+    })
+  }
 })
