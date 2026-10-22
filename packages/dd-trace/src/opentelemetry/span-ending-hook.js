@@ -6,5 +6,9 @@
 // the already-built payload. Its own dependency-free module so an instrumentation can register
 // without loading the OTel bridge, and a plain holder so the caller gates on `hook` existing.
 
-/** @type {{ hook: ((ddSpan: import('../opentracing/span')) => void) | undefined }} */
+/**
+ * @type {{
+ *   hook: ((ddSpan: import('../opentracing/span'), otelSemanticsEnabled: boolean) => void) | undefined
+ * }}
+ */
 module.exports = { hook: undefined }

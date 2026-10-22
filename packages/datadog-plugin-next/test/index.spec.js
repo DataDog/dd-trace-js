@@ -4,11 +4,12 @@ const assert = require('node:assert/strict')
 
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
-const path = require('node:path')
-const http = require('node:http')
 const { execSync, spawn } = require('node:child_process')
+const { once } = require('node:events')
 const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
 const { rm } = require('node:fs/promises')
+const http = require('node:http')
+const path = require('node:path')
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -1160,6 +1161,7 @@ describe('compiled Next runtimes', () => {
 
     before(async () => {
       tracer = await agent.load('next', {
+        service: 'next-service',
         hooks: {
           request: countRequestHook,
         },
@@ -1198,8 +1200,10 @@ describe('compiled Next runtimes', () => {
         const [span] = traces[0]
         assertObjectContains(span, {
           name: 'next.request',
+          service: 'next-service',
           resource: 'GET /api/first-entry',
           meta: {
+            '_dd.svc_src': 'opt.plugin',
             'http.status_code': '201',
             'next.page': '/api/first-entry',
           },
@@ -2000,5 +2004,221 @@ describe('compiled Next runtimes', () => {
       }), /App Page handler error/)
       pageResponse.emit('finish')
     })
+  })
+
+  describe('with OTel semantics', () => {
+    before(async () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      await agent.load(['http', 'next'], [{ client: false }, undefined])
+      dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
+    })
+
+    after(() => {
+      delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      return agent.close()
+    })
+
+    for (const [runtime, exportName] of [
+      ['app-page', 'AppPageRouteModule'],
+      ['pages-api', 'PagesAPIRouteModule'],
+    ]) {
+      it(`finishes consecutive ${runtime} requests without a Web request`, async () => {
+        for (const status of [200, 503]) {
+          const pathname = `/node-request-${status}`
+          class RouteModule {
+            definition = { pathname, page: pathname }
+
+            prepare () {
+              return Promise.resolve()
+            }
+
+            /** @param {{responseGenerator: () => Promise<object>}} options */
+            handleResponse ({ responseGenerator }) {
+              return responseGenerator()
+            }
+
+            render () {
+              return Promise.resolve()
+            }
+          }
+          applyCompiledRuntimeHook(runtime, { [exportName]: RouteModule })
+
+          const request = { headers: { host: 'example.com' }, method: 'GET', url: pathname }
+          const response = new http.ServerResponse(request)
+          response.statusCode = status
+          const trace = agent.assertSomeTraces(traces => {
+            const [span] = traces[0]
+            assertObjectContains(span, {
+              name: 'next.request',
+              resource: `GET ${pathname}`,
+              error: status >= 500 ? 1 : 0,
+              meta: {
+                'http.request.method': 'GET',
+                'http.response.status_code': String(status),
+                'url.path': pathname,
+                'server.address': 'example.com',
+              },
+            })
+            assert.strictEqual(span.meta['error.type'], status >= 500 ? String(status) : undefined)
+          })
+          const routeModule = new RouteModule()
+          async function handleRequest () {
+            if (runtime === 'pages-api') {
+              await routeModule.render(request, response, { page: pathname })
+            } else {
+              await routeModule.prepare(request, response, {})
+              await routeModule.handleResponse({
+                req: request,
+                responseGenerator: () => Promise.resolve({ value: { status } }),
+              })
+            }
+            response.emit('finish')
+          }
+          await Promise.all([trace, handleRequest()])
+        }
+      })
+    }
+
+    it('captures Web NextRequest attributes through the App Route lifecycle', async () => {
+      class AppRouteRouteModule {
+        definition = { pathname: '/api/web-request' }
+
+        prepare () {
+          return Promise.resolve()
+        }
+
+        handleResponse ({ responseGenerator }) {
+          return responseGenerator()
+        }
+
+        handle (_request, _context) {
+          return Promise.resolve({ status: 503 })
+        }
+      }
+      applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
+
+      const request = new Request('https://example.com/api/web-request?token=secret', {
+        headers: { 'user-agent': 'test-agent/1.0' },
+        method: 'PROPFIND',
+      })
+      const trace = agent.assertSomeTraces(traces => {
+        const [span] = traces[0]
+        assertObjectContains(span, {
+          name: 'next.request',
+          resource: 'HTTP /api/web-request',
+          error: 1,
+          meta: {
+            'error.type': '503',
+            'http.request.method': '_OTHER',
+            'http.request.method_original': 'PROPFIND',
+            'http.response.status_code': '503',
+            'url.path': '/api/web-request',
+            'url.scheme': 'https',
+            'server.address': 'example.com',
+            'user_agent.original': 'test-agent/1.0',
+          },
+        })
+      })
+      const nodeRequest = { headers: {}, method: 'PROPFIND', url: '/api/web-request?token=secret' }
+      const nodeResponse = new http.ServerResponse(nodeRequest)
+      const routeModule = new AppRouteRouteModule()
+
+      await routeModule.prepare(nodeRequest, nodeResponse, {})
+      const result = await routeModule.handleResponse({
+        req: nodeRequest,
+        responseGenerator: async () => {
+          const response = await routeModule.handle(request, {})
+          return { response, value: { status: response.status } }
+        },
+      })
+      nodeResponse.emit('finish')
+      assert.strictEqual(result.response.status, 503)
+      await trace
+    })
+
+    for (const { title, customResource, expectedResource } of [
+      {
+        title: 'preserves a custom HTTP parent resource through the App Route lifecycle',
+        customResource: 'custom-http-resource',
+        expectedResource: 'custom-http-resource',
+      },
+      {
+        title: 'updates the HTTP parent resource through the App Route lifecycle',
+        expectedResource: 'HTTP /api/web-request',
+      },
+    ]) {
+      it(title, async () => {
+        class AppRouteRouteModule {
+          definition = { pathname: '/api/web-request' }
+
+          prepare () {
+            return Promise.resolve()
+          }
+
+          handleResponse ({ responseGenerator }) {
+            return responseGenerator()
+          }
+
+          handle () {
+            return Promise.resolve({ status: 201 })
+          }
+        }
+        applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
+        const routeModule = new AppRouteRouteModule()
+        const server = http.createServer(async (req, res) => {
+          try {
+            if (customResource) {
+              storage('legacy').getStore().span.setTag('resource.name', customResource)
+            }
+            const request = new Request(`http://${req.headers.host}${req.url}`, { method: req.method })
+            await routeModule.prepare(req, res, {})
+            const result = await routeModule.handleResponse({
+              req,
+              responseGenerator: async () => {
+                const response = await routeModule.handle(request, {})
+                return { value: { status: response.status } }
+              },
+            })
+            res.statusCode = result.value.status
+            res.end()
+          } catch (error) {
+            res.destroy(error)
+          }
+        })
+        server.listen(0, '127.0.0.1')
+        await once(server, 'listening')
+        const port = server.address().port
+        const trace = agent.assertSomeTraces(traces => {
+          const spans = traces.find(trace => trace.some(span => span.name === 'next.request'))
+          assert.ok(spans)
+          const nextSpan = spans.find(span => span.name === 'next.request')
+          assert.ok(nextSpan)
+          const parentSpan = spans.find(span => span.span_id.toString() === nextSpan.parent_id.toString())
+          assert.ok(parentSpan)
+          assert.strictEqual(parentSpan.resource, expectedResource)
+          assert.strictEqual(nextSpan.resource, 'HTTP /api/web-request')
+          assertObjectContains(nextSpan.meta, {
+            'network.peer.address': '127.0.0.1',
+            'server.address': '127.0.0.1',
+            'url.path': '/api/web-request',
+            'user_agent.original': 'test-agent/1.0',
+          })
+        })
+
+        try {
+          const [response] = await Promise.all([
+            httpRequest({
+              method: 'PROPFIND',
+              url: `http://127.0.0.1:${port}/api/web-request`,
+              headers: { 'user-agent': 'test-agent/1.0' },
+            }),
+            trace,
+          ])
+          assert.strictEqual(response.status, 201)
+        } finally {
+          await new Promise(resolve => server.close(resolve))
+        }
+      })
+    }
   })
 })
