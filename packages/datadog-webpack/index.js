@@ -14,6 +14,7 @@ const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
 const JAVASCRIPT_ASSET = /\.[cm]?js$/
+const WHITESPACE = /\s/
 
 const DD_BUNDLER_INJECT_GIT_METADATA = getValueFromEnvSources('DD_BUNDLER_INJECT_GIT_METADATA') !== false
 
@@ -143,7 +144,14 @@ class DatadogWebpackPlugin {
             for (const filename of chunk.files) {
               if (updatedAssets.has(filename) || !JAVASCRIPT_ASSET.test(filename)) continue
               updatedAssets.add(filename)
-              compilation.updateAsset(filename, old => new compiler.webpack.sources.ConcatSource(banner, old))
+              compilation.updateAsset(filename, old => {
+                // Code ahead of a leading "use strict" directive (e.g. with output.iife disabled) would turn it into
+                // a plain expression and the whole asset into sloppy mode, so the banner goes after it.
+                const { offset, code } = getBannerInsertion(old.source(), banner)
+                const source = new compiler.webpack.sources.ReplaceSource(old)
+                source.insert(offset, code)
+                return source
+              })
             }
           }
         }
@@ -214,6 +222,43 @@ class DatadogWebpackPlugin {
       })
     })
   }
+}
+
+/**
+ * Places startup code where it cannot break the asset's prologue: after a leading "use strict" directive preceded
+ * only by whitespace and comments, otherwise after a hashbang line, otherwise at the start.
+ * @param {string | Buffer} source
+ * @param {string} banner
+ * @returns {{ offset: number, code: string }}
+ */
+function getBannerInsertion (source, banner) {
+  if (typeof source !== 'string') return { offset: 0, code: banner }
+
+  const start = source.startsWith('#!') ? (source.indexOf('\n') + 1 || source.length) : 0
+  let index = start
+
+  while (index < source.length) {
+    if (WHITESPACE.test(source[index])) {
+      index++
+    } else if (source.startsWith('/*', index)) {
+      const end = source.indexOf('*/', index + 2)
+      if (end === -1) break
+      index = end + 2
+    } else if (source.startsWith('//', index)) {
+      const end = source.indexOf('\n', index + 2)
+      if (end === -1) break
+      index = end + 1
+    } else {
+      break
+    }
+  }
+
+  if (!source.startsWith('"use strict"', index) && !source.startsWith("'use strict'", index)) {
+    return { offset: start, code: banner }
+  }
+  index += '"use strict"'.length
+  // Without its semicolon, the directive followed by `(` would become a call.
+  return source[index] === ';' ? { offset: index + 1, code: banner } : { offset: index, code: `;${banner}` }
 }
 
 /**

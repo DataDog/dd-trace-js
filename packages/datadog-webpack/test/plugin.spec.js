@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const vm = require('node:vm')
 
 const { after, afterEach, before, describe, it } = require('mocha')
 
@@ -26,24 +27,38 @@ function createCompilerHarness (options, { chunks = [], assets = {} } = {}) {
   const updates = []
   const outputAssets = new Map(Object.entries(assets))
 
-  class ConcatSource {
-    /** @param {...(string|{ source: () => string, map: () => object })} parts */
-    constructor (...parts) {
-      this.parts = parts
+  class ReplaceSource {
+    /** @param {{ source: () => string, map: () => object }} original */
+    constructor (original) {
+      this.original = original
+      /** @type {Array<[number, string]>} */
+      this.insertions = []
+    }
+
+    /**
+     * @param {number} position
+     * @param {string} value
+     */
+    insert (position, value) {
+      this.insertions.push([position, value])
     }
 
     source () {
-      return this.parts.map(part => typeof part === 'string' ? part : part.source()).join('')
+      let content = this.original.source()
+      for (const [position, value] of [...this.insertions].sort((a, b) => b[0] - a[0])) {
+        content = content.slice(0, position) + value + content.slice(position)
+      }
+      return content
     }
 
     map () {
-      return /** @type {{ map: () => object }} */ (this.parts.at(-1)).map()
+      return this.original.map()
     }
   }
 
   const compiler = {
     options,
-    webpack: { sources: { ConcatSource } },
+    webpack: { sources: { ReplaceSource } },
     hooks: {
       environment: { tap: (_name, hook) => { environmentHook = hook } },
       thisCompilation: { tap: (_name, hook) => { compilationHook = hook } },
@@ -176,7 +191,7 @@ describe('DatadogWebpackPlugin', () => {
         const asset = harness.outputAssets.get(filename)
         assert.ok(asset, `expected emitted asset ${filename}`)
         assert.ok(asset.source().includes(banner), `expected ${filename} to be marked`)
-        assert.equal(asset.map(), map, 'ConcatSource should retain the original source map')
+        assert.equal(asset.map(), map, 'ReplaceSource should retain the original source map')
       }
       assert.deepEqual(harness.updates.sort(), ['legacy.cjs', 'main.js', 'shared.mjs'])
       assert.equal(harness.outputAssets.get('async.js')?.source(), 'async()')
@@ -223,6 +238,64 @@ describe('DatadogWebpackPlugin', () => {
         process.chdir(originalDirectory)
         fs.rmSync(noGitDirectory, { recursive: true, force: true })
       }
+    })
+
+    it('places the banner where it keeps a leading "use strict" directive in effect', () => {
+      const map = { version: 3, sources: ['entry.js'], mappings: 'AAAA' }
+      const strictCheck = 'globalThis.strict = (function () { return this })() === undefined'
+      const assets = {
+        'top-level.js': `/******/ "use strict";\n${strictCheck}`,
+        'no-semicolon.js': `// generated\n'use strict'\n${strictCheck}`,
+        'hashbang.js': `#!/usr/bin/env node\n"use strict";\n${strictCheck}`,
+        'iife.js': `/******/ (() => {\n"use strict";\n${strictCheck}\n})()`,
+        'sloppy.js': `/* no directive */\n${strictCheck}`,
+      }
+      const harness = createCompilerHarness(
+        { optimization: { minimize: false }, target: 'node' },
+        {
+          chunks: [{ canBeInitial: () => true, files: new Set(Object.keys(assets)) }],
+          assets: Object.fromEntries(
+            Object.entries(assets).map(([name, content]) => [name, createSource(content, map)])
+          ),
+        }
+      )
+
+      new DatadogWebpackPlugin().apply(harness.compiler)
+      harness.runCompilation()
+
+      const banner = createBundlerBanner('webpack')
+      /** @param {string} filename */
+      const sourceOf = filename => {
+        const asset = harness.outputAssets.get(filename)
+        assert.ok(asset, `expected emitted asset ${filename}`)
+        return asset.source()
+      }
+      const expectedStrict = {
+        'top-level.js': true,
+        'no-semicolon.js': true,
+        'hashbang.js': true,
+        'iife.js': true,
+        'sloppy.js': false,
+      }
+      for (const [filename, strict] of Object.entries(expectedStrict)) {
+        const output = sourceOf(filename)
+        assert.ok(output.includes(banner), `expected ${filename} to be marked`)
+        const context = vm.createContext({})
+        vm.runInContext(output, context)
+        assert.equal(context.strict, strict, `${filename} strict mode`)
+        assert.equal(
+          vm.runInContext('globalThis[Symbol.for("dd-trace:bundler")].bundlers.length', context),
+          1,
+          `${filename} banner must run`
+        )
+      }
+
+      const hashbang = sourceOf('hashbang.js')
+      const prologue = '#!/usr/bin/env node\n"use strict";'
+      assert.equal(hashbang.slice(0, prologue.length), prologue, 'hashbang and directive must stay first')
+      assert.ok(hashbang.includes(banner))
+      const iife = sourceOf('iife.js')
+      assert.ok(iife.indexOf(banner) < iife.indexOf('(() => {'), 'banner runs before an IIFE bundle')
     })
 
     it('warns for non-Node targets and disabled Node externals without failing', () => {
