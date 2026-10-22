@@ -262,7 +262,7 @@ class Span extends BridgeSpanBase {
 
     // Must run before `finish()`, while the DD span is still unfinished. See span-ending-hook.js.
     if (spanEndingHook.hook !== undefined) {
-      spanEndingHook.hook(this._ddSpan)
+      spanEndingHook.hook(this._ddSpan, this._otelTraceSemanticsEnabled)
     }
     this._ddSpan.finish(endTime)
     this._spanProcessor.onEnd(this)
