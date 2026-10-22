@@ -8,6 +8,7 @@ const path = require('node:path')
 const http = require('node:http')
 const { execSync, spawn } = require('node:child_process')
 const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
+const { rm } = require('node:fs/promises')
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -237,7 +238,7 @@ describe('Plugin', function () {
         }
       })
 
-      after(function () {
+      after(async function () {
         this.timeout(5000)
         const files = [
           'package.json',
@@ -245,8 +246,7 @@ describe('Plugin', function () {
           '.next',
           'yarn.lock',
         ]
-        const paths = files.map(file => path.join(__dirname, file))
-        execSync(`rm -rf ${paths.join(' ')}`)
+        await Promise.all(files.map(file => rm(path.join(__dirname, file), { recursive: true, force: true })))
       })
 
       withNamingSchema(
