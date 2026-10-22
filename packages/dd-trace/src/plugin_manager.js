@@ -24,6 +24,12 @@ const loadChannel = channel('dd-trace:instrumentation:load')
 
 const DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')
 
+/**
+ * @typedef {import('./config/config-base') & {
+ *   getOrigin: (name: import('./config/config-types').ConfigPath) => string
+ * }} TracerConfigWithOrigin
+ */
+
 const disabledPlugins = new Set(
   DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
 )
@@ -179,6 +185,7 @@ module.exports = class PluginManager {
 
   // TODO: figure out a better way to handle this
   #getSharedConfig (name) {
+    const tracerConfig = /** @type {TracerConfigWithOrigin} */ (this._tracerConfig)
     const {
       logInjection,
       serviceMapping,
@@ -209,7 +216,7 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       tracing,
       DD_TRACE_RESOURCE_RENAMING_ENABLED,
-    } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
+    } = tracerConfig
 
     const sharedConfig = {
       codeOriginForSpans,
@@ -232,6 +239,15 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       tracing,
       resourceRenamingEnabled: DD_TRACE_RESOURCE_RENAMING_ENABLED,
+    }
+
+    if (DD_TRACE_HTTP_CLIENT_ERROR_STATUSES !== undefined &&
+        tracerConfig.getOrigin('DD_TRACE_HTTP_CLIENT_ERROR_STATUSES') === 'default') {
+      sharedConfig.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = undefined
+    }
+    if (DD_TRACE_HTTP_SERVER_ERROR_STATUSES !== undefined &&
+        tracerConfig.getOrigin('DD_TRACE_HTTP_SERVER_ERROR_STATUSES') === 'default') {
+      sharedConfig.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = undefined
     }
 
     if (logInjection !== undefined) {
