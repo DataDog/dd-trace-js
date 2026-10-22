@@ -10,13 +10,14 @@ const { describe, it } = require('mocha')
 const semver = require('semver')
 
 const { engines, nodeMaxMajor } = require('../../../../package.json')
+const { isTrue } = require('../../../dd-trace/src/guardrails/util')
 
 const execFileAsync = promisify(execFile)
 
 // Outside its supported runtime range the tracer aborts instrumentation on purpose, so a child
 // process has nothing to report. `DD_INJECT_FORCE` overrides that, the same way `withVersions` does.
 const injectForce = process.env.DD_INJECT_FORCE
-const runtimeSupported = Boolean(injectForce) ||
+const runtimeSupported = isTrue(injectForce) ||
   semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
 
 const repositoryRoot = path.resolve(__dirname, '../../../..')

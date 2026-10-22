@@ -7,8 +7,10 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { match } = require('sinon')
 
+const { storage } = require('../../../../datadog-core')
 const rules = require('../../../src/appsec/recommended.json')
 const Reporter = require('../../../src/appsec/reporter')
+const { adoptRequest, withRequest } = require('../../../src/appsec/store')
 const { getConfigFresh } = require('../../helpers/config')
 
 describe('WAF Manager', () => {
@@ -141,6 +143,23 @@ describe('WAF Manager', () => {
       waf.run(payload, req)
 
       sinon.assert.calledOnceWithExactly(run, payload, undefined, req, undefined)
+    })
+
+    it('should use the canonical request for an adopted request', () => {
+      const run = sinon.stub()
+      WAFManager.prototype.getWAFContext = sinon.stub().returns({ run })
+      waf.init(rules, config.appsec)
+
+      const canonicalRequest = {}
+      const adoptedRequest = {}
+      storage('legacy').enterWith(withRequest(undefined, canonicalRequest))
+      adoptRequest({ req: adoptedRequest })
+
+      const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+      waf.run(payload, adoptedRequest)
+
+      sinon.assert.calledOnceWithExactly(WAFManager.prototype.getWAFContext, canonicalRequest)
+      sinon.assert.calledOnceWithExactly(run, payload, undefined, canonicalRequest, undefined)
     })
 
     describe('sampling priority', () => {
@@ -412,6 +431,16 @@ describe('WAF Manager', () => {
     describe('dispose', () => {
       it('should call ddwafContext.dispose', () => {
         waf.disposeContext(req)
+        sinon.assert.calledOnce(ddwafContext.dispose)
+      })
+
+      it('should dispose through an adopted request', () => {
+        const adoptedRequest = {}
+        storage('legacy').enterWith(withRequest(undefined, req))
+        adoptRequest({ req: adoptedRequest })
+
+        waf.disposeContext(adoptedRequest)
+
         sinon.assert.calledOnce(ddwafContext.dispose)
       })
     })
