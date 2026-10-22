@@ -84,6 +84,10 @@ file does not automatically include the worker; the Datadog esbuild plugin does 
 external to the bundle with its installed package available. If the worker cannot load, `flagevaluation` track EVP events
 are disabled for that provider and a bounded warning is logged; flag evaluations and existing exposure events continue.
 
+By default, the Datadog esbuild and webpack plugins inject `DD_GIT_COMMIT_SHA` and `DD_GIT_REPOSITORY_URL` into the
+bundle for Source Code Integration. Set `DD_BUNDLER_INJECT_GIT_METADATA=false` to skip that injection when you need
+stable artifact hashes across commits (for example, content-addressed Lambda deployments).
+
 <h3 id="feature-flag-evaluation-telemetry-opt-out">Per-subject Evaluation Telemetry Opt-out</h3>
 
 Enable the context parameter before you first access `tracer.openfeature`:
