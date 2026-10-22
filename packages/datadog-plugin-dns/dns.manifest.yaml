@@ -1,0 +1,10 @@
+_v: 1
+name: dns
+display_name: DNS
+description: Instruments Node.js DNS hostname and service lookups, record resolution, and reverse lookups through
+  callback and promise APIs, including Resolver instances.
+packages: []
+category:
+- other
+systems: []
+creation_date: '2019-02-06'

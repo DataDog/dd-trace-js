@@ -9,6 +9,7 @@ const { describe, it } = require('mocha')
 const { NODE_MAJOR } = require('../../../../version')
 
 const repoRoot = path.resolve(__dirname, '../../../..')
+const rulesBundle = 'vendor/dist/@datadog/openfeature-node-server/rules-based/index.js'
 const expectedTracedFiles = [
   'vendor/dist/@datadog/openfeature-node-server/index.js',
   'packages/dd-trace/src/openfeature/writers/flag-eval-evp-hook.js',
@@ -27,6 +28,22 @@ if (NODE_MAJOR < 20) {
 const { nodeFileTrace } = require('@vercel/nft')
 
 describe('OpenFeature file tracing', () => {
+  it('traces standalone rules helpers without the provider or tracer', async function () {
+    this.timeout(30000)
+    const { fileList } = await nodeFileTrace([path.join(repoRoot, 'openfeature/rules-based.js')], { base: repoRoot })
+    assert.ok(!fileList.has('vendor/dist/@datadog/openfeature-node-server/index.js'))
+    assert.ok(fileList.has(rulesBundle))
+    assert.ok(!fileList.has('packages/dd-trace/src/proxy.js'))
+  })
+
+  it('traces the general entrypoint provider fallback without the rules decoder', async function () {
+    this.timeout(30000)
+    const { fileList } = await nodeFileTrace([path.join(repoRoot, 'openfeature.js')], { base: repoRoot })
+    assert.ok(fileList.has('vendor/dist/@datadog/openfeature-node-server/index.js'))
+    assert.ok(!fileList.has(rulesBundle))
+    assert.ok(!fileList.has('packages/dd-trace/src/proxy.js'))
+  })
+
   it('traces the provider dependency tree through tracer.openfeature', async function () {
     this.timeout(30000)
     const entrypoint = path.join(repoRoot, 'packages/dd-trace/src/proxy.js')
@@ -35,6 +52,7 @@ describe('OpenFeature file tracing', () => {
     for (const expectedTracedFile of expectedTracedFiles) {
       assert.ok(fileList.has(expectedTracedFile), `Expected trace to include ${expectedTracedFile}`)
     }
+    assert.ok(!fileList.has(rulesBundle))
   })
 
   it('loads the provider through tracer.openfeature', () => {
@@ -44,7 +62,9 @@ describe('OpenFeature file tracing', () => {
       [
         '--eval',
         `const tracer = require(${tracerPath}); tracer.init({ plugins: false }); ` +
-        "require('@openfeature/server-sdk'); if (!tracer.openfeature) throw new Error('no provider')",
+        "require('@openfeature/server-sdk'); if (!tracer.openfeature) throw new Error('no provider'); " +
+        `if (require.cache[${JSON.stringify(path.join(repoRoot, rulesBundle))}]) ` +
+        "throw new Error('loaded rules decoder')",
       ],
       { encoding: 'utf8' }
     )
@@ -84,6 +104,7 @@ describe('OpenFeature file tracing', () => {
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/configuration_source'))}),
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/agentless_configuration_source'))}),
         require.resolve(${JSON.stringify(path.join(repoRoot, 'vendor/dist/@datadog/openfeature-node-server'))}),
+        require.resolve(${JSON.stringify(path.join(repoRoot, rulesBundle))}),
         require.resolve('@openfeature/server-sdk'),
         require.resolve('@openfeature/core')
       ]
@@ -105,7 +126,7 @@ describe('OpenFeature file tracing', () => {
           })
 
           assert.strictEqual(result.status, 0, result.stderr)
-          assert.deepStrictEqual(JSON.parse(result.stdout), Array(11).fill(false))
+          assert.deepStrictEqual(JSON.parse(result.stdout), Array(12).fill(false))
         }
       }
     }

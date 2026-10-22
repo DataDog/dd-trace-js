@@ -84,7 +84,7 @@ const DD_ERROR_META_KEYS = new Set(['error.message'])
  * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
  *
  * This implementation follows the OTLP trace data model:
- * https://opentelemetry.io/docs/specs/otlp/#trace-data-model
+ * https://github.com/open-telemetry/opentelemetry-proto/blob/v1.7.0/opentelemetry/proto/trace/v1/trace.proto
  *
  * It receives DD-formatted spans (from span_format.js) and produces
  * an ExportTraceServiceRequest serialized as JSON (http/json protocol only).

@@ -32,6 +32,10 @@ function enableGCPPubSubPushSubscription () {
     getValueFromEnvSources('DD_TRACE_GCP_PUBSUB_PUSH_ENABLED')
 }
 
+function getIsAzureContainerApp () {
+  return getEnvironmentVariable('CONTAINER_APP_NAME') !== undefined
+}
+
 function getIsAzureFunction () {
   return getEnvironmentVariable('FUNCTIONS_EXTENSION_VERSION') !== undefined &&
     getEnvironmentVariable('FUNCTIONS_WORKER_RUNTIME') !== undefined
@@ -103,6 +107,7 @@ module.exports = {
   supportsServerlessTelemetryRetention,
   createServerlessDeliveryTracker,
   getIsGCPFunction,
+  getIsAzureContainerApp,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,

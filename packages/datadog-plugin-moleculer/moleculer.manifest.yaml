@@ -1,0 +1,12 @@
+_v: 1
+name: moleculer
+display_name: Moleculer
+description: Instruments Moleculer service calls and action handlers with trace-context propagation for local and remote
+  invocations.
+packages:
+- name: moleculer
+category:
+- rpc.client
+- rpc.server
+systems: []
+creation_date: '2022-01-25'

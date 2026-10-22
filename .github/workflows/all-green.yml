@@ -56,7 +56,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-          DELAY: ${{ github.run_attempt == 1 && '2.5' || '0' }} # 2.5 minutes on first attempt, no delay on reruns
+          DELAY: ${{ github.run_attempt == 1 && '5' || '0' }} # 5 minutes on first attempt, no delay on reruns
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
