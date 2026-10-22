@@ -31,9 +31,7 @@ export async function initialize (data) {
 export async function load (url, context, nextLoad) {
   const result = await nextLoad(url, context)
 
-  if (!port) return result
-  if (!result.source) return result
-  if (url.includes(ddTraceDir) || url.includes('iitm=true')) return result
+  if (!port || !result.source || url.includes(ddTraceDir) || url.includes('iitm=true')) return result
 
   let passes
   try {

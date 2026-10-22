@@ -1,0 +1,13 @@
+_v: 1
+name: elasticsearch
+display_name: Elasticsearch
+description: Instruments Elasticsearch client requests, capturing request details, connection metadata, and errors.
+packages:
+- name: '@elastic/elasticsearch'
+- name: '@elastic/transport'
+- name: elasticsearch
+category:
+- db.client
+systems:
+- elasticsearch
+creation_date: '2018-06-06'

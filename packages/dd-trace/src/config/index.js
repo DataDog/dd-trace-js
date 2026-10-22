@@ -248,9 +248,9 @@ class Config extends ConfigBase {
     const { experimental, ...rest } = options
     if (experimental) {
       // @ts-expect-error - Difficult to type this correctly.
-      this.#applyOptions(experimental, 'code', 'experimental')
+      this.#applyOptions(experimental, 'experimental')
     }
-    this.#applyOptions(rest, 'code')
+    this.#applyOptions(rest)
     this.#applyCalculated()
 
     warnWrongOtelSettings()
@@ -280,10 +280,9 @@ class Config extends ConfigBase {
 
   /**
    * @param {TracerOptions} options
-   * @param {'code'} source
    * @param {string} [root]
    */
-  #applyOptions (options, source, root = '') {
+  #applyOptions (options, root = '') {
     for (const [name, value] of Object.entries(options)) {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
@@ -300,7 +299,7 @@ class Config extends ConfigBase {
             // Defining an option that receives an object as value may not contain a property that is also
             // potentially a nested property!
             if (Object.hasOwn(value, nestedProperty)) {
-              this.#applyOptions(value, source, fullName)
+              this.#applyOptions(value, fullName)
               matched = true
               break
             }
@@ -316,7 +315,7 @@ class Config extends ConfigBase {
             // TracePropagationStyle is special. It is a single option that is used to set both inject and extract.
             // TODO: Consider what to do with this later
             // @ts-expect-error - Difficult to type this correctly.
-            this.#applyOptions({ inject: value, extract: value }, source, 'tracePropagationStyle')
+            this.#applyOptions({ inject: value, extract: value }, 'tracePropagationStyle')
           } else {
             log.warn('Unknown option %s with value %o', fullName, value)
           }
@@ -325,12 +324,12 @@ class Config extends ConfigBase {
       }
       const coerced = programmaticTypeCoercions[entry.type](value)
       if (coerced === undefined && value !== undefined) {
-        warnInvalidValue(value, fullName, source, `Invalid ${entry.type} input`)
+        warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
       }
       const transformed = coerced !== undefined && entry.transformer
-        ? entry.transformer(coerced, fullName, source)
+        ? entry.transformer(coerced, fullName, 'code')
         : coerced
-      setAndTrack(this, entry.property ?? name, transformed, value, source)
+      setAndTrack(this, entry.property ?? name, transformed, value, 'code')
     }
   }
 

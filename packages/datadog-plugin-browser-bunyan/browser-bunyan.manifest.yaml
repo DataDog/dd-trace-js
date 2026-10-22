@@ -1,0 +1,11 @@
+_v: 1
+name: browser-bunyan
+display_name: browser-bunyan
+description: Instruments browser-bunyan log emission to inject trace-correlation identifiers and service metadata into
+  log records.
+packages:
+- name: browser-bunyan
+category:
+- log.emission
+systems: []
+creation_date: '2026-08-17'

@@ -464,6 +464,7 @@
 /benchmark/sirun/id/ @DataDog/lang-platform-js
 /benchmark/sirun/log/ @DataDog/lang-platform-js
 /benchmark/sirun/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
+/benchmark/sirun/openfeature-initialization/ @DataDog/feature-flagging-and-experimentation-sdk
 /benchmark/sirun/runtime-metrics/ @DataDog/lang-platform-js
 /benchmark/sirun/scope/ @DataDog/lang-platform-js
 /benchmark/sirun/shimmer-runtime/ @DataDog/lang-platform-js
