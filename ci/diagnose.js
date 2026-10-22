@@ -1332,7 +1332,7 @@ function isIneligibleFrameworkCommand (frameworkId, command) {
  * @param {string} command package script command
  */
 function isCucumberRunnerCommand (command) {
-  return CUCUMBER_RUNNER_COMMAND_RE.test(String(command || ''))
+  return CUCUMBER_RUNNER_COMMAND_RE.test(String(command))
 }
 
 /**
@@ -2091,7 +2091,7 @@ function hasShaMetadata (env) {
  * @param {string|undefined} value value to inspect
  */
 function isTrueLike (value) {
-  return /^(?:1|true)$/i.test(String(value || ''))
+  return /^(?:1|true)$/i.test(String(value))
 }
 
 /**
