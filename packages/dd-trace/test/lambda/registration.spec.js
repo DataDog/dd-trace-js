@@ -372,8 +372,18 @@ describe('lambda', () => {
             hookCalls[0].onrequire(app, fixturePath, undefined, '0.0.0')
             let complete
             const completion = new Promise(resolve => { complete = resolve })
+            const originalCompletion = () => {}
+            const context = {
+              getRemainingTimeInMillis: () => 100,
+              done: originalCompletion,
+              succeed: originalCompletion,
+              fail: originalCompletion,
+            }
             const moduleExports = {
               promisifiedHandler: handler => (event, context) => {
+                assert.strictEqual(context.done, originalCompletion)
+                assert.strictEqual(context.succeed, originalCompletion)
+                assert.strictEqual(context.fail, originalCompletion)
                 handler(event, context, () => {})
                 return completion
               },
@@ -382,7 +392,7 @@ describe('lambda', () => {
             hookCalls[1].onrequire(moduleExports, `datadog-lambda-js/${file}`, undefined, '12.143.0')
             assert.notStrictEqual(moduleExports.promisifiedHandler, original)
             const handler = moduleExports.promisifiedHandler(app.myEntry)
-            const invocation = handler({}, { getRemainingTimeInMillis: () => 100 })
+            const invocation = handler({}, context)
             assert.strictEqual(clock.countTimers(), 1)
             if (pending) {
               clock.tick(74)

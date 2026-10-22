@@ -33,7 +33,7 @@ function patchDatadogLambdaHandler (datadogHandler) {
  */
 function patchPromisifiedHandlerModule (moduleExports) {
   shimmer.wrap(moduleExports, 'promisifiedHandler', promisify => {
-    return handler => datadog(promisify(handler))
+    return handler => datadog(promisify(handler), true)
   })
   return moduleExports
 }
