@@ -33,14 +33,31 @@ describe('bundler register', () => {
 
   describe('built-in startup protocol', () => {
     const HOOKED_BUILTINS = [['http'], ['https'], ['dns'], ['dns/promises'], ['fs']]
+    let moduleLoadListDescriptor
 
-    it('patches every hooked built-in when a bundle ran before the tracer, then syncs once', () => {
+    beforeEach(() => {
+      moduleLoadListDescriptor = Object.getOwnPropertyDescriptor(process, 'moduleLoadList')
+    })
+
+    afterEach(() => {
+      Object.defineProperty(process, 'moduleLoadList', moduleLoadListDescriptor)
+    })
+
+    it('patches every loaded hooked built-in when a bundle ran before the tracer, then syncs once', () => {
       globalThis[BUNDLER] = { bundlers: ['webpack'] }
       const { requireBuiltin, sync } = loadBuiltinRegister()
 
       assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
       sinon.assert.calledOnce(sync)
       sinon.assert.callOrder(requireBuiltin, sync)
+    })
+
+    it('does not mistake a record without bundles for a bundle that ran before the tracer', () => {
+      globalThis[BUNDLER] = { bundlers: [] }
+      const { requireBuiltin, sync } = loadBuiltinRegister()
+
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
     })
 
     it('patches once when the first bundle loads after the tracer', () => {
@@ -50,6 +67,32 @@ describe('bundler register', () => {
 
       globalThis[BUNDLER].onBundle('esbuild')
       globalThis[BUNDLER].onBundle('webpack')
+
+      assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
+      sinon.assert.calledOnce(sync)
+    })
+
+    it('leaves built-ins nobody loaded alone until a later bundle loads them', () => {
+      globalThis[BUNDLER] = { bundlers: ['webpack'] }
+      const { requireBuiltin, sync, moduleLoadList } = loadBuiltinRegister({ loaded: ['http', 'fs'] })
+
+      assert.deepStrictEqual(requireBuiltin.args, [['http'], ['fs']])
+      sinon.assert.calledOnce(sync)
+
+      moduleLoadList.push('NativeModule dns')
+      globalThis[BUNDLER].onBundle('esbuild')
+
+      assert.deepStrictEqual(requireBuiltin.args, [['http'], ['fs'], ['dns']])
+      sinon.assert.calledTwice(sync)
+
+      globalThis[BUNDLER].onBundle('esbuild')
+      assert.equal(requireBuiltin.callCount, 3)
+      sinon.assert.calledTwice(sync)
+    })
+
+    it('patches every hooked built-in when the loaded built-ins are unknown', () => {
+      globalThis[BUNDLER] = { bundlers: ['webpack'] }
+      const { requireBuiltin, sync } = loadBuiltinRegister({ moduleLoadListMissing: true })
 
       assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
       sinon.assert.calledOnce(sync)
@@ -415,9 +458,26 @@ function throwValue (value) {
 
 /**
  * Execute the real CommonJS entrypoint with the module wrapper supplied by Node or a bundler.
- * @param {{ bundled?: boolean, disabled?: Set<string>, serverless?: boolean }} [options]
+ * @param {{
+ *   bundled?: boolean,
+ *   disabled?: Set<string>,
+ *   serverless?: boolean,
+ *   loaded?: string[],
+ *   moduleLoadListMissing?: boolean
+ * }} [options]
  */
-function loadBuiltinRegister ({ bundled = false, disabled = new Set(), serverless = false } = {}) {
+function loadBuiltinRegister ({
+  bundled = false,
+  disabled = new Set(),
+  serverless = false,
+  loaded = ['http', 'https', 'dns', 'dns/promises', 'fs'],
+  moduleLoadListMissing = false,
+} = {}) {
+  const moduleLoadList = loaded.map(name => `NativeModule ${name}`)
+  Object.defineProperty(process, 'moduleLoadList', {
+    value: moduleLoadListMissing ? undefined : moduleLoadList,
+    configurable: true,
+  })
   const requireBuiltin = sinon.stub(Module.prototype, 'require').returns({})
   const sync = sinon.stub(Module, 'syncBuiltinESMExports')
   const log = { error: sinon.stub() }
@@ -449,7 +509,7 @@ function loadBuiltinRegister ({ bundled = false, disabled = new Set(), serverles
     assert.ok(Object.hasOwn(stubs, name), `Unexpected startup dependency: ${name}`)
     return stubs[name]
   }, mod, __filename, __dirname)
-  return { requireBuiltin, sync, log }
+  return { requireBuiltin, sync, log, moduleLoadList }
 }
 
 /**
