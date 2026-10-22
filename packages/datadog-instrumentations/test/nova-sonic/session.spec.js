@@ -277,6 +277,44 @@ describe('Nova Sonic protocol', () => {
       })
     }
 
+    for (const text of [2, 8]) {
+      it(`validates the combined ${direction} audio/text delta (${text} text tokens)`, () => {
+        const [{ turn }] = replay([namedUsage({
+          input: 10,
+          output: 10,
+          inputText: 2,
+          outputText: 2,
+          inputAudio: 8,
+          outputAudio: 8,
+          [`${direction}Text`]: text,
+        }, 0)])
+        assert.equal(turn.metrics[`${direction}_text_tokens`], text === 2 ? 2 : undefined)
+        assert.equal(turn.metrics.input_audio_tokens, 8)
+        assert.equal(turn.metrics.output_audio_tokens, 8)
+        assert.equal(turn.metrics[`${direction === 'input' ? 'output' : 'input'}_text_tokens`], 2)
+        assert.equal(turn.metrics.total_tokens, 20)
+      })
+    }
+
+    it(`omits conflicting ${direction} text for the turn and recovers subsequent deltas`, () => {
+      const usage = (total, audio, text, at) => namedUsage({
+        input: 0,
+        output: 0,
+        [direction]: total,
+        [`${direction}Audio`]: audio,
+        [`${direction}Text`]: text,
+      }, at)
+      const first = speech()
+      first.splice(10, 0,
+        usage(100, 10, 10, 2701), usage(110, 18, 18, 2702), usage(120, 26, 20, 2703))
+      const next = speech({ id: '2', offset: 1000, at: 4000 })
+      next.splice(10, 0, usage(130, 34, 22, 6701))
+      const turns = replay([...first, ...next])
+      assert.deepEqual(turns.map(({ turn }) => turn.metrics[`${direction}_text_tokens`]), [undefined, 2])
+      assert.deepEqual(turns.map(({ turn }) => turn.metrics[`${direction}_audio_tokens`]), [26, 8])
+      assert.deepEqual(turns.map(({ turn }) => turn.metrics[`${direction}_tokens`]), [120, 10])
+    })
+
     it(`rejects ${direction} text deltas larger than the aggregate delta`, () => {
       const records = speech()
       records.splice(10, 0,

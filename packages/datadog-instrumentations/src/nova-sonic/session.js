@@ -394,6 +394,7 @@ class SonicSession {
 
       // Each modality is a subset of the aggregate and has its own cumulative baseline.
       // Missing text must not discard valid speech or charge a previous turn's gap.
+      let remaining = delta
       for (const [modality, field] of [['audio', 'speechTokens'], ['text', 'textTokens']]) {
         const modalityKey = `${direction}_${modality}_tokens`
         const modalityTotal = data.details?.total?.[direction]?.[field]
@@ -402,13 +403,16 @@ class SonicSession {
           (previous === undefined || modalityTotal >= previous)
         const modalityDelta = valid && previous !== undefined ? modalityTotal - previous : undefined
         this.#modalityTotals[modalityKey] = valid ? modalityTotal : delta ? undefined : previous
-        if (modalityDelta === undefined || modalityDelta > delta) {
-          if (delta || modalityDelta > delta) {
+        if (modalityDelta === undefined || modalityDelta > remaining) {
+          if (delta || modalityDelta > remaining) {
             target.missingModalityMetrics.add(modalityKey)
             delete target.metrics[modalityKey]
           }
-        } else if (!target.missingModalityMetrics.has(modalityKey)) {
-          target.metrics[modalityKey] = (target.metrics[modalityKey] ?? 0) + modalityDelta
+        } else {
+          remaining -= modalityDelta
+          if (!target.missingModalityMetrics.has(modalityKey)) {
+            target.metrics[modalityKey] = (target.metrics[modalityKey] ?? 0) + modalityDelta
+          }
         }
       }
     }
