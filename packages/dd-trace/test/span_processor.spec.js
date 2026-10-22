@@ -381,13 +381,25 @@ describe('SpanProcessor', () => {
   it('should not add the native export marker when traces are exported over OTLP', () => {
     config.flushMinSpans = 1
     config.OTEL_TRACES_EXPORTER = 'otlp'
-    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, true)
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
     processor.process(finishedSpan)
 
     const [chunk] = exporter.export.firstCall.args
     assert.ok(!Object.hasOwn(chunk[0].meta, SDK_OTLP_EXPORT_KEY))
+  })
+
+  it('should add the native export marker when a native transport overrides OTLP', () => {
+    config.flushMinSpans = 1
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, false)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    const [chunk] = exporter.export.firstCall.args
+    assert.strictEqual(chunk[0].meta[SDK_OTLP_EXPORT_KEY], 'false')
   })
 
   it('should add live tracestate to spans exported through OTLP', () => {
