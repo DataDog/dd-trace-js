@@ -39,7 +39,6 @@ describe('plugins/util/web', () => {
       statusCode: 200,
       end,
       getHeader: sinon.stub(),
-      getHeaders: sinon.stub().returns({}),
       setHeader: sinon.spy(),
       writeHead: () => {},
     }
@@ -825,7 +824,7 @@ describe('plugins/util/web', () => {
       req.method = 'GET'
       req.headers.origin = 'https://example.com'
       req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
-      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+      res.getHeader.withArgs(ALLOW_ORIGIN).returns('*')
 
       const wrapped = web.wrapWriteHead(context)
       wrapped.call(res, 200)
@@ -837,7 +836,7 @@ describe('plugins/util/web', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://evil.example.com'
       req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
-      res.getHeaders.returns({ [ALLOW_ORIGIN]: 'https://good.example.com' })
+      res.getHeader.withArgs(ALLOW_ORIGIN).returns('https://good.example.com')
 
       const wrapped = web.wrapWriteHead(context)
       wrapped.call(res, 200)
@@ -850,7 +849,7 @@ describe('plugins/util/web', () => {
       req.headers.origin = 'https://example.com'
       req.headers['access-control-request-headers'] =
         'x-datadog-trace-id, x-datadog-parent-id, x-other'
-      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+      res.getHeader.withArgs(ALLOW_ORIGIN).returns('*')
 
       const wrapped = web.wrapWriteHead(context)
       wrapped.call(res, 200)
@@ -866,7 +865,7 @@ describe('plugins/util/web', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
       req.headers['access-control-request-headers'] = 'baggage, traceparent, tracestate, x-other'
-      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+      res.getHeader.withArgs(ALLOW_ORIGIN).returns('*')
 
       const wrapped = web.wrapWriteHead(context)
       wrapped.call(res, 200)
@@ -882,7 +881,6 @@ describe('plugins/util/web', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
       req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
-      res.getHeaders.returns({})
 
       const wrapped = web.wrapWriteHead(context)
       wrapped.call(res, 200, { [ALLOW_ORIGIN]: 'https://example.com' })
@@ -898,7 +896,6 @@ describe('plugins/util/web', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
       req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
-      res.getHeaders.returns({})
 
       const wrapped = web.wrapWriteHead(context)
       wrapped.call(res, 200, 'OK', { [ALLOW_ORIGIN]: '*' })
@@ -914,7 +911,7 @@ describe('plugins/util/web', () => {
       req.method = 'options'
       req.headers.origin = 'https://example.com'
       req.headers['access-control-request-headers'] = 'x-datadog-trace-id'
-      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+      res.getHeader.withArgs(ALLOW_ORIGIN).returns('*')
 
       const wrapped = web.wrapWriteHead(context)
       wrapped.call(res, 200)
@@ -930,10 +927,8 @@ describe('plugins/util/web', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
       req.headers['access-control-request-headers'] = 'x-datadog-trace-id, x-datadog-trace-id'
-      res.getHeaders.returns({
-        [ALLOW_ORIGIN]: '*',
-        [ALLOW_HEADERS]: 'content-type, x-datadog-trace-id',
-      })
+      res.getHeader.withArgs(ALLOW_ORIGIN).returns('*')
+      res.getHeader.withArgs(ALLOW_HEADERS).returns('content-type, x-datadog-trace-id')
 
       const wrapped = web.wrapWriteHead(context)
       wrapped.call(res, 200)
@@ -949,7 +944,7 @@ describe('plugins/util/web', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
       req.headers['access-control-request-headers'] = 'content-type, x-other'
-      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+      res.getHeader.withArgs(ALLOW_ORIGIN).returns('*')
 
       const wrapped = web.wrapWriteHead(context)
       wrapped.call(res, 200)
@@ -960,7 +955,7 @@ describe('plugins/util/web', () => {
     it('delegates to the original writeHead with the same arguments', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
-      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+      res.getHeader.withArgs(ALLOW_ORIGIN).returns('*')
       res.writeHead = sinon.spy()
 
       const wrapped = web.wrapWriteHead(context)
@@ -977,7 +972,7 @@ describe('plugins/util/web', () => {
       req.method = 'OPTIONS'
       req.headers.origin = 'https://example.com'
       req.headers['access-control-request-headers'] = '  x-datadog-parent-id  ,x-datadog-trace-id  '
-      res.getHeaders.returns({ [ALLOW_ORIGIN]: '*' })
+      res.getHeader.withArgs(ALLOW_ORIGIN).returns('*')
 
       const wrapped = web.wrapWriteHead(context)
       wrapped.call(res, 200)

@@ -321,20 +321,11 @@ const web = {
     const writeHead = res.writeHead
 
     return function (statusCode, statusMessage, headers) {
-      // CORS preflight tagging only matters for OPTIONS requests. Skip the
-      // getHeaders() spread + isOriginAllowed work entirely for the common
-      // GET / POST / etc. case. Node's http module passes `req.method`
-      // through unchanged, so all standard methods are uppercase; the
-      // `toLowerCase` fallback covers any non-standard caller.
       if (req.method === 'OPTIONS' || req.method.toLowerCase() === 'options') {
-        headers = typeof statusMessage === 'string' ? headers : statusMessage
-        headers = { ...res.getHeaders(), ...headers }
-
-        if (isOriginAllowed(req, headers)) {
-          addAllowHeaders(req, res, headers)
-        }
+        const headerIndex = typeof statusMessage === 'string' || headers != null ? 2 : 1
+        const updatedHeaders = addAllowHeaders(req, res, arguments[headerIndex])
+        if (updatedHeaders) arguments[headerIndex] = updatedHeaders
       }
-
       return writeHead.apply(this, arguments)
     }
   },
@@ -362,8 +353,28 @@ function normalizeHeadersCarrier (headers) {
   return carrier
 }
 
+/**
+ * @param {import('node:http').IncomingMessage} req
+ * @param {import('node:http').ServerResponse | import('node:http2').Http2ServerResponse} res
+ * @param {ResponseHeaders} headers
+ */
 function addAllowHeaders (req, res, headers) {
-  const allowHeaders = splitHeader(headers['access-control-allow-headers'])
+  if (!req.headers.origin || !req.headers['access-control-request-headers'] ||
+      res.headersSent || res.stream?.destroyed || res.stream?.closed) return
+
+  const originKey = findHeader(headers, 'access-control-allow-origin')
+  const allowOrigin = originKey === undefined
+    ? res.getHeader('access-control-allow-origin')
+    : getHeaderValue(headers, originKey)
+  if (allowOrigin !== '*' && allowOrigin !== req.headers.origin) return
+
+  const allowKey = findHeader(headers, 'access-control-allow-headers')
+  const existing = allowKey === undefined
+    ? res.getHeader('access-control-allow-headers')
+    : getHeaderValue(headers, allowKey)
+  if (allowKey !== undefined && existing == null) return
+
+  const allowHeaders = splitHeader(existing)
   const requestHeaders = splitHeader(req.headers['access-control-request-headers'])
   const contextHeaders = [
     'baggage',
@@ -384,19 +395,70 @@ function addAllowHeaders (req, res, headers) {
   }
 
   if (allowHeaders.length > 0) {
-    res.setHeader('access-control-allow-headers', uniq(allowHeaders).join(','))
+    const value = uniq(allowHeaders).join(',')
+    if (Array.isArray(headers)) return setAllowHeaders(headers, allowKey, value)
+    res.setHeader('access-control-allow-headers', value)
+    if (allowKey !== undefined) return setAllowHeaders(headers, allowKey, value)
   }
 }
 
-function isOriginAllowed (req, headers) {
-  const origin = req.headers.origin
-  const allowOrigin = headers['access-control-allow-origin']
+/** @typedef {import('node:http').OutgoingHttpHeader} HeaderValue */
+/** @typedef {import('node:http').OutgoingHttpHeaders | Array<HeaderValue | [string, HeaderValue]>} ResponseHeaders */
 
-  return origin && (allowOrigin === '*' || allowOrigin === origin)
+/**
+ * @param {ResponseHeaders} headers
+ * @param {string} name
+ */
+function findHeader (headers, name) {
+  if (!headers) return
+  if (Array.isArray(headers)) {
+    const tuples = Array.isArray(headers[0])
+    for (let i = headers.length - (tuples ? 1 : 2); i >= 0; i -= tuples ? 1 : 2) {
+      const key = tuples ? headers[i][0] : headers[i]
+      if (typeof key === 'string' && key.toLowerCase() === name) return tuples ? i : i + 1
+    }
+  } else {
+    const keys = Object.keys(headers)
+    for (let i = keys.length - 1; i >= 0; i--) {
+      if (keys[i].toLowerCase() === name) return keys[i]
+    }
+  }
+}
+
+/**
+ * @param {ResponseHeaders} headers
+ * @param {string | number} key
+ */
+function getHeaderValue (headers, key) {
+  return Array.isArray(headers) && Array.isArray(headers[0]) ? headers[key][1] : headers[key]
+}
+
+/**
+ * @param {ResponseHeaders} headers
+ * @param {string | number | undefined} key
+ * @param {string} value
+ */
+function setAllowHeaders (headers, key, value) {
+  if (Array.isArray(headers)) {
+    const result = []
+    const tuples = Array.isArray(headers[0])
+    // Native writeHead ignores custom array iterators.
+    for (let i = 0; i < headers.length; i++) result.push(headers[i])
+    if (key !== undefined) {
+      result[key] = tuples ? [headers[key][0], value] : value
+    } else if (tuples) {
+      result.push(['access-control-allow-headers', value])
+    } else {
+      result.push('access-control-allow-headers', value)
+    }
+    return result
+  }
+  return { ...headers, [key]: value }
 }
 
 function splitHeader (str) {
-  return typeof str === 'string' ? str.split(',').map((header) => header.trim()) : []
+  if (Array.isArray(str)) str = str.join(',')
+  return str === undefined ? [] : String(str).split(',').map((header) => header.trim())
 }
 
 function addRequestTags (context, spanType) {
