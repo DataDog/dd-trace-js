@@ -21,6 +21,7 @@ module.exports = {
   '@apollo/gateway': () => require('../apollo'),
   '@modelcontextprotocol/sdk': { esmFirst: true, fn: () => require('../modelcontextprotocol-sdk') },
   '@openai/agents': () => require('../openai-agents'),
+  '@openai/agents-realtime': { esmFirst: true, fn: () => require('../openai-agents-realtime') },
   '@openai/agents-openai': () => require('../openai-agents'),
   'apollo-server-core': () => require('../apollo-server-core'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),

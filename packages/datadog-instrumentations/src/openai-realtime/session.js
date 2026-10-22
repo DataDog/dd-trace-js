@@ -10,6 +10,7 @@ const {
 const log = require('../../../dd-trace/src/log')
 const { extractResponseTools, normalizeResponseEventType } = require('./events')
 const { InputTurn, ResponseTurn } = require('./turns')
+const ServerPlayback = require('./server-playback')
 
 // Realtime PCM is 24 kHz mono by spec; overridden from the session's format object when present.
 const DEFAULT_AUDIO_RATE = 24_000
@@ -212,6 +213,10 @@ class RealtimeSession {
    */
   #clientTruncates = false
 
+  #playback
+
+  #vadSilenceMs = 0
+
   #closed = false
 
   /**
@@ -221,14 +226,35 @@ class RealtimeSession {
    * @param {string} [options.model]
    * @param {string} [options.basePath]
    * @param {() => boolean} [options.shouldRetainAudio]
+   * @param {string} [options.sessionId]
+   * @param {boolean} [options.serverPlayback]
+   * @param {(itemId: string, eventId: string) => void} [options.requestItem]
    */
-  constructor ({ emitTurn, captureContext, model, basePath = '', shouldRetainAudio = () => true }) {
+  constructor ({
+    emitTurn, captureContext, model, basePath = '', shouldRetainAudio = () => true,
+    sessionId, serverPlayback = false, requestItem,
+  }) {
     this.#emitTurn = emitTurn
     this.#captureContext = captureContext
     this.#model = model
     this.#basePath = basePath
     this.#shouldRetainAudio = shouldRetainAudio
     this.#pendingInput = new InputTurn(shouldRetainAudio)
+    if (sessionId) this.#sessionId = sessionId
+    if (serverPlayback) {
+      this.#playback = new ServerPlayback({
+        shouldRetainAudio,
+        requestItem,
+        onReady: (turn, now) => {
+          for (const [id, candidate] of this.#responses) {
+            if (candidate === turn) this.#responses.delete(id)
+          }
+          const index = this.#awaiting.indexOf(turn)
+          if (index !== -1) this.#awaiting.splice(index, 1)
+          this.#finalizeTurn(turn, now, true)
+        },
+      })
+    }
   }
 
   // -- event entry points ---------------------------------------------------
@@ -240,6 +266,7 @@ class RealtimeSession {
   onClientEvent (event, now) {
     try {
       this.#flushPlaying(now)
+      this.#playback?.onClientEvent(event)
 
       switch (event?.type) {
         // First: a server-VAD client appends microphone audio many times a second.
@@ -276,6 +303,7 @@ class RealtimeSession {
 
       const eventType = event?.type
       if (typeof eventType !== 'string') return
+      this.#playback?.onServerEvent(event, now)
 
       switch (eventType) {
         case 'session.created':
@@ -291,14 +319,14 @@ class RealtimeSession {
           this.#onSpeechStarted(event.audio_start_ms, now)
           return
         case 'input_audio_buffer.speech_stopped':
-          // The commit that follows is the authoritative end of user speech and overwrites this;
-          // recording it here only covers a session that never commits, so the window still gets an
-          // end.
-          this.#pendingInput.speechEndTime ??= now
+          this.#onSpeechStopped(event.audio_end_ms, now)
           return
         case 'input_audio_buffer.committed':
           this.#pendingInput.itemId = event.item_id == null ? undefined : String(event.item_id)
-          this.#pendingInput.speechEndTime = now
+          if (!this.#playback || this.#pendingInput.speechEndTime === undefined) {
+            this.#pendingInput.speechEndTime = now
+          }
+          this.#playback?.rememberInput(this.#pendingInput)
           return
         case 'input_audio_buffer.cleared':
           this.#pendingInput.discardAudio()
@@ -352,6 +380,7 @@ class RealtimeSession {
       }
 
       this.#responses.clear()
+      this.#playback?.finishSession(now)
       this.#inputTranscripts.clear()
       this.#toolCallNames.clear()
       // Audio buffered for a turn that will now never start. An app that holds on to closed
@@ -472,6 +501,10 @@ class RealtimeSession {
 
     const onset = this.#bufferOffsetToWallTime(audioStartMs, now)
     pending.speechStartTime = onset
+    const startOffset = toFiniteNumber(audioStartMs)
+    if (this.#playback && startOffset !== undefined && startOffset >= 0) {
+      pending.speechStartOffsetMs = startOffset
+    }
 
     pending.audio.trimLeading(this.#preOnsetBytes(audioStartMs))
     // Re-anchor the segment on the onset: whatever survived the trim starts there. A trim that
@@ -480,6 +513,35 @@ class RealtimeSession {
     // segment, so every later frame would skip it and the segment would fall back to whatever
     // format the session holds at describe time.
     if (pending.audio.startTime !== undefined) pending.audio.startTime = onset
+  }
+
+  /**
+   * End a VAD window. A sideband observes no input frames, so its start event's
+   * arrival cannot anchor the stored clip: that clip includes pre-detection audio.
+   * Project the protocol's start/end offsets back from the stop observation instead.
+   *
+   * @param {unknown} audioEndMs
+   * @param {number} now
+   */
+  #onSpeechStopped (audioEndMs, now) {
+    const pending = this.#pendingInput
+    if (pending.speechEndTime !== undefined) return
+
+    if (this.#playback) {
+      const endMs = toFiniteNumber(audioEndMs)
+      const startMs = pending.speechStartOffsetMs
+      if (startMs !== undefined && endMs !== undefined && endMs >= startMs &&
+          pending.speechStartTime !== undefined) {
+        // AIDEV-NOTE: both offsets include VAD padding. Removing silence from the
+        // duration as well would shift the caller forward and erase barge-in overlap.
+        pending.speechStartTime = Math.min(pending.speechStartTime, Math.max(0, now - (endMs - startMs)))
+      }
+      pending.speechEndTime = Math.max(pending.speechStartTime ?? 0, now - this.#vadSilenceMs)
+    } else {
+      // Existing WebSocket clients anchor the start from their observed input frames;
+      // the subsequent commit remains their authoritative speech end.
+      pending.speechEndTime = now
+    }
   }
 
   /**
@@ -663,10 +725,10 @@ class RealtimeSession {
     // Classify before flushing: an out-of-band response runs *alongside* the conversation, so it is
     // not evidence that a pending turn's transcript has stopped coming.
 
-    if (!outOfBand) {
-      // A new conversational turn starting means a prior turn's input transcription is almost
-      // certainly not coming anymore, and that any held playback is over (or was cut off without a
-      // truncation reaching us), so flush both rather than let a turn hang.
+    // A new conversational turn starting means a prior turn's input transcription is almost
+    // certainly not coming anymore, and that any held playback is over (or was cut off without a
+    // truncation reaching us), so flush both rather than let a turn hang.
+    if (!outOfBand && !this.#playback) {
       this.#flushAwaiting(now)
       this.#flushPlaying(now, true)
     }
@@ -678,6 +740,7 @@ class RealtimeSession {
 
     this.#captureContext(turn)
     this.#responses.set(String(responseId), turn)
+    this.#playback?.start(String(responseId), turn)
   }
 
   /**
@@ -713,6 +776,7 @@ class RealtimeSession {
     }
 
     this.#applyCachedTranscript(turn)
+    this.#playback?.responseDone(key, response)
 
     // Hold the turn open for a late input transcription ONLY when transcription is actually enabled
     // and this item has not already reached a terminal state: otherwise no transcript is ever
@@ -725,6 +789,7 @@ class RealtimeSession {
         this.#inputTranscriptionEnabled &&
         !this.#inputTranscripts.has(turn.input.itemId)) {
       this.#awaiting.push(turn)
+      this.#playback?.hold(turn, now, { transcriptPending: true })
       return
     }
 
@@ -796,7 +861,8 @@ class RealtimeSession {
     // The turn's data is complete, but on a barge-in-capable client the agent's audio may still be
     // playing and a truncation may yet cut it short — hold the turn rather than submit audio the
     // listener might never hear.
-    if (!force && this.#parkForPlayback(turn, now)) return
+    if (this.#playback?.hold(turn, now, { force })) return
+    if (!this.#playback && !force && this.#parkForPlayback(turn, now)) return
 
     // Drop the cached transcript for this turn's input item so the map can't grow across a long
     // session. Every finalize path goes through here.
@@ -822,7 +888,7 @@ class RealtimeSession {
 
     // The VAD speech onset when we have it. The first buffered frame only approximates the onset,
     // for a client that appends audio solely while the user talks (client-side turn detection).
-    const userStart = input.speechStartTime ?? input.audio.startTime
+    const userStart = this.#playback ? input.speechStartTime : input.speechStartTime ?? input.audio.startTime
     const inputFormat = segmentFormat(input.audio, this.#inputAudioMime, this.#inputAudioRate)
     const outputFormat = segmentFormat(turn.audio, this.#outputAudioMime, this.#outputAudioRate)
     const inputDurationMs = segmentDurationMs(
@@ -831,13 +897,15 @@ class RealtimeSession {
     const userEnd = input.speechEndTime ??
       (userStart === undefined || inputDurationMs === undefined ? undefined : userStart + inputDurationMs)
 
-    const agentStart = turn.audio.startTime
+    const agentStart = this.#playback ? turn.serverSpeech?.startTime : turn.audio.startTime
     const playbackMs = segmentDurationMs(
       turn.audio.totalDecodedBytes, outputFormat.mimeType, outputFormat.sampleRate
     )
-    const agentEnd = agentStart === undefined
-      ? undefined
-      : (playbackMs === undefined ? (turn.responseDoneTime ?? now) : agentStart + playbackMs)
+    const agentEnd = this.#playback
+      ? turn.serverSpeech?.finishTime
+      : agentStart === undefined
+        ? undefined
+        : (playbackMs === undefined ? (turn.responseDoneTime ?? now) : agentStart + playbackMs)
 
     // The llm span measures model work: it opens at the end of user speech, not when the human
     // started talking, and closes when generation completes.
@@ -944,6 +1012,16 @@ class RealtimeSession {
       if (rate) this.#outputAudioRate = rate
     }
     if (voice != null) this.#sessionConfig.voice = String(voice)
+    const turnDetection = audio?.input?.turn_detection ?? session.turn_detection
+    if (turnDetection !== undefined) {
+      this.#vadSilenceMs = turnDetection?.type === 'server_vad'
+        ? (toFiniteNumber(turnDetection.silence_duration_ms) ?? 0)
+        : 0
+    }
+    this.#playback?.updateFormats(
+      { mimeType: this.#inputAudioMime, sampleRate: this.#inputAudioRate },
+      { mimeType: this.#outputAudioMime, sampleRate: this.#outputAudioRate }
+    )
   }
 
   /**
