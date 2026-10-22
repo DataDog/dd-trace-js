@@ -1,6 +1,5 @@
 'use strict'
 
-const { EventEmitter } = require('node:events')
 const { types: { isProxy } } = require('node:util')
 
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
@@ -34,13 +33,8 @@ function checkTimeout (context) {
   const timeout = setTimeout(() => {
     timeoutChannel.publish()
   }, Math.max(0, remainingTimeInMillis - apmFlushDeadline))
-  try {
-    timeout.unref?.()
-  } catch (error) {
-    clearTimeout(timeout)
-    log.error('Error unreferencing Lambda timeout monitor: %s', error)
-    return
-  }
+  // eslint-disable-next-line eslint-rules/eslint-timer-unref -- AWS Lambda uses Node.js timers.
+  timeout.unref()
   return timeout
 }
 
@@ -75,8 +69,9 @@ function crashFlush () {
  * Monitors an AWS Lambda handler for impending timeouts without creating a span.
  *
  * @param {Function} lambdaHandler a Lambda handler function.
+ * @param {boolean} normalized whether datadog-lambda-js owns completion selection.
  */
-exports.datadog = function datadog (lambdaHandler) {
+exports.datadog = function datadog (lambdaHandler, normalized = false) {
   function monitored (...args) {
     const context = extractContext(args)
     if (!context || monitoredContexts.has(context)) return Reflect.apply(lambdaHandler, this, args)
@@ -100,21 +95,22 @@ exports.datadog = function datadog (lambdaHandler) {
         }
       }
     }
-    const clearOnHandlerCompletion = () => {
-      // Once a native callback selects event-loop drain, later handler signals are ignored by RIC.
-      if (!callbackPending) clear()
-    }
+    const clearOnHandlerCompletion = normalized
+      ? clear
+      : () => {
+          // Once a native callback selects event-loop drain, later handler signals are ignored by RIC.
+          if (!callbackPending) clear()
+        }
 
     const contextIndex = args.indexOf(context)
     const callbackObservable = contextIndex !== 2 && typeof args[2] === 'function'
-    let completionObservable = true
-    for (const name of ['done', 'succeed', 'fail']) {
-      if (!wrapCompletion(context, name, clearOnHandlerCompletion, completionMethods)) completionObservable = false
+    if (!normalized) {
+      for (const name of ['done', 'succeed', 'fail']) {
+        wrapCompletion(context, name, clearOnHandlerCompletion, completionMethods)
+      }
     }
     // Legacy Lambda runtimes complete idle invocations through this callback instead of the handler's callback.
-    if (!wrapCompletion(globalThis, BEFORE_EXIT, clear, completionMethods)) completionObservable = false
-    // Newer runtimes complete from the return value and expose no legacy completion hooks.
-    if (completionMethods.length === 0) completionObservable = false
+    wrapCompletion(globalThis, BEFORE_EXIT, clear, completionMethods)
 
     if (callbackObservable) {
       const callback = args[2]
@@ -162,10 +158,8 @@ exports.datadog = function datadog (lambdaHandler) {
           throw error
         })
       }
-      // An observed callback can complete later regardless of arity or an incidental return value.
-      // Otherwise, retain monitoring only when context/runtime completion is observable and expected.
-      if (!callbackObservable &&
-          (!completionObservable || !isCallbackCompletion(monitored, result, contextIndex))) clear()
+      // Legacy RIC supplies a callback; newer runtimes complete from the return value.
+      if (!callbackObservable) clear()
       return result
     } catch (error) {
       clearOnHandlerCompletion()
@@ -174,6 +168,8 @@ exports.datadog = function datadog (lambdaHandler) {
       monitoredContexts.delete(context)
     }
   }
+
+  if (normalized) return monitored
 
   // datadog-lambda-js uses arity and the runtime's streaming metadata to choose how to invoke the handler.
   Object.defineProperty(monitored, 'length', { value: getDataProperty(lambdaHandler, 'length') ?? 0 })
@@ -229,27 +225,6 @@ function onCompletion (callback, clear) {
     clear()
     return Reflect.apply(callback, this, args)
   }
-}
-
-/**
- * @param {Function} handler
- * @param {unknown} result
- * @param {number} contextIndex
- */
-function isCallbackCompletion (handler, result, contextIndex) {
-  // datadog-lambda-js's unmarked streaming adapter still receives context as its third argument.
-  if (contextIndex === 2 || handler[HANDLER_STREAMING] === 'response') return false
-  if ((handler.length >= 3 && contextIndex !== 2) || result === undefined) return true
-  if (result === null || typeof result !== 'object') return false
-  for (let target = result; target !== null && !isProxy(target); target = Object.getPrototypeOf(target)) {
-    if (target === EventEmitter.prototype) return true
-  }
-  if ((typeof getDataProperty(result, 'listen') === 'function' &&
-      typeof getDataProperty(result, 'close') === 'function') ||
-      (typeof getDataProperty(result, 'on') === 'function' &&
-      typeof getDataProperty(result, 'emit') === 'function')) return true
-  const name = getDataProperty(getDataProperty(result, 'constructor'), 'name')
-  return typeof name === 'string' && /Server|Socket|Emitter/i.test(name)
 }
 
 /**
