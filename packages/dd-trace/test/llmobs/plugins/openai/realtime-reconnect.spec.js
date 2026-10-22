@@ -21,12 +21,14 @@ describe('openai realtime reconnect', () => {
         let restoreSocket
         let realtime
         let socket
+        let sdkErrors
 
         beforeEach(() => {
           const versionModule = require(`../../../../../../versions/openai@${version}`)
           restoreSocket = installFakeSocket(versionModule.getPath('openai'))
           FakeRealtimeSocket.instances.length = 0
-          // Keep setImmediate real: the test agent uses it to drain trace payloads.
+          // Reconnect backoff needs fake timeouts, while the agent drains traces on real setImmediate.
+          // This also fakes the agent's rejection timer: missing traces fall back to Mocha's timeout.
           clock = sinon.useFakeTimers({
             now: 1_000_000,
             shouldClearNativeTimers: true,
@@ -43,11 +45,14 @@ describe('openai realtime reconnect', () => {
             reconnectMaxDelay: 0,
           }, new OpenAI({ apiKey: 'sk-test-realtime' }))
           socket = realtime.socket
+          sdkErrors = []
+          realtime.on('error', error => sdkErrors.push(error))
         })
 
         afterEach(() => {
           try {
             realtime.close()
+            assert.deepStrictEqual(sdkErrors, [])
           } finally {
             clock.restore()
             restoreSocket()
@@ -95,10 +100,16 @@ describe('openai realtime reconnect', () => {
           const first = await getEvents(2)
 
           const previous = socket
+          const reconnected = realtime.emitted('reconnected')
           previous.close(1012, 'service restart')
-          await clock.tickAsync(0)
-          socket = realtime.socket
-          assert.notStrictEqual(socket, previous)
+          await Promise.all([
+            reconnected,
+            clock.tickAsync(0).then(() => {
+              socket = realtime.socket
+              assert.notStrictEqual(socket, previous)
+              socket.open()
+            }),
+          ])
           return first.llmobsSpans[0].session_id
         }
 
@@ -109,7 +120,9 @@ describe('openai realtime reconnect', () => {
               const deferred = pending === 'deferred transcription'
               sessionCreated(deferred)
               if (deferred) {
-                realtime.send({ type: 'input_audio_buffer.append', audio: pcm16(100) })
+                const input = { type: 'input_audio_buffer.append', audio: pcm16(100) }
+                realtime.send(input)
+                assert.deepStrictEqual(socket.clientEvents(), [input])
                 socket.deliver({ type: 'input_audio_buffer.committed', item_id: 'input_1' })
               }
               startResponse('after reconnect')
@@ -144,10 +157,12 @@ describe('openai realtime reconnect', () => {
           assert.notStrictEqual(secondSessionId, firstSessionId)
 
           // Exercise the client-event path before any server event on this replacement.
-          realtime.send({
+          const input = {
             type: 'conversation.item.create',
             item: { role: 'user', content: [{ type: 'input_text', text: 'new session' }] },
-          })
+          }
+          realtime.send(input)
+          assert.deepStrictEqual(socket.clientEvents(), [input])
           startResponse('completed')
           finishResponse('completed')
           const { apmSpans, llmobsSpans } = await getEvents(2)

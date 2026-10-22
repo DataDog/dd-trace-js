@@ -116,6 +116,12 @@ class FakeRealtimeSocket {
 
   // -- what the test drives --
 
+  /** Notify the SDK that the replacement socket's handshake has completed. */
+  open () {
+    this.readyState = 1
+    this.#dispatch('open', [], { type: 'open' })
+  }
+
   /**
    * Hand a server event to the SDK, synchronously, exactly as the real socket would.
    *
