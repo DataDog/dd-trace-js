@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
@@ -621,6 +621,112 @@ describe('Plugin', () => {
             )
           })
         })
+      })
+
+      describe('with OTel semantics enabled', () => {
+        const connectClient = (path = `/${route}?active=true&password=secret`, options) => {
+          client = new WebSocket(`ws://127.0.0.1:${clientPort}${path}`, options)
+          return client
+        }
+
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          await agent.load(['ws'], [{
+            service: 'some',
+            traceWebsocketMessagesEnabled: true,
+            queryStringObfuscation: 'password=[^&]*',
+          }])
+          WebSocket = require(`../../../versions/ws@${version}`).get()
+
+          wsServer = new WebSocket.Server({ port: 0, host: '127.0.0.1' })
+          await once(wsServer, 'listening')
+          clientPort = wsServer.address().port
+        })
+
+        afterEach(() => {
+          if (client) {
+            client.removeAllListeners('error')
+            client.on('error', () => {})
+          }
+        })
+
+        afterEach(async () => {
+          await closeWsServer(wsServer)
+        })
+
+        afterEach(async () => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          await agent.close()
+        })
+
+        it('uses OTel HTTP server attributes for the connection span', () => {
+          wsServer.on('connection', ws => ws.close())
+          connectClient(undefined, { headers: { 'user-agent': 'test-user-agent' } })
+
+          return agent.assertSomeTraces(traces => {
+            const span = findSpan(traces, span => span.name === 'web.request' && span.type === 'websocket')
+            assertObjectContains(span, {
+              resource: 'GET',
+              meta: {
+                'http.request.method': 'GET',
+                'network.peer.address': '127.0.0.1',
+                'url.query': 'active=true&<redacted>',
+                'user_agent.original': 'test-user-agent',
+              },
+            })
+          })
+        })
+
+        for (const separateTraces of [false, true]) {
+          for (const inheritSampling of [false, true]) {
+            it(`preserves message paths with separate=${separateTraces}, inherit=${inheritSampling}`, async () => {
+              agent.reload('ws', {
+                service: 'some',
+                traceWebsocketMessagesEnabled: true,
+                traceWebsocketMessagesSeparateTraces: separateTraces,
+                traceWebsocketMessagesInheritSampling: inheritSampling,
+                queryStringObfuscation: 'password=[^&]*',
+              })
+              const spans = new Map()
+              const trace = agent.assertSomeTraces(traces => {
+                for (const batch of traces) {
+                  for (const span of batch) {
+                    if (span.type === 'websocket') spans.set(span.name, span)
+                  }
+                }
+
+                const connection = spans.get('web.request')
+                assert.ok(connection)
+                assert.strictEqual(connection.resource, 'GET')
+                for (const name of ['websocket.send', 'websocket.receive', 'websocket.close']) {
+                  const span = spans.get(name)
+                  assert.ok(span, `Expected ${name}`)
+                  assert.strictEqual(span.resource, 'websocket /chat')
+                  if (name !== 'websocket.send') {
+                    assert.strictEqual(span.meta['_dd.dm.resource'],
+                      separateTraces && inheritSampling ? 'GET' : undefined)
+                  }
+                }
+              })
+
+              wsServer.once('connection', socket => {
+                socket.on('message', data => socket.send(data))
+              })
+              const socket = connectClient('/chat?active=true&password=secret')
+              const exchange = async () => {
+                await once(socket, 'open')
+                const message = once(socket, 'message')
+                socket.send('hello')
+                const [data] = await message
+                assert.strictEqual(data.toString(), 'hello')
+                const closed = once(socket, 'close')
+                socket.close(1000, 'done')
+                await closed
+              }
+              await Promise.all([trace, exchange()])
+            })
+          }
+        }
       })
 
       describe('with service configuration', () => {
