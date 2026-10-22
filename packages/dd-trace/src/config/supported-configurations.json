@@ -32,6 +32,167 @@
         "description": "Override the automatic log submission intake URL."
       }
     ],
+    "DD_API_KEY_SECRET_ARN": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "lambda.apiKeySecretArn"
+        ],
+        "default": null,
+        "sensitive": true
+      }
+    ],
+    "DD_CAPTURE_LAMBDA_PAYLOAD": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.captureLambdaPayload"
+        ],
+        "default": "false"
+      }
+    ],
+    "DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH": [
+      {
+        "implementation": "B",
+        "type": "int",
+        "configurationNames": [
+          "lambda.captureLambdaPayloadMaxDepth"
+        ],
+        "default": "10",
+        "allowed": "\\d+"
+      }
+    ],
+    "DD_COLD_START_TRACE_SKIP_LIB": [
+      {
+        "implementation": "B",
+        "type": "string",
+        "configurationNames": [
+          "lambda.coldStartTraceSkipLib"
+        ],
+        "default": "./opentracing/tracer"
+      }
+    ],
+    "DD_COLD_START_TRACING": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.coldStartTracing"
+        ],
+        "default": "true"
+      }
+    ],
+    "DD_DECODE_AUTHORIZER_CONTEXT": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.decodeAuthorizerContext"
+        ],
+        "default": "true"
+      }
+    ],
+    "DD_ENCODE_AUTHORIZER_CONTEXT": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.encodeAuthorizerContext"
+        ],
+        "default": "true"
+      }
+    ],
+    "DD_ENHANCED_METRICS": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.enhancedMetrics"
+        ],
+        "default": "true"
+      }
+    ],
+    "DD_FLUSH_TO_LOG": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.logForwarding"
+        ],
+        "default": "false"
+      }
+    ],
+    "DD_KMS_API_KEY": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "lambda.apiKeyKms"
+        ],
+        "default": null,
+        "sensitive": true
+      }
+    ],
+    "DD_LAMBDA_FIPS_MODE": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.fipsMode"
+        ],
+        "default": "false"
+      }
+    ],
+    "DD_MERGE_XRAY_TRACES": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.mergeXrayTraces"
+        ],
+        "default": "false"
+      }
+    ],
+    "DD_MIN_COLD_START_DURATION": [
+      {
+        "implementation": "B",
+        "type": "int",
+        "configurationNames": [
+          "lambda.minColdStartTraceDurationMs"
+        ],
+        "default": "3",
+        "allowed": "\\d+"
+      }
+    ],
+    "DD_TRACE_AWS_LAMBDA_ENABLED": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.serviceRepresentationEnabled"
+        ],
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_MANAGED_SERVICES": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.createInferredSpan"
+        ],
+        "default": "true"
+      }
+    ],
     "_DD_APM_TRACING_AGENTLESS_ENABLED": [
       {
         "implementation": "A",
@@ -3382,6 +3543,13 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true"
+      }
+    ],
+    "DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "default": "false"
       }
     ],
     "DD_TRACE_LANGCHAIN_ANTHROPIC_ENABLED": [

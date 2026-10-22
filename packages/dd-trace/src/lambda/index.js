@@ -15,8 +15,9 @@ const {
   extractModuleRootAndHandler,
   getLambdaFilePaths,
 } = require('./handler-paths')
+const { listDisablesLambda } = require('./integration-names')
 
-if (!getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',').includes('lambda')) {
+if (!listDisablesLambda(getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS'))) {
   const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
   const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 
@@ -41,7 +42,6 @@ if (!getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',').in
 
       return moduleExports
     })
-    return
   }
 
   const moduleToPatch = 'datadog-lambda-js'
@@ -62,4 +62,19 @@ if (!getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',').in
 
     return moduleExports
   })
+
+  // The published datadog-lambda-js ESM entrypoint imports this helper before initializing the tracer.
+  // Revisit cached copies through the registered hook without loading datadog-lambda-js early.
+  const helperSuffixes = [
+    path.join('datadog-lambda-js', 'dist', 'utils', 'handler.js'),
+    path.join('datadog-lambda-js', 'utils', 'handler.js'),
+  ]
+  for (const filename of Object.keys(require.cache)) {
+    if (!helperSuffixes.some(suffix => filename.endsWith(path.sep + suffix))) continue
+    try {
+      require(filename)
+    } catch (error) {
+      log.error('Error executing cached lambda hook for datadog-lambda-js: %s', error)
+    }
+  }
 }
