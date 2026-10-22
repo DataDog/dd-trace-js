@@ -56,7 +56,7 @@ compiler.run((err, stats) => {
     if (stderr.length) {
       console.error(stderr)
     }
-    if (status) {
+    if (status !== 0) {
       throw new Error(`Generated script exited with unexpected exit code: ${status}`)
     }
     console.log('ok')
