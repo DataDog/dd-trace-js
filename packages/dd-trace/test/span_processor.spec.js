@@ -558,6 +558,7 @@ describe('SpanProcessor', () => {
       const formattedSpan = formattedHttpSpan()
       formattedSpan.resource = 'PROPFIND /u'
       formattedSpan.meta['http.method'] = 'PROPFIND'
+      formattedSpan.meta['_dd.otel.instrumentation_http_resource'] = 'PROPFIND /u'
       spanFormat.returns(formattedSpan)
       const otelConfig = {
         flushMinSpans: 3,
@@ -581,7 +582,7 @@ describe('SpanProcessor', () => {
 
       processor.process(finishedSpan)
 
-      assert.deepStrictEqual(statsView, { resource: 'HTTP /u', method: '_OTHER', statusCode: 200, endpoint: '/u' })
+      assert.deepStrictEqual(statsView, { resource: 'HTTP', method: '_OTHER', statusCode: 200, endpoint: '/u' })
     })
   })
 })
