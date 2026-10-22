@@ -20,39 +20,50 @@ const disabledInstrumentations = getDisabledInstrumentations()
 
 // Built-ins cached by a bundle before register.js installed ritm must pass through
 // Node's real require again. Hooks mutate the shared exports object in place;
-// synchronizing afterwards also updates already-created native ESM named exports.
+// synchronizing afterwards also updates already-created native ESM named exports
+// (of every built-in, not only the hooked ones).
 const bundlerKey = Symbol.for('dd-trace:bundler')
 /** @type {import('./bundler-banner').BundlerRecord | undefined} */
 const existingRecord = globalThis[bundlerKey]
 /** @type {import('./bundler-banner').BundlerRecord} */
 const bundlerRecord = globalThis[bundlerKey] ??= { bundlers: [] }
-let builtinsPatched = false
-bundlerRecord.onBundle = patchBundledBuiltins
+const hookedBuiltins = Object.keys(hooks).filter(name =>
+  isNodeBuiltinModuleName(name) &&
+  !disabledInstrumentations.has(name) &&
+  !(IS_SERVERLESS && hooks[name].serverless === false)
+)
+/** @type {Set<string>} */
+const patchedBuiltins = new Set()
+bundlerRecord.onBundle = patchLoadedBuiltins
 
-// A plugin banner marks the process as bundled even when dd-trace is external or preloaded. Without one,
+// The runtime creates the record as well, so only a recorded bundle proves a banner ran before it. Without one,
 // a bundled tracer is still recognizable because its module wrapper is not a Module instance.
-if (existingRecord || !(module instanceof Module)) {
-  patchBundledBuiltins()
+if (existingRecord?.bundlers.length || !(module instanceof Module)) {
+  patchLoadedBuiltins()
 }
 
-function patchBundledBuiltins () {
-  if (builtinsPatched) return
-  // Mark before requiring to prevent re-entrant hooks and repeated failed loads.
-  builtinsPatched = true
+function patchLoadedBuiltins () {
+  // A built-in nobody has loaded cannot be cached by a bundle yet, and a later CommonJS require reaches ritm.
+  // Skipping it keeps startup from loading built-ins the application never uses. moduleLoadList is undocumented,
+  // so every hooked built-in is loaded if it ever disappears.
+  // @ts-expect-error - process.moduleLoadList is not typed
+  const { moduleLoadList } = process
+  const loadedBuiltins = Array.isArray(moduleLoadList) ? moduleLoadList : undefined
 
-  let loaded = false
-  for (const name of Object.keys(hooks)) {
-    if (!isNodeBuiltinModuleName(name) || disabledInstrumentations.has(name)) continue
-    if (IS_SERVERLESS && hooks[name].serverless === false) continue
+  let patched = false
+  for (const name of hookedBuiltins) {
+    if (patchedBuiltins.has(name) || loadedBuiltins?.includes(`NativeModule ${name}`) === false) continue
+    // Mark before requiring to prevent re-entrant hooks and repeated failed loads.
+    patchedBuiltins.add(name)
 
     try {
       Module.prototype.require.call(module, name)
-      loaded = true
+      patched = true
     } catch (error) {
       log.error('Error instrumenting bundled built-in %s: %s', name, String(error?.message ?? error), error)
     }
   }
-  if (!loaded) return
+  if (!patched) return
   try {
     Module.syncBuiltinESMExports()
   } catch (error) {

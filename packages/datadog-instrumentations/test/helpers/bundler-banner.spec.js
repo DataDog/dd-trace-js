@@ -6,6 +6,14 @@ const vm = require('node:vm')
 const createBundlerBanner = require('../../src/helpers/bundler-banner')
 
 describe('bundler banner', () => {
+  it('keeps the startup code that bundles and runtimes of other versions rely on', () => {
+    assert.equal(
+      createBundlerBanner('webpack'),
+      '((r,b)=>{r.bundlers.push(b);r.onBundle?.(b)})(globalThis[Symbol.for("dd-trace:bundler")]??={bundlers:[]},' +
+        '"webpack");'
+    )
+  })
+
   it('shares the record between bundlers without requiring dd-trace', () => {
     const context = vm.createContext({})
     vm.runInContext(createBundlerBanner('webpack'), context)
