@@ -13,6 +13,7 @@ const REMOTELY_CONFIGURABLE_SETTINGS = /** @type {const} */ ([
   'DD_PROFILING_UPLOAD_PERIOD',
 ])
 
+// Keep every mapped profile type here; enablement is derived from this list.
 const PROFILE_TYPES = /** @type {const} */ (['cpuTime', 'wallTime', 'memory'])
 
 /**
@@ -271,9 +272,9 @@ function toSettings ({ profilers, settings }) {
   }
 
   // Any true enables profiling; all false disables it; otherwise use the local setting.
-  if (cpuTime || wallTime || memory) {
+  if (PROFILE_TYPES.some(type => profilers[type] === true)) {
     envs.DD_PROFILING_ENABLED = 'true'
-  } else if (cpuTime === false && wallTime === false && memory === false) {
+  } else if (PROFILE_TYPES.every(type => profilers[type] === false)) {
     envs.DD_PROFILING_ENABLED = 'false'
   }
 
