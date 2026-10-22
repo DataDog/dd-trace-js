@@ -141,4 +141,63 @@ describe('Hook', () => {
     assert.strictEqual(hook(namespace, 'test-package', '/test-package'), namespace)
     sinon.assert.notCalled(ownKeys)
   })
+
+  it('dispatches a CommonJS namespace through its default with CommonJS hook semantics', () => {
+    const original = sinon.stub()
+    const wrapped = sinon.stub()
+    const cjsExports = { operation: original, default: 'a CommonJS property' }
+    const namespace = { default: cjsExports, operation: original, missing: undefined }
+    const onrequire = sinon.stub().callsFake(() => {
+      cjsExports.operation = wrapped
+      cjsExports.missing = wrapped
+      return cjsExports
+    })
+    Hook(['test-package'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(hook(namespace, 'test-package', '/test-package', 'commonjs'), namespace)
+    assert.strictEqual(namespace.operation, wrapped)
+    assert.strictEqual(namespace.missing, wrapped)
+    assert.strictEqual(namespace.default, cjsExports)
+    sinon.assert.calledOnceWithExactly(onrequire, cjsExports, 'test-package', '/test-package', '1.0.0', false)
+  })
+
+  it('rebinds replacement CommonJS defaults and module.exports aliases', () => {
+    const original = sinon.stub()
+    const replacement = sinon.stub()
+    const namespace = { default: original, 'module.exports': original }
+    const onrequire = sinon.stub().returns(replacement)
+    Hook(['test-package'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(hook(namespace, 'test-package', '/test-package', 'commonjs'), namespace)
+    assert.strictEqual(namespace.default, replacement)
+    assert.strictEqual(namespace['module.exports'], replacement)
+    sinon.assert.calledOnce(onrequire)
+  })
+
+  it('does not read a CommonJS getter missing from the ESM namespace', () => {
+    const getter = sinon.stub().throws(new Error('must not read'))
+    const cjsExports = {}
+    Object.defineProperty(cjsExports, 'omitted', { get: getter, enumerable: true })
+    const namespace = { default: cjsExports }
+    const onrequire = sinon.stub().returns(cjsExports)
+    Hook(['test-package'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(hook(namespace, 'test-package', '/test-package', 'commonjs'), namespace)
+    sinon.assert.notCalled(getter)
+  })
+
+  it('preserves primitive CommonJS exports', () => {
+    for (const exported of [undefined, null, false, 0, '', NaN, 42]) {
+      const namespace = { default: exported }
+      const onrequire = sinon.stub().returns(exported)
+      Hook(['test-package'], onrequire)
+      const hook = iitm.lastCall.args[2]
+      assert.strictEqual(hook(namespace, 'test-package', '/test-package', 'commonjs'), namespace)
+      assert.strictEqual(namespace.default, exported)
+      sinon.assert.calledOnce(onrequire)
+    }
+  })
 })
