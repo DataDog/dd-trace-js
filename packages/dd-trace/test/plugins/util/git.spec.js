@@ -851,12 +851,19 @@ describe('getGitInformationDiscrepancy', () => {
 describe('fetchHeadCommitSha', () => {
   const cachedExecStub = sinon.stub()
   const logErrorSpy = sinon.spy()
+  const environment = {
+    PATH: '/test/bin',
+    GIT_SSH_COMMAND: 'ssh -F test-config',
+    GIT_NO_LAZY_FETCH: '0',
+    GIT_ALLOW_PROTOCOL: 'https',
+  }
   const { fetchHeadCommitSha } = proxyquire('../../../src/plugins/util/git',
     {
       './git-cache': {
         cachedExec: cachedExecStub,
       },
       '../../log': { error: logErrorSpy },
+      '../../config/helper': { getEnvironmentVariables: () => environment },
     }
   )
 
@@ -872,7 +879,7 @@ describe('fetchHeadCommitSha', () => {
 
     sinon.assert.calledOnceWithExactly(cachedExecStub, 'git', ['cat-file', '-e', 'abc123'], {
       stdio: 'pipe',
-      env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
+      env: { ...environment, GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
     })
   })
 
