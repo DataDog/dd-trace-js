@@ -101,6 +101,9 @@ updates:
       - dependency-name: "glob"
         # 11.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
+      - dependency-name: "nock"
+        # 15.x does not support Node.js 18.
+        versions: ["15.x"]
       - dependency-name: "@opentelemetry/core"
         # 2.0.0 onwards only supports Node.js 18.19.0 and above
         update-types: ["version-update:semver-major"]
@@ -223,6 +226,9 @@ updates:
       - dependency-name: "office-addin-mock"
         # Pinned to 2.x due to compatibility issues with newer major versions
         update-types: ["version-update:semver-major"]
+      - dependency-name: "nock"
+        # 15.x does not support Node.js 18.
+        versions: ["15.x"]
     # Cohort-based groups so a single breaking bump only blocks its own PR. A dependency lands
     # in the first cohort it matches; `test-versions` is the catch-all for the long tail
     # (OpenTelemetry, OpenFeature, logging, templating, serialization, runtimes, misc).
