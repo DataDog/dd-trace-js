@@ -1,19 +1,21 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { exec, execFileSync } = require('node:child_process')
+const { AsyncLocalStorage } = require('node:async_hooks')
+const { execFileSync } = require('node:child_process')
 const { once } = require('node:events')
 const { mkdirSync, symlinkSync, writeFileSync } = require('node:fs')
 const http = require('node:http')
 const { join } = require('node:path')
 
 const {
+  createParallelIt,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   sandboxCwd,
   useSandbox,
+  withReceiver,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
@@ -48,6 +50,10 @@ const requestedVersion = process.env.WEBDRIVERIO_VERSION
 const versions = requestedVersion
   ? [requestedVersion === 'oldest' ? OLDEST_WEBDRIVERIO_VERSION : requestedVersion]
   : [OLDEST_WEBDRIVERIO_VERSION, 'latest']
+const mochaArgs = [...process.argv, ...(process.env.MOCHA_OPTIONS?.split(/\s+/) || [])]
+const hasMochaFilter = mochaArgs.some(arg =>
+  ['--grep', '--fgrep', '-g', '-f'].includes(arg) || /^(?:--f?grep=|-[gf].+)/.test(arg)
+)
 
 const PNG_SCREENSHOT = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=',
@@ -71,6 +77,8 @@ const disabledSettings = {
   impacted_tests_enabled: false,
   coverage_report_upload_enabled: false,
 }
+
+const scenarioContext = new AsyncLocalStorage()
 
 const advancedRequestPaths = [
   '/api/v2/ci/libraries/tests',
@@ -149,6 +157,41 @@ function stopServer (server) {
     return Promise.resolve()
   }
   return new Promise(resolve => server.close(resolve))
+}
+
+/**
+ * Runs WebdriverIO scenarios with isolated intake and WebDriver servers.
+ *
+ * @param {import('mocha').TestFunction} mochaIt
+ * @param {number} concurrency
+ * @returns {import('mocha').TestFunction}
+ */
+function createScenarioIt (mochaIt, concurrency) {
+  const register = concurrency === 1
+    ? (name, fn) => mochaIt(name, withReceiver(fn))
+    : createParallelIt(mochaIt, { concurrency, withReceiver: true })
+
+  const scenarioIt = (name, fn) => register(name, async (receiver, run) => {
+    receiver.setSettings(disabledSettings)
+    const webDriver = await startWebDriverServer()
+
+    try {
+      await scenarioContext.run({ receiver, run, webDriver }, fn)
+    } finally {
+      try {
+        await run.stop()
+      } finally {
+        await stopServer(webDriver.server)
+      }
+    }
+  })
+  scenarioIt.skip = mochaIt.skip.bind(mochaIt)
+
+  return scenarioIt
+}
+
+function getScenarioReceiver () {
+  return scenarioContext.getStore().receiver
 }
 
 /**
@@ -280,11 +323,9 @@ for (const version of versions) {
   describe(`webdriverio@${version}`, function () {
     this.timeout(60_000)
 
-    let childProcess
     let cwd
-    let receiver
-    let testOutput = ''
-    let webDriver
+    const concurrency = version === OLDEST_WEBDRIVERIO_VERSION && !hasMochaFilter ? 2 : 1
+    const it = createScenarioIt(global.it, concurrency)
 
     useSandbox([
       `@wdio/cli@${version}`,
@@ -294,24 +335,8 @@ for (const version of versions) {
       '@sinonjs/fake-timers@15.4.0',
     ], true, ['./integration-tests/webdriverio/fixtures/*'])
 
-    before(async function () {
+    before(function () {
       cwd = sandboxCwd()
-      webDriver = await startWebDriverServer()
-    })
-
-    after(async function () {
-      await stopServer(webDriver?.server)
-    })
-
-    beforeEach(async function () {
-      receiver = await new FakeCiVisIntake().start()
-      receiver.setSettings(disabledSettings)
-    })
-
-    afterEach(async function () {
-      childProcess?.kill()
-      testOutput = ''
-      await receiver.stop()
     })
 
     /**
@@ -328,16 +353,19 @@ for (const version of versions) {
      * @returns {Promise<void>}
      */
     async function runScenario (scenario, expectedWebDriverSessions, assertEvents, expectedExitCode = 0, options = {}) {
+      const { receiver, run, webDriver } = scenarioContext.getStore()
       const { env, expectedScreenshots, framework = 'mocha' } = options
+      let testOutput = ''
       const initialWebDriverSessionCount = webDriver.getSessionCount()
       const initialScreenshotCount = webDriver.getScreenshotCount()
-      childProcess = exec('./node_modules/.bin/wdio run ./wdio.conf.js', {
+      const childProcess = run('./node_modules/.bin/wdio run ./wdio.conf.js', {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
           DD_TEST_SESSION_NAME: 'webdriverio-integration-test',
           WEBDRIVERIO_FRAMEWORK: framework,
+          WEBDRIVERIO_RETRY_MARKER: join(cwd, `.webdriverio-spec-file-retry-${webDriver.port}`),
           WEBDRIVERIO_SCENARIO: scenario,
           WEBDRIVER_PORT: String(webDriver.port),
           ...env,
@@ -462,6 +490,7 @@ for (const version of versions) {
     })
 
     describe('failure videos', () => {
+      const it = createScenarioIt(global.it, 1)
       const videoEnv = { DD_TEST_FAILURE_VIDEOS_ENABLED: 'true', DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false' }
 
       before(() => {
@@ -686,7 +715,7 @@ for (const version of versions) {
         })
 
         it(`keeps ${framework} screenshot and video outcomes independent`, async () => {
-          receiver.setMediaResponseStatusCode(400)
+          getScenarioReceiver().setMediaResponseStatusCode(400)
           await runScenario('videos', 1, ({ media, tests }) => {
             const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
             assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], 'true')
@@ -754,7 +783,7 @@ for (const version of versions) {
           assert.strictEqual(media[0].headers['dd-api-key'], undefined)
         }, 1, {
           env: {
-            ...getCiVisEvpProxyConfig(receiver.port),
+            ...getCiVisEvpProxyConfig(getScenarioReceiver().port),
             NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
             ...videoEnv,
           },
@@ -898,7 +927,7 @@ for (const version of versions) {
     })
 
     it('starts Jasmine parent spans before tests when settings are delayed', async () => {
-      receiver.setSettingsResponseDelay(1_000)
+      getScenarioReceiver().setSettingsResponseDelay(1_000)
 
       await runScenario('jasmineDelayedSettings', 1, ({ session, module, suites, tests }) => {
         assert.strictEqual(suites.length, 1)

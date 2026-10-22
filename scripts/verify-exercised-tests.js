@@ -26,6 +26,7 @@ const COVERAGE_ACTIONS = new Set([
 ])
 const COVERAGE_COLLECTORS = new Set([
   'integration-tests/coverage/run-suite.js',
+  'integration-tests/vitest/run-with-coverage.js',
   'scripts/c8-ci.js',
 ])
 
