@@ -187,8 +187,10 @@ class DatadogWebpackPlugin {
         const version = packageJson.version
         const pkgPath = request === pkg ? pkg : `${pkg}/${modulePath}`
 
+        // Webpack runs loaders right-to-left, so appending makes this loader see the package's original source
+        // before any user transpiler lowers the syntax Orchestrion function queries match on.
         createData.loaders ||= []
-        createData.loaders.unshift({
+        createData.loaders.push({
           loader: require.resolve('./src/loader'),
           options: { pkg, version, path: pkgPath, rewriteOnly: !isModuleOfInterest },
         })

@@ -201,11 +201,12 @@ describe('DatadogWebpackPlugin', () => {
     /**
      * @param {string} request
      * @param {string} modulePath
+     * @param {object[]} [loaders]
      */
-    function resolve (request, modulePath) {
+    function resolve (request, modulePath, loaders) {
       const resolveData = {
         request,
-        createData: { resource: path.join(projectDir, 'node_modules', modulePath) },
+        createData: { resource: path.join(projectDir, 'node_modules', modulePath), loaders },
       }
       afterResolve(resolveData)
       return resolveData.createData.loaders
@@ -234,6 +235,20 @@ describe('DatadogWebpackPlugin', () => {
         path: 'express/lib/express.js',
         rewriteOnly: false,
       })
+    })
+
+    it('runs before existing loaders so it receives the original source', () => {
+      const transpiler = { loader: 'babel-loader', options: {} }
+      const loaders = resolve(
+        './pregel/index.cjs',
+        '@langchain/langgraph/dist/pregel/index.cjs',
+        [transpiler]
+      )
+
+      // Webpack runs loaders right-to-left, so the last entry runs first.
+      assert.equal(loaders?.length, 2)
+      assert.equal(loaders[0], transpiler)
+      assert.equal(loaders[1].loader, require.resolve('../src/loader'))
     })
 
     it('skips modules that are neither rewrite targets nor modules of interest', () => {
