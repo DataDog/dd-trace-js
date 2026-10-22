@@ -1,10 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { execSync } = require('node:child_process')
+const { execFileSync, execSync } = require('node:child_process')
 const os = require('node:os')
 const fs = require('node:fs')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 
 const { describe, it, afterEach, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -848,22 +849,37 @@ describe('getGitInformationDiscrepancy', () => {
 })
 
 describe('fetchHeadCommitSha', () => {
+  const cachedExecStub = sinon.stub()
+  const logErrorSpy = sinon.spy()
   const { fetchHeadCommitSha } = proxyquire('../../../src/plugins/util/git',
     {
       './git-cache': {
         cachedExec: cachedExecStub,
       },
+      '../../log': { error: logErrorSpy },
     }
   )
 
-  it('fetches the head commit SHA', () => {
+  afterEach(() => {
+    cachedExecStub.reset()
+    logErrorSpy.resetHistory()
+  })
+
+  it('does not fetch a commit that is already available locally', () => {
+    cachedExecStub.returns('')
+
+    fetchHeadCommitSha('abc123')
+
+    sinon.assert.calledOnceWithExactly(cachedExecStub, 'git', ['cat-file', '-e', 'abc123'])
+  })
+
+  it('fetches only the missing head commit', () => {
     const headSha = 'abc123'
     const remoteName = 'origin'
 
     cachedExecStub
-      .onCall(0).returns(null)
-      .onCall(1).returns(null)
-      .onCall(2).returns('')
+      .returns('')
+      .onCall(0).throws(new Error('Commit is missing'))
 
     fetchHeadCommitSha(headSha)
 
@@ -871,6 +887,8 @@ describe('fetchHeadCommitSha', () => {
       'git',
       [
         'fetch',
+        '--depth=1',
+        '--no-tags',
         '--update-shallow',
         '--filter=blob:none',
         '--recurse-submodules=no',
@@ -879,5 +897,119 @@ describe('fetchHeadCommitSha', () => {
         headSha,
       ]
     )
+  })
+
+  it('logs a failed fetch without throwing', () => {
+    cachedExecStub.throws(new Error('Git command failed'))
+
+    fetchHeadCommitSha('abc123')
+
+    sinon.assert.called(logErrorSpy)
+    assert.ok(cachedExecStub.getCalls().some(call => call.args[1][0] === 'fetch'))
+  })
+})
+
+describe('PR head metadata in shallow repositories', () => {
+  let directory
+  let checkout
+  let headSha
+  let getGitMetadata
+  let cachedExecSpy
+
+  /**
+   * @param {string} cwd
+   * @param {string[]} flags
+   * @param {import('node:child_process').ExecFileSyncOptions} [options]
+   */
+  function git (cwd, flags, options = {}) {
+    return execFileSync('git', flags, { ...options, cwd, stdio: 'pipe' }).toString().trim()
+  }
+
+  beforeEach(() => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-pr-head-'))
+    const remote = path.join(directory, 'remote.git')
+    checkout = path.join(directory, 'checkout')
+    git(directory, ['init', '--bare', remote])
+    git(remote, ['config', 'uploadpack.allowFilter', 'true'])
+    git(remote, ['fast-import', '--quiet'], {
+      input: `commit refs/heads/juan-fernandez/head
+mark :1
+committer Test Author <author@example.com> 1700000000 +0000
+data 4
+root
+
+commit refs/heads/juan-fernandez/head
+mark :2
+author PR Author <pr-author@example.com> 1700000001 +0000
+committer PR Committer <pr-committer@example.com> 1700000002 +0000
+data 7
+PR head
+from :1
+
+commit refs/heads/juan-fernandez/merge
+mark :3
+committer Test Author <author@example.com> 1700000003 +0000
+data 4
+base
+from :1
+
+commit refs/heads/juan-fernandez/merge
+committer Test Author <author@example.com> 1700000004 +0000
+data 5
+merge
+from :3
+merge :2
+
+done
+`,
+    })
+    headSha = git(remote, ['rev-parse', 'refs/heads/juan-fernandez/head'])
+    git(directory, [
+      'clone', '--depth=1', '--no-checkout', '--branch', 'juan-fernandez/merge',
+      pathToFileURL(remote).href, checkout,
+    ])
+    git(checkout, ['update-ref', '--no-deref', 'HEAD', git(checkout, ['rev-parse', 'HEAD'])])
+    cachedExecSpy = sinon.spy((command, flags, options) =>
+      execFileSync(command, flags, { stdio: 'pipe', ...options, cwd: checkout }))
+    getGitMetadata = proxyquire('../../../src/plugins/util/git', {
+      './git-cache': { cachedExec: cachedExecSpy },
+    }).getGitMetadata
+  })
+
+  afterEach(() => {
+    fs.rmSync(directory, { recursive: true, force: true })
+  })
+
+  it('fetches head metadata without its ancestors or changing the checkout', () => {
+    const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+    const originalRefs = git(checkout, ['show-ref'])
+    const fetchHeadPath = path.join(checkout, '.git', 'FETCH_HEAD')
+    fs.writeFileSync(fetchHeadPath, 'unchanged\n')
+
+    const metadata = getGitMetadata({ headCommitSha: headSha })
+
+    assertObjectContains(metadata, {
+      [GIT_COMMIT_HEAD_MESSAGE]: "PR head'\n",
+      [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'PR Author',
+      [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'pr-author@example.com',
+      [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'PR Committer',
+      [GIT_COMMIT_HEAD_COMMITTER_EMAIL]: 'pr-committer@example.com',
+    })
+    assert.strictEqual(new Date(metadata[GIT_COMMIT_HEAD_AUTHOR_DATE]).toISOString(), '2023-11-14T22:13:21.000Z')
+    assert.strictEqual(new Date(metadata[GIT_COMMIT_HEAD_COMMITTER_DATE]).toISOString(), '2023-11-14T22:13:22.000Z')
+    assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '1')
+    assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+    assert.strictEqual(git(checkout, ['show-ref']), originalRefs)
+    assert.strictEqual(fs.readFileSync(fetchHeadPath, 'utf8'), 'unchanged\n')
+  })
+
+  it('preserves available head history without fetching', () => {
+    git(checkout, ['fetch', '--depth=2', 'origin', headSha])
+
+    const metadata = getGitMetadata({ headCommitSha: headSha })
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+    assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
+    assert.ok(cachedExecSpy.getCalls().every(call => call.args[1][0] !== 'fetch'))
   })
 })

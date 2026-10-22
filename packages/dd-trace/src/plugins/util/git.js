@@ -559,11 +559,20 @@ function getGitInformationDiscrepancy () {
 }
 
 function fetchHeadCommitSha (headSha) {
+  try {
+    cachedExec('git', ['cat-file', '-e', headSha])
+    return
+  } catch {
+    // The commit is missing locally; fetch it without downloading its history.
+  }
+
   const remoteName = getGitRemoteName()
 
   sanitizedExec(
     [
       'fetch',
+      '--depth=1',
+      '--no-tags',
       '--update-shallow',
       '--filter=blob:none',
       '--recurse-submodules=no',
