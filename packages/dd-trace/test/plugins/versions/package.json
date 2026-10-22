@@ -175,7 +175,7 @@
     "koa-websocket": "7.0.0",
     "langchain": "1.5.18",
     "ldapjs": "3.0.7",
-    "ldapjs-promise": "3.0.10",
+    "ldapjs-promise": "4.0.0",
     "light-my-request": "6.6.0",
     "limitd-client": "2.14.1",
     "lodash": "4.18.1",
