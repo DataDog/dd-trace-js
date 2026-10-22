@@ -24,7 +24,10 @@ describe('AppsecFsPlugin', () => {
     appsecFsPlugin.enable()
   })
 
-  afterEach(() => { appsecFsPlugin.disable() })
+  afterEach(() => {
+    appsecFsPlugin.disable()
+    storage(APPSEC_FS_STORAGE).enterWith(undefined)
+  })
 
   describe('enable/disable', () => {
     const channels = [

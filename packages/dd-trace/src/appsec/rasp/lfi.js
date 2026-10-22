@@ -6,7 +6,7 @@ const { fsOperationStart, incomingHttpRequestStart, expressResponseRenderStart }
 const { storage } = require('../../../../datadog-core')
 const web = require('../../plugins/util/web')
 const { FS_OPERATION_PATH } = require('../addresses')
-const { getRequest } = require('../store')
+const { getActiveRequest } = require('../store')
 const waf = require('../waf')
 const {
   APPSEC_FS_STORAGE,
@@ -67,7 +67,7 @@ function analyzeLfi (ctx) {
   const fs = storage(APPSEC_FS_STORAGE).getStore()
   if (!fs) return
 
-  const req = getRequest(storage('legacy').getStore())
+  const req = getActiveRequest()
   if (!req) return
 
   const res = web.getContext(req)?.res
