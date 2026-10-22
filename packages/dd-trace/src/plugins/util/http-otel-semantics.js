@@ -17,6 +17,8 @@ const USER_AGENT_ORIGINAL = 'user_agent.original'
 const CLIENT_ADDRESS = 'client.address'
 const NETWORK_PEER_ADDRESS = 'network.peer.address'
 const HTTP_REQUEST_METHOD_ORIGINAL = 'http.request.method_original'
+const INSTRUMENTATION_HTTP_RESOURCE = '_dd.otel.instrumentation_http_resource'
+const HTTP_STATUS_ERROR = '_dd.otel.status_error'
 
 // Known HTTP methods (RFC 9110 + PATCH RFC 5789 + QUERY httpbis draft). A verb
 // outside this set is reported as `_OTHER` with the raw value preserved on
@@ -25,11 +27,47 @@ const KNOWN_METHODS = new Set([
   'CONNECT', 'DELETE', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT', 'QUERY', 'TRACE',
 ])
 
+/**
+ * The OTel HTTP span name: `{method} {target}`, or the bare method with no target. An unknown
+ * verb uses the literal `HTTP`, never the URL path.
+ *
+ * @param {string} method
+ * @param {string} [route]
+ */
+function otelHttpResourceName (method, route) {
+  const normalizedMethod = KNOWN_METHODS.has(method) ? method : 'HTTP'
+  if (typeof route === 'string' && route.length > 0) return `${normalizedMethod} ${route}`
+  return normalizedMethod
+}
+
+/**
+ * Record the generated resource so later passes do not overwrite an application change.
+ *
+ * @param {import('../../opentracing/span')} span
+ * @param {string} resource
+ */
+function setInstrumentationHttpResource (span, resource) {
+  span.setTag('resource.name', resource)
+  span.setTag(INSTRUMENTATION_HTTP_RESOURCE, resource)
+}
+
 // Datadog HTTP meta keys replaced by OTel names — omitted when rebuilding meta.
+// `http.endpoint` stays: it has no OTel equivalent and ASM plus endpoint aggregation read it.
 const DD_HTTP_META_KEYS = new Set([
   'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.url', 'out.host',
+  INSTRUMENTATION_HTTP_RESOURCE, HTTP_STATUS_ERROR,
 ])
 const NETWORK_DESTINATION_PORT = 'network.destination.port'
+
+/**
+ * Treat a resource that differs from the recorded instrumentation value as application-owned.
+ *
+ * @param {string | undefined} currentResource
+ * @param {string | undefined} instrumentationResource
+ */
+function isInstrumentationOwnedResource (currentResource, instrumentationResource) {
+  return !currentResource || currentResource === instrumentationResource
+}
 
 // IPv6 literals arrive bracketed (URL.hostname / out.host = `[::1]`); OTel
 // `server.address` is the bare address.
@@ -159,7 +197,19 @@ function applyHttpOtelSemantics (formattedSpan) {
   const metrics = formattedSpan.metrics
   const method = meta['http.method']
   const url = meta['http.url']
-  if (method === undefined && url === undefined) return
+  // Hooks can remove the method and URL; the resource marker still identifies HTTP spans whose
+  // remaining tags need renaming.
+  if (method === undefined && url === undefined && meta[INSTRUMENTATION_HTTP_RESOURCE] === undefined) {
+    // Rebuild to remove an orphaned internal marker without demoting `meta` to V8 dictionary mode.
+    if (Object.hasOwn(meta, HTTP_STATUS_ERROR)) {
+      const cleanMeta = {}
+      for (const key of Object.keys(meta)) {
+        if (key !== HTTP_STATUS_ERROR) cleanMeta[key] = meta[key]
+      }
+      formattedSpan.meta = cleanMeta
+    }
+    return
+  }
 
   // Rebuild meta/metrics as fresh objects that omit the renamed Datadog HTTP
   // keys. Deleting them in place demotes the formatted span to V8 dictionary
@@ -169,6 +219,7 @@ function applyHttpOtelSemantics (formattedSpan) {
   for (const key of Object.keys(meta)) {
     if (!DD_HTTP_META_KEYS.has(key)) newMeta[key] = meta[key]
   }
+
   const newMetrics = {}
   for (const key of Object.keys(metrics)) {
     if (key !== NETWORK_DESTINATION_PORT) newMetrics[key] = metrics[key]
@@ -180,29 +231,18 @@ function applyHttpOtelSemantics (formattedSpan) {
     if (KNOWN_METHODS.has(method)) {
       newMeta[HTTP_REQUEST_METHOD] = method
     } else {
-      // Unknown verb: bucket to `_OTHER`, preserve the raw value, and use the
-      // literal "HTTP" in the span name (the spec forbids the URL path there).
-      // Known-method names are already `{method} {route}`.
       newMeta[HTTP_REQUEST_METHOD] = '_OTHER'
       newMeta[HTTP_REQUEST_METHOD_ORIGINAL] = method
-      const resource = formattedSpan.resource
-      if (typeof resource === 'string') {
-        if (resource === method) {
-          formattedSpan.resource = 'HTTP'
-        } else if (resource.startsWith(`${method} `)) {
-          formattedSpan.resource = `HTTP${resource.slice(method.length)}`
-        }
-      }
+    }
+    // Comparing against the recorded value keeps a manual resource shaped like "GET /custom".
+    if (isInstrumentationOwnedResource(formattedSpan.resource, meta[INSTRUMENTATION_HTTP_RESOURCE])) {
+      formattedSpan.resource = otelHttpResourceName(method, meta['http.route'])
     }
   }
 
   const status = meta['http.status_code']
   let statusCode
   if (status !== undefined) {
-    // OTel types http.response.status_code as an int, so emit it as a numeric
-    // metric (the OTLP exporter serializes meta as stringValue but metrics as
-    // intValue) — mirroring how server.port is handled below. Guard against a
-    // non-numeric status, which would otherwise write a NaN metric.
     statusCode = Number.parseInt(status, 10)
     if (Number.isFinite(statusCode)) newMetrics[HTTP_RESPONSE_STATUS_CODE] = statusCode
   }
@@ -214,11 +254,6 @@ function applyHttpOtelSemantics (formattedSpan) {
   if (clientIp !== undefined) newMeta[CLIENT_ADDRESS] = clientIp
 
   if (kind === 'server') {
-    // FIXME: some server frameworks (e.g. Next.js — `packages/datadog-plugin-next`)
-    // never populate `http.url`, so the OTel `url.*` / `server.*` attributes below
-    // can't be derived and are omitted for those spans. This needs a fix; the
-    // short-term option is to set `http.url` in those integrations so they emit
-    // the full server attribute set.
     if (url !== undefined) {
       // The query in `http.url` is already obfuscated per config, so it is preserved.
       const { scheme, address, port, path, query } = decomposeServerUrl(url, url)
@@ -230,7 +265,6 @@ function applyHttpOtelSemantics (formattedSpan) {
     }
   } else {
     if (url !== undefined) {
-      // url.full must not carry embedded credentials.
       newMeta[URL_FULL] = redactUrlCredentials(url)
     }
     const outHost = meta['out.host']
@@ -245,8 +279,10 @@ function applyHttpOtelSemantics (formattedSpan) {
     }
   }
 
-  if (status !== undefined && formattedSpan.error &&
-      newMeta[ERROR_TYPE] === undefined && Number.isFinite(statusCode)) {
+  // Configured validators, not a fixed status range, decide whether status caused the error.
+  // Match the recorded status so a hook replacement is not blamed, and keep exception-derived types.
+  const statusCausedError = status !== undefined && meta[HTTP_STATUS_ERROR] === status
+  if (formattedSpan.error && newMeta[ERROR_TYPE] === undefined && statusCausedError && Number.isFinite(statusCode)) {
     newMeta[ERROR_TYPE] = status
   }
 
@@ -255,7 +291,12 @@ function applyHttpOtelSemantics (formattedSpan) {
 }
 
 module.exports = {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
   NETWORK_PEER_ADDRESS, // imported by web.js (set from req.socket, not at serialization)
   decomposeServerUrl, // exercised directly by the helper spec
+  isInstrumentationOwnedResource,
+  otelHttpResourceName,
+  setInstrumentationHttpResource,
   applyHttpOtelSemantics,
 }
