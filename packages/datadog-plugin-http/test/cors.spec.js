@@ -12,6 +12,13 @@ const ALLOW_ORIGIN = 'access-control-allow-origin'
 const ALLOW_HEADERS = 'access-control-allow-headers'
 const origin = 'https://example.com'
 const requestHeaders = { origin, 'access-control-request-headers': 'baggage,traceparent,x-other' }
+const duplicatePairs = [
+  [ALLOW_ORIGIN, '*'],
+  [ALLOW_HEADERS, 'content-type'],
+  ['Access-Control-Allow-Headers', 'x-custom'],
+  ['Set-Cookie', 'first=1'],
+  ['Set-Cookie', 'second=2'],
+]
 
 /** @typedef {import('node:http').IncomingMessage | import('node:http2').Http2ServerRequest} ServerRequest */
 /** @typedef {import('node:http').ServerResponse | import('node:http2').Http2ServerResponse} ServerResponse */
@@ -19,14 +26,35 @@ const requestHeaders = { origin, 'access-control-request-headers': 'baggage,trac
 for (const protocol of ['http', 'http2']) {
   for (const plugins of [['http', 'http2'], ['http2', 'http']]) {
     describe(`${protocol} CORS with ${plugins.join(' before ')}`, () => {
+      const shapes = protocol === 'http' ? ['object', 'flat'] : ['object', 'flat', 'tuples']
+      const nativeHeaders = new Map()
+      let closedError
+
       before(async () => {
+        for (const shape of shapes) {
+          const response = await exchange(protocol, (req, res) => {
+            res.setHeader(ALLOW_HEADERS, 'overridden')
+            res.writeHead(200, freezeHeaders(shape, duplicatePairs))
+          })
+          assert.strictEqual(response[ALLOW_HEADERS].includes('baggage'), false)
+          nativeHeaders.set(shape, response)
+        }
+        if (protocol === 'http') {
+          await exchange(protocol, async (req, res) => {
+            await closeResponse(res)
+            assert.throws(() => res.writeHead(200, { [ALLOW_HEADERS]: 'x-custom' }), error => {
+              assert.strictEqual(error.code, 'ERR_HTTP_HEADERS_SENT')
+              closedError = { name: error.name, code: error.code, message: error.message }
+              return true
+            })
+          })
+        }
         const config = { client: false, headers: [ALLOW_HEADERS, ALLOW_ORIGIN] }
         await agent.load(plugins, [config, config])
       })
 
       after(() => agent.close())
 
-      const shapes = protocol === 'http' ? ['object', 'flat'] : ['object', 'flat', 'tuples']
       for (const shape of shapes) {
         for (const [name, message] of [
           ['omitted', []], ['string', ['OK']], ['empty', ['']], ['undefined', [undefined]],
@@ -64,14 +92,7 @@ for (const protocol of ['http', 'http2']) {
         }
 
         it(`preserves duplicate ${shape} allow-header fields and cookies`, async () => {
-          const pairs = [
-            [ALLOW_ORIGIN, '*'],
-            [ALLOW_HEADERS, 'content-type'],
-            ['Access-Control-Allow-Headers', 'x-custom'],
-            ['Set-Cookie', 'first=1'],
-            ['Set-Cookie', 'second=2'],
-          ]
-          const headers = freezeHeaders(shape, pairs)
+          const headers = freezeHeaders(shape, duplicatePairs)
           const traces = agent.assertSomeTraces(() => {})
           const [response] = await Promise.all([
             exchange(protocol, (req, res) => {
@@ -80,10 +101,8 @@ for (const protocol of ['http', 'http2']) {
             }),
             traces,
           ])
-          assert.strictEqual(response[ALLOW_HEADERS], shape === 'object'
-            ? 'x-custom,baggage,traceparent'
-            : 'content-type, x-custom,baggage,traceparent')
-          assert.deepStrictEqual(response['set-cookie'], shape === 'object' ? ['second=2'] : ['first=1', 'second=2'])
+          assert.strictEqual(response[ALLOW_HEADERS], `${nativeHeaders.get(shape)[ALLOW_HEADERS]},baggage,traceparent`)
+          assert.deepStrictEqual(response['set-cookie'], nativeHeaders.get(shape)['set-cookie'])
         })
 
         it(`combines progressive headers with unrelated explicit ${shape} fields`, async () => {
@@ -227,17 +246,11 @@ for (const protocol of ['http', 'http2']) {
         const traces = agent.assertSomeTraces(() => {})
         await Promise.all([
           exchange(protocol, async (req, res) => {
-            res.setHeader(ALLOW_ORIGIN, '*')
-            const closed = once(res, 'close')
-            res.end()
-            await closed
+            await closeResponse(res)
             if (protocol === 'http2') {
               assert.strictEqual(res.writeHead(200, { [ALLOW_HEADERS]: 'x-custom' }), res)
             } else {
-              assert.throws(() => res.writeHead(200, { [ALLOW_HEADERS]: 'x-custom' }), {
-                code: 'ERR_HTTP_HEADERS_SENT',
-                message: 'Cannot write headers after they are sent to the client',
-              })
+              assert.throws(() => res.writeHead(200, { [ALLOW_HEADERS]: 'x-custom' }), closedError)
             }
           }),
           traces,
@@ -245,6 +258,16 @@ for (const protocol of ['http', 'http2']) {
       })
     })
   }
+}
+
+/**
+ * @param {ServerResponse} res
+ */
+async function closeResponse (res) {
+  res.setHeader(ALLOW_ORIGIN, '*')
+  const closed = once(res, 'close')
+  res.end()
+  await closed
 }
 
 /**
