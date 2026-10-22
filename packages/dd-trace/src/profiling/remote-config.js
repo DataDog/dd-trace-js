@@ -49,13 +49,23 @@ function enable (rc, config) {
     }
 
     for (const item of [...transaction.toApply, ...transaction.toModify]) {
-      const parsed = parse(item.id, item.file)
+      /** @type {string[]} */
+      const problems = []
+      const parsed = parse(item.id, item.file, problems)
       if (parsed === undefined) {
         configs.delete(item.id)
       } else {
         configs.set(item.id, parsed)
       }
-      transaction.ack(item.path)
+
+      if (problems.length === 0) {
+        transaction.ack(item.path)
+      } else {
+        // Report partial failures while still applying valid fields.
+        const reason = problems.join('; ')
+        log.debug('[profiling/remote-config] Invalid profiling configuration %s: %s', item.id, reason)
+        transaction.error(item.path, reason)
+      }
     }
 
     // Skip unchanged settings to avoid redundant telemetry and config publishes.
@@ -72,36 +82,37 @@ function enable (rc, config) {
 /**
  * @param {string} id - Remote config id
  * @param {unknown} file - Remote config payload
+ * @param {string[]} problems - Validation errors to report
  * @returns {ProfilingConfig | undefined} undefined for unrelated payloads or invalid targets
  */
-function parse (id, file) {
+function parse (id, file, problems) {
   if (file === null || typeof file !== 'object') return
 
   const { profilers, settings, targets } = /** @type {Record<string, unknown>} */ (file)
   // Payloads without either section belong to other DEBUG users.
   if (profilers === undefined && settings === undefined) return
 
-  const parsedTargets = parseTargets(id, targets)
+  const parsedTargets = parseTargets(targets, problems)
   if (parsedTargets === undefined) return
 
   return {
     id,
-    profilers: parseProfilers(id, profilers),
-    settings: parseSettings(id, settings),
+    profilers: parseProfilers(profilers, problems),
+    settings: parseSettings(settings, problems),
     targets: parsedTargets,
   }
 }
 
 /**
- * @param {string} id - Remote config id
  * @param {unknown} profilers - The payload's `profilers` section
+ * @param {string[]} problems - Validation errors to report
  * @returns {RequestedProfilers}
  */
-function parseProfilers (id, profilers) {
+function parseProfilers (profilers, problems) {
   /** @type {RequestedProfilers} */
   const parsed = {}
   if (!isObject(profilers)) {
-    if (profilers !== undefined) log.debug('[profiling/remote-config] Ignoring invalid profilers in %s', id)
+    if (profilers !== undefined) problems.push('profilers is not an object')
     return parsed
   }
   for (const type of PROFILE_TYPES) {
@@ -109,54 +120,55 @@ function parseProfilers (id, profilers) {
     if (typeof value === 'boolean') {
       parsed[type] = value
     } else if (value !== undefined) {
-      log.debug('[profiling/remote-config] Ignoring invalid profilers.%s in %s: %o', type, id, value)
+      problems.push(`profilers.${type} is not a boolean`)
     }
   }
   return parsed
 }
 
 /**
- * @param {string} id - Remote config id
  * @param {unknown} settings - The payload's `settings` section
+ * @param {string[]} problems - Validation errors to report
  * @returns {RequestedSettings}
  */
-function parseSettings (id, settings) {
+function parseSettings (settings, problems) {
   /** @type {RequestedSettings} */
   const parsed = {}
   if (!isObject(settings)) {
-    if (settings !== undefined) log.debug('[profiling/remote-config] Ignoring invalid settings in %s', id)
+    if (settings !== undefined) problems.push('settings is not an object')
     return parsed
   }
   const { uploadIntervalSeconds } = settings
   if (Number.isInteger(uploadIntervalSeconds) && /** @type {number} */ (uploadIntervalSeconds) > 0) {
     parsed.uploadIntervalSeconds = /** @type {number} */ (uploadIntervalSeconds)
   } else if (uploadIntervalSeconds !== undefined) {
-    log.debug('[profiling/remote-config] Ignoring invalid settings.uploadIntervalSeconds in %s: %o',
-      id, uploadIntervalSeconds)
+    problems.push('settings.uploadIntervalSeconds is not a positive integer')
   }
   return parsed
 }
 
 /**
- * @param {string} id - Remote config id
  * @param {unknown} targets - The payload's `targets` section
+ * @param {string[]} problems - Validation errors to report
  * @returns {Target[] | undefined} undefined if the config must be dropped
  */
-function parseTargets (id, targets) {
+function parseTargets (targets, problems) {
   if (targets === undefined) return []
   if (!Array.isArray(targets)) {
-    log.debug('[profiling/remote-config] Ignoring %s: targets is not an array', id)
+    problems.push('targets is not an array')
     return
   }
 
   /** @type {Target[]} */
   const parsed = []
-  for (const target of targets) {
-    if (!isObject(target)) continue
-    const { service, env, tags = [] } = target
-    if ((service !== undefined && typeof service !== 'string') ||
+  for (let index = 0; index < targets.length; index++) {
+    const target = targets[index]
+    const { service, env, tags = [] } = isObject(target) ? target : {}
+    if (!isObject(target) ||
+        (service !== undefined && typeof service !== 'string') ||
         (env !== undefined && typeof env !== 'string') ||
         !Array.isArray(tags) || !tags.every(tag => typeof tag === 'string')) {
+      problems.push(`targets[${index}] is invalid`)
       continue
     }
     parsed.push({ service, env, tags })
@@ -164,7 +176,7 @@ function parseTargets (id, targets) {
 
   // Reject an all-invalid target list rather than treating it as untargeted.
   if (parsed.length === 0 && targets.length !== 0) {
-    log.debug('[profiling/remote-config] Ignoring %s: no valid targets', id)
+    problems.push('no valid targets')
     return
   }
   return parsed

@@ -28,7 +28,11 @@ describe('Profiling Remote Config', () => {
       tags: { team: 'profiling', region: 'eu' },
       setRemoteConfig: sinon.spy(),
     }
-    enable(rc, config)
+    // The fakes implement only what the handler uses.
+    enable(
+      /** @type {import('../../src/remote_config')} */ (/** @type {unknown} */ (rc)),
+      /** @type {ReturnType<import('../../src/config')>} */ (/** @type {unknown} */ (config))
+    )
   })
 
   /**
@@ -220,6 +224,70 @@ describe('Profiling Remote Config', () => {
       })
 
       assert.deepStrictEqual(currentSettings(), { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_ENABLED: 'true' })
+    })
+  })
+
+  describe('apply state', () => {
+    const path = (id) => `datadog/2/${PRODUCT}/${id}/config`
+
+    it('acknowledges valid profiling payloads and payloads of other DEBUG users', () => {
+      const transaction = update({
+        toApply: [
+          { id: 'a', file: { profilers: { memory: true }, settings: { uploadIntervalSeconds: 30 } } },
+          { id: 'other-team', file: { something: 'else' } },
+          { id: 'not-an-object', file: 'text' },
+        ],
+      })
+
+      sinon.assert.notCalled(transaction.error)
+      sinon.assert.calledWithExactly(transaction.ack, path('a'))
+      sinon.assert.calledWithExactly(transaction.ack, path('other-team'))
+      sinon.assert.calledWithExactly(transaction.ack, path('not-an-object'))
+    })
+
+    it('reports a partially invalid profiling payload as an error and still applies its valid fields', () => {
+      const transaction = update({
+        toApply: [{
+          id: 'a',
+          file: {
+            profilers: { cpuTime: 'true', memory: true },
+            settings: { uploadIntervalSeconds: 0 },
+            targets: [{ service: 'my-service' }, { env: 1 }],
+          },
+        }],
+      })
+
+      sinon.assert.notCalled(transaction.ack)
+      sinon.assert.calledOnceWithExactly(
+        transaction.error,
+        path('a'),
+        'targets[1] is invalid; profilers.cpuTime is not a boolean; ' +
+          'settings.uploadIntervalSeconds is not a positive integer'
+      )
+      assert.deepStrictEqual(currentSettings(), { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_ENABLED: 'true' })
+    })
+
+    it('reports invalid sections as errors', () => {
+      const transaction = update({ toApply: [{ id: 'a', file: { profilers: [], settings: 'fast' } }] })
+
+      sinon.assert.calledOnceWithExactly(
+        transaction.error,
+        path('a'),
+        'profilers is not an object; settings is not an object'
+      )
+    })
+
+    it('reports a config dropped for its targets as an error', () => {
+      const transaction = update({
+        toApply: [
+          { id: 'not-array', file: { profilers: { memory: true }, targets: {} } },
+          { id: 'all-invalid', file: { profilers: { memory: true }, targets: ['x'] } },
+        ],
+      })
+
+      sinon.assert.calledWithExactly(transaction.error, path('not-array'), 'targets is not an array')
+      sinon.assert.calledWithExactly(transaction.error, path('all-invalid'), 'targets[0] is invalid; no valid targets')
+      assert.strictEqual(currentSettings(), null)
     })
   })
 
