@@ -1,0 +1,12 @@
+_v: 1
+name: aerospike
+display_name: Aerospike
+description: Instruments Aerospike client connection and database commands, including record operations, queries, and index
+  management.
+packages:
+- name: aerospike
+category:
+- db.client
+systems:
+- aerospike
+creation_date: '2023-11-28'

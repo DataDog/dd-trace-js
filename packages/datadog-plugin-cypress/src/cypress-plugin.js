@@ -1526,11 +1526,7 @@ class CypressPlugin {
       : undefined
     const testSpan = this.activeTestSpan || lastFailedTestSpan
 
-    if (!testSpan) {
-      return
-    }
-
-    if (!isFailureScreenshotForUpload(details)) {
+    if (!testSpan || !isFailureScreenshotForUpload(details)) {
       return
     }
 

@@ -181,10 +181,9 @@ function canStringifyDirectWalk (value, depth) {
         child._bsontype !== undefined ||
         isRegExp(child) ||
         isMap(child) ||
-        typeof child.toJSON === 'function') {
+        typeof child.toJSON === 'function' || !canStringifyDirectWalk(child, depth + 1)) {
       return false
     }
-    if (!canStringifyDirectWalk(child, depth + 1)) return false
   }
   return true
 }
@@ -322,9 +321,13 @@ function buildRedact (value, ancestors) {
   // `value === original` short-circuit.
   if (typeof value.toJSON === 'function') {
     const json = value.toJSON()
-    if (typeof json !== 'object' || json === null || json === value) return REDACT_LEAF
-    // Re-screen: toJSON can return a TypedArray or Binary BSON wrapper.
-    if (ArrayBuffer.isView(json) || json._bsontype === 'Binary') return REDACT_LEAF
+    if (
+      typeof json !== 'object' || json === null || json === value ||
+      // Re-screen: toJSON can return a TypedArray or Binary BSON wrapper.
+      ArrayBuffer.isView(json) || json._bsontype === 'Binary'
+    ) {
+      return REDACT_LEAF
+    }
     value = json
   } else if (bsontype !== undefined) {
     return REDACT_LEAF

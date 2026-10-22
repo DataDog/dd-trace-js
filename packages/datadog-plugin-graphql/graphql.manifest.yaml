@@ -1,0 +1,13 @@
+_v: 1
+name: graphql
+display_name: GraphQL
+description: Instruments server-side GraphQL request handling, parsing, validation, operation execution, and field
+  resolution, including JIT-compiled execution.
+packages:
+- name: '@graphql-tools/executor'
+- name: graphql
+- name: mercurius
+category:
+- graphql.server
+systems: []
+creation_date: '2018-06-15'

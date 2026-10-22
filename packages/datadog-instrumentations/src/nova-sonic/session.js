@@ -56,13 +56,12 @@ function object (value) {
 
 /**
  * @param {string} text
- * @param {object} [fallback]
  */
-function parse (text, fallback = {}) {
+function parse (text) {
   try {
     return JSON.parse(text)
   } catch {
-    return fallback
+    return {}
   }
 }
 

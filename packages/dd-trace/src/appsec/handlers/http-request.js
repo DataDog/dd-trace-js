@@ -60,9 +60,7 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   if (!cookies || typeof cookies !== 'object') return
 
   const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  if (isEmpty(cookies)) return
+  if (!rootSpan || isEmpty(cookies)) return
   analyzedCookies.add(cookies)
 
   const results = waf.run({
@@ -189,9 +187,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   }
 
   const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  if (isEmpty(query)) return
+  if (!rootSpan || isEmpty(query)) return
 
   const results = waf.run({
     persistent: {
@@ -204,9 +200,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
 
 function onRequestProcessParams ({ req, res, abortController, params }) {
   const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  if (!params || typeof params !== 'object' || isEmpty(params)) return
+  if (!rootSpan || !params || typeof params !== 'object' || isEmpty(params)) return
 
   const results = waf.run({
     persistent: {

@@ -12,8 +12,7 @@ const getConfig = require('../../config')
  * @param {object} configuration - Request configuration for the settings endpoint.
  */
 function buildSettingsCacheKey (configuration) {
-  const config = getConfig()
-  const { testOptimization } = config
+  const { testOptimization } = getConfig()
   return buildCacheKey('settings', [
     tracerVersion,
     configuration.url?.href,

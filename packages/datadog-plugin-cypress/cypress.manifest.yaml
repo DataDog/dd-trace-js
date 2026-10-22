@@ -1,0 +1,11 @@
+_v: 1
+name: cypress
+display_name: Cypress
+description: Instruments Cypress test execution and commands for Test Optimization, including results, code coverage,
+  test skipping and retries, test management, failure screenshots and videos, and RUM correlation.
+packages:
+- name: cypress
+category:
+- test.execution
+systems: []
+creation_date: '2021-09-17'

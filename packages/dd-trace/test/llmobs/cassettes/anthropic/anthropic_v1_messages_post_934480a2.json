@@ -1,0 +1,59 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.anthropic.com/v1/messages",
+    "headers": {
+      "Content-Length": "291",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "Anthropic/JS 0.14.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "0.14.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.22.0",
+      "anthropic-version": "2023-06-01",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What is 2 + 2? Do not search the web.\"\n    }\n  ],\n  \"max_tokens\": 1024,\n  \"tools\": [\n    {\n      \"type\": \"web_search_20250305\",\n      \"name\": \"web_search\",\n      \"max_uses\": 1\n    }\n  ]\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Fri, 25 Sep 2026 16:14:43 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "anthropic-ratelimit-input-tokens-limit": "33800000",
+      "anthropic-ratelimit-input-tokens-remaining": "33798000",
+      "anthropic-ratelimit-input-tokens-reset": "2026-09-25T16:14:43Z",
+      "anthropic-ratelimit-output-tokens-limit": "5100000",
+      "anthropic-ratelimit-output-tokens-remaining": "5100000",
+      "anthropic-ratelimit-output-tokens-reset": "2026-09-25T16:14:43Z",
+      "anthropic-ratelimit-requests-limit": "20000",
+      "anthropic-ratelimit-requests-remaining": "19998",
+      "anthropic-ratelimit-requests-reset": "2026-09-25T16:14:43Z",
+      "anthropic-ratelimit-tokens-limit": "38900000",
+      "anthropic-ratelimit-tokens-remaining": "38898000",
+      "anthropic-ratelimit-tokens-reset": "2026-09-25T16:14:43Z",
+      "Server": "cloudflare",
+      "request-id": "req_011CfQTMftsJUYAKWWKXpH7L",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "anthropic-organization-id": "4257e925-ee99-4ee8-9c62-8e53716d5203",
+      "anthropic-workspace-id": "wrkspc_016aTU2q5hNGVxQMc7MKHPqm",
+      "traceresponse": "00-faeb25b9ee81001e927852dbf700a37b-0e8ee984ff067614-01",
+      "vary": "Accept-Encoding",
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+      "cf-cache-status": "DYNAMIC",
+      "X-Robots-Tag": "none",
+      "Content-Encoding": "gzip",
+      "CF-RAY": "a40b52cefe460c1e-BOS"
+    },
+    "body": "{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_011CfQTMgFxAuMMdcy82fhdN\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"2 + 2 = 4\\n\\nThis is a simple arithmetic problem that doesn't require a web search.\"}],\"container\":null,\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":2228,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":28,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"},\"diagnostics\":null}"
+  }
+}
