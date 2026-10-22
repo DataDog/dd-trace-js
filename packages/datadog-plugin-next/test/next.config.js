@@ -37,6 +37,7 @@ if (nextMajor >= 16) {
 // customer configures it. Pages API routes are externalized without this.
 if (nextMajor >= 15) {
   config.serverExternalPackages = ['dd-trace']
+  config.outputFileTracingRoot = __dirname
 } else if (nextMajor >= 13) {
   config.experimental.serverComponentsExternalPackages = ['dd-trace']
 }
@@ -71,6 +72,10 @@ if (satisfies(VERSION, '<=11')) {
 
     return config
   }
+}
+
+if (nextMajor >= 12 && nextMajor < 15) {
+  config.experimental.outputFileTracingRoot = __dirname
 }
 
 // standalone only enabled in versions it is present
