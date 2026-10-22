@@ -54,13 +54,8 @@ function patchLambdaModule (handlerPath) {
       Object.defineProperty(exports, handlerPath, descriptor)
       return exports
     }
-    return shimmer.wrap(lambdaModule, handlerPath, patchLambdaHandler) ?? lambdaModule
+    return shimmer.wrap(lambdaModule, handlerPath, datadog)
   }
-}
-
-/** @param {Function} lambdaHandler */
-function patchLambdaHandler (lambdaHandler) {
-  return datadog(lambdaHandler)
 }
 
 const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
