@@ -83,7 +83,6 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * | 'env_var'
  * | 'local_stable_config'
  * | 'fleet_stable_config'} TelemetrySource
- * @typedef {'remote_config' | 'calculated'} RevertibleTelemetrySource
  * @typedef {'tracing' | 'profiling'} RemoteConfigLayer
  * @typedef {import('../../../../index').TracerOptions} TracerOptions
  * @typedef {import('./config-types').ConfigKey} ConfigKey
@@ -125,11 +124,12 @@ const changeTracker = {
 const remoteConfigPathsByLayer = new Map()
 
 /**
+ * Only calculated values are reverted together; RC values are reverted per layer.
+ *
  * @param {Config} config
- * @param {RevertibleTelemetrySource} source
  */
-function undo (config, source) {
-  revert(config, changeTracker[source])
+function undoCalculated (config) {
+  revert(config, changeTracker.calculated)
 }
 
 /**
@@ -188,6 +188,7 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
     if (source === 'calculated' && value === get(config, name)) {
       return
     }
+    // Only setRemoteConfig may write remote_config values: it supplies the current layer's path set.
     changeTracker[source].add(name)
   } else {
     // Programmatic-only options (e.g. logger, lookup, plugins) have no row in
@@ -401,7 +402,7 @@ class Config extends ConfigBase {
 
   // Handles values calculated from a mixture of options and env vars
   #applyCalculated () {
-    undo(this, 'calculated')
+    undoCalculated(this)
 
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
