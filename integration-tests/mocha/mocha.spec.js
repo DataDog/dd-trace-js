@@ -118,6 +118,7 @@ const runTestsWithCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=text-summa
 const testFile = 'ci-visibility/run-mocha.js'
 const expectedStdout = '2 passing'
 const extraStdout = 'end event: can add event listeners to mocha'
+const finalFlushMarker = 'dd-trace final flush completed\n'
 
 const requestedMochaVersion = process.env.MOCHA_VERSION || 'latest'
 const oldestMochaVersion = DD_MAJOR >= 6 ? '8.0.0' : '5.2.0'
@@ -139,26 +140,40 @@ const parallelIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.3
 const reporterFinalizationIt = DD_MAJOR === 5 && MOCHA_VERSION === '5.2.0' ? it.skip : it
 
 /**
- * Captures matching intake payloads until the child process closes.
+ * Captures matching intake payloads until the child confirms its final transport flush.
  *
  * @param {FakeCiVisIntake} intake
  * @param {import('node:child_process').ChildProcess} process
  * @param {(message: object) => boolean} matches
  * @returns {Promise<object[]>}
  */
-async function capturePayloadsUntilClose (intake, process, matches) {
+function capturePayloadsUntilFinalFlush (intake, process, matches) {
   const payloads = []
+  let output = ''
   const onMessage = message => {
     if (matches(message)) payloads.push(message)
   }
   intake.on('message', onMessage)
 
-  try {
-    await once(process, 'close')
-    return payloads
-  } finally {
-    intake.off('message', onMessage)
-  }
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      intake.off('message', onMessage)
+      process.stdout.off('data', onData)
+      process.off('close', onClose)
+    }
+    const onData = chunk => {
+      output += chunk.toString()
+      if (!output.includes(finalFlushMarker)) return
+      cleanup()
+      resolve(payloads)
+    }
+    const onClose = code => {
+      cleanup()
+      reject(new Error(`Child closed with code ${code} before confirming its final flush`))
+    }
+    process.stdout.on('data', onData)
+    process.once('close', onClose)
+  })
 }
 
 describe('mocha failed test replay helpers', () => {
@@ -6859,11 +6874,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               ]),
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
+              REPORT_FINAL_FLUSH: finalFlushMarker,
             },
           }
         )
 
-        const logsPromise = capturePayloadsUntilClose(
+        const logsPromise = capturePayloadsUntilFinalFlush(
           receiver,
           childProcess,
           ({ url }) => url.endsWith('/api/v2/logs')
@@ -6911,11 +6927,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './dynamic-instrumentation/test-hit-breakpoint',
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            REPORT_FINAL_FLUSH: finalFlushMarker,
           },
         }
       )
 
-      const logsPromise = capturePayloadsUntilClose(
+      const logsPromise = capturePayloadsUntilFinalFlush(
         receiver,
         childProcess,
         ({ url }) => url.endsWith('/api/v2/logs')
@@ -7357,11 +7374,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './dynamic-instrumentation/test-not-hit-breakpoint',
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            REPORT_FINAL_FLUSH: finalFlushMarker,
           },
         }
       )
 
-      const logsPromise = capturePayloadsUntilClose(
+      const logsPromise = capturePayloadsUntilFinalFlush(
         receiver,
         childProcess,
         ({ url }) => url.endsWith('/api/v2/logs')
@@ -10052,6 +10070,18 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
+          const expectedTestsBySuite = new Map([
+            ['ci-visibility/mocha-flaky/flaky-passes.js', 3],
+            ['ci-visibility/test/ci-visibility-test.js', 1],
+            ['ci-visibility/mocha-flaky/flaky-fails.js', 6],
+            ['ci-visibility/mocha-hooks/flaky-passes-with-hooks.js', 3],
+            ['ci-visibility/mocha-hooks/flaky-fails-with-hooks.js', 6],
+          ])
+          assert.strictEqual(tests.length, 19)
+          for (const [suite, expectedCount] of expectedTestsBySuite) {
+            assert.strictEqual(tests.filter(test => test.meta[TEST_SUITE] === suite).length, expectedCount)
+          }
+
           // Test that eventually passes: finalStatus 'pass' only on last attempt per test name
           // These tests will pass after the second retry
           const eventuallyPassingTests = tests.filter(
@@ -10140,13 +10170,18 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           })
         }
 
+        const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          assertEvents
+        )
+
         childProcess = exec(runTestsCommand, {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './mocha-flaky/flaky-passes.js',
-              'ci-visibility/test/ci-visibility-test.js',
+              './test/ci-visibility-test.js',
               './mocha-flaky/flaky-fails.js',
               './mocha-hooks/flaky-passes-with-hooks.js',
               './mocha-hooks/flaky-fails-with-hooks.js',
@@ -10154,12 +10189,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           },
         })
 
-        const payloads = await capturePayloadsUntilClose(
-          receiver,
-          childProcess,
-          ({ url }) => url.endsWith('/api/v2/citestcycle')
-        )
-        assertEvents(payloads)
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          payloadsPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
       })
 
     it('sets final_status tag to skip for disabled tests', async () => {
