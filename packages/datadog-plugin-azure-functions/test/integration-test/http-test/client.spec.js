@@ -24,7 +24,8 @@ describe('esm', () => {
       'azure-functions-core-tools@4',
     ],
     false,
-    ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+    ['./packages/datadog-plugin-azure-functions/test/fixtures/local.settings.json',
+      './packages/datadog-plugin-azure-functions/test/fixtures/package.json',
       './packages/datadog-plugin-azure-functions/test/integration-test/http-test/*'])
 
     before(async function () {
