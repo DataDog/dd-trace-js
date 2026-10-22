@@ -69,6 +69,14 @@ class FakeRealtimeSocket {
     return this
   }
 
+  /**
+   * @param {string} event
+   * @param {Function} listener
+   */
+  removeListener (event, listener) {
+    return this.off(event, listener)
+  }
+
   // -- DOM surface --
 
   addEventListener (event, listener, options) {
@@ -97,9 +105,13 @@ class FakeRealtimeSocket {
     this.sent.push(data)
   }
 
-  close () {
+  /**
+   * @param {number} [code]
+   * @param {string} [reason]
+   */
+  close (code = 1000, reason = 'OK') {
     this.readyState = 3
-    this.#dispatch('close', undefined, {})
+    this.#dispatch('close', [code, Buffer.from(reason)], { code, reason })
   }
 
   // -- what the test drives --
@@ -113,7 +125,7 @@ class FakeRealtimeSocket {
     const json = JSON.stringify(event)
     // `ws` hands over a Buffer (the SDK calls `.toString()`); the DOM surface hands over a
     // MessageEvent whose `data` is a string.
-    this.#dispatch('message', Buffer.from(json), { data: json })
+    this.#dispatch('message', [Buffer.from(json)], { data: json })
   }
 
   /**
@@ -123,8 +135,8 @@ class FakeRealtimeSocket {
     return this.sent.map(data => JSON.parse(data))
   }
 
-  #dispatch (event, emitterArg, domArg) {
-    for (const listener of [...(this.emitterListeners.get(event) ?? [])]) listener(emitterArg)
+  #dispatch (event, emitterArgs, domArg) {
+    for (const listener of [...(this.emitterListeners.get(event) ?? [])]) listener(...emitterArgs)
     for (const listener of [...(this.domListeners.get(event) ?? [])]) listener(domArg)
   }
 }
