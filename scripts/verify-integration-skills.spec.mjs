@@ -333,14 +333,16 @@ describe('verify-integration-skills', () => {
     }
   })
 
-  it('rejects handbook growth outside the reviewed inventory', () => {
-    const { status, stderr } = runTool([], (root) => {
-      writeFixtureFile(root, '.agents/skills/serverless-integrations/references/extra.md', '# Extra\n')
-    })
+  for (const skill of ['apm-integrations', 'serverless-integrations']) {
+    it(`rejects ${skill} handbook growth outside the reviewed inventory`, () => {
+      const { status, stderr } = runTool([], (root) => {
+        writeFixtureFile(root, `.agents/skills/${skill}/references/extra.md`, '# Extra\n')
+      })
 
-    assert.strictEqual(status, 1)
-    assert.match(stderr, /expected exactly these skill files/)
-  })
+      assert.strictEqual(status, 1)
+      assert.match(stderr, /expected exactly these skill files/)
+    })
+  }
 
   it('rejects symlinked Markdown in the skill inventory', () => {
     const { status, stderr } = runTool([], root => {
@@ -1333,18 +1335,20 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.strictEqual(Object.hasOwn(packet, 'contract'), false)
   })
 
-  it('rejects stale discovery metadata', () => {
-    const { status, stderr } = runTool([], (root) => {
-      writeFixtureFile(root, '.agents/skills/serverless-integrations/agents/openai.yaml', `interface:
+  for (const skill of ['apm-integrations', 'serverless-integrations']) {
+    it(`rejects stale ${skill} discovery metadata`, () => {
+      const { status, stderr } = runTool([], (root) => {
+        writeFixtureFile(root, `.agents/skills/${skill}/agents/openai.yaml`, `interface:
   display_name: "APM integrations"
   short_description: "Build integrations"
   default_prompt: "Review this integration."
 `)
-    })
+      })
 
-    assert.strictEqual(status, 1)
-    assert.match(stderr, /default_prompt must mention \$serverless-integrations/)
-  })
+      assert.strictEqual(status, 1)
+      assert.strictEqual(stderr.includes(`default_prompt must mention $${skill}`), true)
+    })
+  }
 
   it('rejects malformed and incomplete discovery metadata', () => {
     const malformed = runTool([], (root) => {
