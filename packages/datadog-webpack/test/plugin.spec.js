@@ -107,7 +107,7 @@ describe('DatadogWebpackPlugin', () => {
         assert.equal(asset.filename, 'bundle.mjs')
         const content = asset.value.source()
         assert.match(content, /DD_GIT_COMMIT_SHA|DD_GIT_REPOSITORY_URL/)
-        assert.ok(content.endsWith('module.exports = 1\n'))
+        assert.match(content, /module\.exports = 1\n$/)
         assert.equal(typeof asset.value.size(), 'number')
         assert.equal(asset.value.map(), null)
         assert.equal(asset.value.sourceAndMap().source, content)
