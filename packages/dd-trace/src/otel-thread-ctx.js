@@ -41,6 +41,10 @@ const {
 } = require('./profiling/webspan-utils')
 const webTagsCache = require('./web-tags-cache')
 
+/** @typedef {import('./opentracing/span')} DatadogSpan */
+/** @typedef {import('./opentracing/span_context')} DatadogSpanContext */
+/** @typedef {InstanceType<typeof import('@datadog/pprof').otelThreadCtx.ThreadContext>} ThreadContext */
+
 // OTEP-4947 duplicates are last-wins, so appending a later endpoint value would
 // correctly overwrite an earlier one — but an out-of-process reader sampling the
 // record mid-request would still see the interim value (e.g. a bare `GET`) as
@@ -139,7 +143,12 @@ const HEX_CODES = Buffer.from('0123456789abcdef')
 const traceIdBytes = Buffer.alloc(16)
 const spanIdBytes = new Uint8Array(8)
 
-// Same bytes as decoding toTraceId(true); unexpected shapes fall back to that.
+/**
+ * Same bytes as decoding toTraceId(true); unexpected shapes fall back to that.
+ *
+ * @param {DatadogSpanContext} spanContext
+ * @returns {Uint8Array}
+ */
 function getTraceIdBytes (spanContext) {
   const low = spanContext._traceId.toBuffer()
   if (low.length === 16) {
@@ -160,6 +169,10 @@ function getTraceIdBytes (spanContext) {
   return traceIdBytes
 }
 
+/**
+ * @param {DatadogSpanContext} spanContext
+ * @returns {Uint8Array}
+ */
 function getSpanIdBytes (spanContext) {
   const bytes = spanContext._spanId.toBuffer()
   if (bytes.length !== 8) return Buffer.from(spanContext.toSpanId(true), 'hex')
@@ -167,7 +180,11 @@ function getSpanIdBytes (spanContext) {
   return spanIdBytes
 }
 
-// Same string as toSpanId(true), without the per-trace Buffer hex round trip.
+/**
+ * Same string as toSpanId(true), without the per-trace Buffer hex round trip.
+ *
+ * @param {DatadogSpanContext} rootContext
+ */
 function localRootSpanIdHex (rootContext) {
   const bytes = rootContext._spanId.toBuffer()
   if (bytes.length !== 8) return rootContext.toSpanId(true)
@@ -183,6 +200,10 @@ function localRootSpanIdHex (rootContext) {
   )
 }
 
+/**
+ * @param {DatadogSpan} span
+ * @returns {ThreadContext | undefined} The span's record, or undefined when the span's trace or span id is malformed.
+ */
 function getOrBuildContext (span) {
   let cached = span[CachedSym]
   if (cached !== undefined && cached.context !== undefined) return cached.context
@@ -252,7 +273,7 @@ function appendEndpoint (context, endpoint) {
 
 function onEnter () {
   if (!started) return
-  const span = getActiveSpan()
+  const span = /** @type {DatadogSpan | null | undefined} */ (getActiveSpan())
   const context = span && getOrBuildContext(span)
   if (!context) {
     // Clearing an empty frame would still make pprof install a new AsyncContextFrame.
