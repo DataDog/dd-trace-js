@@ -4,7 +4,6 @@ const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
 
 const pugCompileCh = channel('datadog:pug:compile:start')
-const patched = new WeakSet()
 
 function wrapCompile (compile) {
   return function wrappedCompile (source) {
@@ -17,11 +16,8 @@ function wrapCompile (compile) {
 }
 
 addHook({ name: 'pug', versions: ['>=2.0.4'] }, compiler => {
-  for (const name of ['compile', 'compileClientWithDependenciesTracked']) {
-    if (patched.has(compiler[name])) continue
-    shimmer.wrap(compiler, name, wrapCompile)
-    patched.add(compiler[name])
-  }
+  shimmer.wrap(compiler, 'compile', wrapCompile)
+  shimmer.wrap(compiler, 'compileClientWithDependenciesTracked', wrapCompile)
 
   return compiler
 })

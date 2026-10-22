@@ -6,9 +6,6 @@ const { addHook } = require('./helpers/instrument')
 
 const serializeChannel = dc.channel('apm:protobufjs:serialize-start')
 const deserializeChannel = dc.channel('apm:protobufjs:deserialize-end')
-const patchedRoots = new WeakSet()
-const patchedReflections = new WeakSet()
-const patchedTypes = new WeakSet()
 
 function wrapSerialization (messageClass) {
   if (messageClass?.encode) {
@@ -77,8 +74,6 @@ function wrapReflection (protobuf) {
   ]
 
   for (const method of reflectionMethods) {
-    if (patchedReflections.has(method.target)) continue
-    patchedReflections.add(method.target)
     shimmer.wrap(method.target, method.name, original => function (...args) {
       const result = original.apply(this, args)
       if (result.nested) {
@@ -102,37 +97,30 @@ addHook({
   name: 'protobufjs',
   versions: ['>=6.8.0'],
 }, protobuf => {
-  const proto = protobuf.Root.prototype
-  if (!patchedRoots.has(proto)) {
-    patchedRoots.add(proto)
-    shimmer.wrap(proto, 'load', original => function (...args) {
-      const result = original.apply(this, args)
-      if (isPromise(result)) {
-        return result.then(root => {
-          wrapProtobufClasses(root)
-          return root
-        })
-      }
-      // If result is not a promise, directly wrap the protobuf classes
-      wrapProtobufClasses(result)
-      return result
-    })
+  shimmer.wrap(protobuf.Root.prototype, 'load', original => function (...args) {
+    const result = original.apply(this, args)
+    if (isPromise(result)) {
+      return result.then(root => {
+        wrapProtobufClasses(root)
+        return root
+      })
+    }
+    // If result is not a promise, directly wrap the protobuf classes
+    wrapProtobufClasses(result)
+    return result
+  })
 
-    shimmer.wrap(proto, 'loadSync', original => function (...args) {
-      const root = original.apply(this, args)
-      wrapProtobufClasses(root)
-      return root
-    })
-  }
+  shimmer.wrap(protobuf.Root.prototype, 'loadSync', original => function (...args) {
+    const root = original.apply(this, args)
+    wrapProtobufClasses(root)
+    return root
+  })
 
-  if (!patchedTypes.has(protobuf.Type)) {
-    shimmer.wrap(protobuf, 'Type', Original => function (...args) {
-      const typeInstance = new Original(...args)
-      wrapSetup(typeInstance)
-      return typeInstance
-    })
-    patchedTypes.add(protobuf.Type)
-  }
+  shimmer.wrap(protobuf, 'Type', Original => function (...args) {
+    const typeInstance = new Original(...args)
+    wrapSetup(typeInstance)
+    return typeInstance
+  })
 
   wrapReflection(protobuf)
 

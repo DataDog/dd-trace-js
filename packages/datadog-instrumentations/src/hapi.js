@@ -8,17 +8,6 @@ const handleChannel = channel('apm:hapi:request:handle')
 const routeChannel = channel('apm:hapi:request:route')
 const errorChannel = channel('apm:hapi:request:error')
 const hapiTracingChannel = tracingChannel('apm:hapi:extension')
-const patchedServers = new WeakSet()
-
-/** @param {{ server: Function, Server: Function }} hapi */
-function wrapServers (hapi) {
-  for (const name of ['server', 'Server']) {
-    if (patchedServers.has(hapi[name])) continue
-    shimmer.wrap(hapi, name, wrapServer)
-    patchedServers.add(hapi[name])
-  }
-  return hapi
-}
 
 function wrapServer (server) {
   return function (options) {
@@ -140,7 +129,9 @@ function reply (request, h) {
 }
 
 addHook({ name: '@hapi/hapi', versions: ['>=17.9'] }, hapi => {
-  return wrapServers(hapi)
+  shimmer.massWrap(hapi, ['server', 'Server'], wrapServer)
+
+  return hapi
 })
 
 addHook({ name: '@hapi/hapi', versions: ['>=17.9'], file: 'lib/core.js' }, Core => {
@@ -156,7 +147,9 @@ addHook({ name: '@hapi/hapi', versions: ['>=17.9'], file: 'lib/route.js' }, Rout
 })
 
 addHook({ name: 'hapi', versions: ['>=17'] }, hapi => {
-  return wrapServers(hapi)
+  shimmer.massWrap(hapi, ['server', 'Server'], wrapServer)
+
+  return hapi
 })
 
 addHook({ name: 'hapi', versions: ['16'] }, hapi => {

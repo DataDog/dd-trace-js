@@ -6,8 +6,6 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
-const patchedTransports = new WeakSet()
-
 addHook({ name: '@elastic/transport', file: 'lib/Transport.js', versions: ['>=8 <9'] }, (exports) => {
   wrapTransportPrototype(exports.default)
   return exports
@@ -19,12 +17,8 @@ addHook({ name: '@elastic/transport', versions: ['>=9'] }, (exports) => {
 })
 
 function wrapTransportPrototype (Transport) {
-  const proto = Transport.prototype
-  if (patchedTransports.has(proto)) return
-  patchedTransports.add(proto)
-
-  shimmer.wrap(proto, 'request', createWrapRequest('elasticsearch'))
-  shimmer.wrap(proto, 'getConnection', createWrapGetConnection('elasticsearch'))
+  shimmer.wrap(Transport.prototype, 'request', createWrapRequest('elasticsearch'))
+  shimmer.wrap(Transport.prototype, 'getConnection', createWrapGetConnection('elasticsearch'))
 }
 
 addHook({ name: '@elastic/elasticsearch', file: 'lib/Transport.js', versions: ['>=5.6.16 <8', '>=8'] }, Transport => {

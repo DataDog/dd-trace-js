@@ -8,28 +8,21 @@ const {
 
 const sanitizeMethodFinished = channel('datadog:express-mongo-sanitize:sanitize:finish')
 const sanitizeMiddlewareFinished = channel('datadog:express-mongo-sanitize:filter:finish')
-const patchedSanitize = new WeakSet()
-const patchedMiddleware = new WeakSet()
 
 const propertiesToSanitize = ['body', 'params', 'headers', 'query']
 
 addHook({ name: 'express-mongo-sanitize', versions: ['>=1.0.0'] }, expressMongoSanitize => {
-  if (!patchedSanitize.has(expressMongoSanitize.sanitize)) {
-    shimmer.wrap(expressMongoSanitize, 'sanitize', sanitize => function (...args) {
-      const sanitizedObject = sanitize.apply(this, args)
+  shimmer.wrap(expressMongoSanitize, 'sanitize', sanitize => function (...args) {
+    const sanitizedObject = sanitize.apply(this, args)
 
-      if (sanitizeMethodFinished.hasSubscribers) {
-        sanitizeMethodFinished.publish({ sanitizedObject })
-      }
+    if (sanitizeMethodFinished.hasSubscribers) {
+      sanitizeMethodFinished.publish({ sanitizedObject })
+    }
 
-      return sanitizedObject
-    })
-    patchedSanitize.add(expressMongoSanitize.sanitize)
-  }
+    return sanitizedObject
+  })
 
-  if (patchedMiddleware.has(expressMongoSanitize)) return expressMongoSanitize
-
-  const wrapped = shimmer.wrapFunction(expressMongoSanitize, expressMongoSanitize => function (...args) {
+  return shimmer.wrapFunction(expressMongoSanitize, expressMongoSanitize => function (...args) {
     const middleware = expressMongoSanitize.apply(this, args)
 
     return shimmer.wrapFunction(middleware, middleware => function (...args) {
@@ -51,6 +44,4 @@ addHook({ name: 'express-mongo-sanitize', versions: ['>=1.0.0'] }, expressMongoS
       return middleware.call(this, req, args[1], wrappedNext)
     })
   })
-  if (typeof wrapped === 'function') patchedMiddleware.add(wrapped)
-  return wrapped
 })

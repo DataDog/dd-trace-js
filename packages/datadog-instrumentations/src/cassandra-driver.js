@@ -12,71 +12,58 @@ const errorCh = channel('apm:cassandra-driver:query:error')
 const connectCh = channel('apm:cassandra-driver:query:connect')
 
 let startCtx = {}
-const patchedBatch = new WeakSet()
-const patchedExecute = new WeakSet()
-const patchedInnerExecute = new WeakSet()
 
 addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
-  const proto = cassandra.Client.prototype
-  if (!patchedBatch.has(proto)) {
-    patchedBatch.add(proto)
+  shimmer.wrap(cassandra.Client.prototype, 'batch', batch => function (queries, options, callback) {
+    if (!startCh.hasSubscribers) {
+      return batch.apply(this, arguments)
+    }
+    const lastIndex = arguments.length - 1
+    const cb = arguments[lastIndex]
 
-    shimmer.wrap(proto, 'batch', batch => function (queries, options, callback) {
-      if (!startCh.hasSubscribers) {
-        return batch.apply(this, arguments)
+    startCtx = { keyspace: this.keyspace, query: queries, contactPoints: this.options && this.options.contactPoints }
+    return startCh.runStores(startCtx, () => {
+      if (typeof cb === 'function') {
+        arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
       }
-      const lastIndex = arguments.length - 1
-      const cb = arguments[lastIndex]
 
-      startCtx = { keyspace: this.keyspace, query: queries, contactPoints: this.options && this.options.contactPoints }
-      return startCh.runStores(startCtx, () => {
-        if (typeof cb === 'function') {
-          arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
+      try {
+        const res = batch.apply(this, arguments)
+        if (typeof res === 'function') {
+          return wrapCallback(finishCh, errorCh, startCtx, res)
         }
-
-        try {
-          const res = batch.apply(this, arguments)
-          if (typeof res === 'function') {
-            return wrapCallback(finishCh, errorCh, startCtx, res)
-          }
-          if (!res) {
-            return res
-          }
-          return res.then(
-            () => finish(finishCh, errorCh, startCtx),
-            err => finish(finishCh, errorCh, startCtx, err)
-          )
-        } catch (e) {
-          finish(finishCh, errorCh, startCtx, e)
-          throw e
+        if (!res) {
+          return res
         }
-      })
+        return res.then(
+          () => finish(finishCh, errorCh, startCtx),
+          err => finish(finishCh, errorCh, startCtx, err)
+        )
+      } catch (e) {
+        finish(finishCh, errorCh, startCtx, e)
+        throw e
+      }
     })
-  }
+  })
   return cassandra
 })
 
 addHook({ name: 'cassandra-driver', versions: ['>=4.4'], patchDefault: false }, (cassandra) => {
-  const proto = cassandra.Client.prototype
-  if (!patchedExecute.has(proto)) {
-    patchedExecute.add(proto)
+  shimmer.wrap(cassandra.Client.prototype, '_execute', _execute => function (query, params, execOptions, callback) {
+    if (!startCh.hasSubscribers) {
+      return _execute.apply(this, arguments)
+    }
+    startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
+    return startCh.runStores(startCtx, () => {
+      const promise = _execute.apply(this, arguments)
 
-    shimmer.wrap(proto, '_execute', _execute => function (query, params, execOptions, callback) {
-      if (!startCh.hasSubscribers) {
-        return _execute.apply(this, arguments)
-      }
-      startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
-      return startCh.runStores(startCtx, () => {
-        const promise = _execute.apply(this, arguments)
-
-        promise.then(
-          () => finish(finishCh, errorCh, startCtx),
-          err => finish(finishCh, errorCh, startCtx, err)
-        )
-        return promise
-      })
+      promise.then(
+        () => finish(finishCh, errorCh, startCtx),
+        err => finish(finishCh, errorCh, startCtx, err)
+      )
+      return promise
     })
-  }
+  })
   return cassandra
 })
 
@@ -85,38 +72,33 @@ const isValid = (args) => {
 }
 
 addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'], patchDefault: false }, (cassandra) => {
-  const proto = cassandra.Client.prototype
-  if (!patchedInnerExecute.has(proto)) {
-    patchedInnerExecute.add(proto)
-
-    shimmer.wrap(proto, '_innerExecute', _innerExecute =>
-      function (query, params, execOptions, callback) {
-        if (!startCh.hasSubscribers) {
-          return _innerExecute.apply(this, arguments)
-        }
-        if (!isValid(arguments)) {
-          return _innerExecute.apply(this, arguments)
-        }
-
-        startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
-        return startCh.runStores(startCtx, () => {
-          const lastIndex = arguments.length - 1
-          const cb = arguments[lastIndex]
-
-          if (typeof cb === 'function') {
-            arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
-          }
-
-          try {
-            return _innerExecute.apply(this, arguments)
-          } catch (e) {
-            finish(finishCh, errorCh, startCtx, e)
-            throw e
-          }
-        })
+  shimmer.wrap(cassandra.Client.prototype, '_innerExecute', _innerExecute =>
+    function (query, params, execOptions, callback) {
+      if (!startCh.hasSubscribers) {
+        return _innerExecute.apply(this, arguments)
       }
-    )
-  }
+      if (!isValid(arguments)) {
+        return _innerExecute.apply(this, arguments)
+      }
+
+      startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
+      return startCh.runStores(startCtx, () => {
+        const lastIndex = arguments.length - 1
+        const cb = arguments[lastIndex]
+
+        if (typeof cb === 'function') {
+          arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
+        }
+
+        try {
+          return _innerExecute.apply(this, arguments)
+        } catch (e) {
+          finish(finishCh, errorCh, startCtx, e)
+          throw e
+        }
+      })
+    }
+  )
   return cassandra
 })
 

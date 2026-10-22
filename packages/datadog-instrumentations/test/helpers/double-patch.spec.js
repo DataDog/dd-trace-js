@@ -5,7 +5,13 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 const semver = require('semver')
 
+const shimmer = require('../../../datadog-shimmer')
 const instrumentations = require('../../src/helpers/instrumentations')
+
+// Mirrors register.js, which attributes every wrapper a hook creates to its instrumentation entry.
+function run (entry, exports, version, isIitm) {
+  return shimmer.runHook(entry, entry.hook, exports, version, isIitm)
+}
 
 function noop () {}
 
@@ -193,7 +199,7 @@ describe('hooks for CommonJS exports shared with ESM namespaces', () => {
         const exports = create()
         const initial = methods.map(method => get(exports, method))
         let wrapped = exports
-        for (const { hook } of hooks) wrapped = hook(wrapped, version) ?? wrapped
+        for (const entry of hooks) wrapped = run(entry, wrapped, version) ?? wrapped
         const once = methods.map(method => get(wrapped, method))
         for (const [index, method] of methods.entries()) {
           assert.notStrictEqual(once[index], initial[index], `${name}.${method} was not wrapped`)
@@ -201,7 +207,7 @@ describe('hooks for CommonJS exports shared with ESM namespaces', () => {
 
         // IITM sees a different namespace object, but both views share their classes and functions.
         const namespace = { default: wrapped, ...wrapped }
-        for (const { hook } of hooks) hook(namespace, version, true)
+        for (const entry of hooks) run(entry, namespace, version, true)
         for (const [index, method] of methods.entries()) {
           assert.strictEqual(get(wrapped, method), once[index], `${name}.${method} was wrapped again`)
           if (!method.includes('.prototype.')) {
@@ -214,15 +220,15 @@ describe('hooks for CommonJS exports shared with ESM namespaces', () => {
 
   it('patches a distinct tedious BulkLoad even when its Connection was already patched', () => {
     require('../../src/tedious')
-    const [{ hook }] = instrumentations.tedious
+    const [entry] = instrumentations.tedious
     const Connection = withMethods(['makeRequest'])
     const first = { Connection, BulkLoad: withMethods(['getRowStream']) }
-    hook(first, '18.6.1')
+    run(entry, first, '18.6.1')
     const once = Connection.prototype.makeRequest
     const BulkLoad = withMethods(['getRowStream'])
     const original = BulkLoad.prototype.getRowStream
 
-    hook({ Connection, BulkLoad }, '18.6.1')
+    run(entry, { Connection, BulkLoad }, '18.6.1')
 
     assert.strictEqual(Connection.prototype.makeRequest, once)
     assert.notStrictEqual(BulkLoad.prototype.getRowStream, original)
@@ -230,14 +236,14 @@ describe('hooks for CommonJS exports shared with ESM namespaces', () => {
 
   it('patches a distinct protobufjs Type even when its Root was already patched', () => {
     require('../../src/protobufjs')
-    const [{ hook }] = instrumentations.protobufjs
+    const [entry] = instrumentations.protobufjs
     const Root = Object.assign(withMethods(['load', 'loadSync']), { fromJSON: noop })
     const first = { Root, Type: Object.assign(withMethods(['fromObject']), { fromJSON: noop }) }
-    hook(first, '8.8.0')
+    run(entry, first, '8.8.0')
     const once = Root.prototype.load
     const Type = Object.assign(withMethods(['fromObject']), { fromJSON: noop })
 
-    hook({ Root, Type }, '8.8.0')
+    run(entry, { Root, Type }, '8.8.0')
 
     assert.strictEqual(Root.prototype.load, once)
     assert.notStrictEqual(Type.prototype.fromObject, noop)
@@ -247,12 +253,12 @@ describe('hooks for CommonJS exports shared with ESM namespaces', () => {
     require('../../src/google-cloud-pubsub')
     const hooks = instrumentations['@google-cloud/pubsub'].filter(({ file }) => !file)
     const first = cases.find(({ name }) => name === '@google-cloud/pubsub').create()
-    for (const { hook } of hooks) hook(first, '5.0.0')
+    for (const entry of hooks) run(entry, first, '5.0.0')
     const once = first.Subscription.prototype.emit
     const Topic = withMethods(['publish', 'publishMessage'])
     const original = Topic.prototype.publishMessage
 
-    for (const { hook } of hooks) hook({ ...first, Topic }, '5.0.0')
+    for (const entry of hooks) run(entry, { ...first, Topic }, '5.0.0')
 
     assert.strictEqual(first.Subscription.prototype.emit, once)
     assert.notStrictEqual(Topic.prototype.publishMessage, original)
