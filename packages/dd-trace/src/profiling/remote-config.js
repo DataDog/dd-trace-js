@@ -37,6 +37,8 @@ const PROFILE_TYPES = /** @type {const} */ (['cpuTime', 'wallTime', 'memory'])
 function enable (rc, config) {
   /** @type {Map<string, ProfilingConfig>} */
   const configs = new Map()
+  // Match the initially empty profiling layer.
+  let lastSettings = 'null'
 
   rc.subscribeProducts(PRODUCT)
   rc.setBatchHandler([PRODUCT], (transaction) => {
@@ -55,7 +57,14 @@ function enable (rc, config) {
       transaction.ack(item.path)
     }
 
-    config.setRemoteConfig(toSettings(merge(configs.values(), config)), 'profiling')
+    // Skip unchanged settings to avoid redundant telemetry and config publishes.
+    // toSettings inserts keys in a fixed order, making JSON equality stable.
+    const settings = toSettings(merge(configs.values(), config))
+    const serialized = JSON.stringify(settings)
+    if (serialized === lastSettings) return
+    lastSettings = serialized
+
+    config.setRemoteConfig(settings, 'profiling')
   })
 }
 
