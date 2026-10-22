@@ -2,7 +2,6 @@
 
 const dc = require('dc-polyfill')
 
-const Plugin = require('../../plugins/plugin')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
@@ -16,6 +15,7 @@ const enabledFor = {
 }
 
 let fsPlugin
+const legacyStorage = storage('legacy')
 const appsecFsStorage = storage(APPSEC_FS_STORAGE)
 const fsOperationStart = dc.channel('apm:fs:operation:start')
 const fsOperationFinish = dc.channel('apm:fs:operation:finish')
@@ -23,6 +23,12 @@ const responseRenderStart = dc.channel('tracing:datadog:express:response:render:
 const responseRenderEnd = dc.channel('tracing:datadog:express:response:render:end')
 
 function getStoreToStart (fsProps, store = appsecFsStorage.getStore()) {
+  // Only track operations inside a traced context, like a request. Callbacks of fs streams and watchers keep
+  // the state of the operation that created them, so state created outside of one would leak into every request
+  // of a server started from such a callback. The tracing fs plugin enters a noop store when no span is active.
+  const legacyStore = legacyStorage.getStore()
+  if (!legacyStore || legacyStore.noop) return
+
   if (!store || !store.opExcluded) {
     return {
       ...store,
@@ -34,7 +40,7 @@ function getStoreToStart (fsProps, store = appsecFsStorage.getStore()) {
   return store
 }
 
-class AppsecFsPlugin extends Plugin {
+class AppsecFsPlugin {
   enable () {
     // The tracing fs plugin binds the legacy store on these channels. AppSec
     // keeps its fs-only state in a dedicated storage namespace to avoid
@@ -43,8 +49,6 @@ class AppsecFsPlugin extends Plugin {
     fsOperationFinish.bindStore(appsecFsStorage, this._onFsOperationFinishOrRenderEnd)
     responseRenderStart.bindStore(appsecFsStorage, this._onResponseRenderStart)
     responseRenderEnd.bindStore(appsecFsStorage, this._onFsOperationFinishOrRenderEnd)
-
-    super.configure(true)
   }
 
   disable () {
@@ -52,7 +56,6 @@ class AppsecFsPlugin extends Plugin {
     fsOperationFinish.unbindStore(appsecFsStorage)
     responseRenderStart.unbindStore(appsecFsStorage)
     responseRenderEnd.unbindStore(appsecFsStorage)
-    super.configure(false)
   }
 
   _onFsOperationStart () {
