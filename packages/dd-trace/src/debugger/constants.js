@@ -6,6 +6,7 @@ const WORKER_ERROR_REASON = Object.freeze({
   UNSUPPORTED_INSERTION_POINT: 'unsupported_insertion_point',
   CONFLICTING_CAPTURE_OPTIONS: 'conflicting_capture_options',
   UNKNOWN_REMOTE_CONFIG_ACTION: 'unknown_remote_config_action',
+  WORKER_ENTRY_POINT_NOT_FOUND: 'worker_entry_point_not_found',
 })
 
 module.exports = {

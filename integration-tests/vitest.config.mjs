@@ -100,6 +100,7 @@ async function getBrowserProvider () {
   if (browserProvider === 'webdriverio') {
     const { webdriverio } = await import('@vitest/browser-webdriverio')
     const capabilities = {
+      'wdio:enforceWebDriverClassic': true,
       'goog:chromeOptions': {
         args: ['disable-dev-shm-usage', 'no-sandbox'],
       },

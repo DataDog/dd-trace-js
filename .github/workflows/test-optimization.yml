@@ -177,6 +177,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       OPTIONS_OVERRIDE: 1
       PLAYWRIGHT_VERSION: ${{ matrix.playwright-version }}
+      TEST_OPTIMIZATION_NODE_SHARD: ${{ matrix.node-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/dd-sts-api-key
@@ -259,22 +260,32 @@ jobs:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: npm run test:instrumentations:ci
-        if: matrix.spec == 'webdriverio'
+        if: matrix.spec == 'webdriverio.test-optimization'
         env:
           PLUGINS: webdriverio
       - uses: ./.github/actions/upload-junit-artifacts
         id: webdriverio_instrumentation_upload
-        if: "!cancelled() && matrix.spec == 'webdriverio'"
+        if: "!cancelled() && matrix.spec == 'webdriverio.test-optimization'"
         with:
           id: ${{ github.job }}-${{ strategy.job-index }}-instrumentation
       - name: Clear uploaded instrumentation JUnit reports
         if: "!cancelled() && steps.webdriverio_instrumentation_upload.outcome == 'success'"
         run: rm -f ./*.xml
+      - name: Install FFmpeg for video recording and validation
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Use installed Chrome and ChromeDriver
+        if: matrix.spec == 'webdriverio'
+        run: |
+          google-chrome --version
+          chromedriver --version
+          echo "WEBDRIVERIO_CHROME_BINARY=$(command -v google-chrome)" >> "$GITHUB_ENV"
+          echo "WEBDRIVERIO_CHROMEDRIVER_BINARY=$(command -v chromedriver)" >> "$GITHUB_ENV"
       - id: webdriverio_integration
         run: npm run test:integration:webdriverio:coverage
         env:
           SPEC: ${{ matrix.spec }}
           WEBDRIVERIO_VERSION: ${{ matrix.webdriverio-version }}
+          WEBDRIVERIO_REAL_BROWSER: 'true'
       - uses: ./.github/actions/coverage
         with:
           flags: >-
@@ -577,6 +588,8 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           SPEC: ${{ matrix.spec }}
+          TEST_OPTIMIZATION_PARALLEL_VITEST_VERSIONS: >-
+            ${{ matrix.spec == 'vitest.core' && matrix.vitest-version == 'all' && 'oldest,latest' || '' }}
           VITEST_VERSION: ${{ matrix.vitest-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage

@@ -51,8 +51,13 @@ describe('AgentlessConfigurationSource', () => {
       pollIntervalMs: 30_000,
       requestTimeoutMs: 2000,
       apiKey: 'test-api-key',
+      env: 'test-env',
     }
     log = {
+      debug: sinon.spy((messageOrFn) => {
+        // Simulates a debug-enabled logger, which invokes the lazy callback form.
+        if (typeof messageOrFn === 'function') messageOrFn()
+      }),
       error: sinon.spy(),
       warn: sinon.spy(),
     }
@@ -140,6 +145,11 @@ describe('AgentlessConfigurationSource', () => {
     await flush()
 
     sinon.assert.calledOnceWithExactly(applyConfiguration, VALID_UFC)
+    const debugCall = log.debug.getCalls().find((call) => typeof call.args[0] === 'function')
+    assert.strictEqual(
+      debugCall.args[0](),
+      'Feature Flags: agentless configuration applied successfully (0 flag(s), env=test-env)'
+    )
     assert.strictEqual(requests[0].data, '')
     assert.strictEqual(requests[0].options.url, config.endpoint)
     assert.strictEqual(requests[0].options.method, 'GET')

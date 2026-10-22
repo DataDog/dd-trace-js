@@ -214,14 +214,32 @@ describe('Plugin', () => {
           })
 
           it('when consuming a message', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
+            const topic = (await pubsub.createTopic(`dsm-size-${id()}`))[0]
+            const subscription = (await topic.createSubscription(`dsm-size-sub-${id()}`))[0]
+            const data = Buffer.alloc(1000, 'a')
 
-            await consume(async () => {
-              assert.ok(
-                recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
-                `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
-              )
+            const received = new Promise(resolve => {
+              subscription.on('message', msg => {
+                msg.ack()
+                resolve(msg)
+              })
             })
+
+            await publish(topic, { data })
+            const message = await received
+            await subscription.close()
+
+            const consumeCheckpoint = recordCheckpointSpy.args
+              .map(args => args[0])
+              .find(checkpoint => checkpoint.edgeTags.includes('direction:in') &&
+                checkpoint.edgeTags.includes(`topic:${topic.name}`))
+
+            assert.ok(consumeCheckpoint, 'Expected a direction:in checkpoint for the consumed message')
+            assert.strictEqual(message.data.length, data.length)
+            assert.ok(
+              consumeCheckpoint.payloadSize >= data.length,
+              `Expected consume payloadSize ${consumeCheckpoint.payloadSize} >= message data size ${data.length}`
+            )
           })
         })
       })

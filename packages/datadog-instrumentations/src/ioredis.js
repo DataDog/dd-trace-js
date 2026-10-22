@@ -14,9 +14,7 @@ const connectionOptionsCache = new WeakMap()
 
 function wrapRedis (Redis) {
   shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
-    if (!startCh.hasSubscribers) return sendCommand.call(this, command, stream)
-
-    if (!command?.promise) return sendCommand.call(this, command, stream)
+    if (!startCh.hasSubscribers || !command?.promise) return sendCommand.call(this, command, stream)
 
     const options = this.options || {}
     let connectionOptions = connectionOptionsCache.get(this)
@@ -32,7 +30,7 @@ function wrapRedis (Redis) {
       connectionName: options.connectionName,
     }
     return startCh.runStores(ctx, () => {
-      command.promise.then(() => finish(finishCh, errorCh, ctx), err => finish(finishCh, errorCh, ctx, err))
+      command.promise.then(() => finish(ctx), err => finish(ctx, err))
 
       return sendCommand.call(this, command, stream)
     })
@@ -51,7 +49,11 @@ addHook({ name: 'ioredis', versions: ['>=4.11.0 <5'], file: 'built/redis/index.j
 
 addHook({ name: 'ioredis', versions: ['>=5'] }, wrapRedis)
 
-function finish (finishCh, errorCh, ctx, error) {
+/**
+ * @param {Record<string, unknown> & { error?: Error }} ctx
+ * @param {Error} [error]
+ */
+function finish (ctx, error) {
   if (error) {
     ctx.error = error
     errorCh.publish(ctx)

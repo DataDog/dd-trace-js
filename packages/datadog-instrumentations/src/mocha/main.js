@@ -1,6 +1,9 @@
 'use strict'
 
 const { AsyncResource } = require('node:async_hooks')
+const { realpathSync } = require('node:fs')
+const { resolve, sep } = require('node:path')
+const { fileURLToPath } = require('node:url')
 
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../../vendor/dist/semifies')
@@ -16,6 +19,7 @@ const { EMPTY_EFD_RETRY_POLICY } = require('../../../dd-trace/src/ci-visibility/
 const { writeCoverageBackfillToCache } = require('../../../dd-trace/src/ci-visibility/test-optimization-cache')
 const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
+const { getCallSites } = require('../../../dd-trace/src/plugins/util/stacktrace')
 const {
   getTestSuitePath,
   MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
@@ -88,6 +92,9 @@ const runnerRecoveryStates = new WeakMap()
 const runnersWithPendingCoverageReset = new WeakSet()
 const parallelRunners = new WeakSet()
 const wrappedRunnerEmitPrototypes = new WeakSet()
+const rootSuitesWithHookFiles = new WeakSet()
+const ROOT_HOOK_NAMES = ['_beforeAll', '_afterAll', '_beforeEach', '_afterEach']
+const ROOT_SUITE_ARRAY_NAMES = ['tests', 'suites', '_onlyTests', '_onlySuites', ...ROOT_HOOK_NAMES]
 let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
@@ -167,6 +174,40 @@ function haveRootTestsFinished (rootTests) {
     }
   }
   return true
+}
+
+/**
+ * @param {{ file: string }} test
+ */
+function startRootSuite (test) {
+  const ctx = testFileToSuiteCtx.get(test.file)
+  if (ctx?._pendingRootStart) {
+    ctx._pendingRootStart = false
+    testSuiteStartCh.runStores(ctx, () => {})
+  }
+}
+
+/**
+ * @param {string} file
+ * @param {'pass' | 'fail' | 'skip'} status
+ * @param {object} [runner] Defers coverage reset until this runner's suite-end reporters finish.
+ */
+function finishRootSuite (file, status, runner) {
+  const ctx = testFileToSuiteCtx.get(file)
+  if (!ctx) {
+    log.warn('No ctx found for suite', file)
+    return
+  }
+
+  if (global.__coverage__) {
+    const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
+    testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
+    mergeCoverage(global.__coverage__, originalCoverageMap)
+    if (runner) runnersWithPendingCoverageReset.add(runner)
+    else resetCoverage(global.__coverage__)
+  }
+
+  testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
 }
 
 function getSuitePath (suite) {
@@ -931,6 +972,23 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       return
     }
 
+    if (runner._opts?.cleanReferencesAfterRun === false) {
+      const rootSuite = runner.suite
+      const originalArrays = ROOT_SUITE_ARRAY_NAMES.map(name => rootSuite[name])
+      // Restore definitions before completion callbacks can start another run, including with the plugin disabled.
+      runner.prependOnceListener('end', () => {
+        for (let index = 0; index < ROOT_SUITE_ARRAY_NAMES.length; index++) {
+          rootSuite[ROOT_SUITE_ARRAY_NAMES[index]] = originalArrays[index]
+        }
+      })
+    }
+
+    // Root hooks must be selected before .only() removes other files from the test tree.
+    for (const name of ROOT_HOOK_NAMES) {
+      runner.suite[name] = runner.suite[name].filter(hook => !hook.file ||
+        !suitesToSkip.includes(getSuitePath(hook)) || unskippableSuites.includes(hook.file))
+    }
+
     // We remove the suites that we skip through ITR
     // Mocha normally applies exclusivity after this asynchronous configuration step.
     if (typeof runner.suite.hasOnly === 'function') {
@@ -940,17 +998,28 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
     const numTestsToRun = runner.grepTotal(runner.suite)
     const filteredSuites = getFilteredSuites(runner.suite.suites)
+    // Root tests share a Mocha suite across files, but TIA still selects them by file.
+    const filteredRootTests = getFilteredSuites(runner.suite.tests)
     const { suitesToRun, suitesToSkipForRun } = filteredSuites
 
-    isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
+    isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length ||
+      filteredRootTests.suitesToRun.length !== runner.suite.tests.length
 
     log.debug('%d out of %d suites are going to run.', suitesToRun.length, runner.suite.suites.length)
 
     runner.suite.suites = suitesToRun
+    runner.suite.tests = filteredRootTests.suitesToRun
+    // Mocha reapplies exclusivity when the delayed runner resumes.
+    if (runner.suite._onlyTests.length) {
+      runner.suite._onlyTests = runner.suite.tests
+    }
+    if (runner.suite._onlySuites.length) {
+      runner.suite._onlySuites = runner.suite._onlySuites.filter(suite => suitesToRun.includes(suite))
+    }
     areAllSuitesSkipped = isSuitesSkipped && numTestsToRun > 0 && runner.grepTotal(runner.suite) === 0
 
-    skippedSuites = [...filteredSuites.skippedSuites]
-    suitesToSkip = suitesToSkipForRun
+    skippedSuites = [...new Set([...filteredSuites.skippedSuites, ...filteredRootTests.skippedSuites])]
+    suitesToSkip = [...new Set([...suitesToSkipForRun, ...filteredRootTests.suitesToSkipForRun])]
     skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
     writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
 
@@ -1095,10 +1164,50 @@ function runMochaRunner (run, runner, args) {
 /**
  * @param {Function} Mocha
  * @param {string} frameworkVersion
+ * @param {import('./common').MochaHookMeta} hookMeta
  * @returns {Function}
  */
-function wrapMochaRun (Mocha, frameworkVersion) {
+function wrapMochaRun (Mocha, frameworkVersion, hookMeta) {
   warnDeprecatedMochaVersion(frameworkVersion)
+
+  // Shimmer is required to attach listeners to the root suite created by each Mocha instance.
+  shimmer.wrap(Mocha.prototype, 'ui', ui => function (...args) {
+    const result = ui.apply(this, args)
+    const suite = this.suite
+    if (!rootSuitesWithHookFiles.has(suite)) {
+      rootSuitesWithHookFiles.add(suite)
+      let file
+      suite.prependListener('pre-require', (context, testFile) => {
+        file = testFile
+      })
+      suite.on('post-require', () => {
+        file = undefined
+      })
+      // Hook objects are created at runtime; inspect the caller while registration is still on the stack.
+      shimmer.wrap(suite, '_createHook', createHook => function createHookWithFile (...args) {
+        const hook = createHook.apply(this, args)
+        if (file && !hook.file) {
+          try {
+            const { moduleBaseDir } = hookMeta
+            const mochaPathPrefix = moduleBaseDir && moduleBaseDir + sep
+            for (const site of getCallSites(createHookWithFile)) {
+              const source = site.getFileName()
+              if (!source || source.startsWith('node:')) continue
+              const sourceFile = source.startsWith('file:') ? fileURLToPath(source) : source
+              if (mochaPathPrefix && sourceFile.startsWith(mochaPathPrefix)) continue
+              // Helpers register shared setup; only direct declarations belong to the loading test file.
+              if (sourceFile === file || realpathSync(sourceFile) === realpathSync(file)) hook.file = file
+              break
+            }
+          } catch (error) {
+            log.debug('Error capturing Mocha root hook source: %s', error)
+          }
+        }
+        return hook
+      })
+    }
+    return result
+  })
 
   // Shimmer is required because run must return its Runner while execution is paused and resumed after configuration.
   shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
@@ -1123,7 +1232,7 @@ function wrapMochaRun (Mocha, frameworkVersion) {
     this.files.forEach((path) => {
       const isUnskippable = isMarkedAsUnskippable({ path })
       if (isUnskippable) {
-        unskippableSuites.push(path)
+        unskippableSuites.push(resolve(path))
       }
     })
 
@@ -1200,8 +1309,7 @@ addHook({
   filePattern: String.raw`lib/runner\.(?:c?js)$`,
 }, function (runnerPackage, frameworkVersion) {
   const Runner = runnerPackage.Runner ?? runnerPackage.default ?? runnerPackage
-  if (typeof Runner !== 'function') return
-  if (patched.has(Runner)) return
+  if (typeof Runner !== 'function' || patched.has(Runner)) return
 
   patched.add(Runner)
   wrapRunnerEmit(Runner)
@@ -1226,12 +1334,12 @@ addHook({
       runnerFrameworkErrors.delete(this)
     }
 
-    const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
+    let { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
     // Root-level tests (direct children of root, no describe wrapper) keyed by file.
     // Populated during the root 'suite' event so the normal finish path can include them
     // in mixed-file status calculation.
     const rootTestsByFile = new Map()
-    // Counts how many original tests per pure-root file still need their final attempt.
+    // Counts how many selected tests per pure-root file still need their final attempt.
     // Hits zero when the last test's lifecycle completes, triggering the suite finish.
     const rootPendingCountByFile = new Map()
     const rootFinalizationPendingCountByFile = new Map()
@@ -1304,33 +1412,18 @@ addHook({
       }
       rootPendingCountByFile.delete(file)
 
-      const ctx = testFileToSuiteCtx.get(file)
-      if (!ctx) {
-        log.warn('No ctx found for suite', file)
-        return
-      }
-
       const rootTests = rootTestsByFile.get(file) || []
-      const status = getRootSuiteStatus(rootTests)
-
-      if (global.__coverage__) {
-        const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
-        testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
-        mergeCoverage(global.__coverage__, originalCoverageMap)
-        resetCoverage(global.__coverage__)
-      }
-
-      testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+      finishRootSuite(file, getRootSuiteStatus(rootTests))
     }
 
-    function finishRootSuiteFallbackForFile (file) {
+    function finishRootSuiteFallbackForFile (file, runner) {
       const ctx = testFileToSuiteCtx.get(file)
       if (!ctx || !rootPendingCountByFile.has(file)) return
 
       const rootTests = rootTestsByFile.get(file) || []
       const status = haveRootTestsFinished(rootTests) ? getRootSuiteStatus(rootTests) : 'fail'
       rootPendingCountByFile.delete(file)
-      testSuiteFinishCh.publish({ status, ...ctx.currentStore }, () => {})
+      finishRootSuite(file, status, runner)
     }
 
     function finishRootSuiteAfterFinalAttempt (test) {
@@ -1361,13 +1454,7 @@ addHook({
     this.prependListener('test', getOnTestHandler(true))
     // Reporters are registered before Runner#run, so prepend this after the test handler
     // to start the suite first and preserve the test event if a reporter throws.
-    this.prependListener('test', function (test) {
-      const ctx = testFileToSuiteCtx.get(test.file)
-      if (ctx?._pendingRootStart) {
-        ctx._pendingRootStart = false
-        testSuiteStartCh.runStores(ctx, () => {})
-      }
-    })
+    this.prependListener('test', startRootSuite)
 
     // Reporters are registered before this run wrapper. Prepend terminal handlers
     // so a reporter error cannot strand a test span that Mocha already completed.
@@ -1407,8 +1494,16 @@ addHook({
     this.prependListener('fail', getOnFailHandler(true, config))
 
     this.prependListener('pending', getOnPendingHandler())
+    // Static skips emit 'pending' without 'test', so their suite must start here too.
+    this.prependListener('pending', startRootSuite)
 
     this.prependListener('suite', function (suite) {
+      if (suite.root) {
+        // TIA and .only() have now selected the suites that can finish during this run.
+        const selectedSuites = getSuitesByTestFile(suite)
+        suitesByTestFile = selectedSuites.suitesByTestFile
+        numSuitesByTestFile = selectedSuites.numSuitesByTestFile
+      }
       if (suite.root || !suite.tests.length) {
         // This branch can be triggered when we have top level it(...) inside test files.
         // In that case, they all (even if they are from different files) are going to be
@@ -1418,9 +1513,14 @@ addHook({
         // below. Since 'suite' fires for root first, in the mixed case the ctx is created
         // here and the describe-based handler finds it already set.
         if (suite.root && suite.tests.length > 0) {
+          const { _grep: grep, _invert: invert } = this
+          const lastIndex = grep.lastIndex
+          const selectedTests = suite.tests.filter(test => grep.test(test.fullTitle()) !== !!invert)
+          // Inspecting a stateful grep must not change which tests Mocha subsequently selects.
+          if (grep.lastIndex !== lastIndex) grep.lastIndex = lastIndex
           const files = new Set(suite.tests.map(test => test.file).filter(Boolean))
           for (const file of files) {
-            const testsForFile = suite.tests.filter(t => t.file === file)
+            const testsForFile = selectedTests.filter(t => t.file === file)
             rootTestsByFile.set(file, testsForFile)
             // Only track the countdown for pure root-level files.
             // Mixed files are finished by the normal 'suite end' path.
@@ -1461,10 +1561,10 @@ addHook({
     this.prependListener('suite end', function (suite) {
       if (suite.root) {
         // Normal case: pure root-level files are finished by the 'test end' / 'hook end'
-        // listeners via finishRootSuiteForFile. Two edge cases remain here:
+        // listeners via finishRootSuiteForFile. Fallback cases remain here:
         //
-        // 1. All-pending: no 'test' event fired, _pendingRootStart is still true.
-        //    Start and immediately finish with 'skip'.
+        // 1. Unstarted file: no 'test' or 'pending' event fired (e.g. all tests
+        //    were filtered out). Start and immediately finish with 'skip'.
         //
         // 2. Aborted mid-run (e.g. a beforeEach hook failure): Mocha skips remaining
         //    tests and jumps straight to 'suite end'. rootPendingCountByFile still has
@@ -1491,7 +1591,7 @@ addHook({
               continue
             }
 
-            finishRootSuiteFallbackForFile(test.file)
+            finishRootSuiteFallbackForFile(test.file, this)
           }
         }
         return
@@ -1584,10 +1684,7 @@ addHook({
   file: 'src/WorkerHandler.js',
 }, (workerHandlerPackage) => {
   shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => function (_, path) {
-    if (!testFinishCh.hasSubscribers) {
-      return exec.apply(this, arguments)
-    }
-    if (!path?.length) {
+    if (!testFinishCh.hasSubscribers || !path?.length) {
       return exec.apply(this, arguments)
     }
     const [testSuiteAbsolutePath] = path
