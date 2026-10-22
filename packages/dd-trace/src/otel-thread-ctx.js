@@ -133,7 +133,7 @@ let ThreadContext
 let getContext
 let clearContext
 
-const HEX_CODES = Uint8Array.from(Buffer.from('0123456789abcdef'))
+const HEX_CODES = Buffer.from('0123456789abcdef')
 
 // Reusable: the ThreadContext constructor copies the ids into its own record.
 const traceIdBytes = Buffer.alloc(16)
@@ -146,12 +146,12 @@ function getTraceIdBytes (spanContext) {
     for (let i = 0; i < 16; i++) traceIdBytes[i] = low[i]
     return traceIdBytes
   }
-  if (low.length !== 8) return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
+  if (low.length !== 8) return Buffer.from(spanContext.toTraceId(true), 'hex')
   const high = spanContext._trace.tags['_dd.p.tid']
   if (high) {
     // write() stops at the first non-hex character, so only a valid _dd.p.tid fills all 8 bytes.
     if (typeof high !== 'string' || high.length !== 16 || traceIdBytes.write(high, 0, 8, 'hex') !== 8) {
-      return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
+      return Buffer.from(spanContext.toTraceId(true), 'hex')
     }
   } else {
     for (let i = 0; i < 8; i++) traceIdBytes[i] = 0
@@ -162,7 +162,7 @@ function getTraceIdBytes (spanContext) {
 
 function getSpanIdBytes (spanContext) {
   const bytes = spanContext._spanId.toBuffer()
-  if (bytes.length !== 8) return Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex'))
+  if (bytes.length !== 8) return Buffer.from(spanContext.toSpanId(true), 'hex')
   for (let i = 0; i < 8; i++) spanIdBytes[i] = bytes[i]
   return spanIdBytes
 }
