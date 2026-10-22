@@ -179,7 +179,11 @@ class BaseFFEWriter {
 
     // Keep byte counting behind the debug callback because payloads can be several megabytes.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `${this.constructor.name} flushing ${events.length} events (${Buffer.byteLength(payload)} bytes)`)
+    log.debug(() => {
+      try {
+        return `${this.constructor.name} flushing ${events.length} events (${Buffer.byteLength(payload)} bytes)`
+      } catch { return 'Feature Flags: flushing events; diagnostic details unavailable' }
+    })
     this._sendPayload(payload, events.length)
   }
 
@@ -198,7 +202,8 @@ class BaseFFEWriter {
    */
   destroy () {
     if (this.#destroyer) {
-      log.debug('Stopping %s', this.constructor.name)
+      log.debug('%s stopping with %d buffered events; final flush initiated without awaiting delivery',
+        this.constructor.name, this._buffer.length)
       clearInterval(this._periodic)
       this.flush()
       globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
@@ -313,13 +318,14 @@ class BaseFFEWriter {
     // The request helper mutates headers. Concurrent envelopes must not share them.
     const requestOptions = { ...route.requestOptions, headers: { ...route.requestOptions.headers } }
     request(payload, requestOptions, (error, response, statusCode) => {
-      const errorMessage = error && (this.#formatError ? this.#formatError(error, statusCode) : error.message)
+      const errorMessage = error && (this.#formatError
+        ? this.#formatError(error, statusCode)
+        : error.message)
       if (fallbackRoute && isSafeToReplay(error, statusCode)) {
         log.debug(
-          '%s switching from %s%s to direct intake after definitive rejection',
+          '%s switching from %s to direct intake after definitive rejection',
           this.constructor.name,
-          route.url.href,
-          route.endpoint
+          route.url.origin
         )
         if (this._requestOptions === route.requestOptions) {
           this.#activateRoute(fallbackRoute)
@@ -332,27 +338,25 @@ class BaseFFEWriter {
 
       if (fallbackRoute && isTransportFailure(error, statusCode)) {
         log.debug(
-          '%s switching future batches from %s%s to direct intake after an ambiguous failure without replay',
+          '%s switching future batches from %s to direct intake after an ambiguous failure without replay',
           this.constructor.name,
-          route.url.href,
-          route.endpoint
+          route.url.origin
         )
         if (this._requestOptions === route.requestOptions) {
           this.#activateRoute(fallbackRoute)
           this._fallbackRoute = undefined
           route.onFallback?.()
         }
-        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, errorMessage)
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
         onComplete?.(false)
         return
       }
 
       if (fallbackRoute && shouldSwitchFutureRoute(statusCode)) {
         log.debug(
-          '%s switching future batches from %s%s to direct intake after status %d without replay',
+          '%s switching future batches from %s to direct intake after status %d without replay',
           this.constructor.name,
-          route.url.href,
-          route.endpoint,
+          route.url.origin,
           statusCode
         )
         if (this._requestOptions === route.requestOptions) {
@@ -360,7 +364,7 @@ class BaseFFEWriter {
           this._fallbackRoute = undefined
           route.onFallback?.()
         }
-        log.warn('Events request returned status %d', statusCode)
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
         onComplete?.(false)
         return
       }
@@ -374,24 +378,40 @@ class BaseFFEWriter {
           shouldSwitchFutureRoute(statusCode))
       ) {
         route.onUnavailable()
-        if (error) {
-          log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, errorMessage)
-        } else {
-          log.warn('Events request returned status %d', statusCode)
-        }
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
         onComplete?.(false)
         return
       }
 
-      if (error) {
-        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, errorMessage)
-      } else if (statusCode >= 200 && statusCode < 300) {
-        log.debug('Successfully sent %d events', eventCount)
+      const delivered = !error && statusCode >= 200 && statusCode < 300
+      if (delivered) {
+        log.debug('%s accepted %d events at %s (%s, status %d); downstream delivery is not observed',
+          this.constructor.name, eventCount, route.url.origin,
+          route.endpoint.startsWith('/evp_proxy/') ? 'Agent/local EVP handoff' : 'HTTP receiver', statusCode)
       } else {
-        log.warn('Events request returned status %d', statusCode)
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
       }
-      onComplete?.(!error && statusCode >= 200 && statusCode < 300)
+      onComplete?.(delivered)
     })
+  }
+
+  /**
+   * Batches are not retried after a failed final attempt, so the failure log states the loss.
+   *
+   * @param {ActiveWriterRoute} route - Route that failed
+   * @param {number} eventCount - Event count in the dropped batch
+   * @param {Error | null} error - Request error
+   * @param {string | null | undefined} errorMessage - Redacted request error
+   * @param {number | undefined} statusCode - HTTP response status
+   */
+  #logDropped (route, eventCount, error, errorMessage, statusCode) {
+    if (error) {
+      log.error('%s failed to send %d events to %s (status=%s, cause=%s); events dropped',
+        this.constructor.name, eventCount, route.url.origin, statusCode ?? 'none', errorMessage)
+    } else {
+      log.warn('%s events request to %s returned status %d; %d events were dropped',
+        this.constructor.name, route.url.origin, statusCode, eventCount)
+    }
   }
 }
 

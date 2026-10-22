@@ -70,6 +70,12 @@ describe('FlaggingProvider Initialization Timeout', () => {
     clock.restore()
   })
 
+  function recoveryLogCount () {
+    return log.debug.getCalls().filter(call =>
+      call.args[0] === 'Feature Flags: configuration applied after the provider was not ready; provider is ready again'
+    ).length
+  }
+
   it('should timeout after 30 seconds when configuration is not set', async () => {
     const provider = new FlaggingProvider(mockTracer, mockConfig)
 
@@ -119,6 +125,8 @@ describe('FlaggingProvider Initialization Timeout', () => {
     // Verify initialization is in progress
     assert.strictEqual(provider.initController.isInitializing(), true)
 
+    sinon.assert.calledWith(log.debug, 'Feature Flags: waiting for provider initialization (timeout %dms)...', 30_000)
+
     // Advance time by 20 seconds (before timeout)
     await clock.tickAsync(20000)
 
@@ -142,7 +150,22 @@ describe('FlaggingProvider Initialization Timeout', () => {
     // Verify initialization completed successfully
     assert.strictEqual(provider.initController.isInitializing(), false)
     assert.strictEqual(provider.getConfiguration(), ufc)
-    sinon.assert.calledWith(log.debug, 'Feature Flags: provider initialized successfully')
+    sinon.assert.calledWith(log.debug, 'Feature Flags: provider initialized successfully after %dms', 20_000)
+    sinon.assert.neverCalledWith(log.debug,
+      'Feature Flags: configuration applied after the provider was not ready; provider is ready again')
+  })
+
+  it('reports when initialization does not need to wait for configuration', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    provider.setConfiguration({ flags: {} })
+
+    await provider.initialize()
+
+    sinon.assert.calledWith(log.debug,
+      'Feature Flags: configuration already applied; provider initialization does not need to wait')
+    sinon.assert.calledWith(log.debug, 'Feature Flags: provider initialized successfully after %dms', 0)
+    sinon.assert.neverCalledWith(log.debug,
+      'Feature Flags: configuration applied after the provider was not ready; provider is ready again')
   })
 
   it('should call setError with timeout message after 30 seconds', async () => {
@@ -224,6 +247,14 @@ describe('FlaggingProvider Initialization Timeout', () => {
     // Should emit READY event to signal recovery
     sinon.assert.calledOnce(readyEventSpy)
     assert.strictEqual(provider.getConfiguration(), ufc)
+    assert.strictEqual(recoveryLogCount(), 1)
+
+    // A removed and restored configuration is the same recovery transition.
+    provider.setConfiguration(undefined)
+    provider.setConfiguration(ufc)
+
+    sinon.assert.calledTwice(readyEventSpy)
+    assert.strictEqual(recoveryLogCount(), 2)
   })
 
   describe('custom timeout configuration', () => {

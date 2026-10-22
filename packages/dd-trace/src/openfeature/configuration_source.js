@@ -5,6 +5,11 @@ const log = require('../log')
 
 const DEFAULT_AGENTLESS_PATH = '/api/v2/feature-flagging/config/rules-based/server'
 const MAX_POLL_INTERVAL_SECONDS = 60 * 60
+const AGENTLESS_START_MESSAGE = 'Feature Flags: starting agentless configuration source at %s ' +
+  '(%s endpoint, poll interval %ds, request timeout %ds, DD-API-KEY header %s)'
+const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is remote_config but Remote ' +
+  'Configuration is disabled; flag evaluations will return their default values. Set ' +
+  'DD_REMOTE_CONFIGURATION_ENABLED=true or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=agentless'
 
 /**
  * @typedef {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} UniversalFlagConfiguration
@@ -27,6 +32,9 @@ function create (config, applyConfiguration) {
 
   if (source !== 'agentless') {
     log.debug('Feature Flags: configuration source is %s, not agentless; skipping agentless setup', source)
+    if (source === 'remote_config' && !config.remoteConfig?.DD_REMOTE_CONFIGURATION_ENABLED) {
+      log.warn(REMOTE_CONFIG_DISABLED_WARNING)
+    }
     return
   }
 
@@ -39,10 +47,18 @@ function create (config, applyConfiguration) {
 
     const AgentlessConfigurationSource = require('./agentless_configuration_source')
     const resolvedEndpoint = endpoint(config, baseUrl)
-    log.debug('Feature Flags: starting agentless configuration source at %s', redactedUrl(resolvedEndpoint))
+    const effectivePollIntervalSeconds = Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS)
+    log.debug(
+      AGENTLESS_START_MESSAGE,
+      redactedUrl(resolvedEndpoint),
+      hasCustomEndpoint ? 'custom' : 'default',
+      effectivePollIntervalSeconds,
+      requestTimeoutSeconds,
+      hasCustomEndpoint ? 'not sent' : 'sent'
+    )
     return new AgentlessConfigurationSource({
       endpoint: resolvedEndpoint,
-      pollIntervalMs: Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS) * 1000,
+      pollIntervalMs: effectivePollIntervalSeconds * 1000,
       requestTimeoutMs: requestTimeoutSeconds * 1000,
       apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
       env: config.env,
