@@ -174,4 +174,8 @@ event carries. The helper rejects an input or output field that contradicts the 
 | `llm` | `modelName`, `modelProvider`, `inputMessages`, `outputMessages`, `metrics`, `metadata` |
 | `embedding` | `modelName`, `modelProvider`, `inputDocuments`, `outputValue`, sometimes `metrics` |
 | `retrieval` | `inputValue`, `outputDocuments` |
+| `experiment` | `inputValue`, `outputValue`, `metadata`, experiment tags |
 | `workflow`, `agent`, `task`, `step`, `tool` | `inputValue`, `outputValue`, `metadata` |
+
+For a multimodal `llm` operation, put `audioParts` or `imageParts` in the expected input/output messages and
+assert both directions. Each part needs a `mimeType` and exactly one of base64 `content` or `attachmentKey`.
