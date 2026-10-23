@@ -354,12 +354,11 @@
 
 /scripts/generate-config-types.js @DataDog/apm-sdk-capabilities
 /scripts/generate-supported-integrations.js @DataDog/apm-sdk-capabilities
+/scripts/generate-supported-integrations.spec.mjs @DataDog/apm-sdk-capabilities
 /scripts/helpers/test-file-index.js @DataDog/apm-sdk-capabilities
 /scripts/helpers/test-file-index.spec.js @DataDog/apm-sdk-capabilities
 /scripts/verify-exercised-tests.js @DataDog/apm-sdk-capabilities
 /scripts/verify-exercised-tests.spec.mjs @DataDog/apm-sdk-capabilities
-/supported_versions_output.json @DataDog/apm-sdk-capabilities
-/supported_versions_table.csv @DataDog/apm-sdk-capabilities
 
 # Feature Flagging
 /integration-tests/esbuild/*openfeature* @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
