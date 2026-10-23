@@ -280,7 +280,6 @@ function translateOne (trace, state, pending, rootSpan, tagger, tracer) {
 /**
  * Translate Bedrock Agent trace parts into nested LLMObs spans.
  * @param {TranslationOptions} options
- * @returns {void}
  */
 function translateBedrockTraces ({ tracer, tagger, rootSpan, traces }) {
   /** @type {Map<string, StepState>} */
