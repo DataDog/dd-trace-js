@@ -391,6 +391,9 @@ describe('playwright instrumentation (unit)', () => {
   let pageHook
   let pageGotoSubscriber
   let subscriber
+  let commonIndexHook
+  let testFinishPayload
+  let workerHook
   const testPageGotoCh = {
     get hasSubscribers () {
       return subscriber !== undefined
@@ -408,9 +411,19 @@ describe('playwright instrumentation (unit)', () => {
       './helpers/instrument': {
         ...realInstrument,
         addHook: addHookSpy,
-        channel: name => name === 'ci:playwright:test:page-goto'
-          ? testPageGotoCh
-          : realInstrument.channel(name),
+        channel: name => {
+          if (name === 'ci:playwright:test:page-goto') return testPageGotoCh
+          if (name === 'ci:playwright:test:finish') {
+            return {
+              get hasSubscribers () { return true },
+              publish (payload) {
+                testFinishPayload = payload
+                payload.onDone()
+              },
+            }
+          }
+          return realInstrument.channel(name)
+        },
         tracingChannel: name => {
           if (name === 'orchestrion:playwright-core:Page_goto') {
             return {
@@ -429,11 +442,140 @@ describe('playwright instrumentation (unit)', () => {
       return target.name === 'playwright-core' && target.file === 'lib/client/page.js'
     })
     pageHook = call.args[1]
+
+    const workerCall = addHookSpy.getCalls().find(({ args }) => {
+      const target = args[0]
+      return target.name === 'playwright' && target.file === 'lib/worker/workerMain.js'
+    })
+    workerHook = workerCall.args[1]
+
+    const commonIndexCall = addHookSpy.getCalls().find(({ args }) => {
+      const target = args[0]
+      return target.name === 'playwright' && target.file === 'lib/common/index.js'
+    })
+    commonIndexHook = commonIndexCall.args[1]
   })
 
   afterEach(() => {
     subscriber = undefined
+    testFinishPayload = undefined
   })
+
+  function createWorkerMain (dispatchEvent, entry) {
+    class WorkerMain {
+      constructor () {
+        this._project = { project: { name: 'chromium' } }
+      }
+
+      runTestGroup () {}
+      gracefullyClose () {}
+
+      async _runTest (test) {
+        this.dispatchEvent('stepEnd', { stepId: 'missing-step' })
+        this.dispatchEvent('stepBegin', {
+          stepId: 'step-id',
+          testId: 'test-id',
+          title: 'valid step',
+          wallTime: 100,
+        })
+        this.dispatchEvent('stepEnd', {
+          stepId: 'step-id',
+          testId: 'test-id',
+          wallTime: 125,
+          error: { message: 'step error' },
+        })
+        this.dispatchEvent('stepEnd', { stepId: 'step-id' })
+        this._currentTest = {
+          annotations: [],
+          error: undefined,
+          expectedStatus: 'passed',
+          retry: 0,
+          status: 'passed',
+          testId: 'test-id',
+        }
+        return 'run result'
+      }
+    }
+    WorkerMain.prototype.dispatchEvent = dispatchEvent
+    if (entry === 'legacy worker hook') {
+      workerHook({ WorkerMain })
+      return new WorkerMain()
+    }
+
+    const commonExport = { suiteUtils: {} }
+    Object.defineProperty(commonExport, 'startProcessRunner', {
+      configurable: true,
+      get: () => create => create(),
+    })
+    const common = commonIndexHook(commonExport)
+    return common.startProcessRunner(() => new WorkerMain())
+  }
+
+  for (const entry of ['legacy worker hook', 'modern process runner hook']) {
+    it(`forwards an unmatched step end through the ${entry}`, () => {
+      const calls = []
+      const returnValue = Symbol('return value')
+      const worker = createWorkerMain(function () {
+        calls.push({ receiver: this, args: [...arguments] })
+        return returnValue
+      }, entry)
+      const receiver = {}
+      const payload = { stepId: 'missing-step' }
+      const extraArgument = { extra: true }
+
+      assert.strictEqual(worker.dispatchEvent.call(receiver, 'stepEnd', payload, extraArgument), returnValue)
+      assert.deepStrictEqual(calls, [{ receiver, args: ['stepEnd', payload, extraArgument] }])
+      assert.strictEqual(calls[0].receiver, receiver)
+      assert.strictEqual(calls[0].args[1], payload)
+      assert.strictEqual(calls[0].args[2], extraArgument)
+    })
+
+    it(`forwards a duplicate step end through the ${entry}`, () => {
+      const calls = []
+      const returnValue = Symbol('return value')
+      const worker = createWorkerMain(function () {
+        calls.push({ receiver: this, args: [...arguments] })
+        return returnValue
+      }, entry)
+      const receiver = {}
+      const payload = { stepId: 'completed-step' }
+      const extraArgument = { extra: true }
+
+      worker.dispatchEvent('stepBegin', {
+        stepId: 'completed-step', testId: 'test-id', wallTime: 10, title: 'step',
+      })
+      worker.dispatchEvent('stepEnd', { stepId: 'completed-step', testId: 'test-id', wallTime: 20 })
+      assert.strictEqual(worker.dispatchEvent.call(receiver, 'stepEnd', payload, extraArgument), returnValue)
+      assert.deepStrictEqual(calls.at(-1), { receiver, args: ['stepEnd', payload, extraArgument] })
+      assert.strictEqual(calls.at(-1).receiver, receiver)
+      assert.strictEqual(calls.at(-1).args[1], payload)
+      assert.strictEqual(calls.at(-1).args[2], extraArgument)
+      assert.strictEqual(worker.dispatchEvent('done', { ok: true }), returnValue)
+      assert.deepStrictEqual(calls.at(-1).args, ['done', { ok: true }])
+      assert.strictEqual(calls.length, 4)
+    })
+
+    it(`reports only matched step metadata through the ${entry}`, async () => {
+      const worker = createWorkerMain(() => {}, entry)
+      const test = {
+        id: 'test-id',
+        title: 'test title',
+        _requireFile: '/test/file.js',
+        location: { file: '/test/file.js', line: 1 },
+        parent: { _hooks: [] },
+        repeatEachIndex: 0,
+      }
+
+      assert.strictEqual(await worker._runTest(test), 'run result')
+      assert.deepStrictEqual(testFinishPayload.steps, [{
+        testId: 'test-id',
+        startTime: new Date(100),
+        title: 'valid step',
+        duration: 25,
+        error: { message: 'step error' },
+      }])
+    })
+  }
 
   function subscribe (listener) {
     subscriber = listener
