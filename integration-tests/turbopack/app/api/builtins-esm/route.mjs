@@ -1,4 +1,5 @@
 import { lookup } from 'dns'
+import { readFile } from 'fs'
 import { request } from 'node:http'
 
 export const runtime = 'nodejs'
@@ -21,6 +22,9 @@ export async function GET (incoming) {
       })
       outgoing.once('error', reject)
       outgoing.end()
+    }),
+    new Promise((resolve, reject) => {
+      readFile(process.argv[1], error => error ? reject(error) : resolve())
     }),
   ])
   return Response.json({ address, body })
