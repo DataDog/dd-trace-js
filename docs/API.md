@@ -252,6 +252,24 @@ for other operations is unaffected.
 <h5 id="next"></h5>
 <h5 id="nyc"></h5>
 <h5 id="openai"></h5>
+
+OpenAI Realtime tracing also recognizes `@openai/agents-realtime` 0.20.x
+(WebSocket and SIP/`call_id` sideband connections). It uses the `openai` plugin
+configuration and `DD_OPENAI_REALTIME_ENABLED` switch. Each response retains the
+`realtime audio turn` / `user speech` / `OpenAI.createRealtimeResponse` /
+`agent speech` span contract. Server playback events determine speech windows;
+`response.done` ends generation, not playback.
+
+When LLM Observability consumes audio, sideband instrumentation can request stored
+conversation items. Retrieval is bounded and falls back to transcripts when
+unavailable or too large. Interrupted items honor the server truncation boundary.
+Input clips use paired VAD offsets to include prefix padding at the correct start,
+with wall-clock precision limited by sideband event delivery.
+Unknown per-response boundaries in continuous playback are omitted rather than
+estimated. ESM applications must register the tracer loader before importing the
+SDK. This path is tested with SDK 0.20.0 using local protocol replays; actual SIP
+media and continuous multi-response playback still require live validation.
+
 <h5 id="openai-agents"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>

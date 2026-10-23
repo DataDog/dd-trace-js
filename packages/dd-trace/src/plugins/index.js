@@ -46,6 +46,7 @@ const plugins = {
   get '@wdio/local-runner' () { return require('../../../datadog-plugin-mocha/src') },
   get '@langchain/langgraph' () { return require('../../../datadog-plugin-langgraph/src') },
   get '@openai/agents' () { return require('../../../datadog-plugin-openai-agents/src') },
+  get '@openai/agents-realtime' () { return require('../../../datadog-plugin-openai/src') },
   get aerospike () { return require('../../../datadog-plugin-aerospike/src') },
   get ai () { return require('../../../datadog-plugin-ai/src') },
   get amqp10 () { return require('../../../datadog-plugin-amqp10/src') },

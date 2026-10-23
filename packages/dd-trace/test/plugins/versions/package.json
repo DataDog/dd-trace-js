@@ -73,6 +73,7 @@
     "@openai/agents": "0.20.0",
     "@openai/agents-core": "0.20.0",
     "@openai/agents-openai": "0.20.0",
+    "@openai/agents-realtime": "0.20.0",
     "@openfeature/core": "1.12.0",
     "@openfeature/server-sdk": "1.23.0",
     "@opensearch-project/opensearch": "3.9.0",

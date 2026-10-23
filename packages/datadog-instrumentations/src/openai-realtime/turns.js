@@ -80,13 +80,21 @@ class InputTurn {
   itemId = undefined
 
   /**
-   * Wall clock (epoch ms) when the user actually started speaking, from the VAD speech-onset event.
-   * This is the start of the user-speech window; the first buffered frame is not, because a
+   * Start of the VAD-selected input clip on the wall clock (epoch ms), including prefix padding.
+   * This anchors the user-speech window; an arbitrary first buffered frame does not, because a
    * server-VAD client streams the microphone continuously.
    *
    * @type {number | undefined}
    */
   speechStartTime = undefined
+
+  /**
+   * Start of this VAD clip on the provider's input-buffer clock, including prefix padding.
+   * Paired with speech_stopped.audio_end_ms to place retrieved sideband audio.
+   *
+   * @type {number | undefined}
+   */
+  speechStartOffsetMs = undefined
 
   /**
    * Wall clock (epoch ms) when the input audio was committed (roughly the end of user speech). Lets
@@ -119,6 +127,7 @@ class InputTurn {
   discardAudio () {
     this.audio.clear()
     this.speechStartTime = undefined
+    this.speechStartOffsetMs = undefined
     this.audioBaseMs = undefined
   }
 }
@@ -137,6 +146,9 @@ class ResponseTurn {
     this.createdTime = createdTime
     this.audio = new AudioAccumulator(retainAudio)
   }
+
+  /** @type {{ startTime?: number, finishTime?: number } | undefined} */
+  serverSpeech = undefined
 
   transcript = new ItemText()
 
