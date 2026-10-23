@@ -2,9 +2,37 @@
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
-const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const getConfig = require('../../dd-trace/src/config')
+const log = require('../../dd-trace/src/log')
 const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
+
+// Loaded on first use inside the capture gates, so users with cloud payload
+// tagging disabled never initialize the payload-tagging snapshot machinery.
+let payloadTagging
+
+// A failed load is not cached: it throws into the caller's fail-soft catch and
+// the next capture gate retries.
+function getPayloadTagging () {
+  payloadTagging ??= require('../../dd-trace/src/payload-tagging')
+  return payloadTagging
+}
+
+// Only the first payload-reporter instance attempts the eager load, keeping a
+// single initialization per process; a failed preload is retried by the
+// capture gates.
+let preloadAttempted = false
+
+function preloadPayloadTagging () {
+  if (preloadAttempted) return
+  preloadAttempted = true
+  try {
+    getPayloadTagging()
+  } catch {
+    // Never inspect the caught value; the capture gates log their own
+    // diagnostics when they retry the load.
+    log.debug('Error loading payload tagging; payload tags are omitted until a capture retries the load')
+  }
+}
 
 const RESPONSE_SKIP_KEYS = new Set(['request', 'requestId', 'error', '$metadata'])
 
@@ -75,6 +103,17 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
     this._parentMap = new WeakMap()
 
+    // Initialize the snapshot machinery during startup when capture is
+    // enabled, so the first captured operation does not pay for loading the
+    // module. Users with capture disabled never load it.
+    const pluginClass = /** @type {typeof BaseAwsSdkPlugin} */ (this.constructor)
+    if (
+      pluginClass.isPayloadReporter &&
+      (this.cloudTaggingConfig?.request || this.cloudTaggingConfig?.response)
+    ) {
+      preloadPayloadTagging()
+    }
+
     this.addBind(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
       const {
         request,
@@ -117,8 +156,16 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.request) {
         const maxDepth = this.cloudTaggingConfig.maxDepth
-        const requestTags = tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
-        span.addTags(requestTags)
+        try {
+          const { tagsFromRequest } = getPayloadTagging()
+          const requestTags = tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
+          span.addTags(requestTags)
+        } catch {
+          // A capture failure must not disable the plugin or fail the
+          // operation. Never inspect the caught value: payload getters can
+          // throw while logging it.
+          log.debug('Error attaching request payload tags; omitting payload tags for this operation')
+        }
       }
 
       return ctx.currentStore
@@ -248,9 +295,17 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
     if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.response) {
       const maxDepth = this.cloudTaggingConfig.maxDepth
-      const responseBody = this.extractResponseBody(response)
-      const responseTags = tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })
-      span.addTags(responseTags)
+      try {
+        const { tagsFromResponse } = getPayloadTagging()
+        const responseBody = this.extractResponseBody(response)
+        const responseTags = tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })
+        span.addTags(responseTags)
+      } catch {
+        // A capture failure must not skip remaining response tagging or span
+        // completion. Never inspect the caught value: payload getters can
+        // throw while logging it.
+        log.debug('Error attaching response payload tags; omitting payload tags for this operation')
+      }
     }
   }
 
