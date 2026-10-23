@@ -3,7 +3,6 @@
 const assert = require('node:assert')
 const path = require('node:path')
 
-const axios = require('axios')
 const msgpack = require('@msgpack/msgpack')
 
 const { withVersions } = require('../setup/mocha')
@@ -11,6 +10,7 @@ const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 
 const { getConfigFresh } = require('../helpers/config')
+const httpRequest = require('../setup/helpers/http-client')
 const { createDeepObject } = require('./utils')
 
 describe('extended data collection', () => {
@@ -98,7 +98,7 @@ describe('extended data collection', () => {
           child2: 2,
         },
       }
-      await axios.post(
+      await httpRequest.post(
         `http://127.0.0.1:${port}/`,
         requestBody,
         {
@@ -129,7 +129,7 @@ describe('extended data collection', () => {
       const requestBody = {
         bodyParam: 'collect-standard',
       }
-      await axios.post(
+      await httpRequest.post(
         `http://127.0.0.1:${port}/redacted-headers`,
         requestBody,
         {
@@ -178,7 +178,7 @@ describe('extended data collection', () => {
           child2: 2,
         },
       }
-      await axios.post(
+      await httpRequest.post(
         `http://127.0.0.1:${port}/`,
         requestBody,
         {
@@ -234,7 +234,7 @@ describe('extended data collection', () => {
         bodyParam: 'collect-standard',
         deepObject: expectedDeepTruncatedObject,
       }
-      await axios.post(`http://127.0.0.1:${port}/`, requestBody)
+      await httpRequest.post(`http://127.0.0.1:${port}/`, requestBody)
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
@@ -255,7 +255,7 @@ describe('extended data collection', () => {
         bodyParam: 'collect-standard',
         longValue: Array(4096).fill('A').join(''),
       }
-      await axios.post(`http://127.0.0.1:${port}/`, requestBody)
+      await httpRequest.post(`http://127.0.0.1:${port}/`, requestBody)
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
@@ -277,7 +277,7 @@ describe('extended data collection', () => {
         bodyParam: 'collect-standard',
         children: children.slice(0, 256),
       }
-      await axios.post(`http://127.0.0.1:${port}/`, requestBody)
+      await httpRequest.post(`http://127.0.0.1:${port}/`, requestBody)
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]

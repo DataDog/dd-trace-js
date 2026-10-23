@@ -593,7 +593,6 @@ module.exports = class CiPlugin extends Plugin {
    * @param {string|undefined} repositoryRoot - Repository root discovered by the coordinator process.
    * @param {Array<{ pattern: string, owners: string[] }>|null|undefined} codeOwnersEntries
    * Parsed CODEOWNERS entries discovered by the coordinator process.
-   * @returns {void}
    */
   _setRepositoryRoot (repositoryRoot, codeOwnersEntries) {
     if (codeOwnersEntries !== undefined) {
@@ -789,7 +788,7 @@ module.exports = class CiPlugin extends Plugin {
       return
     }
 
-    const exporter = this.config.experimental?.exporter
+    const exporter = this.config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER
     const workerTestFramework = WORKER_EXPORTER_TO_TEST_FRAMEWORK[exporter]
     this.shouldSkipGitMetadataExtraction = workerTestFramework &&
       TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework)

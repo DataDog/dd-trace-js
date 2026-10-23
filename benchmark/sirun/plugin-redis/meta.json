@@ -10,10 +10,10 @@
       "env": { "VARIANT": "get", "OPERATIONS": "13500000" }
     },
     "long-value": {
-      "env": { "VARIANT": "long-value", "OPERATIONS": "13000000" }
+      "env": { "VARIANT": "long-value", "OPERATIONS": "11500000" }
     },
     "mset-wide": {
-      "env": { "VARIANT": "mset-wide", "OPERATIONS": "980000" }
+      "env": { "VARIANT": "mset-wide", "OPERATIONS": "820000" }
     },
     "mixed": {
       "env": { "VARIANT": "mixed", "OPERATIONS": "11500000" }

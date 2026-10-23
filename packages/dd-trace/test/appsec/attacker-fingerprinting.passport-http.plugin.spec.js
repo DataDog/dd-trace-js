@@ -4,16 +4,16 @@ const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
-const Axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
+const HttpRequest = require('../setup/helpers/http-client')
 
 function assertFingerprintInTraces (traces) {
   const span = traces[0][0]
   assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.header'), `Available keys: ${inspect(Object.keys(span.meta))}`)
-  assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-5-e58aa9dd')
+  assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0100000100-74c2908f-5-e58aa9dd')
   assert.ok(
     Object.hasOwn(span.meta, '_dd.appsec.fp.http.network'),
     `Available keys: ${inspect(Object.keys(span.meta))}`
@@ -28,7 +28,7 @@ function assertFingerprintInTraces (traces) {
 
 withVersions('passport-http', 'passport-http', version => {
   describe('Attacker fingerprinting', () => {
-    let port, server, axios
+    let port, server, httpRequest
 
     before(async () => {
       await agent.load(['express', 'http'], { client: false })
@@ -64,7 +64,7 @@ withVersions('passport-http', 'passport-http', version => {
       server = app.listen(port)
       await once(server, 'listening')
       port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-      axios = Axios.create({
+      httpRequest = HttpRequest.create({
         baseURL: `http://localhost:${port}`,
         headers: {
           'User-Agent': 'test-user-agent',
@@ -83,7 +83,7 @@ withVersions('passport-http', 'passport-http', version => {
 
     it('should report http fingerprints on login fail', async () => {
       try {
-        await axios.post(
+        await httpRequest.post(
           `http://localhost:${port}/login`, {}, {
             auth: {
               username: 'fail',
@@ -97,7 +97,7 @@ withVersions('passport-http', 'passport-http', version => {
     })
 
     it('should report http fingerprints on login successful', async () => {
-      await axios.post(
+      await httpRequest.post(
         `http://localhost:${port}/login`, {}, {
           auth: {
             username: 'success',

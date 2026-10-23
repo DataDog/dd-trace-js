@@ -37,7 +37,6 @@ class DynamicInstrumentationLogsWriter extends BaseWriter {
    *
    * @param {(error?: Error) => void} [done]
    * @param {{ deadline?: number }} [options]
-   * @returns {void}
    */
   flush (done, options) {
     this.#requestTracker.flush(done, options)

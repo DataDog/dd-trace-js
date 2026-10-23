@@ -27,7 +27,6 @@ const PACKAGE_SNAPSHOT_EXCLUDED_NAMES = new Set(['.git', '.nyc_output', 'node_mo
  * @param {string} input.offlineFixtureNonce random fixture-root nonce shown in the execution plan
  * @param {boolean} [input.keepTempFiles] whether generated files are retained
  * @param {boolean} [input.verbose] whether command progress is printed
- * @returns {string} SHA-256 approval digest
  */
 function getApprovalDigest ({
   manifest,
@@ -185,7 +184,6 @@ function getApprovalProjectSnapshot (manifest, { includeLocal = true } = {}) {
  * Serializes approval material using stable formatting suitable for independent SHA-256 tools.
  *
  * @param {object} input approval inputs
- * @returns {string} UTF-8 JSON text ending in one newline
  */
 function serializeApprovalMaterial (input) {
   return `${JSON.stringify(getApprovalMaterial(input), null, 2)}\n`
@@ -299,7 +297,6 @@ function getSelectedGeneratedPaths (strategy, requestedScenario) {
  * Hashes one covered regular file.
  *
  * @param {string} filename absolute filename
- * @returns {string} lowercase SHA-256 digest
  */
 function getFileDigest (filename) {
   return crypto.createHash('sha256').update(fs.readFileSync(filename)).digest('hex')
@@ -329,7 +326,6 @@ function collectPackageFiles (directory, excludedPaths, files) {
  *
  * @param {string} filename package path
  * @param {string[]} excludedPaths generated paths omitted from the package snapshot
- * @returns {boolean} whether the path is excluded
  */
 function isExcludedPackagePath (filename, excludedPaths) {
   return excludedPaths.some(excluded => filename === excluded || filename.startsWith(`${excluded}${path.sep}`))
@@ -339,7 +335,6 @@ function isExcludedPackagePath (filename, excludedPaths) {
  * Resolves an existing path or its nearest existing ancestor through filesystem aliases.
  *
  * @param {string} filename path that may not exist yet
- * @returns {string} physical path
  */
 function resolvePhysicalPath (filename) {
   const missingSegments = []
@@ -358,7 +353,6 @@ function resolvePhysicalPath (filename) {
  *
  * @param {string} digest supplied approval digest
  * @param {object} input approval inputs
- * @returns {void}
  */
 function assertApprovalDigest (digest, input) {
   if (!APPROVAL_DIGEST_PATTERN.test(String(digest || ''))) {

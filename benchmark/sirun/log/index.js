@@ -36,8 +36,8 @@ assert.equal(
 // runs the (overridden no-op) debug handler, with-error builds an Error per call.
 // OPERATIONS is set per variant (meta.json): with-error stays at 800k because the per-call
 // Error allocation hits a major-GC cliff that spikes stddev if grown; with-debug has
-// no such allocation, so it runs a larger OPERATIONS to keep the loop well clear of the
-// startup-guard floor and tighten per-sample stddev. The earlier disabled/filtered
+// no such allocation, so it runs a larger OPERATIONS to tighten per-sample stddev.
+// The earlier disabled/filtered
 // variants (no subscribers) were dropped: with nothing to dispatch to, V8 dead-code-
 // eliminated the no-op loop, so wall.time flipped between running and elided runs
 // (stddev up to ~66%) and the variant measured nothing that could regress.
