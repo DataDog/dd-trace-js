@@ -379,7 +379,7 @@
 /.github/actions/upload-junit-artifacts/action.yaml @DataDog/ci-app-libraries @dd-octo-sts
 /.github/editorconfig-checker/ @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/ci-app-libraries
-/.github/selenium/ @DataDog/ci-app-libraries
+/.github/browser-tools/ @DataDog/ci-app-libraries
 /.github/chainguard/ @DataDog/sdlc-security
 /.github/codeql_config.yml @DataDog/sdlc-security
 /.github/workflows/*.yml @DataDog/lang-platform-js @dd-octo-sts
@@ -463,6 +463,7 @@
 /benchmark/sirun/id/ @DataDog/lang-platform-js
 /benchmark/sirun/log/ @DataDog/lang-platform-js
 /benchmark/sirun/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
+/benchmark/sirun/openfeature-initialization/ @DataDog/feature-flagging-and-experimentation-sdk
 /benchmark/sirun/runtime-metrics/ @DataDog/lang-platform-js
 /benchmark/sirun/scope/ @DataDog/lang-platform-js
 /benchmark/sirun/shimmer-runtime/ @DataDog/lang-platform-js
@@ -597,5 +598,5 @@
 /integration-tests/appsec/iast-esbuild-cjs/package.json @DataDog/asm-js @dd-octo-sts
 /.github/editorconfig-checker/Dockerfile @Datadog/lang-platform-js @dd-octo-sts
 /.github/playwright/Dockerfile @DataDog/ci-app-libraries @dd-octo-sts
-/.github/selenium/Dockerfile @DataDog/ci-app-libraries @dd-octo-sts
+/.github/browser-tools/Dockerfile @DataDog/ci-app-libraries @dd-octo-sts
 /benchmark/sirun/Dockerfile* @DataDog/lang-platform-js @dd-octo-sts

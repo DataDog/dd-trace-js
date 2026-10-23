@@ -3,6 +3,8 @@
 
 export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
+  _DD_TEST_PARALLELIZATION_METADATA_FILE: string | undefined;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   aiguard: {
     DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
@@ -75,6 +77,7 @@ export interface GeneratedConfig {
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
   DD_APP_KEY: string | undefined;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
+  DD_BUNDLER_INJECT_GIT_METADATA: boolean;
   DD_CRASHTRACKING_ENABLED: boolean;
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
@@ -607,6 +610,8 @@ export interface GeneratedConfig {
 
 export interface GeneratedEnvVarConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
+  _DD_TEST_PARALLELIZATION_METADATA_FILE: string | undefined;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   DATADOG_API_KEY: string | undefined;
   DD_ACTION_EXECUTION_ID: string | undefined;
@@ -657,6 +662,7 @@ export interface GeneratedEnvVarConfig {
   DD_APPSEC_TRACE_RATE_LIMIT: number;
   DD_APPSEC_WAF_TIMEOUT: number;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
+  DD_BUNDLER_INJECT_GIT_METADATA: boolean;
   DD_CIVISIBILITY_AGENTLESS_ENABLED: boolean;
   DD_CIVISIBILITY_AGENTLESS_URL: URL | undefined;
   DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER: string | undefined;

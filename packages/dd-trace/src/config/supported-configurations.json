@@ -508,6 +508,14 @@
         "default": null
       }
     ],
+    "DD_BUNDLER_INJECT_GIT_METADATA": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "description": "When using the Datadog esbuild or webpack plugin, inject DD_GIT_COMMIT_SHA and DD_GIT_REPOSITORY_URL into the bundle. Set to false for stable artifact hashes across commits."
+      }
+    ],
     "DD_CIVISIBILITY_AGENTLESS_ENABLED": [
       {
         "implementation": "A",
@@ -2139,6 +2147,22 @@
         "type": "boolean",
         "default": null,
         "namespace": "testOptimization"
+      }
+    ],
+    "_DD_TEST_PARALLELIZATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "description": "Internal: Identifies test processes started by ddtest run."
+      }
+    ],
+    "_DD_TEST_PARALLELIZATION_METADATA_FILE": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "description": "Internal: Absolute path to planning metadata supplied by ddtest run."
       }
     ],
     "DD_TEST_SESSION_NAME": [

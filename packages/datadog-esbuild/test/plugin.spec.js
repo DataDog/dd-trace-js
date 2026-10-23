@@ -391,4 +391,33 @@ describe('datadog-esbuild plugin', () => {
       assert.match(result.contents, /set\["Client"\]/)
     })
   })
+
+  describe('git metadata injection', () => {
+    const original = process.env.DD_BUNDLER_INJECT_GIT_METADATA
+    const pluginPath = require.resolve('../index')
+
+    afterEach(() => {
+      if (original === undefined) {
+        delete process.env.DD_BUNDLER_INJECT_GIT_METADATA
+      } else {
+        process.env.DD_BUNDLER_INJECT_GIT_METADATA = original
+      }
+      delete require.cache[pluginPath]
+    })
+
+    it('skips banner injection when DD_BUNDLER_INJECT_GIT_METADATA=false', () => {
+      process.env.DD_BUNDLER_INJECT_GIT_METADATA = 'false'
+      delete require.cache[pluginPath]
+      const plugin = require('../index')
+      const initialOptions = { banner: { js: '// existing\n' } }
+      plugin.setup({
+        initialOptions,
+        onEnd () {},
+        onResolve () {},
+        onLoad () {},
+      })
+      assert.equal(initialOptions.banner.js.includes('DD_GIT_COMMIT_SHA'), false)
+      assert.equal(initialOptions.banner.js.includes('DD_GIT_REPOSITORY_URL'), false)
+    })
+  })
 })

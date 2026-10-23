@@ -118,6 +118,7 @@ const runTestsWithCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=text-summa
 const testFile = 'ci-visibility/run-mocha.js'
 const expectedStdout = '2 passing'
 const extraStdout = 'end event: can add event listeners to mocha'
+const finalFlushMarker = 'dd-trace final flush completed\n'
 
 const requestedMochaVersion = process.env.MOCHA_VERSION || 'latest'
 const oldestMochaVersion = DD_MAJOR >= 6 ? '8.0.0' : '5.2.0'
@@ -137,6 +138,43 @@ const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
 const parallelIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.3.0') ? it : it.skip
 // TODO: Remove this temporary release unblock once the Mocha 5.2 regressions introduced by #9798 are fixed.
 const reporterFinalizationIt = DD_MAJOR === 5 && MOCHA_VERSION === '5.2.0' ? it.skip : it
+
+/**
+ * Captures matching intake payloads until the child confirms its final transport flush.
+ *
+ * @param {FakeCiVisIntake} intake
+ * @param {import('node:child_process').ChildProcess} process
+ * @param {(message: object) => boolean} matches
+ * @returns {Promise<object[]>}
+ */
+function capturePayloadsUntilFinalFlush (intake, process, matches) {
+  const payloads = []
+  let output = ''
+  const onMessage = message => {
+    if (matches(message)) payloads.push(message)
+  }
+  intake.on('message', onMessage)
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      intake.off('message', onMessage)
+      process.stdout.off('data', onData)
+      process.off('close', onClose)
+    }
+    const onData = chunk => {
+      output += chunk.toString()
+      if (!output.includes(finalFlushMarker)) return
+      cleanup()
+      resolve(payloads)
+    }
+    const onClose = code => {
+      cleanup()
+      reject(new Error(`Child closed with code ${code} before confirming its final flush`))
+    }
+    process.stdout.on('data', onData)
+    process.once('close', onClose)
+  })
+}
 
 describe('mocha failed test replay helpers', () => {
   describe('finishDeferredHookEnd', () => {
@@ -2748,6 +2786,213 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
+
+        for (const mode of ['all', 'first', 'last', 'mixed']) {
+          it(`associates skipped top-level tests with their suite (${mode})`, async () => {
+            const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            childProcess = exec(`node node_modules/mocha/bin/mocha ./${suiteFile}`, {
+              cwd,
+              env: { ...envVars, DD_INJECT_FORCE: 'true', MOCHA_TOP_LEVEL_SKIP_MODE: mode },
+            })
+
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+
+                assert.strictEqual(suites.length, 1)
+                assert.strictEqual(tests.length, mode === 'mixed' ? 3 : 2)
+                assertObjectContains(suites[0], {
+                  meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: mode === 'all' ? 'skip' : 'pass' },
+                })
+                for (const test of tests) {
+                  assert.ok(test.test_suite_id, 'Skipped tests must reference their suite')
+                  assert.strictEqual(test.test_suite_id.toString(), suites[0].test_suite_id.toString())
+                }
+                const skippedTests = tests.filter(test => test.meta[TEST_STATUS] === 'skip')
+                assert.strictEqual(skippedTests.length, mode === 'all' || mode === 'mixed' ? 2 : 1)
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0)
+          })
+        }
+
+        for (const followingFile of ['top-level-it-no-describe.js', 'top-level-it-with-hooks.js']) {
+          it(`finishes skipped root files before ${followingFile}`, async () => {
+            const skippedFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            const passingFile = `ci-visibility/mocha-plugin-tests/${followingFile}`
+            childProcess = exec(`node node_modules/mocha/bin/mocha ./${skippedFile} ./${passingFile}`, {
+              cwd,
+              env: { ...envVars, DD_INJECT_FORCE: 'true' },
+            })
+
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                assert.strictEqual(suites.length, 2)
+                const skippedSuite = suites.find(suite => suite.meta[TEST_SUITE] === skippedFile)
+                const passingSuite = suites.find(suite => suite.meta[TEST_SUITE] === passingFile)
+                assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+                assert.strictEqual(passingSuite.meta[TEST_STATUS], 'pass')
+                assert.ok(skippedSuite.start + BigInt(skippedSuite.duration) <= passingSuite.start,
+                  'Skipped files must finish before the following file starts')
+                assert.strictEqual(tests.length, 4)
+                for (const test of tests) {
+                  const suite = test.meta[TEST_SUITE] === skippedFile ? skippedSuite : passingSuite
+                  assert.strictEqual(test.test_suite_id.toString(), suite.test_suite_id.toString())
+                }
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0)
+          })
+        }
+
+        for (const { hook, skippedFileFirst, reporterThrows } of [
+          { hook: 'beforeEach', skippedFileFirst: false, reporterThrows: false },
+          { hook: 'afterEach', skippedFileFirst: false, reporterThrows: false },
+          { hook: 'beforeEach', skippedFileFirst: false, reporterThrows: true },
+          { hook: 'afterEach', skippedFileFirst: false, reporterThrows: true },
+          { hook: 'afterEach', skippedFileFirst: true, reporterThrows: false },
+        ]) {
+          it(`preserves top-level suite coverage after an aborting ${hook}` +
+            ` (skipped file first=${skippedFileFirst}, reporter throws=${reporterThrows})`, async () => {
+            const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-aborted.js'
+            const skippedFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            const files = skippedFileFirst ? `./${skippedFile} ./${suiteFile}` : `./${suiteFile}`
+            receiver.setSettings({ itr_enabled: true, code_coverage: true, tests_skipping: false })
+            childProcess = exec(
+              `node node_modules/nyc/bin/nyc.js --silent node node_modules/mocha/bin/mocha ${files}` +
+              ' --reporter ./ci-visibility/mocha-root-coverage-reporter.js',
+              {
+                cwd,
+                env: {
+                  ...envVars,
+                  DD_INJECT_FORCE: 'true',
+                  MOCHA_FAILING_HOOK: hook,
+                  MOCHA_COVERAGE_REPORTER_THROWS: reporterThrows ? '1' : '',
+                },
+              }
+            )
+            childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+            childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+            const payloadsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle') || url.endsWith('/api/v2/citestcov'), payloads => {
+                const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                const coverages = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcov'))
+                  .flatMap(({ payload }) => payload).flatMap(({ content }) => content.coverages)
+
+                assert.strictEqual(suites.length, skippedFileFirst ? 2 : 1)
+                const abortedSuite = suites.find(suite => suite.meta[TEST_SUITE] === suiteFile)
+                assert.strictEqual(abortedSuite.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(coverages.length, suites.length)
+                const abortedCoverage = coverages.find(coverage =>
+                  coverage.test_suite_id === Number(abortedSuite.test_suite_id))
+                assertObjectContains(abortedCoverage.files.map(({ filename }) => filename), [
+                  suiteFile,
+                  'ci-visibility/test/sum.js',
+                ])
+                const abortedSum = abortedCoverage.files.find(
+                  ({ filename }) => filename === 'ci-visibility/test/sum.js')
+                assert.ok(abortedSum.bitmap[0] & (1 << 4), 'The aborted file must own coverage of the sum body')
+                if (skippedFileFirst) {
+                  const skippedSuite = suites.find(suite => suite.meta[TEST_SUITE] === skippedFile)
+                  const skippedCoverage = coverages.find(coverage =>
+                    coverage.test_suite_id === Number(skippedSuite.test_suite_id))
+                  assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+                  const skippedSum = skippedCoverage.files.find(
+                    ({ filename }) => filename === 'ci-visibility/test/sum.js')
+                  assert.strictEqual((skippedSum?.bitmap[0] || 0) & (1 << 4), 0,
+                    'Skipped files must not receive coverage executed by a later file')
+                }
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), payloadsPromise])
+            assert.strictEqual(exitCode, 1, testOutput)
+            assert.match(testOutput, /MOCHA ROOT REPORTER COVERAGE: 1/)
+            assert.match(testOutput, /MOCHA ROOT COVERAGE AFTER REPORTERS: 0/)
+          })
+        }
+
+        for (const invert of [false, true]) {
+          it(`keeps filtered root-file coverage separate (invert=${invert})`, async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-filtered.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-filtered2.js',
+            ]
+            const grep = invert ? '--grep excluded --invert' : '--grep included'
+            receiver.setSettings({ itr_enabled: true, code_coverage: true, tests_skipping: false })
+            childProcess = exec(
+              'node node_modules/nyc/bin/nyc.js --silent node node_modules/mocha/bin/mocha ' +
+              `${suiteFiles.join(' ')} ${grep} --reporter ./ci-visibility/mocha-root-coverage-reporter.js`,
+              { cwd, env: { ...envVars, DD_INJECT_FORCE: 'true' } }
+            )
+            childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+            childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+            const payloadsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle') || url.endsWith('/api/v2/citestcov'), payloads => {
+                const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                const coverages = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcov'))
+                  .flatMap(({ payload }) => payload).flatMap(({ content }) => content.coverages)
+
+                assert.strictEqual(tests.length, 2)
+                assert.strictEqual(suites.length, 2)
+                assert.strictEqual(coverages.length, 2)
+                const [suiteA, suiteB] = suiteFiles.map(file => suites.find(suite => suite.meta[TEST_SUITE] === file))
+                assert.ok(suiteA.start + BigInt(suiteA.duration) <= suiteB.start,
+                  'Filtered files must finish at their own execution boundary')
+                for (const suite of suites) {
+                  assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+                  const coverage = coverages.find(item => item.test_suite_id === Number(suite.test_suite_id))
+                  const ownFile = coverage.files.find(({ filename }) => filename === suite.meta[TEST_SUITE])
+                  assert.ok(ownFile.bitmap[0] & (1 << 6), 'Each suite must cover its own executed test body')
+                  const otherFile = suiteFiles.find(file => file !== suite.meta[TEST_SUITE])
+                  const otherCoverage = coverage.files.find(({ filename }) => filename === otherFile)
+                  assert.strictEqual((otherCoverage?.bitmap[0] || 0) & (1 << 6), 0,
+                    'A suite must not claim the other file\'s executed test body')
+                }
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), payloadsPromise])
+            assert.strictEqual(exitCode, 0, testOutput)
+            assert.match(testOutput, /MOCHA RESTORED SUM HITS: 2/)
+          })
+
+          it(`keeps filtered skipped root suites skipped (invert=${invert})`, async () => {
+            const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            const grep = invert ? '--grep second --invert' : '--grep first'
+            childProcess = exec(`node node_modules/mocha/bin/mocha ./${suiteFile} ${grep}`, {
+              cwd,
+              env: { ...envVars, DD_INJECT_FORCE: 'true', MOCHA_TOP_LEVEL_SKIP_MODE: 'first' },
+            })
+
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                assert.strictEqual(tests.length, 1)
+                assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
+                assert.strictEqual(suites.length, 1)
+                assert.strictEqual(suites[0].meta[TEST_STATUS], 'skip')
+                assert.strictEqual(tests[0].test_suite_id.toString(), suites[0].test_suite_id.toString())
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0)
+          })
+        }
 
         context('suite span timing', () => {
           it('suite spans for top-level-only files are bounded to their own file execution', async () => {
@@ -6594,7 +6839,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   context('dynamic instrumentation', () => {
     // retry listener was released in mocha@6.0.0
     onlyLatestIt('does not activate dynamic instrumentation if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false',
-      (done) => {
+      async () => {
         receiver.setSettings({
           flaky_test_retries_enabled: true,
           di_enabled: true,
@@ -6618,13 +6863,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(hasDebugTags, false)
           })
 
-        const logsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-            if (payloads.length > 0) {
-              throw new Error('Unexpected logs')
-            }
-          }, 5000)
-
         childProcess = exec(
           runTestsCommand,
           {
@@ -6636,19 +6874,26 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               ]),
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
+              REPORT_FINAL_FLUSH: finalFlushMarker,
             },
           }
         )
 
-        childProcess.on('exit', (code) => {
-          Promise.all([eventsPromise, logsPromise]).then(() => {
-            assert.strictEqual(code, 0)
-            done()
-          }).catch(done)
-        })
+        const logsPromise = capturePayloadsUntilFinalFlush(
+          receiver,
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/logs')
+        )
+        const [[exitCode], logs] = await Promise.all([
+          once(childProcess, 'exit'),
+          logsPromise,
+          eventsPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
+        assert.deepStrictEqual(logs, [])
       })
 
-    onlyLatestIt('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
+    onlyLatestIt('does not activate dynamic instrumentation if remote settings are disabled', async () => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: false,
@@ -6672,13 +6917,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(hasDebugTags, false)
         })
 
-      const logsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-          if (payloads.length > 0) {
-            throw new Error('Unexpected logs')
-          }
-        }, 5000)
-
       childProcess = exec(
         runTestsCommand,
         {
@@ -6689,16 +6927,23 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './dynamic-instrumentation/test-hit-breakpoint',
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            REPORT_FINAL_FLUSH: finalFlushMarker,
           },
         }
       )
 
-      childProcess.on('exit', (code) => {
-        Promise.all([eventsPromise, logsPromise]).then(() => {
-          assert.strictEqual(code, 0)
-          done()
-        }).catch(done)
-      })
+      const logsPromise = capturePayloadsUntilFinalFlush(
+        receiver,
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/logs')
+      )
+      const [[exitCode], logs] = await Promise.all([
+        once(childProcess, 'exit'),
+        logsPromise,
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
+      assert.deepStrictEqual(logs, [])
     })
 
     onlyLatestIt('runs retries with dynamic instrumentation', (done) => {
@@ -7096,7 +7341,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
-    onlyLatestIt('does not crash if the retry does not hit the breakpoint', (done) => {
+    onlyLatestIt('does not crash if the retry does not hit the breakpoint', async () => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true,
@@ -7119,13 +7364,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           assert.strictEqual(hasDebugTags, false)
         })
-      const logsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-          if (payloads.length > 0) {
-            throw new Error('Unexpected logs')
-          }
-        }, 5000)
-
       childProcess = exec(
         'node ./ci-visibility/run-mocha.js',
         {
@@ -7136,15 +7374,23 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './dynamic-instrumentation/test-not-hit-breakpoint',
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            REPORT_FINAL_FLUSH: finalFlushMarker,
           },
         }
       )
 
-      childProcess.on('exit', () => {
-        Promise.all([eventsPromise, logsPromise]).then(() => {
-          done()
-        }).catch(done)
-      })
+      const logsPromise = capturePayloadsUntilFinalFlush(
+        receiver,
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/logs')
+      )
+      const [[exitCode], logs] = await Promise.all([
+        once(childProcess, 'exit'),
+        logsPromise,
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
+      assert.deepStrictEqual(logs, [])
     })
 
     onlyLatestIt('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
@@ -9820,98 +10066,114 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           early_flake_detection: { enabled: false },
         })
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const assertEvents = (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-            // Test that eventually passes: finalStatus 'pass' only on last attempt per test name
-            // These tests will pass after the second retry
-            const eventuallyPassingTests = tests.filter(
-              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-passes.js'
-            )
-            const eventuallyPassingByName = eventuallyPassingTests.reduce((acc, test) => {
-              const name = test.meta[TEST_NAME]
-              if (!acc[name]) acc[name] = []
-              acc[name].push(test)
-              return acc
-            }, {}) // Object that associates name to test retries events
-            Object.values(eventuallyPassingByName).forEach(testGroup => {
-              testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
-                if (index < testGroup.length - 1) {
-                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                } else {
-                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
-                }
-              })
-            })
+          const expectedTestsBySuite = new Map([
+            ['ci-visibility/mocha-flaky/flaky-passes.js', 3],
+            ['ci-visibility/test/ci-visibility-test.js', 1],
+            ['ci-visibility/mocha-flaky/flaky-fails.js', 6],
+            ['ci-visibility/mocha-hooks/flaky-passes-with-hooks.js', 3],
+            ['ci-visibility/mocha-hooks/flaky-fails-with-hooks.js', 6],
+          ])
+          assert.strictEqual(tests.length, 19)
+          for (const [suite, expectedCount] of expectedTestsBySuite) {
+            assert.strictEqual(tests.filter(test => test.meta[TEST_SUITE] === suite).length, expectedCount)
+          }
 
-            // Test that always passes: finalStatus 'pass' only on last attempt
-            const alwaysPassingTests = tests.filter(
-              test => test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
-            )
-            alwaysPassingTests.sort((a, b) =>
-              (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
-              if (index < alwaysPassingTests.length - 1) {
+          // Test that eventually passes: finalStatus 'pass' only on last attempt per test name
+          // These tests will pass after the second retry
+          const eventuallyPassingTests = tests.filter(
+            test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-passes.js'
+          )
+          const eventuallyPassingByName = eventuallyPassingTests.reduce((acc, test) => {
+            const name = test.meta[TEST_NAME]
+            if (!acc[name]) acc[name] = []
+            acc[name].push(test)
+            return acc
+          }, {}) // Object that associates name to test retries events
+          Object.values(eventuallyPassingByName).forEach(testGroup => {
+            testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+              if (index < testGroup.length - 1) {
                 assert.ok(!(TEST_FINAL_STATUS in test.meta))
               } else {
                 assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
               }
             })
+          })
 
-            // Test that always fails: finalStatus 'fail' only on last attempt
-            const alwaysFailingTests = tests.filter(
-              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-fails.js'
-            )
-            alwaysFailingTests.sort((a, b) =>
-              (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
-              if (index < alwaysFailingTests.length - 1) {
+          // Test that always passes: finalStatus 'pass' only on last attempt
+          const alwaysPassingTests = tests.filter(
+            test => test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
+          )
+          alwaysPassingTests.sort((a, b) =>
+            (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+            if (index < alwaysPassingTests.length - 1) {
+              assert.ok(!(TEST_FINAL_STATUS in test.meta))
+            } else {
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+            }
+          })
+
+          // Test that always fails: finalStatus 'fail' only on last attempt
+          const alwaysFailingTests = tests.filter(
+            test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-fails.js'
+          )
+          alwaysFailingTests.sort((a, b) =>
+            (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+            if (index < alwaysFailingTests.length - 1) {
+              assert.ok(!(TEST_FINAL_STATUS in test.meta))
+            } else {
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+            }
+          })
+
+          // With hooks — test that eventually passes
+          const eventuallyPassingTestsWithHooks = tests.filter(
+            test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-passes-with-hooks.js'
+          )
+          const eventuallyPassingByNameWithHooks = eventuallyPassingTestsWithHooks.reduce((acc, test) => {
+            const name = test.meta[TEST_NAME]
+            if (!acc[name]) acc[name] = []
+            acc[name].push(test)
+            return acc
+          }, {})
+          Object.values(eventuallyPassingByNameWithHooks).forEach(testGroup => {
+            testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+              if (index < testGroup.length - 1) {
+                assert.ok(!(TEST_FINAL_STATUS in test.meta))
+              } else {
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+              }
+            })
+          })
+
+          // With hooks — test that always fails
+          const alwaysFailingTestsWithHooks = tests.filter(
+            test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-fails-with-hooks.js'
+          )
+          const alwaysFailingByNameWithHooks = alwaysFailingTestsWithHooks.reduce((acc, test) => {
+            const name = test.meta[TEST_NAME]
+            if (!acc[name]) acc[name] = []
+            acc[name].push(test)
+            return acc
+          }, {})
+          Object.values(alwaysFailingByNameWithHooks).forEach(testGroup => {
+            testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+              if (index < testGroup.length - 1) {
                 assert.ok(!(TEST_FINAL_STATUS in test.meta))
               } else {
                 assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
               }
             })
-
-            // With hooks — test that eventually passes
-            const eventuallyPassingTestsWithHooks = tests.filter(
-              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-passes-with-hooks.js'
-            )
-            const eventuallyPassingByNameWithHooks = eventuallyPassingTestsWithHooks.reduce((acc, test) => {
-              const name = test.meta[TEST_NAME]
-              if (!acc[name]) acc[name] = []
-              acc[name].push(test)
-              return acc
-            }, {})
-            Object.values(eventuallyPassingByNameWithHooks).forEach(testGroup => {
-              testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
-                if (index < testGroup.length - 1) {
-                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                } else {
-                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
-                }
-              })
-            })
-
-            // With hooks — test that always fails
-            const alwaysFailingTestsWithHooks = tests.filter(
-              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-fails-with-hooks.js'
-            )
-            const alwaysFailingByNameWithHooks = alwaysFailingTestsWithHooks.reduce((acc, test) => {
-              const name = test.meta[TEST_NAME]
-              if (!acc[name]) acc[name] = []
-              acc[name].push(test)
-              return acc
-            }, {})
-            Object.values(alwaysFailingByNameWithHooks).forEach(testGroup => {
-              testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
-                if (index < testGroup.length - 1) {
-                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                } else {
-                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
-                }
-              })
-            })
           })
+        }
+
+        const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          assertEvents
+        )
 
         childProcess = exec(runTestsCommand, {
           cwd,
@@ -9919,7 +10181,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './mocha-flaky/flaky-passes.js',
-              'ci-visibility/test/ci-visibility-test.js',
+              './test/ci-visibility-test.js',
               './mocha-flaky/flaky-fails.js',
               './mocha-hooks/flaky-passes-with-hooks.js',
               './mocha-hooks/flaky-fails-with-hooks.js',
@@ -9927,7 +10189,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           },
         })
 
-        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          payloadsPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
       })
 
     it('sets final_status tag to skip for disabled tests', async () => {
