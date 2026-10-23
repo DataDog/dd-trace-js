@@ -21,7 +21,7 @@ function isLoopbackHost (hostname) {
 
 /**
  * @param {string|undefined} protocol
- * @param {string|undefined} hostname
+ * @param {string|undefined|null} hostname
  */
 function canSendApiKey (protocol, hostname) {
   return protocol === 'https:' || protocol === 'unix:' ||
