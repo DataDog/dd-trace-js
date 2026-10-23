@@ -196,11 +196,11 @@ function sanitizeString (value) {
  * @param {unknown} value candidate text
  */
 function hasUnicodeDefaultIgnorable (value) {
-  return DEFAULT_IGNORABLE_TEST_PATTERN.test(String(value ?? ''))
+  return DEFAULT_IGNORABLE_TEST_PATTERN.test(String(value))
 }
 
 function hasUnsafeInvisibleCharacter (value) {
-  const text = String(value ?? '')
+  const text = String(value)
   return hasUnicodeDefaultIgnorable(text) || UNSAFE_CONTROL_TEST_PATTERN.test(text)
 }
 
@@ -230,7 +230,7 @@ function sanitizeConsoleText (value) {
  * @param {string} name key or environment variable name
  */
 function isSensitiveName (name) {
-  const normalized = String(name || '').replaceAll(/[-.]/g, '_')
+  const normalized = String(name).replaceAll(/[-.]/g, '_')
   return SENSITIVE_NAME_PATTERN.test(normalized) ||
     SENSITIVE_AUTH_NAME_PATTERN.test(normalized) ||
     SENSITIVE_COOKIE_NAME_PATTERN.test(normalized) ||

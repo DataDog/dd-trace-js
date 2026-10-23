@@ -73,6 +73,17 @@ describe('test optimization offline validation artifacts', () => {
     assert.strictEqual(fs.existsSync(fixture.root), false)
   })
 
+  it('rejects missing or malformed approval digests before creating fixtures', () => {
+    for (const approvedPlanSha256 of [
+      undefined, null, false, 0, -0, 0n, NaN, '', 'a'.repeat(63), 'a'.repeat(65), 'g'.repeat(64),
+    ]) {
+      assert.throws(() => createOfflineFixture({ approvedPlanSha256 }), {
+        name: 'Error',
+        message: 'Offline validation requires an approved plan digest before creating fixtures.',
+      })
+    }
+  })
+
   it('treats a fixture that disappears during cleanup as already removed', () => {
     const fixture = createOfflineFixture({
       approvedPlanSha256: 'e'.repeat(64),
