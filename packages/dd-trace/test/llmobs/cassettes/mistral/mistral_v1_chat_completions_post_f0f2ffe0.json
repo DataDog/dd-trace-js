@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.17.0.1:9127/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "text/event-stream",
+      "Cookie": "",
+      "User-Agent": "mistral-client-typescript/2.0.0",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "440"
+    },
+    "body": "{\"model\":\"mistral-large-latest\",\"temperature\":0.7,\"top_p\":0.9,\"max_tokens\":100,\"stream\":true,\"random_seed\":42,\"messages\":[{\"role\":\"user\",\"content\":\"What's the weather in NYC?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get the current weather for a location.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"]}}}],\"presence_penalty\":0,\"frequency_penalty\":0}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Date": "Tue, 08 Sep 2026 16:27:27 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "data: {\"id\":\"378d4d9fd4914db088d7c448257ed0d2\",\"object\":\"chat.completion.chunk\",\"created\":1784567096,\"model\":\"mistral-large-latest\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"378d4d9fd4914db088d7c448257ed0d2\",\"object\":\"chat.completion.chunk\",\"created\":1784567096,\"model\":\"mistral-large-latest\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"id\":\"aX2gaLIyo\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"location\\\": \\\"New York City\\\"}\"},\"index\":0}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":72,\"total_tokens\":86,\"completion_tokens\":14,\"prompt_tokens_details\":{\"cached_tokens\":0}},\"p\":\"abcde\"}\n\ndata: [DONE]\n\n"
+  }
+}

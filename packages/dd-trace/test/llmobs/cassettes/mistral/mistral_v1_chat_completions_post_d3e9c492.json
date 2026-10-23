@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.17.0.1:9127/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "Cookie": "",
+      "User-Agent": "mistral-client-typescript/2.0.0",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "441"
+    },
+    "body": "{\"model\":\"mistral-large-latest\",\"temperature\":0.7,\"top_p\":0.9,\"max_tokens\":100,\"stream\":false,\"random_seed\":42,\"messages\":[{\"role\":\"user\",\"content\":\"What's the weather in NYC?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get the current weather for a location.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"]}}}],\"presence_penalty\":0,\"frequency_penalty\":0}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Content-Type": "application/json",
+      "Date": "Tue, 08 Sep 2026 16:26:57 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "{\"id\":\"00c8d4bb77014b64b8db8797d61e293a\",\"created\":1784566711,\"model\":\"mistral-large-latest\",\"usage\":{\"prompt_tokens\":72,\"total_tokens\":86,\"completion_tokens\":14,\"prompt_tokens_details\":{\"cached_tokens\":0}},\"object\":\"chat.completion\",\"choices\":[{\"index\":0,\"finish_reason\":\"tool_calls\",\"message\":{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"Caf7Pyrd8\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"location\\\": \\\"New York City\\\"}\"},\"index\":0}],\"content\":\"\"}}]}"
+  }
+}

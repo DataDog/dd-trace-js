@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.17.0.1:9127/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "Cookie": "",
+      "User-Agent": "mistral-client-typescript/2.0.0",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "209"
+    },
+    "body": "{\"model\":\"invalid-model\",\"temperature\":0.7,\"top_p\":0.9,\"max_tokens\":100,\"stream\":false,\"random_seed\":42,\"messages\":[{\"role\":\"user\",\"content\":\"Why is the sky blue?\"}],\"presence_penalty\":0,\"frequency_penalty\":0}"
+  },
+  "response": {
+    "status": {
+      "code": 400,
+      "message": "Bad Request"
+    },
+    "headers": {
+      "content-type": "application/json",
+      "Date": "Tue, 08 Sep 2026 16:27:12 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "{\"object\":\"error\",\"message\":\"Invalid model: invalid-model\",\"type\":\"invalid_model\",\"param\":null,\"code\":\"1500\"}"
+  }
+}
