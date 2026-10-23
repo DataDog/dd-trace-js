@@ -366,6 +366,7 @@ interface Plugins {
   "sharedb": tracer.plugins.sharedb;
   "supabase": tracer.plugins.supabase;
   "tedious": tracer.plugins.tedious;
+  "typesafe": tracer.plugins.typesafe;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
   "web": tracer.plugins.web;
@@ -3537,6 +3538,12 @@ declare namespace tracer {
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
     interface tedious extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@typesafe-ai/sdk](https://www.npmjs.com/package/@typesafe-ai/sdk) module.
+     */
+    interface typesafe extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
