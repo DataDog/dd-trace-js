@@ -45,7 +45,7 @@ class SpanProcessor {
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
-    this._nativeExport = config.OTEL_TRACES_EXPORTER !== 'otlp'
+    this._nativeExport = !exportOtlpTraces
   }
 
   sample (span) {

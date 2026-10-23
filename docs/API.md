@@ -6,6 +6,15 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 The module exported by this library is an instance of the [Tracer](./interfaces/Tracer.html) class.
 
+<h2 id="otel-http-semantics">Experimental OpenTelemetry HTTP semantics</h2>
+
+Set `DD_TRACE_OTEL_SEMANTICS_ENABLED=true` before initialization to use OpenTelemetry HTTP semantic conventions.
+This setting defaults to `false`. It selects OTLP trace export, span attribute schema `v0`, and disables peer-service defaults.
+Configure the collector with `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`.
+
+The tracer disables this setting with a warning in Electron, Test Optimization, and agentless tracing.
+AWS Lambda requires an explicit OTLP endpoint. Remote configuration cannot change this setting after initialization.
+
 <h2 id="agentless-mode">Agentless mode</h2>
 
 Set `DD_AGENTLESS_ENABLED=true` to send supported telemetry directly to Datadog without a local Agent.
