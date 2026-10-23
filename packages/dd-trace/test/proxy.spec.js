@@ -503,6 +503,30 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(runtimeMetrics.start)
       })
 
+      it('should subscribe to the profiling remote config product even when profiling is disabled', () => {
+        proxy.init()
+
+        sinon.assert.calledWith(rc.subscribeProducts, 'DEBUG')
+        const handleProfiling = handlers.get('DEBUG')
+        handleProfiling({
+          toApply: [{
+            id: 'profiling-config',
+            path: 'datadog/2/DEBUG/profiling-config/config',
+            file: { profilers: { memory: true } },
+          }],
+          toModify: [],
+          toUnapply: [],
+          ack: sinon.spy(),
+          error: sinon.spy(),
+        })
+
+        sinon.assert.calledWith(
+          config.setRemoteConfig,
+          { DD_PROFILING_HEAP_ENABLED: 'true', DD_PROFILING_ENABLED: 'true' },
+          'profiling'
+        )
+      })
+
       it('should support applying remote config', () => {
         const conf = {}
 

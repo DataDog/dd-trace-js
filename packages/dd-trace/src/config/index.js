@@ -83,7 +83,7 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * | 'env_var'
  * | 'local_stable_config'
  * | 'fleet_stable_config'} TelemetrySource
- * @typedef {'remote_config' | 'calculated'} RevertibleTelemetrySource
+ * @typedef {'tracing' | 'profiling'} RemoteConfigLayer
  * @typedef {import('../../../../index').TracerOptions} TracerOptions
  * @typedef {import('./config-types').ConfigKey} ConfigKey
  * @typedef {import('./config-types').ConfigPath} ConfigPath
@@ -118,15 +118,36 @@ const changeTracker = {
   calculated: new Set(),
 }
 
+// RC layers own disjoint settings (see isProfilingSetting), so each update can restore
+// its layer's local values without affecting other layers.
+/** @type {Map<RemoteConfigLayer, Set<ConfigPath>>} */
+const remoteConfigPathsByLayer = new Map()
+
+/**
+ * Only calculated values are reverted together; RC values are reverted per layer.
+ *
+ * @param {Config} config
+ */
+function undoCalculated (config) {
+  revert(config, changeTracker.calculated)
+}
+
 /**
  * @param {Config} config
- * @param {RevertibleTelemetrySource} source
+ * @param {Iterable<ConfigPath>} names
  */
-function undo (config, source) {
-  for (const name of changeTracker[source]) {
+function revert (config, names) {
+  for (const name of names) {
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
+}
+
+/**
+ * @param {string} name - Canonical environment variable name
+ */
+function isProfilingSetting (name) {
+  return name.startsWith('DD_PROFILING_') || name.startsWith('DD_INTERNAL_PROFILING_')
 }
 
 function get (object, path) {
@@ -167,6 +188,7 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
     if (source === 'calculated' && value === get(config, name)) {
       return
     }
+    // Only setRemoteConfig may write remote_config values: it supplies the current layer's path set.
     changeTracker[source].add(name)
   } else {
     // Programmatic-only options (e.g. logger, lookup, plugins) have no row in
@@ -334,23 +356,37 @@ class Config extends ConfigBase {
   }
 
   /**
-   * Set the configuration with SDK_CONFIGURATION remote config settings.
-   * Resolves env-var names via `configurationsTable`, since this payload is keyed by env var name.
+   * Replace one RC layer, restoring omitted settings to their local values.
    *
    * @param {Partial<Record<import('./helper').SupportedEnvKey, string>>|null} options - Env-var-keyed
-   *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
+   *   settings, or null to reset the layer
+   * @param {RemoteConfigLayer} [layer] - 'profiling' owns profiling settings; 'tracing' owns the rest (APM_TRACING).
    */
-  setRemoteConfig (options) {
-    // Replace the complete RC layer so omitted fields fall back to their previous source.
+  setRemoteConfig (options, layer = 'tracing') {
     // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
-    undo(this, 'remote_config')
+    const previousPaths = remoteConfigPathsByLayer.get(layer)
+    if (previousPaths !== undefined) {
+      revert(this, previousPaths)
+    }
 
-    // Special case: if options is null, nothing to apply
-    // This happens when all remote configs are removed
+    // Collect paths for the next update's rollback.
+    const paths = new Set()
+    changeTracker.remote_config = paths
+
+    // Null resets the layer without applying new settings.
     if (options !== null) {
       // Resolve aliases and drop configs this tracer version doesn't recognize
-      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
+      const envs = getEnvironmentVariables(options, true)
+      for (const name of Object.keys(envs)) {
+        const ownedByLayer = layer === 'profiling' ? isProfilingSetting(name) : !isProfilingSetting(name)
+        if (!ownedByLayer) {
+          log.debug('Ignoring %s from the %s remote config layer', name, layer)
+          delete envs[name]
+        }
+      }
+      this.#applyEnvs(envs, 'remote_config')
     }
+    remoteConfigPathsByLayer.set(layer, paths)
 
     this.#applyCalculated()
     configUpdateChannel.publish(this)
@@ -365,7 +401,7 @@ class Config extends ConfigBase {
 
   // Handles values calculated from a mixture of options and env vars
   #applyCalculated () {
-    undo(this, 'calculated')
+    undoCalculated(this)
 
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
