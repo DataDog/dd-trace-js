@@ -131,7 +131,7 @@ describe('integrations', () => {
               temperature: 1,
               max_output_tokens: 50,
             },
-            metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
+            metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37, reasoning_output_tokens: 0 },
             tags: { ml_app: 'test', integration: 'vertexai' },
           })
         })
@@ -164,6 +164,8 @@ describe('integrations', () => {
                       a: 2,
                       b: 2,
                     },
+                    tool_id: '',
+                    type: 'function_call',
                   },
                 ],
               },
@@ -172,7 +174,7 @@ describe('integrations', () => {
               temperature: 1,
               max_output_tokens: 50,
             },
-            metrics: { input_tokens: 20, output_tokens: 3, total_tokens: 23 },
+            metrics: { input_tokens: 20, output_tokens: 3, total_tokens: 23, reasoning_output_tokens: 0 },
             tags: { ml_app: 'test', integration: 'vertexai' },
           })
         })
@@ -221,7 +223,7 @@ describe('integrations', () => {
                 temperature: 1,
                 max_output_tokens: 50,
               },
-              metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
+              metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37, reasoning_output_tokens: 0 },
               tags: { ml_app: 'test', integration: 'vertexai' },
             })
           })

@@ -163,6 +163,13 @@ describe('Plugin', () => {
           modelProvider: 'google',
           inputDocuments: [{ text: 'Hello, world!' }],
           outputValue: MOCK_STRING,
+          metadata: {
+            task_type: null,
+            title: null,
+            output_dimensionality: null,
+            mime_type: null,
+            auto_truncate: null,
+          },
           tags: { ml_app: 'test', integration: 'google_genai' },
         })
       })

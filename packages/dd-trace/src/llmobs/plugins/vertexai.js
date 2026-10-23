@@ -38,7 +38,7 @@ class VertexAILLMObsPlugin extends LLMObsPlugin {
     const history = ctx.history || []
     const systemInstructions = extractSystemInstructions(instance)
 
-    const metadata = getMetadata(instance)
+    const metadata = getMetadata(instance, request)
     const inputMessages = extractInputMessages(request, history, systemInstructions)
     const outputMessages = extractOutputMessages(result)
     const metrics = extractMetrics(result)
@@ -49,11 +49,11 @@ class VertexAILLMObsPlugin extends LLMObsPlugin {
   }
 }
 
-function getMetadata (instance) {
+function getMetadata (instance, request) {
   const metadata = {}
 
-  const modelConfig = instance.generationConfig
-  if (!modelConfig) return metadata
+  const modelConfig = instance?.generationConfig || {}
+  const requestConfig = request?.generationConfig || {}
 
   for (const [parameter, parameterKey] of [
     ['temperature', 'temperature'],
@@ -62,8 +62,9 @@ function getMetadata (instance) {
     ['topP', 'top_p'],
     ['topK', 'top_k'],
   ]) {
-    if (modelConfig[parameter]) {
-      metadata[parameterKey] = modelConfig[parameter]
+    const value = requestConfig[parameter] || modelConfig[parameter]
+    if (value) {
+      metadata[parameterKey] = value
     }
   }
 
@@ -168,11 +169,21 @@ function extractMessageFromPart (part, role) {
   if (functionCall) {
     message.toolCalls = [{
       name: functionCall.name,
-      arguments: functionCall.args,
+      arguments: functionCall.args ?? {},
+      toolId: functionCall.id ?? '',
+      type: 'function_call',
     }]
   }
   if (functionResponse) {
-    message.content = `[tool result: ${functionResponse.response}]`
+    message.role = 'user'
+    message.toolResults = [{
+      name: functionResponse.name ?? '',
+      result: typeof functionResponse.response === 'string'
+        ? functionResponse.response
+        : JSON.stringify(functionResponse.response),
+      toolId: functionResponse.id ?? '',
+      type: 'function_response',
+    }]
   }
 
   return message
@@ -187,9 +198,11 @@ function extractMetrics (result) {
   const tokenCounts = response.usageMetadata
   const metrics = {}
   if (tokenCounts) {
-    metrics.inputTokens = tokenCounts.promptTokenCount
-    metrics.outputTokens = tokenCounts.candidatesTokenCount
-    metrics.totalTokens = tokenCounts.totalTokenCount
+    // totalTokenCount includes the tool-use prompt tokens, so they count as input
+    metrics.inputTokens = (tokenCounts.promptTokenCount ?? 0) + (tokenCounts.toolUsePromptTokenCount ?? 0)
+    metrics.outputTokens = (tokenCounts.candidatesTokenCount ?? 0) + (tokenCounts.thoughtsTokenCount ?? 0)
+    metrics.totalTokens = tokenCounts.totalTokenCount ?? 0
+    metrics.reasoningOutputTokens = tokenCounts.thoughtsTokenCount ?? 0
   }
 
   return metrics
