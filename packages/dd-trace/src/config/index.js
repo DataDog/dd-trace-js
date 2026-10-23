@@ -27,6 +27,7 @@ const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
 const ConfigBase = require('./config-base')
 const {
+  getConfiguredEnvName,
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
@@ -193,6 +194,9 @@ module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {
+  /** @type {Set<TelemetrySource>} */
+  #otelPropagationSources = new Set()
+
   /**
    * parsed DD_TAGS, usable as a standalone tag set across products
    * @type {Record<string, string>}
@@ -239,9 +243,9 @@ class Config extends ConfigBase {
 
     this.#applyDefaults()
     // TODO: Update origin documentation to list all valid sources. Add local_stable_config and fleet_stable_config.
-    this.#applyEnvs(getEnvironmentVariables(this.stableConfig.localEntries, true), 'local_stable_config')
-    this.#applyEnvs(getEnvironmentVariables(undefined, true), 'env_var')
-    this.#applyEnvs(getEnvironmentVariables(this.stableConfig.fleetEntries, true), 'fleet_stable_config')
+    this.#applyEnvs(this.stableConfig.localEntries, 'local_stable_config')
+    this.#applyEnvs(undefined, 'env_var')
+    this.#applyEnvs(this.stableConfig.fleetEntries, 'fleet_stable_config')
 
     // Experimental options are applied first, so they can be overridden by non-experimental options.
     // TODO: When using programmatic options, check if there is a higher
@@ -266,11 +270,21 @@ class Config extends ConfigBase {
   }
 
   /**
-   * @param {import('./helper').TracerEnv} envs
+   * @param {Record<string, string | undefined> | undefined} envs
    * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config' | 'remote_config'} source
    */
   #applyEnvs (envs, source) {
-    for (const [name, value] of Object.entries(envs)) {
+    const otelPropagators = envs === undefined
+      // eslint-disable-next-line eslint-rules/eslint-env-aliases
+      ? getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE', 'env_var') === 'OTEL_PROPAGATORS'
+      : envs.DD_TRACE_PROPAGATION_STYLE === undefined && envs.OTEL_PROPAGATORS !== undefined
+    if (otelPropagators) {
+      this.#otelPropagationSources.add(source)
+    } else {
+      this.#otelPropagationSources.delete(source)
+    }
+
+    for (const [name, value] of Object.entries(getEnvironmentVariables(envs, true))) {
       const entry = configurationsTable[name]
       const parsed = entry.parser(value, name, source)
       const transformed = parsed !== undefined && entry.transformer ? entry.transformer(parsed, name, source) : parsed
@@ -352,7 +366,7 @@ class Config extends ConfigBase {
     // This happens when all remote configs are removed
     if (options !== null) {
       // Resolve aliases and drop configs this tracer version doesn't recognize
-      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
+      this.#applyEnvs(options, 'remote_config')
     }
 
     this.#applyCalculated()
@@ -691,18 +705,26 @@ class Config extends ConfigBase {
       setAndTrack(this, 'logInjection', false)
     }
 
+    const otelPropagators = this.#otelPropagationSources.has(this.getOrigin('DD_TRACE_PROPAGATION_STYLE'))
+    for (const styles of [
+      this.DD_TRACE_PROPAGATION_STYLE,
+      this.tracePropagationStyle.inject,
+      this.tracePropagationStyle.extract,
+    ]) {
+      const b3Style = DD_MAJOR >= 6 || styles === this.DD_TRACE_PROPAGATION_STYLE && otelPropagators
+        ? 'b3 single header'
+        : 'b3multi'
+      for (let index = 0; index < styles.length; index++) {
+        if (styles[index] === 'b3') {
+          styles[index] = b3Style
+        }
+      }
+    }
+
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
         setAndTrack(this, configName, this[alias])
-      }
-    }
-
-    for (const styles of Object.values(this.tracePropagationStyle)) {
-      for (let index = 0; index < styles.length; index++) {
-        if (styles[index] === 'b3') {
-          styles[index] = DD_MAJOR < 6 ? 'b3multi' : 'b3 single header'
-        }
       }
     }
 

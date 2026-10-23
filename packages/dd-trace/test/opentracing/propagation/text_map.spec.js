@@ -99,7 +99,7 @@ describe('TextMapPropagator', () => {
   describe('B3 propagation configuration', () => {
     afterEach(() => sinon.restore())
 
-    for (const { name, env, options, remote, single, multi, extractSingle = single, tracecontext = false } of [
+    for (const { name, env, options, remote, stable, single, multi, extractSingle = single, tracecontext = false } of [
       { name: 'OTEL b3', env: { OTEL_PROPAGATORS: 'b3' }, single: true, multi: false },
       { name: 'OTEL uppercase b3', env: { OTEL_PROPAGATORS: 'B3' }, single: true, multi: false },
       { name: 'OTEL b3 with whitespace', env: { OTEL_PROPAGATORS: ' b3 ' }, single: true, multi: false },
@@ -111,6 +111,51 @@ describe('TextMapPropagator', () => {
         tracecontext: true,
       },
       { name: 'OTEL b3multi', env: { OTEL_PROPAGATORS: 'b3multi' }, single: false, multi: true },
+      {
+        name: 'local OTEL b3',
+        env: {},
+        stable: { localStableConfig: { OTEL_PROPAGATORS: 'b3' } },
+        single: true,
+        multi: false,
+      },
+      {
+        name: 'fleet OTEL b3 overriding Datadog environment settings',
+        env: { DD_TRACE_PROPAGATION_STYLE: 'b3' },
+        stable: { fleetStableConfig: { OTEL_PROPAGATORS: 'b3' } },
+        single: true,
+        multi: false,
+      },
+      {
+        name: 'Datadog environment settings overriding local OTEL b3',
+        env: { DD_TRACE_PROPAGATION_STYLE: 'b3' },
+        stable: { localStableConfig: { OTEL_PROPAGATORS: 'b3' } },
+        single: DD_MAJOR >= 6,
+        multi: DD_MAJOR < 6,
+      },
+      {
+        name: 'fleet Datadog b3 overriding OTEL environment settings',
+        env: { OTEL_PROPAGATORS: 'b3' },
+        stable: { fleetStableConfig: { DD_TRACE_PROPAGATION_STYLE: 'b3' } },
+        single: DD_MAJOR >= 6,
+        multi: DD_MAJOR < 6,
+      },
+      {
+        name: 'invalid fleet settings falling back to local OTEL b3',
+        env: {},
+        stable: {
+          localStableConfig: { OTEL_PROPAGATORS: 'b3' },
+          fleetStableConfig: { DD_TRACE_PROPAGATION_STYLE: 'invalid' },
+        },
+        single: true,
+        multi: false,
+      },
+      {
+        name: 'invalid fleet settings falling back to OTEL environment settings',
+        env: { OTEL_PROPAGATORS: 'b3' },
+        stable: { fleetStableConfig: { DD_TRACE_PROPAGATION_STYLE: 'invalid' } },
+        single: true,
+        multi: false,
+      },
       { name: 'OTEL b3 and b3multi', env: { OTEL_PROPAGATORS: 'b3,b3multi' }, single: true, multi: true },
       {
         name: 'OTEL legacy single-header spelling',
@@ -177,7 +222,9 @@ describe('TextMapPropagator', () => {
     ]) {
       it(`should use the configured B3 headers for ${name}`, () => {
         sinon.stub(process, 'env').value(env)
-        config = getConfigFresh(options)
+        config = getConfigFresh(options, stable
+          ? { './helper': { getStableConfigSources: () => stable } }
+          : {})
         propagator = new TextMapPropagator(config)
         if (remote) config.setRemoteConfig(remote)
         const carrier = {}
@@ -215,8 +262,14 @@ describe('TextMapPropagator', () => {
       config = getConfigFresh()
       propagator = new TextMapPropagator(config)
 
+      process.env.DD_TRACE_PROPAGATION_STYLE = 'b3'
+      delete process.env.OTEL_PROPAGATORS
+
       for (const [remote, single] of [
         [{ DD_TRACE_PROPAGATION_STYLE: 'b3' }, DD_MAJOR >= 6],
+        [{ OTEL_PROPAGATORS: 'b3' }, true],
+        [{ OTEL_PROPAGATORS: 'b3', DD_TRACE_PROPAGATION_STYLE: 'b3' }, DD_MAJOR >= 6],
+        [{}, true],
         [null, true],
       ]) {
         config.setRemoteConfig(remote)

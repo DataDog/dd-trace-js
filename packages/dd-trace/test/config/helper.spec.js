@@ -190,6 +190,25 @@ describe('config-helper env resolution', () => {
     assert.strictEqual(envName, 'DD_TRACE_AGENT_HOSTNAME')
   })
 
+  it('restricts configured-name lookup to the requested source', () => {
+    process.env.DD_SERVICE = 'environment-service'
+    const StableConfigStub = sinon.stub().callsFake(function () {
+      this.localEntries = { DD_SERVICE: 'local-service' }
+      this.fleetEntries = { OTEL_SERVICE_NAME: 'fleet-service' }
+      this.warnings = []
+    })
+    loadModule({
+      '../serverless': { IS_SERVERLESS: false },
+      './stable': StableConfigStub,
+    })
+
+    assert.strictEqual(getConfiguredEnvName('DD_SERVICE'), 'OTEL_SERVICE_NAME')
+    assert.strictEqual(getConfiguredEnvName('DD_SERVICE', 'env_var'), 'DD_SERVICE')
+    assert.strictEqual(getConfiguredEnvName('DD_SERVICE', 'local_stable_config'), 'DD_SERVICE')
+    assert.strictEqual(getConfiguredEnvName('DD_SERVICE', 'fleet_stable_config'), 'OTEL_SERVICE_NAME')
+    assert.strictEqual(getConfiguredEnvName('DD_ENV', 'fleet_stable_config'), undefined)
+  })
+
   it('throws for unsupported DD_ configuration', () => {
     assert.throws(
       () => getEnvironmentVariable('DD_UNSUPPORTED_CONFIG'),
@@ -238,39 +257,6 @@ describe('config-helper env resolution', () => {
 
     assert.strictEqual(getValueFromEnvSources('OTEL_LOG_LEVEL'), 'debug')
     assert.strictEqual(getValueFromEnvSources('DD_TRACE_LOG_LEVEL'), 'debug')
-  })
-
-  for (const source of ['env', 'local', 'fleet']) {
-    it(`normalizes OTEL b3 from ${source} configuration`, () => {
-      const propagators = 'B3, b3multi, b3'
-      const entries = { OTEL_PROPAGATORS: propagators }
-      if (source === 'env') process.env.OTEL_PROPAGATORS = propagators
-      const StableConfigStub = sinon.stub().callsFake(function () {
-        this.localEntries = source === 'local' ? entries : {}
-        this.fleetEntries = source === 'fleet' ? entries : {}
-        this.warnings = []
-      })
-      loadModule({
-        '../serverless': { IS_SERVERLESS: false },
-        './stable': StableConfigStub,
-      })
-
-      assert.deepStrictEqual(getValueFromEnvSources('DD_TRACE_PROPAGATION_STYLE'), [
-        'b3 single header',
-        'b3multi',
-        'b3 single header',
-      ])
-    })
-  }
-
-  it('preserves the OTEL single-header meaning on v6', () => {
-    process.env.OTEL_PROPAGATORS = 'b3'
-    const helper = proxyquire('../../src/config/helper', {
-      '../../../../version': { DD_MAJOR: 6 },
-      './supported-configurations.json': structuredClone(require('../../src/config/supported-configurations.json')),
-    })
-
-    assert.strictEqual(helper.getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE'), 'b3 single header')
   })
 
   describe('with stable config and env vars', () => {

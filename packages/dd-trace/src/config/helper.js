@@ -44,7 +44,6 @@ applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 // - `deprecations`: Record<deprecatedEnvVar, string> (message suffix)
 const aliases = {}
 const deprecations = {}
-const b3SingleHeaderAlias = /(^|,)\s*b3\s*(?=,|$)/gi
 
 for (const [canonical, configuration] of Object.entries(supportedConfigurations)) {
   for (const implementation of configuration) {
@@ -116,17 +115,6 @@ function loadStableConfig () {
   stableConfigWarnings = instance.warnings
 }
 
-/**
- * @param {string} name
- * @param {string | undefined} value
- */
-function getAliasValue (name, value) {
-  // eslint-disable-next-line eslint-rules/eslint-env-aliases
-  return name === 'OTEL_PROPAGATORS' && typeof value === 'string'
-    ? value.replaceAll(b3SingleHeaderAlias, '$1b3 single header')
-    : value
-}
-
 function getValueFromSource (name, source) {
   if (source[name] !== undefined) {
     return source[name]
@@ -135,7 +123,7 @@ function getValueFromSource (name, source) {
   if (aliases[name]) {
     for (const alias of aliases[name]) {
       if (source[alias] !== undefined) {
-        return getAliasValue(alias, source[alias])
+        return source[alias]
       }
     }
   }
@@ -341,7 +329,7 @@ module.exports = {
           // In case that more than a single alias exist, use the one defined first in our own order
           for (const alias of aliases[aliasToCanonical[key]]) {
             if (source[alias] !== undefined) {
-              configs[aliasToCanonical[key]] = getAliasValue(key, value)
+              configs[aliasToCanonical[key]] = value
               break
             }
           }
@@ -370,18 +358,30 @@ module.exports = {
    * from a specific environment-based source.
    *
    * @param {string} name Environment variable name
+   * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config'} [source] Restrict lookup to this source.
    * @returns {string|undefined}
    */
-  getConfiguredEnvName (name) {
+  getConfiguredEnvName (name, source) {
     validateAccess(name)
 
     if (!stableConfigLoaded) {
       loadStableConfig()
     }
 
-    for (const source of [fleetStableConfig, process.env, localStableConfig]) {
-      if (source !== undefined) {
-        const fromSource = getEnvNameFromSource(name, source)
+    let sources
+    if (source === undefined) {
+      sources = [fleetStableConfig, process.env, localStableConfig]
+    } else {
+      const entries = {
+        fleet_stable_config: fleetStableConfig,
+        env_var: process.env,
+        local_stable_config: localStableConfig,
+      }
+      sources = [entries[source]]
+    }
+    for (const entries of sources) {
+      if (entries !== undefined) {
+        const fromSource = getEnvNameFromSource(name, entries)
         if (fromSource !== undefined) {
           return fromSource
         }

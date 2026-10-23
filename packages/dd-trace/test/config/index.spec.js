@@ -2622,6 +2622,20 @@ describe('Config', () => {
   })
 
   for (const ddMajor of [5, 6]) {
+    it(`normalizes OTEL B3 propagation configuration on v${ddMajor}`, () => {
+      process.env.OTEL_PROPAGATORS = 'B3, b3multi, b3'
+
+      const config = getConfig(undefined, { ddMajor })
+      const expected = ['b3 single header', 'b3multi', 'b3 single header']
+
+      for (const remote of [{ DD_TRACE_SAMPLE_RATE: '0.5' }, null]) {
+        config.setRemoteConfig(remote)
+
+        assert.deepStrictEqual(config.tracePropagationStyle.inject, expected)
+        assert.deepStrictEqual(config.tracePropagationStyle.extract, expected)
+      }
+    })
+
     it(`normalizes B3 propagation configuration on v${ddMajor}`, () => {
       process.env.DD_TRACE_PROPAGATION_STYLE = 'b3,b3multi,b3 single header'
 
