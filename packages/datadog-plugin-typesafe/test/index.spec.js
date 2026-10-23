@@ -99,6 +99,35 @@ describe('Plugin', () => {
         await tracesPromise
       })
 
+      it('records errors reading the response body', async () => {
+        const tracesPromise = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+
+          assert.equal(span.name, 'typesafe.request')
+          assert.equal(span.error, 1)
+          // The SDK buffers the body before asResponse() resolves, so the failure arrives as its connection error
+          assert.equal(span.meta['error.message'], 'Connection error: connection reset')
+        })
+
+        const body = new ReadableStream({
+          pull (controller) {
+            controller.error(new Error('connection reset'))
+          },
+        })
+        const client = new sdk.TypeSafeClient({
+          apiKey: 'not-a-real-key',
+          retry: { maxRetries: 0 },
+          fetch: () => Promise.resolve(new Response(body, { headers: { 'content-type': 'application/json' } })),
+        })
+
+        await assert.rejects(
+          client.systemOne({ state: STATE, questions: questions(), model: MODEL }),
+          error => error instanceof sdk.APIConnectionError
+        )
+
+        await tracesPromise
+      })
+
       it('records validation errors raised before any request is sent', async () => {
         const tracesPromise = agent.assertSomeTraces(traces => {
           assert.equal(traces.length, 1)
