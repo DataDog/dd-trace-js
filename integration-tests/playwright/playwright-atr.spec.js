@@ -27,11 +27,17 @@ const {
   TEST_RETRY_REASON_TYPES,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
-const { PLAYWRIGHT_VERSION } = process.env
+const { PLAYWRIGHT_VERSION, TEST_OPTIMIZATION_NODE_SHARD } = process.env
 
 const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
 const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
+const nodeShardIndex = ['oldest', 'latest'].indexOf(TEST_OPTIMIZATION_NODE_SHARD)
+const nodeShard = nodeShardIndex === -1 ? undefined : { index: nodeShardIndex, count: 2 }
+
+function createPlaywrightIt () {
+  return createParallelIt(global.it, { withReceiver: true, shard: nodeShard })
+}
 
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
@@ -42,7 +48,7 @@ versions.forEach((version) => {
 
   contextRetryLimits(`playwright@${version} retry exhaustion metadata`, function () {
     this.timeout(60000)
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createPlaywrightIt()
     useSandbox([`@playwright/test@${version}`])
 
     for (const dynamic of [false, true]) {
@@ -135,7 +141,7 @@ versions.forEach((version) => {
   const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createPlaywrightIt()
     // Worker trace finalization and these fixtures require the Playwright 1.38+ integration.
     const modernRetryTest = satisfies(version, '>=1.38.0') || version === 'latest' ? it : global.it.skip
 
