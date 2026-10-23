@@ -6,11 +6,11 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
 import { before, describe, it } from 'mocha'
 import dc from 'dc-polyfill'
 
 const require = createRequire(import.meta.url)
+const { supportsSyncHooks } = require('../../../../../vendor/dist/import-in-the-middle/create-hook.js')
 const source = 'export function getTracer () { return "tracer" }\n'
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = resolve(testDirectory, '../../../../..')

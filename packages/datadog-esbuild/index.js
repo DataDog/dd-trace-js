@@ -344,7 +344,7 @@ ${build.initialOptions.banner.js}`
             transform: build.esbuild.transformSync,
           })
 
-          const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
+          const iitmPath = require.resolve('../../vendor/dist/import-in-the-middle/lib/register.js')
           const toRegister = data.internal ? args.path : pathToFileURL(args.path)
           // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
           contents = `

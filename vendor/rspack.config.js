@@ -2,13 +2,13 @@
 
 // TODO: Stop depending on `@opentelemetry/api` and instead intercept the user
 //       version with an instrumentation.
-// TODO: Fix `import-in-the-middle` so that it doesn't interfere with the global
-//       object or switch to our own internal loader and remove the dependency.
+// TODO: Fix `import-in-the-middle` so that its loader doesn't set a flag on the
+//       global object, or switch to our own internal loader.
 // TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
 
 const { join } = require('node:path')
 
-const { CopyRspackPlugin, SwcJsMinimizerRspackPlugin } = require('@rspack/core')
+const { BannerPlugin, CopyRspackPlugin, DefinePlugin, SwcJsMinimizerRspackPlugin } = require('@rspack/core')
 const { LicenseWebpackPlugin } = require('license-webpack-plugin')
 
 const { dependencies } = require('./package.json')
@@ -27,8 +27,36 @@ const exclude = new Set([
 
 const difference = new Set([...include].filter(x => !exclude.has(x)))
 
+// `import-in-the-middle` keeps its package layout: the generated wrapper modules
+// import `lib/register.js` relative to the hook URL, and the runtime `index.js`
+// must share that same file's hook state, so it is shipped unbundled next to it.
+const entry = {
+  ...Object.fromEntries(difference.entries()),
+  'import-in-the-middle': { import: 'import-in-the-middle', filename: 'import-in-the-middle/index.js' },
+  'import-in-the-middle/create-hook': {
+    import: 'import-in-the-middle/create-hook.mjs',
+    filename: 'import-in-the-middle/create-hook.js',
+  },
+  'import-in-the-middle/lib/get-exports': {
+    import: 'import-in-the-middle/lib/get-exports.mjs',
+    filename: 'import-in-the-middle/lib/get-exports.js',
+  },
+}
+
+const iitmPackagePath = join('node_modules', 'import-in-the-middle')
+
 module.exports = {
-  entry: Object.fromEntries(difference.entries()),
+  entry,
+  externals: [
+    // This is shared between dd-trace and users, so it needs to be external.
+    { '@opentelemetry/api': '@opentelemetry/api' },
+    ({ context, request }, callback) => {
+      if (request === './lib/register' && context.includes(iitmPackagePath)) {
+        return callback(undefined, 'commonjs ./lib/register.js')
+      }
+      callback()
+    },
+  ],
   target: 'node',
   mode: 'production',
   // Using `hidden` removes the URL comment from source files since we don't
@@ -64,11 +92,19 @@ module.exports = {
       }),
     ],
   },
-  // This is shared between dd-trace and users, so it needs to be external.
-  externals: {
-    '@opentelemetry/api': '@opentelemetry/api',
-  },
   plugins: [
+    // rspack otherwise inlines the build machine's file URL for `import.meta.url`
+    // (used by import-in-the-middle's `createRequire`), so resolve it at runtime.
+    // It is computed in a banner because import-in-the-middle declares its own
+    // `require` variable, which would shadow a `require()` call inlined there.
+    new DefinePlugin({
+      'import.meta.url': '__ddImportMetaUrl',
+    }),
+    new BannerPlugin({
+      banner: 'const __ddImportMetaUrl = require("node:url").pathToFileURL(__filename).href;',
+      raw: true,
+      include: /^import-in-the-middle\/(create-hook|lib\/get-exports)\.js$/,
+    }),
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
       excludedPackageTest: packageName => !include.has(packageName),
@@ -87,6 +123,12 @@ module.exports = {
         {
           from: 'source-map/lib/mappings.wasm',
           to: 'source-map',
+        },
+        // Not bundled: it has no dependencies, and its `exports.x =` shape lets
+        // cjs-module-lexer expose named exports to the ESM wrappers importing it.
+        {
+          from: 'import-in-the-middle/lib/register.js',
+          to: 'import-in-the-middle/lib/register.js',
         },
       ],
     }),

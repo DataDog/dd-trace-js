@@ -10,13 +10,11 @@ const { createEsmResolver, driveGetExportsGenerator } = require('./resolver')
 /** @typedef {ReturnType<typeof createEsmResolver>} EsmResolver */
 
 const getExportsImporting = (url) => import(url).then(Object.keys)
-let getExportsModulePromise
+let getExportsModule
 
 const loadGetExportsModule = () => {
-  if (!getExportsModulePromise) {
-    getExportsModulePromise = import('import-in-the-middle/lib/get-exports.mjs')
-  }
-  return getExportsModulePromise
+  getExportsModule ??= require('../../../vendor/dist/import-in-the-middle/lib/get-exports.js')
+  return getExportsModule
 }
 
 /**
@@ -31,7 +29,7 @@ const loadGetExportsModule = () => {
  * }>}
  */
 const getExports = async (srcUrl, context, getSource, resolver) => {
-  const mod = await loadGetExportsModule()
+  const mod = loadGetExportsModule()
   const exportsGenerator = mod.getExports(srcUrl, context, getSource)
   /**
    * @param {string} specifier
