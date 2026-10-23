@@ -12,7 +12,8 @@ const instrumentationUtils = require('../../src/helpers/instrumentation-utils')
 const sharedUtils = require('../../src/helpers/shared-utils')
 
 const CHANNEL = 'dd-trace:bundler:load'
-const registerSource = fs.readFileSync(require.resolve('../../src/helpers/bundler-register'), 'utf8')
+const registerPath = require.resolve('../../src/helpers/bundler-register')
+const registerSource = fs.readFileSync(registerPath, 'utf8')
 
 describe('bundler register', () => {
   let originalRequire
@@ -460,7 +461,8 @@ function loadBuiltinRegister ({
     './shared-utils': sharedUtils,
     './rewriter/targets': {},
   }
-  const wrapped = vm.runInThisContext(Module.wrap(registerSource))
+  // Naming the script after the real file attributes its coverage to that file.
+  const wrapped = vm.runInThisContext(Module.wrap(registerSource), { filename: registerPath })
   const mod = bundled ? { exports: {} } : new Module(__filename)
   wrapped(mod.exports, name => {
     assert.ok(Object.hasOwn(stubs, name), `Unexpected startup dependency: ${name}`)
