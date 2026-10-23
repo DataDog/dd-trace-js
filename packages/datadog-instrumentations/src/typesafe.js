@@ -8,14 +8,23 @@ const { addHook } = require('./helpers/instrument')
 const typesafeTracingChannel = tracingChannel('apm:typesafe:request')
 
 /**
+ * @param {boolean} serializesAssets - Whether this SDK version runs its asset-aware serializer (0.7.0+)
+ * @returns {(systemOne: Function) => Function}
+ */
+function wrapSystemOne (serializesAssets) {
+  return systemOne => wrapSystemOneMethod(systemOne, serializesAssets)
+}
+
+/**
  * Shimmer instead of Orchestrion: `systemOne` returns the SDK's lazy `APIPromise` subclass, which must reach the
  * caller unchanged (`asResponse()`, `withResponse()`, `map()`). Awaiting it here would run the SDK's body parse and
  * consume the response that `asResponse()` callers read themselves, so the result is read from a clone instead.
  *
  * @param {Function} systemOne
+ * @param {boolean} serializesAssets
  * @returns {Function}
  */
-function wrapSystemOne (systemOne) {
+function wrapSystemOneMethod (systemOne, serializesAssets) {
   return function (...args) {
     if (!typesafeTracingChannel.start.hasSubscribers) {
       return systemOne.apply(this, args)
@@ -25,6 +34,7 @@ function wrapSystemOne (systemOne) {
       request: args[0],
       baseURL: this.baseURL,
       defaultModel: this.defaultModel,
+      serializesAssets,
     }
 
     return typesafeTracingChannel.start.runStores(ctx, () => {
@@ -51,20 +61,36 @@ function wrapSystemOne (systemOne) {
 }
 
 /**
- * Reads the body from a clone so the caller's response stays unread.
+ * Reads the body from a clone so the caller's response stays unread. The raw text is kept for the span, and parsed
+ * the way the SDK does: JSON when it parses, otherwise the text itself.
  *
  * @param {object} ctx
  * @param {Response} response
  */
 function readResult (ctx, response) {
   try {
-    response.clone().json().then(body => finish(ctx, body), error => {
-      log.debug('Could not parse the TypeSafe response body; the span has no result: %s', error.message)
+    response.clone().text().then(text => {
+      ctx.responseText = text
+      finish(ctx, parseBody(text))
+    }, error => {
+      log.debug('Could not read the TypeSafe response body; the span has no result: %s', error.message)
       finish(ctx)
     })
   } catch (error) {
     log.debug('Could not read the TypeSafe response body; the span has no result: %s', error.message)
     finish(ctx)
+  }
+}
+
+/**
+ * @param {string} text
+ */
+function parseBody (text) {
+  if (text.length === 0) return
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
   }
 }
 
@@ -90,7 +116,9 @@ addHook({
   name: '@typesafe-ai/sdk',
   versions: ['>=0.6.0'],
 }, exports => {
-  shimmer.wrap(exports.TypeSafeClient.prototype, 'systemOne', wrapSystemOne)
+  // Image assets and the serializer that writes them (and non-finite numbers) arrived together in 0.7.0
+  const serializesAssets = typeof exports.withAssets === 'function'
+  shimmer.wrap(exports.TypeSafeClient.prototype, 'systemOne', wrapSystemOne(serializesAssets))
 
   return exports
 })

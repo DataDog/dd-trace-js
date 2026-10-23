@@ -2,7 +2,10 @@
 
 const LLMObsPlugin = require('../base')
 
+const IMAGE = Symbol.for('@typesafe-ai/sdk/image')
 const TEXT_WITH_ASSETS = Symbol.for('@typesafe-ai/sdk/text-with-assets')
+// The SDK's pattern for automatic image references, which it scans the serialized request for
+const IMAGE_REFERENCE = /<image:[0-9a-f]{32}>/g
 const TYPESAFE_MODEL_PROVIDER = 'typesafe'
 const OPENROUTER_MODEL_PROVIDER = 'openrouter'
 
@@ -15,11 +18,7 @@ class TypeSafeLLMObsPlugin extends LLMObsPlugin {
     // Captured at call time, when the SDK serializes the request: the caller may reuse and change the object
     // before the response arrives.
     if (this._llmobsEnabledFor(ctx)) {
-      const assetNames = getAssetNames(ctx.request?.assets)
-      ctx.llmobsRequest = {
-        state: toWireValue(ctx.request?.state, assetNames),
-        questions: toWireValue(ctx.request?.questions, assetNames),
-      }
+      ctx.llmobsRequestBody = serializeRequest(ctx.request, ctx.defaultModel, ctx.serializesAssets)
     }
     super.start(ctx)
   }
@@ -44,22 +43,20 @@ class TypeSafeLLMObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const { llmobsRequest, result } = ctx
-    const inputMessages = [{ role: 'user', content: stringify(llmobsRequest?.state) }]
+    const { llmobsRequestBody, result, responseText } = ctx
+    const inputMessages = [{ role: 'user', content: llmobsRequestBody ?? '' }]
 
-    if (llmobsRequest?.questions) this._tagger.tagMetadata(span, { questions: llmobsRequest.questions })
-
-    if (ctx.error || !result) {
+    if (ctx.error || responseText === undefined) {
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
 
-    this._tagger.tagLLMIO(span, inputMessages, [{ role: 'assistant', content: stringify(result.answers) }])
+    this._tagger.tagLLMIO(span, inputMessages, [{ role: 'assistant', content: responseText }])
 
     const metrics = extractMetrics(result)
     if (metrics) this._tagger.tagMetrics(span, metrics)
 
-    if (result.model) this._tagger.tagModelName(span, result.model)
+    if (result?.model) this._tagger.tagModelName(span, result.model)
   }
 }
 
@@ -92,73 +89,77 @@ function extractMetrics (result) {
   const metrics = {}
   if (inputTokens != null) metrics.inputTokens = inputTokens
   if (outputTokens != null) metrics.outputTokens = outputTokens
-  // The SDK reports a count it did not receive as null, so a total from one count would be misleading
-  if (inputTokens != null && outputTokens != null) metrics.totalTokens = inputTokens + outputTokens
+  if (inputTokens != null || outputTokens != null) metrics.totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0)
   return metrics
 }
 
 /**
- * @param {Record<string, object>} [assets] - The request's named assets
- * @returns {Map<object, string>|undefined}
- */
-function getAssetNames (assets) {
-  if (!assets || typeof assets !== 'object') return
-  const names = new Map()
-  for (const [name, asset] of Object.entries(assets)) names.set(asset, name)
-  return names.size > 0 ? names : undefined
-}
-
-/**
- * Converts a request value to the JSON the SDK sends. Image assets serialize to their `<image:…>` reference and
- * text with assets to its text through their `toJSON`, which the span processor's object copy would otherwise skip,
- * copying image bytes onto the span one index at a time. Assets given names in the request's `assets` are sent
- * under those names instead, so they are replaced the same way the SDK does.
+ * Rebuilds the JSON body `systemOne` sends. 0.7.0+ writes images as their alias from `assets` or their `<image:…>`
+ * reference, text with assets as its text and non-finite numbers as strings, and lists the uploaded images under
+ * `assets`; their bytes go in separate multipart parts and are not recorded. Earlier versions send the request as is.
  *
- * @param {unknown} value
- * @param {Map<object, string>} [assetNames]
+ * @param {object} [request]
+ * @param {string} [defaultModel]
+ * @param {boolean} [serializesAssets]
  */
-function toWireValue (value, assetNames) {
-  if (value === undefined) return
+function serializeRequest (request, defaultModel, serializesAssets) {
+  if (!request || typeof request !== 'object') return
   try {
-    const json = assetNames ? JSON.stringify(value, nameAssets(assetNames)) : JSON.stringify(value)
-    return JSON.parse(json)
+    if (!serializesAssets) return JSON.stringify({ ...request, model: request.model ?? defaultModel })
+
+    const { assets, ...rest } = request
+    const named = assets ? Object.entries(assets) : []
+    const assetNames = new Map()
+    for (const [name, asset] of named) assetNames.set(asset, name)
+
+    const found = new Map()
+    const json = JSON.stringify({ ...rest, model: request.model ?? defaultModel }, wireReplacer(assetNames, found))
+
+    // Like the SDK: the named assets, then every other image in order of its first reference
+    const sent = new Map(named)
+    for (const [reference] of json.matchAll(IMAGE_REFERENCE)) {
+      if (!sent.has(reference) && found.has(reference)) sent.set(reference, found.get(reference))
+    }
+    if (sent.size === 0) return json
+
+    let part = 0
+    const sentAssets = {}
+    for (const [name, asset] of sent) sentAssets[name] = { type: asset.type, part: `asset-${part++}` }
+    return JSON.stringify({ ...JSON.parse(json), assets: sentAssets })
   } catch {}
 }
 
 /**
- * @param {Map<object, string>} assetNames
+ * Mirrors the SDK's serializer. Without it the span processor's object copy would skip each image's `toJSON` and
+ * copy its bytes one index at a time.
+ *
+ * @param {Map<object, string>} assetNames - Named assets, keyed by the asset
+ * @param {Map<string, object>} found - Filled with the unnamed images the request references, keyed by reference
  * @returns {(this: object, key: string, value: unknown) => unknown}
  */
-function nameAssets (assetNames) {
+function wireReplacer (assetNames, found) {
   return function (key, value) {
+    if (typeof value === 'number' && !Number.isFinite(value)) return String(value)
     const original = this[key]
     if (typeof original !== 'object' || original === null) return value
 
-    const name = assetNames.get(original)
-    if (name !== undefined) return name
+    if (IMAGE in original) {
+      const name = assetNames.get(original)
+      if (name !== undefined) return name
+      found.set(String(original), original)
+      return value
+    }
 
     if (TEXT_WITH_ASSETS in original) {
       let { text } = original
       for (const asset of original.assets) {
-        const assetName = assetNames.get(asset)
-        if (assetName !== undefined) text = text.replaceAll(String(asset), assetName)
+        const name = assetNames.get(asset)
+        if (name === undefined) found.set(String(asset), asset)
+        else text = text.replaceAll(String(asset), name)
       }
       return text
     }
     return value
-  }
-}
-
-/**
- * @param {unknown} value
- */
-function stringify (value) {
-  if (typeof value === 'string') return value
-  if (value === undefined) return ''
-  try {
-    return JSON.stringify(value)
-  } catch {
-    return String(value)
   }
 }
 

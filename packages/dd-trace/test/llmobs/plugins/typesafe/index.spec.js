@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { readFileSync } = require('node:fs')
+const path = require('node:path')
 
 const { describe, before, it } = require('mocha')
 
@@ -25,16 +27,9 @@ const EXPECTED_QUESTIONS = {
   refund: { type: 'noul', instructions: 'Is the customer asking for a refund?' },
   urgency: { type: 'score', instructions: 'How urgent is this message?', criteria: ['Low', 'Medium', 'High'] },
 }
-const STRING_STATE_OUTPUT =
-  '{"team":{"type":"choice","choice":"billing","confidence":1,"probabilities":{"billing":1,"techni' +
-  'cal":0,"sales":0}},"refund":{"type":"noul","noul":0.99},"urgency":{"type":"score","score":1.08,' +
-  '"confidence":0.76,"legend":{"0":"Low","1":"Medium","2":"High"},"probabilities":{"0":0.04,"1":0.' +
-  '84,"2":0.12}}}'
-const JSON_STATE_OUTPUT =
-  '{"team":{"type":"choice","choice":"billing","confidence":1,"probabilities":{"billing":1,"techni' +
-  'cal":0,"sales":0}},"refund":{"type":"noul","noul":0.99},"urgency":{"type":"score","score":1.11,' +
-  '"confidence":0.78,"legend":{"0":"Low","1":"Medium","2":"High"},"probabilities":{"0":0.02,"1":0.' +
-  '85,"2":0.13}}}'
+// The response bodies exactly as recorded, which is what the span's output records
+const STRING_STATE_RESPONSE_TEXT = recordedResponseText('typesafe_v1_systemone_post_8e45a9dd.json')
+const JSON_STATE_RESPONSE_TEXT = recordedResponseText('typesafe_v1_systemone_post_3b431e67.json')
 const STRING_STATE_METRICS = { input_tokens: 403, output_tokens: 69, total_tokens: 472 }
 const JSON_STATE_METRICS = { input_tokens: 417, output_tokens: 69, total_tokens: 486 }
 const STUB_RESPONSE = {
@@ -42,7 +37,25 @@ const STUB_RESPONSE = {
   answers: { damaged: { type: 'noul', noul: 0.9 } },
   usage: { input_tokens: 10, output_tokens: 1 },
 }
-const IMAGE_REFERENCE = '<image:[0-9a-f]+>'
+const IMAGE_REFERENCE = '<image:[0-9a-f]{32}>'
+
+/**
+ * @param {string} cassette
+ */
+function recordedResponseText (cassette) {
+  const file = path.join(__dirname, '..', '..', 'cassettes', 'typesafe', cassette)
+  return JSON.parse(readFileSync(file, 'utf8')).response.body
+}
+
+/**
+ * The JSON body the SDK sends for a request with the default questions.
+ *
+ * @param {unknown} state
+ * @param {object} [questions]
+ */
+function requestBody (state, questions = EXPECTED_QUESTIONS) {
+  return JSON.stringify({ state, questions, model: MODEL })
+}
 
 describe('Plugin', () => {
   const { getEvents } = useLlmObs({ plugin: 'typesafe' })
@@ -70,12 +83,12 @@ describe('Plugin', () => {
 
     // Requests with image assets are multipart with a random boundary and random image references, so a
     // cassette keyed on the request body cannot replay them; these tests answer from a canned response instead.
-    function createStubbedClient (options = {}) {
+    function createStubbedClient (options = {}, body = JSON.stringify(STUB_RESPONSE)) {
       return new sdk.TypeSafeClient({
         ...options,
         apiKey: 'not-a-real-key',
         retry: { maxRetries: 0 },
-        fetch: () => Promise.resolve(new Response(JSON.stringify(STUB_RESPONSE), {
+        fetch: () => Promise.resolve(new Response(body, {
           status: 200,
           headers: { 'content-type': 'application/json' },
         })),
@@ -100,7 +113,6 @@ describe('Plugin', () => {
         modelProvider: 'typesafe',
         inputMessages: [{ role: 'user', content }],
         outputMessages: [{ role: 'assistant', content: output }],
-        metadata: { questions: EXPECTED_QUESTIONS },
         metrics,
         tags: { ml_app: 'test', integration: 'typesafe' },
       })
@@ -112,8 +124,8 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
-          content: STATE,
-          output: STRING_STATE_OUTPUT,
+          content: requestBody(STATE),
+          output: STRING_STATE_RESPONSE_TEXT,
           metrics: STRING_STATE_METRICS,
         })
       })
@@ -124,8 +136,8 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
-          content: JSON.stringify(state),
-          output: JSON_STATE_OUTPUT,
+          content: requestBody(state),
+          output: JSON_STATE_RESPONSE_TEXT,
           metrics: JSON_STATE_METRICS,
         })
       })
@@ -137,8 +149,8 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
-          content: STATE,
-          output: STRING_STATE_OUTPUT,
+          content: requestBody(STATE),
+          output: STRING_STATE_RESPONSE_TEXT,
           metrics: STRING_STATE_METRICS,
         })
       })
@@ -152,8 +164,8 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
-          content: STATE,
-          output: STRING_STATE_OUTPUT,
+          content: requestBody(STATE),
+          output: STRING_STATE_RESPONSE_TEXT,
           metrics: STRING_STATE_METRICS,
         })
       })
@@ -166,8 +178,8 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
-          content: STATE,
-          output: STRING_STATE_OUTPUT,
+          content: requestBody(STATE),
+          output: STRING_STATE_RESPONSE_TEXT,
           metrics: STRING_STATE_METRICS,
         })
       })
@@ -178,8 +190,8 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
-          content: STATE,
-          output: STRING_STATE_OUTPUT,
+          content: requestBody(STATE),
+          output: STRING_STATE_RESPONSE_TEXT,
           metrics: STRING_STATE_METRICS,
         })
       })
@@ -212,9 +224,8 @@ describe('Plugin', () => {
           name: 'typesafe.request',
           modelName: MODEL,
           modelProvider: 'typesafe',
-          inputMessages: [{ role: 'user', content: ERROR_STATE }],
+          inputMessages: [{ role: 'user', content: requestBody(ERROR_STATE) }],
           outputMessages: [{ content: '', role: '' }],
-          metadata: { questions: EXPECTED_QUESTIONS },
           error: {
             type: 'AuthenticationError',
             message: MOCK_STRING,
@@ -239,9 +250,8 @@ describe('Plugin', () => {
           name: 'typesafe.request',
           modelName: MODEL,
           modelProvider: 'typesafe',
-          inputMessages: [{ role: 'user', content: STATE }],
+          inputMessages: [{ role: 'user', content: requestBody(STATE, {}) }],
           outputMessages: [{ content: '', role: '' }],
-          metadata: { questions: {} },
           error: { type: 'TypeSafeError', message: MOCK_STRING, stack: MOCK_STRING },
           tags: { ml_app: 'test', integration: 'typesafe' },
         })
@@ -254,7 +264,25 @@ describe('Plugin', () => {
         await promise
 
         const { llmobsSpans } = await getEvents()
-        assert.deepEqual(llmobsSpans[0].meta.input.messages, [{ role: 'user', content: STATE }])
+        assert.deepEqual(llmobsSpans[0].meta.input.messages, [{ role: 'user', content: requestBody(STATE) }])
+      })
+
+      it('records non-finite numbers the way this SDK version sends them', async () => {
+        await createStubbedClient().systemOne({ state: { score: Number.NaN }, questions: questions(), model: MODEL })
+
+        const { llmobsSpans } = await getEvents()
+        // 0.7.0's serializer writes them as strings; earlier versions send plain JSON, where they become null
+        const expected = sdk.withAssets ? 'NaN' : null
+        assert.equal(llmobsSpans[0].meta.input.messages[0].content, requestBody({ score: expected }))
+      })
+
+      it('records a successful response that is not JSON as received', async () => {
+        await createStubbedClient({}, 'upstream proxy page')
+          .systemOne({ state: STATE, questions: questions(), model: MODEL })
+
+        const { llmobsSpans } = await getEvents()
+        assert.deepEqual(llmobsSpans[0].meta.output.messages, [{ role: 'assistant', content: 'upstream proxy page' }])
+        assert.deepEqual(llmobsSpans[0].metrics, {})
       })
     })
 
@@ -272,8 +300,11 @@ describe('Plugin', () => {
         })
 
         const { llmobsSpans } = await getEvents()
-        const { instructions } = llmobsSpans[0].meta.metadata.questions.damaged
-        assert.match(instructions, new RegExp(`^Is ${IMAGE_REFERENCE} damaged\\?$`))
+        const body = JSON.parse(llmobsSpans[0].meta.input.messages[0].content)
+        const [reference] = Object.keys(body.assets)
+        assert.match(reference, new RegExp(`^${IMAGE_REFERENCE}$`))
+        assert.equal(body.questions.damaged.instructions, `Is ${reference} damaged?`)
+        assert.deepEqual(body.assets, { [reference]: { type: 'image', part: 'asset-0' } })
         assert.ok(JSON.stringify(llmobsSpans[0]).length < 10_000, 'image bytes must not reach the span')
       })
 
@@ -287,7 +318,9 @@ describe('Plugin', () => {
         })
 
         const { llmobsSpans } = await getEvents()
-        assert.equal(llmobsSpans[0].meta.metadata.questions.damaged.instructions, 'Is photo damaged?')
+        const body = JSON.parse(llmobsSpans[0].meta.input.messages[0].content)
+        assert.equal(body.questions.damaged.instructions, 'Is photo damaged?')
+        assert.deepEqual(body.assets, { photo: { type: 'image', part: 'asset-0' } })
       })
 
       it('records text with assets as the text that was sent', async () => {
@@ -299,8 +332,8 @@ describe('Plugin', () => {
         })
 
         const { llmobsSpans } = await getEvents()
-        const [{ content }] = llmobsSpans[0].meta.input.messages
-        assert.match(content, new RegExp(`^Compare ${IMAGE_REFERENCE} with the listing\\.$`))
+        const body = JSON.parse(llmobsSpans[0].meta.input.messages[0].content)
+        assert.match(body.state, new RegExp(`^Compare ${IMAGE_REFERENCE} with the listing\\.$`))
       })
     })
   })
