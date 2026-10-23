@@ -272,7 +272,15 @@ jobs:
         if: "!cancelled() && steps.webdriverio_instrumentation_upload.outcome == 'success'"
         run: rm -f ./*.xml
       - name: Install FFmpeg for video recording and validation
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          # Healthy installs take ~20s, but a slow mirror can crawl past the job's time budget. The inner timeout
+          # runs as root so it can stop apt; timeout_minutes is only a backstop.
+          timeout_minutes: 5
+          retry_wait_seconds: 30
+          command: >-
+            sudo timeout 3m sh -c 'apt-get update && apt-get install -y --no-install-recommends ffmpeg'
       - name: Use installed Chrome and ChromeDriver
         if: matrix.spec == 'webdriverio'
         run: |
