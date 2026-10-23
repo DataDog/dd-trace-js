@@ -1351,6 +1351,11 @@ describe('integrations', () => {
                 }],
               },
             ],
+            toolDefinitions: [{
+              name: 'get_weather',
+              description: 'Get the current weather for a city',
+              schema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+            }],
             modelName: 'gpt-4o-mini-2024-07-18',
             modelProvider: 'openai',
             metadata: {
@@ -1412,6 +1417,7 @@ describe('integrations', () => {
               output_tokens: 0,
               total_tokens: MOCK_NUMBER,
               cache_read_input_tokens: 0,
+              cache_write_input_tokens: 0,
               reasoning_output_tokens: 0,
             },
             modelName: 'gpt-6-luna',
@@ -1744,7 +1750,19 @@ describe('integrations', () => {
             { role: 'user', content: 'What was a positive news story from today? Answer in one sentence.' },
           ],
           outputMessages: [
-            { role: 'assistant', content: '' },
+            {
+              role: 'assistant',
+              content: JSON.stringify({
+                id: 'ws_0ac8a31f8fa61cdd016ab68865825c87d18976c4721dab7978',
+                type: 'web_search_call',
+                status: 'completed',
+                action: {
+                  type: 'search',
+                  queries: ['positive news stories today'],
+                  query: 'positive news stories today',
+                },
+              }),
+            },
             { role: 'assistant', content: MOCK_STRING },
           ],
           metrics: {
@@ -1752,6 +1770,7 @@ describe('integrations', () => {
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
             cache_read_input_tokens: 0,
+            cache_write_input_tokens: 0,
             reasoning_output_tokens: 0,
             web_search_count: 1,
           },
@@ -1796,7 +1815,19 @@ describe('integrations', () => {
             { role: 'user', content: 'What was a positive news story from today? Answer in one sentence, streamed.' },
           ],
           outputMessages: [
-            { role: 'assistant', content: '' },
+            {
+              role: 'assistant',
+              content: JSON.stringify({
+                id: 'ws_0a7c695088e4c3f2016ab68868fbf487d1998c2b20f48d66d3',
+                type: 'web_search_call',
+                status: 'completed',
+                action: {
+                  type: 'search',
+                  queries: ['positive news April 27 2024'],
+                  query: 'positive news April 27 2024',
+                },
+              }),
+            },
             { role: 'assistant', content: MOCK_STRING },
           ],
           metrics: {
@@ -1804,6 +1835,7 @@ describe('integrations', () => {
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
             cache_read_input_tokens: 0,
+            cache_write_input_tokens: 0,
             reasoning_output_tokens: 0,
             web_search_count: 1,
           },

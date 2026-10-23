@@ -471,9 +471,26 @@ describe('Plugin', () => {
       /**
        * @param {object[]} apmSpans
        * @param {object[]} llmobsSpans
-       * @param {{ content: string, webSearchCount?: number, tokens?: Record<string, number> }} options
+       * @param {{
+       *   content: string,
+       *   searchToolId?: string,
+       *   webSearchCount?: number,
+       *   tokens?: Record<string, number>
+       * }} options
        */
-      function assertWebSearchSpan (apmSpans, llmobsSpans, { content, webSearchCount, tokens }) {
+      function assertWebSearchSpan (apmSpans, llmobsSpans, { content, searchToolId, webSearchCount, tokens }) {
+        const searchMessages = searchToolId === undefined
+          ? []
+          : [{
+              role: 'assistant',
+              content: '',
+              tool_calls: [{
+                tool_id: searchToolId,
+                name: 'web_search',
+                arguments: { query: 'Node.js LTS latest release 2026' },
+                type: 'server_tool_use',
+              }],
+            }]
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
@@ -481,7 +498,8 @@ describe('Plugin', () => {
           modelName: 'claude-haiku-4-5-20251001',
           modelProvider: 'anthropic',
           inputMessages: [{ role: 'user', content }],
-          outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          outputMessages: [...searchMessages, { role: 'assistant', content: MOCK_STRING }],
+          toolDefinitions: [{ name: 'web_search', description: '', schema: {} }],
           metadata: { max_tokens: 1024 },
           metrics: {
             input_tokens: MOCK_NUMBER,
@@ -508,7 +526,11 @@ describe('Plugin', () => {
         })
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        assertWebSearchSpan(apmSpans, llmobsSpans, { content, webSearchCount: 1 })
+        assertWebSearchSpan(apmSpans, llmobsSpans, {
+          content,
+          searchToolId: 'srvtoolu_019c5GeT1EEmJSoe5UzLgqSt',
+          webSearchCount: 1,
+        })
       })
 
       it('tags web_search_count from the final message_delta (streaming)', async () => {
@@ -529,6 +551,7 @@ describe('Plugin', () => {
         // input_tokens comes from the cumulative message_delta count (18882), not message_start (2234)
         assertWebSearchSpan(apmSpans, llmobsSpans, {
           content,
+          searchToolId: 'srvtoolu_01NNFEftgCGymLPfhzq69qX1',
           webSearchCount: 1,
           tokens: { input_tokens: 18882, output_tokens: 120, total_tokens: 19002 },
         })
