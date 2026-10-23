@@ -358,30 +358,18 @@ module.exports = {
    * from a specific environment-based source.
    *
    * @param {string} name Environment variable name
-   * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config'} [source] Restrict lookup to this source.
    * @returns {string|undefined}
    */
-  getConfiguredEnvName (name, source) {
+  getConfiguredEnvName (name) {
     validateAccess(name)
 
     if (!stableConfigLoaded) {
       loadStableConfig()
     }
 
-    let sources
-    if (source === undefined) {
-      sources = [fleetStableConfig, process.env, localStableConfig]
-    } else {
-      const entries = {
-        fleet_stable_config: fleetStableConfig,
-        env_var: process.env,
-        local_stable_config: localStableConfig,
-      }
-      sources = [entries[source]]
-    }
-    for (const entries of sources) {
-      if (entries !== undefined) {
-        const fromSource = getEnvNameFromSource(name, entries)
+    for (const source of [fleetStableConfig, process.env, localStableConfig]) {
+      if (source !== undefined) {
+        const fromSource = getEnvNameFromSource(name, source)
         if (fromSource !== undefined) {
           return fromSource
         }

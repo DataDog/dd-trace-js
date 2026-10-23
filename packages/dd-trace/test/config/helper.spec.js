@@ -1,7 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
-
+const assert = require('assert')
 const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -188,25 +187,6 @@ describe('config-helper env resolution', () => {
     const envName = getConfiguredEnvName('DD_AGENT_HOST')
 
     assert.strictEqual(envName, 'DD_TRACE_AGENT_HOSTNAME')
-  })
-
-  it('restricts configured-name lookup to the requested source', () => {
-    process.env.DD_SERVICE = 'environment-service'
-    const StableConfigStub = sinon.stub().callsFake(function () {
-      this.localEntries = { DD_SERVICE: 'local-service' }
-      this.fleetEntries = { OTEL_SERVICE_NAME: 'fleet-service' }
-      this.warnings = []
-    })
-    loadModule({
-      '../serverless': { IS_SERVERLESS: false },
-      './stable': StableConfigStub,
-    })
-
-    assert.strictEqual(getConfiguredEnvName('DD_SERVICE'), 'OTEL_SERVICE_NAME')
-    assert.strictEqual(getConfiguredEnvName('DD_SERVICE', 'env_var'), 'DD_SERVICE')
-    assert.strictEqual(getConfiguredEnvName('DD_SERVICE', 'local_stable_config'), 'DD_SERVICE')
-    assert.strictEqual(getConfiguredEnvName('DD_SERVICE', 'fleet_stable_config'), 'OTEL_SERVICE_NAME')
-    assert.strictEqual(getConfiguredEnvName('DD_ENV', 'fleet_stable_config'), undefined)
   })
 
   it('throws for unsupported DD_ configuration', () => {

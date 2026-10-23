@@ -27,7 +27,6 @@ const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
 const ConfigBase = require('./config-base')
 const {
-  getConfiguredEnvName,
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
@@ -194,9 +193,6 @@ module.exports = getConfig
 
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {
-  /** @type {Set<TelemetrySource>} */
-  #otelPropagationSources = new Set()
-
   /**
    * parsed DD_TAGS, usable as a standalone tag set across products
    * @type {Record<string, string>}
@@ -242,10 +238,12 @@ class Config extends ConfigBase {
     }
 
     this.#applyDefaults()
+    // eslint-disable-next-line eslint-rules/eslint-process-env
+    const envs = process.env
     // TODO: Update origin documentation to list all valid sources. Add local_stable_config and fleet_stable_config.
-    this.#applyEnvs(this.stableConfig.localEntries, 'local_stable_config')
-    this.#applyEnvs(undefined, 'env_var')
-    this.#applyEnvs(this.stableConfig.fleetEntries, 'fleet_stable_config')
+    this.#applyEnvs(getEnvironmentVariables(this.stableConfig.localEntries, true), 'local_stable_config')
+    this.#applyEnvs(getEnvironmentVariables(envs, true), 'env_var')
+    this.#applyEnvs(getEnvironmentVariables(this.stableConfig.fleetEntries, true), 'fleet_stable_config')
 
     // Experimental options are applied first, so they can be overridden by non-experimental options.
     // TODO: When using programmatic options, check if there is a higher
@@ -256,9 +254,9 @@ class Config extends ConfigBase {
       this.#applyOptions(experimental, 'code', 'experimental')
     }
     this.#applyOptions(rest, 'code')
-    this.#applyCalculated()
+    this.#applyCalculated(envs)
 
-    warnWrongOtelSettings()
+    warnWrongOtelSettings(envs)
 
     parseErrors.clear()
   }
@@ -270,21 +268,11 @@ class Config extends ConfigBase {
   }
 
   /**
-   * @param {Record<string, string | undefined> | undefined} envs
+   * @param {import('./helper').TracerEnv} envs
    * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config' | 'remote_config'} source
    */
   #applyEnvs (envs, source) {
-    const otelPropagators = envs === undefined
-      // eslint-disable-next-line eslint-rules/eslint-env-aliases
-      ? getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE', 'env_var') === 'OTEL_PROPAGATORS'
-      : envs.DD_TRACE_PROPAGATION_STYLE === undefined && envs.OTEL_PROPAGATORS !== undefined
-    if (otelPropagators) {
-      this.#otelPropagationSources.add(source)
-    } else {
-      this.#otelPropagationSources.delete(source)
-    }
-
-    for (const [name, value] of Object.entries(getEnvironmentVariables(envs, true))) {
+    for (const [name, value] of Object.entries(envs)) {
       const entry = configurationsTable[name]
       const parsed = entry.parser(value, name, source)
       const transformed = parsed !== undefined && entry.transformer ? entry.transformer(parsed, name, source) : parsed
@@ -366,10 +354,10 @@ class Config extends ConfigBase {
     // This happens when all remote configs are removed
     if (options !== null) {
       // Resolve aliases and drop configs this tracer version doesn't recognize
-      this.#applyEnvs(options, 'remote_config')
+      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
     }
 
-    this.#applyCalculated()
+    this.#applyCalculated(undefined, options)
     configUpdateChannel.publish(this)
   }
 
@@ -380,8 +368,11 @@ class Config extends ConfigBase {
     return trackedConfigOrigins.get(name) ?? 'default'
   }
 
-  // Handles values calculated from a mixture of options and env vars
-  #applyCalculated () {
+  /**
+   * @param {Record<string, string | undefined>} [envs]
+   * @param {Record<string, string | undefined> | null} [remoteConfig]
+   */
+  #applyCalculated (envs, remoteConfig) {
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
         trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {
@@ -705,7 +696,15 @@ class Config extends ConfigBase {
       setAndTrack(this, 'logInjection', false)
     }
 
-    const otelPropagators = this.#otelPropagationSources.has(this.getOrigin('DD_TRACE_PROPAGATION_STYLE'))
+    const propagationOrigin = trackedConfigOrigins.get('DD_TRACE_PROPAGATION_STYLE')
+    const propagationEnvs = {
+      env_var: envs,
+      fleet_stable_config: this.stableConfig.fleetEntries,
+      local_stable_config: this.stableConfig.localEntries,
+      remote_config: remoteConfig,
+    }[propagationOrigin]
+    const otelPropagators = propagationEnvs?.DD_TRACE_PROPAGATION_STYLE === undefined &&
+      propagationEnvs?.OTEL_PROPAGATORS !== undefined
     for (const styles of [
       this.DD_TRACE_PROPAGATION_STYLE,
       this.tracePropagationStyle.inject,
@@ -719,6 +718,12 @@ class Config extends ConfigBase {
           styles[index] = b3Style
         }
       }
+    }
+
+    // Remote withdrawal must restore the normalized startup value.
+    const propagationBaseline = changeTracker.baseValuesByPath.DD_TRACE_PROPAGATION_STYLE
+    if (envs && propagationBaseline) {
+      propagationBaseline.value = [...this.DD_TRACE_PROPAGATION_STYLE]
     }
 
     // Apply all fallbacks to the calculated config.
@@ -839,7 +844,10 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
   return result
 }
 
-function warnWrongOtelSettings () {
+/**
+ * @param {Record<string, string | undefined>} envs
+ */
+function warnWrongOtelSettings (envs) {
   // This mostly works for non-aliased environment variables only.
   // TODO: Adjust this to work across all sources.
   for (const [otelEnvVar, ddEnvVar, key] of [
@@ -857,8 +865,6 @@ function warnWrongOtelSettings () {
     ['OTEL_SDK_DISABLED', 'DD_TRACE_OTEL_ENABLED'],
     ['OTEL_LOGS_EXPORTER'],
   ]) {
-    // eslint-disable-next-line eslint-rules/eslint-process-env
-    const envs = process.env
     const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key ?? otelEnvVar))
     const otelEnvValue = envs[otelEnvVar]
     if (otelEnvValue) {
