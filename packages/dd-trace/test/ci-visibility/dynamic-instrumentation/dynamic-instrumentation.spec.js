@@ -23,6 +23,7 @@ describe('test visibility with dynamic instrumentation', () => {
     if (childProcess) {
       childProcess.kill()
     }
+    sinon.restore()
   })
 
   it('can grab local variables', (done) => {
@@ -472,6 +473,80 @@ describe('test visibility with dynamic instrumentation', () => {
       'package.json.name': 'dd-trace',
     })
   })
+
+  it('retries enabling the debugger for the next probe after enabling it failed', async () => {
+    const breakpointSetChannel = new EventEmitter()
+    const breakpointHitChannel = new EventEmitter()
+    const breakpointRemoveChannel = new EventEmitter()
+    const session = new EventEmitter()
+    const enableError = new Error('Inspector method "Debugger.enable" requires an active inspector')
+    session.post = sinon.stub()
+    session.post.withArgs('Debugger.enable').rejects(enableError)
+    breakpointSetChannel.postMessage = sinon.stub()
+    breakpointHitChannel.postMessage = sinon.stub()
+    breakpointRemoveChannel.postMessage = sinon.stub()
+
+    proxyquire('../../../src/ci-visibility/dynamic-instrumentation/worker', {
+      worker_threads: {
+        workerData: {
+          config: {},
+          breakpointSetChannel,
+          breakpointHitChannel,
+          breakpointRemoveChannel,
+        },
+      },
+      '../../../debugger/devtools_client/session': session,
+      '../../../debugger/devtools_client/source-maps': {
+        getGeneratedPosition: sinon.stub(),
+      },
+      '../../../debugger/devtools_client/snapshot': {
+        getLocalStateForCallFrame: sinon.stub(),
+      },
+      '../../../debugger/devtools_client/state': {
+        // No script is loaded until the debugger has been enabled
+        findScriptFromPartialPath: () => undefined,
+        getStackFromCallFrames: sinon.stub(),
+      },
+      '../../../log': {
+        error: () => {},
+        warn: () => {},
+      },
+    })
+    const [onSetBreakpoint] = breakpointSetChannel.listeners('message')
+
+    await assert.rejects(onSetBreakpoint({ id: 'probe-1', file: 'file.js', line: 10 }), enableError)
+    await assert.rejects(onSetBreakpoint({ id: 'probe-2', file: 'file.js', line: 10 }), enableError)
+
+    sinon.assert.calledTwice(session.post.withArgs('Debugger.enable'))
+    sinon.assert.notCalled(breakpointSetChannel.postMessage)
+  })
+
+  for (const [runtime, versions] of [
+    ['Bun', { bun: '1.4.3' }],
+    ['Deno', { node: '26.0.0', deno: '2.9.6' }],
+  ]) {
+    it(`does not create a client on ${runtime}`, () => {
+      sinon.stub(process, 'versions').value({ ...process.versions, ...versions })
+      const Worker = sinon.stub()
+      const logGenericError = sinon.stub()
+      const createDynamicInstrumentation = proxyquire('../../../src/ci-visibility/dynamic-instrumentation', {
+        worker_threads: {
+          Worker,
+          threadId: 0,
+        },
+        '../../startup-log': {
+          logGenericError,
+        },
+      })
+
+      assert.strictEqual(createDynamicInstrumentation({}), undefined)
+      assert.strictEqual(createDynamicInstrumentation({}), undefined)
+
+      sinon.assert.notCalled(Worker)
+      sinon.assert.calledOnceWithExactly(logGenericError,
+        `Failed Test Replay is disabled, because Live Debugger/Dynamic Instrumentation is not supported on ${runtime}.`)
+    })
+  }
 
   it('serializes probe replacement, cancels queued setup, and releases removed state', async () => {
     const worker = new EventEmitter()

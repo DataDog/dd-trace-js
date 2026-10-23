@@ -6,6 +6,8 @@ const { randomUUID } = require('crypto')
 const log = require('../../log')
 const { getEnvironmentVariables } = require('../../config/helper')
 const getDebuggerConfig = require('../../debugger/config')
+const { getUnsupportedRuntime } = require('../../debugger/unsupported-runtime')
+const { logGenericError } = require('../../startup-log')
 
 const drainRequestIdToResolveBreakpointHit = new Map()
 
@@ -241,13 +243,28 @@ class TestVisDynamicInstrumentation {
 }
 
 let dynamicInstrumentation
+let isUnsupportedRuntimeReported = false
 
 /**
+ * Returns `undefined` if the runtime can't run Live Debugger/Dynamic Instrumentation, so test frameworks skip every
+ * Failed Test Replay step instead of waiting for probes that would never be set or hit.
+ *
  * @param {import('../../config/config-base')} config - Tracer configuration
  */
 module.exports = function createAndGetTestVisDynamicInstrumentation (config) {
   if (dynamicInstrumentation) {
     return dynamicInstrumentation
+  }
+  const unsupportedRuntime = getUnsupportedRuntime()
+  if (unsupportedRuntime !== undefined) {
+    if (!isUnsupportedRuntimeReported) {
+      isUnsupportedRuntimeReported = true
+      logGenericError(
+        'Failed Test Replay is disabled, ' +
+        `because Live Debugger/Dynamic Instrumentation is not supported on ${unsupportedRuntime}.`
+      )
+    }
+    return
   }
   dynamicInstrumentation = new TestVisDynamicInstrumentation(config)
   return dynamicInstrumentation

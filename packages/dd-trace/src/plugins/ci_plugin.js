@@ -1090,6 +1090,8 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   addDiProbe (err) {
+    // There is no client on runtimes that can't run Live Debugger/Dynamic Instrumentation
+    if (!this.di) return
     if (!err?.stack) {
       log.warn('Can not add breakpoint if the test error does not have a stack')
       return
