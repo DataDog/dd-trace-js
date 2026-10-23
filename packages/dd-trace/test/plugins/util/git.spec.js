@@ -46,6 +46,7 @@ const {
   getGitDiff,
   isGitAvailable: isGitAvailableWithStub,
 } = proxyquire('../../../src/plugins/util/git', {
+  'node:child_process': { execFileSync: cachedExecStub },
   './git-cache': {
     cachedExec: cachedExecStub,
   },
@@ -500,6 +501,7 @@ describe('getGitDiff', () => {
 
     const { getGitDiff } = proxyquire('../../../src/plugins/util/git',
       {
+        'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': {
           cachedExec: cachedExecStub,
         },
@@ -851,6 +853,7 @@ describe('getGitInformationDiscrepancy', () => {
 
 describe('fetchHeadCommitSha', () => {
   const cachedExecStub = sinon.stub()
+  const execFileSyncStub = sinon.stub()
   const logErrorSpy = sinon.spy()
   const environment = {
     PATH: '/test/bin',
@@ -863,6 +866,7 @@ describe('fetchHeadCommitSha', () => {
       './git-cache': {
         cachedExec: cachedExecStub,
       },
+      'node:child_process': { execFileSync: execFileSyncStub },
       '../../log': { error: logErrorSpy },
       '../../config/helper': { getEnvironmentVariables: () => environment },
     }
@@ -870,7 +874,13 @@ describe('fetchHeadCommitSha', () => {
 
   afterEach(() => {
     cachedExecStub.reset()
+    execFileSyncStub.reset()
     logErrorSpy.resetHistory()
+  })
+
+  beforeEach(() => {
+    cachedExecStub.returns('')
+    execFileSyncStub.returns('')
   })
 
   it('preserves the original fetch for a commit that is already available locally', () => {
@@ -878,11 +888,12 @@ describe('fetchHeadCommitSha', () => {
 
     fetchHeadCommitSha('abc123')
 
-    sinon.assert.calledWithExactly(cachedExecStub, 'git', ['cat-file', '-e', 'abc123'], {
+    sinon.assert.calledWithExactly(execFileSyncStub, 'git', ['cat-file', '-e', 'abc123'], {
       stdio: 'pipe',
       env: { ...environment, GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
     })
-    sinon.assert.calledWith(cachedExecStub, 'git', [
+    sinon.assert.neverCalledWith(cachedExecStub, 'git', ['cat-file', '-e', 'abc123'])
+    sinon.assert.calledWith(execFileSyncStub, 'git', [
       'fetch',
       '--update-shallow',
       '--filter=blob:none',
@@ -897,13 +908,13 @@ describe('fetchHeadCommitSha', () => {
     const headSha = 'abc123'
     const remoteName = 'origin'
 
-    cachedExecStub
+    execFileSyncStub
       .returns('')
       .onCall(0).throws(new Error('Commit is missing'))
 
     fetchHeadCommitSha(headSha)
 
-    sinon.assert.calledWith(cachedExecStub,
+    sinon.assert.calledWith(execFileSyncStub,
       'git',
       [
         'fetch',
@@ -920,11 +931,34 @@ describe('fetchHeadCommitSha', () => {
 
   it('logs a failed fetch without throwing', () => {
     cachedExecStub.throws(new Error('Git command failed'))
+    execFileSyncStub.throws(new Error('Git command failed'))
 
     fetchHeadCommitSha('abc123')
 
     sinon.assert.called(logErrorSpy)
-    assert.ok(cachedExecStub.getCalls().some(call => call.args[1][0] === 'fetch'))
+    assert.ok(execFileSyncStub.getCalls().some(call => call.args[1][0] === 'fetch'))
+  })
+
+  it('retries the original fetch after a bounded fetch fails', () => {
+    execFileSyncStub.onCall(0).throws(new Error('Commit is missing'))
+    execFileSyncStub.onCall(1).throws(new Error('Shallow requests are unsupported'))
+
+    fetchHeadCommitSha('abc123')
+
+    const fetches = execFileSyncStub.getCalls().filter(call => call.args[1][0] === 'fetch')
+    assert.strictEqual(fetches.length, 2)
+    assert.ok(fetches[0].args[1].includes('--depth=1'))
+    assert.ok(!fetches[1].args[1].includes('--depth=1'))
+    sinon.assert.calledOnce(logErrorSpy)
+  })
+
+  it('does not retry a failed original fetch for a local head', () => {
+    execFileSyncStub.onCall(1).throws(new Error('Remote is unavailable'))
+
+    fetchHeadCommitSha('abc123')
+
+    sinon.assert.calledTwice(execFileSyncStub)
+    sinon.assert.calledOnce(logErrorSpy)
   })
 })
 
@@ -1002,6 +1036,7 @@ done
       execFileSync(command, flags, { stdio: 'pipe', ...options, cwd: checkout }))
     const gitUtils = proxyquire('../../../src/plugins/util/git', {
       './git-cache': { cachedExec: cachedExecSpy },
+      'node:child_process': { execFileSync: cachedExecSpy },
     })
     getGitMetadata = gitUtils.getGitMetadata
     getGitDiff = gitUtils.getGitDiff
@@ -1041,6 +1076,121 @@ done
     const metadata = getGitMetadata({ headCommitSha: headSha })
 
     assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+    assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
+  })
+
+  it('recovers head metadata when a shallow lock prevents fetching at depth 1', () => {
+    fs.writeFileSync(path.join(checkout, '.git', 'shallow.lock'), 'held\n')
+    const execute = (command, flags, options) => cachedExecSpy(command, flags, {
+      ...options,
+      env: { ...process.env, ...options?.env, GIT_NO_LAZY_FETCH: '1' },
+    })
+    const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
+      './git-cache': { cachedExec: execute },
+      'node:child_process': { execFileSync: execute },
+    })
+
+    const metadata = getGitMetadata({ headCommitSha: headSha })
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+  })
+
+  it('retries the original fetch when the bounded fetch leaves head metadata unreadable', () => {
+    let failedHeadRead = false
+    const execute = (command, flags, options) => {
+      if (flags[0] === 'show' && flags.at(-1) === headSha && !failedHeadRead) {
+        failedHeadRead = true
+        throw new Error('Head metadata is temporarily unavailable')
+      }
+      return cachedExecSpy(command, flags, options)
+    }
+    const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
+      './git-cache': { cachedExec: execute },
+      'node:child_process': { execFileSync: execute },
+    })
+
+    const metadata = getGitMetadata({ headCommitSha: headSha })
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    const fetches = cachedExecSpy.getCalls().filter(call => call.args[1][0] === 'fetch')
+    assert.strictEqual(fetches.length, 2)
+    assert.ok(fetches[0].args[1].includes('--depth=1'))
+    assert.ok(!fetches[1].args[1].includes('--depth=1'))
+  })
+
+  it('prepares the known diff base before the remote becomes unavailable', () => {
+    git(remote, ['config', 'uploadpack.allowFilter', 'false'])
+
+    const metadata = getGitMetadata({ headCommitSha: headSha, pullRequestBaseBranchSha: baseSha })
+    git(checkout, ['remote', 'set-url', 'origin', path.join(directory, 'unavailable.git')])
+    const diff = getGitDiff(baseSha, headSha)
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.match(diff, /-root/)
+    assert.match(diff, /\+head/)
+  })
+
+  it('fetches missing diff snapshots without relying on metadata extraction', () => {
+    git(remote, ['config', 'uploadpack.allowFilter', 'false'])
+
+    const diff = getGitDiff(baseSha, headSha)
+
+    assert.match(diff, /-root/)
+    assert.match(diff, /\+head/)
+  })
+
+  it('preserves existing base history while preparing a missing head for the diff', () => {
+    git(remote, ['config', 'uploadpack.allowFilter', 'false'])
+    git(remote, ['fast-import', '--quiet'], {
+      input: `commit refs/heads/juan-fernandez/base
+mark :5
+committer Base <base@example.com> 1700000005 +0000
+data 4
+base
+from ${baseSha}
+
+commit refs/heads/juan-fernandez/base
+committer Base <base@example.com> 1700000006 +0000
+data 4
+base
+from :5
+
+done
+`,
+    })
+    const knownBase = git(remote, ['rev-parse', 'refs/heads/juan-fernandez/base'])
+    git(checkout, ['fetch', '--depth=2', 'origin', knownBase])
+
+    getGitMetadata({ headCommitSha: headSha, pullRequestBaseBranchSha: knownBase })
+    git(checkout, ['remote', 'set-url', 'origin', path.join(directory, 'unavailable.git')])
+
+    assert.strictEqual(git(checkout, ['rev-list', '--count', knownBase]), '2')
+    assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '1')
+    assert.match(getGitDiff(knownBase, headSha), /\+head/)
+  })
+
+  it('does not use a cached missing-object probe to shorten subsequently fetched head history', () => {
+    const repo = path.resolve(__dirname, '../../../../..')
+    const script = `
+      const path = require('node:path')
+      const { execFileSync } = require('node:child_process')
+      const [repo, headSha, cacheDir] = process.argv.slice(1)
+      const config = require(path.join(repo, 'packages/dd-trace/src/config'))()
+      config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = true
+      config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = cacheDir
+      const { cachedExec } = require(path.join(repo, 'packages/dd-trace/src/plugins/util/git-cache'))
+      try { cachedExec('git', ['cat-file', '-e', headSha]) } catch {}
+      execFileSync('git', ['fetch', '--depth=2', 'origin', headSha], { stdio: 'pipe' })
+      const { getGitMetadata } = require(path.join(repo, 'packages/dd-trace/src/plugins/util/git'))
+      process.stdout.write(JSON.stringify(getGitMetadata({ headCommitSha: headSha })))
+    `
+
+    const metadata = JSON.parse(execFileSync(process.execPath, [
+      '-e', script, repo, headSha, path.join(directory, 'git-cache'),
+    ], { cwd: checkout, stdio: 'pipe' }))
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
     assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
   })
 
@@ -1116,13 +1266,13 @@ done
       assert.strictEqual(git(checkout, ['config', '--get', 'remote.origin.promisor']), 'true')
       if (legacyGit) {
         // Simulate Git versions predating GIT_NO_LAZY_FETCH; the transport guard must still prevent lazy downloads.
+        const execute = (command, flags, options) => cachedExecSpy(command, flags, {
+          ...options,
+          env: { ...process.env, ...options?.env, GIT_NO_LAZY_FETCH: '0' },
+        })
         getGitMetadata = proxyquire('../../../src/plugins/util/git', {
-          './git-cache': {
-            cachedExec: (command, flags, options) => cachedExecSpy(command, flags, {
-              ...options,
-              env: { ...process.env, ...options?.env, GIT_NO_LAZY_FETCH: '0' },
-            }),
-          },
+          './git-cache': { cachedExec: execute },
+          'node:child_process': { execFileSync: execute },
         }).getGitMetadata
       }
 
