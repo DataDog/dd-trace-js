@@ -8,7 +8,6 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
-const Axios = require('axios')
 const semver = require('semver')
 
 const { NODE_MAJOR } = require('../../../../../version')
@@ -16,14 +15,15 @@ const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { withVersions } = require('../../setup/mocha')
 const { getConfigFresh } = require('../../helpers/config')
+const HttpRequest = require('../../setup/helpers/http-client')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - lfi', () => {
-  let axios
+  let httpRequest
 
   async function testBlockingRequest (url = '/?file=/test.file', config = undefined, ruleEvalCount = 1) {
     try {
-      await axios.get(url, config)
+      await httpRequest.get(url, config)
     } catch (e) {
       if (!e.response) {
         throw e
@@ -39,8 +39,10 @@ describe('RASP - lfi', () => {
 
   withVersions('express', 'express', expressVersion => {
     if (semver.intersects(expressVersion, '<=4.10.5') && NODE_MAJOR >= 24) {
-      // Express 4.10.5 and older cannot start on Node.js 24.
-      describe.skip(`refusing to run tests as express@${expressVersion} is incompatible with Node.js ${NODE_MAJOR}`)
+      it(`refusing to run tests as express@${expressVersion} is incompatible with Node.js ${NODE_MAJOR}`, function () {
+        // Express 4.10.5 and older cannot start on Node.js 24.
+        this.skip()
+      })
       return
     }
 
@@ -71,7 +73,7 @@ describe('RASP - lfi', () => {
         server = expressApp.listen(0)
         await once(server, 'listening')
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({
+        httpRequest = HttpRequest.create({
           baseURL: `http://localhost:${port}`,
         })
       })
@@ -130,7 +132,7 @@ describe('RASP - lfi', () => {
             it('should not block if param not found in the request', async () => {
               app = getAppFn(fn, args, options)
 
-              await axios.get(`/?file=${secureFile}`)
+              await httpRequest.get(`/?file=${secureFile}`)
 
               return checkRaspExecutedAndNotThreat(agent, false)
             })
@@ -479,7 +481,7 @@ describe('RASP - lfi', () => {
       server.listen(0)
       await once(server, 'listening')
       const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-      axios = Axios.create({
+      httpRequest = HttpRequest.create({
         baseURL: `http://localhost:${port}`,
       })
     })

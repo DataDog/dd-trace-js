@@ -11,7 +11,7 @@ describe('direct EVP route', () => {
   let log
 
   beforeEach(() => {
-    log = { debug: sinon.spy() }
+    log = { warn: sinon.spy() }
 
     ;({ createDirectEVPRoute } = proxyquire('../../src/evp_proxy/direct', {
       '../log': log,
@@ -48,16 +48,30 @@ describe('direct EVP route', () => {
     })
   })
 
+  it('normalizes surrounding whitespace and defaults a blank site', () => {
+    assert.strictEqual(createDirectEVPRoute({
+      DD_API_KEY: 'test-api-key',
+      site: '  DATADOGHQ.EU  ',
+    }, 'event-platform-intake').url.href, 'https://event-platform-intake.datadoghq.eu/')
+
+    assert.strictEqual(createDirectEVPRoute({
+      DD_API_KEY: 'test-api-key',
+      site: '  ',
+    }, 'event-platform-intake').url.href, 'https://event-platform-intake.datadoghq.com/')
+  })
+
   it('does not create a route without an API key', () => {
     assert.strictEqual(createDirectEVPRoute({
       site: 'datadoghq.com',
     }, 'event-platform-intake'), undefined)
   })
 
-  it('does not create a route without a site', () => {
-    assert.strictEqual(createDirectEVPRoute({
+  it('uses the default site when it is omitted', () => {
+    const route = createDirectEVPRoute({
       DD_API_KEY: 'test-api-key',
-    }, 'event-platform-intake'), undefined)
+    }, 'event-platform-intake')
+
+    assert.strictEqual(route.url.href, 'https://event-platform-intake.datadoghq.com/')
   })
 
   it('does not create a route for an invalid site', () => {
@@ -67,9 +81,23 @@ describe('direct EVP route', () => {
     }, 'event-platform-intake'), undefined)
 
     sinon.assert.calledOnceWithExactly(
-      log.debug,
-      'Unable to configure direct EVP intake: %s',
-      sinon.match.string
+      log.warn,
+      'Feature Flags direct event delivery is disabled because DD_SITE is invalid.'
     )
+  })
+
+  it('warns once without logging an invalid site or API key', () => {
+    const config = {
+      DD_API_KEY: 'sensitive-api-key',
+      site: 'sensitive invalid site',
+    }
+
+    createDirectEVPRoute(config, 'event-platform-intake')
+    createDirectEVPRoute(config, 'event-platform-intake')
+
+    sinon.assert.calledOnce(log.warn)
+    const message = log.warn.firstCall.args.join(' ')
+    assert.ok(!message.includes(config.site))
+    assert.ok(!message.includes(config.DD_API_KEY))
   })
 })

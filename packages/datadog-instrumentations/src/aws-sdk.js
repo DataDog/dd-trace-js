@@ -2,12 +2,14 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
+const sendSonic = require('./nova-sonic')
 
 const patchedClientConfigProtocols = new WeakSet()
 const patchedCommandPrototypes = new WeakSet()
+const patchedSmithyClients = new WeakSet()
 
 // Resource identifiers that already match the channel-suffix slug. Anything
-// else falls back to `'default'`. Hoisted out of the per-call hot path so we
+// else falls back to `'aws'`. Hoisted out of the per-call hot path so we
 // don't allocate a fresh Array literal + run `.includes` on every AWS send.
 const KNOWN_CHANNEL_SUFFIXES = new Set([
   'cloudwatchlogs',
@@ -77,7 +79,6 @@ const clientNameCache = new WeakMap()
 
 /**
  * @param {Function} clientCtor
- * @returns {string}
  */
 function getClientName (clientCtor) {
   let name = clientNameCache.get(clientCtor)
@@ -93,7 +94,6 @@ const operationCache = new WeakMap()
 
 /**
  * @param {Function} commandCtor
- * @returns {string}
  */
 function getOperationName (commandCtor) {
   let operation = operationCache.get(commandCtor)
@@ -163,6 +163,9 @@ function wrapSmithySend (send) {
     const channels = getChannelBag(channelSuffix)
     const clientName = getClientName(this.constructor)
     const operation = getOperationName(command.constructor)
+    if (channelSuffix === 'bedrockruntime' && operation === 'invokeModelWithBidirectionalStream') {
+      return sendSonic(send, this, command, args)
+    }
     const request = {
       operation,
       params: command.input,
@@ -200,11 +203,11 @@ function wrapSmithySend (send) {
     }
 
     return channels.start.runStores(ctx, () => {
-      // When the region is not set this never resolves so we can't await.
+      // Resolve region tags independently; send reports provider failures through its promise or callback.
       this.config.region().then(region => {
         ctx.region = region
         channels.region.publish(ctx)
-      })
+      }, () => {})
 
       if (cbExists) {
         args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (err, result) {
@@ -322,18 +325,24 @@ function getChannelSuffix (name) {
   // some resource identifiers have spaces between ex: bedrock runtime
   name = String(name).replaceAll(' ', '')
   if (KNOWN_CHANNEL_SUFFIXES.has(name)) return name
-  return CHANNEL_SUFFIX_ALIASES.get(name) ?? 'default'
+  return CHANNEL_SUFFIX_ALIASES.get(name) ?? 'aws'
 }
 
-addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {
-  shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
+/** @param {{ Client: Function }} smithy */
+function patchSmithyClient (smithy) {
+  const prototype = smithy.Client.prototype
+  // Recent smithy-client releases re-export core/client. Loading both entry points must not
+  // install two observers on the same send (and consume/charge every duplex event twice).
+  if (!patchedSmithyClients.has(prototype)) {
+    shimmer.wrap(prototype, 'send', wrapSmithySend)
+    patchedSmithyClients.add(prototype)
+  }
   return smithy
-})
+}
 
-addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, smithy => {
-  shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
-  return smithy
-})
+addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, patchSmithyClient)
+
+addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, patchSmithyClient)
 
 // `@aws-sdk/client-*` >= 3.1046.0 dropped `@smithy/smithy-client` and now
 // extends from `@smithy/core/client` directly. The `Client.send` contract is
@@ -343,10 +352,7 @@ addHook({
   name: '@smithy/core',
   file: 'dist-cjs/submodules/client/index.js',
   versions: ['>=3.24.0'],
-}, smithyCoreClient => {
-  shimmer.wrap(smithyCoreClient.Client.prototype, 'send', wrapSmithySend)
-  return smithyCoreClient
-})
+}, patchSmithyClient)
 
 addHook({ name: 'aws-sdk', versions: ['>=2.3.0'] }, AWS => {
   shimmer.wrap(AWS.config, 'setPromisesDependency', setPromisesDependency => {

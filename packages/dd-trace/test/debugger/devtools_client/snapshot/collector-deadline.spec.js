@@ -29,7 +29,8 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
     session.removeAllListeners('Debugger.scriptParsed')
     session.removeAllListeners('Debugger.paused')
     await session.post('Debugger.disable')
-    clock.restore()
+    // Also restores the `process.hrtime.bigint` stubs, so they don't leak into other specs
+    sinon.restore()
   })
 
   it('should not mark properties with timeout when deadline is not exceeded', async function () {

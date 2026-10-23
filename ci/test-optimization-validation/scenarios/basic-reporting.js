@@ -338,7 +338,6 @@ function getSelectorEvidence (framework, events) {
  *
  * @param {string} actual captured test source path
  * @param {string} expected approved representative path
- * @returns {boolean} whether both paths identify the same file
  */
 function sourceFilesMatch (actual, expected) {
   const normalizedActual = normalizeSourceFile(actual)

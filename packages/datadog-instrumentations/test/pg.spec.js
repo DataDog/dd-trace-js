@@ -137,6 +137,7 @@ describe('pg instrumentation', () => {
               })
 
               describe('with callback in query object', () => {
+                // eslint-disable-next-line mocha/handle-done-callback -- Query invokes the assigned callback.
                 it('Should not fail if it is not aborted', (done) => {
                   const query = new Query('SELECT 1')
                   query.callback = (error) => {
@@ -146,6 +147,7 @@ describe('pg instrumentation', () => {
                   client.query(query)
                 })
 
+                // eslint-disable-next-line mocha/handle-done-callback -- Query invokes the assigned callback.
                 it('Should abort query', (done) => {
                   queryClientStartChannel.subscribe(abortQuery)
 

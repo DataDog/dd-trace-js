@@ -10,6 +10,11 @@ const DEFAULT_LONG_LIVED_THRESHOLD = 30_000
  * This class embodies the SSI profiler-triggering heuristics under SSI.
  */
 class SSIHeuristics {
+  #active = false
+  #longLivedTimer
+  #onAppClosing = this.disable.bind(this)
+  #onSpanCreated = this.#handleSpanCreated.bind(this)
+
   /**
    * @param {import('../config/config-base')} config - Tracer configuration
    */
@@ -32,20 +37,36 @@ class SSIHeuristics {
   }
 
   start () {
+    if (this.#active) return
+    this.#active = true
+
     // Used to determine short-livedness of the process. We could use the process start time as the
     // reference point, but the tracer initialization point is more relevant, as we couldn't be
     // collecting profiles earlier anyway. The difference is not particularly significant if the
     // tracer is initialized early in the process lifetime.
-    setTimeout(() => {
+    this.#longLivedTimer = setTimeout(() => {
+      this.#longLivedTimer = undefined
       this.shortLived = false
       this._maybeTriggered()
-    }, this.longLivedThreshold).unref?.()
+    }, this.longLivedThreshold)
+    this.#longLivedTimer.unref?.()
 
-    this._onSpanCreated = this._onSpanCreated.bind(this)
-    dc.subscribe('dd-trace:span:start', this._onSpanCreated)
+    dc.subscribe('dd-trace:span:start', this.#onSpanCreated)
+    dc.subscribe('datadog:telemetry:app-closing', this.#onAppClosing)
+  }
 
-    this._onAppClosing = this._onAppClosing.bind(this)
-    dc.subscribe('datadog:telemetry:app-closing', this._onAppClosing)
+  /**
+   * Cancels the pending heuristic and releases all resources owned by this instance.
+   */
+  disable () {
+    this.triggeredCallback = undefined
+    if (!this.#active) return
+
+    this.#active = false
+    clearTimeout(this.#longLivedTimer)
+    this.#longLivedTimer = undefined
+    dc.unsubscribe('dd-trace:span:start', this.#onSpanCreated)
+    dc.unsubscribe('datadog:telemetry:app-closing', this.#onAppClosing)
   }
 
   onTriggered (callback) {
@@ -70,17 +91,10 @@ class SSIHeuristics {
     }
   }
 
-  _onSpanCreated () {
+  #handleSpanCreated () {
     this.noSpan = false
     this._maybeTriggered()
-    dc.unsubscribe('dd-trace:span:start', this._onSpanCreated)
-  }
-
-  _onAppClosing () {
-    dc.unsubscribe('datadog:telemetry:app-closing', this._onAppClosing)
-    if (this.noSpan) {
-      dc.unsubscribe('dd-trace:span:start', this._onSpanCreated)
-    }
+    dc.unsubscribe('dd-trace:span:start', this.#onSpanCreated)
   }
 }
 

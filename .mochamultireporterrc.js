@@ -2,6 +2,9 @@
 
 const env = process.env // eslint-disable-line eslint-rules/eslint-process-env
 const isCI = Boolean(env.CI)
+const junitSuffix = env.MOCHA_JUNIT_REPORT_SUFFIX
+  ? `-${env.MOCHA_JUNIT_REPORT_SUFFIX.replaceAll(/[^a-zA-Z0-9._-]+/g, '-')}`
+  : ''
 
 const reporterEnabled = ['spec']
 if (isCI) reporterEnabled.push('./scripts/junit-reporter.js')
@@ -18,7 +21,7 @@ const {
 module.exports = {
   reporterEnabled,
   scriptsJunitReporterJsReporterOptions: {
-    mochaFile: `./node-${process.versions.node}-junit.xml`,
+    mochaFile: `./node-${process.versions.node}${junitSuffix}-junit.xml`,
     properties: {
       node_version: process.versions.node,
       ...(isCI && {

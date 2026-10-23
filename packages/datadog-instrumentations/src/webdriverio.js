@@ -6,6 +6,7 @@ const realSetTimeout = setTimeout
 const { AsyncResource } = require('node:async_hooks')
 const { fileURLToPath } = require('node:url')
 
+const { createFinalFlushTimeoutError, FINAL_FLUSH_TIMEOUT } = require('../../dd-trace/src/ci-visibility/final-flush')
 const { EMPTY_EFD_RETRY_POLICY } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
@@ -30,6 +31,9 @@ const {
   SCREENSHOT_UPLOAD_RESPONSE,
   sendWebdriverioWorkerMessage,
   SUITE_FINISH,
+  VIDEO_UPLOAD,
+  VIDEO_UPLOAD_FLUSH,
+  VIDEO_UPLOAD_RESPONSE,
   WEBDRIVERIO_WORKER_ENV,
   WEBDRIVERIO_WORKER_EVENT,
   WEBDRIVERIO_WORKER_ORIGIN,
@@ -52,6 +56,8 @@ const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const modifiedFilesCh = channel('ci:mocha:modified-files')
 const screenshotCapabilitiesCh = channel('ci:webdriverio:screenshot:capabilities')
 const screenshotUploadCh = channel('ci:webdriverio:screenshot:upload')
+const videoCapabilitiesCh = channel('ci:webdriverio:video:capabilities')
+const videoUploadCh = channel('ci:webdriverio:video:upload')
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
@@ -59,10 +65,13 @@ const workerReportTelemetryCh = channel('ci:mocha:worker-report:telemetry')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 
 const jasmineAdapterInitCh = tracingChannel('orchestrion:@wdio/jasmine-framework:JasmineAdapter_init')
+const mochaAdapterInitCh = tracingChannel('orchestrion:@wdio/mocha-framework:MochaAdapter_init')
 const baseReporterWaitForSyncCh = tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync')
 const runnerRunCh = tracingChannel('orchestrion:@wdio/runner:Runner_run')
+const runnerStartSessionCh = tracingChannel('orchestrion:@wdio/runner:Runner_startSession')
 const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
 const launcherStartInstanceCh = tracingChannel('orchestrion:@wdio/cli:Launcher_startInstance')
+const configParserShardCh = tracingChannel('orchestrion:@wdio/config:ConfigParser_shard')
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
 const testFrameworkFnWrapperCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
@@ -79,7 +88,7 @@ const TEST_FRAMEWORK = 'webdriverio'
 const SET_RUM_COOKIE_SCRIPT = 'cookie => { globalThis.document.cookie = cookie }'
 const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
-let jasmineWorkerRequestId = 0
+let workerRequestId = 0
 
 const loadCh = channel('dd-trace:instrumentation:load')
 if (loadCh.hasSubscribers) {
@@ -87,6 +96,7 @@ if (loadCh.hasSubscribers) {
 }
 
 const coordinatorStates = new WeakMap()
+const emptyShardConfigurations = new WeakSet()
 const localRunnerVersions = new WeakMap()
 const rumBrowsers = new Set()
 const rumCorrelationBrowsers = new Set()
@@ -119,7 +129,6 @@ addHook({
  * Returns whether this browser can preload and clean correlation across every browsing context.
  *
  * @param {object} browser
- * @returns {boolean}
  */
 function canCorrelateRumBrowser (browser) {
   return browser?.isBidi &&
@@ -132,7 +141,6 @@ function canCorrelateRumBrowser (browser) {
  * Releases retained state when a WebDriver session ends.
  *
  * @param {object} browser
- * @returns {void}
  */
 function releaseRumBrowser (browser) {
   rumBrowsers.delete(browser)
@@ -152,7 +160,6 @@ function releaseRumBrowser (browser) {
  * Retains a browser and watches for WebDriver's deleteSession result event.
  *
  * @param {object} browser
- * @returns {void}
  */
 function retainRumBrowser (browser) {
   rumBrowsers.add(browser)
@@ -171,7 +178,6 @@ function retainRumBrowser (browser) {
  * Returns whether RUM is inactive because its configured sampling rate is below 100%.
  *
  * @param {{isRumActive: boolean, isRumInstrumented: boolean, rumSamplingRate: number|null}} rumState
- * @returns {boolean}
  */
 function isRumSampledOut (rumState) {
   return rumState.isRumInstrumented && !rumState.isRumActive &&
@@ -291,8 +297,7 @@ async function preloadRumNavigation () {
   try {
     const browser = this
     const testExecutionId = getRumTestExecutionId(browser)
-    if (!canCorrelateRumBrowser(browser)) return
-    if (!rumRunnerBrowsers.has(browser)) return
+    if (!canCorrelateRumBrowser(browser) || !rumRunnerBrowsers.has(browser)) return
 
     retainRumBrowser(browser)
     if (!testExecutionId) return
@@ -365,9 +370,7 @@ async function handleRumNavigation (context) {
       log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
     }
     const testExecutionId = getRumTestExecutionId(browser, isRumActive)
-    if (sampledOut) return
-
-    if (!testExecutionId) {
+    if (sampledOut || !testExecutionId) {
       return
     }
     if (!isRumActive && browser.isBidi) return
@@ -652,7 +655,6 @@ function handleRumProtocolCommand (command) {
  * Wraps only WebDriver commands that need to wait for RUM work before their request starts.
  *
  * @param {{arguments?: unknown[], result?: Function}} context
- * @returns {void}
  */
 function wrapRumProtocolCommand (context) {
   const command = context.arguments?.[2]?.command
@@ -675,7 +677,6 @@ function wrapRumProtocolCommand (context) {
  * A tracing-channel start subscriber is synchronous and cannot delay the static async handler itself.
  *
  * @param {{result?: {_bidiHandler?: {value?: object}}}} context
- * @returns {void}
  */
 function wrapRumBidiNavigation (context) {
   const bidiHandler = context.result?._bidiHandler?.value
@@ -844,7 +845,6 @@ async function retryRumBrowsers (testExecutionId) {
  * Delays BiDi navigation until its RUM correlation preload is installed.
  *
  * @param {{rumPreloadCallback?: () => Promise<void>}} context
- * @returns {void}
  */
 function waitForRumNavigationStart (context) {
   if (!rumPageNavigateCh.hasSubscribers) return
@@ -860,7 +860,6 @@ function waitForRumNavigationStart (context) {
  * }} context
  * @param {() => Promise<unknown>} operation
  * @param {boolean} [waitForResolve]
- * @returns {void}
  */
 function setRumWaitCallbacks (context, operation, waitForResolve = true) {
   const waitForOperation = onDone => operation().then(onDone, onDone)
@@ -872,7 +871,6 @@ function setRumWaitCallbacks (context, operation, waitForResolve = true) {
  * Delays URL completion until RUM detection and correlation settle.
  *
  * @param {object} context
- * @returns {void}
  */
 function waitForRumNavigation (context) {
   if (!rumPageNavigateCh.hasSubscribers) return
@@ -884,7 +882,6 @@ function waitForRumNavigation (context) {
  * Correlation remains active until every afterEach hook has run.
  *
  * @param {{arguments?: unknown[]}} context
- * @returns {void}
  */
 function waitForRumCleanup (context) {
   const type = context.arguments?.[1]
@@ -904,7 +901,6 @@ function waitForRumCleanup (context) {
  * Correlation remains active until every afterEach hook has run.
  *
  * @param {{arguments?: unknown[]}} context
- * @returns {void}
  */
 function waitForFailedRumCleanup (context) {
   const type = context.arguments?.[1]
@@ -928,7 +924,6 @@ function waitForFailedRumCleanup (context) {
  * Prepares retained RUM state before the next test or non-afterEach hook starts.
  *
  * @param {{arguments?: unknown[], rumCleanupCallback?: () => Promise<void>}} context
- * @returns {void}
  */
 function waitForRumTestStart (context) {
   const type = context.arguments?.[1]
@@ -948,6 +943,7 @@ function waitForRumTestStart (context) {
  * @property {string} framework
  * @property {string|undefined} rootDir
  * @property {typeof process.env|undefined} runnerEnv
+ * @property {{total: number}|undefined} shard
  */
 
 /**
@@ -966,6 +962,8 @@ function waitForRumTestStart (context) {
  * @property {boolean|undefined} hasTests
  * @property {number|undefined} exitCode
  * @property {number|undefined} retries
+ * @property {AbortController|undefined} videoController
+ * @property {ReturnType<typeof setTimeout>|undefined} videoFlushTimer
  */
 
 /**
@@ -1014,18 +1012,21 @@ function waitForRumTestStart (context) {
  */
 function createWorkerConfiguration () {
   return {
+    dynamicAtrBuckets: undefined,
     earlyFlakeDetectionFaultyThreshold: 30,
     earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
     flakyTestRetriesCount: 0,
     isCodeCoverageEnabled: false,
     isCoverageReportUploadEnabled: false,
     isDiEnabled: false,
+    isDynamicAtrEnabled: false,
     isEarlyFlakeDetectionEnabled: false,
     isFlakyTestRetriesEnabled: false,
     isImpactedTestsEnabled: false,
     isItrEnabled: false,
     isKnownTestsEnabled: false,
     isTestFailureScreenshotsEnabled: false,
+    isTestFailureVideosEnabled: false,
     isSuitesSkippingEnabled: false,
     isTestDynamicInstrumentationEnabled: false,
     isTestManagementTestsEnabled: false,
@@ -1039,29 +1040,28 @@ function createWorkerConfiguration () {
 }
 
 /**
- * Configures a Jasmine worker and waits for its coordinator-owned optimization settings.
+ * Configures a framework worker before browser session creation using its coordinator-owned settings.
  *
  * @param {{_jrunner?: {env?: {addReporter?: (reporter: object) => void}}, _specs?: string[]}} adapter
  * @param {{
  *   resolveCallback?: (onDone: () => void) => void,
  *   rejectCallback?: (onDone: () => void) => void
  * }} context
- * @returns {void}
+ * @param {'mocha'|'jasmine'} testFrameworkAdapter
  */
-function initializeJasmineWorker (adapter, context) {
+function initializeFrameworkWorker (adapter, context, testFrameworkAdapter) {
   if (!isWebdriverioWorker) {
     return
   }
 
   const specs = adapter?._specs || []
 
-  if (jasmineDoneCh.hasSubscribers) {
+  if (testFrameworkAdapter === JASMINE_FRAMEWORK_ADAPTER && jasmineDoneCh.hasSubscribers) {
     adapter?._jrunner?.env?.addReporter?.({
       /**
        * Publishes run-level failures that are absent from suiteDone.
        *
        * @param {object} result
-       * @returns {void}
        */
       jasmineDone (result) {
         jasmineDoneCh.publish({ result })
@@ -1073,17 +1073,15 @@ function initializeJasmineWorker (adapter, context) {
    * Waits until the coordinator has started this worker's parent spans.
    *
    * @param {() => void} onDone
-   * @returns {void}
    */
   const waitForCoordinator = onDone => {
-    const requestId = `${process.pid}-${++jasmineWorkerRequestId}`
+    const requestId = `${process.pid}-${++workerRequestId}`
     let finished = false
 
     /**
-     * Releases Jasmine initialization exactly once.
+     * Releases framework initialization exactly once.
      *
      * @param {object} [configuration]
-     * @returns {void}
      */
     function finish (configuration = createWorkerConfiguration()) {
       if (finished) {
@@ -1098,7 +1096,7 @@ function initializeJasmineWorker (adapter, context) {
         repositoryRoot: configuration.repositoryRoot,
         specs,
         testFramework: TEST_FRAMEWORK,
-        testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
+        testFrameworkAdapter,
       })
       onDone()
     }
@@ -1107,7 +1105,6 @@ function initializeJasmineWorker (adapter, context) {
      * Receives coordinator readiness for this worker.
      *
      * @param {object} message
-     * @returns {void}
      */
     function onMessage (message) {
       if (message?.name === WORKER_READY_RESPONSE && message.content?.requestId === requestId) {
@@ -1123,7 +1120,7 @@ function initializeJasmineWorker (adapter, context) {
       name: WORKER_READY,
       content: {
         requestId,
-        testFrameworkAdapter: JASMINE_FRAMEWORK_ADAPTER,
+        testFrameworkAdapter,
       },
     }, error => {
       if (error) {
@@ -1190,7 +1187,6 @@ function getCoordinatorState (localRunner) {
  * Normalizes a WebdriverIO spec identifier to a filesystem path.
  *
  * @param {string} file
- * @returns {string}
  */
 function normalizeFile (file) {
   return file.startsWith('file://') ? fileURLToPath(file) : file
@@ -1201,7 +1197,6 @@ function normalizeFile (file) {
  *
  * @param {CoordinatorState} state
  * @param {string[]} files
- * @returns {void}
  */
 function addScheduledFiles (state, files) {
   for (const file of files) {
@@ -1214,7 +1209,6 @@ function addScheduledFiles (state, files) {
  *
  * @param {string|undefined} workerNodeOptions
  * @param {string} launcherNodeOptions
- * @returns {boolean}
  */
 function includesNodeOptions (workerNodeOptions, launcherNodeOptions) {
   if (!workerNodeOptions) {
@@ -1240,7 +1234,6 @@ function includesNodeOptions (workerNodeOptions, launcherNodeOptions) {
  * Starts the single test session owned by the WebdriverIO launcher.
  *
  * @param {CoordinatorState} state
- * @returns {void}
  */
 function startSession (state) {
   if (state.sessionStarted) {
@@ -1264,7 +1257,6 @@ function startSession (state) {
  * Completes coordinator initialization and releases waiting workers.
  *
  * @param {CoordinatorState} state
- * @returns {void}
  */
 function completeCoordinatorInitialization (state) {
   if (state.initialized) {
@@ -1288,7 +1280,6 @@ function completeCoordinatorInitialization (state) {
  * @param {CoordinatorState} state
  * @param {import('node:diagnostics_channel').Channel} requestChannel
  * @param {(response: object) => void} onDone
- * @returns {void}
  */
 function requestCoordinatorData (state, requestChannel, onDone) {
   if (!requestChannel.hasSubscribers) {
@@ -1320,7 +1311,6 @@ function getMochaFrameworkData (frameworkData) {
  * Applies the worker configuration for an EFD session with faulty known-tests data.
  *
  * @param {object} configuration
- * @returns {void}
  */
 function setEarlyFlakeDetectionFaulty (configuration) {
   configuration.isEarlyFlakeDetectionEnabled = false
@@ -1333,7 +1323,6 @@ function setEarlyFlakeDetectionFaulty (configuration) {
  *
  * @param {CoordinatorState} state
  * @param {object|undefined} response
- * @returns {void}
  */
 function configureCoordinator (state, response) {
   const { configuration } = state
@@ -1347,6 +1336,9 @@ function configureCoordinator (state, response) {
   const screenshotCapabilities = {}
   screenshotCapabilitiesCh.publish(screenshotCapabilities)
   configuration.isTestFailureScreenshotsEnabled = screenshotCapabilities.enabled === true
+  const videoCapabilities = {}
+  videoCapabilitiesCh.publish(videoCapabilities)
+  configuration.isTestFailureVideosEnabled = videoCapabilities.enabled === true
 
   configuration.repositoryRoot = repositoryRoot
   if (err || !libraryConfig) {
@@ -1354,10 +1346,14 @@ function configureCoordinator (state, response) {
     return
   }
 
+  configuration.dynamicAtrBuckets = libraryConfig.isDynamicAtrEnabled === true
+    ? libraryConfig.dynamicAtrBuckets
+    : undefined
   configuration.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
   configuration.earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
   configuration.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
   configuration.isDiEnabled = libraryConfig.isDiEnabled
+  configuration.isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled === true
   configuration.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
   configuration.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
   configuration.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
@@ -1371,7 +1367,6 @@ function configureCoordinator (state, response) {
   /**
    * Completes initialization after all enabled requests settle.
    *
-   * @returns {void}
    */
   function finishRequest () {
     pendingRequests--
@@ -1430,7 +1425,6 @@ function configureCoordinator (state, response) {
  *
  * @param {CoordinatorState} state
  * @param {(configuration: object) => void} [onDone]
- * @returns {void}
  */
 function initializeCoordinator (state, onDone) {
   if (state.initialized) {
@@ -1474,7 +1468,6 @@ function initializeCoordinator (state, onDone) {
  *
  * @param {WorkerRecord} workerRecord
  * @param {string[]} files
- * @returns {void}
  */
 function startWorkerSuites (workerRecord, files) {
   for (const rawFile of files) {
@@ -1502,7 +1495,6 @@ function startWorkerSuites (workerRecord, files) {
  * @param {WorkerRecord} workerRecord
  * @param {string} rawFile
  * @param {string} status
- * @returns {void}
  */
 function finishWorkerSuite (state, workerRecord, rawFile, status) {
   const file = normalizeFile(rawFile)
@@ -1524,7 +1516,6 @@ function finishWorkerSuite (state, workerRecord, rawFile, status) {
  * @param {CoordinatorState} state
  * @param {WorkerRecord} workerRecord
  * @param {string} status
- * @returns {void}
  */
 function finishAllWorkerSuites (state, workerRecord, status) {
   let hasFailedSuite = false
@@ -1549,7 +1540,6 @@ function finishAllWorkerSuites (state, workerRecord, status) {
  *
  * @param {WorkerRecord} workerRecord
  * @param {object} message
- * @returns {void}
  */
 function sendWorkerMessage (workerRecord, message) {
   const childProcess = workerRecord.worker.childProcess
@@ -1570,7 +1560,6 @@ function sendWorkerMessage (workerRecord, message) {
  * @param {CoordinatorState} state
  * @param {WorkerRecord} workerRecord
  * @param {object} message
- * @returns {void}
  */
 function handleConfigurationRequest (state, workerRecord, message) {
   const { files = [], requestId } = message.content || {}
@@ -1594,7 +1583,6 @@ function handleConfigurationRequest (state, workerRecord, message) {
  *
  * @param {CoordinatorState} state
  * @param {string[]} files
- * @returns {void}
  */
 function updateEarlyFlakeDetectionFaultyState (state, files) {
   const { configuration } = state
@@ -1641,7 +1629,6 @@ function getWebdriverioSuiteError (error) {
  *
  * @param {WorkerRecord} workerRecord
  * @param {object} message
- * @returns {void}
  */
 function handleSuiteResults (workerRecord, message) {
   const { results = [] } = message.content || {}
@@ -1662,7 +1649,6 @@ function handleSuiteResults (workerRecord, message) {
  * @param {CoordinatorState} state
  * @param {WorkerRecord} workerRecord
  * @param {object|unknown[]} message
- * @returns {void}
  */
 function handleWorkerMessage (state, workerRecord, message) {
   if (message?.origin === WEBDRIVERIO_WORKER_ORIGIN && message.name === WEBDRIVERIO_WORKER_EVENT) {
@@ -1693,6 +1679,13 @@ function handleWorkerMessage (state, workerRecord, message) {
     return
   }
 
+  if (message.name === WORKER_READY || message.name === CONFIGURATION_REQUEST) {
+    // Watch mode reuses the worker. Keep old requests cancelled while the new run gets a fresh signal.
+    clearTimeout(workerRecord.videoFlushTimer)
+    workerRecord.videoFlushTimer = undefined
+    workerRecord.videoController?.abort(new Error('WebdriverIO video run completed'))
+    workerRecord.videoController = undefined
+  }
   if (message.name === WORKER_READY) {
     initializeCoordinator(state, configuration => {
       if (state.testFrameworkAdapter === JASMINE_FRAMEWORK_ADAPTER) {
@@ -1713,25 +1706,51 @@ function handleWorkerMessage (state, workerRecord, message) {
     handleConfigurationRequest(state, workerRecord, message)
     return
   }
-  if (message.name === SCREENSHOT_UPLOAD) {
+  if (message.name === VIDEO_UPLOAD_FLUSH) {
+    if (message.content?.complete) {
+      clearTimeout(workerRecord.videoFlushTimer)
+      workerRecord.videoFlushTimer = undefined
+      // The worker may have reached its own deadline before the coordinator's timer fires.
+      workerRecord.videoController?.abort(new Error('WebdriverIO video flush completed'))
+      return
+    }
+    const controller = workerRecord.videoController ??= new AbortController()
+    workerRecord.videoFlushTimer ??= setTimeout(() => {
+      controller.abort(createFinalFlushTimeoutError())
+    }, FINAL_FLUSH_TIMEOUT)
+    workerRecord.videoFlushTimer.unref?.()
+    return
+  }
+  if (message.name === SCREENSHOT_UPLOAD || message.name === VIDEO_UPLOAD) {
+    const isVideo = message.name === VIDEO_UPLOAD
+    const uploadCh = isVideo ? videoUploadCh : screenshotUploadCh
     const { requestId, ...content } = message.content || {}
     const respond = (error) => sendWorkerMessage(workerRecord, {
       origin: 'datadog',
-      name: SCREENSHOT_UPLOAD_RESPONSE,
+      name: isVideo ? VIDEO_UPLOAD_RESPONSE : SCREENSHOT_UPLOAD_RESPONSE,
       content: {
         error: error?.message,
         requestId,
       },
     })
-    if (!requestId || !screenshotUploadCh.hasSubscribers) {
-      respond(new Error('WebdriverIO screenshot upload is not available'))
-    } else {
+    if (requestId && uploadCh.hasSubscribers) {
       try {
-        screenshotUploadCh.publish({ ...content, onDone: respond })
+        let signal
+        if (isVideo) {
+          workerRecord.videoController ??= new AbortController()
+          signal = workerRecord.videoController.signal
+        }
+        uploadCh.publish({
+          ...content,
+          signal,
+          onDone: respond,
+        })
       } catch (error) {
-        log.error('WebdriverIO screenshot upload error: %s', error?.message || String(error))
+        log.error('WebdriverIO media upload error: %s', error?.message || String(error))
         respond(error)
       }
+    } else {
+      respond(new Error('WebdriverIO media upload is not available'))
     }
     return
   }
@@ -1756,9 +1775,10 @@ function handleWorkerMessage (state, workerRecord, message) {
  * @param {CoordinatorState} state
  * @param {WorkerRecord} workerRecord
  * @param {object} exit
- * @returns {void}
  */
 function handleWorkerExit (state, workerRecord, exit) {
+  clearTimeout(workerRecord.videoFlushTimer)
+  workerRecord.videoController?.abort(new Error('WebdriverIO worker exited during video upload'))
   state.activeWorkers--
   workerRecord.exitCode = exit.exitCode
   workerRecord.retries = exit.retries
@@ -1779,7 +1799,6 @@ function handleWorkerExit (state, workerRecord, exit) {
  * @param {CoordinatorState} state
  * @param {object} worker
  * @param {string[]} specs
- * @returns {void}
  */
 function registerWorker (state, worker, specs) {
   const normalizedSpecs = []
@@ -1796,6 +1815,8 @@ function registerWorker (state, worker, specs) {
     hasTests: undefined,
     exitCode: undefined,
     retries: undefined,
+    videoController: undefined,
+    videoFlushTimer: undefined,
   }
   state.activeWorkers++
   if (state.activeWorkers > state.maxActiveWorkers) {
@@ -1811,7 +1832,6 @@ function registerWorker (state, worker, specs) {
  * Calculates the final status for the coordinated session.
  *
  * @param {CoordinatorState} state
- * @returns {string}
  */
 function getSessionStatus (state) {
   let hasPassingSuite = false
@@ -1838,12 +1858,26 @@ function getSessionStatus (state) {
 }
 
 /**
+ * Explains a skipped session using the workers' discovery results.
+ *
+ * @param {CoordinatorState} state
+ */
+function getTestSessionEmptyReason (state) {
+  if (state.workers.size === 0 && emptyShardConfigurations.has(getRunnerConfiguration(state.localRunner))) {
+    return 'zero_test_shard'
+  }
+  for (const workerRecord of state.workers) {
+    if (workerRecord.hasTests !== false) return 'all_tests_skipped'
+  }
+  return 'zero_tests'
+}
+
+/**
  * Finishes the single WebdriverIO-owned test session.
  *
  * @param {CoordinatorState} state
  * @param {unknown} error
  * @param {() => void} onDone
- * @returns {void}
  */
 function finishCoordinator (state, error, onDone) {
   if (state.finished) {
@@ -1851,9 +1885,9 @@ function finishCoordinator (state, error, onDone) {
     return
   }
   if (!state.sessionStarted) {
-    if (!error && getSessionStatus(state) !== 'fail') {
-      onDone()
-      return
+    if (!error && state.workers.size === 0 &&
+      !emptyShardConfigurations.has(getRunnerConfiguration(state.localRunner))) {
+      error = new Error('No test files were found.')
     }
     initializeCoordinator(state, () => finishCoordinator(state, error, onDone))
     return
@@ -1877,8 +1911,10 @@ function finishCoordinator (state, error, onDone) {
     return
   }
 
+  const status = error ? 'fail' : getSessionStatus(state)
   testSessionFinishCh.publish({
-    status: error ? 'fail' : getSessionStatus(state),
+    status,
+    testSessionEmptyReason: status === 'skip' ? getTestSessionEmptyReason(state) : undefined,
     error,
     isEarlyFlakeDetectionEnabled: state.configuration.isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty: state.configuration.isEarlyFlakeDetectionFaulty,
@@ -1901,7 +1937,6 @@ function finishCoordinator (state, error, onDone) {
  *   resolveCallback?: (onDone: () => void) => void,
  *   rejectCallback?: (onDone: () => void) => void
  * }} context
- * @returns {void}
  */
 function waitForLogSubmissionAtWorkerExit (context) {
   const shouldCleanRum = rumBrowsers.size > 0
@@ -1926,11 +1961,48 @@ function waitForLogSubmissionAtWorkerExit (context) {
  * Cleans retained RUM browsers before WebdriverIO deletes the worker session.
  *
  * @param {{rumCleanupCallback?: () => Promise<void>}} context
- * @returns {void}
  */
 function waitForRumCleanupBeforeSessionEnd (context) {
   context.rumCleanupCallback = cleanupAllRumBrowsers
 }
+
+/**
+ * Opted-in background screenshots must not dismiss dialogs. Preserve explicit customer policies.
+ *
+ * @param {{
+ *   arguments: [{framework?: string, sessionId?: string, automationProtocol?: string}, object],
+ *   self: {_isMultiremote?: boolean, _isMultiRemote?: boolean}
+ * }} context
+ */
+function configureVideoPromptBehavior (context) {
+  if (!testFinishCh.hasSubscribers || getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) !== true) return
+  const [config, capabilities] = context.arguments
+  if (!SUPPORTED_FRAMEWORK_ADAPTERS.has(config?.framework) || 'sessionId' in config ||
+    config.automationProtocol === './protocol-stub.js') return
+  try {
+    const videoCapabilities = {}
+    videoCapabilitiesCh.publish(videoCapabilities)
+    if (!videoCapabilities.enabled) return
+    /** @param {{unhandledPromptBehavior?: unknown}} caps - Capabilities for one browser session. */
+    const withDefault = caps => caps && caps.unhandledPromptBehavior === undefined
+      ? { ...caps, unhandledPromptBehavior: 'ignore' }
+      : caps
+    // Prepare every session before replacing the argument, so a read failure cannot leave partial defaults.
+    context.arguments[1] = (context.self._isMultiremote || context.self._isMultiRemote)
+      ? Object.fromEntries(Object.entries(capabilities).map(([name, options]) => {
+        const session = { ...options }
+        session.capabilities = withDefault(session.capabilities)
+        return [name, session]
+      }))
+      : withDefault(capabilities)
+  } catch (error) {
+    log.error('Error configuring WebdriverIO video prompt handling: %s', error?.message || String(error))
+  }
+}
+
+runnerStartSessionCh.start.subscribe(
+  /** @type {import('node:diagnostics_channel').ChannelListener} */ (configureVideoPromptBehavior)
+)
 
 baseReporterWaitForSyncCh.asyncEnd.subscribe(
   /** @type {import('node:diagnostics_channel').ChannelListener} */ (waitForLogSubmissionAtWorkerExit)
@@ -1989,12 +2061,33 @@ executeAsyncCh.subscribe({
 // @ts-expect-error See the partial tracing-channel subscriber above.
 jasmineAdapterInitCh.subscribe({
   asyncEnd (context) {
-    initializeJasmineWorker(context.result || context.self, context)
+    initializeFrameworkWorker(context.result || context.self, context, JASMINE_FRAMEWORK_ADAPTER)
+  },
+})
+
+// @ts-expect-error See the partial tracing-channel subscriber above.
+mochaAdapterInitCh.subscribe({
+  asyncEnd (context) {
+    // Mocha normally receives worker settings in run(), after WebdriverIO creates its browser session.
+    if (getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true) {
+      initializeFrameworkWorker(context.result || context.self, context, MOCHA_FRAMEWORK_ADAPTER)
+    }
   },
 })
 
 // dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
 // @ts-expect-error
+configParserShardCh.subscribe({
+  end (context) {
+    const config = context.self._config
+    if (testFinishCh.hasSubscribers && config?.shard?.total > 1 &&
+      context.arguments[0].length > 0 && context.result?.length === 0) {
+      emptyShardConfigurations.add(config)
+    }
+  },
+})
+
+// @ts-expect-error See the partial tracing-channel subscriber above.
 launcherStartInstanceCh.subscribe({
   start (context) {
     const localRunner = context.self?.runner
@@ -2069,10 +2162,11 @@ localRunnerRunCh.subscribe({
 // @ts-expect-error See the partial tracing-channel subscriber above.
 localRunnerShutdownCh.subscribe({
   asyncEnd (context) {
-    const state = coordinatorStates.get(context.self)
-    if (!state) {
+    const runnerConfiguration = getRunnerConfiguration(context.self)
+    if (!testFinishCh.hasSubscribers || !SUPPORTED_FRAMEWORK_ADAPTERS.has(runnerConfiguration?.framework)) {
       return
     }
+    const state = getCoordinatorState(context.self)
 
     // Orchestrion uses the callback for the matching settlement path to delay LocalRunner.shutdown.
     const waitForCoordinator = onDone => {

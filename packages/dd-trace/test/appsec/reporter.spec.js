@@ -13,10 +13,6 @@ const { USER_KEEP } = require('../../../../ext/priority')
 const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')
 const { withRequest } = require('../../src/appsec/store')
-const { getConfigFresh } = require('../helpers/config')
-function getAppSecConfig (options) {
-  return getConfigFresh({ appsec: options }).appsec
-}
 
 describe('reporter', () => {
   let Reporter
@@ -26,15 +22,17 @@ describe('reporter', () => {
   let prioritySampler
 
   const defaultReporterConfig = {
-    rateLimit: 100,
-    extendedHeadersCollection: {
-      enabled: false,
-      redaction: true,
-      maxHeaders: 50,
-    },
-    rasp: {
-      bodyCollection: false,
-    },
+    DD_APPSEC_COLLECT_ALL_HEADERS: false,
+    DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: true,
+    DD_APPSEC_MAX_COLLECTED_HEADERS: 50,
+    DD_APPSEC_RASP_COLLECT_REQUEST_BODY: false,
+  }
+
+  /**
+   * @param {Partial<typeof defaultReporterConfig>} overrides
+   */
+  function getReporterConfig (overrides) {
+    return { ...defaultReporterConfig, ...overrides }
   }
 
   beforeEach(() => {
@@ -84,7 +82,7 @@ describe('reporter', () => {
 
   afterEach(() => {
     sinon.restore()
-    Reporter.init(getAppSecConfig(defaultReporterConfig))
+    Reporter.init(defaultReporterConfig)
     Reporter.metricsQueue.clear()
   })
 
@@ -496,7 +494,7 @@ describe('reporter', () => {
 
     describe('inferred proxy spans', () => {
       it('should propagate _dd.appsec.json to inferred proxy span when present', () => {
-        Reporter.init(getAppSecConfig(defaultReporterConfig), true)
+        Reporter.init(defaultReporterConfig, true)
 
         const inferredProxySpan = {
           setTag: sinon.stub(),
@@ -520,7 +518,7 @@ describe('reporter', () => {
       })
 
       it('should not fail when inferred proxy span is not present', () => {
-        Reporter.init(getAppSecConfig(defaultReporterConfig), true)
+        Reporter.init(defaultReporterConfig, true)
         web.getContext.returns({})
 
         Reporter.reportAttack({
@@ -541,7 +539,7 @@ describe('reporter', () => {
       })
 
       it('should not add _dd.appsec.json to inferred proxy span when inferredProxyServicesEnabled is false', () => {
-        Reporter.init(getAppSecConfig(defaultReporterConfig), false)
+        Reporter.init(defaultReporterConfig, false)
 
         const inferredProxySpan = {
           setTag: sinon.stub(),
@@ -579,16 +577,8 @@ describe('reporter', () => {
       })
 
       it('should report request body in meta struct on rasp event when enabled', () => {
-        const config = getAppSecConfig({
-          rateLimit: 100,
-          extendedHeadersCollection: {
-            enabled: false,
-            redaction: true,
-            maxHeaders: 50,
-          },
-          rasp: {
-            bodyCollection: true,
-          },
+        const config = getReporterConfig({
+          DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true,
         })
         Reporter.init(config)
 
@@ -609,18 +599,7 @@ describe('reporter', () => {
       })
 
       it('should not report request body in meta struct on rasp event when disabled', () => {
-        const config = getAppSecConfig({
-          rateLimit: 100,
-          extendedHeadersCollection: {
-            enabled: false,
-            redaction: true,
-            maxHeaders: 50,
-          },
-          rasp: {
-            bodyCollection: false,
-          },
-        })
-        Reporter.init(config)
+        Reporter.init(defaultReporterConfig)
 
         Reporter.reportAttack({
           events: [
@@ -693,16 +672,8 @@ describe('reporter', () => {
         })
 
         it('should set request body size exceeded when reporter request body has been truncated', () => {
-          const config = getAppSecConfig({
-            rateLimit: 100,
-            extendedHeadersCollection: {
-              enabled: false,
-              redaction: true,
-              maxHeaders: 50,
-            },
-            rasp: {
-              bodyCollection: true,
-            },
+          const config = getReporterConfig({
+            DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true,
           })
           Reporter.init(config)
 
@@ -725,16 +696,8 @@ describe('reporter', () => {
         })
 
         it('should set request body size exceeded metric for old and new approaches when both events happen', () => {
-          const config = getAppSecConfig({
-            rateLimit: 100,
-            extendedHeadersCollection: {
-              enabled: false,
-              redaction: true,
-              maxHeaders: 50,
-            },
-            rasp: {
-              bodyCollection: true,
-            },
+          const config = getReporterConfig({
+            DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true,
           })
           Reporter.init(config)
 
@@ -1210,7 +1173,7 @@ describe('reporter', () => {
         }))
 
       after(() => {
-        Reporter.init(getAppSecConfig(defaultReporterConfig))
+        Reporter.init(defaultReporterConfig)
       })
 
       it('should collect extended headers on appsec event', () => {
@@ -1228,16 +1191,9 @@ describe('reporter', () => {
         }
         span.context()._tags['appsec.event'] = 'true'
 
-        const config = getAppSecConfig({
-          rateLimit: 100,
-          extendedHeadersCollection: {
-            enabled: true,
-            redaction: false,
-            maxHeaders: 50,
-          },
-          rasp: {
-            bodyCollection: false,
-          },
+        const config = getReporterConfig({
+          DD_APPSEC_COLLECT_ALL_HEADERS: true,
+          DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: false,
         })
         Reporter.init(config)
         Reporter.finishRequest(req, res)
@@ -1272,16 +1228,10 @@ describe('reporter', () => {
         const discardedReqHeadersCount = extendedRequestHeaders.length - reportedExtReqHeadersCount
         const discardedResHeadersCount = extendedResponseHeaders.length - maxHeaders
 
-        const config = getAppSecConfig({
-          rateLimit: 100,
-          extendedHeadersCollection: {
-            enabled: true,
-            redaction: false,
-            maxHeaders,
-          },
-          rasp: {
-            bodyCollection: false,
-          },
+        const config = getReporterConfig({
+          DD_APPSEC_COLLECT_ALL_HEADERS: true,
+          DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: false,
+          DD_APPSEC_MAX_COLLECTED_HEADERS: maxHeaders,
         })
 
         Reporter.init(config)
@@ -1318,16 +1268,9 @@ describe('reporter', () => {
         }
         span.context()._tags['appsec.event'] = 'true'
 
-        const config = getAppSecConfig({
-          rateLimit: 100,
-          extendedHeadersCollection: {
-            enabled: true,
-            redaction: true,
-            maxHeaders: 50,
-          },
-          rasp: {
-            bodyCollection: false,
-          },
+        const config = getReporterConfig({
+          DD_APPSEC_COLLECT_ALL_HEADERS: true,
+          DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: true,
         })
 
         Reporter.init(config)

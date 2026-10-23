@@ -4,9 +4,8 @@ const path = require('node:path')
 const assert = require('node:assert')
 const { execSync } = require('node:child_process')
 
-const axios = require('axios')
-
 const { FakeAgent, spawnProc, stopProc, sandboxCwd, useSandbox } = require('../helpers')
+const httpRequest = require('../../packages/dd-trace/test/setup/helpers/http-client')
 
 const { ESBUILD_VERSION } = process.env
 const esbuildVersions = ESBUILD_VERSION ? [ESBUILD_VERSION] : ['latest', '0.16.12']
@@ -63,7 +62,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'web.request')
         }, 2_500),
-        axios.get(proc.url),
+        httpRequest.get(proc.url),
       ])
     })
 
@@ -86,7 +85,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'web.request')
         }, 2_500),
-        axios.get(proc.url),
+        httpRequest.get(proc.url),
       ])
     })
 
@@ -109,7 +108,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'hono.request')
         }, 2_500),
-        axios.get(proc.url),
+        httpRequest.get(proc.url),
       ])
     })
 
@@ -132,7 +131,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'hono.request')
         }, 2_500),
-        axios.get(proc.url),
+        httpRequest.get(proc.url),
       ])
     })
   })
