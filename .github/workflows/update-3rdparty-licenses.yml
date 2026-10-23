@@ -46,7 +46,12 @@ jobs:
       - name: Install dd-license-attribution
         working-directory: dd-license-attribution
         run: |
-          pip install .
+          # pluggy 1.7.0 dropped support for the class-based hookspecs used by
+          # plugincode (scancode-toolkit), making the tool fail at import with
+          # "did not find any 'plugincode.location_provider' hooks". Remove
+          # this pin once the dd-license-attribution ref above is >= 0.8.0,
+          # which ships the same constraint in its published metadata.
+          pip install . "pluggy<1.7"
 
       - name: Create mirrors.json for PR branch
         env:

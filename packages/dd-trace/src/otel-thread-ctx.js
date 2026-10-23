@@ -41,6 +41,10 @@ const {
 } = require('./profiling/webspan-utils')
 const webTagsCache = require('./web-tags-cache')
 
+/** @typedef {import('./opentracing/span')} DatadogSpan */
+/** @typedef {import('./opentracing/span_context')} DatadogSpanContext */
+/** @typedef {InstanceType<typeof import('@datadog/pprof').otelThreadCtx.ThreadContext>} ThreadContext */
+
 // OTEP-4947 duplicates are last-wins, so appending a later endpoint value would
 // correctly overwrite an earlier one — but an out-of-process reader sampling the
 // record mid-request would still see the interim value (e.g. a bare `GET`) as
@@ -133,35 +137,29 @@ let ThreadContext
 let getContext
 let clearContext
 
-const TRACE_ID_128 = '_dd.p.tid'
-const HEX16 = /^[\da-f]{16}$/i
-
 // Reusable: the ThreadContext constructor copies the ids into its own record.
-const traceIdBytes = new Uint8Array(16)
+const traceIdBytes = Buffer.alloc(16)
 const spanIdBytes = new Uint8Array(8)
 
-// The upper half of local trace ids only changes once per second.
-let lastTraceIdHigh
-const lastTraceIdHighBytes = new Uint8Array(8)
-
-// Same bytes as decoding toTraceId(true); unexpected shapes fall back to that.
+/**
+ * Same bytes as decoding toTraceId(true); unexpected shapes fall back to that.
+ *
+ * @param {DatadogSpanContext} spanContext
+ * @returns {Uint8Array}
+ */
 function getTraceIdBytes (spanContext) {
   const low = spanContext._traceId.toBuffer()
   if (low.length === 16) {
     for (let i = 0; i < 16; i++) traceIdBytes[i] = low[i]
     return traceIdBytes
   }
-  if (low.length !== 8) return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
-  const high = spanContext._trace.tags[TRACE_ID_128]
+  if (low.length !== 8) return Buffer.from(spanContext.toTraceId(true), 'hex')
+  const high = spanContext._trace.tags['_dd.p.tid']
   if (high) {
-    if (high !== lastTraceIdHigh) {
-      if (typeof high !== 'string' || !HEX16.test(high)) {
-        return Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
-      }
-      for (let i = 0; i < 8; i++) lastTraceIdHighBytes[i] = Number.parseInt(high.slice(i * 2, i * 2 + 2), 16)
-      lastTraceIdHigh = high
+    // write() stops at the first non-hex character, so only a valid _dd.p.tid fills all 8 bytes.
+    if (typeof high !== 'string' || high.length !== 16 || traceIdBytes.write(high, 0, 8, 'hex') !== 8) {
+      return Buffer.from(spanContext.toTraceId(true), 'hex')
     }
-    for (let i = 0; i < 8; i++) traceIdBytes[i] = lastTraceIdHighBytes[i]
   } else {
     for (let i = 0; i < 8; i++) traceIdBytes[i] = 0
   }
@@ -169,33 +167,29 @@ function getTraceIdBytes (spanContext) {
   return traceIdBytes
 }
 
+/**
+ * @param {DatadogSpanContext} spanContext
+ * @returns {Uint8Array}
+ */
 function getSpanIdBytes (spanContext) {
   const bytes = spanContext._spanId.toBuffer()
-  if (bytes.length !== 8) return Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex'))
+  if (bytes.length !== 8) return Buffer.from(spanContext.toSpanId(true), 'hex')
   for (let i = 0; i < 8; i++) spanIdBytes[i] = bytes[i]
   return spanIdBytes
 }
 
-const HEX_CODES = Uint8Array.from(Buffer.from('0123456789abcdef'))
-
-// Same string as toSpanId(true), without the per-trace Buffer hex round trip.
-function localRootSpanIdHex (rootContext) {
-  const b = rootContext._spanId.toBuffer()
-  if (b.length !== 8) return rootContext.toSpanId(true)
-  return String.fromCharCode(
-    HEX_CODES[b[0] >> 4], HEX_CODES[b[0] & 15], HEX_CODES[b[1] >> 4], HEX_CODES[b[1] & 15],
-    HEX_CODES[b[2] >> 4], HEX_CODES[b[2] & 15], HEX_CODES[b[3] >> 4], HEX_CODES[b[3] & 15],
-    HEX_CODES[b[4] >> 4], HEX_CODES[b[4] & 15], HEX_CODES[b[5] >> 4], HEX_CODES[b[5] & 15],
-    HEX_CODES[b[6] >> 4], HEX_CODES[b[6] & 15], HEX_CODES[b[7] >> 4], HEX_CODES[b[7] & 15]
-  )
-}
-
+/**
+ * @param {DatadogSpan} span
+ * @returns {ThreadContext | undefined} The span's record, or undefined when the span's trace or span id is malformed.
+ */
 function getOrBuildContext (span) {
   let cached = span[CachedSym]
   if (cached !== undefined && cached.context !== undefined) return cached.context
   const spanContext = span.context()
   const traceId = getTraceIdBytes(spanContext)
   const spanId = getSpanIdBytes(spanContext)
+  // The native constructor throws on any other id length, and onEnter runs inside user code.
+  if (traceId.length !== 16 || spanId.length !== 8) return
   // Local root span: the first entry in the trace's started-spans list, or
   // this span itself when it IS the root. Encoded as 16-char lowercase hex
   // per the libdatadog convention.
@@ -206,7 +200,7 @@ function getOrBuildContext (span) {
   const webTags = webTagsCache.getCachedWebTags(span)
   const endpoint = finalEndpoint(webTags)
   const attrs = []
-  attrs[LOCAL_ROOT_SPAN_ID_IDX] = localRootSpanIdHex(rootContext)
+  attrs[LOCAL_ROOT_SPAN_ID_IDX] = rootContext.toSpanId(true)
   if (endpoint !== undefined) attrs[ENDPOINT_IDX] = endpoint
   attrs[THREAD_NAME_IDX] = THREAD_NAME
   attrs[THREAD_ID_IDX] = THREAD_ID
@@ -257,13 +251,13 @@ function appendEndpoint (context, endpoint) {
 
 function onEnter () {
   if (!started) return
-  const span = getActiveSpan()
-  if (!span) {
+  const span = /** @type {DatadogSpan | null | undefined} */ (getActiveSpan())
+  const context = span && getOrBuildContext(span)
+  if (!context) {
     // Clearing an empty frame would still make pprof install a new AsyncContextFrame.
     if (getContext() !== undefined) clearContext()
     return
   }
-  const context = getOrBuildContext(span)
   // Skip if this CPED already holds the same context. Same allocation-churn
   // fix as the wall profiler in dd-trace-js#8638.
   if (getContext() === context) return

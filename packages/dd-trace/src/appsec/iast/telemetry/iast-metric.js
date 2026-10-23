@@ -24,12 +24,7 @@ function formatTags (tags, tagKey) {
 }
 
 function getNamespace (scope, context) {
-  let namespace = globalNamespace
-
-  if (scope === Scope.REQUEST) {
-    namespace = getNamespaceFromContext(context) || globalNamespace
-  }
-  return namespace
+  return scope === Scope.REQUEST ? getNamespaceFromContext(context) || globalNamespace : globalNamespace
 }
 
 class IastMetric {

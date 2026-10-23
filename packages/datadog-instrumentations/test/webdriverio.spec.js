@@ -123,6 +123,7 @@ const launcherFixtureModulePath = path.join(
   'index.js'
 )
 const utilsFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-utils.mjs')
+const modernRetryUtilsFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-utils-modern-retry.mjs')
 const utilsFixtureModulePath = path.join(
   __dirname,
   'fixtures',
@@ -132,6 +133,16 @@ const utilsFixtureModulePath = path.join(
   'build',
   'index.js'
 )
+const modernRetryUtilsFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'utils-v10',
+  'build',
+  'index.js'
+)
+const modernRetryUtilsFixtureTarget = { moduleName: '@wdio/utils', filePath: 'build/index.js' }
 const browserFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-browser.mjs')
 const browserFixtureModulePaths = ['index.js', 'node.js'].map(file => path.join(
   __dirname,
@@ -734,6 +745,20 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rumCleanupCallback/)
     assert.strictEqual(rewrittenSource.match(/__apm\$ctx\.rumStartCallback/g)?.length, 1)
+    assert.match(rewrittenSource, /__apm\$ctx\.retryCallback/)
+  })
+
+  it('rewrites the WebdriverIO 10.1 executeAsync retry branch', () => {
+    const source = fs.readFileSync(modernRetryUtilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(
+      source,
+      modernRetryUtilsFixtureModulePath,
+      'module',
+      modernRetryUtilsFixtureTarget
+    )
+
+    assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /__apm\$ctx\.rumStartCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.retryCallback/)
   })
 
@@ -1476,112 +1501,156 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /orchestrion:jasmine-core:Spec_attemptDone/)
   })
 
-  it('runs the WebdriverIO retry callback before a failed test is retried', async () => {
-    const source = fs.readFileSync(utilsFixturePath, 'utf8')
-    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
-    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
-    const outputPath = path.join(outputDirectory, 'index.mjs')
-    const callbacks = []
-    const retries = { attempts: 0, limit: 2 }
-    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
-    const subscriber = {
-      start (ctx) {
-        ctx.retryCallback = async function (error) {
-          callbacks.push(error.message)
-          await new Promise(resolve => setImmediate(resolve))
+  for (const [version, fixturePath, modulePath, target] of [
+    ['9.0', utilsFixturePath, utilsFixtureModulePath],
+    ['10.1', modernRetryUtilsFixturePath, modernRetryUtilsFixtureModulePath, modernRetryUtilsFixtureTarget],
+  ]) {
+    describe(`WebdriverIO ${version} retries`, () => {
+      let executeAsync
+      let outputDirectory
+      let subscriber
+      const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+
+      beforeEach(async () => {
+        const source = fs.readFileSync(fixturePath, 'utf8')
+        const rewrittenSource = rewriter.rewrite(source, modulePath, 'module', target)
+        outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+        const outputPath = path.join(outputDirectory, 'index.mjs')
+        fs.writeFileSync(outputPath, rewrittenSource)
+        ;({ executeAsync } = await import(pathToFileURL(outputPath)))
+      })
+
+      afterEach(() => {
+        if (subscriber) executeAsyncCh.unsubscribe(subscriber)
+        subscriber = undefined
+        fs.rmSync(outputDirectory, { recursive: true, force: true })
+      })
+
+      it('awaits RUM setup and the retry callback before each attempt', async () => {
+        const calls = []
+        const retries = { attempts: 0, limit: 2 }
+        subscriber = {
+          start (ctx) {
+            ctx.rumStartCallback = async () => {
+              await new Promise(resolve => setImmediate(resolve))
+              calls.push('rum start')
+            }
+            ctx.retryCallback = async error => {
+              calls.push(error.message)
+              await new Promise(resolve => setImmediate(resolve))
+              calls.push('retry ready')
+            }
+          },
         }
-      },
-    }
-    let attempts = 0
+        let attempts = 0
 
-    executeAsyncCh.subscribe(subscriber)
-    try {
-      fs.writeFileSync(outputPath, rewrittenSource)
+        executeAsyncCh.subscribe(subscriber)
+        const result = await executeAsync.call({}, () => {
+          calls.push(`attempt ${++attempts}`)
+          if (attempts === 1) throw new Error('failed attempt')
+          return attempts
+        }, retries)
 
-      const { executeAsync } = await import(pathToFileURL(outputPath))
-      const result = await executeAsync(() => {
-        attempts++
-        if (attempts === 1) {
+        assert.strictEqual(result, 2)
+        assert.strictEqual(retries.attempts, 1)
+        assert.deepStrictEqual(calls, [
+          'rum start', 'attempt 1', 'failed attempt', 'retry ready', 'rum start', 'attempt 2',
+        ])
+      })
+
+      it('honors retry limits changed by the callback', async () => {
+        const retries = { attempts: 0, limit: 1 }
+        subscriber = {
+          start (ctx) {
+            ctx.retryCallback = async () => {
+              await new Promise(resolve => setImmediate(resolve))
+              retries.limit = 0
+            }
+          },
+        }
+        let attempts = 0
+
+        executeAsyncCh.subscribe(subscriber)
+        await assert.rejects(executeAsync.call({}, () => {
+          attempts++
           throw new Error('failed attempt')
+        }, retries), /failed attempt/)
+
+        assert.strictEqual(attempts, 1)
+        assert.strictEqual(retries.attempts, 0)
+      })
+
+      it('preserves retries when the retry callback rejects', async () => {
+        const retries = { attempts: 0, limit: 1 }
+        subscriber = {
+          start (ctx) {
+            ctx.retryCallback = () => Promise.reject(new Error('observability callback failed'))
+          },
         }
-        return attempts
-      }, retries)
+        let attempts = 0
 
-      assert.strictEqual(result, 2)
-      assert.strictEqual(retries.attempts, 1)
-      assert.deepStrictEqual(callbacks, ['failed attempt'])
-    } finally {
-      executeAsyncCh.unsubscribe(subscriber)
-    }
-  })
+        executeAsyncCh.subscribe(subscriber)
+        const result = await executeAsync.call({}, () => {
+          attempts++
+          if (attempts === 1) throw new Error('test failed')
+          return 'passed'
+        }, retries)
 
-  it('honors WebdriverIO retry limits changed by the callback', async () => {
-    const source = fs.readFileSync(utilsFixturePath, 'utf8')
-    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
-    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
-    const outputPath = path.join(outputDirectory, 'index.mjs')
-    const failedRetries = { attempts: 0, limit: 1 }
-    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
-    const subscriber = {
-      start (ctx) {
-        ctx.retryCallback = async function () {
-          failedRetries.limit = 0
-        }
-      },
-    }
-    let failedAttempts = 0
+        assert.strictEqual(result, 'passed')
+        assert.strictEqual(attempts, 2)
+        assert.strictEqual(retries.attempts, 1)
+      })
 
-    executeAsyncCh.subscribe(subscriber)
-    try {
-      fs.writeFileSync(outputPath, rewrittenSource)
+      for (const limit of [0, 1]) {
+        it(`preserves the test error after exhausting ${limit} retries`, async () => {
+          const retries = { attempts: 0, limit }
+          const error = new Error('Timeout')
+          const retryCallback = sinon.spy()
+          subscriber = { start (ctx) { ctx.retryCallback = retryCallback } }
+          let attempts = 0
 
-      const { executeAsync } = await import(pathToFileURL(outputPath))
-      await assert.rejects(executeAsync(() => {
-        failedAttempts++
-        throw new Error('failed attempt')
-      }, failedRetries), /failed attempt/)
+          executeAsyncCh.subscribe(subscriber)
+          await assert.rejects(executeAsync.call({}, () => {
+            attempts++
+            throw error
+          }, retries), actual => actual === error)
 
-      assert.strictEqual(failedAttempts, 1)
-      assert.strictEqual(failedRetries.attempts, 0)
-    } finally {
-      executeAsyncCh.unsubscribe(subscriber)
-    }
-  })
+          assert.strictEqual(attempts, limit + 1)
+          assert.strictEqual(retries.attempts, limit)
+          assert.strictEqual(retryCallback.callCount, limit)
+        })
+      }
 
-  it('preserves WebdriverIO retries when the retry callback rejects', async () => {
-    const source = fs.readFileSync(utilsFixturePath, 'utf8')
-    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
-    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
-    const outputPath = path.join(outputDirectory, 'index.mjs')
-    const retries = { attempts: 0, limit: 1 }
-    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
-    const subscriber = {
-      start (ctx) {
-        ctx.retryCallback = () => Promise.reject(new Error('observability callback failed'))
-      },
-    }
-    let attempts = 0
+      if (version === '10.1') {
+        it('does not retry a Mocha framework timeout', async () => {
+          const clock = sinon.useFakeTimers()
+          const retries = { attempts: 0, limit: 1 }
+          const error = new Error('Mocha framework timeout')
+          const context = { _runnable: { _timeoutError: () => error } }
+          const retryCallback = sinon.spy()
+          subscriber = { start (ctx) { ctx.retryCallback = retryCallback } }
+          let attempts = 0
 
-    executeAsyncCh.subscribe(subscriber)
-    try {
-      fs.writeFileSync(outputPath, rewrittenSource)
+          executeAsyncCh.subscribe(subscriber)
+          try {
+            const result = assert.rejects(executeAsync.call(context, () => {
+              attempts++
+              return new Promise(() => {})
+            }, retries, [], 100), actual => actual === error)
 
-      const { executeAsync } = await import(pathToFileURL(outputPath))
-      const result = await executeAsync(() => {
-        attempts++
-        if (attempts === 1) {
-          throw new Error('test failed')
-        }
-        return 'passed'
-      }, retries)
+            await clock.tickAsync(100)
+            await result
 
-      assert.strictEqual(result, 'passed')
-      assert.strictEqual(attempts, 2)
-      assert.strictEqual(retries.attempts, 1)
-    } finally {
-      executeAsyncCh.unsubscribe(subscriber)
-    }
-  })
+            assert.strictEqual(attempts, 1)
+            assert.strictEqual(retries.attempts, 0)
+            assert.strictEqual(retryCallback.callCount, 0)
+          } finally {
+            clock.restore()
+          }
+        })
+      }
+    })
+  }
 
   it('keeps RUM correlated after a failed beforeEach hook', async () => {
     require('../src/webdriverio')

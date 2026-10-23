@@ -16,7 +16,7 @@ RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub \
 
 # Install ChromeDriver matching the installed Chrome version
 RUN CHROME_VER=$(google-chrome --version | awk '{print $3}' | cut -d. -f1-3) \
-    && curl -sf https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json \
+    && curl -sf --retry 5 --retry-delay 2 --retry-connrefused https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json \
       > /tmp/chrome-versions.json \
     && DRIVER_URL=$(CHROME_VER="$CHROME_VER" node -e " \
         const d = JSON.parse(require('fs').readFileSync('/tmp/chrome-versions.json', 'utf8')); \
@@ -30,6 +30,11 @@ RUN CHROME_VER=$(google-chrome --version | awk '{print $3}' | cut -d. -f1-3) \
     && mv /tmp/chromedriver-dir/chromedriver-linux64/chromedriver /usr/bin/chromedriver \
     && chmod +x /usr/bin/chromedriver \
     && rm -rf /tmp/chrome-versions.json /tmp/chromedriver.zip /tmp/chromedriver-dir
+
+# Install FFmpeg for browser video recording
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && ffmpeg -hide_banner -encoders 2>/dev/null | grep -Eq '[[:space:]]libvpx[[:space:]]' \
+    && rm -rf /var/lib/apt/lists/*
 
 # Remove node since it will be injected at runtime by setup-node
 RUN rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \

@@ -9,6 +9,7 @@ const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const DebugLoggingHook = require('./debug-logging-hook')
 const EvalMetricsHook = require('./eval-metrics-hook')
+const EvaluationTelemetryOptOutHook = require('./evaluation-telemetry-opt-out-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
 const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
 
@@ -17,6 +18,9 @@ const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
  * Extends DatadogNodeServerProvider to add tracer integration and configuration management.
  */
 class FlaggingProvider extends DatadogNodeServerProvider {
+  // Track this wrapper's logging lifecycle without reading the upstream provider's private state.
+  #waitingForConfiguration = false
+
   /** @type {SpanEnrichmentHook | undefined} */
   #spanEnrichmentHook
 
@@ -36,8 +40,13 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       initializationTimeoutMs: config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
     })
 
+    const enableOptOut =
+      config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED === true
+    /** @param {import('@openfeature/server-sdk').Hook} hook */
+    const telemetryHook = hook => enableOptOut ? new EvaluationTelemetryOptOutHook(hook) : hook
+
     if (config.DD_METRICS_OTEL_ENABLED === true) {
-      this.hooks.push(new EvalMetricsHook(config))
+      this.hooks.push(telemetryHook(new EvalMetricsHook(config)))
     } else {
       log.debug('Feature Flags: evaluation metrics disabled; set %s=true to enable', 'DD_METRICS_OTEL_ENABLED')
     }
@@ -49,7 +58,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     if (config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
       // @ts-expect-error The upstream constructor always initializes its optional hooks property.
-      this.hooks.push(this.#spanEnrichmentHook)
+      this.hooks.push(telemetryHook(this.#spanEnrichmentHook))
       log.info('%s span enrichment enabled', this.constructor.name)
     } else {
       log.info('%s span enrichment disabled', this.constructor.name)
@@ -60,7 +69,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
     if (config.featureFlags?.DD_FLAGGING_EVALUATION_COUNTS_ENABLED !== false) {
       this.#flagEvalEVPHook = new FlagEvalEVPHook(config)
-      this.hooks.push(this.#flagEvalEVPHook)
+      this.hooks.push(telemetryHook(this.#flagEvalEVPHook))
     }
 
     this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this))
@@ -74,6 +83,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   initialize (context) {
     log.debug('Feature Flags: waiting for provider initialization...')
 
+    this.#waitingForConfiguration = !this.getConfiguration()
     const promise = super.initialize(context)
 
     // `DatadogNodeServerProvider#initialize` starts a timer that is never unref'd, which would
@@ -82,26 +92,43 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // TODO: remove once `@datadog/openfeature-node-server` unrefs this timer itself.
     this.initController?.timeoutId?.unref?.()
 
-    // Only observes the outcome for logging; `promise` itself is returned unmodified below.
-    // Guarded so a logger failure can never leave the derived promise unhandled.
-    promise.then(
-      () => {
-        try {
-          log.debug('Feature Flags: provider initialized successfully')
-        } catch { /* logging failure must not crash the process */ }
-      },
-      (error) => {
-        try {
-          // errorWithoutTelemetry avoids inflating telemetry volume for every routine init timeout.
-          log.errorWithoutTelemetry(
-            'Feature Flags: provider failed to initialize: %s',
-            error instanceof Error ? error.message : String(error)
-          )
-        } catch { /* logging failure must not crash the process */ }
-      }
-    )
+    if (this.getConfiguration()) this.#logInitialConfiguration()
 
     return promise
+  }
+
+  /**
+   * @param {Parameters<DatadogNodeServerProvider['setConfiguration']>[0]} configuration
+   */
+  setConfiguration (configuration) {
+    const wasWaiting = this.#waitingForConfiguration
+    super.setConfiguration(configuration)
+    this.#waitingForConfiguration = false
+    if (wasWaiting && configuration != null) this.#logInitialConfiguration()
+  }
+
+  /**
+   * @param {unknown} error
+   */
+  setError (error) {
+    const wasWaiting = this.#waitingForConfiguration
+    super.setError(error)
+    this.#waitingForConfiguration = false
+    if (!wasWaiting) return
+
+    try {
+      // Avoid inflating telemetry volume for routine initialization timeouts.
+      log.errorWithoutTelemetry(
+        'Feature Flags: provider failed to initialize: %s',
+        error instanceof Error ? error.message : String(error)
+      )
+    } catch { /* logging failure must not affect initialization */ }
+  }
+
+  #logInitialConfiguration () {
+    try {
+      log.debug('Feature Flags: initial configuration available')
+    } catch { /* logging failure must not affect initialization */ }
   }
 
   /**
