@@ -77,7 +77,7 @@ class OpenaiAgentsPlugin extends Plugin {
     // all processors), so we must re-register after every new version loads.
     // The instrumentation's patchedMods WeakSet ensures each module instance
     // fires the channel exactly once, so no duplicates accumulate.
-    /** @type {(message: unknown, name: string) => unknown} */
+    /** @type {(message: unknown) => void} */
     const onAgentsCoreLoaded = (message) => {
       const { mod } = /** @type {{ mod?: object }} */ (message)
       const processor = new DDOpenAIAgentsProcessor(() => this.#integration)
@@ -113,13 +113,13 @@ class OpenaiAgentsPlugin extends Plugin {
       return ddSpan ? { ...store, span: ddSpan } : store
     }
     this.addBind('apm:openai-agents:tool:start', bindLegacyToolStore)
-    /** @type {(message: unknown, name: string) => unknown} */
+    /** @type {(message: unknown) => void} */
     const onAgentPrepare = (message) => {
       const { agent, agentsCoreSpan } = /** @type {{ agent?: object, agentsCoreSpan?: object }} */ (message)
       this.#integration.tagAgentManifest(agentsCoreSpan, agent)
     }
     this.addSub('apm:openai-agents:agent:prepare', onAgentPrepare)
-    /** @type {(message: unknown, name: string) => unknown} */
+    /** @type {(message: unknown) => void} */
     const onSpanStart = (message) => {
       const { span } = /** @type {SpanStartPayload} */ (message ?? {})
       if (!this.#integration.enabled || !this.#isLLMObsEnabled()) return
