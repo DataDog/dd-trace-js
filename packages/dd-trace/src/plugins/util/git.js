@@ -575,16 +575,18 @@ function getGitInformationDiscrepancy () {
 
 /** @param {string} sha */
 function hasLocalGitObject (sha) {
-  try {
-    execFileSync('git', ['cat-file', '-e', sha], {
-      stdio: 'pipe',
-      // Older Git versions ignore GIT_NO_LAZY_FETCH, so also disallow transports for this local-only probe.
-      env: { ...getEnvironmentVariables(), GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
-    })
-    return true
-  } catch {
-    return false
-  }
+  return legacyStorage.run({ noop: true }, () => {
+    try {
+      execFileSync('git', ['cat-file', '-e', sha], {
+        stdio: 'pipe',
+        // Older Git versions ignore GIT_NO_LAZY_FETCH, so also disallow transports for this local-only probe.
+        env: { ...getEnvironmentVariables(), GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
+      })
+      return true
+    } catch {
+      return false
+    }
+  })
 }
 
 function fetchHeadCommitSha (headSha, useDepth = true) {

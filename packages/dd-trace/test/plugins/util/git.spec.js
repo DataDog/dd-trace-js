@@ -960,6 +960,19 @@ describe('fetchHeadCommitSha', () => {
     sinon.assert.calledTwice(execFileSyncStub)
     sinon.assert.calledOnce(logErrorSpy)
   })
+
+  it('suppresses tracing for internal local-object probes', () => {
+    const legacyStorage = require('../../../../datadog-core').storage('legacy')
+    const probeStates = []
+    execFileSyncStub.callsFake((command, flags) => {
+      if (flags[0] === 'cat-file') probeStates.push(legacyStorage.getHandle()?.noop)
+      return ''
+    })
+
+    fetchHeadCommitSha('abc123')
+
+    assert.deepStrictEqual(probeStates, [true])
+  })
 })
 
 describe('PR head metadata in shallow repositories', () => {
