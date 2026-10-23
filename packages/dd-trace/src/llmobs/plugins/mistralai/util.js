@@ -7,7 +7,6 @@ const { safeJsonParse } = require('../../util')
  * Mirrors dd-trace-py `extract_provider`: an empty server URL means the SDK default (Mistral).
  *
  * @param {string} [serverURL]
- * @returns {string}
  */
 function getModelProvider (serverURL = '') {
   return !serverURL || serverURL.toLowerCase().includes('mistral') ? 'mistral' : UNKNOWN_MODEL_PROVIDER
