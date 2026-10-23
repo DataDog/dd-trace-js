@@ -43,7 +43,7 @@ describe('bundler register', () => {
 
       assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
       sinon.assert.calledOnce(sync)
-      sinon.assert.callOrder(requireBuiltin, sync)
+      for (const call of requireBuiltin.getCalls()) assert.ok(call.calledBefore(sync.firstCall))
     })
 
     it('does not touch built-ins in an unbundled process', () => {
