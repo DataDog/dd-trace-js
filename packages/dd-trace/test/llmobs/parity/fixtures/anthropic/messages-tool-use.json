@@ -1,0 +1,31 @@
+{
+  "responses": [
+    {
+      "match": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "status": 200,
+      "headers": {
+        "CF-Cache-Status": "DYNAMIC",
+        "CF-RAY": "892a69eb7ebc0ce1-EWR",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Date": "Wed, 12 Jun 2024 14:08:42 GMT",
+        "Server": "cloudflare",
+        "Transfer-Encoding": "chunked",
+        "anthropic-ratelimit-requests-limit": "4000",
+        "anthropic-ratelimit-requests-remaining": "3999",
+        "anthropic-ratelimit-requests-reset": "2024-06-12T14:09:35Z",
+        "anthropic-ratelimit-tokens-limit": "400000",
+        "anthropic-ratelimit-tokens-remaining": "399000",
+        "anthropic-ratelimit-tokens-reset": "2024-06-12T14:09:35Z",
+        "request-id": "req_015akRKY3h8vWcdrDH9q9Q5B",
+        "via": "1.1 google",
+        "x-cloud-trace-context": "20d8935e80f02155df3bb6198c9a09a4"
+      },
+      "body": "{\"id\":\"msg_01QA7vDgvzfZ1mU5o8nwfkri\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-3-opus-20240229\",\"content\":[{\"type\":\"text\",\"text\":\"<thinking>\\nThe get_weather tool is directly relevant for answering this question about the weather in a specific location. \\n\\nThe get_weather tool requires a \\\"location\\\" parameter. The user has provided the location of \\\"San Francisco, CA\\\" in their question, so we have the necessary information to make the API call.\\n\\nNo other tools are needed to answer this question. We can proceed with calling the get_weather tool with the provided location.\\n</thinking>\"},{\"type\":\"tool_use\",\"id\":\"toolu_01DYJo37oETVsCdLTTcCWcdq\",\"name\":\"get_weather\",\"input\":{\"location\":\"San Francisco, CA\"}}],\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":599,\"output_tokens\":152}}",
+      "stream": false
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "responses": [
+    {
+      "match": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "status": 200,
+      "headers": {
+        "CF-RAY": "923d96ab48188c73-EWR",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Date": "Fri, 21 Mar 2025 12:52:48 GMT",
+        "Server": "cloudflare",
+        "Set-Cookie": "__cf_bm=cZPJDVpj4j3PHPYNrKuidCIAQIW1enHgh4IGVDiVt_0-1742561568-1.0.1.1-m9m6K6XjHrcQWfRM32rvoDzFf70M8ZFGs_.rdqqOKJ3kXEb2VGIY6y157buTWQjJdnT5r618PEUjbD0DLoVA3k42bens6iMjo.kctiWvft8; path=/; expires=Fri, 21-Mar-25 13:22:48 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None",
+        "Transfer-Encoding": "chunked",
+        "X-Content-Type-Options": "nosniff",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "openai-organization": "datadog-staging",
+        "openai-processing-ms": "418",
+        "openai-version": "2020-10-01",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-request-id": "req_4e63fdfd30481e31e64dddd3aee193a8"
+      },
+      "body": "{\n  \"id\": \"resp_67dd612092dc8191826dcbc863e9240603f95947d96c3963\",\n  \"object\": \"response\",\n  \"created_at\": 1742561568,\n  \"status\": \"completed\",\n  \"error\": null,\n  \"incomplete_details\": null,\n  \"instructions\": \"You are a helpful assistant specialized in addition calculations. Do not retry the tool call if it errors and instead return immediately\",\n  \"max_output_tokens\": null,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"output\": [\n    {\n      \"type\": \"function_call\",\n      \"id\": \"fc_67dd6120edd08191be41ca1448307bcf03f95947d96c3963\",\n      \"call_id\": \"call_HkEqS6psuoEKEXO0hPh87fgm\",\n      \"name\": \"add\",\n      \"arguments\": \"{\\\"a\\\":1,\\\"b\\\":2}\",\n      \"status\": \"completed\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\": null,\n  \"reasoning\": {\n    \"effort\": null,\n    \"generate_summary\": null\n  },\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    }\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"description\": \"Add two numbers together\",\n      \"name\": \"add\",\n      \"parameters\": {\n        \"properties\": {\n          \"a\": {\n            \"title\": \"A\",\n            \"type\": \"integer\"\n          },\n          \"b\": {\n            \"title\": \"B\",\n            \"type\": \"integer\"\n          }\n        },\n        \"required\": [\n          \"a\",\n          \"b\"\n        ],\n        \"title\": \"add_args\",\n        \"type\": \"object\",\n        \"additionalProperties\": false\n      },\n      \"strict\": true\n    }\n  ],\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 302,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 18,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 320\n  },\n  \"user\": null,\n  \"metadata\": {}\n}",
+      "stream": false
+    },
+    {
+      "match": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "status": 200,
+      "headers": {
+        "CF-RAY": "923d96aee83e8c73-EWR",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Date": "Fri, 21 Mar 2025 12:52:49 GMT",
+        "Server": "cloudflare",
+        "Transfer-Encoding": "chunked",
+        "X-Content-Type-Options": "nosniff",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "openai-organization": "datadog-staging",
+        "openai-processing-ms": "826",
+        "openai-version": "2020-10-01",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-request-id": "req_fdcdd9a1b13901ff430cb48e04d39d67"
+      },
+      "body": "{\n  \"id\": \"resp_67dd612125988191aaacd1a224fd41fa03f95947d96c3963\",\n  \"object\": \"response\",\n  \"created_at\": 1742561569,\n  \"status\": \"completed\",\n  \"error\": null,\n  \"incomplete_details\": null,\n  \"instructions\": \"You are a helpful assistant specialized in addition calculations. Do not retry the tool call if it errors and instead return immediately\",\n  \"max_output_tokens\": null,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"output\": [\n    {\n      \"type\": \"message\",\n      \"id\": \"msg_67dd6121867c8191b6f90771e690768b03f95947d96c3963\",\n      \"status\": \"completed\",\n      \"role\": \"assistant\",\n      \"content\": [\n        {\n          \"type\": \"output_text\",\n          \"text\": \"It seems there was an error while trying to calculate the sum. Let's try another approach or revisit later.\",\n          \"annotations\": []\n        }\n      ]\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\": null,\n  \"reasoning\": {\n    \"effort\": null,\n    \"generate_summary\": null\n  },\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    }\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"description\": \"Add two numbers together\",\n      \"name\": \"add\",\n      \"parameters\": {\n        \"properties\": {\n          \"a\": {\n            \"title\": \"A\",\n            \"type\": \"integer\"\n          },\n          \"b\": {\n            \"title\": \"B\",\n            \"type\": \"integer\"\n          }\n        },\n        \"required\": [\n          \"a\",\n          \"b\"\n        ],\n        \"title\": \"add_args\",\n        \"type\": \"object\",\n        \"additionalProperties\": false\n      },\n      \"strict\": true\n    }\n  ],\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 343,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 23,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 366\n  },\n  \"user\": null,\n  \"metadata\": {}\n}",
+      "stream": false
+    }
+  ]
+}
