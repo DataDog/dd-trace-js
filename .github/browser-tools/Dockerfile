@@ -31,6 +31,11 @@ RUN CHROME_VER=$(google-chrome --version | awk '{print $3}' | cut -d. -f1-3) \
     && chmod +x /usr/bin/chromedriver \
     && rm -rf /tmp/chrome-versions.json /tmp/chromedriver.zip /tmp/chromedriver-dir
 
+# Install FFmpeg for browser video recording
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && ffmpeg -hide_banner -encoders 2>/dev/null | grep -Eq '[[:space:]]libvpx[[:space:]]' \
+    && rm -rf /var/lib/apt/lists/*
+
 # Remove node since it will be injected at runtime by setup-node
 RUN rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
     && rm -rf /usr/local/lib/node_modules /usr/local/include/node
