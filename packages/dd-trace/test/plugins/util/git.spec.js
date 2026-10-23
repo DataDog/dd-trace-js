@@ -8,6 +8,7 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const { describe, it, afterEach, beforeEach } = require('mocha')
+const nock = require('nock')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -872,15 +873,24 @@ describe('fetchHeadCommitSha', () => {
     logErrorSpy.resetHistory()
   })
 
-  it('does not fetch a commit that is already available locally', () => {
+  it('preserves the original fetch for a commit that is already available locally', () => {
     cachedExecStub.returns('')
 
     fetchHeadCommitSha('abc123')
 
-    sinon.assert.calledOnceWithExactly(cachedExecStub, 'git', ['cat-file', '-e', 'abc123'], {
+    sinon.assert.calledWithExactly(cachedExecStub, 'git', ['cat-file', '-e', 'abc123'], {
       stdio: 'pipe',
       env: { ...environment, GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
     })
+    sinon.assert.calledWith(cachedExecStub, 'git', [
+      'fetch',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--recurse-submodules=no',
+      '--no-write-fetch-head',
+      'origin',
+      'abc123',
+    ])
   })
 
   it('fetches only the missing head commit', () => {
@@ -898,7 +908,6 @@ describe('fetchHeadCommitSha', () => {
       [
         'fetch',
         '--depth=1',
-        '--no-tags',
         '--update-shallow',
         '--filter=blob:none',
         '--recurse-submodules=no',
@@ -924,7 +933,9 @@ describe('PR head metadata in shallow repositories', () => {
   let checkout
   let remote
   let headSha
+  let baseSha
   let getGitMetadata
+  let getGitDiff
   let cachedExecSpy
 
   /**
@@ -948,14 +959,20 @@ mark :1
 committer Test Author <author@example.com> 1700000000 +0000
 data 4
 root
+M 100644 inline history.txt
+data 4
+root
 
 commit refs/heads/juan-fernandez/head
 mark :2
 author PR Author <pr-author@example.com> 1700000001 +0000
 committer PR Committer <pr-committer@example.com> 1700000002 +0000
-data 7
-PR head
+data 17
+PR head DD_abc123
 from :1
+M 100644 inline history.txt
+data 4
+head
 
 commit refs/heads/juan-fernandez/merge
 mark :3
@@ -975,6 +992,7 @@ done
 `,
     })
     headSha = git(remote, ['rev-parse', 'refs/heads/juan-fernandez/head'])
+    baseSha = git(remote, ['rev-parse', `${headSha}^`])
     git(directory, [
       'clone', '--depth=1', '--no-checkout', '--branch', 'juan-fernandez/merge',
       pathToFileURL(remote).href, checkout,
@@ -982,12 +1000,15 @@ done
     git(checkout, ['update-ref', '--no-deref', 'HEAD', git(checkout, ['rev-parse', 'HEAD'])])
     cachedExecSpy = sinon.spy((command, flags, options) =>
       execFileSync(command, flags, { stdio: 'pipe', ...options, cwd: checkout }))
-    getGitMetadata = proxyquire('../../../src/plugins/util/git', {
+    const gitUtils = proxyquire('../../../src/plugins/util/git', {
       './git-cache': { cachedExec: cachedExecSpy },
-    }).getGitMetadata
+    })
+    getGitMetadata = gitUtils.getGitMetadata
+    getGitDiff = gitUtils.getGitDiff
   })
 
   afterEach(() => {
+    nock.cleanAll()
     fs.rmSync(directory, { recursive: true, force: true })
   })
 
@@ -1000,7 +1021,7 @@ done
     const metadata = getGitMetadata({ headCommitSha: headSha })
 
     assertObjectContains(metadata, {
-      [GIT_COMMIT_HEAD_MESSAGE]: "PR head'\n",
+      [GIT_COMMIT_HEAD_MESSAGE]: "PR head DD_abc123'\n",
       [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'PR Author',
       [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'pr-author@example.com',
       [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'PR Committer',
@@ -1014,14 +1035,74 @@ done
     assert.strictEqual(fs.readFileSync(fetchHeadPath, 'utf8'), 'unchanged\n')
   })
 
-  it('preserves available head history without fetching', () => {
+  it('preserves available head history', () => {
     git(checkout, ['fetch', '--depth=2', 'origin', headSha])
 
     const metadata = getGitMetadata({ headCommitSha: headSha })
 
     assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
     assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
-    assert.ok(cachedExecSpy.getCalls().every(call => call.args[1][0] !== 'fetch'))
+  })
+
+  for (const missingObject of ['parent', 'tree']) {
+    it(`recovers head metadata and its Test Management marker with a missing ${missingObject}`, (done) => {
+      const commits = missingObject === 'parent' ? [headSha] : [headSha, baseSha]
+      for (const sha of commits) {
+        const object = execFileSync('git', ['cat-file', 'commit', sha], { cwd: remote, stdio: 'pipe' })
+        git(checkout, ['hash-object', '-t', 'commit', '-w', '--stdin'], { input: object })
+      }
+      git(checkout, ['cat-file', '-e', headSha])
+      assert.throws(() => git(checkout, ['show', '-s', '--format=%B', headSha]), { status: 128 })
+
+      const metadata = getGitMetadata({ headCommitSha: headSha })
+
+      assertObjectContains(metadata, {
+        [GIT_COMMIT_HEAD_MESSAGE]: "PR head DD_abc123'\n",
+        [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'PR Author',
+        [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'pr-author@example.com',
+        [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'PR Committer',
+        [GIT_COMMIT_HEAD_COMMITTER_EMAIL]: 'pr-committer@example.com',
+      })
+
+      const { getTestManagementTests } = proxyquire(
+        '../../../src/ci-visibility/test-management/get-test-management-tests', {
+          '../requests/fs-cache': { withCache: (key, fetch, callback) => fetch(null, callback) },
+        })
+      const scope = nock('http://localhost:8126')
+        .post('/evp_proxy/v2/api/v2/test/libraries/test-management/tests', body =>
+          body.data.attributes.sha === headSha &&
+          body.data.attributes.commit_message === "PR head DD_abc123'\n")
+        .reply(200, { data: { attributes: { modules: {} } } })
+
+      getTestManagementTests({
+        url: 'http://localhost:8126',
+        isEvpProxy: true,
+        evpProxyPrefix: '/evp_proxy/v2',
+        repositoryUrl: 'https://example.com/repository',
+        commitHeadSha: headSha,
+        commitHeadMessage: metadata[GIT_COMMIT_HEAD_MESSAGE],
+        commitMessage: metadata[GIT_COMMIT_MESSAGE],
+        sha: metadata[GIT_COMMIT_SHA],
+      }, err => {
+        assert.ifError(err)
+        assert.ok(scope.isDone())
+        done()
+      })
+    })
+  }
+
+  it('can still retrieve a PR diff when the local shallow head has a missing base', () => {
+    git(checkout, ['fetch', '--depth=1', 'origin', headSha])
+    git(checkout, ['checkout', '--detach', headSha])
+    assert.throws(() => git(checkout, ['cat-file', '-e', baseSha]), { status: 1 })
+
+    const metadata = getGitMetadata({ headCommitSha: headSha })
+    const diff = getGitDiff(baseSha, headSha)
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+    assert.match(diff, /diff --git a\/history\.txt b\/history\.txt/)
+    assert.match(diff, /-root/)
+    assert.match(diff, /\+head/)
   })
 
   for (const legacyGit of [false, true]) {

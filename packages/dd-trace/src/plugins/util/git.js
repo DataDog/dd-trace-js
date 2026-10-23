@@ -560,24 +560,25 @@ function getGitInformationDiscrepancy () {
 }
 
 function fetchHeadCommitSha (headSha) {
+  let headIsAvailable = false
   try {
     cachedExec('git', ['cat-file', '-e', headSha], {
       stdio: 'pipe',
       // Older Git versions ignore GIT_NO_LAZY_FETCH, so also disallow transports for this local-only probe.
       env: { ...getEnvironmentVariables(), GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
     })
-    return
+    headIsAvailable = true
   } catch {
     // The commit is missing locally; fetch it without downloading its history.
   }
 
+  // Preserve the original fetch for local heads: it can repair missing objects and enable later lazy fetches.
   const remoteName = getGitRemoteName()
 
   sanitizedExec(
     [
       'fetch',
-      '--depth=1',
-      '--no-tags',
+      ...(headIsAvailable ? [] : ['--depth=1']),
       '--update-shallow',
       '--filter=blob:none',
       '--recurse-submodules=no',
