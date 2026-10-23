@@ -6,6 +6,7 @@ let ExternalExperiment
 let evaluatorTypes
 let remoteEvaluatorTypes
 let builtinEvaluators
+let NoopPromptOptimization
 
 function getExternalExperiment () {
   ExternalExperiment ??= require('./experiment').ExternalExperiment
@@ -20,6 +21,11 @@ function getEvaluatorTypes () {
 function getRemoteEvaluatorTypes () {
   remoteEvaluatorTypes ??= require('./remote-evaluator')
   return remoteEvaluatorTypes
+}
+
+function getNoopPromptOptimization () {
+  NoopPromptOptimization ??= require('../prompt-optimization/noop').NoopPromptOptimization
+  return NoopPromptOptimization
 }
 
 function getBuiltinEvaluators () {
@@ -351,6 +357,11 @@ class NoopExperiments {
   experiment (options = {}) {
     this.#warn()
     return new NoopExperiment(options.name)
+  }
+
+  optimizePrompt (options = {}) {
+    this.#warn()
+    return new (getNoopPromptOptimization())(options)
   }
 
   /**
