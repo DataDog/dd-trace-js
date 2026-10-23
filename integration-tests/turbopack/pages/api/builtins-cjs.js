@@ -1,6 +1,7 @@
 'use strict'
 
 const { lookup } = require('node:dns')
+const { readFile } = require('fs')
 const { request } = require('http')
 
 module.exports = async (incoming, response) => {
@@ -19,6 +20,9 @@ module.exports = async (incoming, response) => {
       })
       outgoing.once('error', reject)
       outgoing.end()
+    }),
+    new Promise((resolve, reject) => {
+      readFile(process.argv[1], error => error ? reject(error) : resolve())
     }),
   ])
   response.json({ address, body })

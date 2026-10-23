@@ -62,6 +62,8 @@ for (const { nextVersion, tracerMode } of scenarios) {
           DD_TEST_BUNDLED_TRACER: String(tracerMode === 'bundled'),
           DD_TRACE_AGENT_PORT: String(agent.port),
           DD_TRACE_FLUSH_INTERVAL: '0',
+          // fs is opt-in; dd-trace's own startup loads it through the bundle before its hooks exist.
+          DD_TRACE_FS_ENABLED: 'true',
           NODE_OPTIONS: tracerMode === 'preloaded' ? '--import=dd-trace/init.js' : '',
         },
         execArgv: [],
@@ -103,7 +105,7 @@ for (const { nextVersion, tracerMode } of scenarios) {
 
     // Built-ins the bundle loaded before a bundled tracer started must still be instrumented.
     for (const format of tracerMode === 'bundled' ? ['cjs', 'esm'] : []) {
-      it(`instruments node:http and node:dns imported by ${format} routes`, async () => {
+      it(`instruments built-ins imported by ${format} routes`, async () => {
         const spans = []
         const assertBuiltinTrace = agent.assertMessageReceived(({ payload }) => {
           spans.push(...payload.flat())
@@ -121,6 +123,12 @@ for (const { nextVersion, tracerMode } of scenarios) {
           assert.ok(dns, 'bundled dns.lookup span')
           assert.equal(dns.meta['dns.address'], '127.0.0.1')
           assert.equal(dns.error, 0)
+          // dd-trace's own startup loads fs through the bundle before its hooks exist, so only re-requiring
+          // already loaded built-ins instruments it.
+          const file = spans.find(span => span.name === 'fs.operation' && span.resource === 'readFile' &&
+            span.meta['file.path']?.endsWith(path.join('turbopack', 'server.js')))
+          assert.ok(file, 'bundled fs.readFile span')
+          assert.equal(file.error, 0)
         }, 10_000, 1, true)
 
         const [response] = await Promise.all([
