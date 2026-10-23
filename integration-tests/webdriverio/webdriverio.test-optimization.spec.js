@@ -50,6 +50,8 @@ const requestedVersion = process.env.WEBDRIVERIO_VERSION
 const versions = requestedVersion
   ? [requestedVersion === 'oldest' ? OLDEST_WEBDRIVERIO_VERSION : requestedVersion]
   : [OLDEST_WEBDRIVERIO_VERSION, 'latest']
+// CI runs each adapter in its own job; together they exceed the CI time budget.
+const frameworks = process.env.WEBDRIVERIO_ADAPTER ? [process.env.WEBDRIVERIO_ADAPTER] : ['mocha', 'jasmine']
 
 const SETTINGS_PATH = '/api/v2/libraries/tests/services/setting'
 const KNOWN_TESTS_PATH = '/api/v2/ci/libraries/tests'
@@ -362,7 +364,7 @@ for (const version of versions) {
       )
     }
 
-    for (const framework of ['mocha', 'jasmine']) {
+    for (const framework of frameworks) {
       describe(`${framework} adapter`, function () {
         /**
          * Runs one optimization scenario for this adapter.

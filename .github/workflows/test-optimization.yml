@@ -44,7 +44,9 @@ jobs:
       fail-fast: false
       matrix:
         version: [oldest, maintenance, active, latest]
-    name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
+        # The TIA code coverage specs and the remaining specs each take about half of the suite time.
+        spec: ['tia-code-coverage*', '!(tia-code-coverage*)']
+    name: ${{ github.workflow }} / integration (node-${{ matrix.version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -70,6 +72,8 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
       - run: npm run test:integration:testopt:coverage
+        env:
+          SPEC: ${{ matrix.spec }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-testopt-${{ matrix.version }}
@@ -236,7 +240,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Keep the regular and Test Optimization suites in separate lanes; together they exceed the CI time budget.
+        # Keep the regular, failure video, and Test Optimization suites in separate lanes; together they exceed the
+        # CI time budget. The oldest Test Optimization suite also runs each adapter in its own lane.
         include:
           - node-version: oldest
             webdriverio-version: oldest
@@ -246,13 +251,24 @@ jobs:
             spec: webdriverio
           - node-version: oldest
             webdriverio-version: oldest
+            spec: webdriverio.failure-videos
+          - node-version: latest
+            webdriverio-version: latest
+            spec: webdriverio.failure-videos
+          - node-version: oldest
+            webdriverio-version: oldest
             spec: webdriverio.test-optimization
+            adapter: mocha
+          - node-version: oldest
+            webdriverio-version: oldest
+            spec: webdriverio.test-optimization
+            adapter: jasmine
           - node-version: latest
             webdriverio-version: latest
             spec: webdriverio.test-optimization
     name: >-
       integration-webdriverio (${{ matrix.webdriverio-version }},
-      node-${{ matrix.node-version }}, ${{ matrix.spec }})
+      node-${{ matrix.node-version }}, ${{ matrix.spec }}${{ matrix.adapter && format(', {0}', matrix.adapter) || '' }})
     runs-on: ubuntu-latest
     container:
       image: ${{ needs.browser-tools.outputs.image }}
@@ -266,12 +282,12 @@ jobs:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: npm run test:instrumentations:ci
-        if: matrix.spec == 'webdriverio.test-optimization'
+        if: matrix.spec == 'webdriverio.test-optimization' && matrix.adapter != 'jasmine'
         env:
           PLUGINS: webdriverio
       - uses: ./.github/actions/upload-junit-artifacts
         id: webdriverio_instrumentation_upload
-        if: "!cancelled() && matrix.spec == 'webdriverio.test-optimization'"
+        if: "!cancelled() && matrix.spec == 'webdriverio.test-optimization' && matrix.adapter != 'jasmine'"
         with:
           id: ${{ github.job }}-${{ strategy.job-index }}-instrumentation
       - name: Clear uploaded instrumentation JUnit reports
@@ -282,7 +298,7 @@ jobs:
         # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Use installed Chrome and ChromeDriver
-        if: matrix.spec == 'webdriverio'
+        if: matrix.spec != 'webdriverio.test-optimization'
         run: |
           google-chrome --version
           chromedriver --version
@@ -293,6 +309,7 @@ jobs:
         env:
           SPEC: ${{ matrix.spec }}
           WEBDRIVERIO_VERSION: ${{ matrix.webdriverio-version }}
+          WEBDRIVERIO_ADAPTER: ${{ matrix.adapter }}
           WEBDRIVERIO_REAL_BROWSER: 'true'
       - uses: ./.github/actions/coverage
         with:
@@ -553,6 +570,7 @@ jobs:
         version: [oldest, latest]
         spec:
           - vitest.core
+          - vitest.retries
           - vitest.tia
           - vitest.test-management
           - vitest.advanced
@@ -597,7 +615,8 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           SPEC: ${{ matrix.spec }}
           TEST_OPTIMIZATION_PARALLEL_VITEST_VERSIONS: >-
-            ${{ matrix.spec == 'vitest.core' && matrix.vitest-version == 'all' && 'oldest,latest' || '' }}
+            ${{ (matrix.spec == 'vitest.core' || matrix.spec == 'vitest.retries') && matrix.vitest-version == 'all'
+            && 'oldest,latest' || '' }}
           VITEST_VERSION: ${{ matrix.vitest-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
