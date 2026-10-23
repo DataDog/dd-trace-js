@@ -10,7 +10,10 @@ const sinon = require('sinon')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/mocha')
 
-const { compileBreakpointCondition } = require('../../../src/debugger/devtools_client/probe_sampler')
+const {
+  compileBreakpointCondition,
+  isSnapshotProducingProbe,
+} = require('../../../src/debugger/devtools_client/probe_sampler')
 
 describe('breakpoints', function () {
   /** @type {typeof import('../../../src/debugger/devtools_client/breakpoints')} */
@@ -1586,6 +1589,32 @@ describe('breakpoints', function () {
         }
       )
     })
+
+    for (const capture of ['snapshot', 'expression']) {
+      it(`should keep ${capture} capture disabled when retrying a probe after a failed refresh`, async function () {
+        await addProbe(capture === 'snapshot'
+          ? { captureSnapshot: true }
+          : { captureExpressions: [{ name: 'foo', expr: { dsl: 'foo', json: { ref: 'foo' } } }] })
+        const probe = getInstalledProbe()
+
+        // What the pause handler does when it permanently disables capture for the probe
+        if (capture === 'snapshot') {
+          probe.captureSnapshot = false
+        } else {
+          probe.compiledCaptureExpressions = undefined
+        }
+        sessionMock.post.withArgs('Debugger.setBreakpoint').rejects(new Error('inspector failure'))
+        await assert.rejects(breakpoints.refreshBreakpoints([probe]), { reason: 'breakpoint_replacement_failed' })
+
+        sessionMock.post.withArgs('Debugger.setBreakpoint').resolves({ breakpointId })
+        scriptLoadingStabilizedCallback()
+        await waitForQueuedOperations()
+
+        assert.strictEqual(getInstalledProbe(), probe)
+        assert.strictEqual(isSnapshotProducingProbe(probe), false)
+        sinon.assert.calledOnceWithExactly(ackInstalled, probe)
+      })
+    }
   })
 
   describe('re-evaluation', function () {

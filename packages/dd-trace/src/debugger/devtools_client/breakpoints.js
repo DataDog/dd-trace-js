@@ -201,6 +201,9 @@ async function installProbe (probe) {
       })
     }
   }
+  // Re-evaluation reuses the compiled expressions, so it can't re-enable capture after the pause handler permanently
+  // disabled it by discarding them.
+  delete probe.captureExpressions
 
   // Must be calculated after `compiledCaptureExpressions` has been resolved, since capture-expression probes produce
   // snapshots and therefore default to the snapshot rate.
