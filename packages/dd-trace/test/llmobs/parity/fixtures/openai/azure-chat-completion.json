@@ -1,0 +1,22 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/azure/openai/deployments/gpt-4o-mini/chat/completions" },
+      "status": 200,
+      "body": {
+        "id": "chatcmpl-parity-azure",
+        "object": "chat.completion",
+        "created": 1700000000,
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "message": { "role": "assistant", "content": "Parity." },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": { "prompt_tokens": 8, "completion_tokens": 2, "total_tokens": 10 }
+      }
+    }
+  ]
+}

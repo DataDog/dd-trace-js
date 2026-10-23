@@ -1,0 +1,23 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/completions" },
+      "status": 200,
+      "body": {
+        "id": "cmpl-parity",
+        "object": "text_completion",
+        "created": 1700000000,
+        "model": "gpt-3.5-turbo-instruct",
+        "choices": [
+          {
+            "text": "Parity.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": { "prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5 }
+      }
+    }
+  ]
+}
