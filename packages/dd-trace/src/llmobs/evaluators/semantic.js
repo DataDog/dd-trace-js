@@ -1,12 +1,11 @@
 'use strict'
 
-const { BaseEvaluator, EvaluatorResult } = require('./base')
+const { BaseEvaluator, EvaluatorResult } = require('../experiments/evaluator')
 const { isThenable, toText } = require('./util')
 
 /**
  * @param {number[]} vec1
  * @param {number[]} vec2
- * @returns {number} Cosine similarity in [-1, 1]; 0 when either vector has zero magnitude.
  */
 function cosineSimilarity (vec1, vec2) {
   if (!Array.isArray(vec1) || !Array.isArray(vec2)) throw new TypeError('embeddingFn must return an array of numbers')
@@ -49,7 +48,7 @@ class SemanticSimilarityEvaluator extends BaseEvaluator {
   }
 
   /**
-   * @param {import('./base').EvaluatorContext} context
+   * @param {import('../experiments/evaluator').EvaluatorContext} context
    * @returns {EvaluatorResult | Promise<EvaluatorResult>}
    */
   evaluate (context) {

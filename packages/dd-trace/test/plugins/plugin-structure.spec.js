@@ -8,6 +8,11 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
+const {
+  isRewriteActivationEnabled,
+  isRewriteTargetName,
+} = require('../../../datadog-instrumentations/src/helpers/rewriter/targets')
+const plugins = require('../../src/plugins')
 
 const abstractPlugins = [
   'web', // web is an abstract plugin, and will not have an instrumentation file
@@ -44,8 +49,16 @@ const missingPlugins = [
 
 // instrumentations that do not have a hook, but are still instrumented
 const missingInstrumentationHooks = [
+  'azure-cosmos',
+  'bullmq',
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
+  'langchain',
+  'langgraph',
+  'postgres',
+  'supabase',
 ]
+
+const hooklessOrchestrionPlugins = new Set(['azure-cosmos', 'bullmq', 'langchain', 'langgraph', 'postgres', 'supabase'])
 
 function extractPluginIds (source, re, index) {
   const ids = new Set()
@@ -61,7 +74,7 @@ function extractPluginsInterfaceKeys (dtsSource) {
   assert.ok(m, 'Could not find `interface Plugins { ... }` in index.d.ts')
 
   const body = m[1]
-  return extractPluginIds(body, /^\s*"([^"]+)"\s*:\s*/gm, 1)
+  return extractPluginIds(body, /^[ \t]*"([^"]+)"[ \t]*:[ \t]*/gm, 1)
 }
 
 function extractRuntimePluginPackageNames (pluginsIndexSource) {
@@ -116,7 +129,7 @@ describe('Plugin Structure Validation', () => {
       })
 
       it('should have a corresponding instrumentation file', () => {
-        if (abstractPlugins.includes(pluginId)) {
+        if (abstractPlugins.includes(pluginId) || hooklessOrchestrionPlugins.has(pluginId)) {
           return
         }
 
@@ -141,7 +154,8 @@ describe('Plugin Structure Validation', () => {
     const missingInstrumentations = []
 
     allPluginIds.forEach(pluginId => {
-      if (!instrumentationFiles.has(pluginId) && !abstractPlugins.includes(pluginId)) {
+      if (!instrumentationFiles.has(pluginId) && !abstractPlugins.includes(pluginId) &&
+        !hooklessOrchestrionPlugins.has(pluginId)) {
         missingInstrumentations.push(pluginId)
       }
     })
@@ -173,6 +187,34 @@ describe('Plugin Structure Validation', () => {
     })
 
     assert.deepStrictEqual(missingHooks, missingInstrumentationHooks)
+  })
+
+  it('registers pure Orchestrion integrations only as rewrite targets', () => {
+    const names = [
+      '@azure/cosmos',
+      '@langchain/core',
+      '@langchain/langgraph',
+      '@supabase/auth-js',
+      '@supabase/functions-js',
+      '@supabase/postgrest-js',
+      '@supabase/realtime-js',
+      '@supabase/storage-js',
+      'bullmq',
+      'mercurius',
+      'postgres',
+    ]
+
+    for (const name of names) {
+      assert.equal(hooks[name], undefined)
+      assert.equal(isRewriteTargetName(name), true)
+      assert.equal(isRewriteActivationEnabled(name), true)
+    }
+    assert.equal(isRewriteActivationEnabled('graphql'), false)
+    assert.equal(typeof hooks.graphql, 'function')
+  })
+
+  it('should map @graphql-tools/executor instrumentation to the graphql plugin', () => {
+    assert.strictEqual(plugins['@graphql-tools/executor'], plugins.graphql)
   })
 
   it('should include all canonical plugin ids used by the runtime plugin registry in index.d.ts', () => {

@@ -21,6 +21,7 @@ const RETRY_JITTER = 0.2
  * @property {number} pollIntervalMs
  * @property {number} requestTimeoutMs
  * @property {string | undefined} apiKey
+ * @property {string | undefined} env
  */
 
 /**
@@ -64,9 +65,6 @@ class AgentlessConfigurationSource {
     this.#applyConfiguration = applyConfiguration
   }
 
-  /**
-   * @returns {void}
-   */
   start () {
     if (this.#abortController) return
 
@@ -75,9 +73,6 @@ class AgentlessConfigurationSource {
     this.#poll(abortController)
   }
 
-  /**
-   * @returns {void}
-   */
   stop () {
     this.#abortController?.abort()
     this.#abortController = undefined
@@ -112,8 +107,22 @@ class AgentlessConfigurationSource {
    */
   async #pollOnce (abortController) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      log.debug('Feature Flags: agentless configuration poll attempt %d/%d', attempt, MAX_ATTEMPTS)
       const response = await this.#request(abortController.signal)
       if (this.#abortController !== abortController) return
+
+      if (response.statusCode === 304) {
+        // 304 means the cached configuration is still valid, not a failure.
+        log.debug('Feature Flags: agentless configuration poll attempt %d/%d returned HTTP 304 (unchanged)',
+          attempt, MAX_ATTEMPTS)
+      } else if (response.statusCode === undefined) {
+        log.debug('Feature Flags: agentless configuration poll attempt %d/%d failed: %s',
+          attempt, MAX_ATTEMPTS, errorMessage(response.error))
+      } else {
+        // Avoids errorMessage(response.error), which embeds the full request URL.
+        log.debug('Feature Flags: agentless configuration poll attempt %d/%d returned HTTP %d',
+          attempt, MAX_ATTEMPTS, response.statusCode)
+      }
 
       const retryable = response.statusCode === undefined || isRetryableStatus(response.statusCode)
       if (!retryable) {
@@ -175,7 +184,6 @@ class AgentlessConfigurationSource {
 
   /**
    * @param {PollResponse} response
-   * @returns {void}
    */
   #apply (response) {
     const statusCode = response.statusCode
@@ -212,13 +220,19 @@ class AgentlessConfigurationSource {
     const etag = response.headers?.etag
     const value = Array.isArray(etag) ? etag[0] : etag
     this.#etag = value?.trim() || undefined
+
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.debug(() => {
+      const flagCount = Object.keys(configuration.flags ?? {}).length
+      return 'Feature Flags: agentless configuration applied successfully ' +
+        `(${flagCount} flag(s), env=${this.#config.env ?? 'unset'})`
+    })
   }
 
   /**
    * @param {number | undefined} statusCode
    * @param {unknown} error
    * @param {number} attempts
-   * @returns {void}
    */
   #warnFailure (statusCode, error, attempts) {
     const category = statusCode === 401 || statusCode === 403
@@ -278,16 +292,21 @@ function parseConfiguration (body) {
 }
 
 /**
+ * Formats a request error, including the underlying network error code
+ * (e.g. ENOTFOUND, ECONNREFUSED, ETIMEDOUT) when available, since "request
+ * failed" alone does not tell a customer whether the problem is DNS, a
+ * refused connection, a timeout, or something else.
+ *
  * @param {unknown} error
- * @returns {string}
  */
 function errorMessage (error) {
-  return error instanceof Error ? error.message : String(error ?? 'request was not sent')
+  if (!(error instanceof Error)) return String(error ?? 'request was not sent')
+  const code = /** @type {{ code?: string }} */ (error).code
+  return code ? `${error.message} (${code})` : error.message
 }
 
 /**
  * @param {number | undefined} status
- * @returns {boolean}
  */
 function isRetryableStatus (status) {
   return status === 408 || status === 429 || (status >= 500 && status <= 599)
@@ -297,7 +316,6 @@ function isRetryableStatus (status) {
  * @param {number} pollIntervalMs
  * @param {number} attempt
  * @param {number} random
- * @returns {number}
  */
 function retryDelay (pollIntervalMs, attempt, random) {
   const base = attempt === 1
@@ -310,7 +328,6 @@ function retryDelay (pollIntervalMs, attempt, random) {
  * @param {number} value
  * @param {number} minimum
  * @param {number} maximum
- * @returns {number}
  */
 function clamp (value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value))

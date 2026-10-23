@@ -421,15 +421,18 @@ describe('request', function () {
   it('should handle an http error', done => {
     nock('http://localhost:8080')
       .put('/path')
-      .reply(400)
+      .reply(400, 'bad request')
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
       port: 8080,
+      includeErrorResponseBody: true,
     }, err => {
       assert.ok(err instanceof Error)
-      assert.strictEqual(err.message, 'Error from http://localhost:8080/path: 400 Bad Request.')
+      assert.strictEqual(err.message,
+        'Error from http://localhost:8080/path: 400 Bad Request. Response from the endpoint: "bad request"')
+      assert.strictEqual(err.responseBody, 'bad request')
       done()
     })
   })
@@ -446,8 +449,36 @@ describe('request', function () {
     }, err => {
       assert.ok(err instanceof Error)
       assert.strictEqual(err.message, 'Error from http://api.datadog.com/path: 400 Bad Request.')
+      assert.strictEqual(err.responseBody, undefined)
       done()
     })
+  })
+
+  it('preserves HTTP error details when the global URL is mocked', async () => {
+    nock('http://localhost:8080').put('/path').reply(400, () => {
+      // Mock after Nock's own URL parsing so only the exporter's error handling sees the mock.
+      sinon.replace(globalThis, 'URL', () => {})
+      return 'bad request'
+    })
+
+    try {
+      const error = await new Promise(resolve => {
+        request(Buffer.from(''), {
+          path: '/path',
+          method: 'PUT',
+          port: 8080,
+          includeErrorResponseBody: true,
+        }, resolve)
+      })
+
+      assert.ok(error instanceof Error)
+      assert.strictEqual(error.status, 400)
+      assert.strictEqual(error.message,
+        'Error from http://localhost:8080/path: 400 Bad Request. Response from the endpoint: "bad request"')
+      assert.strictEqual(error.responseBody, 'bad request')
+    } finally {
+      sinon.restore()
+    }
   })
 
   // Live timeout → abort → retry → 'socket hang up' is covered by

@@ -73,7 +73,7 @@ const OPERATIONS = {
     },
     name: REPORT_VULNERABILITY,
     initialTokenBucketSize () {
-      return typeof config.maxContextOperations === 'number' ? config.maxContextOperations : 2
+      return typeof config.DD_IAST_MAX_CONTEXT_OPERATIONS === 'number' ? config.DD_IAST_MAX_CONTEXT_OPERATIONS : 2
     },
     initContext: function (context) {
       context.tokens[REPORT_VULNERABILITY] = this.initialTokenBucketSize()
@@ -146,8 +146,8 @@ function _resetGlobalContext () {
 
 function acquireRequest (rootSpan) {
   if (availableRequest > 0 && rootSpan) {
-    const sampling = config && typeof config.requestSampling === 'number'
-      ? config.requestSampling
+    const sampling = config && typeof config.DD_IAST_REQUEST_SAMPLING === 'number'
+      ? config.DD_IAST_REQUEST_SAMPLING
       : 30
     if (rootSpan.context().toSpanId().slice(-2) <= sampling) {
       availableRequest--
@@ -158,7 +158,7 @@ function acquireRequest (rootSpan) {
 }
 
 function releaseRequest () {
-  if (availableRequest < config.maxConcurrentRequests) {
+  if (availableRequest < config.DD_IAST_MAX_CONCURRENT_REQUESTS) {
     availableRequest++
   }
 }
@@ -174,7 +174,7 @@ function initializeRequestContext (iastContext) {
 
 function configure (cfg) {
   config = cfg
-  availableRequest = config.maxConcurrentRequests
+  availableRequest = config.DD_IAST_MAX_CONCURRENT_REQUESTS
 }
 
 function startGlobalContext () {

@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const axios = require('axios').create({ validateStatus: null })
 
 const dc = require('dc-polyfill')
 const { after, before, beforeEach, describe, it } = require('mocha')
@@ -10,6 +9,7 @@ const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { getActiveRequest } = require('../../dd-trace/src/appsec/store')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client').create({ validateStatus: null })
 
 withVersions('passport-http', 'passport-http', version => {
   describe('passport-http instrumentation', () => {
@@ -115,7 +115,7 @@ withVersions('passport-http', 'passport-http', version => {
     })
 
     it('should not call subscriber when an error occurs', async () => {
-      const res = await axios.get(`http://localhost:${port}/`, {
+      const res = await httpRequest.get(`http://localhost:${port}/`, {
         headers: {
           // error:1234
           Authorization: 'Basic ZXJyb3I6MTIzNA==',
@@ -127,7 +127,7 @@ withVersions('passport-http', 'passport-http', version => {
     })
 
     it('should call subscriber with proper arguments on success', async () => {
-      const res = await axios.get(`http://localhost:${port}/`, {
+      const res = await httpRequest.get(`http://localhost:${port}/`, {
         headers: {
           // test:1234
           Authorization: 'Basic dGVzdDoxMjM0',
@@ -146,7 +146,7 @@ withVersions('passport-http', 'passport-http', version => {
     })
 
     it('should call subscriber with proper arguments on success with passReqToCallback set to true', async () => {
-      const res = await axios.get(`http://localhost:${port}/req`, {
+      const res = await httpRequest.get(`http://localhost:${port}/req`, {
         headers: {
           // test:1234
           Authorization: 'Basic dGVzdDoxMjM0',
@@ -165,7 +165,7 @@ withVersions('passport-http', 'passport-http', version => {
     })
 
     it('should call subscriber with proper arguments on failure', async () => {
-      const res = await axios.get(`http://localhost:${port}/`, {
+      const res = await httpRequest.get(`http://localhost:${port}/`, {
         headers: {
           // test:1
           Authorization: 'Basic dGVzdDox',
@@ -190,7 +190,7 @@ withVersions('passport-http', 'passport-http', version => {
         abortController.abort()
       })
 
-      const res = await axios.get(`http://localhost:${port}/`, {
+      const res = await httpRequest.get(`http://localhost:${port}/`, {
         headers: {
           // test:1234
           Authorization: 'Basic dGVzdDoxMjM0',

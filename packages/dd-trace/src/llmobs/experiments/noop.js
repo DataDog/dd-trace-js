@@ -1,8 +1,37 @@
 'use strict'
 
 const log = require('../../log')
-const { NoopPromptOptimization } = require('../prompt-optimization/noop')
-const { ExternalExperiment } = require('./experiment')
+
+let ExternalExperiment
+let evaluatorTypes
+let remoteEvaluatorTypes
+let builtinEvaluators
+let NoopPromptOptimization
+
+function getExternalExperiment () {
+  ExternalExperiment ??= require('./experiment').ExternalExperiment
+  return ExternalExperiment
+}
+
+function getEvaluatorTypes () {
+  evaluatorTypes ??= require('./evaluator')
+  return evaluatorTypes
+}
+
+function getRemoteEvaluatorTypes () {
+  remoteEvaluatorTypes ??= require('./remote-evaluator')
+  return remoteEvaluatorTypes
+}
+
+function getNoopPromptOptimization () {
+  NoopPromptOptimization ??= require('../prompt-optimization/noop').NoopPromptOptimization
+  return NoopPromptOptimization
+}
+
+function getBuiltinEvaluators () {
+  builtinEvaluators ??= require('../evaluators')
+  return builtinEvaluators
+}
 
 const NOOP_EXPERIMENT_ID = '00000000-0000-0000-0000-000000000000'
 const NOOP_SPAN_ID = '0000000000000000'
@@ -247,6 +276,74 @@ class NoopExperiments {
     log.warn('LLMObs experiments unavailable: %s', this.#reason)
   }
 
+  get BaseEvaluator () {
+    return getEvaluatorTypes().BaseEvaluator
+  }
+
+  get BaseSummaryEvaluator () {
+    return getEvaluatorTypes().BaseSummaryEvaluator
+  }
+
+  get EvaluatorContext () {
+    return getEvaluatorTypes().EvaluatorContext
+  }
+
+  get SummaryEvaluatorContext () {
+    return getEvaluatorTypes().SummaryEvaluatorContext
+  }
+
+  get EvaluatorResult () {
+    return getEvaluatorTypes().EvaluatorResult
+  }
+
+  get MultiEvaluatorResult () {
+    return getEvaluatorTypes().MultiEvaluatorResult
+  }
+
+  get RemoteEvaluator () {
+    return getRemoteEvaluatorTypes().RemoteEvaluator
+  }
+
+  get RemoteEvaluatorError () {
+    return getRemoteEvaluatorTypes().RemoteEvaluatorError
+  }
+
+  get LLMJudge () {
+    return getBuiltinEvaluators().LLMJudge
+  }
+
+  get BooleanStructuredOutput () {
+    return getBuiltinEvaluators().BooleanStructuredOutput
+  }
+
+  get ScoreStructuredOutput () {
+    return getBuiltinEvaluators().ScoreStructuredOutput
+  }
+
+  get CategoricalStructuredOutput () {
+    return getBuiltinEvaluators().CategoricalStructuredOutput
+  }
+
+  get StringCheckEvaluator () {
+    return getBuiltinEvaluators().StringCheckEvaluator
+  }
+
+  get RegexMatchEvaluator () {
+    return getBuiltinEvaluators().RegexMatchEvaluator
+  }
+
+  get LengthEvaluator () {
+    return getBuiltinEvaluators().LengthEvaluator
+  }
+
+  get JSONEvaluator () {
+    return getBuiltinEvaluators().JSONEvaluator
+  }
+
+  get SemanticSimilarityEvaluator () {
+    return getBuiltinEvaluators().SemanticSimilarityEvaluator
+  }
+
   createDataset (name, options = {}) {
     this.#warn()
     return new NoopDataset(name, options)
@@ -264,7 +361,7 @@ class NoopExperiments {
 
   optimizePrompt (options = {}) {
     this.#warn()
-    return new NoopPromptOptimization(options)
+    return new (getNoopPromptOptimization())(options)
   }
 
   /**
@@ -273,7 +370,8 @@ class NoopExperiments {
    */
   startExperiment (options = {}) {
     this.#warn()
-    return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name, true)))
+    const NoopExternalExperiment = getExternalExperiment()
+    return Promise.resolve(new NoopExternalExperiment(new NoopExperiment(options.name, true)))
   }
 
   /**

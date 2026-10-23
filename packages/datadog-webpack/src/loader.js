@@ -7,7 +7,6 @@ const CHANNEL = 'dd-trace:bundler:load'
  * Called for each module-of-interest identified by DatadogWebpackPlugin.
  *
  * @param {string} source
- * @returns {string}
  */
 module.exports = function loader (source) {
   this.cacheable(false)

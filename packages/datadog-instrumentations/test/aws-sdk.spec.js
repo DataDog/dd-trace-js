@@ -97,6 +97,17 @@ describe('aws-sdk instrumentation: smithy command-deserialize patching', () => {
     assert.notEqual(c2.deserialize, ownC2)
     assert.notEqual(c1.deserialize, c2.deserialize)
   })
+
+  it('wraps a Client re-exported by multiple Smithy entry points only once', () => {
+    const FakeClient = makeFakeClientClass('bedrockruntime')
+    const originalWrapper = FakeClient.prototype.send
+    const registry = globalThis[Symbol.for('_ddtrace_instrumentations')]
+    registry['@aws-sdk/smithy-client'][0].hook({ Client: FakeClient })
+    const coreHook = registry['@smithy/core'].find(hook => hook.file === 'dist-cjs/submodules/client/index.js')
+    assert.ok(coreHook)
+    coreHook.hook({ Client: FakeClient })
+    assert.equal(FakeClient.prototype.send, originalWrapper)
+  })
 })
 
 describe('aws-sdk instrumentation: channel suffix', () => {
@@ -107,7 +118,7 @@ describe('aws-sdk instrumentation: channel suffix', () => {
    * @param {string} serviceId
    */
   async function suffixFor (serviceId) {
-    const candidates = ['eventbridge', 'default', 'sns']
+    const candidates = ['eventbridge', 'aws', 'default', 'sns']
     const seen = []
     const listeners = candidates.map(suffix => {
       const listener = () => seen.push(suffix)
@@ -140,7 +151,7 @@ describe('aws-sdk instrumentation: channel suffix', () => {
     assert.deepStrictEqual(await suffixFor('events'), ['eventbridge'])
   })
 
-  it('routes an unknown service to the default channel', async () => {
-    assert.deepStrictEqual(await suffixFor('Timestream Write'), ['default'])
+  it('routes an unknown service to the aws channel', async () => {
+    assert.deepStrictEqual(await suffixFor('Timestream Write'), ['aws'])
   })
 })

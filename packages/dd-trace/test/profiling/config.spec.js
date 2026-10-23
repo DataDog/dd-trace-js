@@ -97,7 +97,7 @@ describe('config', () => {
       flushInterval: 65 * 1000,
       activation: 'manual',
       v8ProfilerBugWorkaroundEnabled: true,
-      allocationProfilingEnabled: false,
+      allocationProfilingEnabled: isAtLeast26,
       cpuProfilingEnabled: samplingContextsAvailable,
       uploadCompression: {
         method: zstdOrGzip,
@@ -545,7 +545,7 @@ describe('config', () => {
     // runtime concern and is covered in profilers/space.spec.js.
     assert.deepStrictEqual(config.oomMonitoring, {
       enabled: false,
-      heapLimitExtensionSize: 0,
+      heapLimitExtensionSize: 'auto',
       maxHeapExtensionCount: 0,
       exportStrategies: [],
     })
@@ -557,7 +557,7 @@ describe('config', () => {
     if (oomMonitoringSupported) {
       assert.deepStrictEqual(config.oomMonitoring, {
         enabled: true,
-        heapLimitExtensionSize: 0,
+        heapLimitExtensionSize: 'auto',
         maxHeapExtensionCount: 0,
         exportStrategies: ['process'],
       })
@@ -612,7 +612,7 @@ describe('config', () => {
     it('should support OOM heap profiler configuration', function () {
       process.env = {
         DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: '1',
-        DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '1000000',
+        DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 'auto',
         DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '2',
         DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,async,process',
       }
@@ -622,7 +622,7 @@ describe('config', () => {
       // Duplicate strategies collapse to a validated, de-duplicated list.
       assert.deepStrictEqual(config.oomMonitoring, {
         enabled: true,
-        heapLimitExtensionSize: 1000000,
+        heapLimitExtensionSize: 'auto',
         maxHeapExtensionCount: 2,
         exportStrategies: ['process', 'async'],
       })

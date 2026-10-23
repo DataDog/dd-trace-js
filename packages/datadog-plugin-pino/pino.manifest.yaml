@@ -1,0 +1,12 @@
+_v: 1
+name: pino
+display_name: Pino
+description: Instruments Pino log records and pino-pretty formatting to inject trace correlation identifiers and service
+  metadata, with optional agentless log submission.
+packages:
+- name: pino
+- name: pino-pretty
+category:
+- log.emission
+systems: []
+creation_date: '2019-02-06'

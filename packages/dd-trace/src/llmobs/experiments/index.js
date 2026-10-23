@@ -3,11 +3,14 @@
 const fs = require('node:fs')
 
 const log = require('../../log')
+const builtinEvaluators = require('../evaluators')
 const { PromptOptimization } = require('../prompt-optimization')
 const { ExperimentsClient } = require('./client')
 const { readCsvRecords } = require('./csv')
 const { Dataset, DatasetRecord } = require('./dataset')
 const { Experiment, ExternalExperiment } = require('./experiment')
+const evaluatorTypes = require('./evaluator')
+const remoteEvaluatorTypes = require('./remote-evaluator')
 const { experimentSummaryFromResource, parseExperimentEvents } = require('./pull')
 const { validateTagsList } = require('./util')
 const NoopExperiments = require('./noop')
@@ -64,9 +67,77 @@ class Experiments {
 
   constructor (config, llmobs) {
     this.#config = config
-    this.#llmobs = config.llmobs?.mlApp || config.service ? llmobs : undefined
-    this.#projectName = config.llmobs?.projectName || DEFAULT_PROJECT_NAME
+    this.#llmobs = config.llmobs?.DD_LLMOBS_ML_APP || config.service ? llmobs : undefined
+    this.#projectName = config.llmobs?.DD_LLMOBS_PROJECT_NAME || DEFAULT_PROJECT_NAME
     this.#client = this.#clientForProject(this.#projectName)
+  }
+
+  get BaseEvaluator () {
+    return evaluatorTypes.BaseEvaluator
+  }
+
+  get BaseSummaryEvaluator () {
+    return evaluatorTypes.BaseSummaryEvaluator
+  }
+
+  get EvaluatorContext () {
+    return evaluatorTypes.EvaluatorContext
+  }
+
+  get SummaryEvaluatorContext () {
+    return evaluatorTypes.SummaryEvaluatorContext
+  }
+
+  get EvaluatorResult () {
+    return evaluatorTypes.EvaluatorResult
+  }
+
+  get MultiEvaluatorResult () {
+    return evaluatorTypes.MultiEvaluatorResult
+  }
+
+  get RemoteEvaluator () {
+    return remoteEvaluatorTypes.RemoteEvaluator
+  }
+
+  get RemoteEvaluatorError () {
+    return remoteEvaluatorTypes.RemoteEvaluatorError
+  }
+
+  get LLMJudge () {
+    return builtinEvaluators.LLMJudge
+  }
+
+  get BooleanStructuredOutput () {
+    return builtinEvaluators.BooleanStructuredOutput
+  }
+
+  get ScoreStructuredOutput () {
+    return builtinEvaluators.ScoreStructuredOutput
+  }
+
+  get CategoricalStructuredOutput () {
+    return builtinEvaluators.CategoricalStructuredOutput
+  }
+
+  get StringCheckEvaluator () {
+    return builtinEvaluators.StringCheckEvaluator
+  }
+
+  get RegexMatchEvaluator () {
+    return builtinEvaluators.RegexMatchEvaluator
+  }
+
+  get LengthEvaluator () {
+    return builtinEvaluators.LengthEvaluator
+  }
+
+  get JSONEvaluator () {
+    return builtinEvaluators.JSONEvaluator
+  }
+
+  get SemanticSimilarityEvaluator () {
+    return builtinEvaluators.SemanticSimilarityEvaluator
   }
 
   /**
@@ -208,9 +279,9 @@ class Experiments {
     const projectName = options?.projectName ?? datasetProjectName
     const client = this.#clientForOperation(projectName)
     const usesDatasetOverride = datasetProjectName !== undefined && datasetProjectName !== this.#projectName
-    const resolvedProjectName = projectName ?? this.#config.llmobs?.projectName
+    const resolvedProjectName = projectName ?? this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME
     const experimentOptions = options?.projectName === undefined &&
-      (usesDatasetOverride || this.#config.llmobs?.projectName !== undefined) &&
+      (usesDatasetOverride || this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME !== undefined) &&
       resolvedProjectName !== undefined
       ? { ...options, projectName: resolvedProjectName }
       : options
@@ -250,8 +321,9 @@ class Experiments {
    */
   startExperiment (options) {
     const client = this.#clientForOperation(options?.projectName)
-    const experimentOptions = options?.projectName === undefined && this.#config.llmobs?.projectName !== undefined
-      ? { ...options, projectName: this.#config.llmobs.projectName }
+    const experimentOptions = options?.projectName === undefined &&
+      this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME !== undefined
+      ? { ...options, projectName: this.#config.llmobs.DD_LLMOBS_PROJECT_NAME }
       : options
     return new Experiment(client, { ...experimentOptions, external: true }).start()
       .then(experiment => new ExternalExperiment(experiment))
@@ -265,7 +337,7 @@ class Experiments {
    *   variableMapping?: Record<string, string>) => Record<string, unknown> }} evaluator
    * @param {object} [options]
    * @param {string} [options.agentService] Agent service (ML app) the evaluator is attached to.
-   *   Defaults to the tracer's `llmobs.mlApp` / `service`.
+   *   Defaults to the tracer's `DD_LLMOBS_ML_APP` / `service`.
    * @param {string} [options.mlApp] Deprecated alias of `agentService`.
    * @param {string} [options.evalName] Published name; defaults to `evaluator.name`.
    * @param {Record<string, string>} [options.variableMapping] Renames `{{placeholders}}` in the prompt.
@@ -278,7 +350,7 @@ class Experiments {
     if (mlApp !== undefined && agentService === undefined) {
       log.warn('LLMObs experiments: publishEvaluator option `mlApp` is deprecated, use `agentService`')
     }
-    const resolved = agentService ?? mlApp ?? this.#config.llmobs?.mlApp ?? this.#config.service
+    const resolved = agentService ?? mlApp ?? this.#config.llmobs?.DD_LLMOBS_ML_APP ?? this.#config.service
     if (typeof resolved !== 'string' || resolved.trim() === '') {
       throw new Error('`agentService` must be provided as a non-empty string.')
     }
@@ -454,4 +526,9 @@ function createExperiments (config, llmobs) {
   return new Experiments(config, llmobs)
 }
 
-module.exports = { Experiments, createExperiments }
+module.exports = {
+  Experiments,
+  createExperiments,
+  ...evaluatorTypes,
+  ...remoteEvaluatorTypes,
+}

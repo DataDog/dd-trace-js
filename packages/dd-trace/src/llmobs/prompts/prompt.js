@@ -1,134 +1,159 @@
 'use strict'
 
-const { PromptAPIError } = require('./errors')
-const { extractTemplate, renderChat, safeSubstitute } = require('./util')
+/** @typedef {import('../../../../../index').llmobs.FormattedPromptMessage} FormattedPromptMessage */
 
+// Match double braces first; preserve surrounding braces such as the closing object in {"age": {age}}.
+const VARIABLE_PATTERN = /\{\{\s*(\w+)\s*\}\}|\{\s*(\w+)\s*\}/g
+
+function isMessage (value) {
+  return typeof value?.role === 'string' &&
+    value?.type !== 'placeholder' &&
+    (value?.content == null || typeof value.content === 'string') &&
+    (typeof value?.content === 'string' ||
+      (Array.isArray(value?.tool_calls) && value.tool_calls.length > 0) ||
+      (Array.isArray(value?.tool_results) && value.tool_results.length > 0))
+}
+
+function isPlaceholder (value) {
+  return value?.type === 'placeholder' && typeof value?.name === 'string'
+}
+
+function isObject (value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isTool (value) {
+  return isObject(value) &&
+    (value.id == null || typeof value.id === 'string') &&
+    (value.type == null || typeof value.type === 'string') &&
+    (value.tool_id == null || typeof value.tool_id === 'string') &&
+    (value.name == null || typeof value.name === 'string')
+}
+
+function hasValidTools (message) {
+  return (message.tool_call_id == null || typeof message.tool_call_id === 'string') &&
+    (message.tool_calls == null || (Array.isArray(message.tool_calls) && message.tool_calls.every(call =>
+      isTool(call) && (call.function == null ||
+        (isObject(call.function) &&
+          typeof call.function.name === 'string' && typeof call.function.arguments === 'string'))))) &&
+    (message.tool_results == null || (Array.isArray(message.tool_results) && message.tool_results.every(isTool)))
+}
+
+function render (template, variables) {
+  return template.replaceAll(VARIABLE_PATTERN, (match, doubleName, singleName) => {
+    const name = doubleName ?? singleName
+    return Object.hasOwn(variables, name) ? String(variables[name]) : match
+  })
+}
+
+function freezeConfig (config) {
+  if (config === undefined) return Object.freeze({})
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw new TypeError('Invalid prompt config: expected a JSON object')
+  }
+  const copy = structuredClone(config)
+  const freeze = value => {
+    if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value
+    for (const nested of Object.values(value)) freeze(nested)
+    return Object.freeze(value)
+  }
+  return freeze(copy)
+}
 class ManagedPrompt {
-  #uuid
-  #versionUuid
-
   /**
-   * @param {{id: string, version: string | number, label?: string, template: string | import('./util').Message[],
-   * source: string, uuid?: string, versionUuid?: string, labels?: string[]}} options
+   * @param {object} data
+   * @param {string} data.id
+   * @param {string} data.version
+   * @param {'registry'|'cache'|'fallback'|'ff'|'resolve'} data.source
+   * @param {string | Array<{role: string, content: string} | {type: 'placeholder', name: string}>} data.template
+   * @param {Record<string, unknown>} [data.config]
+   * @param {string} [data.promptUuid]
+   * @param {string} [data.promptVersionUuid]
    */
-  constructor ({ id, version, label, template, source, uuid, versionUuid, labels }) {
-    this.id = String(id)
-    this.version = String(version)
-    this.label = label
-    this.template = template
+  constructor ({ id, version, source, template, config, promptUuid, promptVersionUuid }) {
+    this.id = id
+    this.version = version
     this.source = source
-    this.labels = labels
-    this.#uuid = uuid
-    this.#versionUuid = versionUuid
+    this.template = Array.isArray(template)
+      ? Object.freeze(template.map(item => Object.freeze(isPlaceholder(item)
+        ? { type: 'placeholder', name: item.name }
+        : { role: item.role, content: item.content })))
+      : template
+    this.config = freezeConfig(config)
+    this.promptUuid = promptUuid
+    this.promptVersionUuid = promptVersionUuid
     Object.freeze(this)
   }
 
-  get isChat () {
-    return Array.isArray(this.template)
-  }
-
   /**
-   * Render this prompt with the supplied variables.
-   * @param {Record<string, unknown>} variables
-   * @returns {string | import('./util').Message[]}
+   * Render the prompt without changing its stored template.
+   * @param {Record<string, unknown>} [variables]
+   * @returns {string | FormattedPromptMessage[]}
    */
-  render (variables = {}) {
-    return typeof this.template === 'string'
-      ? safeSubstitute(this.template, variables)
-      : renderChat(this.template, variables)
-  }
-
-  /**
-   * Render this prompt as chat messages.
-   * @param {Record<string, unknown>} variables
-   * @returns {import('./util').Message[]}
-   */
-  renderChat (variables = {}) {
-    return renderChat(this.template, variables)
-  }
-
-  /**
-   * Convert this prompt to the object accepted by llmobs.annotate().
-   * @param {Record<string, unknown>} variables
-   * @returns {import('../../../../../index').llmobs.Prompt}
-   */
-  toAnnotation (variables = {}) {
-    const annotation = {
-      id: this.id,
-      version: this.version,
-      template: this.template,
-    }
-    const entries = Object.entries(variables)
-    if (entries.length > 0) {
-      annotation.variables = Object.fromEntries(entries.map(([key, value]) => [key, String(value)]))
-    }
-    if (this.source === 'registry' && this.label !== undefined) annotation.tags = { label: this.label }
-    return annotation
-  }
-
-  _serialize () {
-    return {
-      id: this.id,
-      version: this.version,
-      label: this.label,
-      template: this.template,
-      source: this.source,
-      labels: this.labels,
-      uuid: this.#uuid,
-      versionUuid: this.#versionUuid,
-    }
-  }
-
-  static fromCache (data) {
-    return new ManagedPrompt(data)
-  }
-
-  /**
-   * @param {Record<string, unknown>} payload
-   * @param {{label?: string, source?: 'registry' | 'fallback' | 'cache'}} options
-   * @returns {ManagedPrompt}
-   */
-  static fromResponse (payload, { label, source = 'registry' } = {}) {
-    const template = extractTemplate(payload)
-    if (template === undefined) throw new PromptAPIError('Prompt response is missing a template')
-    const responseLabel = payload.label ?? label
-    const responseVersionUuid = payload.prompt_version_uuid ?? payload.ID ?? payload.id_version
-    return new ManagedPrompt({
-      id: String(payload.prompt_id ?? payload.id),
-      version: String(payload.user_version ?? payload.version),
-      label: typeof responseLabel === 'string' ? responseLabel : undefined,
-      template,
-      source,
-      uuid: typeof payload.prompt_uuid === 'string' ? payload.prompt_uuid : undefined,
-      versionUuid: typeof responseVersionUuid === 'string'
-        ? responseVersionUuid
-        : undefined,
-      labels: Array.isArray(payload.labels) ? payload.labels.filter(label => typeof label === 'string') : undefined,
+  format (variables = {}) {
+    if (typeof this.template === 'string') return render(this.template, variables)
+    return this.template.flatMap(item => {
+      if (!isPlaceholder(item)) return { ...item, content: render(item.content, variables) }
+      if (!Object.hasOwn(variables, item.name)) {
+        throw new TypeError(`Missing message placeholder variable '${item.name}'`)
+      }
+      const messages = variables[item.name]
+      if (!Array.isArray(messages) || !messages.every(message => isMessage(message) && hasValidTools(message))) {
+        throw new TypeError(`Invalid message placeholder variable '${item.name}': expected an array of messages`)
+      }
+      return structuredClone(messages)
     })
   }
 
   /**
-   * @param {string | import('../../../../../index').llmobs.PromptMessage[] | object | (() => unknown)} fallback
-   * @param {string} id
+   * Convert the managed prompt to the existing public annotation shape.
+   * @param {Record<string, unknown>} [variables]
+   * @returns {Record<string, unknown>}
+   */
+  toAnnotation (variables) {
+    const annotation = {
+      id: this.id,
+      version: this.version,
+      template: typeof this.template === 'string' ? this.template : this.template.map(message => ({ ...message })),
+    }
+    const placeholderNames = new Set(Array.isArray(this.template)
+      ? this.template.filter(isPlaceholder).map(item => item.name)
+      : [])
+    const entries = Object.entries(variables ?? {}).filter(([name]) => !placeholderNames.has(name))
+    if (entries.length) {
+      annotation.variables = Object.fromEntries(entries.map(([name, value]) => [name, String(value)]))
+    }
+    if (this.promptUuid) annotation.promptUuid = this.promptUuid
+    if (this.promptVersionUuid) annotation.promptVersionUuid = this.promptVersionUuid
+    return annotation
+  }
+
+  /**
+   * Convert a caller fallback to a managed prompt.
+   * @param {string} promptId
+   * @param {string | object | Array<{role: string, content: string} | {type: 'placeholder', name: string}> |
+   *   (() => string | object | Array<{role: string, content: string} | {type: 'placeholder', name: string}>)} fallback
    * @returns {ManagedPrompt}
    */
-  static fromFallback (fallback, id) {
+  static fromFallback (promptId, fallback) {
     const value = typeof fallback === 'function' ? fallback() : fallback
-    if (typeof value === 'string' || Array.isArray(value)) {
-      return new ManagedPrompt({ id, version: 'fallback', template: value, source: 'fallback' })
-    }
-    const template = extractTemplate(value ?? {})
-    if (template === undefined) {
-      throw new TypeError('Fallback must contain a template or chat_template')
+    const promptLike = value && !Array.isArray(value) && typeof value === 'object'
+    const template = promptLike ? value.template : value
+    const validTemplate = typeof template === 'string' || (
+      Array.isArray(template) && template.every(item =>
+        isPlaceholder(item) || (isMessage(item) && typeof item.content === 'string'))
+    )
+    if (!validTemplate) {
+      throw new TypeError('Invalid prompt fallback: expected a string, chat message array, or object with a template')
     }
     return new ManagedPrompt({
-      id,
-      version: value?.version ?? 'fallback',
-      label: value?.label,
-      template,
+      id: promptId,
+      version: String(promptLike && value.version ? value.version : 'fallback'),
       source: 'fallback',
+      template,
+      config: promptLike ? value.config : undefined,
     })
   }
 }
 
-module.exports = { ManagedPrompt }
+module.exports = ManagedPrompt

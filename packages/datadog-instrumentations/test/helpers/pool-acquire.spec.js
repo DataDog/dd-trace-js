@@ -741,7 +741,6 @@ describe('helpers/pool-acquire', () => {
 
 /**
  * @param {(method: Function) => Function} wrap
- * @returns {void}
  */
 function assertInactiveFastPath (wrap) {
   const receiver = {}
@@ -759,9 +758,6 @@ function assertInactiveFastPath (wrap) {
   assert.strictEqual(wrapped.call(receiver, firstArgument, secondArgument), expectedReturn)
 }
 
-/**
- * @returns {void}
- */
 function noop () {}
 
 /**

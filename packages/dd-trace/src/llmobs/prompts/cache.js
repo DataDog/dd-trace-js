@@ -1,162 +1,272 @@
 'use strict'
 
+const { createHash, randomUUID } = require('node:crypto')
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
+
+const { LRUCache } = require('../../../../../vendor/dist/lru-cache')
+
 const log = require('../../log')
-const { cacheHash, parseCacheKey } = require('./util')
+const ManagedPrompt = require('./prompt')
+
+const CACHE_SUBPATH = path.join('datadog', 'llmobs', 'prompts')
+const MAX_HOT_ENTRIES = 1024
+const PROMPT_SOURCES = new Set(['registry', 'cache', 'fallback', 'ff', 'resolve'])
+
+/** @param {string} key */
+function promptIdFromKey (key) {
+  return key.slice(0, key.lastIndexOf(':'))
+}
+
+/**
+ * @param {string} promptId
+ * @param {Array<unknown>} selector
+ */
+function cacheKey (promptId, selector) {
+  const hash = createHash('sha1').update(JSON.stringify(selector)).digest('hex').slice(0, 16)
+  return `${promptId}:${hash}`
+}
+
+function defaultCacheDir () {
+  try {
+    const home = os.homedir()
+    if (home) return path.join(home, '.cache', CACHE_SUBPATH)
+  } catch {}
+  return path.join(os.tmpdir(), CACHE_SUBPATH)
+}
 
 class HotCache {
-  #ttl
-  #maxSize
-  #entries = new Map()
+  /**
+   * Create the bounded in-memory prompt cache.
+   * @param {object} options
+   * @param {number} options.ttlMs
+   * @param {(key: string, stale: ManagedPrompt | undefined, options: {context: object}) =>
+   *   Promise<ManagedPrompt | undefined>} [options.fetchMethod]
+   */
+  constructor ({ ttlMs, fetchMethod }) {
+    this.enabled = ttlMs > 0
+    this.cache = new LRUCache({
+      max: MAX_HOT_ENTRIES,
+      ttl: this.enabled && Number.isFinite(ttlMs) ? ttlMs : undefined,
+      allowStale: true,
+      noDeleteOnStaleGet: true,
+      fetchMethod,
+    })
+  }
 
   /**
-   * @param {{ttl?: number, maxSize?: number}} options
+   * Read a prompt and its freshness.
+   * @param {string} key
    */
-  constructor ({ ttl = 60, maxSize = 1024 } = {}) {
-    this.#ttl = ttl
-    this.#maxSize = maxSize
-  }
-
   get (key) {
-    if (this.#ttl <= 0) return
-    const entry = this.#entries.get(key)
-    if (!entry) return
-    if (entry.expiresAt <= Date.now()) {
-      this.#entries.delete(key)
-      return
-    }
-    this.#entries.delete(key)
-    this.#entries.set(key, entry)
-    return entry.value
+    if (!this.enabled) return
+    const status = {}
+    const prompt = this.cache.get(key, { status })
+    if (!prompt) return
+    return { prompt, stale: status.get === 'stale' }
   }
 
-  set (key, value) {
-    if (this.#ttl <= 0) return
-    this.#entries.delete(key)
-    this.#entries.set(key, { value, expiresAt: Date.now() + this.#ttl * 1000 })
-    while (this.#entries.size > this.#maxSize) {
-      this.#entries.delete(this.#entries.keys().next().value)
-    }
+  /**
+   * Store a prompt.
+   * @param {string} key
+   * @param {ManagedPrompt} prompt
+   * @param {number} [ageMs]
+   */
+  set (key, prompt, ageMs = 0) {
+    if (this.enabled) this.cache.set(key, prompt, { start: performance.now() - ageMs })
   }
 
+  /**
+   * Refresh a stale prompt in the background.
+   * @param {string} key
+   * @param {object} context
+   */
+  refresh (key, context) {
+    if (!this.enabled) return
+    void this.cache.fetch(key, {
+      allowStaleOnFetchRejection: true,
+      context,
+      forceRefresh: true,
+      noDeleteOnFetchRejection: true,
+    }).catch(() => {})
+  }
+
+  /**
+   * Delete one selector.
+   * @param {string} key
+   */
   delete (key) {
-    this.#entries.delete(key)
+    if (this.enabled) this.cache.delete(key)
   }
 
+  /**
+   * Clear all hot prompt entries.
+   */
   clear () {
-    this.#entries.clear()
+    if (this.enabled) this.cache.clear()
   }
 
+  /**
+   * Evict every selector for one exact prompt ID.
+   * @param {string} promptId
+   */
   evictPrompt (promptId) {
-    for (const key of this.#entries.keys()) {
-      if (parseCacheKey(key).id === promptId) this.#entries.delete(key)
+    if (!this.enabled) return
+    for (const [key] of this.cache.dump()) {
+      if (promptIdFromKey(key) === promptId) this.cache.delete(key)
     }
-  }
-
-  get size () {
-    return this.#entries.size
   }
 }
 
 class WarmCache {
-  #dir
-  #ttl
+  /**
+   * Create the optional filesystem prompt cache.
+   * @param {object} options
+   * @param {string | undefined} options.cacheDir
+   * @param {boolean} [options.enabled]
+   * @param {number} options.ttlMs
+   */
+  constructor ({ cacheDir, enabled = true, ttlMs }) {
+    this.enabled = enabled && ttlMs > 0
+    this.ttlMs = ttlMs
+    this.cacheDir = cacheDir || defaultCacheDir()
+    if (this.enabled) this.#ensureDir(this.cacheDir)
+  }
 
   /**
-   * @param {{dir?: string, ttl?: number}} options
+   * Create a secure cache directory.
+   * @param {string} directory
    */
-  constructor ({ dir, ttl = 60 } = {}) {
-    this.#dir = dir
-    this.#ttl = ttl
-    if (dir) this.#mkdir(dir)
-  }
-
-  #mkdir (directory) {
+  #ensureDir (directory) {
     try {
-      fs.mkdirSync(directory, { recursive: true })
+      fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
     } catch (error) {
-      log.debug('Failed to create prompt cache directory: %s', error.message)
+      log.warn('Failed to create prompt cache directory: %s', error.message)
+      this.enabled = false
     }
   }
 
-  #path (key) {
-    return path.join(/** @type {string} */ (this.#dir), `${cacheHash(key)}.json`)
+  /**
+   * Resolve the collision-safe directory for a prompt ID.
+   * @param {string} promptId
+   */
+  #promptDir (promptId) {
+    return path.join(this.cacheDir, Buffer.from(promptId).toString('base64url') || '_')
   }
 
+  /**
+   * Resolve the cache file for a selector key.
+   * @param {string} key
+   */
+  #path (key) {
+    const index = key.lastIndexOf(':')
+    return path.join(this.#promptDir(key.slice(0, index)), `${key.slice(index + 1)}.json`)
+  }
+
+  /**
+   * Restore and validate a prompt from the warm cache.
+   * @param {object} data
+   */
+  #deserialize (data) {
+    const validTemplate = typeof data?.template === 'string' || (
+      Array.isArray(data?.template) && data.template.every(message => {
+        return message && typeof message.role === 'string' && typeof message.content === 'string'
+      })
+    )
+    if (
+      typeof data?.id !== 'string' ||
+      typeof data.version !== 'string' ||
+      !PROMPT_SOURCES.has(data.source) ||
+      !validTemplate ||
+      (data.promptUuid !== undefined && typeof data.promptUuid !== 'string') ||
+      (data.promptVersionUuid !== undefined && typeof data.promptVersionUuid !== 'string')
+    ) {
+      throw new TypeError('Invalid managed prompt cache entry')
+    }
+    return new ManagedPrompt(data)
+  }
+
+  /**
+   * Read a prompt and its freshness.
+   * @param {string} key
+   */
   get (key) {
-    if (!this.#dir || this.#ttl <= 0) return
+    if (!this.enabled) return
     try {
       const data = JSON.parse(fs.readFileSync(this.#path(key), 'utf8'))
-      if (data.timestamp + this.#ttl * 1000 <= Date.now()) {
-        this.delete(key)
-        return
-      }
-      if (data.value?._managedPrompt) {
-        const { ManagedPrompt } = require('./prompt')
-        return ManagedPrompt.fromCache(data.value._managedPrompt)
-      }
-      return data.value
+      if (!Number.isFinite(data.timestamp)) throw new TypeError('Invalid prompt cache timestamp')
+      const prompt = this.#deserialize(data.prompt)
+      const ageMs = Math.max(0, Date.now() - data.timestamp)
+      return { prompt, stale: ageMs > this.ttlMs, ageMs }
     } catch (error) {
-      if (error.code !== 'ENOENT') log.debug('Failed to read prompt from cache: %s', error.message)
+      log.debug('Failed to read prompt from cache: %s', error.message)
     }
   }
 
-  set (key, value) {
-    if (!this.#dir || this.#ttl <= 0) return
+  /**
+   * Store a prompt with restrictive permissions.
+   * @param {string} key
+   * @param {ManagedPrompt} prompt
+   */
+  set (key, prompt) {
+    if (!this.enabled) return
+    const file = this.#path(key)
+    const temporary = `${file}.tmp.${randomUUID()}`
     try {
-      this.#mkdir(this.#dir)
-      let stored = value
-      if (value?.constructor?.name === 'ManagedPrompt' && typeof value._serialize === 'function') {
-        stored = { _managedPrompt: value._serialize() }
-      }
-      fs.writeFileSync(this.#path(key), JSON.stringify({
-        promptId: parseCacheKey(key).id,
-        key,
-        timestamp: Date.now(),
-        value: stored,
-      }))
+      this.#ensureDir(path.dirname(file))
+      if (!this.enabled) return
+      // Write separately, then rename so other processes see either the old file or the complete new one.
+      fs.writeFileSync(temporary, JSON.stringify({ prompt, timestamp: Date.now() }), {
+        encoding: 'utf8',
+        mode: 0o600,
+      })
+      fs.renameSync(temporary, file)
     } catch (error) {
+      try { fs.rmSync(temporary, { force: true }) } catch {}
       log.debug('Failed to write prompt to cache: %s', error.message)
     }
   }
 
+  /**
+   * Delete one selector.
+   * @param {string} key
+   */
   delete (key) {
-    if (!this.#dir) return
+    if (!this.enabled) return
     try {
       fs.rmSync(this.#path(key), { force: true })
     } catch (error) {
-      log.debug('Failed to delete prompt cache entry: %s', error.message)
+      log.debug('Failed to delete prompt from cache: %s', error.message)
     }
   }
 
-  clear () {
-    if (!this.#dir) return
+  /**
+   * Evict every selector for one exact prompt ID.
+   * @param {string} promptId
+   */
+  evictPrompt (promptId) {
+    if (!this.enabled) return
     try {
-      for (const file of fs.readdirSync(this.#dir)) {
-        fs.rmSync(path.join(this.#dir, file), { recursive: true, force: true })
+      fs.rmSync(this.#promptDir(promptId), { recursive: true, force: true })
+    } catch (error) {
+      log.debug('Failed to evict prompt from cache: %s', error.message)
+    }
+  }
+
+  /**
+   * Clear all warm prompt entries.
+   */
+  clear () {
+    if (!this.enabled) return
+    try {
+      for (const entry of fs.readdirSync(this.cacheDir)) {
+        fs.rmSync(path.join(this.cacheDir, entry), { recursive: true, force: true })
       }
     } catch (error) {
       log.debug('Failed to clear prompt cache: %s', error.message)
     }
   }
-
-  evictPrompt (promptId) {
-    if (!this.#dir) return
-    try {
-      for (const file of fs.readdirSync(this.#dir)) {
-        const filename = path.join(this.#dir, file)
-        try {
-          const data = JSON.parse(fs.readFileSync(filename, 'utf8'))
-          if (data.promptId === promptId) fs.rmSync(filename, { force: true })
-        } catch (error) {
-          log.debug('Failed to inspect prompt cache entry: %s', error.message)
-        }
-      }
-    } catch (error) {
-      log.debug('Failed to evict prompt cache entries: %s', error.message)
-    }
-  }
 }
 
-module.exports = { HotCache, WarmCache }
+module.exports = { HotCache, WarmCache, cacheKey, promptIdFromKey }

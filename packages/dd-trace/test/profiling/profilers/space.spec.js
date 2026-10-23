@@ -204,6 +204,17 @@ describe('profilers/native/space', () => {
     assert.strictEqual(callbackMode, pprof.heap.CallbackMode.Async)
   })
 
+  it('should pass automatic heap limit extension sizing to pprof', () => {
+    const profiler = makeSpace(NativeSpaceProfiler, {
+      oomMonitoringEnabled: true,
+      heapLimitExtensionSize: 'auto',
+    })
+
+    profiler.start()
+
+    assert.strictEqual(pprof.heap.monitorOutOfMemory.firstCall.args[0], 'auto')
+  })
+
   it('should target the file URL in the export command for the file exporter', () => {
     const profiler = makeSpace(NativeSpaceProfiler, {
       oomMonitoringEnabled: true,

@@ -1,10 +1,6 @@
 'use strict'
 
-const guard = require('../startup-guard')
-// eslint-disable-next-line import/order -- The startup guard must run before every other require.
 const assert = require('node:assert/strict')
-
-globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 
 const LLMObsSpanProcessor = require('../../../packages/dd-trace/src/llmobs/span_processor')
 const LLMObsTagger = require('../../../packages/dd-trace/src/llmobs/tagger')
@@ -25,6 +21,9 @@ const {
   ML_APP,
   NAME,
 } = require('../../../packages/dd-trace/src/llmobs/constants/tags')
+const guard = require('../startup-guard')
+
+globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 
 const { VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)

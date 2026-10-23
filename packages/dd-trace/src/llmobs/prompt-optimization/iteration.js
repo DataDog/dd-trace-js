@@ -17,7 +17,6 @@ function isPlainObject (value) {
 /**
  * Render a value for inclusion in the optimization user prompt.
  * @param {unknown} value
- * @returns {string}
  */
 function display (value) {
   if (typeof value === 'string') return value
@@ -31,7 +30,6 @@ function display (value) {
 
 /**
  * @param {unknown} value
- * @returns {boolean}
  */
 function isEmptyValue (value) {
   if (value === null || value === undefined || value === '' || value === false || value === 0) return true
@@ -118,7 +116,6 @@ class OptimizationIteration {
   /**
    * Prepare the system prompt: inject the expected output format, the evaluation
    * model (if any) and a random prompt-engineering tip.
-   * @returns {string}
    */
   loadSystemPrompt () {
     const outputFormat = this.#config.evaluationOutputFormat
@@ -150,7 +147,6 @@ class OptimizationIteration {
   /**
    * Build the user prompt: current prompt, summary metrics and one labeled
    * example per label.
-   * @returns {string}
    */
   buildUserPrompt () {
     const promptParts = [`Initial Prompt:\n${this.currentPrompt}\n`]
@@ -180,7 +176,6 @@ class OptimizationIteration {
   /**
    * Group rows by the label returned by `labelize` and format one random row per label.
    * @param {import('../experiments/result').Row[]} rows
-   * @returns {string}
    */
   addExamples (rows) {
     if (rows.length === 0 || this.#labelize === null) return ''
@@ -213,7 +208,6 @@ class OptimizationIteration {
 
   /**
    * @param {import('../experiments/result').Row} example
-   * @returns {string}
    */
   static formatExample (example) {
     const parts = [`Input:\n${display(example.input)}`]

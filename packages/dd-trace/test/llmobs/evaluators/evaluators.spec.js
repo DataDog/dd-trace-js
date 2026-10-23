@@ -2,13 +2,12 @@
 
 const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
+const sinon = require('sinon')
 
+const { BaseEvaluator, EvaluatorContext, EvaluatorResult } = require('../../../src/llmobs/experiments/evaluator')
 const {
-  BaseEvaluator,
   BooleanStructuredOutput,
   CategoricalStructuredOutput,
-  EvaluatorContext,
-  EvaluatorResult,
   JSONEvaluator,
   LLMJudge,
   LengthEvaluator,
@@ -31,17 +30,6 @@ function ctx (fields = {}) {
 }
 
 describe('LLMObs built-in evaluators', () => {
-  describe('EvaluatorResult', () => {
-    it('defaults optional fields to null', () => {
-      const result = new EvaluatorResult(true)
-      assert.equal(result.value, true)
-      assert.equal(result.reasoning, null)
-      assert.equal(result.assessment, null)
-      assert.equal(result.metadata, null)
-      assert.equal(result.tags, null)
-    })
-  })
-
   describe('BaseEvaluator', () => {
     it('defaults the name to the class name and requires evaluate()', () => {
       class MyEvaluator extends BaseEvaluator {}
@@ -271,9 +259,9 @@ describe('LLMObs built-in evaluators', () => {
     const structuredOutput = new BooleanStructuredOutput({ description: 'Correct?', passWhen: true, reasoning: true })
 
     it('validates constructor options', () => {
-      assert.throws(() => new LLMJudge({ modelCall () {}, structuredOutput }), { message: /userPrompt/ })
-      assert.throws(() => new LLMJudge({ userPrompt: 'x', structuredOutput }), { message: /modelCall/ })
-      assert.throws(() => new LLMJudge({ userPrompt: 'x', modelCall () {}, structuredOutput, provider: 'nope' }), {
+      assert.throws(() => new LLMJudge({ client () {}, structuredOutput }), { message: /userPrompt/ })
+      assert.throws(() => new LLMJudge({ userPrompt: 'x', structuredOutput }), { message: /client/ })
+      assert.throws(() => new LLMJudge({ userPrompt: 'x', client () {}, structuredOutput, provider: 'nope' }), {
         message: /provider/,
       })
     })
@@ -288,7 +276,7 @@ describe('LLMObs built-in evaluators', () => {
         provider: 'openai',
         modelParams: { temperature: 0 },
         structuredOutput,
-        modelCall (request) {
+        client (request) {
           calls.push(request)
           return JSON.stringify({ boolean_eval: true, reasoning: 'looks right' })
         },
@@ -320,31 +308,40 @@ describe('LLMObs built-in evaluators', () => {
     it('accepts already-parsed objects and async model functions', async () => {
       const judge = new LLMJudge({
         userPrompt: '{{output_data}}',
+        model: 'judge-model',
         structuredOutput: new ScoreStructuredOutput({ description: 'x', minScore: 0, maxScore: 1, minThreshold: 0.5 }),
-        async modelCall () {
+        async client () {
           return { score_eval: 0.25, reasoning: 'meh' }
         },
       })
       const result = await judge.evaluate(ctx({ outputData: 'out' }))
       assert.equal(result.value, 0.25)
       assert.equal(result.assessment, 'fail')
-      assert.equal(result.reasoning, null)
+      assert.equal(result.reasoning, undefined)
+    })
+
+    it('requires a model before calling the client', () => {
+      const client = sinon.spy()
+      const judge = new LLMJudge({ userPrompt: 'x', structuredOutput, client })
+      assert.throws(() => judge.evaluate(ctx()), { message: 'model must be specified' })
+      sinon.assert.notCalled(client)
     })
 
     it('rejects malformed model responses', async () => {
       const judge = new LLMJudge({
         userPrompt: '{{output_data}}',
+        model: 'judge-model',
         structuredOutput,
-        modelCall () {
+        client () {
           return JSON.stringify({ boolean_eval: 'yes' })
         },
       })
       assert.throws(() => judge.evaluate(ctx({ outputData: 'out' })), { message: /Expected boolean, got string/ })
-      const notJson = new LLMJudge({ userPrompt: 'x', structuredOutput, modelCall: () => 'nope' })
+      const notJson = new LLMJudge({ userPrompt: 'x', model: 'judge-model', structuredOutput, client: () => 'nope' })
       assert.throws(() => notJson.evaluate(ctx()), { message: /Invalid JSON response/ })
-      const array = new LLMJudge({ userPrompt: 'x', structuredOutput, modelCall: () => '[1]' })
+      const array = new LLMJudge({ userPrompt: 'x', model: 'judge-model', structuredOutput, client: () => '[1]' })
       assert.throws(() => array.evaluate(ctx()), { message: /expected object/ })
-      const rejected = new LLMJudge({ userPrompt: 'x', structuredOutput, modelCall: async () => 42 })
+      const rejected = new LLMJudge({ userPrompt: 'x', model: 'judge-model', structuredOutput, client: async () => 42 })
       await assert.rejects(rejected.evaluate(ctx()), { message: /JSON string or a plain object/ })
     })
 
@@ -356,7 +353,7 @@ describe('LLMObs built-in evaluators', () => {
         model: 'gpt-4o',
         provider: 'openai',
         structuredOutput,
-        modelCall () {},
+        client () {},
       })
       const payload = judge.buildPublishPayload('my-app', 'published-name', { input_data: 'question' })
       assert.equal(payload.eval_name, 'published-name')

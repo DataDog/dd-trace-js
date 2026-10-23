@@ -6,6 +6,7 @@
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
+const { URL } = require('url')
 const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
@@ -85,11 +86,7 @@ function request (data, options, callback) {
   const timeout = options.timeout || 2000
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
-  let dataArray = data
-
-  if (!Array.isArray(data)) {
-    dataArray = [data]
-  }
+  const dataArray = Array.isArray(data) ? data : [data]
   const contentLength = byteLength(dataArray)
   options.headers['Content-Length'] = contentLength
 
@@ -170,6 +167,7 @@ function request (data, options, callback) {
         }
         const error = new log.NoTransmitError(errorMessage)
         error.status = res.statusCode
+        if (options.includeErrorResponseBody) error.responseBody = responseData
 
         complete(error, null, res.statusCode, res.headers)
       }

@@ -23,7 +23,6 @@ const { hasEntries } = require('../experiments/util')
 
 /**
  * @param {number | null | undefined} score
- * @returns {string}
  */
 function formatScore (score) {
   return typeof score === 'number' ? score.toFixed(4) : 'N/A'
@@ -31,7 +30,6 @@ function formatScore (score) {
 
 /**
  * @param {unknown} value
- * @returns {string}
  */
 function display (value) {
   try {
@@ -119,7 +117,6 @@ class OptimizationResult {
 
   /**
    * Human-readable summary of the optimization.
-   * @returns {string}
    */
   summary () {
     const lines = [

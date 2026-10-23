@@ -16,7 +16,6 @@ const CACHE_LOCK_HEARTBEAT_MS = 30_000 // 30 seconds
 /**
  * Returns whether the filesystem cache is enabled via config.
  *
- * @returns {boolean}
  */
 function isCacheEnabled () {
   return getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
@@ -27,7 +26,6 @@ function isCacheEnabled () {
  *
  * @param {string} prefix - Cache file prefix (e.g. 'known-tests', 'skippable', 'test-mgmt')
  * @param {Array<unknown>} parts - Values that uniquely identify the cached response
- * @returns {string}
  */
 function buildCacheKey (prefix, parts) {
   const hash = createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 16)
@@ -36,7 +34,6 @@ function buildCacheKey (prefix, parts) {
 
 /**
  * @param {string} cacheKey
- * @returns {string}
  */
 function getCachePath (cacheKey) {
   return path.join(tmpdir(), `dd-${cacheKey}.json`)
@@ -44,7 +41,6 @@ function getCachePath (cacheKey) {
 
 /**
  * @param {string} cacheKey
- * @returns {string}
  */
 function getLockPath (cacheKey) {
   return path.join(tmpdir(), `dd-${cacheKey}.lock`)
@@ -138,7 +134,6 @@ function tryAcquireLock (cacheKey) {
  * Removes the lock file.
  *
  * @param {string} cacheKey
- * @returns {boolean}
  */
 function releaseLock (cacheKey) {
   try {
@@ -185,7 +180,6 @@ function startLockHeartbeat (cacheKey) {
  * Checks whether the lock file is stale (older than the lock timeout).
  *
  * @param {string} cacheKey
- * @returns {boolean}
  */
 function isLockStale (cacheKey) {
   try {

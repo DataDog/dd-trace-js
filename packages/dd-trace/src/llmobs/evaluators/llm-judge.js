@@ -1,10 +1,10 @@
 'use strict'
 
 const { validateEvaluatorName } = require('../experiments/util')
-const { BaseEvaluator, EvaluatorResult } = require('./base')
+const { BaseEvaluator, EvaluatorResult } = require('../experiments/evaluator')
 const { isThenable } = require('./util')
 
-const PLACEHOLDER_PATTERN = /\{\{(.+?)\}\}/g
+const PLACEHOLDER_PATTERN = /\{\{([^{}]+)\}\}/g
 
 // Context fields exposed to `{{...}}` prompt placeholders. Snake-case names match
 // dd-trace-py and the backend prompt-template contract; camelCase aliases are
@@ -38,7 +38,7 @@ const DEFAULT_REASONING_DESCRIPTION = 'Explanation for the evaluation result'
  *   jsonSchema: Record<string, unknown> | null,
  *   model: string,
  *   modelParams: Record<string, unknown> | null,
- * }) => string | Promise<string>} LLMJudgeModelCall
+ * }) => string | Promise<string>} LLMJudgeClient
  */
 
 class BaseStructuredOutput {
@@ -79,14 +79,12 @@ class BaseStructuredOutput {
     throw new Error('Subclasses must implement toJsonSchema')
   }
 
-  /** @returns {string} */
   get expectedType () {
     return 'value'
   }
 
   /**
    * @param {unknown} result
-   * @returns {boolean}
    */
   validate (result) {
     return true
@@ -260,31 +258,31 @@ function isPlainObject (value) {
 
 /**
  * Evaluator that asks an LLM to grade the task output. The model is invoked through
- * a user-supplied `modelCall` so no provider SDK is required.
+ * a user-supplied `client` function (dd-trace-py's `LLMClient` protocol) so no provider SDK is required.
  */
 class LLMJudge extends BaseEvaluator {
-  #modelCall
+  #client
 
   /**
    * @param {object} options
    * @param {string} options.userPrompt Prompt template; `{{input_data}}`, `{{output_data}}`,
    *   `{{expected_output}}`, `{{metadata.key}}` placeholders are rendered from the evaluator context.
-   * @param {LLMJudgeModelCall} options.modelCall Function performing the LLM request and returning the text response.
-   * @param {string} options.model Model identifier forwarded to `modelCall`.
+   * @param {LLMJudgeClient} options.client Function performing the LLM request and returning the text response.
+   * @param {string} options.model Model identifier forwarded to `client`.
    * @param {string} [options.systemPrompt]
    * @param {BaseStructuredOutput | Record<string, unknown>} [options.structuredOutput] Structured output
    *   definition or a raw JSON schema object.
    * @param {'openai' | 'anthropic' | 'azure_openai' | 'vertexai' | 'bedrock'} [options.provider] Provider name,
-   *   forwarded to `modelCall` and required for `publishEvaluator`.
+   *   forwarded to `client` and required for `publishEvaluator`.
    * @param {Record<string, unknown>} [options.modelParams]
    * @param {string} [options.name]
    */
-  constructor ({ userPrompt, modelCall, model, systemPrompt, structuredOutput, provider, modelParams, name } = {}) {
+  constructor ({ userPrompt, client, model, systemPrompt, structuredOutput, provider, modelParams, name } = {}) {
     super(name)
     if (typeof userPrompt !== 'string' || userPrompt.length === 0) {
       throw new Error('userPrompt must be a non-empty string')
     }
-    if (typeof modelCall !== 'function') throw new TypeError('modelCall must be a callable function')
+    if (typeof client !== 'function') throw new TypeError('client must be a callable function')
     if (provider != null && !Object.hasOwn(PUBLISH_PROVIDER_MAPPING, provider)) {
       const supported = JSON.stringify(Object.keys(PUBLISH_PROVIDER_MAPPING))
       throw new Error(`provider must be one of ${supported}, got: ${provider}`)
@@ -294,7 +292,7 @@ class LLMJudge extends BaseEvaluator {
       throw new TypeError('structuredOutput must be a structured output instance or a JSON schema object')
     }
 
-    this.#modelCall = modelCall
+    this.#client = client
     this.userPrompt = userPrompt
     this.systemPrompt = systemPrompt ?? null
     this.structuredOutput = structuredOutput ?? null
@@ -304,10 +302,13 @@ class LLMJudge extends BaseEvaluator {
   }
 
   /**
-   * @param {import('./base').EvaluatorContext} context
+   * @param {import('../experiments/evaluator').EvaluatorContext} context
    * @returns {string | EvaluatorResult | Promise<string | EvaluatorResult>}
    */
   evaluate (context) {
+    if (this.model === null) throw new Error('model must be specified')
+
+    /** @type {LLMJudgeMessage[]} */
     const messages = []
     if (this.systemPrompt) messages.push({ role: 'system', content: this.systemPrompt })
     messages.push({ role: 'user', content: renderTemplate(this.userPrompt, context) })
@@ -319,7 +320,7 @@ class LLMJudge extends BaseEvaluator {
         : this.structuredOutput
     }
 
-    const response = this.#modelCall({
+    const response = this.#client({
       provider: this.provider,
       messages,
       jsonSchema,
@@ -352,17 +353,17 @@ class LLMJudge extends BaseEvaluator {
 
     const structuredOutput = this.structuredOutput
     if (!(structuredOutput instanceof BaseStructuredOutput)) {
-      return new EvaluatorResult(data, { reasoning: typeof data.reasoning === 'string' ? data.reasoning : null })
+      return new EvaluatorResult(data, { reasoning: typeof data.reasoning === 'string' ? data.reasoning : undefined })
     }
 
     const result = data[structuredOutput.label]
     if (!structuredOutput.validate(result)) {
       throw new Error(`Expected ${structuredOutput.expectedType}, got ${result === null ? 'null' : typeof result}`)
     }
-    const reasoning = structuredOutput.reasoning && typeof data.reasoning === 'string' ? data.reasoning : null
+    const reasoning = structuredOutput.reasoning && typeof data.reasoning === 'string' ? data.reasoning : undefined
     return new EvaluatorResult(result, {
       reasoning,
-      assessment: structuredOutput.assess(result),
+      assessment: structuredOutput.assess(result) ?? undefined,
       metadata: { raw_response: data },
     })
   }
@@ -462,7 +463,6 @@ function normalizeVariableMapping (variableMapping) {
 /**
  * @param {string} template
  * @param {Record<string, string>} mapping
- * @returns {string}
  */
 function applyVariableMapping (template, mapping) {
   const keys = Object.keys(mapping)
@@ -476,8 +476,7 @@ function applyVariableMapping (template, mapping) {
  * Render `{{path.to.field}}` placeholders from the evaluator context. Missing
  * values render as empty strings; objects and arrays are JSON-encoded.
  * @param {string} template
- * @param {import('./base').EvaluatorContext} context
- * @returns {string}
+ * @param {import('../experiments/evaluator').EvaluatorContext} context
  */
 function renderTemplate (template, context) {
   const root = {

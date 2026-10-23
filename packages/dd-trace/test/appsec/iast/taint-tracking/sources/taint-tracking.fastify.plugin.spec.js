@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { storage } = require('../../../../../../datadog-core')
@@ -16,6 +15,7 @@ const {
   HTTP_REQUEST_URI,
 } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 const { getConfigFresh } = require('../../../../helpers/config')
+const httpRequest = require('../../../../setup/helpers/http-client')
 
 describe('URI sourcing with fastify', () => {
   let fastify
@@ -66,7 +66,7 @@ describe('URI sourcing with fastify', () => {
 
       const port = appInstance.server.address().port
 
-      const response = await axios
+      const response = await httpRequest
         .get(`http://127.0.0.1:${port}/path/vulnerable`)
       assert.strictEqual(response.status, 200)
     })
@@ -127,7 +127,7 @@ describe('Path params sourcing with fastify', () => {
 
       const port = appInstance.server.address().port
 
-      const response = await axios
+      const response = await httpRequest
         .get(`http://127.0.0.1:${port}/tainted1/tainted2`)
       assert.strictEqual(response.status, 200)
     })

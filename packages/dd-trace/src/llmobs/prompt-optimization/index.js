@@ -22,7 +22,6 @@ function isPlainObject (value) {
 
 /**
  * @param {unknown} evaluators
- * @returns {boolean}
  */
 function hasEvaluators (evaluators) {
   if (Array.isArray(evaluators)) return evaluators.length > 0

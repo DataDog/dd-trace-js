@@ -388,7 +388,6 @@ async function validateFramework ({ framework, manifest, options, out, packageCh
  * Creates a manifest scaffold and prints the bounded next step.
  *
  * @param {object} options CLI options
- * @returns {void}
  */
 function initializeManifest (options) {
   const manifestPath = path.resolve(options.manifest)
@@ -423,7 +422,6 @@ function initializeManifest (options) {
  *
  * @param {object} manifest loaded manifest
  * @param {object} options CLI options
- * @returns {void}
  */
 function printPlan (manifest, options) {
   const out = validateOutputPath(manifest, options.out)
@@ -560,7 +558,6 @@ function getInstalledPackageCheckError (packageCheck) {
  * Restores approved execution options from approval.json.
  *
  * @param {object} options parsed options
- * @returns {void}
  */
 function applyApprovedPlanOptions (options) {
   if (!options.approvedArtifactSha256) throw new Error('--run-approved-plan requires --sha256.')
@@ -619,7 +616,6 @@ function getApprovalManifest (manifest, targets) {
  * @param {object} framework framework entry
  * @param {Set<string>} scenarios selected scenarios
  * @param {object} blocker blocking result
- * @returns {void}
  */
 function addAdvancedNotReached (results, framework, scenarios, blocker) {
   for (const scenario of getAdvancedScenarios(scenarios)) {
@@ -648,7 +644,6 @@ function addAdvancedNotReached (results, framework, scenarios, blocker) {
  * @param {Set<string>} scenarios selected scenarios
  * @param {string} reasonCode blocker id
  * @param {string} [blockerCategoryOverride] blocker category supplied by a runtime result
- * @returns {void}
  */
 function addNotReachedLocalResults (results, framework, scenarios, reasonCode, blockerCategoryOverride) {
   const blockerCategory = blockerCategoryOverride || framework.blockerCategory || (
@@ -675,7 +670,6 @@ function addNotReachedLocalResults (results, framework, scenarios, reasonCode, b
  * @param {object[]} results result list
  * @param {object[]} frameworks selected frameworks
  * @param {Set<string>} scenarios selected scenarios
- * @returns {void}
  */
 function addMissingResults (results, frameworks, scenarios) {
   for (const framework of frameworks) {
@@ -728,7 +722,6 @@ function normalizeScenarioSelection (scenario) {
  * Normalizes a framework target.
  *
  * @param {string} target target value
- * @returns {string} normalized target
  */
 function normalizeFrameworkTarget (target) {
   const normalized = String(target).trim().replace(/(?<!:):+$/, '')
@@ -741,7 +734,6 @@ function normalizeFrameworkTarget (target) {
  *
  * @param {object} manifest loaded manifest
  * @param {string} outputPath output path
- * @returns {string} absolute output path
  */
 function validateOutputPath (manifest, outputPath) {
   const root = path.resolve(manifest.repository.root)
@@ -757,7 +749,6 @@ function validateOutputPath (manifest, outputPath) {
  * Prevents incompatible CLI modes.
  *
  * @param {object} options parsed options
- * @returns {void}
  */
 function assertCompatibleModes (options) {
   if (!options.runApprovedPlan) return
@@ -772,7 +763,6 @@ function assertCompatibleModes (options) {
  * @param {string[]} argv arguments
  * @param {number} index value index
  * @param {string} flag flag name
- * @returns {string} flag value
  */
 function requireValue (argv, index, flag) {
   if (!argv[index]) throw new Error(`${flag} requires a value.`)
@@ -782,7 +772,6 @@ function requireValue (argv, index, flag) {
 /**
  * Prints CLI help.
  *
- * @returns {void}
  */
 function printHelp () {
   console.log(`Usage: node ci/validate-test-optimization.js [options]
@@ -805,7 +794,6 @@ function printHelp () {
  * @param {object} framework framework entry
  * @param {string} phase phase name
  * @param {string} status status
- * @returns {void}
  */
 function logPhase (framework, phase, status) {
   console.log(sanitizeConsoleText(`[test-optimization-validator] ${framework.id}: ${phase}: ${status}`))

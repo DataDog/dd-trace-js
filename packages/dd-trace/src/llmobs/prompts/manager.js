@@ -1,271 +1,645 @@
 'use strict'
 
 const log = require('../../log')
-const { HotCache, WarmCache } = require('./cache')
-const { ManagedPrompt } = require('./prompt')
-const { cacheKey } = require('./util')
+const { getEnvironmentVariable } = require('../../config/helper')
+const request = require('../../exporters/common/request')
+const { createSiteUrl, isLoopbackHost } = require('../../exporters/common/url')
+const { ERROR_NAMES, PROMPTS_PATH, SOURCE_CACHE } = require('../constants/prompts')
+const telemetry = require('../telemetry')
+const { HotCache, WarmCache, cacheKey, promptIdFromKey } = require('./cache')
+const ManagedPrompt = require('./prompt')
+
+/**
+ * @typedef {object} PromptRequest
+ * @property {string} promptId
+ * @property {number | undefined} version
+ * @property {string | undefined} env
+ * @property {string | undefined} targetingKey
+ * @property {Record<string, unknown>} attributes
+ * @property {string} key
+ * @property {boolean} resolve
+ */
+
+/**
+ * @typedef {object} PromptFetchResult
+ * @property {ManagedPrompt} [prompt]
+ * @property {string} [reason]
+ * @property {boolean} [notFound]
+ * @property {boolean} [cacheable]
+ * @property {PromptAPIError} [error]
+ */
+
+function isPlainObject (value) {
+  if (!value || typeof value !== 'object') return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+/**
+ * Build a canonical prompt selector.
+ * @param {string} promptId
+ * @param {object} [options]
+ * @param {number} [options.version]
+ * @param {string} [options.env]
+ * @param {string} [options.targetingKey]
+ * @param {Record<string, unknown>} [options.attributes]
+ */
+function promptRequest (promptId, { version, env, targetingKey, attributes = {} } = {}) {
+  const requestAttributes = { ...attributes }
+  let selector
+  if (version !== undefined) {
+    selector = ['version', version]
+  } else if (env) {
+    const attributesSelector = Object.keys(requestAttributes).sort().map(key => [key, requestAttributes[key]])
+    selector = ['resolve', env, targetingKey ?? null, attributesSelector]
+  } else {
+    selector = ['latest']
+  }
+
+  return {
+    promptId,
+    version,
+    env,
+    targetingKey,
+    attributes: requestAttributes,
+    key: cacheKey(promptId, selector),
+    resolve: version === undefined && Boolean(env),
+  }
+}
+
+function promptFromData (data, source) {
+  if (!isPlainObject(data) || !data.prompt_id) return
+  const version = data.user_version || data.version
+  if (!version) return
+  const template = Array.isArray(data.template?.messages) ? data.template.messages : data.template
+  return new ManagedPrompt({
+    id: data.prompt_id,
+    version: String(version),
+    source,
+    template: template || data.chat_template || [],
+    config: data.config,
+    promptUuid: data.prompt_uuid,
+    promptVersionUuid: data.prompt_version_uuid || data.id || data.ID,
+  })
+}
+
+/**
+ * @param {ManagedPrompt} prompt
+ */
+function withCacheSource (prompt) {
+  if (SOURCE_CACHE === prompt.source) return prompt
+  return new ManagedPrompt({ ...prompt, source: /** @type {ManagedPrompt['source']} */ (SOURCE_CACHE) })
+}
+
+function detailFromBody (body) {
+  try {
+    return JSON.parse(body)?.detail ?? body
+  } catch {
+    return body
+  }
+}
+
+function errorName (status) {
+  if (status === 400) return ERROR_NAMES.VALIDATION
+  if (status === 401 || status === 403) return ERROR_NAMES.AUTH
+  if (status === 404) return ERROR_NAMES.NOT_FOUND
+  if (status === 409) return ERROR_NAMES.CONFLICT
+  if (status >= 500) return ERROR_NAMES.SERVER
+  return ERROR_NAMES.API
+}
+
+class PromptAPIError extends Error {
+  /**
+   * Create a typed Prompt Management API error.
+   * @param {number} status
+   * @param {string} detail
+   * @param {string} [name]
+   */
+  constructor (status, detail, name = errorName(status)) {
+    super(`Prompt API error (${status}): ${detail}`)
+    this.name = name
+    this.status = status
+    this.detail = detail
+  }
+}
+
+function normalizeItem (item) {
+  if (!isPlainObject(item)) return item
+  const { ID, labels, ...normalized } = item
+  if (normalized.id === undefined && ID !== undefined) normalized.id = ID
+  return normalized
+}
+
+function requestSignal (timeoutMs, cacheSignal) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs)
+  if (!cacheSignal) return timeoutSignal
+  const controller = new AbortController()
+  cacheSignal.addEventListener('abort', () => controller.abort(cacheSignal.reason), { once: true })
+  timeoutSignal.addEventListener('abort', () => controller.abort(timeoutSignal.reason), { once: true })
+  return controller.signal
+}
+
+function httpRequest (body, options) {
+  return new Promise((resolve, reject) => {
+    request(body || '', { ...options, retry: false, includeErrorResponseBody: true }, (error, responseBody, status) => {
+      if (error && status === undefined) return reject(error)
+      resolve({ ok: !error, status, body: error?.responseBody || responseBody || '' })
+    })
+  })
+}
 
 class PromptManager {
-  #client
-  #env
-  #cacheTtl
-  #hotCache
-  #warmCache
-  #inFlight = new Map()
-  #warnedFallback = false
-
   /**
-   * @param {{client?: object, cacheTtl?: number, fileCacheEnabled?: boolean,
-   * fileCacheDir?: string, env?: string}} options
+   * @param {import('../../config/config-base')} config
+   * @param {() => object} getProvider
    */
-  constructor ({ client, cacheTtl = 60, fileCacheEnabled = false, fileCacheDir, env } = {}) {
-    this.#client = client
-    this.#env = env
-    this.#cacheTtl = cacheTtl
-    this.#hotCache = new HotCache({ ttl: cacheTtl })
-    this.#warmCache = new WarmCache({ dir: fileCacheEnabled ? fileCacheDir : undefined, ttl: cacheTtl })
+  constructor (config, getProvider) {
+    this.config = config
+    this.getProvider = getProvider
+    this.ttlMs = Math.round(config.DD_LLMOBS_PROMPTS_CACHE_TTL * 1000)
+    this.timeoutMs = Math.round(config.DD_LLMOBS_PROMPTS_TIMEOUT * 1000)
+    const origin = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') || createSiteUrl(config.site, 'api')?.origin
+    this.origin = origin?.replace(/\/$/, '')
+    this.cacheGeneration = 0
+    this.fetchTokens = new Map()
+    this.pendingFetches = new Map()
+    this.hotCache = new HotCache({
+      ttlMs: this.ttlMs,
+      fetchMethod: (key, stale, { context, signal }) => this.#backgroundFetch(context, signal),
+    })
+    this.warmCache = new WarmCache({
+      cacheDir: config.DD_LLMOBS_PROMPTS_CACHE_DIR,
+      enabled: config.DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED,
+      ttlMs: this.ttlMs,
+    })
+  }
+
+  #requireOrigin () {
+    if (!this.origin) {
+      throw new PromptAPIError(0, 'DD_SITE is invalid for prompt operations', ERROR_NAMES.AUTH)
+    }
+    const { hostname, protocol } = new URL(this.origin)
+    if (protocol !== 'https:' && !(protocol === 'http:' && isLoopbackHost(hostname))) {
+      throw new PromptAPIError(0, 'Prompt origin must use HTTPS unless it targets a loopback host', ERROR_NAMES.AUTH)
+    }
+    return this.origin
   }
 
   /**
-   * Retrieve a managed prompt.
-   * @param {string} id
-   * @param {import('../../../../../index').llmobs.GetPromptOptions} options
+   * Require API authentication before using an HTTP prompt path.
+   */
+  #requireApiKey () {
+    if (!this.config.DD_API_KEY) {
+      throw new PromptAPIError(0, 'DD_API_KEY is required for prompt operations', ERROR_NAMES.AUTH)
+    }
+    return this.config.DD_API_KEY
+  }
+
+  /**
+   * Evaluate a prompt through the tracer's existing OpenFeature provider.
+   * @param {PromptRequest} request
+   * @returns {Promise<ManagedPrompt | undefined>}
+   */
+  async #fetchFromProvider (request) {
+    try {
+      const context = { ...request.attributes }
+      if (request.targetingKey !== undefined) context.targetingKey = request.targetingKey
+      const details = await this.getProvider().resolveObjectEvaluation(
+        `__llmobs__.prompt.${request.promptId}`,
+        {},
+        context,
+        log
+      )
+      return promptFromData(details.value, 'ff')
+    } catch (error) {
+      log.debug('Feature Flag prompt evaluation failed for %s: %s', request.promptId, error.message)
+    }
+  }
+
+  /**
+   * Fetch a prompt from the registry or resolve endpoint.
+   * @param {PromptRequest} request
+   * @param {AbortSignal} [cacheSignal]
+   * @returns {Promise<PromptFetchResult>}
+   */
+  async #fetchHttp (request, cacheSignal) {
+    let origin
+    let apiKey
+    try {
+      origin = this.#requireOrigin()
+      apiKey = this.#requireApiKey()
+    } catch (error) {
+      return { reason: error.detail, error }
+    }
+    if (request.resolve && !this.config.DD_APP_KEY) {
+      return { reason: 'DD_APP_KEY is required to resolve prompts for an environment' }
+    }
+
+    const encodedId = encodeURIComponent(request.promptId)
+    let method = 'GET'
+    let path = `${PROMPTS_PATH}/${encodedId}`
+    let body
+    const headers = {
+      'DD-API-KEY': apiKey,
+      'X-Datadog-SDK-Language': 'javascript',
+    }
+
+    if (request.resolve) {
+      method = 'POST'
+      path += '/resolve'
+      const attributes = { env: request.env }
+      if (request.targetingKey !== undefined) attributes.targeting_key = request.targetingKey
+      if (Object.entries(request.attributes).length > 0) attributes.context = request.attributes
+      body = JSON.stringify({ data: { type: 'prompt_resolve_requests', attributes } })
+      headers['Content-Type'] = 'application/json'
+      headers['DD-APPLICATION-KEY'] = this.config.DD_APP_KEY
+    } else if (request.version !== undefined) {
+      path += `/versions/${encodeURIComponent(request.version)}`
+    }
+
+    try {
+      const response = await httpRequest(body, {
+        url: `${origin}${path}`,
+        method,
+        headers,
+        timeout: this.timeoutMs,
+        signal: requestSignal(this.timeoutMs, cacheSignal),
+      })
+      const responseBody = response.body
+      if (response.ok) {
+        let data
+        try {
+          data = JSON.parse(responseBody)
+        } catch {
+          return { reason: 'invalid JSON in response body' }
+        }
+        const source = request.resolve ? 'resolve' : 'registry'
+        const prompt = promptFromData(data, source)
+        return prompt ? { prompt } : { reason: 'invalid prompt response' }
+      }
+
+      const detail = detailFromBody(responseBody)
+      if (response.status === 404) {
+        log.debug('Prompt not found: prompt_id=%s detail="%s"', request.promptId, detail)
+        return { reason: detail, notFound: true }
+      }
+      log.warn('Prompt fetch failed: prompt_id=%s status=%d detail="%s"', request.promptId, response.status, detail)
+      return { reason: detail }
+    } catch (error) {
+      if (cacheSignal?.aborted) return { reason: 'fetch cancelled' }
+      log.warn('Prompt fetch exception: prompt_id=%s: %s', request.promptId, error.message)
+      return { reason: error.message }
+    }
+  }
+
+  /**
+   * Fetch and cache one selector.
+   * @param {PromptRequest} request
+   * @param {{hot?: boolean, signal?: AbortSignal}} [options]
+   * @returns {Promise<PromptFetchResult>}
+   */
+  async #fetchAndCache (request, { hot = true, signal } = {}) {
+    const generationAtStart = this.cacheGeneration
+    const token = Symbol(request.key)
+    this.fetchTokens.set(request.key, token)
+    const result = await this.#fetchHttp(request, signal)
+    const latest = this.fetchTokens.get(request.key) === token
+    if (latest) this.fetchTokens.delete(request.key)
+    const cacheable = generationAtStart === this.cacheGeneration && latest
+    if (result.prompt) {
+      if (cacheable) {
+        const cached = withCacheSource(result.prompt)
+        if (hot) this.hotCache.set(request.key, cached)
+        if (!request.resolve) this.warmCache.set(request.key, cached)
+      }
+      return { ...result, cacheable }
+    }
+
+    if (signal?.aborted) return { ...result, cacheable }
+    telemetry.recordPromptFetchError(result.notFound ? 'NotFound' : 'FetchError')
+    if (result.notFound && cacheable) {
+      this.hotCache.delete(request.key)
+      this.warmCache.delete(request.key)
+    }
+    return { ...result, cacheable }
+  }
+
+  /**
+   * Refresh one stale hot-cache entry.
+   * @param {PromptRequest} request
+   * @param {AbortSignal} signal
+   * @returns {Promise<ManagedPrompt | undefined>}
+   */
+  async #backgroundFetch (request, signal) {
+    const result = await this.#fetchAndCache(request, { hot: false, signal })
+    if (!result.cacheable) return
+    if (result.prompt) return withCacheSource(result.prompt)
+    if (result.notFound) return
+    throw new Error(result.reason)
+  }
+
+  /**
+   * Resolve a prompt from caches, HTTP, or a caller fallback.
+   * @param {PromptRequest} request
+   * @param {string | object | Array<{role: string, content: string}> |
+   *   (() => string | object | Array<{role: string, content: string}>) | undefined} fallback
    * @returns {Promise<ManagedPrompt>}
    */
-  get (id, options = {}) {
-    if (typeof id !== 'string' || id.length === 0) {
-      return Promise.reject(new TypeError('Prompt id must be a non-empty string'))
+  async #getHttpPrompt (request, fallback) {
+    const hot = this.hotCache.get(request.key)
+    if (hot) {
+      if (hot.stale) this.hotCache.refresh(request.key, request)
+      telemetry.recordPromptSource('hot_cache')
+      return hot.prompt
     }
-    const {
-      version,
-      label,
-      env = this.#env,
+
+    if (!request.resolve) {
+      const warm = this.warmCache.get(request.key)
+      if (warm) {
+        this.hotCache.set(request.key, warm.prompt, warm.ageMs)
+        if (warm.stale) this.hotCache.refresh(request.key, request)
+        telemetry.recordPromptSource('warm_cache')
+        return warm.prompt
+      }
+    }
+
+    let pending = this.pendingFetches.get(request.key)
+    if (!pending) {
+      pending = this.#fetchAndCache(request)
+      this.pendingFetches.set(request.key, pending)
+    }
+    let result
+    try {
+      result = await pending
+    } finally {
+      if (this.pendingFetches.get(request.key) === pending) this.pendingFetches.delete(request.key)
+    }
+    if (result.prompt) {
+      telemetry.recordPromptSource(request.resolve ? 'resolve' : 'registry')
+      return result.prompt
+    }
+
+    if (fallback === undefined) {
+      if (result.error) throw result.error
+      const reason = result.reason ? `: ${result.reason}` : ''
+      throw new Error(`Prompt '${request.promptId}' could not be fetched and no fallback was provided${reason}`)
+    }
+    const prompt = ManagedPrompt.fromFallback(request.promptId, fallback)
+    telemetry.recordPromptSource('fallback')
+    return prompt
+  }
+
+  /**
+   * Get a prompt by exact version or current environment.
+   * @param {string} promptId
+   * @param {object} [options]
+   * @param {number} [options.version]
+   * @param {string | object | Array<{role: string, content: string}> |
+   *   (() => string | object | Array<{role: string, content: string}>)} [options.fallback]
+   * @param {string} [options.targetingKey]
+   * @param {Record<string, unknown>} [options.attributes]
+   * @returns {Promise<ManagedPrompt>}
+   */
+  async getPrompt (promptId, options = {}) {
+    const { fallback, targetingKey, attributes = {} } = options
+    const version = options.version ?? undefined
+    if (version !== undefined) {
+      return this.#getHttpPrompt(promptRequest(promptId, { version }), fallback)
+    }
+
+    const request = promptRequest(promptId, {
+      env: this.config.env,
       targetingKey,
       attributes,
-      fallback,
-      cacheTtl,
-    } = options
-    const hasAttributes = attributes && Reflect.ownKeys(attributes).length > 0
-    if (version !== undefined && (label !== undefined || targetingKey !== undefined || hasAttributes)) {
-      log.warn('Prompt get version takes precedence over label, targetingKey, and attributes')
-    } else if (label !== undefined && (targetingKey !== undefined || hasAttributes)) {
-      log.warn('Prompt get label takes precedence over targetingKey and attributes')
-    }
-    const useResolve = version === undefined && label === undefined && Boolean(env)
-    const selector = version === undefined
-      ? label === undefined
-        ? { env: useResolve ? env : undefined, targetingKey, attributes }
-        : { label }
-      : { version }
-    const key = cacheKey({ id, ...selector })
-    const cacheEnabled = (cacheTtl ?? this.#cacheTtl) > 0
-    const task = async () => {
-      if (cacheEnabled) {
-        const hot = this.#hotCache.get(key)
-        if (hot) return this.#cachePrompt(hot)
-        if (!useResolve) {
-          const warm = this.#warmCache.get(key)
-          if (warm) return this.#cachePrompt(warm)
-        }
-      }
-
-      if (useResolve && !this.#client.appKey && fallback !== undefined) {
-        return ManagedPrompt.fromFallback(fallback, id)
-      }
-
-      try {
-        const response = useResolve
-          ? await this.#client.resolvePrompt({ id, env, targetingKey, attributes })
-          : await this.#client.getPrompt({
-            id,
-            version,
-            label: version === undefined ? label : undefined,
-          })
-        const prompt = ManagedPrompt.fromResponse(response, { label })
-        if (cacheEnabled) {
-          this.#hotCache.set(key, prompt)
-          if (!useResolve) this.#warmCache.set(key, prompt)
-        }
+    })
+    if (request.resolve) {
+      const prompt = await this.#fetchFromProvider(request)
+      if (prompt) {
+        telemetry.recordPromptSource('ff')
         return prompt
-      } catch (error) {
-        if (cacheEnabled && !useResolve) {
-          const warm = this.#warmCache.get(key)
-          if (warm) return this.#cachePrompt(warm)
-        }
-        if (fallback !== undefined) {
-          this.#warnFallback(error)
-          return ManagedPrompt.fromFallback(fallback, id)
-        }
-        throw error
       }
     }
-
-    const existing = this.#inFlight.get(key)
-    if (existing) return existing
-    const promise = task().finally(() => this.#inFlight.delete(key))
-    this.#inFlight.set(key, promise)
-    return promise
+    return this.#getHttpPrompt(request, fallback)
   }
 
   /**
-   * Force retrieval of a prompt, bypassing local caches.
-   * @param {string} id
-   * @param {{version?: string | number, label?: string}} options
-   * @returns {Promise<ManagedPrompt>}
+   * Refresh the selector implied by the configured environment.
+   * @param {string} promptId
+   * @returns {Promise<ManagedPrompt | undefined>}
    */
-  async refresh (id, { version, label } = {}) {
-    if (typeof id !== 'string' || id.length === 0) throw new TypeError('Prompt id must be a non-empty string')
-    const useResolve = version === undefined && label === undefined && Boolean(this.#env)
-    const key = cacheKey({ id, version, label, env: useResolve ? this.#env : undefined })
+  async refreshPrompt (promptId) {
+    this.#requireOrigin()
+    this.#requireApiKey()
+    const request = promptRequest(promptId, { env: this.config.env })
+    this.pendingFetches.delete(request.key)
+    const result = await this.#fetchAndCache(request)
+    return result.prompt
+  }
+
+  /**
+   * Clear hot and/or warm prompt caches.
+   * @param {{hot?: boolean, warm?: boolean}} [options]
+   */
+  clearPromptCache ({ hot = true, warm = true } = {}) {
+    this.cacheGeneration++
+    this.pendingFetches.clear()
+    if (hot) this.hotCache.clear()
+    if (warm) this.warmCache.clear()
+  }
+
+  /**
+   * Evict every cached selector for one exact prompt ID.
+   * @param {string} promptId
+   */
+  #evictPrompt (promptId) {
+    for (const key of this.fetchTokens.keys()) {
+      if (promptIdFromKey(key) === promptId) this.fetchTokens.delete(key)
+    }
+    for (const key of this.pendingFetches.keys()) {
+      if (promptIdFromKey(key) === promptId) this.pendingFetches.delete(key)
+    }
+    this.hotCache.evictPrompt(promptId)
+    this.warmCache.evictPrompt(promptId)
+  }
+
+  /**
+   * Record a Prompt Management CRUD error.
+   * @param {'GET'|'POST'|'PATCH'|'DELETE'} method
+   * @param {PromptAPIError} error
+   */
+  #recordCrudError (method, error) {
+    telemetry.recordPromptCrudError(method, error.name, error.status)
+    return error
+  }
+
+  /**
+   * Execute one CRUD request and normalize its response.
+   * @param {'GET'|'POST'|'PATCH'|'DELETE'} method
+   * @param {string} path
+   * @param {object | undefined} body
+   * @param {boolean} requireAppKey
+   * @returns {Promise<object | object[]>}
+   */
+  async #request (method, path, body, requireAppKey) {
     try {
-      const response = useResolve
-        ? await this.#client.resolvePrompt({ id, env: this.#env })
-        : await this.#client.getPrompt({ id, version, label })
-      const prompt = ManagedPrompt.fromResponse(response, { label })
-      this.#hotCache.set(key, prompt)
-      if (!useResolve) this.#warmCache.set(key, prompt)
-      return prompt
+      const origin = this.#requireOrigin()
+      const apiKey = this.#requireApiKey()
+      if (requireAppKey && !this.config.DD_APP_KEY) {
+        throw new PromptAPIError(0, 'DD_APP_KEY is required for prompt write operations', ERROR_NAMES.AUTH)
+      }
+      if (body?.config !== undefined && !isPlainObject(body.config)) {
+        throw new PromptAPIError(0, 'config must be a JSON object', ERROR_NAMES.VALIDATION)
+      }
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'DD-API-KEY': apiKey,
+        'X-Datadog-SDK-Language': 'javascript',
+      }
+      if (requireAppKey) headers['DD-APPLICATION-KEY'] = this.config.DD_APP_KEY
+
+      const response = await httpRequest(body === undefined ? undefined : JSON.stringify(body), {
+        url: `${origin}${path}`,
+        method,
+        headers,
+        timeout: this.timeoutMs,
+        signal: AbortSignal.timeout(this.timeoutMs),
+      })
+
+      const responseBody = response.body
+      if (!response.ok) throw new PromptAPIError(response.status, detailFromBody(responseBody))
+      if (!responseBody) return {}
+      try {
+        const data = JSON.parse(responseBody)
+        return Array.isArray(data) ? data.map(normalizeItem) : normalizeItem(data)
+      } catch {
+        throw new PromptAPIError(response.status, 'invalid JSON in response body', ERROR_NAMES.SERVER)
+      }
     } catch (error) {
-      if (error?.status === 404) this.evictPrompt(id)
-      throw error
+      const promptError = error instanceof PromptAPIError ? error : new PromptAPIError(0, error.message)
+      throw this.#recordCrudError(method, promptError)
     }
   }
 
   /**
-   * Clear in-memory and file prompt caches.
-   * @returns {void}
+   * Create a text or chat prompt and its first version.
+   * @param {string} promptId
+   * @param {string | Array<{role: string, content: string}>} template
+   * @param {{title?: string, description?: string, userVersion?: string, envIds?: string[],
+   *   config?: Record<string, unknown>}} [options]
+   * @returns {Promise<object | object[]>}
    */
-  clearCache () {
-    this.#hotCache.clear()
-    this.#warmCache.clear()
+  async createPrompt (promptId, template, options = {}) {
+    const body = { prompt_id: promptId, template }
+    if (options.title) body.title = options.title
+    if (options.description) body.description = options.description
+    if (options.userVersion) body.user_version = options.userVersion
+    if (options.envIds !== undefined) body.env_ids = options.envIds
+    if (options.config !== undefined) body.config = options.config
+    const response = await this.#request('POST', PROMPTS_PATH, body, true)
+    this.#evictPrompt(promptId)
+    return response
   }
 
   /**
-   * Create a prompt.
-   * @param {import('../../../../../index').llmobs.PromptCreateOptions} [options]
-   * @returns {Promise<import('../../../../../index').llmobs.PromptResponse>}
+   * Add a text or chat version to an existing prompt.
+   * @param {string} promptId
+   * @param {string | Array<{role: string, content: string}>} template
+   * @param {{description?: string, userVersion?: string, envIds?: string[],
+   *   config?: Record<string, unknown>}} [options]
+   * @returns {Promise<object | object[]>}
    */
-  create (options) {
-    const { id, template, title, description, userVersion, labels, envIds } = options ?? {}
-    if (typeof id !== 'string' || id.length === 0 || template === undefined) {
-      throw new TypeError('id and template are required')
+  async createPromptVersion (promptId, template, options = {}) {
+    const body = { template }
+    if (options.description) body.description = options.description
+    if (options.userVersion) body.user_version = options.userVersion
+    if (options.envIds !== undefined) body.env_ids = options.envIds
+    if (options.config !== undefined) body.config = options.config
+    const path = `${PROMPTS_PATH}/${encodeURIComponent(promptId)}/versions`
+    const response = await this.#request('POST', path, body, true)
+    this.#evictPrompt(promptId)
+    return response
+  }
+
+  /**
+   * Update prompt metadata.
+   * @param {string} promptId
+   * @param {{title?: string, description?: string}} [options]
+   * @returns {Promise<object | object[]>}
+   */
+  async updatePrompt (promptId, options = {}) {
+    try {
+      this.#requireApiKey()
+    } catch (error) {
+      throw this.#recordCrudError('PATCH', error)
     }
-    return this.#write(id, this.#client.createPrompt(withoutUndefined({
-      prompt_id: id,
-      template,
-      title,
-      description,
-      user_version: userVersion,
-      labels,
-      env_ids: envIds,
-    })))
-  }
-
-  /**
-   * Create a prompt version.
-   * @param {string} id
-   * @param {import('../../../../../index').llmobs.PromptVersionCreateOptions} [options]
-   * @returns {Promise<import('../../../../../index').llmobs.PromptVersionResponse>}
-   */
-  createVersion (id, options) {
-    const { template, description, userVersion, labels, envIds } = options ?? {}
-    if (template === undefined) throw new TypeError('template is required')
-    return this.#write(id, this.#client.createPromptVersion(id, withoutUndefined({
-      template,
-      description,
-      user_version: userVersion,
-      labels,
-      env_ids: envIds,
-    })))
-  }
-
-  /**
-   * Update a prompt.
-   * @param {string} id
-   * @param {import('../../../../../index').llmobs.PromptUpdateOptions} options
-   * @returns {Promise<import('../../../../../index').llmobs.PromptResponse>}
-   */
-  update (id, { title, description } = {}) {
-    if (title === undefined && description === undefined) {
-      throw new TypeError('At least one of title or description must be provided')
+    if (options.title === undefined && options.description === undefined) {
+      const error = new PromptAPIError(0, 'At least one of title or description must be provided',
+        ERROR_NAMES.VALIDATION)
+      throw this.#recordCrudError('PATCH', error)
     }
-    return this.#write(id, this.#client.updatePrompt(id, withoutUndefined({ title, description })))
+    const body = {}
+    if (options.title !== undefined) body.title = options.title
+    if (options.description !== undefined) body.description = options.description
+    const response = await this.#request('PATCH', `${PROMPTS_PATH}/${encodeURIComponent(promptId)}`, body, true)
+    this.#evictPrompt(promptId)
+    return response
   }
 
   /**
-   * Update a prompt version.
-   * @param {string} id
-   * @param {string | number} version
-   * @param {import('../../../../../index').llmobs.PromptVersionUpdateOptions} options
-   * @returns {Promise<import('../../../../../index').llmobs.PromptVersionResponse>}
+   * Update prompt-version metadata.
+   * @param {string} promptId
+   * @param {number} version
+   * @param {{description?: string, envIds?: string[]}} [options]
+   * @returns {Promise<object | object[]>}
    */
-  updateVersion (id, version, { labels, description, envIds } = {}) {
-    if (labels === undefined && description === undefined && envIds === undefined) {
-      throw new TypeError('At least one of labels, description, or envIds must be provided')
+  async updatePromptVersion (promptId, version, options = {}) {
+    try {
+      this.#requireApiKey()
+    } catch (error) {
+      throw this.#recordCrudError('PATCH', error)
     }
-    return this.#write(id, this.#client.updatePromptVersion(id, version, withoutUndefined({
-      labels,
-      description,
-      env_ids: envIds,
-    })))
+    if (options.description === undefined && options.envIds === undefined) {
+      const error = new PromptAPIError(0, 'At least one of description or envIds must be provided',
+        ERROR_NAMES.VALIDATION)
+      throw this.#recordCrudError('PATCH', error)
+    }
+    const body = {}
+    if (options.description !== undefined) body.description = options.description
+    if (options.envIds !== undefined) body.env_ids = options.envIds
+    const path = `${PROMPTS_PATH}/${encodeURIComponent(promptId)}/versions/${encodeURIComponent(version)}`
+    const response = await this.#request('PATCH', path, body, true)
+    this.#evictPrompt(promptId)
+    return response
   }
 
   /**
-   * Delete a prompt and evict its caches.
-   * @param {string} id
-   * @returns {Promise<import('../../../../../index').llmobs.DeletedPromptResponse>}
+   * Delete a prompt.
+   * @param {string} promptId
+   * @returns {Promise<object | object[]>}
    */
-  async delete (id) {
-    const response = await this.#client.deletePrompt(id)
-    this.evictPrompt(id)
+  async deletePrompt (promptId) {
+    const response = await this.#request('DELETE', `${PROMPTS_PATH}/${encodeURIComponent(promptId)}`, undefined, true)
+    this.#evictPrompt(promptId)
     return response
   }
 
   /**
    * List prompts.
-   * @returns {Promise<import('../../../../../index').llmobs.PromptResponse[]>}
+   * @returns {Promise<object | object[]>}
    */
-  list () {
-    return this.#client.listPrompts()
+  listPrompts () {
+    return this.#request('GET', PROMPTS_PATH, undefined, false)
   }
 
   /**
-   * List prompt versions.
-   * @param {string} id
-   * @returns {Promise<import('../../../../../index').llmobs.PromptVersionResponse[]>}
+   * List versions for a prompt.
+   * @param {string} promptId
+   * @returns {Promise<object | object[]>}
    */
-  listVersions (id) {
-    return this.#client.listPromptVersions(id)
-  }
-
-  #write (id, request) {
-    return Promise.resolve(request).then(response => {
-      this.evictPrompt(id)
-      return response
-    })
-  }
-
-  #cachePrompt (prompt) {
-    if (prompt instanceof ManagedPrompt) {
-      return new ManagedPrompt({ ...prompt._serialize(), source: 'cache' })
-    }
-    return ManagedPrompt.fromCache(prompt)
-  }
-
-  #warnFallback (error) {
-    if (this.#warnedFallback) return
-    this.#warnedFallback = true
-    log.warn('Prompt fetch failed; using fallback: %s', error.message)
-  }
-
-  evictPrompt (id) {
-    this.#hotCache.evictPrompt(id)
-    this.#warmCache.evictPrompt(id)
+  listPromptVersions (promptId) {
+    return this.#request('GET', `${PROMPTS_PATH}/${encodeURIComponent(promptId)}/versions`, undefined, false)
   }
 }
 
-module.exports = { PromptManager }
-
-function withoutUndefined (value) {
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined))
-}
+module.exports = PromptManager

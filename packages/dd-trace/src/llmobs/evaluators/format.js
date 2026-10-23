@@ -1,14 +1,13 @@
 'use strict'
 
-const { BaseEvaluator, assertOptionalFunction, booleanResult } = require('./base')
-const { toText } = require('./util')
+const { BaseEvaluator } = require('../experiments/evaluator')
+const { assertOptionalFunction, booleanResult, toText } = require('./util')
 
 const COUNT_TYPES = new Set(['characters', 'words', 'lines'])
 
 /**
  * @param {string} text
  * @param {string} countType
- * @returns {number}
  */
 function measure (text, countType) {
   if (countType === 'characters') return text.length

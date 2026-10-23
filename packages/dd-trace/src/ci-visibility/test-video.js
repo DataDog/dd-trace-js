@@ -42,7 +42,6 @@ function getVideoUploadTag (uploadResult) {
  * @param {object} span - Test or test suite span to tag
  * @param {string|undefined} uploadResult - Aggregate video upload result
  * @param {string} [scope] - Media lookup scope
- * @returns {void}
  */
 function setVideoUploadTags (span, uploadResult, scope) {
   const uploadTag = getVideoUploadTag(uploadResult)
