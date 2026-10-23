@@ -8,13 +8,16 @@ const { pathToFileURL, fileURLToPath } = require('node:url')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const createBundlerBanner = require('../datadog-instrumentations/src/helpers/bundler-banner')
 const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
 const { createEsmResolver } = require('./src/resolver')
 const { isESMFile, processModule } = require('./src/utils')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
-const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
+const PLUGIN_NAMESPACE = 'datadog-esbuild'
+const STARTUP_MODULE = 'dd-trace:esbuild-startup'
+const STARTUP_MODULE_FILTER = /^dd-trace:esbuild-startup$/
 
 let rewriter
 
@@ -114,6 +117,12 @@ module.exports.setup = function (build) {
     )
   }
 
+  if (build.initialOptions.platform !== 'node') {
+    build.onStart(() => ({
+      warnings: [{ text: 'datadog-esbuild requires platform: "node" for Node.js builtin instrumentation.' }],
+    }))
+  }
+
   if (DD_IAST_ENABLED) {
     const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
     rewriter = iastRewriter.getRewriter()
@@ -124,11 +133,41 @@ module.exports.setup = function (build) {
   const externalModules = new Set(build.initialOptions.external || [])
   build.initialOptions.banner ??= {}
   build.initialOptions.banner.js ??= ''
+
+  // Startup code that has to run before any bundled module.
+  let startupCode = createBundlerBanner('esbuild')
+
+  // Bake DD_GIT_* into the startup code unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
+  if (DD_BUNDLER_INJECT_GIT_METADATA) {
+    const gitMetadata = getGitMetadata()
+    if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
+      const { repositoryURL, commitSHA } = gitMetadata
+      startupCode += `
+if (typeof process === 'object' && process !== null &&
+    process.env !== null && typeof process.env === 'object') {
+  ${repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = ${JSON.stringify(repositoryURL)};` : ''}
+  ${commitSHA ? `process.env.DD_GIT_COMMIT_SHA = ${JSON.stringify(commitSHA)};` : ''}
+}`
+
+      log.debug(
+        'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
+        gitMetadata.repositoryURL || 'not available',
+        gitMetadata.commitSHA || 'not available'
+      )
+    } else {
+      log.warn('No git metadata available - skipping injection')
+    }
+  } else {
+    log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
+  }
+
   if (DD_IAST_ENABLED) {
-    build.initialOptions.banner.js =
-      `globalThis.__DD_ESBUILD_IAST_${isSourceMapEnabled ? 'WITH_SM' : 'WITH_NO_SM'} = true;
-      ${isSourceMapEnabled ? `globalThis.__DD_ESBUILD_BASEPATH = '${require('../dd-trace/src/util').ddBasePath}';` : ''}
-${build.initialOptions.banner.js}`
+    startupCode += `
+globalThis.__DD_ESBUILD_IAST_${isSourceMapEnabled ? 'WITH_SM' : 'WITH_NO_SM'} = true;`
+    if (isSourceMapEnabled) {
+      startupCode += `
+globalThis.__DD_ESBUILD_BASEPATH = ${JSON.stringify(require('../dd-trace/src/util').ddBasePath)};`
+    }
   }
 
   const esmBuild = isESMBuild(build)
@@ -145,30 +184,17 @@ globalThis.__dirname ??= $dd_dirname(globalThis.__filename);
 ${build.initialOptions.banner.js}`
   }
 
-  // Bake DD_GIT_* into the banner unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
-  if (DD_BUNDLER_INJECT_GIT_METADATA) {
-    const gitMetadata = getGitMetadata()
-    if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
-      build.initialOptions.banner ??= {}
-      build.initialOptions.banner.js ??= ''
-
-      build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null &&
-    process.env !== null && typeof process.env === 'object') {
-  ${gitMetadata.repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = '${gitMetadata.repositoryURL}';` : ''}
-  ${gitMetadata.commitSHA ? `process.env.DD_GIT_COMMIT_SHA = '${gitMetadata.commitSHA}';` : ''}
-}
-${build.initialOptions.banner.js}`
-
-      log.debug(
-        'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
-        gitMetadata.repositoryURL || 'not available',
-        gitMetadata.commitSHA || 'not available'
-      )
-    } else {
-      log.warn('No git metadata available - skipping injection')
-    }
+  if (esmBuild || !build.initialOptions.bundle) {
+    // ESM output is always strict, so code ahead of it cannot disable strict mode. Without bundling there is no
+    // module graph to inject into.
+    build.initialOptions.banner.js = `${startupCode}\n${build.initialOptions.banner.js}`
   } else {
-    log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
+    // esbuild places banners ahead of the "use strict" directive it emits for CommonJS and IIFE output, so code
+    // there would turn the directive into a plain expression and the whole bundle into sloppy mode. An injected
+    // module stays behind the directive and still runs before every other bundled module.
+    build.initialOptions.inject = [STARTUP_MODULE, ...build.initialOptions.inject ?? []]
+    build.onResolve({ filter: STARTUP_MODULE_FILTER }, () => ({ path: STARTUP_MODULE, namespace: PLUGIN_NAMESPACE }))
+    build.onLoad({ filter: /.*/, namespace: PLUGIN_NAMESPACE }, () => ({ contents: startupCode, loader: 'js' }))
   }
 
   let resolver
@@ -185,6 +211,9 @@ ${build.initialOptions.banner.js}`
       log.debug('EXTERNAL: %s', args.path)
       return
     }
+
+    // The startup code marks the bundle; the runtime then patches native builtins and synchronizes ESM exports.
+    if (builtins.has(args.path)) return
 
     // TODO: Should this also check for namespace === 'file'?
     if (!modulesOfInterest.has(args.path) &&
@@ -219,8 +248,6 @@ ${build.initialOptions.banner.js}`
 
     const extracted = extractPackageAndModulePath(fullPathToModule)
 
-    const internal = builtins.has(args.path)
-
     // Only the generated wrapper module, and the real module importing itself, must reach the real module unwrapped.
     // Every other importer must get the wrapper regardless of whether it has already been loaded: onLoad runs
     // concurrently with onResolve, so tracking loaded modules makes which importer sees the wrapper depend on timing,
@@ -231,24 +258,6 @@ ${build.initialOptions.banner.js}`
     if (args.namespace === 'file' && (
       modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
     ) {
-      // Internal module like http/fs is imported and the build output is ESM
-      if (internal && args.kind === 'import-statement' && esmBuild && !isInterceptedImporter) {
-        fullPathToModule = `${INTERNAL_ESM_INTERCEPTED_PREFIX}${fullPathToModule}${ESM_INTERCEPTED_SUFFIX}`
-
-        return {
-          path: fullPathToModule,
-          pluginData: {
-            pkg: extracted?.pkg,
-            path: extracted?.path,
-            full: fullPathToModule,
-            raw: args.path,
-            pkgOfInterest: true,
-            kind: args.kind,
-            internal,
-            isESM: true,
-          },
-        }
-      }
       // The file namespace is used when requiring files from disk in userland
       if (extracted.pkg === null) return
 
@@ -259,12 +268,10 @@ ${build.initialOptions.banner.js}`
         pathToPackageJson = extractPackageAndModulePath(pathToPackageJson).pkgJson
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
-          if (!internal) {
-            log.warn(
-              'Unable to find "%s/package.json". Unless it\'s dead code this could cause a problem at runtime.',
-              extracted.pkg
-            )
-          }
+          log.warn(
+            'Unable to find "%s/package.json". Unless it\'s dead code this could cause a problem at runtime.',
+            extracted.pkg
+          )
           return
         }
         throw err
@@ -291,7 +298,6 @@ ${build.initialOptions.banner.js}`
             raw: args.path,
             pkgOfInterest: true,
             kind: args.kind,
-            internal,
             isESM,
           },
         }
@@ -329,14 +335,9 @@ ${build.initialOptions.banner.js}`
         if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
           args.path = args.path.slice(0, -ESM_INTERCEPTED_SUFFIX.length)
 
-          if (data.internal) {
-            args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
-          }
-
           resolver ??= createEsmResolver()
           const setters = await processModule({
             path: args.path,
-            internal: data.internal,
             context: { format: 'module' },
             excludeDefault: false,
             moduleSources: new Map(),
@@ -345,7 +346,7 @@ ${build.initialOptions.banner.js}`
           })
 
           const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
-          const toRegister = data.internal ? args.path : pathToFileURL(args.path)
+          const toRegister = pathToFileURL(args.path)
           // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
           contents = `
 import { register } from ${JSON.stringify(iitmPath)};
@@ -392,9 +393,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
       return {
         contents,
         loader: 'js',
-        resolveDir: data.internal
-          ? build.initialOptions.absWorkingDir ?? process.cwd()
-          : path.dirname(args.path),
+        resolveDir: path.dirname(args.path),
       }
     }
     if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {

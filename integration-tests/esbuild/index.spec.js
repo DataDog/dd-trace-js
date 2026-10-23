@@ -151,16 +151,10 @@ esbuildVersions.forEach((version) => {
         })
 
         const output = result.outputFiles[0].text
-        assert.match(
-          output,
-          /register.*"node:dns\/promises".*"node:dns\/promises"\);$/m,
-          'Bundle should contain the node:dns/promises instrumentation'
-        )
-        assert.match(
-          output,
-          /register.*"node:http".*"node:http"\);$/m,
-          'Bundle should contain the node:http instrumentation'
-        )
+        assert.match(output, /Symbol.for\("dd-trace:bundler"\)/)
+        assert.match(output, /from "node:dns\/promises"/)
+        assert.match(output, /from "node:http"/)
+        assert.doesNotMatch(output, /_dd_esbuild_intercepted/)
       })
 
       it('runs minified ESM bundles without ReferenceError on arguments', () => {
