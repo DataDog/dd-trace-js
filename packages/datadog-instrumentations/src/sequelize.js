@@ -95,7 +95,6 @@ addHook({ name: 'sequelize', versions: ['>=4'], file: 'lib/transaction.js' }, Tr
 /**
  * @param {{ pool: SequelizePool & { read?: SequelizePool, write?: SequelizePool } }} manager
  * @param {[{ type?: string, useMaster?: boolean }?]} args
- * @returns {boolean}
  */
 function sequelizeHasIdleConnection (manager, args) {
   const pool = manager.pool

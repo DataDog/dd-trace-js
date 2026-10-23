@@ -26,6 +26,7 @@ class CypressPlugin extends Plugin {
         userAfterRunHandlers,
         userAfterScreenshotHandlers,
         cleanupWrapper,
+        registerBeforeRun,
       } = payload
 
       const registerAfterRunWithCleanup = (afterRunHandler) => {
@@ -52,12 +53,12 @@ class CypressPlugin extends Plugin {
       // downstream steps — then run the plugin's afterScreenshot on those
       // details and propagate the value back to Cypress. The user handler runs
       // regardless of whether screenshot upload is enabled.
-      const registerAfterScreenshot = (afterScreenshotHandler) => {
+      const registerAfterScreenshot = () => {
         const filteredUserAfterScreenshotHandlers = userAfterScreenshotHandlers.filter(
-          handler => handler !== afterScreenshotHandler
+          handler => handler !== datadogAfterScreenshotHandler
         )
         if (filteredUserAfterScreenshotHandlers.length === 0) {
-          if (afterScreenshotHandler) on('after:screenshot', afterScreenshotHandler)
+          if (datadogAfterScreenshotHandler) on('after:screenshot', datadogAfterScreenshotHandler)
           return
         }
 
@@ -72,13 +73,14 @@ class CypressPlugin extends Plugin {
             Promise.resolve(details)
           )
           return chain.then((finalDetails) => {
-            if (afterScreenshotHandler) afterScreenshotHandler(finalDetails)
+            if (datadogAfterScreenshotHandler) datadogAfterScreenshotHandler(finalDetails)
             return finalDetails
           })
         })
       }
 
       if (cypressPlugin._isInit) {
+        registerBeforeRun()
         // Already initialized by manual plugin call — just chain user handlers.
         // Pass the plugin's afterScreenshot so chaining a user handler doesn't drop the upload
         // (the chained registration replaces the one plugin.js set, so it must include it).
@@ -88,14 +90,14 @@ class CypressPlugin extends Plugin {
             Promise.resolve()
           ))
         }
-        registerAfterScreenshot(datadogAfterScreenshotHandler)
+        registerAfterScreenshot()
         registerAfterRunWithCleanup()
         payload.registered = true
         return
       }
 
-      on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
-      registerAfterScreenshot(datadogAfterScreenshotHandler)
+      registerBeforeRun(cypressPlugin.beforeRun.bind(cypressPlugin))
+      registerAfterScreenshot()
 
       on('after:spec', (spec, results) => {
         const chain = userAfterSpecHandlers.reduce(

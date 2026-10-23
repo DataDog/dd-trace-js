@@ -20,7 +20,6 @@ exports.mochaGlobalSetup = async () => {
   process.stdout.write('GLOBAL SETUP FINISHED\n')
 }
 
-/** @returns {void} */
 exports.mochaGlobalTeardown = () => {
   assert.strictEqual(global.mochaTestExecuted, true)
   process.stdout.write('GLOBAL TEARDOWN FINISHED\n')

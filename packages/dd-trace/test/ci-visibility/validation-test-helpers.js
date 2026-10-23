@@ -117,7 +117,6 @@ function createLoadedManifest (root, framework) {
  * Removes a fixture repository.
  *
  * @param {string} root fixture root
- * @returns {void}
  */
 function removeFixture (root) {
   fs.rmSync(root, { force: true, recursive: true })

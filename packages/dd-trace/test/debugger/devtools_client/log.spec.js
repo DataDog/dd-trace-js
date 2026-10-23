@@ -85,6 +85,52 @@ describe('worker thread logger', function () {
     log.debug(() => message)
   })
 
+  it('should keep the remaining arguments when resolving the function argument', function (done) {
+    const logChannel = new MessageChannel()
+    const log = proxyquire('../../../src/debugger/devtools_client/log', {
+      'node:worker_threads': {
+        workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: 'debug' } },
+      },
+    })
+
+    // The main thread logger reads a trailing error as the cause of the log record, so it must survive the port
+    const cause = new Error('boom')
+
+    logChannel.port2.on('message', (message) => {
+      assert.strictEqual(message.level, 'error')
+      assert.strictEqual(message.args.length, 2)
+      assert.strictEqual(message.args[0], 'logged')
+      assert.strictEqual(message.args[1].message, 'boom')
+      done()
+    })
+
+    log.error(() => 'logged', cause)
+  })
+
+  it('should not resolve the function argument when the level is disabled', function (done) {
+    const logChannel = new MessageChannel()
+    const log = proxyquire('../../../src/debugger/devtools_client/log', {
+      'node:worker_threads': {
+        workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: 'error' } },
+      },
+    })
+
+    logChannel.port2.on('message', () => {
+      throw new Error('should not have logged')
+    })
+
+    let resolved = false
+    log.debug(() => {
+      resolved = true
+      return 'logged'
+    })
+
+    setImmediate(() => {
+      assert.strictEqual(resolved, false, 'should not have built the message')
+      done()
+    })
+  })
+
   describe('log level', function () {
     it('info', checkLogLevel('info', ['error', 'warn', 'info']))
 

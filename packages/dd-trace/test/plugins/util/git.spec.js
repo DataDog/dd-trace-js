@@ -38,13 +38,16 @@ const {
   GIT_COMMIT_HEAD_COMMITTER_NAME,
 } = require('../../../src/plugins/util/tags')
 
-const { getGitMetadata, unshallowRepository, getGitDiff } = proxyquire('../../../src/plugins/util/git',
-  {
-    './git-cache': {
-      cachedExec: cachedExecStub,
-    },
-  }
-)
+const {
+  getGitMetadata,
+  unshallowRepository,
+  getGitDiff,
+  isGitAvailable: isGitAvailableWithStub,
+} = proxyquire('../../../src/plugins/util/git', {
+  './git-cache': {
+    cachedExec: cachedExecStub,
+  },
+})
 
 function getFakeDirectory () {
   if (os.platform() === 'win32') {
@@ -447,6 +450,11 @@ describe('isGitAvailable', () => {
 
   it('returns true if git is available', () => {
     assert.strictEqual(isGitAvailable(), true)
+  })
+
+  it('checks whether git can be executed directly', () => {
+    assert.strictEqual(isGitAvailableWithStub(), true)
+    sinon.assert.calledOnceWithExactly(cachedExecStub, 'git', ['--version'])
   })
 
   it('returns false if git is not available', () => {

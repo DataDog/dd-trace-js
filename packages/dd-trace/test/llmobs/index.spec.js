@@ -146,7 +146,7 @@ describe('module', () => {
 
   describe('handle llmobs info injection', () => {
     it('injects LLMObs info when there is a parent LLMObs span', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
       store.span = {
         context () {
           return {
@@ -166,7 +166,7 @@ describe('module', () => {
     })
 
     it('replaces the parent ID without an mlApp configured', () => {
-      llmobsModule.enable({ llmobs: { agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_AGENTLESS_ENABLED: false } })
       store.span = {
         context () {
           return {
@@ -186,7 +186,7 @@ describe('module', () => {
     })
 
     it('injects the sampling rate and decision from the parent LLMObs span', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
       store.span = {
         context () {
           return {
@@ -213,7 +213,7 @@ describe('module', () => {
     })
 
     it('injects the session_id from the parent LLMObs span', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
       store.span = {
         context () {
           return {
@@ -239,7 +239,7 @@ describe('module', () => {
     })
 
     it('injects the session_id from the trace-level default when the active span carries none', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
       store.span = {
         context () {
           return {
@@ -262,8 +262,30 @@ describe('module', () => {
       )
     })
 
+    it('does not propagate partial LLMObs attribution when the tracestate budget is exceeded', () => {
+      const sessionId = 's'.repeat(200)
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'upstream-app', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+      store.span = {
+        context () {
+          return { toSpanId () { return 'parent-id' } }
+        },
+      }
+      LLMObsTagger.tagMap.set(store.span, { [SESSION_ID]: sessionId })
+
+      const config = getConfigFresh()
+      config.tracePropagationStyle.inject = ['datadog', 'tracecontext']
+      const carrier = {}
+      inject(carrier, undefined, config)
+
+      assert.doesNotMatch(carrier.tracestate ?? '', /(?:^|,)dd=/)
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        `_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=upstream-app,_dd.p.llmobs_sid=${sessionId}`
+      )
+    })
+
     it('converts the local LLMObs trace id to decimal for propagation', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
       store.span = {
         context () {
           return {
@@ -287,7 +309,7 @@ describe('module', () => {
     })
 
     it('forwards an extracted LLMObs trace id without reinterpreting it', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
       const wireTraceId = '12345678901234567890123456789012'
       store.span = {
         context () {
@@ -308,7 +330,7 @@ describe('module', () => {
     })
 
     it('does not inject LLMObs parent ID info when there is no parent LLMObs span', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
       const carrier = {
         'x-datadog-tags': '',
@@ -318,7 +340,7 @@ describe('module', () => {
     })
 
     it('does not inject LLMOBs info when there is no mlApp configured and no parent LLMObs span', () => {
-      llmobsModule.enable({ llmobs: { agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
       const carrier = {
         'x-datadog-tags': '',
@@ -328,7 +350,7 @@ describe('module', () => {
     })
 
     it('does not produce a literal "undefined" prefix when carrier has no x-datadog-tags', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
       const carrier = {}
       inject(carrier)
@@ -337,7 +359,7 @@ describe('module', () => {
     })
 
     it('merges LLMObs tags with propagated trace tags before serialization', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
       const carrier = {}
       inject(carrier, '_dd.p.tid=69fe014200000000,_dd.p.dm=-0')
@@ -349,7 +371,7 @@ describe('module', () => {
     })
 
     it('does not duplicate _dd.p.llmobs_ml_app when already present in x-datadog-tags', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
       const propagatedTags = [
         '_dd.p.tid=69fe014200000000',
@@ -367,7 +389,7 @@ describe('module', () => {
     })
 
     it('preserves non-replaced LLMObs keys from upstream carrier', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
       const propagatedTags = [
         '_dd.p.llmobs_sid=retained-session',
@@ -389,7 +411,7 @@ describe('module', () => {
     })
 
     it('preserves an LLMObs prefix inside another tag value', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
       const propagatedTags = '_dd.p.other=value_dd.p.llmobs_inside,_dd.p.llmobs_ml_app=old-app'
       const carrier = {}
@@ -402,7 +424,7 @@ describe('module', () => {
     })
 
     it('updates existing LLMObs tags in x-datadog-tags without duplicating keys', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
       store.span = {
         context () {
           return {
@@ -452,7 +474,7 @@ describe('module', () => {
     })
 
     it('prevents duplicate tags through the full extraction -> standard propagation -> injection path (#9714)', () => {
-      llmobsModule.enable({ llmobs: { mlApp: 'downstream-app', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'downstream-app', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
       const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
       const config = getConfigFresh({ llmobs: { mlApp: 'downstream-app', agentlessEnabled: false } })
@@ -517,7 +539,7 @@ describe('module', () => {
       it('throws an error', () => {
         llmobsModule.enable({
           llmobs: {
-            agentlessEnabled: true,
+            DD_LLMOBS_AGENTLESS_ENABLED: true,
           },
           startupLogs: true,
         })
@@ -528,7 +550,7 @@ describe('module', () => {
 
     describe('when no site is provided', () => {
       it('throws an error', () => {
-        llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' }, startupLogs: true })
+        llmobsModule.enable({ llmobs: { DD_LLMOBS_AGENTLESS_ENABLED: true, apiKey: 'test' }, startupLogs: true })
 
         sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
       })
@@ -538,7 +560,7 @@ describe('module', () => {
       it('configures agentless writers', () => {
         llmobsModule.enable({
           llmobs: {
-            agentlessEnabled: true,
+            DD_LLMOBS_AGENTLESS_ENABLED: true,
           },
           DD_API_KEY: 'test',
           site: 'datadoghq.com',
@@ -554,7 +576,7 @@ describe('module', () => {
     it('configures agent-proxy writers', () => {
       llmobsModule.enable({
         llmobs: {
-          agentlessEnabled: false,
+          DD_LLMOBS_AGENTLESS_ENABLED: false,
         },
       })
 
@@ -578,7 +600,7 @@ describe('module', () => {
 
         describe('when no API key is provided', () => {
           it('throws an error', () => {
-            llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' }, startupLogs: true })
+            llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', site: 'datadoghq.com' }, startupLogs: true })
 
             sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
           })
@@ -586,7 +608,7 @@ describe('module', () => {
 
         describe('when no site is provided', () => {
           it('throws an error', () => {
-            llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' }, startupLogs: true })
+            llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', apiKey: 'test' }, startupLogs: true })
 
             sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
           })
@@ -612,7 +634,37 @@ describe('module', () => {
         })
 
         it('configures the agent-proxy writers', () => {
-          llmobsModule.enable({ llmobs: { mlApp: 'test' } })
+          llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test' } })
+
+          sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
+          sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
+        })
+      })
+
+      describe('when the agent lists full proxy paths (Lambda extension)', () => {
+        beforeEach(() => {
+          fetchAgentInfoStub.callsFake((url, cb) => {
+            cb(null, { endpoints: ['/v0.4/traces', '/evp_proxy/v2/api/v2/llmobs'] })
+          })
+        })
+
+        it('configures the agent-proxy writers', () => {
+          llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test' } })
+
+          sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
+          sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
+        })
+      })
+
+      describe('when the agent lists non-string endpoints', () => {
+        beforeEach(() => {
+          fetchAgentInfoStub.callsFake((url, cb) => {
+            cb(null, { endpoints: [null, 42, '/evp_proxy/v2/api/v2/llmobs'] })
+          })
+        })
+
+        it('skips them and configures the agent-proxy writers', () => {
+          llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test' } })
 
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
@@ -629,7 +681,7 @@ describe('module', () => {
 
       describe('when no API key is provided', () => {
         it('throws an error', () => {
-          llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' }, startupLogs: true })
+          llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', site: 'datadoghq.com' }, startupLogs: true })
 
           sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
         })
@@ -655,7 +707,7 @@ describe('module', () => {
   })
 
   it('appends to the eval metric writer', () => {
-    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
     const payload = {}
 
@@ -666,7 +718,7 @@ describe('module', () => {
 
   it('registers both LLMObs writers for lifecycle flushing', () => {
     loadLlmobsModuleOnVercel()
-    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
     const done = sinon.spy()
     const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
     const evalWriter = LLMObsEvalMetricsWriterSpy.firstCall.returnValue
@@ -687,7 +739,7 @@ describe('module', () => {
 
   it('continues flushing when one LLMObs writer throws', () => {
     loadLlmobsModuleOnVercel()
-    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
     const done = sinon.spy()
     const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
     const evalWriter = LLMObsEvalMetricsWriterSpy.firstCall.returnValue
@@ -701,7 +753,7 @@ describe('module', () => {
   })
 
   it('removes all subscribers when disabling', () => {
-    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
     llmobsModule.disable()
 
@@ -716,7 +768,7 @@ describe('module', () => {
     loadLlmobsModuleOnVercel()
     const retiredUnregister = sinon.stub()
     registerTelemetryFlusher.onSecondCall().returns(retiredUnregister)
-    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
     const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
     const evalWriter = LLMObsEvalMetricsWriterSpy.firstCall.returnValue
     let completeSpan
@@ -742,7 +794,7 @@ describe('module', () => {
     registerTelemetryFlusher.onCall(0).returns(initialUnregister)
     registerTelemetryFlusher.onCall(1).returns(retiredUnregister)
     registerTelemetryFlusher.onCall(2).returns(replacementUnregister)
-    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
     const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
     const evalWriter = LLMObsEvalMetricsWriterSpy.firstCall.returnValue
     let destroySpan
@@ -750,7 +802,7 @@ describe('module', () => {
     spanWriter.destroy.callsFake(done => { destroySpan = done })
     evalWriter.destroy.callsFake(done => { destroyEvaluation = done })
 
-    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
     sinon.assert.calledOnce(initialUnregister)
     sinon.assert.calledThrice(registerTelemetryFlusher)
@@ -770,7 +822,7 @@ describe('module', () => {
 
   it('completes transport selection for writers retired during initialization', () => {
     loadLlmobsModuleOnVercel()
-    llmobsModule.enable({ llmobs: { mlApp: 'test' } })
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test' } })
     const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
     const evalWriter = LLMObsEvalMetricsWriterSpy.firstCall.returnValue
 

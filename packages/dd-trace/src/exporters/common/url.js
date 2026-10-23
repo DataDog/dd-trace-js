@@ -1,13 +1,15 @@
 'use strict'
 
 const net = require('node:net')
-const { format } = require('node:url')
+const { format, URL } = require('node:url')
 
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 
+const DEFAULT_SITE = 'datadoghq.com'
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+
 /**
  * @param {string} hostname
- * @returns {boolean}
  */
 function isLoopbackHost (hostname) {
   // Gate the 127/8 prefix on an IPv4 literal so names such as 127.example.com cannot pass.
@@ -20,7 +22,6 @@ function isLoopbackHost (hostname) {
 /**
  * @param {string|undefined} protocol
  * @param {string|undefined} hostname
- * @returns {boolean}
  */
 function canSendApiKey (protocol, hostname) {
   return protocol === 'https:' || protocol === 'unix:' ||
@@ -33,7 +34,11 @@ function canSendApiKey (protocol, hostname) {
  * @returns {URL | undefined}
  */
 function createSiteUrl (site, intake) {
-  const hostname = `${intake === undefined ? '' : `${intake}.`}${site}`.toLowerCase()
+  const normalizedSite = normalizeSite(site)
+  if (normalizedSite === undefined) return
+
+  const hostname = `${intake === undefined ? '' : `${intake}.`}${normalizedSite}`
+  if (hostname.length > 253) return
 
   try {
     const url = new URL(format({
@@ -53,6 +58,30 @@ function createSiteUrl (site, intake) {
     }
     return url
   } catch {}
+}
+
+/**
+ * Normalizes a Datadog site as a DNS suffix.
+ *
+ * @param {string | undefined} site
+ * @returns {string | undefined}
+ */
+function normalizeSite (site) {
+  if (site === undefined) return DEFAULT_SITE
+  if (typeof site !== 'string') return
+  for (let index = 0; index < site.length; index++) {
+    if (site.charCodeAt(index) > 127) return
+  }
+
+  const normalized = site.trim().toLowerCase() || DEFAULT_SITE
+  if (normalized.length > 253) return
+
+  const labels = normalized.split('.')
+  for (const label of labels) {
+    if (!DNS_LABEL.test(label)) return
+  }
+
+  return normalized
 }
 
 /**
@@ -82,4 +111,4 @@ function parseUrl (urlObjOrString) {
   return url
 }
 
-module.exports = { canSendApiKey, createSiteUrl, isLoopbackHost, parseUrl }
+module.exports = { canSendApiKey, createSiteUrl, isLoopbackHost, normalizeSite, parseUrl }
