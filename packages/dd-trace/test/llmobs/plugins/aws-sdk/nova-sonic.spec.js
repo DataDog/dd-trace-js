@@ -10,7 +10,7 @@ const sinon = require('sinon')
 
 const { storage: llmobsStorage } = require('../../../../src/llmobs/storage')
 const {
-  MODEL, EPOCH, INPUT, OUTPUT, event, pcm, record, fixture, speech,
+  MODEL, EPOCH, INPUT, OUTPUT, event, pcm, record, fixture, speech, namedUsage,
 } = require('../../../../../datadog-instrumentations/test/nova-sonic/helpers')
 const { useLlmObs, assertLlmObsSpanEvent } = require('../../util')
 const { withVersions } = require('../../../setup/mocha')
@@ -181,6 +181,58 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
         region: 'us-east-1', credentials: { accessKeyId: 'test', secretAccessKey: 'test' }, requestHandler, ...config,
       })
       return transport
+    }
+
+    for (const { name, counts, expected } of [
+      {
+        name: 'complete',
+        counts: { inputText: 6, outputText: 24 },
+        expected: { input_text_tokens: 6, output_text_tokens: 24 },
+      },
+      {
+        name: 'missing text',
+        counts: {},
+        expected: {},
+      },
+      {
+        name: 'explicit zero text',
+        counts: { inputText: 0, outputText: 0 },
+        expected: { input_text_tokens: 0, output_text_tokens: 0 },
+      },
+      {
+        name: 'invalid text',
+        counts: { inputText: -1, outputText: '24' },
+        expected: {},
+      },
+    ]) {
+      it(`serializes ${name} named token counts without inventing cache counts`, async () => {
+        const records = speech()
+        records.splice(10, 0, namedUsage({
+          input: 85, output: 129, inputAudio: 79, outputAudio: 105, ...counts,
+        }, 2701))
+        const outbound = records.filter(r => r.outbound)
+        const transport = serializedClient(() => (async function * () {
+          for (const r of records.filter(r => !r.outbound)) {
+            clock.setSystemTime(EPOCH + r.at)
+            yield r.value
+          }
+        })())
+        const body = { async * [Symbol.asyncIterator] () { for (const r of outbound) yield r.value } }
+        try {
+          await drain(await transport.send(new AWS.InvokeModelWithBidirectionalStreamCommand({ modelId: MODEL, body })))
+          const { llmobsSpans } = await getEvents(4)
+          assert.deepEqual(tree(llmobsSpans).llm.metrics, {
+            input_tokens: 85,
+            output_tokens: 129,
+            total_tokens: 214,
+            input_audio_tokens: 79,
+            output_audio_tokens: 105,
+            ...expected,
+          })
+        } finally {
+          transport.destroy()
+        }
+      })
     }
 
     it('honors the environment service disable before subscribing or wrapping streams', async () => {
@@ -805,6 +857,12 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
           for (const direction of ['input', 'output']) {
             assert.equal(responses.reduce((n, s) => n + s.metrics[`${direction}_audio_tokens`], 0),
               lastUsage.details.total[direction].speechTokens)
+            assert.equal(responses.reduce((n, s) => n + s.metrics[`${direction}_text_tokens`], 0),
+              lastUsage.details.total[direction].textTokens)
+            for (const response of responses) {
+              assert.equal(response.metrics[`${direction}_text_tokens`] + response.metrics[`${direction}_audio_tokens`],
+                response.metrics[`${direction}_tokens`])
+            }
           }
           const speechEnds = records.filter(r => r.value.chunk.bytes.includes('userSpeechEnd')).map(r => EPOCH + r.at)
           for (let i = 0; i < turnCount; i++) {
