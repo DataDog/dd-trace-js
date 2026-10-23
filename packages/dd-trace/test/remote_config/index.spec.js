@@ -570,6 +570,17 @@ describe('RemoteConfig', () => {
       }
     })
 
+    it('passes the MicroVM identity controller to polling requests', (cb) => {
+      const controller = {}
+      request.getIdentityRefreshController = sinon.stub().returns(controller)
+      request.yieldsRight(null, '{}', 200)
+
+      rc.poll(() => {
+        assert.strictEqual(request.firstCall.args[1].resetController, controller)
+        cb()
+      })
+    })
+
     it('should request and do nothing when received status 404', (cb) => {
       request.yieldsRight(new Error('Response received 404'), '{"a":"b"}', 404)
 
