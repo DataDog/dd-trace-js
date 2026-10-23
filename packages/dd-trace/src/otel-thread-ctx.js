@@ -137,8 +137,6 @@ let ThreadContext
 let getContext
 let clearContext
 
-const HEX_CODES = Buffer.from('0123456789abcdef')
-
 // Reusable: the ThreadContext constructor copies the ids into its own record.
 const traceIdBytes = Buffer.alloc(16)
 const spanIdBytes = new Uint8Array(8)
@@ -181,26 +179,6 @@ function getSpanIdBytes (spanContext) {
 }
 
 /**
- * Same string as toSpanId(true), without the per-trace Buffer hex round trip.
- *
- * @param {DatadogSpanContext} rootContext
- */
-function localRootSpanIdHex (rootContext) {
-  const bytes = rootContext._spanId.toBuffer()
-  if (bytes.length !== 8) return rootContext.toSpanId(true)
-  return String.fromCharCode(
-    HEX_CODES[(bytes[0] >> 4) & 15], HEX_CODES[bytes[0] & 15],
-    HEX_CODES[(bytes[1] >> 4) & 15], HEX_CODES[bytes[1] & 15],
-    HEX_CODES[(bytes[2] >> 4) & 15], HEX_CODES[bytes[2] & 15],
-    HEX_CODES[(bytes[3] >> 4) & 15], HEX_CODES[bytes[3] & 15],
-    HEX_CODES[(bytes[4] >> 4) & 15], HEX_CODES[bytes[4] & 15],
-    HEX_CODES[(bytes[5] >> 4) & 15], HEX_CODES[bytes[5] & 15],
-    HEX_CODES[(bytes[6] >> 4) & 15], HEX_CODES[bytes[6] & 15],
-    HEX_CODES[(bytes[7] >> 4) & 15], HEX_CODES[bytes[7] & 15]
-  )
-}
-
-/**
  * @param {DatadogSpan} span
  * @returns {ThreadContext | undefined} The span's record, or undefined when the span's trace or span id is malformed.
  */
@@ -222,7 +200,7 @@ function getOrBuildContext (span) {
   const webTags = webTagsCache.getCachedWebTags(span)
   const endpoint = finalEndpoint(webTags)
   const attrs = []
-  attrs[LOCAL_ROOT_SPAN_ID_IDX] = localRootSpanIdHex(rootContext)
+  attrs[LOCAL_ROOT_SPAN_ID_IDX] = rootContext.toSpanId(true)
   if (endpoint !== undefined) attrs[ENDPOINT_IDX] = endpoint
   attrs[THREAD_NAME_IDX] = THREAD_NAME
   attrs[THREAD_ID_IDX] = THREAD_ID
