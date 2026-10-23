@@ -21,7 +21,7 @@ class WSProducerPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const { byteLength, socket, binary } = ctx
-    if (!socket.spanContext) return
+    if (!socket?.spanContext) return
 
     const spanTags = socket.spanTags
     const path = getSegment(spanTags['resource.name'], ' ', 1)

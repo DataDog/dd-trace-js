@@ -35,9 +35,9 @@ const blockedTemplateGraphql = '"testBlockingGraphql"'
 function setTestBlockingTemplates () {
   setTemplates({
     appsec: {
-      blockedTemplateHtml,
-      blockedTemplateJson,
-      blockedTemplateGraphql,
+      DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: blockedTemplateHtml,
+      DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: blockedTemplateJson,
+      DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON: blockedTemplateGraphql,
     },
   })
 }

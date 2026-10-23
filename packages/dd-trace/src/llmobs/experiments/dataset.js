@@ -330,7 +330,6 @@ class Dataset {
    * @param {string} recordId Dataset record id.
    * @param {'add' | 'remove' | 'replace'} operation Tag operation to queue.
    * @param {string[]} tags Tags in key:value format.
-   * @returns {void}
    */
   #queueTagOperation (recordId, operation, tags) {
     if (operation !== 'replace' && tags.length === 0) return
@@ -503,7 +502,6 @@ class Dataset {
    * Detach tag changes sent by this batch so edits made while the request is in flight
    * are queued relative to the response that this batch will commit.
    * @param {PendingBatch} pending
-   * @returns {void}
    */
   #detachCommittedTagOperations (pending) {
     pending.inFlightTagOperations = new Map()
@@ -527,7 +525,6 @@ class Dataset {
   /**
    * Restore tag changes when a batch request fails, including edits made while it was in flight.
    * @param {PendingBatch} pending
-   * @returns {void}
    */
   #restoreFailedTagOperations (pending) {
     if (!pending.inFlightTagOperations) return
@@ -549,7 +546,6 @@ class Dataset {
   /**
    * Clear the changes represented by a completed batch while retaining concurrent local edits.
    * @param {PendingBatch} pending
-   * @returns {void}
    */
   #clearCommittedChanges (pending) {
     for (const [recordId, payload] of pending.insertPayloads) {

@@ -71,9 +71,8 @@ module.exports = {
   },
 
   addMetadataTags (span, metadata, filter, type) {
-    if (!metadata || typeof metadata.getMap !== 'function') return
     // Default no-op filter: skip the full metadata clone via `getMap()`.
-    if (filter === getEmptyObject) return
+    if (!metadata || typeof metadata.getMap !== 'function' || filter === getEmptyObject) return
 
     const values = filter(metadata.getMap())
 

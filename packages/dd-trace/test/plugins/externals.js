@@ -45,7 +45,7 @@ module.exports = {
   apollo: [
     {
       name: '@apollo/subgraph',
-      versions: ['>=2.3.0'],
+      versions: ['>=2.3.0 <2.15.0', '>=2.15.0'],
     },
     {
       name: 'graphql',
@@ -99,7 +99,7 @@ module.exports = {
     },
     {
       name: '@aws-sdk/client-bedrock-runtime',
-      versions: ['>=3.422.0'],
+      versions: ['>=3.422.0', '>=3.785.0'],
     },
   ],
   bullmq: [
@@ -487,7 +487,13 @@ module.exports = {
   'light-my-request': [
     {
       name: 'fastify',
+      versions: ['>=3 <5'],
+      node: '<22.12.0',
+    },
+    {
+      name: 'fastify',
       versions: ['>=3'],
+      node: '>=22.12.0',
     },
   ],
   mariadb: [
@@ -579,6 +585,15 @@ module.exports = {
       dep: true,
     },
   ],
+  openai: [
+    {
+      // `ws` backs `OpenAIRealtimeWS`, but openai declares it as an *optional* peer dependency, so
+      // it is not installed into the version folders by default and `require('ws')` inside
+      // `openai/realtime/ws.js` would throw. Dependency-only, so it adds no version matrix.
+      name: 'ws',
+      dep: true,
+    },
+  ],
   'openai-agents': [
     {
       name: '@openai/agents',
@@ -657,6 +672,12 @@ module.exports = {
       name: 'pino-pretty',
       dep: true,
       versions: ['8.0.0'],
+    },
+  ],
+  postgres: [
+    {
+      name: 'pg',
+      versions: ['>=8.0.3'],
     },
   ],
   '@prisma/client': [
@@ -765,6 +786,14 @@ module.exports = {
     {
       name: 'body-parser',
       versions: ['1.20.1'],
+    },
+  ],
+  supabase: [
+    {
+      name: '@supabase/supabase-js',
+      versions: ['>=2.112.2'],
+      // This package is the Supabase test target even though it differs from the integration key above.
+      honourEnvRange: true,
     },
   ],
 }

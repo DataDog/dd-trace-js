@@ -1,16 +1,21 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { exec } = require('node:child_process')
+const { AsyncLocalStorage } = require('node:async_hooks')
+const { execFileSync } = require('node:child_process')
 const { once } = require('node:events')
+const { mkdirSync, symlinkSync, writeFileSync } = require('node:fs')
 const http = require('node:http')
+const { join } = require('node:path')
 
 const {
+  createParallelIt,
   getCiVisAgentlessConfig,
+  getCiVisEvpProxyConfig,
   sandboxCwd,
   useSandbox,
+  withReceiver,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   DD_CAPABILITIES_AUTO_TEST_RETRIES,
   DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
@@ -25,6 +30,8 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_UPLOADED,
+  TEST_FAILURE_VIDEO_UPLOAD_ERROR,
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_ADAPTER,
   TEST_FRAMEWORK_VERSION,
@@ -33,15 +40,25 @@ const {
   TEST_MANAGEMENT_ENABLED,
   TEST_MODULE,
   TEST_STATUS,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
   TEST_SUITE,
   TEST_TYPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-
 const OLDEST_WEBDRIVERIO_VERSION = '9.0.0'
 const requestedVersion = process.env.WEBDRIVERIO_VERSION
 const versions = requestedVersion
   ? [requestedVersion === 'oldest' ? OLDEST_WEBDRIVERIO_VERSION : requestedVersion]
   : [OLDEST_WEBDRIVERIO_VERSION, 'latest']
+const mochaArgs = [...process.argv, ...(process.env.MOCHA_OPTIONS?.split(/\s+/) || [])]
+const hasMochaFilter = mochaArgs.some(arg =>
+  ['--grep', '--fgrep', '-g', '-f'].includes(arg) || /^(?:--f?grep=|-[gf].+)/.test(arg)
+)
+
+const PNG_SCREENSHOT = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=',
+  'base64'
+)
 
 const disabledSettings = {
   code_coverage: false,
@@ -61,6 +78,8 @@ const disabledSettings = {
   coverage_report_upload_enabled: false,
 }
 
+const scenarioContext = new AsyncLocalStorage()
+
 const advancedRequestPaths = [
   '/api/v2/ci/libraries/tests',
   '/api/v2/ci/tests/skippable',
@@ -76,7 +95,8 @@ function startWebDriverServer () {
   let sessionCount = 0
   let screenshotCount = 0
   const server = http.createServer((request, response) => {
-    request.resume()
+    let body = ''
+    request.on('data', chunk => { body += chunk })
     request.once('end', () => {
       const isNewSession = request.method === 'POST' && request.url === '/session'
       let value = null
@@ -89,13 +109,15 @@ function startWebDriverServer () {
             browserName: 'chrome',
             browserVersion: 'test',
             platformName: process.platform,
+            unhandledPromptBehavior: JSON.parse(body).capabilities.alwaysMatch.unhandledPromptBehavior ??
+              'dismiss and notify',
           },
         }
       } else if (request.method === 'GET' && request.url === '/status') {
         value = { ready: true, message: '' }
       } else if (request.method === 'GET' && /^\/session\/[^/]+\/screenshot$/.test(request.url)) {
         screenshotCount++
-        value = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64')
+        value = PNG_SCREENSHOT.toString('base64')
       }
 
       response.writeHead(200, { 'content-type': 'application/json' })
@@ -138,13 +160,47 @@ function stopServer (server) {
 }
 
 /**
+ * Runs WebdriverIO scenarios with isolated intake and WebDriver servers.
+ *
+ * @param {import('mocha').TestFunction} mochaIt
+ * @param {number} concurrency
+ * @returns {import('mocha').TestFunction}
+ */
+function createScenarioIt (mochaIt, concurrency) {
+  const register = concurrency === 1
+    ? (name, fn) => mochaIt(name, withReceiver(fn))
+    : createParallelIt(mochaIt, { concurrency, withReceiver: true })
+
+  const scenarioIt = (name, fn) => register(name, async (receiver, run) => {
+    receiver.setSettings(disabledSettings)
+    const webDriver = await startWebDriverServer()
+
+    try {
+      await scenarioContext.run({ receiver, run, webDriver }, fn)
+    } finally {
+      try {
+        await run.stop()
+      } finally {
+        await stopServer(webDriver.server)
+      }
+    }
+  })
+  scenarioIt.skip = mochaIt.skip.bind(mochaIt)
+
+  return scenarioIt
+}
+
+function getScenarioReceiver () {
+  return scenarioContext.getStore().receiver
+}
+
+/**
  * Asserts every child event belongs to the coordinator-owned session and module.
  *
  * @param {object} session
  * @param {object} module
  * @param {object[]} suites
  * @param {object[]} tests
- * @returns {void}
  */
 function assertEventHierarchy (session, module, suites, tests) {
   const sessionId = session.test_session_id.toString(10)
@@ -168,7 +224,6 @@ function assertEventHierarchy (session, module, suites, tests) {
  *
  * @param {object[]} suites
  * @param {object[]} tests
- * @returns {void}
  */
 function assertOneTestPerSuiteExecution (suites, tests) {
   assert.deepStrictEqual(
@@ -182,7 +237,6 @@ function assertOneTestPerSuiteExecution (suites, tests) {
  *
  * @param {object} failedTest
  * @param {object[]} media
- * @returns {void}
  */
 function assertFailureScreenshotUploaded (failedTest, media) {
   assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
@@ -190,7 +244,7 @@ function assertFailureScreenshotUploaded (failedTest, media) {
   assert.strictEqual(media.length, 1)
   assert.strictEqual(media[0].media.traceId, failedTest.trace_id.toString())
   assert.strictEqual(media[0].media.contentType, 'image/png')
-  assert.deepStrictEqual([...media[0].media.content], [137, 80, 78, 71, 13, 10, 26, 10])
+  assert.deepStrictEqual(media[0].media.content, PNG_SCREENSHOT)
 }
 
 /**
@@ -269,37 +323,20 @@ for (const version of versions) {
   describe(`webdriverio@${version}`, function () {
     this.timeout(60_000)
 
-    let childProcess
     let cwd
-    let receiver
-    let testOutput = ''
-    let webDriver
+    const concurrency = version === OLDEST_WEBDRIVERIO_VERSION && !hasMochaFilter ? 2 : 1
+    const it = createScenarioIt(global.it, concurrency)
 
     useSandbox([
       `@wdio/cli@${version}`,
       `@wdio/jasmine-framework@${version}`,
       `@wdio/local-runner@${version}`,
       `@wdio/mocha-framework@${version}`,
+      '@sinonjs/fake-timers@15.4.0',
     ], true, ['./integration-tests/webdriverio/fixtures/*'])
 
-    before(async function () {
+    before(function () {
       cwd = sandboxCwd()
-      webDriver = await startWebDriverServer()
-    })
-
-    after(async function () {
-      await stopServer(webDriver?.server)
-    })
-
-    beforeEach(async function () {
-      receiver = await new FakeCiVisIntake().start()
-      receiver.setSettings(disabledSettings)
-    })
-
-    afterEach(async function () {
-      childProcess?.kill()
-      testOutput = ''
-      await receiver.stop()
     })
 
     /**
@@ -316,16 +353,19 @@ for (const version of versions) {
      * @returns {Promise<void>}
      */
     async function runScenario (scenario, expectedWebDriverSessions, assertEvents, expectedExitCode = 0, options = {}) {
+      const { receiver, run, webDriver } = scenarioContext.getStore()
       const { env, expectedScreenshots, framework = 'mocha' } = options
+      let testOutput = ''
       const initialWebDriverSessionCount = webDriver.getSessionCount()
       const initialScreenshotCount = webDriver.getScreenshotCount()
-      childProcess = exec('./node_modules/.bin/wdio run ./wdio.conf.js', {
+      const childProcess = run('./node_modules/.bin/wdio run ./wdio.conf.js', {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
           DD_TEST_SESSION_NAME: 'webdriverio-integration-test',
           WEBDRIVERIO_FRAMEWORK: framework,
+          WEBDRIVERIO_RETRY_MARKER: join(cwd, `.webdriverio-spec-file-retry-${webDriver.port}`),
           WEBDRIVERIO_SCENARIO: scenario,
           WEBDRIVER_PORT: String(webDriver.port),
           ...env,
@@ -391,6 +431,46 @@ for (const version of versions) {
       })
     })
 
+    for (const framework of ['mocha', 'jasmine']) {
+      it(`reports successful zero-test ${framework} workers as skipped with an explanation`, async () => {
+        await runScenario('empty', 0, ({ session, module, suites, tests }) => {
+          assert.strictEqual(tests.length, 0)
+          assert.strictEqual(suites.length, 1)
+          assert.strictEqual(suites[0].meta[TEST_STATUS], 'skip')
+
+          for (const event of [session, module]) {
+            assert.strictEqual(event.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(event.meta[TEST_SKIP_REASON], 'No tests were detected')
+            assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+          }
+        }, 0, { framework })
+      })
+    }
+
+    for (const framework of ['mocha', 'jasmine']) {
+      for (const [scenario, sessions, reason, exitCode] of [
+        ['allSkipped', 1, 'all_tests_skipped', 0],
+        ['emptyShard', 0, 'zero_test_shard', 0],
+        ['noWorkers', 0, undefined, 1],
+        ['noWorkersSharded', 0, undefined, 0],
+      ]) {
+        it(`reports zero-execution sessions: ${framework} ${scenario}`, async () => {
+          await runScenario(scenario, sessions, ({ session, module, tests }) => {
+            assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'skip'))
+            for (const event of [session, module]) {
+              assert.strictEqual(event.meta[TEST_STATUS], reason ? 'skip' : 'fail')
+              assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], reason)
+              assert.strictEqual(event.meta[TEST_SKIP_REASON], reason === 'all_tests_skipped'
+                ? 'All tests were skipped'
+                : reason === 'zero_test_shard'
+                  ? 'No tests were assigned to this shard'
+                  : reason === 'zero_tests' ? 'No tests were detected' : undefined)
+            }
+          }, exitCode, { framework })
+        })
+      }
+    }
+
     it('reports parallel Jasmine workers as one session', async () => {
       await runScenario('parallel', 2, ({ session, suites, tests }) => {
         assert.strictEqual(suites.length, 2)
@@ -409,7 +489,322 @@ for (const version of versions) {
       }, 0, { framework: 'jasmine' })
     })
 
-    it('reports Jasmine statuses and a failure screenshot without global injection', async () => {
+    describe('failure videos', () => {
+      const it = createScenarioIt(global.it, concurrency)
+      const serialIt = createScenarioIt(global.it, 1)
+      const videoEnv = { DD_TEST_FAILURE_VIDEOS_ENABLED: 'true', DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false' }
+
+      before(() => {
+        // The customer-provided executable records videos and validates their uploaded bytes.
+        execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' })
+      })
+
+      for (const framework of ['mocha', 'jasmine']) {
+        for (const [classic, multiremote] of [[true, false], [false, false], [true, true]]) {
+          const browserTest = process.env.WEBDRIVERIO_REAL_BROWSER === 'true' ? serialIt : serialIt.skip
+          const protocol = multiremote ? 'Classic multiremote with frozen capabilities' : classic ? 'Classic' : 'BiDi'
+          browserTest(`records playable ${framework} video in real Chrome (${protocol})`, async () => {
+            await runScenario('videosBrowser', 0, ({ media, tests }) => {
+              const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+              assert.ok(failed, 'expected a failed browser test; check WebdriverIO output for startup errors')
+              assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+              assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 1)
+              const dialogs = tests.find(test => test.meta['test.name'].endsWith(
+                'preserves dialogs during command-triggered and periodic captures'))
+              assert.strictEqual(dialogs?.meta[TEST_STATUS], 'pass')
+              assert.strictEqual(media.length, multiremote ? 2 : 1)
+              const video = media[0].media
+              assert.strictEqual(video.traceId, failed.trace_id.toString())
+              assert.strictEqual(video.contentType, 'video/webm')
+              const duration = Number(execFileSync('ffprobe', [
+                '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', 'pipe:0',
+              ], { input: video.content, encoding: 'utf8' }))
+              // Allow the final screenshot to settle, but command bursts must not inflate playback.
+              assert.ok(duration > 0 && duration < failed.duration / 1e9 + 1,
+                `video duration ${duration}s exceeds test duration ${failed.duration / 1e9}s`)
+              // Decode every frame and inspect a pixel in the solid background below the text.
+              const pixels = execFileSync('ffmpeg', [
+                '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
+                '-vf', 'crop=1:1:10:500:exact=1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1',
+              ], { input: video.content })
+              const colors = []
+              for (let offset = 0; offset < pixels.length; offset += 3) {
+                const [red, green, blue] = pixels.subarray(offset, offset + 3)
+                let color
+                if (red > 200 && green < 40 && blue < 40) color = 'red'
+                if (green > 200 && red < 40 && blue < 40) color = 'green'
+                if (blue > 200 && red < 40 && green < 40) color = 'blue'
+                if (color && colors.at(-1) !== color) colors.push(color)
+              }
+              assert.deepStrictEqual(colors, ['red', 'green', 'blue'])
+              if (process.env.WEBDRIVERIO_VIDEO_ARTIFACTS) {
+                mkdirSync(process.env.WEBDRIVERIO_VIDEO_ARTIFACTS, { recursive: true })
+                writeFileSync(join(process.env.WEBDRIVERIO_VIDEO_ARTIFACTS,
+                  `${framework}-${protocol.replaceAll(' ', '-')}.webm`), video.content)
+              }
+            }, 1, {
+              framework,
+              env: {
+                ...videoEnv,
+                WEBDRIVERIO_CLASSIC: String(classic),
+                WEBDRIVERIO_REAL_MULTIREMOTE: String(multiremote),
+                WEBDRIVERIO_FREEZE_LAST_CAPABILITIES: String(multiremote),
+              },
+            })
+          })
+        }
+      }
+
+      const browserTest = process.env.WEBDRIVERIO_REAL_BROWSER === 'true' ? serialIt : serialIt.skip
+      for (const retry of [false, true]) {
+        browserTest(`waits for final Chrome captures without teardown hooks (retry=${retry})`, async () => {
+          await runScenario('videosBrowserNoHooks', 0, ({ media, tests }) => {
+            const failures = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+            assert.strictEqual(failures.length, retry ? 2 : 1)
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+            assert.strictEqual(media.length, failures.length)
+            for (const failure of failures) {
+              assert.match(failure.meta['error.message'], /failure without teardown hooks/)
+              assert.strictEqual(failure.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+              const video = media.find(({ media }) => media.traceId === failure.trace_id.toString()).media
+              const pixels = execFileSync('ffmpeg', [
+                '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
+                '-vf', 'crop=1:1:10:500:exact=1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1',
+              ], { input: video.content })
+              const [red, green, blue] = pixels.subarray(-3)
+              assert.ok(green > 200 && red < 40 && blue < 40, 'final frame must show the failed green page')
+            }
+          }, 1, {
+            env: { ...videoEnv, WEBDRIVERIO_CLASSIC: 'true', WEBDRIVERIO_VIDEO_RETRY: String(retry) },
+          })
+        })
+      }
+
+      for (const multiremote of [false, true]) {
+        browserTest(`disables real Chrome video after an unsafe reload (multiremote=${multiremote})`, async () => {
+          await runScenario('videosBrowserReload', 0, ({ media, tests }) => {
+            assert.strictEqual(tests.length, 1)
+            assert.strictEqual(tests[0].meta[TEST_STATUS], 'fail')
+            assert.match(tests[0].meta['error.message'], /intentional failure after verifying the dialog is preserved/)
+            assert.strictEqual(tests[0].meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.strictEqual(tests[0].meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+            assert.strictEqual(media.length, 0)
+          }, 1, {
+            env: {
+              ...videoEnv,
+              WEBDRIVERIO_CLASSIC: 'true',
+              WEBDRIVERIO_REAL_MULTIREMOTE: String(multiremote),
+            },
+          })
+        })
+      }
+
+      for (const hook of ['beforeEach', 'afterEach', 'cascading', 'root', 'retry']) {
+        browserTest(`records remaining Chrome teardown after ${hook} failure`, async () => {
+          await runScenario('videosBrowserHooks', 0, ({ media, tests }) => {
+            assert.strictEqual(tests.length, 1)
+            const [test] = tests
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(test.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+            const message = hook === 'beforeEach'
+              ? /setup failed/
+              : hook === 'afterEach' || hook === 'retry' ? /inner teardown failed/ : /final teardown failed/
+            assert.match(test.meta['error.message'], message)
+            assert.strictEqual(media.length, 1)
+            assert.strictEqual(media[0].media.traceId, test.trace_id.toString())
+            const pixels = execFileSync('ffmpeg', [
+              '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
+              '-vf', 'crop=1:1:10:500:exact=1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1',
+            ], { input: media[0].media.content })
+            const [red, green, blue] = pixels.subarray(-3)
+            assert.ok(green > 200 && red < 40 && blue < 40, 'final frame must show the green root teardown page')
+          }, 1, {
+            env: { ...videoEnv, WEBDRIVERIO_CLASSIC: 'true', WEBDRIVERIO_VIDEO_HOOK: hook },
+          })
+        })
+      }
+
+      for (const hookFails of [false, true]) {
+        browserTest(`includes real Chrome teardown in native retry video (hookFails=${hookFails})`, async () => {
+          await runScenario('videosBrowserRetry', 0, ({ media, tests }) => {
+            assert.strictEqual(tests.length, hookFails ? 1 : 2)
+            const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assert.ok(failed)
+            assert.match(failed.meta['error.message'], hookFails ? /teardown failed/ : /retry this failure/)
+            assert.strictEqual(media.length, 1)
+            assert.strictEqual(media[0].media.traceId, failed.trace_id.toString())
+            const pixels = execFileSync('ffmpeg', [
+              '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
+              '-vf', 'crop=1:1:10:500:exact=1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1',
+            ], { input: media[0].media.content })
+            const [red, green, blue] = pixels.subarray(-3)
+            assert.ok(green > 200 && red < 40 && blue < 40, 'final frame must show the green teardown page')
+          }, hookFails ? 1 : 0, {
+            env: {
+              ...videoEnv,
+              WEBDRIVERIO_CLASSIC: 'true',
+              WEBDRIVERIO_VIDEO_HOOK: hookFails ? 'afterEach' : '',
+            },
+          })
+        })
+      }
+
+      for (const framework of ['mocha', 'jasmine']) {
+        for (const hook of ['', 'beforeEach', 'afterEach']) {
+          it(`uploads ${framework} videos for ${hook || 'test'} failures`, async () => {
+            await runScenario('videos', 1, ({ media, tests }) => {
+              const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              const videos = media.filter(({ media }) => media.contentType === 'video/webm')
+              // Mocha stops this suite after a failed hook; Jasmine still executes the next spec.
+              assert.strictEqual(failedTests.length, hook && framework === 'jasmine' ? 2 : 1)
+              assert.strictEqual(videos.length, failedTests.length)
+              for (const test of tests) {
+                assert.strictEqual(test.meta[TEST_FAILURE_VIDEO_UPLOADED],
+                  test.meta[TEST_STATUS] === 'fail' ? 'true' : undefined)
+                assert.strictEqual(test.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+              }
+              for (const { media: video, url } of videos) {
+                assert.ok(failedTests.some(test => test.trace_id.toString() === video.traceId))
+                assert.strictEqual(url.split('?')[0], `/api/v2/ci/test-runs/${video.traceId}/media`)
+                assert.deepStrictEqual([...video.content.subarray(0, 4)], [26, 69, 223, 163])
+                // Decode the uploaded bytes, rather than accepting only a container signature.
+                execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', '-f', 'null', '-'], {
+                  input: video.content,
+                  stdio: ['pipe', 'pipe', 'pipe'],
+                })
+              }
+            }, 1, {
+              framework,
+              env: { ...videoEnv, WEBDRIVERIO_VIDEO_HOOK: hook },
+            })
+          })
+        }
+
+        it(`preserves an explicit ${framework} prompt policy and disables videos`, async () => {
+          await runScenario('videos', 1, ({ media, tests }) => {
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 1)
+            assert.strictEqual(media.length, 0)
+          }, 1, {
+            framework,
+            env: { ...videoEnv, WEBDRIVERIO_PROMPT_BEHAVIOR: 'dismiss and notify' },
+            expectedScreenshots: 0,
+          })
+        })
+
+        it(`keeps ${framework} test results and screenshots when FFmpeg is missing`, async () => {
+          const nodeOnlyPath = join(cwd, `node-only-${framework}`)
+          mkdirSync(nodeOnlyPath)
+          symlinkSync(process.execPath, join(nodeOnlyPath, process.platform === 'win32' ? 'node.exe' : 'node'))
+          await runScenario('videos', 1, ({ media, tests }) => {
+            const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assert.match(failed.meta['error.message'], /video test failure/)
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+            assertFailureScreenshotUploaded(failed, media)
+            assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+          }, 1, {
+            framework,
+            env: {
+              ...videoEnv,
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+              WEBDRIVERIO_EXPECT_PROMPT_BEHAVIOR: 'dismiss and notify',
+              WEBDRIVERIO_CLASSIC: 'true',
+              // Keep Node available even when it shares an installation directory with FFmpeg.
+              PATH: nodeOnlyPath,
+            },
+          })
+        })
+
+        it(`keeps ${framework} screenshot and video outcomes independent`, async () => {
+          getScenarioReceiver().setMediaResponseStatusCode(400)
+          await runScenario('videos', 1, ({ media, tests }) => {
+            const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], 'true')
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+            assert.deepStrictEqual(media.map(({ media }) => media.contentType).sort(), ['image/png', 'video/webm'])
+          }, 1, {
+            framework,
+            env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true', DD_TEST_FAILURE_VIDEOS_ENABLED: 'true' },
+          })
+        })
+
+        it(`uploads ${framework} screenshots and videos when setup installs a zero-epoch fake Date`, async () => {
+          await runScenario('videos', 1, ({ media, tests }) => {
+            const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+            assert.strictEqual(failed.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+            assert.deepStrictEqual(media.map(({ media }) => media.contentType).sort(), ['image/png', 'video/webm'])
+            for (const { media: file } of media) assert.ok(Number(file.capturedAt) > 0)
+          }, 1, {
+            framework,
+            env: { ...videoEnv, DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true', WEBDRIVERIO_FAKE_DATE: 'true' },
+          })
+        })
+      }
+
+      for (const framework of ['mocha', 'jasmine']) {
+        it(`uploads only the failed native ${framework} retry attempt`, async () => {
+          const scenario = framework === 'mocha' ? 'retries' : 'videosJasmineRetry'
+          await runScenario(scenario, 1, ({ media, tests }) => {
+            assert.strictEqual(tests.length, 2)
+            const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            const passedTest = tests.find(test => test.meta[TEST_STATUS] === 'pass')
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+            assert.strictEqual(passedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.strictEqual(media.length, 1)
+            assert.strictEqual(media[0].media.traceId, failedTest.trace_id.toString())
+          }, 0, { framework, env: videoEnv })
+        })
+      }
+
+      for (const scenario of ['videosParallel', 'videosMultiremote']) {
+        it(`isolates videos across ${scenario}`, async () => {
+          await runScenario(scenario, 2, ({ media, tests }) => {
+            const failures = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+            assert.strictEqual(failures.length, scenario === 'videosParallel' ? 2 : 1)
+            assert.strictEqual(media.length, 2)
+            for (const { media: video } of media) {
+              assert.strictEqual(video.contentType, 'video/webm')
+              assert.ok(failures.some(test => test.trace_id.toString() === video.traceId))
+            }
+            assert.ok(failures.every(test => test.meta[TEST_FAILURE_VIDEO_UPLOADED] === 'true'))
+          }, 1, { env: videoEnv })
+        })
+      }
+
+      it('uploads failure videos through the Agent EVP proxy', async () => {
+        await runScenario('videos', 1, ({ media, tests }) => {
+          const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+          assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+          assert.strictEqual(media.length, 1)
+          assert.strictEqual(media[0].media.traceId, failed.trace_id.toString())
+          assert.match(media[0].url, /^\/evp_proxy\/v2\/api\/v2\/ci\/test-runs\//)
+          assert.strictEqual(media[0].headers['x-datadog-evp-subdomain'], 'api')
+          assert.strictEqual(media[0].headers['dd-api-key'], undefined)
+        }, 1, {
+          env: {
+            ...getCiVisEvpProxyConfig(getScenarioReceiver().port),
+            NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
+            ...videoEnv,
+          },
+        })
+      })
+
+      for (const enabled of [undefined, 'false']) {
+        it(`does not capture or upload when the video flag is ${enabled ?? 'unset'}`, async () => {
+          await runScenario('videos', 1, ({ media, tests }) => {
+            assert.strictEqual(media.length, 0)
+            for (const test of tests) {
+              assert.strictEqual(test.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+              assert.strictEqual(test.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+            }
+          }, 1, { env: { ...videoEnv, DD_TEST_FAILURE_VIDEOS_ENABLED: enabled }, expectedScreenshots: 0 })
+        })
+      }
+    })
+
+    it('reports Jasmine statuses and a failure screenshot by default without global injection', async () => {
       await runScenario('jasmineStatuses', 1, ({ media, session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'fail')
         assert.strictEqual(suites.length, 1)
@@ -425,7 +820,7 @@ for (const version of versions) {
         assert.match(failedTest.meta['error.message'], /expected WebdriverIO/)
         assertFailureScreenshotUploaded(failedTest, media)
       }, 1, {
-        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true' },
+        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: undefined },
         expectedScreenshots: 1,
         framework: 'jasmine',
       })
@@ -458,27 +853,32 @@ for (const version of versions) {
       }, 0, { framework: 'jasmine' })
     })
 
-    it('reports grouped Jasmine specs, including an empty spec, from one worker', async () => {
-      await runScenario('groupedEmpty', 1, ({ session, suites, tests }) => {
+    it('reports grouped passing Jasmine behaviors from one worker', async () => {
+      await runScenario('jasminePassing', 1, ({ session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suites.length, 3)
+        assert.strictEqual(suites.length, 5)
         assert.deepStrictEqual(
           suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
           [
             ['empty.e2e.js', 'skip'],
             ['first.e2e.js', 'pass'],
+            ['jasmine-hooks.e2e.js', 'pass'],
+            ['runner-env.e2e.js', 'pass'],
             ['second.e2e.js', 'pass'],
           ]
         )
-        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(tests.length, 4)
         assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'))
         const nonEmptySuites = suites.filter(suite => suite.meta[TEST_STATUS] !== 'skip')
         assertOneTestPerSuiteExecution(nonEmptySuites, tests)
         assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
         assert.deepStrictEqual(
-          tests.map(test => test.meta['test.webdriverio.worker']).sort(),
-          ['first', 'second']
+          tests.map(test => test.meta['test.webdriverio.worker']).filter(Boolean).sort(),
+          ['first', 'runner-env-node-options', 'second']
         )
+        const hookTest = tests.find(test => test.meta[TEST_SUITE] === 'jasmine-hooks.e2e.js')
+        assert.strictEqual(hookTest.meta['test.webdriverio.jasmine.before-each'], 'active')
+        assert.strictEqual(hookTest.meta['test.webdriverio.jasmine.after-each'], 'active')
       }, 0, { framework: 'jasmine' })
     })
 
@@ -528,7 +928,7 @@ for (const version of versions) {
     })
 
     it('starts Jasmine parent spans before tests when settings are delayed', async () => {
-      receiver.setSettingsResponseDelay(1_000)
+      getScenarioReceiver().setSettingsResponseDelay(1_000)
 
       await runScenario('jasmineDelayedSettings', 1, ({ session, module, suites, tests }) => {
         assert.strictEqual(suites.length, 1)
@@ -540,26 +940,6 @@ for (const version of versions) {
           assert.ok(parent.start <= test.start)
           assert.ok(parent.start + BigInt(parent.duration) >= testEnd)
         }
-      }, 0, { framework: 'jasmine' })
-    })
-
-    it('keeps the Jasmine test span active in per-test hooks', async () => {
-      await runScenario('jasmineHooks', 1, ({ session, suites, tests }) => {
-        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suites.length, 1)
-        assert.strictEqual(suites[0].meta[TEST_STATUS], 'pass')
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
-        assert.strictEqual(tests[0].meta['test.webdriverio.jasmine.before-each'], 'active')
-        assert.strictEqual(tests[0].meta['test.webdriverio.jasmine.after-each'], 'active')
-      }, 0, { framework: 'jasmine' })
-    })
-
-    it('preserves tracer preload for Jasmine with runnerEnv.NODE_OPTIONS', async () => {
-      await runScenario('runnerEnvNodeOptions', 1, ({ suites, tests }) => {
-        assert.strictEqual(suites.length, 1)
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta['test.webdriverio.worker'], 'runner-env-node-options')
       }, 0, { framework: 'jasmine' })
     })
 
@@ -622,11 +1002,17 @@ for (const version of versions) {
       })
     })
 
-    it('reports grouped specs from one worker', async () => {
-      await runScenario('grouped', 1, ({ suites, tests }) => {
-        assert.strictEqual(suites.length, 2)
-        assert.strictEqual(tests.length, 2)
+    it('reports grouped passing Mocha behaviors from one worker', async () => {
+      await runScenario('mochaPassing', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(suites.length, 4)
+        assert.strictEqual(tests.length, 4)
         assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
+        assertOneTestPerSuiteExecution(suites, tests)
+        assert.deepStrictEqual(
+          tests.map(test => test.meta['test.webdriverio.worker']).sort(),
+          ['delay', 'first', 'runner-env-node-options', 'second']
+        )
       })
     })
 
@@ -674,15 +1060,7 @@ for (const version of versions) {
       }, 1)
     })
 
-    it('coordinates mochaOpts.delay with configuration loading', async () => {
-      await runScenario('delay', 1, ({ suites, tests }) => {
-        assert.strictEqual(suites.length, 1)
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta['test.webdriverio.worker'], 'delay')
-      })
-    })
-
-    it('reports native Mocha retries and captures only the failed attempt', async () => {
+    it('reports native Mocha retries and captures only the failed attempt by default', async () => {
       await runScenario('retries', 1, ({ media, session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'pass')
         assert.strictEqual(suites.length, 1)
@@ -692,18 +1070,26 @@ for (const version of versions) {
         assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 1)
         assertFailureScreenshotUploaded(tests.find(test => test.meta[TEST_STATUS] === 'fail'), media)
       }, 0, {
-        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true' },
+        env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: undefined },
         expectedScreenshots: 1,
       })
     })
 
-    it('preserves tracer preload with runnerEnv.NODE_OPTIONS', async () => {
-      await runScenario('runnerEnvNodeOptions', 1, ({ suites, tests }) => {
-        assert.strictEqual(suites.length, 1)
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta['test.webdriverio.worker'], 'runner-env-node-options')
+    for (const framework of ['mocha', 'jasmine']) {
+      it(`does not capture or upload ${framework} failure screenshots when explicitly disabled`, async () => {
+        await runScenario(framework === 'mocha' ? 'retries' : 'jasmineStatuses', 1, ({ media, tests }) => {
+          const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+          assert.ok(failedTest)
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+          assert.strictEqual(media.length, 0)
+        }, framework === 'mocha' ? 0 : 1, {
+          env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false' },
+          expectedScreenshots: 0,
+          framework,
+        })
       })
-    })
+    }
 
     it('supports the Mocha TDD interface', async () => {
       await runScenario('tdd', 1, ({ suites, tests }) => {

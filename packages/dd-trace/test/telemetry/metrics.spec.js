@@ -518,6 +518,19 @@ describe('metrics', () => {
       assert.strictEqual(metric.sketch.count, 3)
     })
 
+    it('should track a value observed several times', () => {
+      const ns = new metrics.Namespace('tracers')
+      const metric = ns.distribution('name')
+
+      metric.track(100, 4)
+      metric.track(300)
+
+      assert.strictEqual(metric.pointCount, 5)
+      assert.strictEqual(metric.sketch.count, 5)
+      assert.ok(Math.abs(metric.sketch.getValueAtQuantile(0.75) - 100) <= 1)
+      assert.ok(Math.abs(metric.sketch.getValueAtQuantile(1) - 300) <= 3)
+    })
+
     it('should ignore invalid values', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.distribution('name')

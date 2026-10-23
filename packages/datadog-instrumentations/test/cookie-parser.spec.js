@@ -1,13 +1,13 @@
 'use strict'
 
 const assert = require('node:assert')
-const axios = require('axios')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 withVersions('cookie-parser', 'cookie-parser', version => {
   describe('cookie parser instrumentation', () => {
@@ -43,7 +43,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
     })
 
     it('should not abort the request by default', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { key: 'value' })
 
       sinon.assert.calledOnce(middlewareProcessCookieStub)
       assert.equal(res.data, 'DONE')
@@ -53,7 +53,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
       function noop () {}
       cookieParserReadCh.subscribe(noop)
 
-      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { key: 'value' })
 
       sinon.assert.calledOnce(middlewareProcessCookieStub)
       assert.equal(res.data, 'DONE')
@@ -68,7 +68,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
       }
       cookieParserReadCh.subscribe(blockRequest)
 
-      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { key: 'value' })
 
       sinon.assert.notCalled(middlewareProcessCookieStub)
       assert.equal(res.data, 'BLOCKED')

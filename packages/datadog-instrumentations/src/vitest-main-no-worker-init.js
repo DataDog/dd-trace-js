@@ -4,7 +4,8 @@ const path = require('node:path')
 
 const satisfies = require('../../../vendor/dist/semifies')
 
-const { hasEfdRetries } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { getDynamicAtrRetryCount } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
+const { EMPTY_EFD_RETRY_POLICY, hasEfdRetries } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
@@ -94,7 +95,6 @@ function noop () {}
  * Removes Vite and Vitest runtime query parameters from browser error URLs.
  *
  * @param {string} url
- * @returns {string}
  */
 function removeVitestBrowserUrlMetadata (url) {
   const locationMatch = url.match(VITEST_BROWSER_STACK_LOCATION_RE)
@@ -129,7 +129,6 @@ function removeVitestBrowserUrlMetadata (url) {
  * Removes Vite and Vitest runtime URL metadata from browser error text.
  *
  * @param {string} value
- * @returns {string}
  */
 function normalizeVitestBrowserErrorText (value) {
   return value.replaceAll(VITEST_BROWSER_URL_RE, removeVitestBrowserUrlMetadata)
@@ -139,7 +138,6 @@ function normalizeVitestBrowserErrorText (value) {
  * Removes the ephemeral Vite server origin in addition to its runtime query parameters.
  *
  * @param {string} url
- * @returns {string}
  */
 function normalizeVitestBrowserStackUrl (url) {
   const normalizedUrl = removeVitestBrowserUrlMetadata(url)
@@ -152,7 +150,6 @@ function normalizeVitestBrowserStackUrl (url) {
  * Normalizes browser URLs in a stack when Vitest does not provide parsed frames.
  *
  * @param {string} value
- * @returns {string}
  */
 function normalizeVitestBrowserStackText (value) {
   return value.replaceAll(VITEST_BROWSER_URL_RE, normalizeVitestBrowserStackUrl)
@@ -330,7 +327,6 @@ function isNoWorkerInitPool (pool, isVitestWorkerPool) {
 
 /**
  * @param {object} state
- * @returns {boolean}
  */
 function isEarlyFlakeDetectionActive (state) {
   return state.isEarlyFlakeDetectionEnabled &&
@@ -354,7 +350,20 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
     testManagementTestsBySuite,
     testPropertiesByFilepath,
     testSessionConfiguration,
+    flakyTestRetriesConfiguration,
   } = setupData
+  const { earlyFlakeDetectionRetryPolicy, dynamicAtrBuckets } = state
+
+  // Resolve the shared policy in Node; Browser Mode receives only serializable duration/count pairs.
+  const dynamicAtrRetryPolicy = state.isDynamicAtrEnabled
+    ? [
+        ...EMPTY_EFD_RETRY_POLICY.durationRetryCounts.map(({ durationLimitMs }) => ({
+          durationLimitMs,
+          retryCount: getDynamicAtrRetryCount(durationLimitMs, earlyFlakeDetectionRetryPolicy, dynamicAtrBuckets),
+        })),
+        { retryCount: getDynamicAtrRetryCount(Infinity, earlyFlakeDetectionRetryPolicy, dynamicAtrBuckets) },
+      ]
+    : undefined
 
   setProvidedContext(ctx, {
     _ddVitestWorkerSetup: {
@@ -366,6 +375,8 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       efdSuiteAdmissionBrowserCommand: VITEST_BROWSER_EFD_SUITE_ADMISSION_COMMAND,
       isEfdSuiteAdmissionEnabled: state.isEfdSuiteAdmissionEnabled,
       isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionActive(state),
+      dynamicAtrRetryPolicy,
+      flakyTestRetriesConfiguration,
       isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},
       modifiedFiles: modifiedFiles || {},
@@ -456,7 +467,6 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
  * @param {{
  *   resolve?: { dedupe?: string[] }
  * }} viteConfig
- * @returns {void}
  */
 function configureVitestBrowserSetupFile (viteConfig) {
   viteConfig.resolve ||= {}
@@ -473,7 +483,6 @@ function configureVitestBrowserSetupFile (viteConfig) {
  * @param {unknown} _context
  * @param {string} testSuite
  * @param {unknown} hasNewTest
- * @returns {boolean}
  */
 function handleBrowserEfdSuiteAdmission (_context, testSuite, hasNewTest) {
   return reserveEarlyFlakeDetectionSuite?.(testSuite, hasNewTest === true) === true
@@ -483,7 +492,6 @@ function handleBrowserEfdSuiteAdmission (_context, testSuite, hasNewTest) {
  * Allows Vite to serve the Datadog setup file after its default workspace detection has run.
  *
  * @param {{ server?: { fs?: { allow?: string[] } } }} viteConfig
- * @returns {void}
  */
 function allowVitestBrowserSetupFile (viteConfig) {
   const allow = viteConfig.server?.fs?.allow
@@ -505,7 +513,6 @@ function allowVitestBrowserSetupFile (viteConfig) {
  * Installs the Vite access plugin on each parent project that owns a Browser Mode server.
  *
  * @param {object[]|undefined} testSpecifications
- * @returns {void}
  */
 function addVitestBrowserSetupFileAccess (testSpecifications) {
   if (!Array.isArray(testSpecifications)) return
@@ -545,7 +552,6 @@ function addVitestBrowserRuntimeCommand (project) {
  * Adds the private EFD admission command to a Vitest Browser Mode configuration.
  *
  * @param {object|undefined} config
- * @returns {void}
  */
 function addVitestBrowserCommand (config) {
   const browserConfig = config?.browser
@@ -653,8 +659,7 @@ function createMainProcessReporter (reporterState) {
     },
 
     onTaskUpdate (packs, events) {
-      if (!isReporterActive()) return
-      if (!events) return
+      if (!isReporterActive() || !events) return
 
       for (const event of events) {
         if (event[1] === 'test-retried') {
@@ -679,8 +684,7 @@ function createMainProcessReporter (reporterState) {
     },
 
     onFinished (files) {
-      if (!isReporterActive()) return
-      if (!files) return
+      if (!isReporterActive() || !files) return
 
       for (const file of files) {
         const testModule = createTestModuleFromFile(file)
@@ -927,6 +931,7 @@ function createMainProcessReporter (reporterState) {
     const { flakyTestRetriesConfiguration } = testOptimizationData
     const isFlakyTestRetries = !!flakyTestRetriesConfiguration && isFlakyTestRetriesEnabledForTask({
       isFlakyTestRetriesEnabled: state.isFlakyTestRetriesEnabled,
+      isDynamicAtrEnabled: state.isDynamicAtrEnabled,
       flakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
       flakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
     }, task)
@@ -1169,7 +1174,6 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
  * @param {'attempt_to_fix'|'early_flake_detection'|'external'} type
  * @param {string[]} statuses
  * @param {boolean} isFinalAttempt
- * @returns {boolean}
  */
 function hasFailedAllManagedRetries (task, testProperties, type, statuses, isFinalAttempt) {
   if (!isFinalAttempt || statuses.length === 0 || !statuses.every(status => status === 'fail')) {
@@ -1207,7 +1211,6 @@ function getEarlyFlakeDetectionFinalStatus (statuses, testProperties) {
  *
  * @param {string} status
  * @param {{ isDisabled?: boolean, isQuarantined?: boolean }} testProperties
- * @returns {string}
  */
 function getExternalFinalStatus (status, testProperties) {
   return testProperties.isDisabled || testProperties.isQuarantined ? 'skip' : status
@@ -1271,10 +1274,12 @@ function reportFinalTestAttempt (testReport) {
         isQuarantined: testProperties.isQuarantined,
       })
     }
+    const attemptIndex = task.meta?.__ddTestOptCurrentAttemptIndex ?? 0
+    const attemptStartTime = task.meta?.__ddTestOptAttemptStartTimes?.[attemptIndex]
     const {
       isRumActive,
       testExecutionId,
-    } = getRumCorrelation(task)
+    } = getRumCorrelation(task, attemptIndex)
     testSkipCh.publish({
       ...browserEnvironment,
       testName,
@@ -1286,6 +1291,8 @@ function reportFinalTestAttempt (testReport) {
       isRumActive,
       isTestFrameworkWorker: true,
       requestErrorTags: state.requestErrorTags,
+      startTime: Number.isFinite(attemptStartTime) ? attemptStartTime : undefined,
+      duration: task.meta?.__ddTestOptAttemptDurations?.[attemptIndex],
       testStartLine: task.location?.line,
       testExecutionId,
       ...testSuiteStore,
@@ -1692,7 +1699,6 @@ function getEffectiveTestSpecificationPool (testSpecification, defaultPool) {
  * Resolves Vitest's default worker pool when the user did not configure one.
  *
  * @param {{ pool?: string }|undefined} config
- * @returns {string}
  */
 function getEffectiveConfigPool (config) {
   return config?.pool || VITEST_DEFAULT_POOL
@@ -1747,7 +1753,6 @@ function normalizeProjectName (name) {
  * Returns whether a Vitest specification runs in Browser Mode.
  *
  * @param {object} testSpecification
- * @returns {boolean}
  */
 function isBrowserTestSpecification (testSpecification) {
   return getTestSpecificationPool(testSpecification) === 'browser' ||
@@ -1758,7 +1763,6 @@ function isBrowserTestSpecification (testSpecification) {
  * Returns whether a Vitest project has Browser Mode enabled.
  *
  * @param {object|undefined} project
- * @returns {boolean}
  */
 function isBrowserProject (project) {
   try {
@@ -1771,7 +1775,6 @@ function isBrowserProject (project) {
  * Returns whether Vitest can overlap tests or their setup and teardown.
  *
  * @param {object|undefined} config
- * @returns {boolean}
  */
 function hasConcurrentTestExecution (config) {
   const sequence = config?.sequence
@@ -1785,7 +1788,6 @@ function hasConcurrentTestExecution (config) {
  *
  * @param {object} ctx
  * @param {object[]|undefined} testSpecifications
- * @returns {boolean}
  */
 function canRaceRumCorrelation (ctx, testSpecifications) {
   if (!Array.isArray(testSpecifications)) {

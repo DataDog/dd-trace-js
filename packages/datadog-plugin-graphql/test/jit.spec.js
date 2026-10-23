@@ -199,7 +199,6 @@ describe('Plugin', () => {
 
     /**
      * @param {{ __typename: string }} value
-     * @returns {string}
      */
     function resolveType (value) {
       return value.__typename
@@ -727,7 +726,6 @@ void generatedResolver
               createThenable: () => ({
                 /**
                  * @param {(value: string) => void} resolve
-                 * @returns {string}
                  */
                 then (resolve) {
                   queueMicrotask(() => {
@@ -1587,7 +1585,6 @@ void generatedResolver
                  * @param {object} _args
                  * @param {unknown} _context
                  * @param {{ __datadogGraphqlJitField?: unknown, dynamic?: string, enriched?: string }} info
-                 * @returns {string}
                  */
                 resolve (_source, _args, _context, info) {
                   enrichedValues.push({
@@ -2857,7 +2854,6 @@ void generatedResolver
               resolve: source => ({
                 /**
                  * @param {(value: string) => void} resolve
-                 * @returns {string}
                  */
                 then (resolve) {
                   queueMicrotask(() => resolve(source.nickname))

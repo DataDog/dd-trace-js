@@ -387,7 +387,6 @@ describe('test optimization validation report', () => {
    *
    * @param {object[]} results scenario results
    * @param {object} [runSummary] run summary
-   * @returns {void}
    */
   function write (results, runSummary = {}) {
     writeReport({
@@ -407,7 +406,6 @@ describe('test optimization validation report', () => {
   /**
    * Reads the generated Markdown report.
    *
-   * @returns {string} report source
    */
   function readReport () {
     return fs.readFileSync(path.join(out, 'report.md'), 'utf8')

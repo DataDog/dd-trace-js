@@ -234,7 +234,6 @@ class RemoteConfig {
   /**
    * Updates the native client with the current products and capabilities.
    *
-   * @returns {void}
    */
   #updateProductCapabilities () {
     const fetcher = this.#fetcher

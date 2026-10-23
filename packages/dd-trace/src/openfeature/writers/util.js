@@ -2,6 +2,8 @@
 
 const {
   EVP_EVENT_PLATFORM_SUBDOMAIN,
+  EVP_ORIGIN_HEADER_NAME,
+  EVP_ORIGIN_VERSION_HEADER_NAME,
   EVP_PROXY_PATH_V2,
   EVP_PROXY_PATH_V4,
   EVP_SUBDOMAIN_HEADER_NAME,
@@ -10,12 +12,27 @@ const { createDirectEVPRoute } = require('../../evp_proxy/direct')
 const { discoverEVPProxy } = require('../../evp_proxy/discovery')
 const logger = require('../../log')
 
+const ROUTE_DISCOVERY_COOLDOWN_MS = 60_000
+const REQUIRED_LOCAL_HEADERS = [EVP_ORIGIN_HEADER_NAME, EVP_ORIGIN_VERSION_HEADER_NAME]
+const STOP_NOOP = () => {}
+
+/**
+ * @typedef {(enabled: boolean, route?: import('./flag-evaluations').FlagEvaluationRoute) => void} DeliverySubscriber
+ */
+/**
+ * @typedef {object} DeliveryStrategy
+ * @property {Set<{notify: DeliverySubscriber}>} subscribers
+ * @property {() => void} stop
+ * @property {[boolean, import('./flag-evaluations').FlagEvaluationRoute?]} [result]
+ */
+/** @type {WeakMap<import('../../config/config-base'), DeliveryStrategy>} */
+const deliveryStrategies = new WeakMap()
+
 let missingRouteWarningLogged = false
 
 /**
  * Logs the unavailable exposure-delivery warning once.
  *
- * @returns {void}
  */
 function warnExposureDeliveryUnavailable () {
   if (missingRouteWarningLogged) return
@@ -27,11 +44,10 @@ function warnExposureDeliveryUnavailable () {
 }
 
 /**
- * Preserves Agent exposure delivery for the Remote Configuration source.
+ * Preserves the one-time EVP v2 capability check for the Remote Configuration source.
  *
- * @param {import('../../config')} config - Tracer configuration object
+ * @param {import('../../config/config-base')} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
- * @returns {void}
  */
 function setAgentStrategy (config, setWriterEnabledValue) {
   discoverEVPProxy(config.url, {
@@ -51,6 +67,7 @@ function setAgentStrategy (config, setWriterEnabledValue) {
       setWriterEnabledValue(false)
     }
   })
+  return STOP_NOOP
 }
 
 /**
@@ -59,61 +76,151 @@ function setAgentStrategy (config, setWriterEnabledValue) {
  * Local discovery is optional for delivery. A missing listener, discovery
  * error, or incompatible receiver selects direct intake when credentials exist.
  *
- * @param {import('../../config')} config - Tracer configuration object
+ * @param {import('../../config/config-base')} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
- * @returns {void}
  */
 function setAgentlessStrategy (config, setWriterEnabledValue) {
   const directRoute = createDirectEVPRoute(config, EVP_EVENT_PLATFORM_SUBDOMAIN)
+  let discovering = false
+  let recoveryTimer
+  let state = 'unknown'
+  let stopped = false
 
-  discoverEVPProxy(config.url, {
-    supportedPaths: [EVP_PROXY_PATH_V4, EVP_PROXY_PATH_V2],
-  }, (error, localRoute) => {
-    if (localRoute) {
-      const route = {
-        ...localRoute,
-        headers: {
-          [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
-        },
-      }
-      if (directRoute) route.fallback = directRoute
-      logger.debug('FFE Writer enabled with local EVP route %s', route.basePath)
-      setWriterEnabledValue(true, route)
-      return
+  const stop = () => {
+    stopped = true
+    clearTimeout(recoveryTimer)
+    recoveryTimer = undefined
+  }
+
+  const scheduleRecovery = () => {
+    if (stopped || state !== 'unavailable' || recoveryTimer !== undefined) return
+
+    recoveryTimer = setTimeout(discover, ROUTE_DISCOVERY_COOLDOWN_MS)
+    recoveryTimer.unref?.()
+  }
+
+  const markUnavailable = () => {
+    if (stopped || state === 'direct') return
+    if (state !== 'unavailable') {
+      state = 'unavailable'
+      setWriterEnabledValue(false)
     }
+    scheduleRecovery()
+  }
 
+  const activateDirect = () => {
+    if (stopped || state === 'direct' || directRoute === undefined) return
+    state = 'direct'
+    clearTimeout(recoveryTimer)
+    recoveryTimer = undefined
+    setWriterEnabledValue(true, directRoute)
+  }
+
+  /**
+   * @param {{url: URL, basePath: string}} localRoute - Discovered local route
+   */
+  const activateLocal = localRoute => {
+    state = 'local'
+    const route = {
+      ...localRoute,
+      headers: {
+        [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
+      },
+    }
     if (directRoute) {
-      if (error) {
-        logger.debug('FFE Writer using direct EVP intake after local discovery failed: %s', error.message)
-      } else {
-        logger.debug('FFE Writer using direct EVP intake because no compatible local route was advertised')
-      }
-      setWriterEnabledValue(true, directRoute)
-      return
+      route.fallback = directRoute
+      route.onFallback = activateDirect
+    } else {
+      route.onUnavailable = markUnavailable
     }
+    logger.debug('FFE Writer enabled with local EVP route %s', route.basePath)
+    setWriterEnabledValue(true, route)
+  }
 
-    if (error) {
-      logger.debug('FFE Writer disabled - error getting local receiver info: %s', error.message)
-    }
-    warnExposureDeliveryUnavailable()
-    setWriterEnabledValue(false)
-  })
+  function discover () {
+    recoveryTimer = undefined
+    if (stopped || state === 'direct' || discovering) return
+    discovering = true
+
+    discoverEVPProxy(config.url, {
+      requiredHeaders: REQUIRED_LOCAL_HEADERS,
+      supportedPaths: [EVP_PROXY_PATH_V4, EVP_PROXY_PATH_V2],
+      // Agentless owns fallback and unavailable-state recovery; do not delay them with HTTP retries.
+      retry: false,
+    }, (error, localRoute) => {
+      discovering = false
+      if (stopped || state === 'direct') return
+
+      if (localRoute) {
+        activateLocal(localRoute)
+        return
+      }
+
+      if (directRoute) {
+        if (error) {
+          logger.debug('FFE Writer using direct EVP intake after local discovery failed: %s', error.message)
+        } else {
+          logger.debug('FFE Writer using direct EVP intake because no compatible local route was advertised')
+        }
+        activateDirect()
+        return
+      }
+
+      if (error) {
+        logger.debug('FFE Writer disabled - error getting local receiver info: %s', error.message)
+      }
+      warnExposureDeliveryUnavailable()
+      markUnavailable()
+    })
+  }
+
+  discover()
+  return stop
 }
 
 /**
- * Applies the exposure-delivery strategy for the configured Feature Flags source.
+ * Subscribes to the delivery strategy owned by this tracer configuration.
+ * The provider and exposure module receive the same configuration object from
+ * the tracer. Share their route transitions, but never share credentials across
+ * distinct configurations. The last subscriber owns discovery cleanup.
  *
- * @param {import('../../config')} config - Tracer configuration object
- * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
- * @returns {void}
+ * @param {import('../../config/config-base')} config - Tracer configuration object
+ * @param {(enabled: boolean, route?: import('./flag-evaluations').FlagEvaluationRoute) => void} setWriterEnabledValue
+ *   Callback to set the writer enabled state
  */
-function setExposureDeliveryStrategy (config, setWriterEnabledValue) {
-  if (config.featureFlags?.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'agentless') {
-    setAgentlessStrategy(config, setWriterEnabledValue)
-    return
+function setEventDeliveryStrategy (config, setWriterEnabledValue) {
+  let strategy = deliveryStrategies.get(config)
+  const subscriber = { notify: setWriterEnabledValue }
+
+  if (strategy) {
+    strategy.subscribers.add(subscriber)
+    if (strategy.result) setWriterEnabledValue(...strategy.result)
+  } else {
+    strategy = { subscribers: new Set([subscriber]), stop: STOP_NOOP }
+    deliveryStrategies.set(config, strategy)
+    /** @type {DeliverySubscriber} */
+    const notify = (enabled, route) => {
+      // A Remote Config discovery already in flight cannot be canceled. Ignore
+      // its result after shutdown, including when the same config is reused.
+      if (deliveryStrategies.get(config) !== strategy) return
+      strategy.result = route === undefined ? [enabled] : [enabled, route]
+      for (const subscriber of strategy.subscribers) {
+        subscriber.notify(...strategy.result)
+      }
+    }
+    strategy.stop = config.featureFlags?.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'agentless'
+      ? setAgentlessStrategy(config, notify)
+      : setAgentStrategy(config, notify)
   }
 
-  setAgentStrategy(config, setWriterEnabledValue)
+  return () => {
+    if (!strategy.subscribers.delete(subscriber) || strategy.subscribers.size !== 0) return
+    deliveryStrategies.delete(config)
+    strategy.stop()
+  }
 }
 
-module.exports = { setExposureDeliveryStrategy }
+module.exports = {
+  setEventDeliveryStrategy,
+  setExposureDeliveryStrategy: setEventDeliveryStrategy,
+}
