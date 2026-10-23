@@ -207,6 +207,10 @@ jobs:
         version: [oldest, latest]
         # "oldest" is 5.2.0 in <=5 and 8.0.0 in >=6
         mocha-version: [oldest, latest]
+        spec:
+          - mocha
+          - mocha-advanced-features
+    name: integration-mocha (${{ matrix.mocha-version }}, node-${{ matrix.version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -226,10 +230,11 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
+          SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
-          flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}
+          flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}-${{ matrix.spec }}
 
   integration-webdriverio:
     needs: browser-tools
@@ -365,6 +370,10 @@ jobs:
       matrix:
         version: [oldest, latest]
         cucumber-version: [7.0.0, latest]
+        spec:
+          - cucumber
+          - cucumber-report-methods
+    name: integration-cucumber (${{ matrix.cucumber-version }}, node-${{ matrix.version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -384,10 +393,11 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
+          SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
-          flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}
+          flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}-${{ matrix.spec }}
 
   browser-tools:
     name: Ensure browser tools Docker image
@@ -475,6 +485,7 @@ jobs:
         spec:
           - cypress-reporting
           - cypress-reporting-instrumentation
+          - cypress-reporting-config
           - cypress-itr
           - cypress-tia-code-coverage
           - cypress-efd
