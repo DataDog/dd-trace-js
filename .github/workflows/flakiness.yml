@@ -46,12 +46,34 @@ jobs:
         with:
           version: active
       - run: yarn install --frozen-lockfile --ignore-scripts
-      - run: node scripts/flakiness.mjs
+      - id: flakiness
+        continue-on-error: true
+        run: node scripts/flakiness.mjs
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
-      - run: cat flakiness.md >> "$GITHUB_STEP_SUMMARY"
+      - if: steps.flakiness.outcome == 'success'
+        run: cat flakiness.md >> "$GITHUB_STEP_SUMMARY"
+      - id: duration
+        continue-on-error: true
+        run: node scripts/ci-duration.mjs
+        env:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+      - if: steps.duration.outcome == 'success'
+        run: cat ci-duration.md >> "$GITHUB_STEP_SUMMARY"
       - id: slack
-        run: echo "report=$(cat flakiness.txt)" >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ -f flakiness.txt ]]; then
+            echo "flakiness=$(cat flakiness.txt)" >> "$GITHUB_OUTPUT"
+          else
+            echo "flakiness=⚠️ Flakiness report failed. See <$REPORT_URL|workflow run>." >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -f ci-duration.txt ]]; then
+            echo "duration=$(cat ci-duration.txt)" >> "$GITHUB_OUTPUT"
+          else
+            echo "duration=⚠️ CI duration report failed. See <$REPORT_URL|workflow run>." >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          REPORT_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       - uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v2.1.0
         if: github.event_name == 'schedule'
         with:
@@ -64,4 +86,11 @@ jobs:
               - type: "section"
                 text:
                   type: "mrkdwn"
-                  text: "${{ steps.slack.outputs.report }}"
+                  text: "${{ steps.slack.outputs.flakiness }}"
+              - type: "divider"
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "${{ steps.slack.outputs.duration }}"
+      - if: steps.flakiness.outcome == 'failure' || steps.duration.outcome == 'failure'
+        run: exit 1

@@ -122,6 +122,23 @@ const transformers = {
     return configValue
   },
   /**
+   * @param {string} value
+   * @param {string} optionName
+   * @param {string} source
+   * @returns {number | 'auto' | undefined}
+   */
+  normalizeProfilingHeapLimitExtensionSize (value, optionName, source) {
+    if (value.toLowerCase() === 'auto') {
+      return 'auto'
+    }
+
+    const parsed = parsers.INT(value)
+    if (parsed === undefined) {
+      warnInvalidValue(value, optionName, source, 'Heap limit extension size must be an integer or "auto"')
+    }
+    return parsed
+  },
+  /**
    * Parses DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ('on' | 'off' | 'gzip[-1..9]' | 'zstd[-1..22]')
    * into the codec and level the profiler uploads with. The value's shape is already range-checked
    * by the `allowed` pattern, so no validation is needed here.
@@ -199,6 +216,17 @@ const transformers = {
       return new URL(value)
     } catch {}
   },
+  /**
+   * @param {string} value
+   * @param {string} optionName
+   * @param {string} source
+   * @returns {string | undefined}
+   */
+  validateHttpUrl (value, optionName, source) {
+    const url = transformers.toURL(value)
+    if (url?.protocol === 'http:' || url?.protocol === 'https:') return value
+    warnInvalidValue(value, optionName, source, 'Invalid HTTP URL')
+  },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)
     for (let index = 0; index < value.length; index++) {
@@ -261,28 +289,28 @@ const parsers = {
     }
     return parsed
   },
-  ARRAY (raw) {
+  ARRAY (raw, optionName) {
     // TODO: Make the parsing a helper that is reused everywhere.
     const result = []
     if (!raw) {
       return result
     }
+    // Dynamic ATR buckets are positional; retain empty slots for downstream validation.
+    const preserveEmptyEntries = optionName === 'DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS'
     let valueStart = 0
     for (let i = 0; i < raw.length; i++) {
       const char = raw[i]
       if (char === ',') {
         const value = raw.slice(valueStart, i).trim()
-        // Auto filter empty entries.
-        if (value.length > 0) {
+        if (value.length > 0 || preserveEmptyEntries) {
           result.push(value)
         }
         valueStart = i + 1
       }
     }
-    if (valueStart < raw.length) {
+    if (valueStart < raw.length || preserveEmptyEntries) {
       const value = raw.slice(valueStart).trim()
-      // Auto filter empty entries.
-      if (value.length > 0) {
+      if (value.length > 0 || preserveEmptyEntries) {
         result.push(value)
       }
     }

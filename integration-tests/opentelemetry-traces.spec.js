@@ -123,6 +123,8 @@ describe('OTLP Trace Export', () => {
 
     // Validate timing fields
     for (const span of spans) {
+      assert.strictEqual(span.flags, 1, 'exported spans should have the sampled flag')
+      assert.match(span.traceState, /(?:^|,)ot=rv:[0-9a-f]{14};th:0(?:,|$)/)
       assert.ok(span.startTimeUnixNano >= beforeNs, 'span startTimeUnixNano should be >= test start time')
       assert.ok(span.endTimeUnixNano > 0, 'span should have a positive endTimeUnixNano')
       assert.ok(span.endTimeUnixNano >= span.startTimeUnixNano, 'endTime should be >= startTime')

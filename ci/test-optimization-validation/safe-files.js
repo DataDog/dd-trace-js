@@ -189,7 +189,6 @@ function refuseSymbolicLink (filename, label) {
  *
  * @param {string} root allowed root
  * @param {string} filename candidate path
- * @returns {boolean} true when the candidate is inside the root
  */
 function isPathInside (root, filename) {
   const relative = path.relative(root, filename)

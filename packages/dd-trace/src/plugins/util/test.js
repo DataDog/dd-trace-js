@@ -5,6 +5,7 @@ const fs = require('fs')
 const { URL } = require('url')
 const { stripVTControlCharacters } = require('node:util')
 const { getLageTestSessionName } = require('../../ci-visibility/lage')
+const resolveRunfilePath = require('../../ci-visibility/resolve-runfile-path')
 const log = require('../../log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const { getSegment } = require('../../util')
@@ -102,6 +103,7 @@ const TEST_STATUS = 'test.status'
 const TEST_FINAL_STATUS = 'test.final_status'
 const TEST_PARAMETERS = 'test.parameters'
 const TEST_SKIP_REASON = 'test.skip_reason'
+const TEST_SESSION_EMPTY_REASON = 'test.session.empty_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
@@ -249,8 +251,11 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_module_end',
   'test_session_end',
 ]
+const TEST_PARALLELIZATION_ENABLED = 'test.parallelization.enabled'
+const TEST_PARALLELIZATION_PLAN_TAG_PREFIX = 'test.parallelization.plan.'
 const TEST_LEVELS_METADATA = 'test_levels'
 const TEST_LEVELS_METADATA_TAGS = [
+  TEST_PARALLELIZATION_ENABLED,
   CI_JOB_ID,
   CI_JOB_NAME,
   CI_JOB_URL,
@@ -445,7 +450,6 @@ function addTestOptimizationRequest (requestPromises, responseNames, responseNam
  *
  * @param {string} testSuite
  * @param {string|undefined} testSuiteExecutionId
- * @returns {string}
  */
 function getTestSuiteExecutionKey (testSuite, testSuiteExecutionId) {
   return testSuiteExecutionId ? `${testSuite}\0${testSuiteExecutionId}` : testSuite
@@ -471,9 +475,11 @@ module.exports = {
   TEST_FINAL_STATUS,
   TEST_PARAMETERS,
   TEST_SKIP_REASON,
+  TEST_SESSION_EMPTY_REASON,
   TEST_IS_RUM_ACTIVE,
   setRumTestCorrelation,
   setRumTestTags,
+  setExpectedEmptyTestSessionTags,
   TEST_SOURCE_FILE,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
@@ -807,10 +813,47 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata,
   }
+  if (/^(true|1)$/i.test(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'))) {
+    metadata[TEST_PARALLELIZATION_ENABLED] = 'true'
+    Object.assign(metadata, getTestParallelizationPlanMetadata())
+  }
   if (config && config.service) {
     metadata['service.name'] = config.service
   }
   return removeInvalidMetadata(metadata)
+}
+
+/** @returns {Record<string, string>} */
+function getTestParallelizationPlanMetadata () {
+  try {
+    let metadataFile = getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE')
+    if (!metadataFile) {
+      // The manifest locator belongs to DDTest's artifact protocol, rather than tracer configuration.
+      // eslint-disable-next-line eslint-rules/eslint-process-env
+      const env = process.env
+      const manifestFile = env.TEST_OPTIMIZATION_MANIFEST_FILE || env.DD_TEST_OPTIMIZATION_MANIFEST_FILE
+      const planDirectory = manifestFile
+        ? path.dirname(resolveRunfilePath(manifestFile, env))
+        : path.join(process.cwd(), '.testoptimization')
+      metadataFile = path.join(planDirectory, 'plan-metadata.json')
+    }
+    const { tags } = JSON.parse(fs.readFileSync(metadataFile, 'utf8'))
+    if (!tags || typeof tags !== 'object' || Array.isArray(tags) ||
+        Object.values(tags).some(value => typeof value !== 'string')) {
+      return {}
+    }
+    const metadata = {}
+    for (const [tag, value] of Object.entries(tags)) {
+      if (tag.startsWith(TEST_PARALLELIZATION_PLAN_TAG_PREFIX) &&
+          tag.length > TEST_PARALLELIZATION_PLAN_TAG_PREFIX.length && value) {
+        metadata[tag] = value
+      }
+    }
+    return metadata
+  } catch (err) {
+    log.debug('Failed to read DDTest plan metadata: %s', err.message)
+    return {}
+  }
 }
 
 function getTestParametersString (parametersByTestName, testName) {
@@ -843,6 +886,11 @@ function getTestLevelsMetadataTags (testEnvironmentMetadata) {
       testLevelsMetadataTags[key] = value
     }
   }
+  for (const [key, value] of Object.entries(testEnvironmentMetadata)) {
+    if (key.startsWith(TEST_PARALLELIZATION_PLAN_TAG_PREFIX) && value !== undefined) {
+      testLevelsMetadataTags[key] = value
+    }
+  }
   return testLevelsMetadataTags
 }
 
@@ -868,7 +916,6 @@ function finishAllTraceSpans (span) {
  * @param {import('../../opentracing/span')} testSpan
  * @param {boolean|undefined} isRumActive
  * @param {string} [browserVersion]
- * @returns {void}
  */
 function setRumTestTags (testSpan, isRumActive, browserVersion) {
   if (isRumActive) {
@@ -876,6 +923,29 @@ function setRumTestTags (testSpan, isRumActive, browserVersion) {
   }
   if (browserVersion) {
     testSpan.setTag(TEST_BROWSER_VERSION, browserVersion)
+  }
+}
+
+/**
+ * Marks a successful test session that did not execute any tests.
+ *
+ * @param {import('../../opentracing/span')} testSessionSpan
+ * @param {import('../../opentracing/span')|undefined} testModuleSpan
+ * @param {'zero_tests'|'all_tests_skipped'|'zero_test_shard'|'test_discovery'} emptyReason
+ */
+function setExpectedEmptyTestSessionTags (testSessionSpan, testModuleSpan, emptyReason) {
+  const skipReason = emptyReason === 'test_discovery'
+    ? 'Test discovery only (--list)'
+    : emptyReason === 'zero_test_shard'
+      ? 'No tests were assigned to this shard'
+      : emptyReason === 'all_tests_skipped' ? 'All tests were skipped' : 'No tests were detected'
+
+  for (const span of [testSessionSpan, testModuleSpan]) {
+    if (!span) continue
+
+    span.setTag(TEST_STATUS, 'skip')
+    span.setTag(TEST_SKIP_REASON, skipReason)
+    span.setTag(TEST_SESSION_EMPTY_REASON, emptyReason)
   }
 }
 
@@ -942,7 +1012,6 @@ function getTestCommonTags (name, suite, version, testFramework) {
  *
  * @param {string | undefined} testSuiteAbsolutePath
  * @param {string} sourceRoot
- * @returns {string}
  */
 function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
   if (!testSuiteAbsolutePath) {
@@ -1069,7 +1138,6 @@ const codeOwnersPerEntries = new WeakMap()
 
 /**
  * @param {string} character
- * @returns {string}
  */
 function escapeRegexCharacter (character) {
   return character.replaceAll(/[|\\{}()[\]^$+*?.]/g, String.raw`\$&`)
@@ -1077,7 +1145,6 @@ function escapeRegexCharacter (character) {
 
 /**
  * @param {string} pattern
- * @returns {boolean}
  */
 function hasUnescapedWildcard (pattern) {
   for (let i = 0; i < pattern.length; i++) {
@@ -1093,7 +1160,6 @@ function hasUnescapedWildcard (pattern) {
 
 /**
  * @param {string} pattern
- * @returns {string}
  */
 function codeOwnersPatternToRegexSource (pattern) {
   let source = ''
@@ -1135,7 +1201,10 @@ function getCodeOwnersPatternRegex (pattern) {
   }
 
   const directoryOnly = pattern.endsWith('/')
-  const normalizedPattern = pattern.replace(/^\/+/, '').replace(/\/+$/, '')
+  let normalizedPattern = pattern.replace(/^\/+/, '')
+  let normalizedPatternEnd = normalizedPattern.length
+  while (normalizedPatternEnd > 0 && normalizedPattern[normalizedPatternEnd - 1] === '/') normalizedPatternEnd--
+  normalizedPattern = normalizedPattern.slice(0, normalizedPatternEnd)
   const anchored = pattern.startsWith('/') || normalizedPattern.includes('/')
 
   if (!normalizedPattern) {
@@ -1169,7 +1238,6 @@ function setCodeOwnersPatternRegex (entry) {
  *
  * @param {RegExp|null} regex
  * @param {string} filename
- * @returns {boolean}
  */
 function isCodeOwnersPatternMatch (regex, filename) {
   if (!regex || !filename) {
@@ -1534,8 +1602,7 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
   let updated = false
   for (const [statementId, statementLocation] of Object.entries(fileCoverage.data.statementMap)) {
     const startLine = statementLocation?.start?.line
-    if (!isLineCoveredByBitmap(skippedBitmap, startLine)) continue
-    if (fileCoverage.data.s[statementId] > 0) continue
+    if (!isLineCoveredByBitmap(skippedBitmap, startLine) || fileCoverage.data.s[statementId] > 0) continue
 
     fileCoverage.data.s[statementId] = 1
     updated = true
@@ -1548,7 +1615,6 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
  * @param {object} coverage
  * @param {object} skippedCoverage
  * @param {string} [rootDir]
- * @returns {boolean}
  */
 function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
   const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
@@ -1613,7 +1679,6 @@ function fromCoverageMapToCoverage (coverageMap) {
 
 /**
  * @param {number} code
- * @returns {boolean}
  */
 function isAsciiDigit (code) {
   return code >= 0x30 && code <= 0x39
@@ -2005,6 +2070,10 @@ function getModifiedFilesFromDiff (diff) {
     if (lineMatch && currentFile) {
       const start = Number(lineMatch.groups.start)
       const count = lineMatch.groups.count ? Number(lineMatch.groups.count) : 1
+      if (count === 0) {
+        // Keep the surviving line before a deletion so line-based consumers can match its scope.
+        result[currentFile].push(start)
+      }
       for (let j = 0; j < count; j++) {
         result[currentFile].push(start + j)
       }
@@ -2039,7 +2108,6 @@ function getModifiedFilesFromDiff (diff) {
  *
  * @param {string | undefined} testSuite
  * @param {string} testName
- * @returns {string}
  */
 function getTestOptimizationIdentity (testSuite, testName) {
   return JSON.stringify([testSuite, testName])
@@ -2050,7 +2118,6 @@ function getTestOptimizationIdentity (testSuite, testName) {
  *
  * @param {string | undefined} testSuite
  * @param {string} testName
- * @returns {string}
  */
 function formatTestOptimizationName (testSuite, testName) {
   return testSuite ? `${testSuite} › ${testName}` : testName
@@ -2060,7 +2127,6 @@ function formatTestOptimizationName (testSuite, testName) {
  * Replaces characters that could make one test occupy multiple CI log lines.
  *
  * @param {string} value
- * @returns {string}
  */
 function sanitizeTestOptimizationName (value) {
   return stripVTControlCharacters(value)
@@ -2074,7 +2140,6 @@ function sanitizeTestOptimizationName (value) {
  *
  * @param {string} value
  * @param {number} maxLength
- * @returns {string}
  */
 function truncateTestOptimizationNameStart (value, maxLength) {
   if (value.length <= maxLength) return value
@@ -2090,7 +2155,6 @@ function truncateTestOptimizationNameStart (value, maxLength) {
  *
  * @param {string} value
  * @param {number} maxLength
- * @returns {string}
  */
 function truncateTestOptimizationNameMiddle (value, maxLength) {
   if (value.length <= maxLength) return value
@@ -2109,7 +2173,6 @@ function truncateTestOptimizationNameMiddle (value, maxLength) {
  *
  * @param {string | undefined} testSuite
  * @param {string} testName
- * @returns {string}
  */
 function formatTestOptimizationDisplayName (testSuite, testName) {
   const sanitizedSuite = testSuite ? sanitizeTestOptimizationName(testSuite) : ''
@@ -2133,7 +2196,6 @@ function formatTestOptimizationDisplayName (testSuite, testName) {
  * Renders a bounded bullet list for Test Optimization summaries.
  *
  * @param {Array<{ text: string, suffix?: string }>} items
- * @returns {string}
  */
 function formatTestOptimizationList (items) {
   const shown = items.slice(0, MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS)
@@ -2239,8 +2301,7 @@ function recordTestManagementExecution (execution, executions = testManagementEx
  * }} execution
  */
 function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
-  if (!execution?.testName) return
-  if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
+  if (!execution?.testName || getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
 
   const { testSuite, testName, status, isDisabled, isQuarantined } = execution
   const identity = getTestOptimizationIdentity(testSuite, testName)
@@ -2296,7 +2357,6 @@ function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions
  *
  * @param {{ meta?: Record<string, string> }} span
  * @param {TestManagementExecutions} executions
- * @returns {void}
  */
 function collectTestManagementExecutionFromTraceSpan (span, executions) {
   const meta = span.meta
@@ -2402,7 +2462,6 @@ function addAttemptToFixResultLine (lines, result) {
  *
  * @param {AttemptToFixExecutions} attemptToFixExecutions
  * @param {boolean} [includeTestNames]
- * @returns {string}
  */
 function formatAttemptToFixSummary (attemptToFixExecutions, includeTestNames = true) {
   if (attemptToFixExecutions.size === 0) return ''
@@ -2455,7 +2514,6 @@ function formatAttemptToFixSummary (attemptToFixExecutions, includeTestNames = t
  *
  * @param {TestManagementExecutions} executions
  * @param {boolean} [includeTestNames]
- * @returns {string}
  */
 function formatTestManagementSummary (executions, includeTestNames = true) {
   if (executions.size === 0) return ''
@@ -2506,7 +2564,6 @@ function formatTestManagementSummary (executions, includeTestNames = true) {
  * Formats the dynamic-name warning section of the Test Optimization summary.
  *
  * @param {Set<string>} newTestsWithDynamicNames
- * @returns {string}
  */
 function formatDynamicNamesSummary (newTestsWithDynamicNames) {
   if (newTestsWithDynamicNames.size === 0) return ''

@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const axios = require('axios')
 const {
   sandboxCwd,
   useSandbox,
@@ -11,6 +10,7 @@ const {
   stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../../dd-trace/test/setup/helpers/http-client')
 
 withVersions('body-parser', 'body-parser', version => {
   describe('ESM', () => {
@@ -38,7 +38,7 @@ withVersions('body-parser', 'body-parser', version => {
     for (const variant of Object.keys(variants)) {
       it(`is instrumented ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
-        const response = await axios.post(`${proc.url}/`, { key: 'value' })
+        const response = await httpRequest.post(`${proc.url}/`, { key: 'value' })
         assert.equal(response.headers['x-counter'], '1')
       })
     }

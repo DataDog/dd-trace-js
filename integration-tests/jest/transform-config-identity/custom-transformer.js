@@ -23,6 +23,11 @@ module.exports = {
       throw new Error('testEnvironmentOptions prototype was lost before Babel transform')
     }
 
+    const configString = configOrTransformOptions.configString ?? legacyTransformOptions?.configString
+    if (configString && /"_dd(?:IsDynamicAtrEnabled|DynamicAtrBuckets)"/.test(configString)) {
+      throw new Error('dynamic ATR options leaked into the transform cache key')
+    }
+
     return babelJestTransformer.process.apply(babelJestTransformer, arguments)
   },
 }

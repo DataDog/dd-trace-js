@@ -77,7 +77,6 @@ function stepLines (steps, indent) {
 
 /**
  * @param {Record<string, WorkflowJob>} jobs
- * @returns {string}
  */
 function workflowYaml (jobs) {
   const lines = ['name: test', 'on: push', 'jobs:']
@@ -107,7 +106,6 @@ function workflowYaml (jobs) {
 
 /**
  * @param {JobSteps|string} action Composite steps, or raw YAML for a non-composite action.
- * @returns {string}
  */
 function actionYaml (action) {
   if (typeof action === 'string') return action

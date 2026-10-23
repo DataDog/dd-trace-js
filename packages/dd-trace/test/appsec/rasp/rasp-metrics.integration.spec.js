@@ -4,10 +4,10 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../../integration-tests/helpers')
+const HttpRequest = require('../../setup/helpers/http-client')
 describe('RASP metrics', () => {
-  let axios, cwd, appFile
+  let httpRequest, cwd, appFile
 
   useSandbox(
     ['express'],
@@ -37,7 +37,7 @@ describe('RASP metrics', () => {
           DD_APPSEC_WAF_TIMEOUT: '0.1',
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -47,7 +47,7 @@ describe('RASP metrics', () => {
 
     it('should report rasp error metrics', async () => {
       try {
-        await axios.get('/shi/execFileSync?dir=.')
+        await httpRequest.get('/shi/execFileSync?dir=.')
       } catch (e) {
         if (!e.response) {
           throw e
@@ -94,7 +94,7 @@ describe('RASP metrics', () => {
           DD_APPSEC_WAF_TIMEOUT: '1',
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -103,7 +103,7 @@ describe('RASP metrics', () => {
     })
 
     it('should report rasp timeout metrics', async () => {
-      await axios.get('/shi/execFileSync?dir=.')
+      await httpRequest.get('/shi/execFileSync?dir=.')
 
       let appsecTelemetryReceived = false
 

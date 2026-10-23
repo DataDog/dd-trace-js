@@ -2,13 +2,13 @@
 
 const log = require('../../../../../log')
 
-const AUTHORITY = '^(?:[^:]+:)?//([^@]+)@'
+const AUTHORITY = String.raw`^(?:[^:]+:)?[\t\r\n]*/[\t\r\n]*/([^@]+)@`
 // The key class excludes `?` and `#` so the greedy quantifier is bounded per fragment.
 // Query keys cannot legitimately contain those characters (they delimit query/fragment
 // boundaries), so excluding them preserves match semantics for valid URLs while keeping
 // the regex linear on arbitrary input.
 const QUERY_FRAGMENT = '[?#&]([^=&;?#]+)=([^?#&]+)'
-const pattern = new RegExp(`${AUTHORITY}|${QUERY_FRAGMENT}`, 'gm')
+const pattern = new RegExp(`${AUTHORITY}|${QUERY_FRAGMENT}`, 'g')
 
 module.exports = function extractSensitiveRanges (evidence) {
   try {

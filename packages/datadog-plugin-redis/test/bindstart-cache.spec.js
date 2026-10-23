@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -124,5 +125,61 @@ describe('RedisPlugin bindStart service caching', () => {
     assert.strictEqual(calls[1].args[1].tags['service.name'], 'custom-b')
     assert.strictEqual(calls[2].args[1].tags['service.name'], 'custom-a')
     assert.strictEqual(calls[3].args[1].tags['service.name'], 'custom-b')
+  })
+})
+
+describe('RedisPlugin bindStart retention', () => {
+  it('does not retain long command argument storage', () => {
+    const pluginPath = JSON.stringify(require.resolve('../src'))
+    const script = `
+      const RedisPlugin = require(${pluginPath})
+      const values = new Array(400)
+      let index = 0
+      const span = {
+        _spanContext: { _tags: {} },
+        setTag () {},
+        finish () {},
+        addLink () {},
+      }
+      const tracer = {
+        _service: 'test',
+        _nomenclature: {
+          config: {},
+          opName () { return 'redis.command' },
+          serviceName () { return { name: 'test-redis' } },
+        },
+        startSpan (name, options) {
+          values[index++] = options.tags['redis.raw_command']
+          return span
+        },
+      }
+      const plugin = new RedisPlugin(tracer, {
+        codeOriginForSpans: {
+          enabled: false,
+          experimental: { exit_spans: { enabled: false } },
+        },
+      })
+      plugin.configure({ enabled: false })
+
+      for (let i = 0; i < values.length; i++) {
+        const parent = JSON.parse(JSON.stringify(
+          String(i).padStart(6, '0') + 'x'.repeat(128 * 1024)
+        ))
+        plugin.bindStart({
+          command: 'set',
+          args: ['key', parent.slice(0, 257)],
+          connectionOptions: { host: 'localhost', port: 6379 },
+          currentStore: {},
+        })
+      }
+
+      let retainedLength = 0
+      for (const value of values) retainedLength += value.length
+      process.stdout.write(String(retainedLength))
+    `
+    const result = spawnSync(process.execPath, ['--max-old-space-size=32', '--eval', script], { encoding: 'utf8' })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout, '43200')
   })
 })

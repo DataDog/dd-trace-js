@@ -11,6 +11,10 @@ const config = {
   testEnvironment: 'node',
 }
 
+if (process.env.USE_DEFAULT_TEST_RUNNER) {
+  delete config.testRunner
+}
+
 if (process.env.COLLECT_COVERAGE_FROM) {
   config.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
 }
