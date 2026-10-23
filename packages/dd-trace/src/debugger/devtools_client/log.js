@@ -22,12 +22,13 @@ const on = (level, ...args) => {
 const off = () => {}
 
 const threshold = LEVELS.indexOf(logLevel)
-const isEnabled = debug && typeof logPort?.postMessage === 'function'
+// The main-thread logger records errors in telemetry even when debug output is disabled.
+const isEnabled = typeof logPort?.postMessage === 'function'
 
 /** @type {Logger} */
 module.exports = Object.fromEntries(
   LEVELS.map(level => [
     level,
-    isEnabled && threshold >= LEVELS.indexOf(level) ? on.bind(null, level) : off,
+    isEnabled && (level === 'error' || (debug && threshold >= LEVELS.indexOf(level))) ? on.bind(null, level) : off,
   ])
 )
