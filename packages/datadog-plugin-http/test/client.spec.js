@@ -49,6 +49,28 @@ describe('Plugin', () => {
         return server
       }
 
+      /** @param {import('http').IncomingMessage} response */
+      function resumeResponse (response) {
+        response.resume()
+      }
+
+      /**
+       * @param {string} requestUrl
+       * @param {string} expectedUrl
+       * @returns {Promise<void>}
+       */
+      function sendRequestWithExpectedUrl (requestUrl, expectedUrl) {
+        const trace = agent.assertFirstTraceSpan({
+          meta: {
+            'http.status_code': '200',
+            'http.url': expectedUrl,
+          },
+        })
+        const req = http.request(requestUrl, resumeResponse)
+        req.end()
+        return trace
+      }
+
       beforeEach(() => {
         appListener = null
       })
@@ -147,6 +169,37 @@ describe('Plugin', () => {
             const req = http.request(`${protocol}://localhost:${port}/user?foo=bar`, res => {
               res.on('data', () => {})
             })
+            req.end()
+          })
+        })
+      })
+
+      describe('with OTel semantics and query string tagging disabled', () => {
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          process.env.DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING = 'false'
+          tracer = await agent.load('http', { server: false })
+          http = require(pluginToBeLoaded)
+          express = require('express')
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          delete process.env.DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING
+        })
+
+        it('omits the query string from url.full', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan({
+              meta: { 'url.full': `${protocol}://localhost:${port}/user` },
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/user?page=2`, resumeResponse)
             req.end()
           })
         })
@@ -361,7 +414,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should remove the query string from the URL', done => {
+        it('should report a repeated query schema without retaining values', done => {
           const app = express()
 
           app.get('/user', (req, res) => {
@@ -369,20 +422,16 @@ describe('Plugin', () => {
           })
 
           appListener = server(app, port => {
-            agent.assertFirstTraceSpan({
-              meta: {
-                'http.status_code': '200',
-                'http.url': `${protocol}://localhost:${port}/user`,
-              },
-            })
-              .then(done)
-              .catch(done)
+            const strippedUrl = `${protocol}://localhost:${port}/user`
 
-            const req = http.request(`${protocol}://localhost:${port}/user?foo=bar`, res => {
-              res.on('data', () => {})
-            })
+            async function run () {
+              await sendRequestWithExpectedUrl(`${strippedUrl}?page=1`, strippedUrl)
+              await sendRequestWithExpectedUrl(`${strippedUrl}?page=2`, strippedUrl)
+              await sendRequestWithExpectedUrl(`${strippedUrl}?page=3`, `${strippedUrl}?page=<number>`)
+              done()
+            }
 
-            req.end()
+            run().catch(done)
           })
         })
 
@@ -1078,6 +1127,43 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with query string allowlist configuration', () => {
+        beforeEach(async () => {
+          tracer = await agent.load('http', {
+            server: false,
+            client: {
+              queryStringAllowlist: ['page'],
+            },
+          })
+          http = require(pluginToBeLoaded)
+          express = require('express')
+        })
+
+        it('should include only configured query parameters', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            const strippedUrl = `${protocol}://localhost:${port}/user`
+
+            async function run () {
+              await sendRequestWithExpectedUrl(`${strippedUrl}?secret=value&page=1`, strippedUrl)
+              await sendRequestWithExpectedUrl(`${strippedUrl}?secret=value&page=2`, strippedUrl)
+              await sendRequestWithExpectedUrl(
+                `${strippedUrl}?secret=value&page=3`,
+                `${strippedUrl}?page=<number>`
+              )
+              done()
+            }
+
+            run().catch(done)
+          })
+        })
+      })
+
       describe('with late plugin initialization and an external subscriber', () => {
         let ch
         let sub
@@ -1566,7 +1652,7 @@ describe('Plugin', () => {
             .then(done, done)
 
           appListener = server(app, port => {
-            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+            const req = http.request(`${protocol}://localhost:${port}/user?page=2`, res => {
               res.on('data', () => {})
             })
 

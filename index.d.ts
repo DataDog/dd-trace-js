@@ -2231,6 +2231,12 @@ declare namespace tracer {
     /** @hidden */
     interface HttpClient extends Http {
       /**
+       * Query parameter names to include in client `http.url` schemas.
+       * All names are included when this option is not set.
+       */
+      queryStringAllowlist?: string[];
+
+      /**
        * Use the remote endpoint host as the service name instead of the default.
        *
        * @default false
@@ -2264,6 +2270,12 @@ declare namespace tracer {
 
     /** @hidden */
     interface Http2Client extends Http {
+      /**
+       * Query parameter names to include in client `http.url` schemas.
+       * All names are included when this option is not set.
+       */
+      queryStringAllowlist?: string[];
+
       /**
        * Use the remote endpoint host as the service name instead of the default.
        *
