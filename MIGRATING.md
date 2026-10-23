@@ -327,7 +327,7 @@ respectively.
 
 #### Jest
 
-The use of `'dd-trace/ci/jest/env'` in [`testEnvironment`](https://jestjs.io/docs/configuration#testenvironment-string)
+The use of `'dd-trace/ci/jest/env'` in [`testEnvironment`](https://jestjs.io/docs/configuration#testenvironment-node--jsdom--string)
 is no longer supported.
 To instrument `jest` tests now, add `'-r dd-trace/ci/init'` to the `NODE_OPTIONS` environment
 variable passed to the process running the tests, for example, `NODE_OPTIONS='-r dd-trace/ci/init' yarn test`.

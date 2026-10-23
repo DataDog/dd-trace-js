@@ -2,6 +2,7 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { AUTO_KEEP } = require('../../../ext/priority')
+const { getIsAzureContainerApp } = require('../../dd-trace/src/serverless')
 const { writeTraceparent, writeTracestate } = require('../../dd-trace/src/carrier')
 
 const ORCHESTRATION_FAILURE_END_CHANNEL =
@@ -39,7 +40,7 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
       childOf = this.tracer.extract('text_map', carrier) ?? undefined
     }
     const extractedAsDrop = childOf?._sampling.priority < AUTO_KEEP
-
+    const prefix = getIsAzureContainerApp() ? 'aca' : 'aas'
     const span = this.startSpan(this.operationName(), {
       startTime: ctx.startTime,
       childOf,
@@ -48,15 +49,15 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
 
       meta: {
         component: 'azure-functions',
-        'aas.function.name': ctx.functionName,
-        'aas.function.trigger': ctx.trigger,
+        [`${prefix}.function.name`]: ctx.functionName,
+        [`${prefix}.function.trigger`]: ctx.trigger,
         'resource.name': `${ctx.trigger} ${ctx.functionName}`,
       },
     }, ctx)
 
     // in the case of entity functions, operationName should be available
     if (ctx.operationName) {
-      span.setTag('aas.function.operation', ctx.operationName)
+      span.setTag(`${prefix}.function.operation`, ctx.operationName)
       span.setTag('resource.name', `${ctx.trigger} ${ctx.functionName} ${ctx.operationName}`
       )
     }

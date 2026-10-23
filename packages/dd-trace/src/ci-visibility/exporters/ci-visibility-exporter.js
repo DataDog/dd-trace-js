@@ -114,10 +114,14 @@ function isValidRetryCount (value) {
  * @param {unknown} retryPolicy - Candidate retry policy.
  */
 function isValidCachedEfdRetryPolicy (retryPolicy) {
-  if (retryPolicy === null || typeof retryPolicy !== 'object' || Array.isArray(retryPolicy)) return false
-  if (!isValidRetryCount(retryPolicy.schedulingRetryCount)) return false
-  if (!Array.isArray(retryPolicy.durationRetryCounts) ||
-    retryPolicy.durationRetryCounts.length !== EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length) {
+  if (
+    retryPolicy === null ||
+    typeof retryPolicy !== 'object' ||
+    Array.isArray(retryPolicy) ||
+    !isValidRetryCount(retryPolicy.schedulingRetryCount) ||
+    !Array.isArray(retryPolicy.durationRetryCounts) ||
+    retryPolicy.durationRetryCounts.length !== EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length
+  ) {
     return false
   }
 
@@ -152,9 +156,11 @@ function isValidCachedSettings (settings) {
   }
   if (settings.isDiEnabled && !settings.isFlakyTestRetriesEnabled) return false
   if (settings.isEarlyFlakeDetectionEnabled && !settings.isKnownTestsEnabled) return false
-  if (!isValidCachedEfdRetryPolicy(settings.earlyFlakeDetectionRetryPolicy)) return false
-  if (!isNonNegativeSafeInteger(settings.earlyFlakeDetectionFaultyThreshold) ||
-    settings.earlyFlakeDetectionFaultyThreshold > 100) {
+  if (
+    !isValidCachedEfdRetryPolicy(settings.earlyFlakeDetectionRetryPolicy) ||
+    !isNonNegativeSafeInteger(settings.earlyFlakeDetectionFaultyThreshold) ||
+    settings.earlyFlakeDetectionFaultyThreshold > 100
+  ) {
     return false
   }
   return settings.testManagementAttemptToFixRetries === undefined ||

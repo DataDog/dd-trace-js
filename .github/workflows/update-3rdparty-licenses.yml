@@ -46,7 +46,12 @@ jobs:
       - name: Install dd-license-attribution
         working-directory: dd-license-attribution
         run: |
-          pip install .
+          # pluggy 1.7.0 dropped support for the class-based hookspecs used by
+          # plugincode (scancode-toolkit), making the tool fail at import with
+          # "did not find any 'plugincode.location_provider' hooks". Remove
+          # this pin once the dd-license-attribution ref above is >= 0.8.0,
+          # which ships the same constraint in its published metadata.
+          pip install . "pluggy<1.7"
 
       - name: Create mirrors.json for PR branch
         env:
@@ -123,7 +128,7 @@ jobs:
           steps.check.outputs.needs_update == 'true' &&
           steps.check.outputs.is_bot_same_repo == 'true' &&
           steps.check.outputs.is_release_proposal != 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: license-csv
           path: LICENSE-3rdparty.csv
@@ -173,7 +178,7 @@ jobs:
           policy: update-3rdparty-licenses
 
       - name: Download updated LICENSE-3rdparty.csv
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: license-csv
 

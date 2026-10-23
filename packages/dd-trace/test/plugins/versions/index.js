@@ -6,13 +6,11 @@ const latests = require('./package.json').dependencies
 
 const exactVersionExp = /^=?\d+\.\d+\.\d+/
 
-// Packages whose published majors are not contiguous. `getVersionList()` must not auto-fill their in-between majors:
-// the missing majors were never published, so installing them fails. A failing install of a multi-major range is the
-// signal to add a package here (the install script's error points back to this list). New entries must explain the gap
-// so the next reader does not "fix" it by removing the entry.
-const nonConsecutiveMajorPackages = new Set([
-  'graphql', // jumps from 0.x straight to 14.x (no 1.x–13.x); 14.x–17.x are covered via the apollo externals entries
-  '@redis/client', // jumps from 2.x to 5.x (no 3.x–4.x)
+// Exclude majors without stable releases so published releases on either side of a gap retain test coverage.
+const nonConsecutiveMajorPackages = new Map([
+  ['graphql', '>=1 <14'],
+  ['@redis/client', '>=2 <5'],
+  ['oracledb', '>=8 <26'],
 ])
 
 // Versions the matrix installs but must not run, keyed by module name. `withVersions()` skips any resolved
@@ -91,11 +89,12 @@ function capSubrange (name, subrange) {
  *
  * @param {string} name The module name, e.g. `mongodb`.
  * @param {string[]} versions The declared version entries, e.g. `['>=3.3 <5', '5', '>=6']`.
- * @param {Set<string>} [nonConsecutiveMajors] Module names whose majors are not contiguous; injectable for testing.
+ * @param {Map<string, string>} [nonConsecutiveMajors] Major ranges without stable releases, by module name.
  * @returns {Array<{ versionKey: string, range: string }>} Ordered, de-duplicated entries. `versionKey` is the folder
  *   suffix; `range` is the declaring entry it came from.
  */
 function getVersionList (name, versions, nonConsecutiveMajors = nonConsecutiveMajorPackages) {
+  const missingMajors = nonConsecutiveMajors.get(name)
   /** @type {Map<string, { versionKey: string, range: string }>} */
   const entries = new Map()
 
@@ -139,15 +138,9 @@ function getVersionList (name, versions, nonConsecutiveMajors = nonConsecutiveMa
       }
     }
 
-    if (nonConsecutiveMajors.has(name)) {
-      // Only the in-between majors were never published. The floor major and the top major both exist, so add the
-      // latest of each (skipping the uncertain middle, which is what would make the install fail).
-      addMajor(floor.major)
-      if (topMajor > floor.major) addMajor(topMajor)
-    } else {
-      for (let major = floor.major; major <= topMajor; major++) {
-        addMajor(major)
-      }
+    for (let major = floor.major; major <= topMajor; major++) {
+      if (missingMajors && satisfies(`${major}.0.0`, missingMajors)) continue
+      addMajor(major)
     }
   }
 
