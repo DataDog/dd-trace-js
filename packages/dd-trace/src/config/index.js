@@ -127,6 +127,7 @@ function undo (config, source) {
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
+  changeTracker[source].clear()
 }
 
 function get (object, path) {
@@ -237,9 +238,11 @@ class Config extends ConfigBase {
     }
 
     this.#applyDefaults()
+    // eslint-disable-next-line eslint-rules/eslint-process-env
+    const envs = process.env
     // TODO: Update origin documentation to list all valid sources. Add local_stable_config and fleet_stable_config.
     this.#applyEnvs(getEnvironmentVariables(this.stableConfig.localEntries, true), 'local_stable_config')
-    this.#applyEnvs(getEnvironmentVariables(undefined, true), 'env_var')
+    this.#applyEnvs(getEnvironmentVariables(envs, true), 'env_var')
     this.#applyEnvs(getEnvironmentVariables(this.stableConfig.fleetEntries, true), 'fleet_stable_config')
 
     // Experimental options are applied first, so they can be overridden by non-experimental options.
@@ -251,9 +254,9 @@ class Config extends ConfigBase {
       this.#applyOptions(experimental, 'code', 'experimental')
     }
     this.#applyOptions(rest, 'code')
-    this.#applyCalculated()
+    this.#applyCalculated(envs)
 
-    warnWrongOtelSettings()
+    warnWrongOtelSettings(envs)
 
     parseErrors.clear()
   }
@@ -342,6 +345,7 @@ class Config extends ConfigBase {
    *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
   setRemoteConfig (options) {
+    undo(this, 'calculated')
     // Replace the complete RC layer so omitted fields fall back to their previous source.
     // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
     undo(this, 'remote_config')
@@ -353,7 +357,7 @@ class Config extends ConfigBase {
       this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
     }
 
-    this.#applyCalculated()
+    this.#applyCalculated(options)
     configUpdateChannel.publish(this)
   }
 
@@ -364,10 +368,10 @@ class Config extends ConfigBase {
     return trackedConfigOrigins.get(name) ?? 'default'
   }
 
-  // Handles values calculated from a mixture of options and env vars
-  #applyCalculated () {
-    undo(this, 'calculated')
-
+  /**
+   * @param {Record<string, string | undefined> | null} envs Raw environment source applied in this update.
+   */
+  #applyCalculated (envs) {
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
         trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {
@@ -452,13 +456,36 @@ class Config extends ConfigBase {
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', getIsGCPFunction() || getIsAzureFunction())
     }
 
+    const propagationEnvs = {
+      fleet_stable_config: this.stableConfig.fleetEntries,
+      local_stable_config: this.stableConfig.localEntries,
+    }[trackedConfigOrigins.get('DD_TRACE_PROPAGATION_STYLE')] ?? envs
+    const otelPropagators = propagationEnvs?.DD_TRACE_PROPAGATION_STYLE === undefined &&
+      propagationEnvs?.OTEL_PROPAGATORS !== undefined
+    for (const name of /** @type {const} */ ([
+      'DD_TRACE_PROPAGATION_STYLE',
+      'tracePropagationStyle.inject',
+      'tracePropagationStyle.extract',
+    ])) {
+      const styles = get(this, name)
+      if (!styles.includes('b3')) continue
+
+      const b3Style = DD_MAJOR >= 6 || name === 'DD_TRACE_PROPAGATION_STYLE' && otelPropagators
+        ? 'b3 single header'
+        : 'b3multi'
+      const source = trackedConfigOrigins.get(name)
+      const { canonicalName = name } = configurationsTable[name]
+      const rawValue = configWithOrigin.get(`${canonicalName}${source}`)?.value
+      setAndTrack(this, name, styles.map(style => style === 'b3' ? b3Style : style), rawValue, source)
+    }
+
     // TODO: Remove the experimental env vars as a major or deprecate the option?
     if (this.experimental?.b3) {
-      if (!this.tracePropagationStyle.inject.includes('b3')) {
-        this.tracePropagationStyle.inject.push('b3')
+      if (!this.tracePropagationStyle.inject.includes('b3multi')) {
+        this.tracePropagationStyle.inject.push('b3multi')
       }
-      if (!this.tracePropagationStyle.extract.includes('b3')) {
-        this.tracePropagationStyle.extract.push('b3')
+      if (!this.tracePropagationStyle.extract.includes('b3multi')) {
+        this.tracePropagationStyle.extract.push('b3multi')
       }
       if (!this.tracePropagationStyle.inject.includes('b3 single header')) {
         this.tracePropagationStyle.inject.push('b3 single header')
@@ -807,7 +834,10 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
   return result
 }
 
-function warnWrongOtelSettings () {
+/**
+ * @param {Record<string, string | undefined>} envs
+ */
+function warnWrongOtelSettings (envs) {
   // This mostly works for non-aliased environment variables only.
   // TODO: Adjust this to work across all sources.
   for (const [otelEnvVar, ddEnvVar, key] of [
@@ -825,8 +855,6 @@ function warnWrongOtelSettings () {
     ['OTEL_SDK_DISABLED', 'DD_TRACE_OTEL_ENABLED'],
     ['OTEL_LOGS_EXPORTER'],
   ]) {
-    // eslint-disable-next-line eslint-rules/eslint-process-env
-    const envs = process.env
     const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key ?? otelEnvVar))
     const otelEnvValue = envs[otelEnvVar]
     if (otelEnvValue) {

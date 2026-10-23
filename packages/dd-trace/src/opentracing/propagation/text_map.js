@@ -38,11 +38,9 @@ const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
-const { getConfiguredEnvName } = require('../../config/helper')
 const { setAllBaggageItems, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
 const { hasTraceSourcePropagationTag } = require('../../standalone/tracesource')
 const telemetryMetrics = require('../../telemetry/metrics')
-const { DD_MAJOR } = require('../../../../../version')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const TraceState = require('./tracestate')
@@ -308,25 +306,9 @@ class TextMapPropagator {
   /** @type {import('../../config')} */
   #config
 
-  /** @type {typeof extractB3SingleContext | typeof extractB3MultiContext} */
-  #extractB3Context
-
   /** @param {import('../../config')} config */
   constructor (config) {
     this.#config = config
-
-    // v6+: `'b3'` is always single-header. v5: `OTEL_PROPAGATORS` callers
-    // expect single, legacy `DD_TRACE_PROPAGATION_STYLE` callers expect multi.
-    /* istanbul ignore else: v5 fallback */
-    if (DD_MAJOR >= 6) {
-      this.#extractB3Context = extractB3SingleContext
-    } else {
-      const envName = getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
-      // eslint-disable-next-line eslint-rules/eslint-env-aliases
-      this.#extractB3Context = envName === 'OTEL_PROPAGATORS'
-        ? extractB3SingleContext
-        : extractB3MultiContext
-    }
   }
 
   /**
@@ -574,10 +556,7 @@ class TextMapPropagator {
    * @returns {Record<string, string> | undefined}
    */
   #injectB3MultipleHeaders (spanContext, carrier) {
-    // v5 also accepts the legacy `'b3'` spelling for multi; v6+ routes `'b3'` to single-header.
-    const hasB3multi = this.#hasPropagationStyle('inject', 'b3multi') ||
-      (DD_MAJOR < 6 && this.#hasPropagationStyle('inject', 'b3'))
-    if (!hasB3multi) return
+    if (!this.#hasPropagationStyle('inject', 'b3multi')) return
 
     carrier ??= {}
     writeB3TraceId(carrier, spanContext._traceId.toTraceIdHex(spanContext._trace.tags['_dd.p.tid']))
@@ -601,10 +580,7 @@ class TextMapPropagator {
    * @returns {Record<string, string> | undefined}
    */
   #injectB3SingleHeader (spanContext, carrier) {
-    // v6+ keeps `'b3 single header'` as a back-compat alias for callers that bypass parser normalisation.
-    const hasB3SingleHeader = this.#hasPropagationStyle('inject', 'b3 single header') ||
-      (DD_MAJOR >= 6 && this.#hasPropagationStyle('inject', 'b3'))
-    if (!hasB3SingleHeader) return
+    if (!this.#hasPropagationStyle('inject', 'b3 single header')) return
 
     carrier ??= {}
     const traceId = spanContext._traceId.toTraceIdHex(spanContext._trace.tags['_dd.p.tid'])
@@ -817,9 +793,6 @@ class TextMapPropagator {
             traceContextExtracted = true
           }
           extractedContext = traceContext
-          break
-        case 'b3':
-          extractedContext = this.#extractB3Context(carrier)
           break
         case 'b3 single header':
           extractedContext = extractB3SingleContext(carrier)

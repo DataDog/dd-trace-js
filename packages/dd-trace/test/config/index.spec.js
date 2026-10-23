@@ -429,8 +429,8 @@ describe('Config', () => {
         baz: 'qux',
       },
       tracePropagationStyle: {
-        inject: ['b3', 'tracecontext'],
-        extract: ['b3', 'tracecontext'],
+        inject: [DD_MAJOR < 6 ? 'b3multi' : 'b3 single header', 'tracecontext'],
+        extract: [DD_MAJOR < 6 ? 'b3multi' : 'b3 single header', 'tracecontext'],
       },
     })
 
@@ -464,8 +464,8 @@ describe('Config', () => {
         baz: 'qux1',
       },
       tracePropagationStyle: {
-        inject: ['b3', 'datadog'],
-        extract: ['b3', 'datadog'],
+        inject: ['b3 single header', 'datadog'],
+        extract: ['b3 single header', 'datadog'],
       },
     })
 
@@ -1769,8 +1769,12 @@ describe('Config', () => {
       ],
     })
     assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
-    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3', 'tracecontext'])
-    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3', 'tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, [
+      DD_MAJOR < 6 ? 'b3multi' : 'b3 single header', 'tracecontext',
+    ])
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, [
+      DD_MAJOR < 6 ? 'b3multi' : 'b3 single header', 'tracecontext',
+    ])
 
     sinon.assert.calledOnce(updateConfig)
 
@@ -2472,8 +2476,8 @@ describe('Config', () => {
     assert.ok(Object.hasOwn(config.tags, 'runtime-id'), `Available keys: ${inspect(Object.keys(config.tags))}`)
     assert.match(config.tags['runtime-id'], /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
     if (DD_MAJOR < 6) {
-      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'b3', 'b3 single header'])
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3multi', 'b3 single header'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'b3multi', 'b3 single header'])
       sinon.assert.calledOnce(log.warn)
     } else {
       // In v6 `experimental.b3` is no longer parsed, so the calculated push doesn't fire and the
@@ -2617,18 +2621,61 @@ describe('Config', () => {
     })
   })
 
+  for (const ddMajor of [5, 6]) {
+    it(`normalizes OTEL B3 propagation configuration on v${ddMajor}`, () => {
+      process.env.OTEL_PROPAGATORS = 'B3, b3multi, b3'
+
+      const config = getConfig(undefined, { ddMajor })
+      const expected = ['b3 single header', 'b3multi', 'b3 single header']
+
+      for (const remote of [{ DD_TRACE_SAMPLE_RATE: '0.5' }, null]) {
+        config.setRemoteConfig(remote)
+
+        assert.deepStrictEqual(config.tracePropagationStyle.inject, expected)
+        assert.deepStrictEqual(config.tracePropagationStyle.extract, expected)
+      }
+    })
+
+    it(`normalizes B3 propagation configuration on v${ddMajor}`, () => {
+      process.env.DD_TRACE_PROPAGATION_STYLE = 'b3,b3multi,b3 single header'
+
+      const config = getConfig(undefined, { ddMajor })
+      const expected = [ddMajor < 6 ? 'b3multi' : 'b3 single header', 'b3multi', 'b3 single header']
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, expected)
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, expected)
+
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, expected)
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, expected)
+    })
+  }
+
+  for (const tracePropagationStyle of [undefined, ['datadog']]) {
+    const source = tracePropagationStyle ? 'explicit' : 'default'
+    it(`keeps ${source} experimental B3 styles stable across remote updates`, () => {
+      const config = getConfig({ experimental: { b3: true }, tracePropagationStyle }, { ddMajor: 5 })
+      const expected = [
+        ...(tracePropagationStyle ?? ['datadog', 'tracecontext', 'baggage']), 'b3multi', 'b3 single header',
+      ]
+
+      for (const remote of [{ DD_TRACE_SAMPLE_RATE: '0.5' }, null]) {
+        config.setRemoteConfig(remote)
+
+        assert.deepStrictEqual(config.tracePropagationStyle.inject, expected)
+        assert.deepStrictEqual(config.tracePropagationStyle.extract, expected)
+      }
+    })
+  }
+
   it('should accept legacy "b3 single header" propagation style', () => {
     process.env.DD_TRACE_PROPAGATION_STYLE = 'B3 single header'
 
     const config = getConfig()
 
-    if (DD_MAJOR < 6) {
-      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3 single header'])
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3 single header'])
-    } else {
-      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3'])
-      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
-    }
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3 single header'])
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3 single header'])
   })
 
   it('should prioritize specific propagation style over shared propagation style env vars', () => {
