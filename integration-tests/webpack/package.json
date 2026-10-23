@@ -15,8 +15,11 @@
   "author": "Thomas Hunter II <tlhunter@datadog.com>",
   "license": "ISC",
   "dependencies": {
+    "@langchain/core": "1.2.14",
+    "@langchain/langgraph": "1.4.19",
     "axios": "1.18.0",
     "express": "4.22.1",
-    "knex": "3.1.0"
+    "knex": "3.1.0",
+    "zod": "4.6.5"
   }
 }
