@@ -5,6 +5,8 @@ const log = require('../../log')
 let ExternalExperiment
 let evaluatorTypes
 let remoteEvaluatorTypes
+let builtinEvaluators
+let NoopPromptOptimization
 
 function getExternalExperiment () {
   ExternalExperiment ??= require('./experiment').ExternalExperiment
@@ -19,6 +21,16 @@ function getEvaluatorTypes () {
 function getRemoteEvaluatorTypes () {
   remoteEvaluatorTypes ??= require('./remote-evaluator')
   return remoteEvaluatorTypes
+}
+
+function getNoopPromptOptimization () {
+  NoopPromptOptimization ??= require('../prompt-optimization/noop').NoopPromptOptimization
+  return NoopPromptOptimization
+}
+
+function getBuiltinEvaluators () {
+  builtinEvaluators ??= require('../evaluators')
+  return builtinEvaluators
 }
 
 const NOOP_EXPERIMENT_ID = '00000000-0000-0000-0000-000000000000'
@@ -296,6 +308,42 @@ class NoopExperiments {
     return getRemoteEvaluatorTypes().RemoteEvaluatorError
   }
 
+  get LLMJudge () {
+    return getBuiltinEvaluators().LLMJudge
+  }
+
+  get BooleanStructuredOutput () {
+    return getBuiltinEvaluators().BooleanStructuredOutput
+  }
+
+  get ScoreStructuredOutput () {
+    return getBuiltinEvaluators().ScoreStructuredOutput
+  }
+
+  get CategoricalStructuredOutput () {
+    return getBuiltinEvaluators().CategoricalStructuredOutput
+  }
+
+  get StringCheckEvaluator () {
+    return getBuiltinEvaluators().StringCheckEvaluator
+  }
+
+  get RegexMatchEvaluator () {
+    return getBuiltinEvaluators().RegexMatchEvaluator
+  }
+
+  get LengthEvaluator () {
+    return getBuiltinEvaluators().LengthEvaluator
+  }
+
+  get JSONEvaluator () {
+    return getBuiltinEvaluators().JSONEvaluator
+  }
+
+  get SemanticSimilarityEvaluator () {
+    return getBuiltinEvaluators().SemanticSimilarityEvaluator
+  }
+
   createDataset (name, options = {}) {
     this.#warn()
     return new NoopDataset(name, options)
@@ -311,6 +359,11 @@ class NoopExperiments {
     return new NoopExperiment(options.name)
   }
 
+  optimizePrompt (options = {}) {
+    this.#warn()
+    return new (getNoopPromptOptimization())(options)
+  }
+
   /**
    * @param {object} options
    * @returns {Promise<ExternalExperiment>}
@@ -319,6 +372,60 @@ class NoopExperiments {
     this.#warn()
     const NoopExternalExperiment = getExternalExperiment()
     return Promise.resolve(new NoopExternalExperiment(new NoopExperiment(options.name, true)))
+  }
+
+  /**
+   * @returns {Promise<{ uiUrl: null }>}
+   */
+  publishEvaluator () {
+    this.#warn()
+    return Promise.resolve({ uiUrl: null })
+  }
+
+  /**
+   * @param {string} experimentId
+   * @returns {Promise<object>}
+   */
+  pullExperiment (experimentId = '') {
+    this.#warn()
+    return Promise.resolve({
+      id: experimentId,
+      name: '',
+      experiment: '',
+      projectId: '',
+      projectName: '',
+      datasetId: '',
+      datasetVersion: 0,
+      description: '',
+      config: {},
+      runCount: 0,
+      tags: {},
+      parentExperimentId: null,
+      aggregateData: null,
+      status: null,
+      error: null,
+      createdAt: null,
+      updatedAt: null,
+      url: null,
+      result: { experimentId: null, rows: [], summaryEvaluations: {}, runs: [], url: null },
+    })
+  }
+
+  /**
+   * @returns {Promise<never[]>}
+   */
+  listExperiments () {
+    this.#warn()
+    return Promise.resolve([])
+  }
+
+  /**
+   * @param {{ datasetName?: string, description?: string }} [options]
+   * @returns {Promise<NoopDataset>}
+   */
+  createDatasetFromCsv (options = {}) {
+    this.#warn()
+    return Promise.resolve(new NoopDataset(options.datasetName, { description: options.description }))
   }
 }
 
