@@ -4,7 +4,6 @@
  * Replaces JavaScript comments with spaces while preserving line structure and string literals.
  *
  * @param {string} source JavaScript or TypeScript source
- * @returns {string} source with comments masked
  */
 function maskJavaScriptComments (source) {
   return maskJavaScriptSource(source, false)
@@ -14,7 +13,6 @@ function maskJavaScriptComments (source) {
  * Replaces JavaScript comments and string literals with spaces while preserving line structure.
  *
  * @param {string} source JavaScript or TypeScript source
- * @returns {string} source with non-code text masked
  */
 function maskJavaScriptNonCode (source) {
   return maskJavaScriptSource(source, true)
@@ -25,7 +23,6 @@ function maskJavaScriptNonCode (source) {
  *
  * @param {string} source JavaScript or TypeScript source
  * @param {boolean} maskStrings whether string and template literal contents should be masked
- * @returns {string} masked source
  */
 function maskJavaScriptSource (source, maskStrings) {
   const characters = [...source]

@@ -24,7 +24,6 @@ function addTraceSourceTag (tags, product) {
  * Returns true when the trace source propagation tag exists on the given tags object.
  *
  * @param {Record<string, unknown>} tags
- * @returns {boolean}
  */
 function hasTraceSourcePropagationTag (tags) {
   return Object.hasOwn(tags, TRACE_SOURCE_PROPAGATION_KEY)

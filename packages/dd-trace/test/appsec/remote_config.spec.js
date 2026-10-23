@@ -68,7 +68,7 @@ describe('AppSec Remote Config', () => {
 
   describe('enable', () => {
     it('should listen to remote config when appsec is not explicitly configured', () => {
-      config.appsec.enabled = undefined
+      config.appsec.DD_APPSEC_ENABLED = undefined
 
       appsecRemoteConfig.enable(rc, config, appsec)
 
@@ -79,7 +79,7 @@ describe('AppSec Remote Config', () => {
     })
 
     it('should listen to remote config when appsec is explicitly configured as enabled=true', () => {
-      config.appsec.enabled = true
+      config.appsec.DD_APPSEC_ENABLED = true
 
       appsecRemoteConfig.enable(rc, config, appsec)
 
@@ -90,7 +90,7 @@ describe('AppSec Remote Config', () => {
     })
 
     it('should not listen to remote config when appsec is explicitly configured as enabled=false', () => {
-      config.appsec.enabled = false
+      config.appsec.DD_APPSEC_ENABLED = false
 
       appsecRemoteConfig.enable(rc, config, appsec)
 
@@ -103,7 +103,7 @@ describe('AppSec Remote Config', () => {
       let listener
 
       beforeEach(() => {
-        config.appsec.enabled = undefined
+        config.appsec.DD_APPSEC_ENABLED = undefined
         appsecRemoteConfig.enable(rc, config, appsec)
 
         listener = rc.setProductHandler.firstCall.args[1]
@@ -118,8 +118,8 @@ describe('AppSec Remote Config', () => {
       })
 
       it('should not call enableOrDisableAppsec when activation is not ONECLICK', () => {
-        // When config.appsec.enabled is true, activation is not ONECLICK
-        config.appsec.enabled = true
+        // When DD_APPSEC_ENABLED is true, activation is not ONECLICK
+        config.appsec.DD_APPSEC_ENABLED = true
         appsecRemoteConfig.enable(rc, config, appsec)
 
         const listener2 = rc.setProductHandler.secondCall.args[1]
@@ -167,7 +167,7 @@ describe('AppSec Remote Config', () => {
 
           sinon.assert.calledOnce(telemetry.updateConfig)
           assertObjectContains(telemetry.updateConfig.firstCall.args, [[{
-            name: 'appsec.enabled',
+            name: 'DD_APPSEC_ENABLED',
             origin: 'remote_config',
             value: rcConfigAsmEnabling.asm.enabled,
           }]])
@@ -178,7 +178,7 @@ describe('AppSec Remote Config', () => {
 
           sinon.assert.calledOnce(telemetry.updateConfig)
           assertObjectContains(telemetry.updateConfig.firstCall.args, [[{
-            name: 'appsec.enabled',
+            name: 'DD_APPSEC_ENABLED',
             origin: 'remote_config',
             value: rcConfigAsmDisabling.asm.enabled,
           }]])
@@ -189,9 +189,9 @@ describe('AppSec Remote Config', () => {
 
           sinon.assert.calledOnce(telemetry.updateConfig)
           assertObjectContains(telemetry.updateConfig.firstCall.args, [[{
-            name: 'appsec.enabled',
+            name: 'DD_APPSEC_ENABLED',
             origin: 'default',
-            value: config.appsec.enabled,
+            value: config.appsec.DD_APPSEC_ENABLED,
           }]])
         })
       })
@@ -237,7 +237,10 @@ describe('AppSec Remote Config', () => {
 
           listener('unapply', rcConfig, configId)
 
-          sinon.assert.calledOnceWithExactly(UserTracking.setCollectionMode, config.appsec.eventTracking.mode)
+          sinon.assert.calledOnceWithExactly(
+            UserTracking.setCollectionMode,
+            config.appsec.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE
+          )
         })
 
         it('should not revert collection mode when called with unapply and unknown id', () => {
@@ -306,16 +309,22 @@ describe('AppSec Remote Config', () => {
       })
 
       it('should not enable when custom appsec rules are provided', () => {
-        config.appsec = { enabled: true, rules: {} }
+        config.appsec = { DD_APPSEC_ENABLED: true, DD_APPSEC_RULES: {} }
         appsecRemoteConfig.enable(rc, config, appsec)
         appsecRemoteConfig.enableWafUpdate(config.appsec)
 
         sinon.assert.neverCalledWith(rc.updateCapabilities, 'ASM_ACTIVATION')
         sinon.assert.called(rc.setProductHandler)
+        sinon.assert.notCalled(rc.subscribeProducts)
+        sinon.assert.notCalled(rc.setBatchHandler)
       })
 
       it('should enable when using default rules', () => {
-        config.appsec = { enabled: true, rules: null, rasp: { enabled: true } }
+        config.appsec = {
+          DD_APPSEC_ENABLED: true,
+          DD_APPSEC_RULES: undefined,
+          DD_APPSEC_RASP_ENABLED: true,
+        }
         appsecRemoteConfig.enable(rc, config, appsec)
         appsecRemoteConfig.enableWafUpdate(config.appsec)
 
@@ -326,7 +335,7 @@ describe('AppSec Remote Config', () => {
       })
 
       it('should activate if appsec is manually enabled', () => {
-        config.appsec = { enabled: true, rasp: { enabled: true } }
+        config.appsec = { DD_APPSEC_ENABLED: true, DD_APPSEC_RASP_ENABLED: true }
         appsecRemoteConfig.enable(rc, config, appsec)
         appsecRemoteConfig.enableWafUpdate(config.appsec)
 
@@ -337,7 +346,7 @@ describe('AppSec Remote Config', () => {
       })
 
       it('should activate if appsec enabled is not defined', () => {
-        config.appsec = { rasp: { enabled: true } }
+        config.appsec = { DD_APPSEC_RASP_ENABLED: true }
         appsecRemoteConfig.enable(rc, config, appsec)
         appsecRemoteConfig.enableWafUpdate(config.appsec)
 
@@ -345,7 +354,7 @@ describe('AppSec Remote Config', () => {
       })
 
       it('should not activate rasp capabilities if rasp is disabled', () => {
-        config.appsec = { rasp: { enabled: false } }
+        config.appsec = { DD_APPSEC_RASP_ENABLED: false }
         appsecRemoteConfig.enable(rc, config, appsec)
         appsecRemoteConfig.enableWafUpdate(config.appsec)
 

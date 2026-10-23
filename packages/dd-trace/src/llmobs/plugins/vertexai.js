@@ -23,6 +23,13 @@ class VertexAILLMObsPlugin extends LLMObsPlugin {
     }
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return { metrics: extractMetrics(ctx.result) }
+  }
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
@@ -191,7 +198,8 @@ function extractMetrics (result) {
   const tokenCounts = response.usageMetadata
   const metrics = {}
   if (tokenCounts) {
-    metrics.inputTokens = tokenCounts.promptTokenCount ?? 0
+    // totalTokenCount includes the tool-use prompt tokens, so they count as input
+    metrics.inputTokens = (tokenCounts.promptTokenCount ?? 0) + (tokenCounts.toolUsePromptTokenCount ?? 0)
     metrics.outputTokens = (tokenCounts.candidatesTokenCount ?? 0) + (tokenCounts.thoughtsTokenCount ?? 0)
     metrics.totalTokens = tokenCounts.totalTokenCount ?? 0
     metrics.reasoningOutputTokens = tokenCounts.thoughtsTokenCount ?? 0

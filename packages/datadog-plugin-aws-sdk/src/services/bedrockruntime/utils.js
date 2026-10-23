@@ -24,6 +24,15 @@ const PROVIDER = {
 }
 
 /**
+ * @typedef {{
+ *   inputTokens?: number,
+ *   outputTokens?: number,
+ *   cacheReadTokens?: number,
+ *   cacheWriteTokens?: number,
+ * }} StreamedUsage
+ */
+
+/**
  * Coerce the chunks into a single response body.
  *
  * @param {Array<{ chunk: { bytes: Buffer } }>} chunks
@@ -44,10 +53,7 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
   }
 
   let message = ''
-  let inputTokens = 0
-  let outputTokens = 0
-  let cacheReadTokens = 0
-  let cacheWriteTokens = 0
+  let usage
 
   for (const { chunk: { bytes } } of chunks) {
     const body = JSON.parse(Buffer.from(bytes).toString('utf8'))
@@ -56,8 +62,6 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
       case PROVIDER.AMAZON: {
         if (body?.outputText) {
           message += body?.outputText
-          inputTokens = body?.inputTextTokenCount
-          outputTokens = body?.totalOutputTextTokenCount
         } else if (body?.contentBlockDelta?.delta?.text) {
           message += body.contentBlockDelta.delta.text
         }
@@ -79,9 +83,6 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
           message += body.delta.text
         }
 
-        if (body.message?.usage?.input_tokens) inputTokens = body.message.usage.input_tokens
-        if (body.message?.usage?.output_tokens) outputTokens = body.message.usage.output_tokens
-
         break
       }
       case PROVIDER.COHERE: {
@@ -101,24 +102,61 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
       }
     }
 
-    // by default, it seems newer versions of the AWS SDK include the input/output token counts in the response body
-    const invocationMetrics = body['amazon-bedrock-invocationMetrics']
-    if (invocationMetrics) {
-      inputTokens = invocationMetrics.inputTokenCount
-      outputTokens = invocationMetrics.outputTokenCount
-      cacheReadTokens = invocationMetrics.cacheReadInputTokenCount
-      cacheWriteTokens = invocationMetrics.cacheWriteInputTokenCount
+    usage = mergeStreamedUsage(usage, body, modelProviderUpper)
+  }
+
+  return new Generation({ message, role: 'assistant', ...usage })
+}
+
+/**
+ * Merge the token counts one streamed `invokeModel` frame reports into the running totals. Each
+ * provider spells them differently, and most report none until the trailing invocation metrics,
+ * so a frame carrying no counts leaves the totals as they were.
+ *
+ * @param {StreamedUsage} [usage]
+ * @param {object} body parsed chunk body
+ * @param {string} modelProviderUpper
+ * @returns {StreamedUsage | undefined}
+ */
+function mergeStreamedUsage (usage, body, modelProviderUpper) {
+  // by default, it seems newer versions of the AWS SDK include the input/output token counts in
+  // the response body; any provider can send them, and they supersede what the frames reported
+  const invocationMetrics = body['amazon-bedrock-invocationMetrics']
+  if (invocationMetrics) {
+    return {
+      inputTokens: invocationMetrics.inputTokenCount,
+      outputTokens: invocationMetrics.outputTokenCount,
+      cacheReadTokens: invocationMetrics.cacheReadInputTokenCount,
+      cacheWriteTokens: invocationMetrics.cacheWriteInputTokenCount,
     }
   }
 
-  return new Generation({
-    message,
-    role: 'assistant',
-    inputTokens,
-    outputTokens,
-    cacheReadTokens,
-    cacheWriteTokens,
-  })
+  switch (modelProviderUpper) {
+    case PROVIDER.AMAZON: {
+      const { inputTextTokenCount, totalOutputTextTokenCount } = body
+      if (inputTextTokenCount === undefined && totalOutputTextTokenCount === undefined) return usage
+
+      return {
+        ...usage,
+        inputTokens: inputTextTokenCount ?? usage?.inputTokens,
+        outputTokens: totalOutputTextTokenCount ?? usage?.outputTokens,
+      }
+    }
+    case PROVIDER.ANTHROPIC: {
+      // `message_start` reports the initial counts under `message.usage`; the closing
+      // `message_delta` reports the final output count at the top level
+      const chunkUsage = body.message?.usage ?? body.usage
+      if (!chunkUsage) return usage
+
+      return {
+        ...usage,
+        inputTokens: chunkUsage.input_tokens ?? usage?.inputTokens,
+        outputTokens: chunkUsage.output_tokens ?? usage?.outputTokens,
+      }
+    }
+  }
+
+  return usage
 }
 
 /**
@@ -591,7 +629,6 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
  * of the `[name, value]` tuple.
  *
  * @param {object} block
- * @returns {string}
  */
 function getContentBlockType (block) {
   const key = Object.keys(block)[0]
@@ -625,17 +662,31 @@ function resolveToolResultItem (item) {
   return `[Unsupported content type(s): ${getContentBlockType(item)}]`
 }
 
+/**
+ * Normalize a Converse usage object onto the LLMObs metric names. Returns undefined when the
+ * response reported no counts at all, so a caller cannot mistake an empty record for a measurement.
+ *
+ * @param {object} [usage]
+ * @returns {{
+ *   inputTokens?: number, outputTokens?: number, cacheReadTokens?: number, cacheWriteTokens?: number
+ * } | undefined}
+ */
 function buildUsage (usage = {}) {
-  return {
-    inputTokens: usage.inputTokens ?? usage.input_tokens,
-    outputTokens: usage.outputTokens ?? usage.output_tokens,
-    cacheReadTokens: usage.cacheReadInputTokens ??
-      usage.cacheReadInputTokenCount ??
-      usage.cache_read_input_tokens,
-    cacheWriteTokens: usage.cacheWriteInputTokens ??
-      usage.cacheWriteInputTokenCount ??
-      usage.cache_creation_input_tokens,
+  const inputTokens = usage.inputTokens ?? usage.input_tokens
+  const outputTokens = usage.outputTokens ?? usage.output_tokens
+  const cacheReadTokens = usage.cacheReadInputTokens ??
+    usage.cacheReadInputTokenCount ??
+    usage.cache_read_input_tokens
+  const cacheWriteTokens = usage.cacheWriteInputTokens ??
+    usage.cacheWriteInputTokenCount ??
+    usage.cache_creation_input_tokens
+
+  if (inputTokens === undefined && outputTokens === undefined &&
+      cacheReadTokens === undefined && cacheWriteTokens === undefined) {
+    return
   }
+
+  return { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens }
 }
 
 /**
@@ -768,6 +819,8 @@ function extractTextAndResponseReasonConverseFromStream (chunks) {
 
 module.exports = {
   Generation,
+  buildUsage,
+  mergeStreamedUsage,
   RequestParams,
   extractTextAndResponseReasonFromStream,
   parseModelId,

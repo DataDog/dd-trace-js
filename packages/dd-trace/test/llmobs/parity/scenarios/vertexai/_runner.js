@@ -15,7 +15,7 @@ async function run (scenario) {
   ))
   const originalToken = GoogleAuth.prototype.getAccessToken
   const originalFetch = global.fetch
-  const provider = new URL(process.env.PROVIDER_BASE_URL)
+  const provider = new URL(/** @type {string} */ (process.env.PROVIDER_BASE_URL))
   GoogleAuth.prototype.getAccessToken = async () => ({ token: 'test' })
   global.fetch = (url, options) => {
     const target = new URL(url)

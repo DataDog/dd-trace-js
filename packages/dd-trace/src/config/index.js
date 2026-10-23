@@ -67,7 +67,6 @@ channel('datadog:identity:update').subscribe(refreshRuntimeId)
  * Lazily generates the process-wide runtime ID on first access instead of at module load,
  * so modules that merely require this file without constructing a Config never pay for it.
  *
- * @returns {string}
  */
 function getRuntimeId () {
   runtimeId ??= uuid()
@@ -102,6 +101,10 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 /** @type {Config | null} */
 let configInstance = null
+
+// Fires whenever remote config applies a new value; profiling and other RC-driven consumers
+// subscribe here instead of proxy.js hardcoding a call into each of them.
+const configUpdateChannel = channel('datadog:config:update')
 
 // An entry that is undefined means it is the default value.
 /** @type {Map<ConfigPath, TelemetrySource>} */
@@ -245,9 +248,9 @@ class Config extends ConfigBase {
     const { experimental, ...rest } = options
     if (experimental) {
       // @ts-expect-error - Difficult to type this correctly.
-      this.#applyOptions(experimental, 'code', 'experimental')
+      this.#applyOptions(experimental, 'experimental')
     }
-    this.#applyOptions(rest, 'code')
+    this.#applyOptions(rest)
     this.#applyCalculated()
 
     warnWrongOtelSettings()
@@ -263,7 +266,7 @@ class Config extends ConfigBase {
 
   /**
    * @param {import('./helper').TracerEnv} envs
-   * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config'} source
+   * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config' | 'remote_config'} source
    */
   #applyEnvs (envs, source) {
     for (const [name, value] of Object.entries(envs)) {
@@ -277,21 +280,15 @@ class Config extends ConfigBase {
 
   /**
    * @param {TracerOptions} options
-   * @param {'code' | 'remote_config'} source
    * @param {string} [root]
    */
-  #applyOptions (options, source, root = '') {
+  #applyOptions (options, root = '') {
     for (const [name, value] of Object.entries(options)) {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
       if (!entry) {
-        // TODO: Fix this by by changing remote config to use env styles.
-        if (name !== 'DD_TRACE_ENABLED' || source !== 'remote_config') {
-          log.warn('Unknown option %s with value %o', fullName, value)
-          continue
-        }
-        // @ts-expect-error - The entry is defined in the configurationsTable.
-        entry = configurationsTable.DD_TRACE_ENABLED
+        log.warn('Unknown option %s with value %o', fullName, value)
+        continue
       }
 
       if (entry.nestedProperties) {
@@ -302,7 +299,7 @@ class Config extends ConfigBase {
             // Defining an option that receives an object as value may not contain a property that is also
             // potentially a nested property!
             if (Object.hasOwn(value, nestedProperty)) {
-              this.#applyOptions(value, source, fullName)
+              this.#applyOptions(value, fullName)
               matched = true
               break
             }
@@ -318,7 +315,7 @@ class Config extends ConfigBase {
             // TracePropagationStyle is special. It is a single option that is used to set both inject and extract.
             // TODO: Consider what to do with this later
             // @ts-expect-error - Difficult to type this correctly.
-            this.#applyOptions({ inject: value, extract: value }, source, 'tracePropagationStyle')
+            this.#applyOptions({ inject: value, extract: value }, 'tracePropagationStyle')
           } else {
             log.warn('Unknown option %s with value %o', fullName, value)
           }
@@ -327,34 +324,36 @@ class Config extends ConfigBase {
       }
       const coerced = programmaticTypeCoercions[entry.type](value)
       if (coerced === undefined && value !== undefined) {
-        warnInvalidValue(value, fullName, source, `Invalid ${entry.type} input`)
+        warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
       }
       const transformed = coerced !== undefined && entry.transformer
-        ? entry.transformer(coerced, fullName, source)
+        ? entry.transformer(coerced, fullName, 'code')
         : coerced
-      setAndTrack(this, entry.property ?? name, transformed, value, source)
+      setAndTrack(this, entry.property ?? name, transformed, value, 'code')
     }
   }
 
   /**
-   * Set the configuration with remote config settings.
-   * Applies remote configuration, recalculates derived values, and merges all configuration sources.
+   * Set the configuration with SDK_CONFIGURATION remote config settings.
+   * Resolves env-var names via `configurationsTable`, since this payload is keyed by env var name.
    *
-   * @param {TracerOptions|null} options - Configurations received via Remote
-   *   Config or null to reset all remote configuration
+   * @param {Partial<Record<import('./helper').SupportedEnvKey, string>>|null} options - Env-var-keyed
+   *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
   setRemoteConfig (options) {
-    // Clear all RC-managed fields to ensure previous values don't persist.
-    // State is instead managed by the `RCClientLibConfigManager` class
+    // Replace the complete RC layer so omitted fields fall back to their previous source.
+    // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
     undo(this, 'remote_config')
 
     // Special case: if options is null, nothing to apply
     // This happens when all remote configs are removed
     if (options !== null) {
-      this.#applyOptions(options, 'remote_config')
+      // Resolve aliases and drop configs this tracer version doesn't recognize
+      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
     }
 
     this.#applyCalculated()
+    configUpdateChannel.publish(this)
   }
 
   /**
@@ -370,8 +369,8 @@ class Config extends ConfigBase {
 
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
-        trackedConfigOrigins.has('experimental.flaggingProvider.enabled')) {
-      if (this.experimental.flaggingProvider.enabled) {
+        trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {
+      if (this.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED) {
         setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'remote_config')
       } else {
         setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_ENABLED', false)
@@ -439,7 +438,7 @@ class Config extends ConfigBase {
     // Enable resource renaming when appsec is enabled and only
     // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set
     if (!trackedConfigOrigins.has('DD_TRACE_RESOURCE_RENAMING_ENABLED')) {
-      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.enabled ?? false)
+      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.DD_APPSEC_ENABLED ?? false)
     }
 
     if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
@@ -475,8 +474,8 @@ class Config extends ConfigBase {
     }
 
     if (!trackedConfigOrigins.has('apmTracingEnabled') &&
-        trackedConfigOrigins.has('experimental.appsec.standalone.enabled')) {
-      setAndTrack(this, 'apmTracingEnabled', !this.experimental.appsec.standalone.enabled)
+        trackedConfigOrigins.has('appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED')) {
+      setAndTrack(this, 'apmTracingEnabled', !this.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
     }
 
     if (this.cloudPayloadTagging?.request || this.cloudPayloadTagging?.response) {
@@ -505,7 +504,8 @@ class Config extends ConfigBase {
     // dd-trace's own sampling policy in that case.
     if (!trackedConfigOrigins.has('sampleRate') &&
         (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
-          (this.OTEL_TRACES_EXPORTER === 'otlp' && this.experimental.exporter !== 'electron'))) {
+          (this.OTEL_TRACES_EXPORTER === 'otlp' &&
+            this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'))) {
       setAndTrack(this, 'sampleRate',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
@@ -530,9 +530,9 @@ class Config extends ConfigBase {
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
     if (!this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
-        (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
-        trackedConfigOrigins.has('llmobs.mlApp') ||
-        trackedConfigOrigins.has('llmobs.projectName'))) {
+        (trackedConfigOrigins.has('llmobs.DD_LLMOBS_AGENTLESS_ENABLED') ||
+        trackedConfigOrigins.has('llmobs.DD_LLMOBS_ML_APP') ||
+        trackedConfigOrigins.has('llmobs.DD_LLMOBS_PROJECT_NAME'))) {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
@@ -638,7 +638,7 @@ class Config extends ConfigBase {
     }
 
     const isTestOptimizationWorker = this.isCiVisibility &&
-      TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.experimental.exporter)
+      TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (isTestOptimizationWorker) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
@@ -648,10 +648,10 @@ class Config extends ConfigBase {
         setAndTrack(this, 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', true)
       }
       setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
-      setAndTrack(this, 'llmobs.agentlessEnabled', true)
+      setAndTrack(this, 'llmobs.DD_LLMOBS_AGENTLESS_ENABLED', true)
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
       if (this.DD_API_KEY === undefined) {
-        setAndTrack(this, 'dynamicInstrumentation.enabled', false)
+        setAndTrack(this, 'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED', false)
       }
       setAndTrack(this, 'runtimeMetrics.enabled', false)
       setAndTrack(this, 'dsmEnabled', false)
@@ -667,7 +667,7 @@ class Config extends ConfigBase {
     }
 
     if (agentlessTracingEnabled && !this.isCiVisibility) {
-      setAndTrack(this, 'experimental.exporter', 'agentless')
+      setAndTrack(this, 'tracing.DD_TRACE_EXPERIMENTAL_EXPORTER', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting

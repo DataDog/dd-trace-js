@@ -8,6 +8,8 @@ const {
   convertOpenAIResponseItemsToMessages,
   convertOpenAIResponsePromptToMessages,
   getResponsesInputMessages,
+  getStreamedChatCompletionsOutputMessages,
+  getStreamedResponsesOutputMessages,
   openAIResponseContentToMessageContent,
 } = require('../../../src/aiguard/messages/openai')
 
@@ -413,6 +415,93 @@ describe('aiguard/messages/openai', () => {
     it('should drop null entries in the content array without throwing', () => {
       const content = [null, { type: 'input_text', text: 'Hi' }, undefined]
       assert.strictEqual(openAIResponseContentToMessageContent(content), 'Hi')
+    })
+  })
+
+  describe('streamed output', () => {
+    it('concatenates chat completion text deltas', () => {
+      const chunks = [
+        { choices: [{ index: 0, delta: { content: 'Hello' } }] },
+        { choices: [{ index: 0, delta: { content: ' world' } }] },
+      ]
+
+      assert.deepStrictEqual(getStreamedChatCompletionsOutputMessages(chunks), [
+        { role: 'assistant', content: 'Hello world' },
+      ])
+    })
+
+    it('combines streamed content and tool call arguments', () => {
+      const chunks = [
+        {
+          choices: [{
+            index: 0,
+            delta: {
+              content: 'Calling search',
+              tool_calls: [{
+                index: 0,
+                id: 'call_1',
+                type: 'function',
+                function: { name: 'search', arguments: '' },
+              }],
+            },
+          }],
+        },
+        {
+          choices: [{
+            index: 0,
+            delta: { tool_calls: [{ index: 0, function: { arguments: '{"query":"unsafe"}' } }] },
+          }],
+        },
+      ]
+
+      assert.deepStrictEqual(getStreamedChatCompletionsOutputMessages(chunks), [{
+        role: 'assistant',
+        content: 'Calling search',
+        tool_calls: [{
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'search', arguments: '{"query":"unsafe"}' },
+        }],
+      }])
+    })
+
+    it('combines legacy function call arguments', () => {
+      const chunks = [
+        { choices: [{ index: 0, delta: { function_call: { name: 'search', arguments: '{"query":' } } }] },
+        { choices: [{ index: 0, delta: { function_call: { arguments: '"unsafe"}' } } }] },
+      ]
+
+      assert.deepStrictEqual(getStreamedChatCompletionsOutputMessages(chunks), [{
+        role: 'assistant',
+        tool_calls: [{
+          id: 'search',
+          function: { name: 'search', arguments: '{"query":"unsafe"}' },
+        }],
+      }])
+    })
+
+    it('concatenates refusal deltas', () => {
+      const chunks = [
+        { choices: [{ index: 0, delta: { refusal: 'I cannot' } }] },
+        { choices: [{ index: 0, delta: { refusal: ' help' } }] },
+      ]
+
+      assert.deepStrictEqual(getStreamedChatCompletionsOutputMessages(chunks), [
+        { role: 'assistant', refusal: 'I cannot help' },
+      ])
+    })
+
+    it('reads the final Responses API snapshot', () => {
+      const chunks = [{
+        type: 'response.completed',
+        response: {
+          output: [{ type: 'message', role: 'assistant', content: 'Hello' }],
+        },
+      }]
+
+      assert.deepStrictEqual(getStreamedResponsesOutputMessages(chunks), [
+        { role: 'assistant', content: 'Hello' },
+      ])
     })
   })
 })

@@ -40,9 +40,12 @@ const exclude = new TestExclude({
 // present repo copy, whose bytes are identical to the sandbox copy V8 measured.
 const SANDBOX_MARKER = `${path.sep}node_modules${path.sep}dd-trace${path.sep}`
 
+function isLcovOnlyReport () {
+  return Boolean(process.env.CI)
+}
+
 /**
  * @param {string} filePath
- * @returns {string}
  */
 function rebaseSandboxPath (filePath) {
   const markerIndex = filePath.lastIndexOf(SANDBOX_MARKER)
@@ -52,7 +55,6 @@ function rebaseSandboxPath (filePath) {
 
 /**
  * @param {string} filePath
- * @returns {boolean}
  */
 function shouldInclude (filePath) {
   if (!filePath.startsWith(REPO_ROOT + path.sep)) return false
@@ -77,7 +79,6 @@ function zeroCoverageCount (key, value) {
 /**
  * @param {FunctionCoverage[]} target
  * @param {FunctionCoverage[]} source
- * @returns {void}
  */
 function mergeCoverageCounts (target, source) {
   for (let functionIndex = 0; functionIndex < target.length; functionIndex++) {
@@ -97,7 +98,6 @@ function mergeCoverageCounts (target, source) {
  * @param {Record<string, import('istanbul-lib-coverage').FileCoverageData>} target
  * @param {Record<string, import('istanbul-lib-coverage').FileCoverageData>} source
  * @param {number} multiplier
- * @returns {void}
  */
 function addCoverageCounts (target, source, multiplier) {
   for (const [filePath, targetFile] of Object.entries(target)) {
@@ -163,15 +163,20 @@ async function mergeV8File (mergedScripts, inclusionCache, v8File) {
 }
 
 /**
- * Convert every raw V8 profile in `v8Dir` into a merged istanbul report (lcov + html + json) under
- * `outputDir`. Shared by the integration harness (this script's `main`) and the in-process
- * `scripts/c8-ci.js`, so both produce identical reports from the same patched converter.
+ * Convert every raw V8 profile in `v8Dir` into a merged Istanbul report under `outputDir`.
+ * CI emits only the LCOV artifact consumed by coverage uploaders by default, while local runs
+ * retain HTML, text-summary, and JSON reports for debugging.
  *
  * @param {string} v8Dir directory of raw `NODE_V8_COVERAGE` JSON files
  * @param {string} outputDir report destination (`coverage/node-<version>-<label>`)
+ * @param {{lcovOnly?: boolean}} [options]
  * @returns {Promise<{scripts: number, profiles: number, files: number}>}
  */
-async function convertV8DirToReport (v8Dir, outputDir) {
+async function convertV8DirToReport (
+  v8Dir,
+  outputDir,
+  { lcovOnly = isLcovOnlyReport() } = {}
+) {
   await fs.mkdir(outputDir, { recursive: true })
 
   let files
@@ -220,24 +225,33 @@ async function convertV8DirToReport (v8Dir, outputDir) {
 
   const context = libReport.createContext({ coverageMap, dir: outputDir, defaultSummarizer: 'nested' })
   reports.create('lcovonly', { file: 'lcov.info', projectRoot: REPO_ROOT }).execute(context)
-  reports.create('html', { subdir: 'html' }).execute(context)
-  reports.create('text-summary', { file: 'text-summary.txt' }).execute(context)
-
-  await fs.writeFile(path.join(outputDir, 'coverage-final.json'), JSON.stringify(coverageMap.toJSON()))
+  if (!lcovOnly) {
+    reports.create('html', { subdir: 'html' }).execute(context)
+    reports.create('text-summary', { file: 'text-summary.txt' }).execute(context)
+    await fs.writeFile(path.join(outputDir, 'coverage-final.json'), JSON.stringify(coverageMap.toJSON()))
+  }
 
   return { scripts, profiles: v8Files.length, files: coverageMap.files().length }
 }
 
 async function main () {
   const outputDir = getMergedReportDir()
-  const { scripts, profiles, files } = await convertV8DirToReport(getV8CoverageDir(), outputDir)
+  const lcovOnly = isLcovOnlyReport()
+  const { scripts, profiles, files } = await convertV8DirToReport(
+    getV8CoverageDir(),
+    outputDir,
+    { lcovOnly }
+  )
   if (files === 0) {
     process.stdout.write('No V8 coverage data found to merge.\n')
     return
   }
+  const reportPath = lcovOnly
+    ? path.join(outputDir, 'lcov.info')
+    : path.join(outputDir, 'html', 'index.html')
   process.stdout.write(
     `Converted ${scripts} V8 script entries across ${profiles} process profile(s) into ` +
-    `${files} file section(s). HTML report: ${path.join(outputDir, 'html', 'index.html')}\n`
+    `${files} file section(s). Report: ${reportPath}\n`
   )
 }
 

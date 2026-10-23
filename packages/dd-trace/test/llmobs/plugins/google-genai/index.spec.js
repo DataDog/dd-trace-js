@@ -139,7 +139,6 @@ describe('Plugin', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            reasoning_output_tokens: MOCK_NUMBER,
           },
           tags: { ml_app: 'test', integration: 'google_genai' },
         })

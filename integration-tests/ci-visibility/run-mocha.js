@@ -2,6 +2,7 @@
 
 const MochaPackage = require('mocha')
 const Mocha = MochaPackage.default ?? MochaPackage
+const finalFlushMarker = process.env.REPORT_FINAL_FLUSH
 
 const mocha = new Mocha({
   parallel: !!process.env.RUN_IN_PARALLEL,
@@ -19,14 +20,26 @@ if (process.env.TESTS_TO_RUN) {
   mocha.addFile(require.resolve('./test/ci-visibility-test-2.js'))
 }
 mocha.run((failures) => {
-  if (process.send) {
-    process.send('finished')
+  const finish = () => {
+    if (process.send) {
+      process.send('finished')
+    }
+    if (process.env.REPORT_RUN_CALLBACK) {
+      process.stdout.write('programmatic Mocha run completed\n')
+    }
+    if (process.env.SHOULD_CHECK_RESULTS && failures > 0) {
+      process.exit(1)
+    }
   }
-  if (process.env.REPORT_RUN_CALLBACK) {
-    process.stdout.write('programmatic Mocha run completed\n')
-  }
-  if (process.env.SHOULD_CHECK_RESULTS && failures > 0) {
-    process.exit(1)
+
+  if (finalFlushMarker) {
+    const tracer = require('dd-trace')
+    tracer._tracer.flushAll(() => {
+      process.stdout.write(finalFlushMarker)
+      finish()
+    })
+  } else {
+    finish()
   }
 }).on('end', (res) => {
   // eslint-disable-next-line

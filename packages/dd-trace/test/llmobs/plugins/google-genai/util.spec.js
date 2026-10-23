@@ -32,7 +32,7 @@ describe('google-genai llmobs util', () => {
       assert.deepStrictEqual(extractMetrics({}), {})
     })
 
-    it('preserves cache and reasoning token counts including zero', () => {
+    it('preserves zero cache token counts and counts thought tokens as output', () => {
       assert.deepStrictEqual(extractMetrics({
         usageMetadata: {
           promptTokenCount: 0,
@@ -46,7 +46,16 @@ describe('google-genai llmobs util', () => {
         outputTokens: 5,
         cacheReadTokens: 0,
         totalTokens: 5,
-        reasoningOutputTokens: 3,
+      })
+    })
+
+    it('counts tool-use prompt tokens as input', () => {
+      assert.deepStrictEqual(extractMetrics({
+        usageMetadata: { promptTokenCount: 4, toolUsePromptTokenCount: 6, candidatesTokenCount: 2 },
+      }), {
+        inputTokens: 10,
+        outputTokens: 2,
+        totalTokens: 12,
       })
     })
   })

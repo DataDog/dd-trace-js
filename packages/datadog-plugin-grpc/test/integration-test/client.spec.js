@@ -7,7 +7,6 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox,
   stopProc,
@@ -32,7 +31,7 @@ describe('esm', () => {
       bindingName: 'grpc',
       packageName: '@grpc/grpc-js',
       defaultExport: true,
-      namedExports: ['loadPackageDefinition', 'Server', 'ServerCredentials', 'credentials'],
+      namedExports: ['loadPackageDefinition', 'Server', 'ServerCredentials', 'credentials', 'Client'],
       namedExportBinding: 'namespace',
     })
 
@@ -46,7 +45,9 @@ describe('esm', () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
-          assert.strictEqual(checkSpansForServiceName(payload, 'grpc.client'), true)
+          const clientSpans = payload.flat().filter(s => s.name === 'grpc.client')
+          assert.strictEqual(clientSpans.length, 1,
+            `expected 1 grpc.client span, got ${clientSpans.length} — possible double-patch`)
         })
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 

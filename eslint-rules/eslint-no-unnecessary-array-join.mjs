@@ -173,7 +173,6 @@ function reportUnnecessaryArrayJoin (node, sourceCode, arrayAppenders, context) 
 
 /**
  * @param {import('estree').MemberExpression} member
- * @returns {boolean}
  */
 function isNonEmptyCheck (member) {
   const comparison = member.parent
@@ -185,7 +184,6 @@ function isNonEmptyCheck (member) {
 
 /**
  * @param {import('estree').Expression | import('estree').PrivateIdentifier} node
- * @returns {boolean}
  */
 function isZero (node) {
   return node.type === 'Literal' && node.value === 0
@@ -284,7 +282,6 @@ function getFunctionOwner (node) {
 
 /**
  * @param {import('estree').Expression | import('estree').SpreadElement | undefined} node
- * @returns {boolean}
  */
 function isStaticSeparator (node) {
   if (node === undefined) return true
@@ -296,7 +293,6 @@ function isStaticSeparator (node) {
  * @param {import('estree').Expression} node
  * @param {import('eslint').SourceCode} sourceCode
  * @param {Set<import('estree').Node>} [seen]
- * @returns {boolean}
  */
 function isKnownNonStringExpression (node, sourceCode, seen = new Set()) {
   if (node.type === 'Literal') return typeof node.value !== 'string'
@@ -359,7 +355,6 @@ function isKnownNonStringExpression (node, sourceCode, seen = new Set()) {
 /**
  * @param {import('estree').CallExpression} node
  * @param {import('eslint').SourceCode} sourceCode
- * @returns {boolean}
  */
 function isLiteralJoin (node, sourceCode) {
   if (
@@ -384,7 +379,6 @@ function isLiteralJoin (node, sourceCode) {
 
 /**
  * @param {import('estree').CallExpression} node
- * @returns {boolean}
  */
 function isMapJoin (node) {
   if (
@@ -443,7 +437,6 @@ function getLiteralJoinElements (node, sourceCode) {
 /**
  * @param {import('estree').Identifier} node
  * @param {import('eslint').SourceCode} sourceCode
- * @returns {boolean}
  */
 function isGlobalBoolean (node, sourceCode) {
   let scope = sourceCode.getScope(node)

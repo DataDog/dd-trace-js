@@ -55,7 +55,6 @@ function groupPartsByRole (parts) {
 /**
  * Check if parts contain thought/reasoning content
  * @param {Array<{thought?: boolean}>} parts
- * @returns {boolean}
  */
 function hasThoughtParts (parts) {
   return parts.some(part => part.thought === true)
@@ -66,7 +65,6 @@ function hasThoughtParts (parts) {
  * @param {object} candidate
  * @param {Array<{thought?: boolean}>} parts
  * @param {string} defaultRole
- * @returns {string}
  */
 function determineRole (candidate, parts = [], defaultRole = ROLES.USER) {
   // Check parts for thought indicators
@@ -85,11 +83,9 @@ function determineRole (candidate, parts = [], defaultRole = ROLES.USER) {
 /**
  * Normalize role to standard values
  * @param {string} role
- * @returns {string}
  */
 function normalizeRole (role) {
-  if (role === ROLES.MODEL) return ROLES.ASSISTANT
-  if (role === ROLES.ASSISTANT) return ROLES.ASSISTANT
+  if (role === ROLES.MODEL || role === ROLES.ASSISTANT) return ROLES.ASSISTANT
   if (role === ROLES.USER) return ROLES.USER
   if (role === ROLES.REASONING) return ROLES.REASONING
   return ROLES.USER // default
@@ -106,8 +102,9 @@ function extractMetrics (response) {
 
   if (!tokenUsage) return metrics
 
-  if (tokenUsage.promptTokenCount != null) {
-    metrics.inputTokens = tokenUsage.promptTokenCount
+  // totalTokenCount includes the tool-use prompt tokens, so they count as input
+  if (tokenUsage.promptTokenCount != null || tokenUsage.toolUsePromptTokenCount != null) {
+    metrics.inputTokens = (tokenUsage.promptTokenCount ?? 0) + (tokenUsage.toolUsePromptTokenCount ?? 0)
   }
 
   if (tokenUsage.candidatesTokenCount != null || tokenUsage.thoughtsTokenCount != null) {
@@ -119,17 +116,11 @@ function extractMetrics (response) {
   }
 
   const totalTokens = tokenUsage.totalTokenCount ||
-    (tokenUsage.promptTokenCount != null || tokenUsage.candidatesTokenCount != null ||
-      tokenUsage.thoughtsTokenCount != null
-      ? (tokenUsage.promptTokenCount ?? 0) + (tokenUsage.candidatesTokenCount ?? 0) +
-        (tokenUsage.thoughtsTokenCount ?? 0)
+    (metrics.inputTokens !== undefined || metrics.outputTokens !== undefined
+      ? (metrics.inputTokens ?? 0) + (metrics.outputTokens ?? 0)
       : undefined)
   if (totalTokens != null) {
     metrics.totalTokens = totalTokens
-  }
-
-  if (tokenUsage.thoughtsTokenCount != null) {
-    metrics.reasoningOutputTokens = tokenUsage.thoughtsTokenCount
   }
 
   return metrics
@@ -377,7 +368,7 @@ function formatContentObject (content, defaultRole = ROLES.USER) {
 
 /**
  * Format input messages from contents
- * @param {[string|{text: string}|{parts: Array<string|{text: string}>}]} [contents]
+ * @param {Array<string|{text?: string, parts?: Array<string|{text: string}>}>|string|object} [contents]
  * @param {string} defaultRole
  * @returns {Array}
  */
@@ -405,7 +396,7 @@ function formatInputMessages (contents, defaultRole = ROLES.USER) {
 
 /**
  * Format embedding input from contents
- * @param {[string|{text: string}|{parts: Array<string|{text: string}>}]} [contents]
+ * @param {Array<string|{text?: string, parts?: Array<string|{text: string}>}>|string|object} [contents]
  * @returns {Array}
  */
 function formatEmbeddingInput (contents) {
@@ -586,7 +577,6 @@ function formatOutputMessages (response, isStreaming = false) {
 /**
  * Format embedding output from response
  * @param {object} response
- * @returns {string}
  */
 function formatEmbeddingOutput (response) {
   if (!response?.embeddings?.length) {

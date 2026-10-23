@@ -45,6 +45,12 @@ if (process.env.NO_ISOLATE) {
   config.test.isolate = false
 }
 
+if (process.env.VITEST_NATIVE_MODULE_RUNNER) {
+  config.test.experimental = {
+    viteModuleRunner: false,
+  }
+}
+
 if (process.env.POOL_NO_ISOLATE) {
   config.test.poolOptions = {
     [poolConfig]: {
@@ -94,6 +100,7 @@ async function getBrowserProvider () {
   if (browserProvider === 'webdriverio') {
     const { webdriverio } = await import('@vitest/browser-webdriverio')
     const capabilities = {
+      'wdio:enforceWebDriverClassic': true,
       'goog:chromeOptions': {
         args: ['disable-dev-shm-usage', 'no-sandbox'],
       },
