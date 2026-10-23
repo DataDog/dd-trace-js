@@ -4,12 +4,103 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const vm = require('node:vm')
 
 const { after, afterEach, before, describe, it } = require('mocha')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const createBundlerBanner = require('../../datadog-instrumentations/src/helpers/bundler-banner')
 const DatadogWebpackPlugin = require('../index')
 const loader = require('../src/loader')
+const log = require('../src/log')
+
+/**
+ * @param {{ target: string|string[], optimization: { minimize: boolean },
+ *   externalsPresets?: { node: boolean }, output?: { module: boolean } }} options
+ * @param {{ chunks?: Array<{ canBeInitial: () => boolean, files: Set<string> }>,
+ *   assets?: Record<string, { source: () => string, map: () => object }> }} [fixtures]
+ */
+function createCompilerHarness (options, { chunks = [], assets = {} } = {}) {
+  let environmentHook
+  let compilationHook
+  let processAssetsHook
+  const updates = []
+  const outputAssets = new Map(Object.entries(assets))
+
+  class ReplaceSource {
+    /** @param {{ source: () => string, map: () => object }} original */
+    constructor (original) {
+      this.original = original
+      /** @type {Array<[number, string]>} */
+      this.insertions = []
+    }
+
+    /**
+     * @param {number} position
+     * @param {string} value
+     */
+    insert (position, value) {
+      this.insertions.push([position, value])
+    }
+
+    source () {
+      let content = this.original.source()
+      for (const [position, value] of [...this.insertions].sort((a, b) => b[0] - a[0])) {
+        content = content.slice(0, position) + value + content.slice(position)
+      }
+      return content
+    }
+
+    map () {
+      return this.original.map()
+    }
+  }
+
+  const compiler = {
+    options,
+    webpack: { sources: { ReplaceSource } },
+    hooks: {
+      environment: { tap: (_name, hook) => { environmentHook = hook } },
+      thisCompilation: { tap: (_name, hook) => { compilationHook = hook } },
+      normalModuleFactory: { tap: () => {} },
+    },
+  }
+
+  return {
+    compiler,
+    updates,
+    outputAssets,
+    runEnvironment () {
+      environmentHook()
+    },
+    runCompilation () {
+      const compilation = {
+        chunks,
+        hooks: {
+          processAssets: { tap: (_options, hook) => { processAssetsHook = hook } },
+        },
+        updateAsset (filename, update) {
+          updates.push(filename)
+          outputAssets.set(filename, update(outputAssets.get(filename)))
+        },
+      }
+
+      compilationHook(compilation)
+      processAssetsHook()
+    },
+  }
+}
+
+/**
+ * @param {string} content
+ * @param {object} map
+ */
+function createSource (content, map) {
+  return {
+    source: () => content,
+    map: () => map,
+  }
+}
 
 const DC_MODULE_REQUIRE = `require(${JSON.stringify(require.resolve('dc-polyfill').replaceAll('\\', '/'))})`
 
@@ -54,43 +145,196 @@ describe('DatadogWebpackPlugin', () => {
   describe('apply', () => {
     it('throws when minimize is enabled', () => {
       const plugin = new DatadogWebpackPlugin()
-      let environmentHook
-      const compiler = {
-        options: {
-          optimization: { minimize: true },
-        },
-        hooks: {
-          environment: { tap: (name, fn) => { environmentHook = fn } },
-          thisCompilation: { tap: () => {} },
-          normalModuleFactory: { tap: () => {} },
-        },
-      }
+      const harness = createCompilerHarness({ optimization: { minimize: true }, target: 'node' })
 
-      plugin.apply(compiler)
+      plugin.apply(harness.compiler)
       assert.throws(
-        () => environmentHook(),
+        () => harness.runEnvironment(),
         /optimization\.minimize is not compatible/
       )
     })
 
     it('does not throw when minimize is not enabled', () => {
       const plugin = new DatadogWebpackPlugin()
-      const tapped = []
-      const compiler = {
-        options: {
-          optimization: { minimize: false },
-        },
-        hooks: {
-          environment: { tap: () => {} },
-          thisCompilation: { tap: () => {} },
-          normalModuleFactory: {
-            tap: (name, fn) => { tapped.push(name) },
+      const harness = createCompilerHarness({ optimization: { minimize: false }, target: 'node' })
+
+      plugin.apply(harness.compiler)
+      harness.runEnvironment()
+    })
+
+    it('marks initial JavaScript assets, including .cjs, once each and preserves source maps', () => {
+      const plugin = new DatadogWebpackPlugin()
+      const map = { version: 3, sources: ['entry.js'], mappings: 'AAAA' }
+      const harness = createCompilerHarness(
+        { optimization: { minimize: false }, target: 'node' },
+        {
+          chunks: [
+            { canBeInitial: () => true, files: new Set(['main.js', 'shared.mjs', 'legacy.cjs', 'main.js.map']) },
+            { canBeInitial: () => true, files: new Set(['shared.mjs']) },
+            { canBeInitial: () => false, files: new Set(['async.js']) },
+          ],
+          assets: {
+            'main.js': createSource('main()', map),
+            'shared.mjs': createSource('export {}', map),
+            'legacy.cjs': createSource('module.exports = {}', map),
+            'main.js.map': createSource('{}', map),
+            'async.js': createSource('async()', map),
           },
-        },
+        }
+      )
+
+      plugin.apply(harness.compiler)
+      harness.runCompilation()
+
+      const banner = createBundlerBanner('webpack')
+      for (const filename of ['main.js', 'shared.mjs', 'legacy.cjs']) {
+        const asset = harness.outputAssets.get(filename)
+        assert.ok(asset, `expected emitted asset ${filename}`)
+        assert.ok(asset.source().includes(banner), `expected ${filename} to be marked`)
+        assert.equal(asset.map(), map, 'ReplaceSource should retain the original source map')
+      }
+      assert.deepEqual(harness.updates.sort(), ['legacy.cjs', 'main.js', 'shared.mjs'])
+      assert.equal(harness.outputAssets.get('async.js')?.source(), 'async()')
+      assert.equal(harness.outputAssets.get('main.js.map')?.source(), '{}')
+    })
+
+    it('adds the bundler banner without git metadata and preserves source mapping', () => {
+      const originalDirectory = process.cwd()
+      const noGitDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-webpack-no-git-'))
+      const map = { version: 3, sources: ['entry.mjs'], mappings: 'AAAA' }
+      const source = createSource('export const value = 1', map)
+      const jsMap = { version: 3, sources: ['entry.js'], mappings: 'AAAA' }
+      const jsSource = createSource('module.exports = 1', jsMap)
+
+      try {
+        process.chdir(noGitDirectory)
+        const plugin = new DatadogWebpackPlugin()
+        const harness = createCompilerHarness(
+          { optimization: { minimize: false }, target: 'node' },
+          {
+            chunks: [{ canBeInitial: () => true, files: new Set(['entry.js', 'entry.mjs']) }],
+            assets: { 'entry.js': jsSource, 'entry.mjs': source },
+          }
+        )
+
+        plugin.apply(harness.compiler)
+        harness.runCompilation()
+
+        const banner = createBundlerBanner('webpack')
+        for (const filename of ['entry.js', 'entry.mjs']) {
+          const output = harness.outputAssets.get(filename)
+          assert.ok(output, `expected emitted asset ${filename}`)
+          assert.equal(output.source().slice(0, banner.length), banner)
+          assert.doesNotMatch(output.source(), /DD_GIT_/)
+        }
+        const esmAsset = harness.outputAssets.get('entry.mjs')
+        const commonJsAsset = harness.outputAssets.get('entry.js')
+        assert.ok(esmAsset)
+        assert.ok(commonJsAsset)
+        assert.equal(esmAsset.map(), map)
+        assert.equal(commonJsAsset.map(), jsMap)
+        assert.deepEqual(harness.updates, ['entry.js', 'entry.mjs'])
+      } finally {
+        process.chdir(originalDirectory)
+        fs.rmSync(noGitDirectory, { recursive: true, force: true })
+      }
+    })
+
+    it('places the banner where it keeps a leading "use strict" directive in effect', () => {
+      const map = { version: 3, sources: ['entry.js'], mappings: 'AAAA' }
+      const strictCheck = 'globalThis.strict = (function () { return this })() === undefined'
+      const assets = {
+        'top-level.js': `/******/ "use strict";\n${strictCheck}`,
+        'no-semicolon.js': `// generated\n'use strict'\n${strictCheck}`,
+        'hashbang.js': `#!/usr/bin/env node\n"use strict";\n${strictCheck}`,
+        'iife.js': `/******/ (() => {\n"use strict";\n${strictCheck}\n})()`,
+        'sloppy.js': `/* no directive */\n${strictCheck}`,
+      }
+      const harness = createCompilerHarness(
+        { optimization: { minimize: false }, target: 'node' },
+        {
+          chunks: [{ canBeInitial: () => true, files: new Set(Object.keys(assets)) }],
+          assets: Object.fromEntries(
+            Object.entries(assets).map(([name, content]) => [name, createSource(content, map)])
+          ),
+        }
+      )
+
+      new DatadogWebpackPlugin().apply(harness.compiler)
+      harness.runCompilation()
+
+      const banner = createBundlerBanner('webpack')
+      /** @param {string} filename */
+      const sourceOf = filename => {
+        const asset = harness.outputAssets.get(filename)
+        assert.ok(asset, `expected emitted asset ${filename}`)
+        return asset.source()
+      }
+      const expectedStrict = {
+        'top-level.js': true,
+        'no-semicolon.js': true,
+        'hashbang.js': true,
+        'iife.js': true,
+        'sloppy.js': false,
+      }
+      for (const [filename, strict] of Object.entries(expectedStrict)) {
+        const output = sourceOf(filename)
+        assert.ok(output.includes(banner), `expected ${filename} to be marked`)
+        const context = vm.createContext({})
+        vm.runInContext(output, context)
+        assert.equal(context.strict, strict, `${filename} strict mode`)
+        assert.equal(
+          vm.runInContext('globalThis[Symbol.for("dd-trace:bundler")].bundlers.length', context),
+          1,
+          `${filename} banner must run`
+        )
       }
 
-      plugin.apply(compiler)
-      assert.equal(tapped[0], 'DatadogWebpackPlugin')
+      const hashbang = sourceOf('hashbang.js')
+      const prologue = '#!/usr/bin/env node\n"use strict";'
+      assert.equal(hashbang.slice(0, prologue.length), prologue, 'hashbang and directive must stay first')
+      assert.ok(hashbang.includes(banner))
+      const iife = sourceOf('iife.js')
+      assert.ok(iife.indexOf(banner) < iife.indexOf('(() => {'), 'banner runs before an IIFE bundle')
+    })
+
+    it('warns for non-Node targets and disabled Node externals without failing', () => {
+      const plugin = new DatadogWebpackPlugin()
+      const harness = createCompilerHarness({
+        optimization: { minimize: false },
+        target: 'web',
+        externalsPresets: { node: false },
+      })
+      const warnings = []
+      const originalWarn = log.warn
+      log.warn = (...args) => warnings.push(args)
+
+      try {
+        plugin.apply(harness.compiler)
+        harness.runEnvironment()
+      } finally {
+        log.warn = originalWarn
+      }
+
+      assert.equal(warnings.length, 2, 'expected warnings for target and disabled Node externals')
+      assert.match(warnings[0][0], /target %s/)
+      assert.match(warnings[1][0], /externalsPresets\.node is false/)
+    })
+
+    it('recognizes versioned, asynchronous, and multi-target Node configurations', () => {
+      const originalWarn = log.warn
+      const warnings = []
+      log.warn = (...args) => warnings.push(args)
+      try {
+        for (const target of ['node', 'node18', 'node18.12', 'async-node', 'async-node18.12', ['node', 'es2022']]) {
+          const harness = createCompilerHarness({ target, optimization: { minimize: false } })
+          new DatadogWebpackPlugin().apply(harness.compiler)
+          harness.runEnvironment()
+        }
+        assert.deepStrictEqual(warnings, [])
+      } finally {
+        log.warn = originalWarn
+      }
     })
 
     describe('git metadata injection', () => {
@@ -106,65 +350,47 @@ describe('DatadogWebpackPlugin', () => {
         delete require.cache[pluginPath]
       })
 
+      /**
+       * @param {typeof DatadogWebpackPlugin} Plugin
+       */
       function applyAndProcessAssets (Plugin) {
-        let processAssets
-        const source = 'module.exports = 1\n'
-        let asset
-        const compilation = {
-          chunks: [
-            {
-              canBeInitial: () => false,
-              files: new Set(['lazy.js']),
+        const harness = createCompilerHarness(
+          { optimization: { minimize: false }, target: 'node' },
+          {
+            chunks: [
+              { canBeInitial: () => false, files: new Set(['lazy.js']) },
+              { canBeInitial: () => true, files: new Set(['bundle.js', 'notes.txt']) },
+            ],
+            assets: {
+              'lazy.js': createSource('lazy()', null),
+              'bundle.js': createSource('module.exports = 1\n', null),
+              'notes.txt': createSource('notes', null),
             },
-            {
-              canBeInitial: () => true,
-              files: new Set(['bundle.js', 'notes.txt', 'bundle.mjs']),
-            },
-          ],
-          hooks: {
-            processAssets: {
-              tap: (_options, fn) => { processAssets = fn },
-            },
-          },
-          updateAsset (filename, fn) {
-            const previous = { source: () => source, map: () => null }
-            asset = { filename, value: fn(previous) }
-          },
-        }
-        const plugin = new Plugin()
-        plugin.apply({
-          options: { optimization: { minimize: false } },
-          hooks: {
-            environment: { tap: () => {} },
-            thisCompilation: { tap: (_name, fn) => fn(compilation) },
-            normalModuleFactory: { tap: () => {} },
-          },
-        })
-        processAssets?.()
-        return asset
+          }
+        )
+
+        new Plugin().apply(harness.compiler)
+        harness.runCompilation()
+
+        assert.deepEqual(harness.updates, ['bundle.js'])
+        return harness.outputAssets.get('bundle.js')
       }
 
       it('prefixes initial js assets with git metadata', () => {
-        const asset = applyAndProcessAssets(DatadogWebpackPlugin)
+        const content = applyAndProcessAssets(DatadogWebpackPlugin).source()
 
-        assert.ok(asset, 'expected an updated asset')
-        assert.equal(asset.filename, 'bundle.mjs')
-        const content = asset.value.source()
         assert.match(content, /DD_GIT_COMMIT_SHA|DD_GIT_REPOSITORY_URL/)
+        assert.ok(content.includes(createBundlerBanner('webpack')), 'expected the bundle marker')
         assert.match(content, /module\.exports = 1\n$/)
-        assert.equal(typeof asset.value.size(), 'number')
-        assert.equal(asset.value.map(), null)
-        assert.equal(asset.value.sourceAndMap().source, content)
-        asset.value.updateHash({ update () {} })
       })
 
-      it('skips asset rewriting when DD_BUNDLER_INJECT_GIT_METADATA=false', () => {
+      it('only adds the bundle marker when DD_BUNDLER_INJECT_GIT_METADATA=false', () => {
         process.env.DD_BUNDLER_INJECT_GIT_METADATA = 'false'
         delete require.cache[pluginPath]
-        const Plugin = require('../index')
-        const asset = applyAndProcessAssets(Plugin)
+        const content = applyAndProcessAssets(require('../index')).source()
 
-        assert.equal(asset, undefined)
+        assert.doesNotMatch(content, /DD_GIT_/)
+        assert.equal(content, createBundlerBanner('webpack') + 'module.exports = 1\n')
       })
     })
   })

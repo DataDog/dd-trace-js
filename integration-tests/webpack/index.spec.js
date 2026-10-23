@@ -74,5 +74,9 @@ webpackVersions.forEach((version) => {
 
       execSync('node ./build-and-test-orchestrion.js', { timeout })
     })
+
+    it('instruments preloaded and dynamically imported Node builtins in CJS and ESM bundles', () => {
+      execSync('node ./build-and-test-builtins.js', { timeout })
+    })
   })
 })
