@@ -6,7 +6,8 @@ const {
   PROMPT_MULTIMODAL,
   INSTRUMENTATION_METHOD_AUTO,
 } = require('../../constants/tags')
-const { audioMimeTypeFromFormat, formatAudioPart, safeJsonParse } = require('../../util')
+const { audioMimeTypeFromFormat, formatAudioPart } = require('../../audio-utils')
+const { safeJsonParse } = require('../../util')
 const {
   AUDIO_MIME_TYPES,
   COMMON_METADATA_KEYS,
@@ -14,16 +15,18 @@ const {
   OPENAI_METADATA_CHAT_KEYS,
   OPENAI_METADATA_COMPLETION_KEYS,
   IMAGE_FALLBACK,
+  INPUT_TYPE_IMAGE,
 } = require('./constants')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractContentParts,
   hasMultimodalInputs,
-  getOpenAIModelProvider,
+  getModelProviderAndClient,
   getOpenAIToolDefinitions,
   getResponseImageReference,
   getResponseFileReference,
+  getServerToolUsageMetrics,
 } = require('./utils')
 
 function isIterable (obj) {
@@ -120,6 +123,19 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    const response = ctx.result?.data
+
+    return {
+      // the response model is the resolved one, e.g. the dated version behind an alias
+      modelName: response?.model,
+      metrics: response && this._extractMetrics(response),
+    }
+  }
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     const resource = ctx.methodName
@@ -127,8 +143,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     if (!methodName) return // we will not trace all openai methods for llmobs
 
     const inputs = ctx.args[0] ?? {}
-    const response = ctx.result?.data // no result if error
-    const error = !!span.context().getTag('error')
+    const response = ctx.result?.data // no result if error, or if a stream ended before any response arrived
+    const error = !!span.context().getTag('error') || response == null
 
     const operation = getOperation(methodName)
 
@@ -140,6 +156,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       this._tagEmbedding(span, inputs, response, error)
     } else if (operation === 'response') {
       this.#tagResponse(span, inputs, response, error)
+    } else if (operation === 'decision') {
+      this.#tagDecision(span, inputs, response, error)
     }
 
     if (!error) {
@@ -155,10 +173,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   }
 
   _getModelProviderAndClient (baseUrl = '') {
-    const modelProvider = getOpenAIModelProvider(baseUrl)
-    if (modelProvider === 'azure_openai') return { modelProvider, client: 'AzureOpenAI' }
-    if (modelProvider === 'deepseek') return { modelProvider, client: 'DeepSeek' }
-    return { modelProvider, client: 'OpenAI' }
+    return getModelProviderAndClient(baseUrl)
   }
 
   _extractMetrics (response) {
@@ -184,6 +199,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       const reasoning = (tokenUsage.output_tokens_details ?? tokenUsage.completion_tokens_details)?.reasoning_tokens
       if (reasoning != null) metrics.reasoningOutputTokens = reasoning
     }
+
+    Object.assign(metrics, getServerToolUsageMetrics(response))
 
     return metrics
   }
@@ -514,6 +531,30 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
     this._tagger.tagMetadata(span, outputMetadata)
   }
+
+  #tagDecision (span, inputs, response, error) {
+    const { input, questions } = inputs
+
+    const inputMessages = typeof input === 'string'
+      ? [{ role: 'user', content: input }]
+      : (Array.isArray(input) ? input : []).map(message => ({
+          role: message.role ?? 'user',
+          content: decisionMessageContent(message.content),
+        }))
+
+    if (Array.isArray(questions)) {
+      this._tagger.tagMetadata(span, { questions })
+    }
+
+    if (error) {
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
+      return
+    }
+
+    this._tagger.tagLLMIO(span, inputMessages, [
+      { role: 'assistant', content: JSON.stringify(response.answers ?? []) },
+    ])
+  }
 }
 
 // TODO: this will be moved to the APM integration
@@ -535,13 +576,28 @@ function normalizeOpenAIResourceName (resource) {
     case 'responses.create':
       return 'createResponse'
 
+    // decisions
+    case 'decisions.create':
+      return 'createDecision'
+
     default:
       return resource
   }
 }
 
+// Decision images must be inline data URLs, so they are replaced with a marker instead of copied onto the span
+function decisionMessageContent (content) {
+  if (!Array.isArray(content)) return content ?? ''
+
+  return content
+    .map(part => (part?.type === INPUT_TYPE_IMAGE ? IMAGE_FALLBACK : part?.text ?? ''))
+    .filter(Boolean)
+    .join('\n')
+}
+
 function gateResource (resource) {
-  return ['createCompletion', 'createChatCompletion', 'createEmbedding', 'createResponse'].includes(resource)
+  return ['createCompletion', 'createChatCompletion', 'createEmbedding', 'createResponse', 'createDecision']
+    .includes(resource)
     ? resource
     : undefined
 }
@@ -556,6 +612,8 @@ function getOperation (resource) {
       return 'embedding'
     case 'createResponse':
       return 'response'
+    case 'createDecision':
+      return 'decision'
     default:
       // should never happen
       return 'unknown'

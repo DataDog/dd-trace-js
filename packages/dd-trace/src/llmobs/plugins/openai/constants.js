@@ -6,7 +6,6 @@ const INPUT_TYPE_TEXT = 'input_text'
 
 const IMAGE_FALLBACK = '[image]'
 const FILE_FALLBACK = '[file]'
-const AUDIO_FALLBACK = '[audio]'
 
 // OpenAI audio `format` values that don't map cleanly to `audio/<format>`.
 const AUDIO_MIME_TYPES = {
@@ -83,7 +82,6 @@ module.exports = {
   INPUT_TYPE_TEXT,
   IMAGE_FALLBACK,
   FILE_FALLBACK,
-  AUDIO_FALLBACK,
   AUDIO_MIME_TYPES,
   COMMON_METADATA_KEYS,
   OPENAI_METADATA_RESPONSE_KEYS,

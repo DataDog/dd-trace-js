@@ -83,7 +83,6 @@ function getStatusValidator (config, optionName, defaultRanges, defaultValidator
 
   /**
    * @param {number} code
-   * @returns {boolean}
    */
   function isValidStatusCode (code) {
     return errorStatusCodes[code] !== 1

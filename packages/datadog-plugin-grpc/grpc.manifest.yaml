@@ -1,0 +1,13 @@
+_v: 1
+name: grpc
+display_name: gRPC
+description: Instruments unary and streaming gRPC client calls and server request handlers, with trace propagation
+  through call metadata.
+packages:
+- name: '@grpc/grpc-js'
+category:
+- rpc.client
+- rpc.server
+systems:
+- grpc
+creation_date: '2019-08-28'

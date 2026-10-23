@@ -79,7 +79,7 @@ try {
     .slice(0, proposalCommits.length - 1)
     .join(' ')
 
-  run(`git cherry-pick ${tempCommits} ${versionCommit}`)
+  run(`git cherry-pick --allow-empty ${tempCommits} ${versionCommit}`)
 
   const diff = capture(`git --no-pager diff ${proposalBranch}..${tempBranch}`)
 

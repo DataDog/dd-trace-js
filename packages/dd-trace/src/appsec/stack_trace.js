@@ -81,8 +81,7 @@ function getCallsiteFrames (maxDepth = 32, constructorOpt = getCallsiteFrames, c
 }
 
 function reportStackTrace (rootSpan, stackId, frames, namespace = STACK_TRACE_NAMESPACES.RASP) {
-  if (!rootSpan) return
-  if (!Array.isArray(frames)) return
+  if (!rootSpan || !Array.isArray(frames)) return
 
   if (!rootSpan.meta_struct) {
     rootSpan.meta_struct = {}

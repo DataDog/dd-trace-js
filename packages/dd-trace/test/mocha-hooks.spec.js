@@ -314,8 +314,8 @@ describe('mocha hooks setup', () => {
     }
 
     try {
-      hook.run((err) => {
-        hookError = err
+      hook.run((callbackError) => {
+        hookError = callbackError
       })
     } finally {
       clearTimeout.call(hook)
@@ -334,8 +334,8 @@ describe('mocha hooks setup', () => {
     let hookError
 
     hook.allowUncaught = true
-    hook.run((err) => {
-      hookError = err
+    hook.run((callbackError) => {
+      hookError = callbackError
     })
 
     assert.ok(hookError instanceof Error)
@@ -355,7 +355,7 @@ describe('mocha hooks setup', () => {
       hook.run(() => {
         throw failure
       })
-    }, error => error === failure)
+    }, thrownError => thrownError === failure)
   })
 
   it('does not swallow test errors after a promise hook completes with allow uncaught enabled', async () => {

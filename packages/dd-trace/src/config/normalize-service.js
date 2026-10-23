@@ -11,7 +11,7 @@ const MAX_SERVICE_LENGTH = 100
  * `_scope/name` in runtime metrics. Pre-normalizing pins both consumers
  * (and telemetry / process tags) to the same value.
  *
- * @see https://github.com/DataDog/datadog-agent/blob/main/pkg/trace/traceutil/normalize.go
+ * @see https://github.com/DataDog/datadog-agent/blob/main/pkg/trace/traceutil/normalize/normalize.go
  * @param {string | undefined} name
  */
 function normalizeService (name) {

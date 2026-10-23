@@ -214,7 +214,6 @@ function createGraphqlJitRuntime ({
    * @param {string} resolverCall
    * @param {string} resolverName
    * @param {number | undefined} descriptorId
-   * @returns {string}
    */
   function compileResolverCall (context, resolverCall, resolverName, descriptorId) {
     const openParenthesis = resolverCall.indexOf('(')
@@ -254,7 +253,6 @@ function createGraphqlJitRuntime ({
    * @param {CompiledArguments} args
    * @param {string} argumentSource
    * @param {string} compiledField
-   * @returns {string}
    */
   function compileDefaultField (
     context,
@@ -377,7 +375,6 @@ function createDescriptor (context, compilerPath, input, fieldNode, createFieldM
  * @param {JitFieldDescriptor} descriptor
  * @param {CompiledArguments['missing']} missing
  * @param {string} argumentSource
- * @returns {string}
  */
 function compileArgumentFactory (context, descriptor, missing, argumentSource) {
   if (missing.length === 0 && argumentSource === '{}') return 'undefined'
@@ -418,7 +415,6 @@ function compileArgumentFactory (context, descriptor, missing, argumentSource) {
 
 /**
  * @param {ArgumentPath} path
- * @returns {string}
  */
 function compileArgumentPath (path) {
   let source = 'args'
@@ -430,7 +426,6 @@ function compileArgumentPath (path) {
 
 /**
  * @param {string} value
- * @returns {string}
  */
 function quoteString (value) {
   const json = JSON.stringify(value)
