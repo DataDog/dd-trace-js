@@ -29,6 +29,7 @@ class TracingPlugin extends Plugin {
    * @param {string} [opts.type]
    * @param {string} [opts.id]
    * @param {string} [opts.kind]
+   * @param {object} [opts.pluginConfig]
    * @returns {{ name: string, source: string | undefined }}
    */
   serviceName (opts = {}) {
@@ -46,7 +47,6 @@ class TracingPlugin extends Plugin {
    * @param {string} [opts.type]
    * @param {string} [opts.id]
    * @param {string} [opts.kind]
-   * @returns {string}
    */
   operationName (opts = {}) {
     const {

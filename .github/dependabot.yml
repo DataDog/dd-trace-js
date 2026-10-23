@@ -101,6 +101,9 @@ updates:
       - dependency-name: "glob"
         # 11.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
+      - dependency-name: "nock"
+        # 15.x does not support Node.js 18.
+        versions: ["15.x"]
       - dependency-name: "@opentelemetry/core"
         # 2.0.0 onwards only supports Node.js 18.19.0 and above
         update-types: ["version-update:semver-major"]
@@ -111,6 +114,8 @@ updates:
         # Thus, we ignore them and update them manually.
       - dependency-name: "@opentelemetry/api"
       - dependency-name: "@opentelemetry/api-logs"
+      - dependency-name: "mocha"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"
@@ -156,6 +161,9 @@ updates:
     ignore:
       - dependency-name: "jest-docblock"
         # 30.0.0 onwards only supports Node.js 18.14.x and above
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jsonpath-plus"
+        # Major updates require Node.js 22 and above
         update-types: ["version-update:semver-major"]
       - dependency-name: "https-proxy-agent"
         # 8.0.0 onwards only supports Node.js 22 and above
@@ -213,9 +221,14 @@ updates:
       - javascript
       - semver-patch
     ignore:
+      - dependency-name: "mocha"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "office-addin-mock"
         # Pinned to 2.x due to compatibility issues with newer major versions
         update-types: ["version-update:semver-major"]
+      - dependency-name: "nock"
+        # 15.x does not support Node.js 18.
+        versions: ["15.x"]
     # Cohort-based groups so a single breaking bump only blocks its own PR. A dependency lands
     # in the first cohort it matches; `test-versions` is the catch-all for the long tail
     # (OpenTelemetry, OpenFeature, logging, templating, serialization, runtimes, misc).

@@ -7,35 +7,38 @@ const {
   getChatCompletionsOutputMessages,
   getResponsesInputMessages,
   getResponsesOutputMessages,
+  getStreamedChatCompletionsOutputMessages,
+  getStreamedResponsesOutputMessages,
 } = require('../messages/openai')
+const { decode } = require('../messages/utils')
 const { SOURCE_AUTO } = require('../tags')
-const { pushEvaluation } = require('./evaluate')
+const { evaluate } = require('./evaluate')
+const { interceptStream } = require('./stream')
 
-const chatCompletionsBeforeChannel = channel('dd-trace:openai:chat.completions:before')
-const chatCompletionsAfterChannel = channel('dd-trace:openai:chat.completions:after')
-const responsesBeforeChannel = channel('dd-trace:openai:responses:before')
-const responsesAfterChannel = channel('dd-trace:openai:responses:after')
+const chatCompletionsInterceptChannel = channel('dd-trace:openai:chat.completions:intercept')
+const responsesInterceptChannel = channel('dd-trace:openai:responses:intercept')
 
 let isEnabled = false
 let aiguard
 let opts
+let analyzeStreamResponses
 
 /**
- * Subscribes AI Guard to OpenAI lifecycle channels.
+ * Subscribes AI Guard to the OpenAI interception channels.
  *
  * @param {object} aiguardInstance
  * @param {boolean} block
+ * @param {boolean} analyzeStreams
  */
-function enable (aiguardInstance, block) {
+function enable (aiguardInstance, block, analyzeStreams) {
   if (isEnabled) return
 
   aiguard = aiguardInstance
   opts = { block, source: SOURCE_AUTO, integration: 'openai' }
+  analyzeStreamResponses = analyzeStreams
 
-  chatCompletionsBeforeChannel.subscribe(onChatCompletionsBefore)
-  chatCompletionsAfterChannel.subscribe(onChatCompletionsAfter)
-  responsesBeforeChannel.subscribe(onResponsesBefore)
-  responsesAfterChannel.subscribe(onResponsesAfter)
+  chatCompletionsInterceptChannel.subscribe(onChatCompletions)
+  responsesInterceptChannel.subscribe(onResponses)
 
   isEnabled = true
 }
@@ -43,38 +46,102 @@ function enable (aiguardInstance, block) {
 function disable () {
   if (!isEnabled) return
 
-  chatCompletionsBeforeChannel.unsubscribe(onChatCompletionsBefore)
-  chatCompletionsAfterChannel.unsubscribe(onChatCompletionsAfter)
-  responsesBeforeChannel.unsubscribe(onResponsesBefore)
-  responsesAfterChannel.unsubscribe(onResponsesAfter)
+  chatCompletionsInterceptChannel.unsubscribe(onChatCompletions)
+  responsesInterceptChannel.unsubscribe(onResponses)
 
   aiguard = undefined
   opts = undefined
+  analyzeStreamResponses = undefined
   isEnabled = false
 }
 
-function onChatCompletionsBefore (ctx) {
-  pushEvaluation(ctx, aiguard, getChatCompletionsInputMessages(ctx.args?.[0]), opts)
-}
-
-function onChatCompletionsAfter (ctx) {
-  const inputMessages = getChatCompletionsInputMessages(ctx.args?.[0])
+function onChatCompletions (ctx) {
+  const inputMessages = getChatCompletionsInputMessages(ctx.arguments?.[0])
   if (!inputMessages?.length) return
-  for (const message of getChatCompletionsOutputMessages(ctx.body)) {
-    pushEvaluation(ctx, aiguard, [...inputMessages, message], opts)
+
+  let inputEvaluation
+  ctx.beforeResult = () => {
+    if (!isEnabled) return
+    inputEvaluation ??= evaluate(ctx, aiguard, [inputMessages], opts)
+    return inputEvaluation
+  }
+
+  const isStream = ctx.arguments[0].stream
+  if (isStream && !analyzeStreamResponses) return
+
+  let outputEvaluation
+  ctx.onResult = body => {
+    if (!isEnabled) return body
+
+    if (isStream) {
+      outputEvaluation ??= interceptStream(body, chunks => {
+        if (!isEnabled) return
+        const conversations = decode(
+          () => getStreamedChatCompletionsOutputMessages(chunks)
+            .map(message => [...inputMessages, message]),
+          null,
+          'AIGuard: unable to decode the streamed OpenAI response: %s'
+        )
+        if (!conversations?.length) return
+        return evaluate(ctx, aiguard, conversations, opts)
+      })
+      return outputEvaluation
+    }
+
+    const conversations = decode(
+      () => getChatCompletionsOutputMessages(body).map(message => [...inputMessages, message]),
+      null,
+      'AIGuard: unable to decode OpenAI response body: %s'
+    )
+    if (!conversations?.length) return body
+
+    outputEvaluation ??= evaluate(ctx, aiguard, conversations, opts)
+    return outputEvaluation.then(() => body)
   }
 }
 
-function onResponsesBefore (ctx) {
-  pushEvaluation(ctx, aiguard, getResponsesInputMessages(ctx.args?.[0]), opts)
-}
-
-function onResponsesAfter (ctx) {
-  const inputMessages = getResponsesInputMessages(ctx.args?.[0])
+function onResponses (ctx) {
+  const inputMessages = getResponsesInputMessages(ctx.arguments?.[0])
   if (!inputMessages?.length) return
-  const outputMessages = getResponsesOutputMessages(ctx.body)
-  if (!outputMessages.length) return
-  pushEvaluation(ctx, aiguard, [...inputMessages, ...outputMessages], opts)
+
+  let inputEvaluation
+  ctx.beforeResult = () => {
+    if (!isEnabled) return
+    inputEvaluation ??= evaluate(ctx, aiguard, [inputMessages], opts)
+    return inputEvaluation
+  }
+
+  const isStream = ctx.arguments[0].stream
+  if (isStream && !analyzeStreamResponses) return
+
+  let outputEvaluation
+  ctx.onResult = body => {
+    if (!isEnabled) return body
+
+    if (isStream) {
+      outputEvaluation ??= interceptStream(body, chunks => {
+        if (!isEnabled) return
+        const outputMessages = decode(
+          () => getStreamedResponsesOutputMessages(chunks),
+          null,
+          'AIGuard: unable to decode the streamed OpenAI response: %s'
+        )
+        if (!outputMessages?.length) return
+        return evaluate(ctx, aiguard, [[...inputMessages, ...outputMessages]], opts)
+      })
+      return outputEvaluation
+    }
+
+    const outputMessages = decode(
+      () => getResponsesOutputMessages(body),
+      null,
+      'AIGuard: unable to decode OpenAI response body: %s'
+    )
+    if (!outputMessages?.length) return body
+
+    outputEvaluation ??= evaluate(ctx, aiguard, [[...inputMessages, ...outputMessages]], opts)
+    return outputEvaluation.then(() => body)
+  }
 }
 
 module.exports = { enable, disable }

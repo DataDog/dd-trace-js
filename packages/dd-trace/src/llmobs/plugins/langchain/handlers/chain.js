@@ -31,7 +31,6 @@ class LangChainLLMObsChainHandler extends LangChainLLMObsHandler {
    * LangGraph compiles each node into a `RunnableSequence` whose first step is the node's `RunnableCallable`.
    *
    * @param {Record<string, unknown> | undefined} instance
-   * @returns {boolean}
    */
   isLangGraphNode (instance) {
     const first = /** @type {{ lc_namespace?: string[] } | undefined} */ (instance?.first)

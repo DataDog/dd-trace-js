@@ -52,15 +52,11 @@ let isFirstPayload = true
 /**
  * @param {string} method
  * @param {string} path
- * @returns {string}
  */
 function endpointKey (method, path) {
   return `${method.toUpperCase()} ${path}`
 }
 
-/**
- * @returns {void}
- */
 function scheduleFlush () {
   if (flushScheduled) return
   flushScheduled = true
@@ -73,7 +69,6 @@ function scheduleFlush () {
  * @param {string} method
  * @param {string} path
  * @param {string} operationName
- * @returns {void}
  */
 function recordEndpoint (method, path, operationName) {
   const key = endpointKey(method, path)
@@ -100,10 +95,8 @@ function onFastifyRoute (routeData) {
  * @param {{ method?: string, path?: string }} param0
  */
 function onExpressRoute ({ method, path }) {
-  if (!method || !path) return
-
   // If wildcard already recorded for this path, skip specific methods
-  if (wildcardEndpoints.has(path)) return
+  if (!method || !path || wildcardEndpoints.has(path)) return
 
   recordEndpoint(method, path, 'express.request')
 
@@ -134,9 +127,6 @@ function buildEndpointObjects (endpoints) {
   })
 }
 
-/**
- * @returns {void}
- */
 function flushAndSend () {
   flushScheduled = false
   if (pendingEndpoints.size === 0) return

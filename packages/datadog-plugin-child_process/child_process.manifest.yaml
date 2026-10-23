@@ -1,0 +1,10 @@
+_v: 1
+name: child_process
+display_name: Node.js child_process
+description: Instruments synchronous and asynchronous child process and shell command execution in Node.js, recording
+  commands, exit codes, and errors.
+packages: []
+category:
+- task.execution
+systems: []
+creation_date: '2024-01-30'

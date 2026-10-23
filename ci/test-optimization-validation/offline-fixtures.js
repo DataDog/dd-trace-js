@@ -174,7 +174,6 @@ function getOfflineScenarioNames (requestedScenario) {
  *
  * @param {object} framework framework manifest entry
  * @param {string} scenarioName cache execution name
- * @returns {string} SHA-256 fixture recipe digest
  */
 function getFixtureRecipeDigest (framework, scenarioName) {
   const generatedScenarioId = {
@@ -276,7 +275,6 @@ function mergeSettings (settings = {}) {
  * Creates or verifies a private validator-owned fixture directory.
  *
  * @param {string} directory fixture base directory
- * @returns {void}
  */
 function ensurePrivateDirectory (directory) {
   try {
@@ -298,7 +296,6 @@ function ensurePrivateDirectory (directory) {
  *
  * @param {string} directory first candidate directory
  * @param {string} stop fixture base directory
- * @returns {void}
  */
 function removeEmptyParents (directory, stop) {
   let current = directory
@@ -320,7 +317,6 @@ function removeEmptyParents (directory, stop) {
  *
  * @param {string} root candidate parent
  * @param {string} filename candidate child
- * @returns {boolean} whether the child is inside the parent
  */
 function isPathInside (root, filename) {
   const relative = path.relative(root, filename)

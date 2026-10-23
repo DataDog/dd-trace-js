@@ -59,7 +59,6 @@ function streamInputToChatMessages (input) {
  * Normalizes a `BaseLanguageModelInput` to the prompt string used by the LLM handler.
  *
  * @param {string | object | null | undefined} input
- * @returns {string}
  */
 function streamInputToPrompt (input) {
   if (input == null) return ''

@@ -93,17 +93,18 @@ class PregelStreamLLMObsPlugin extends LLMObsPlugin {
   getLLMObsSpanRegisterOptions (ctx) {
     const name = ctx.self.name || 'LangGraph'
 
-    const enabled = this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
-    if (!enabled) return
-
     const span = ctx.currentStore?.span
     if (!span) return
-    const streamInputs = ctx.arguments?.[0]
-    streamDataMap.set(span, {
-      streamInputs,
-      chunks: [],
-      agentManifest: getAgentManifest(ctx.self, name, streamInputs, ctx.arguments?.[1]),
-    })
+
+    // only the LLMObs payload consumes the accumulated stream
+    if (this._llmobsEnabledFor(ctx)) {
+      const streamInputs = ctx.arguments?.[0]
+      streamDataMap.set(span, {
+        streamInputs,
+        chunks: [],
+        agentManifest: getAgentManifest(ctx.self, name, streamInputs, ctx.arguments?.[1]),
+      })
+    }
 
     return {
       kind: 'agent',
@@ -157,7 +158,7 @@ class NextStreamLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagMetadata(span, { _dd: { agent_manifest: agentManifest } })
     const input = inputs == null ? undefined : formatIO(inputs)
     const lastChunk = chunks.length > 0 ? chunks.at(-1) : undefined
-    const output = !hasError && lastChunk != null ? formatIO(lastChunk) : undefined
+    const output = hasError || lastChunk == null ? undefined : formatIO(lastChunk)
 
     this._tagger.tagTextIO(span, input, output)
 

@@ -36,19 +36,6 @@ class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
     }
 
     const outputMessages = []
-    let inputTokens = 0
-    let outputTokens = 0
-    let totalTokens = 0
-    let tokensSetTopLevel = false
-    const tokensPerRunId = {}
-
-    if (!isWorkflow) {
-      const tokens = this.checkTokenUsageChatOrLLMResult(results)
-      inputTokens = tokens.inputTokens
-      outputTokens = tokens.outputTokens
-      totalTokens = tokens.totalTokens
-      tokensSetTopLevel = totalTokens > 0
-    }
 
     for (const messageSet of results.generations) {
       for (const chatCompletion of messageSet) {
@@ -61,35 +48,45 @@ class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
           if (toolCalls.length > 0) outputMessage.toolCalls = toolCalls
         }
         outputMessages.push(outputMessage)
-
-        if (!isWorkflow && !tokensSetTopLevel) {
-          const { tokens, runId } = this.checkTokenUsageFromAIMessage(chatCompletionMessage)
-          if (tokensPerRunId[runId]) {
-            tokensPerRunId[runId].inputTokens += tokens.inputTokens
-            tokensPerRunId[runId].outputTokens += tokens.outputTokens
-            tokensPerRunId[runId].totalTokens += tokens.totalTokens
-          } else {
-            tokensPerRunId[runId] = tokens
-          }
-        }
       }
-    }
-
-    if (!isWorkflow && !tokensSetTopLevel) {
-      inputTokens = Object.values(tokensPerRunId).reduce((acc, val) => acc + val.inputTokens, 0)
-      outputTokens = Object.values(tokensPerRunId).reduce((acc, val) => acc + val.outputTokens, 0)
-      totalTokens = Object.values(tokensPerRunId).reduce((acc, val) => acc + val.totalTokens, 0)
     }
 
     if (isWorkflow) {
       this._tagger.tagTextIO(span, inputMessages, outputMessages)
     } else {
       this._tagger.tagLLMIO(span, inputMessages, outputMessages)
-      this._tagger.tagMetrics(span, {
-        inputTokens,
-        outputTokens,
-        totalTokens,
-      })
+      this._tagger.tagMetrics(span, this.getTokenUsage(results))
+    }
+  }
+
+  /**
+   * @override
+   */
+  getTokenUsage (results) {
+    const tokens = this.checkTokenUsageChatOrLLMResult(results)
+    // providers that report usage on each generated message instead of on `llmOutput`; counts are
+    // summed per run so a run split across generations is totalled once
+    if (tokens.totalTokens > 0 || !results.generations) return tokens
+
+    const tokensPerRunId = {}
+    for (const messageSet of results.generations) {
+      for (const chatCompletion of messageSet) {
+        const { tokens: messageTokens, runId } = this.checkTokenUsageFromAIMessage(chatCompletion.message)
+        if (tokensPerRunId[runId]) {
+          tokensPerRunId[runId].inputTokens += messageTokens.inputTokens
+          tokensPerRunId[runId].outputTokens += messageTokens.outputTokens
+          tokensPerRunId[runId].totalTokens += messageTokens.totalTokens
+        } else {
+          tokensPerRunId[runId] = messageTokens
+        }
+      }
+    }
+
+    const perRun = Object.values(tokensPerRunId)
+    return {
+      inputTokens: perRun.reduce((acc, val) => acc + val.inputTokens, 0),
+      outputTokens: perRun.reduce((acc, val) => acc + val.outputTokens, 0),
+      totalTokens: perRun.reduce((acc, val) => acc + val.totalTokens, 0),
     }
   }
 
