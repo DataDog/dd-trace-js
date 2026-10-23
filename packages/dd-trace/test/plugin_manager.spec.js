@@ -600,6 +600,28 @@ describe('Plugin Manager', () => {
       })
     })
 
+    for (const [option, range] of [
+      ['DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', '400-499'],
+      ['DD_TRACE_HTTP_SERVER_ERROR_STATUSES', '500-599'],
+    ]) {
+      for (const origin of ['default', 'env_var']) {
+        for (const otelSemantics of [false, true]) {
+          it(`forwards ${option} from ${origin} with OTel semantics ${otelSemantics}`, () => {
+            pm.configure(makeTracerConfig({
+              [option]: range,
+              DD_TRACE_OTEL_SEMANTICS_ENABLED: otelSemantics,
+              getOrigin: () => origin,
+            }))
+            loadChannel.publish({ name: 'two' })
+
+            sinon.assert.calledWithMatch(Two.prototype.configure, {
+              [option]: origin === 'default' ? undefined : range,
+            })
+          })
+        }
+      }
+    }
+
     it('forwards graphql global options to the graphql plugin under their plugin-facing names', () => {
       pm.configure(makeTracerConfig({
         DD_TRACE_GRAPHQL_COLLAPSE: false,
