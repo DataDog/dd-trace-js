@@ -538,6 +538,7 @@ describe('tagger', () => {
             const leafSpanCtx = {
               _spanId: { toString: () => leafSpanId },
               _parentId: { toString: () => genAISpanId },
+              getTag (key) { return leafTags[key] },
               getTags () { return leafTags },
               _trace: { tags: traceTags, started: traceStarted },
               toTraceId () { return '00000000000000009999999999999999' },
@@ -552,6 +553,7 @@ describe('tagger', () => {
 
             realTagger.registerLLMObsSpan(leafSpan, { kind: 'llm' })
 
+            assert.strictEqual(leafSpanCtx.getTag('span.type'), 'llm')
             assert.strictEqual(traceTags.llmobs_trace_id, RealTagger.tagMap.get(leafSpan)['_ml_obs.trace_id'])
             assert.strictEqual(traceTags.llmobs_parent_id, undefined)
             assert.strictEqual(RealTagger.tagMap.get(leafSpan)['_ml_obs.llmobs_parent_id'], genAISpanId)

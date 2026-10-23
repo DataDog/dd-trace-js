@@ -146,7 +146,7 @@ describe('end to end sdk integration tests', () => {
   for (const method of ['trace', 'wrap']) {
     it(`preserves an explicitly configured APM span type with ${method}`, async () => {
       const options = { kind: 'workflow', type: 'custom' }
-      const fn = () => {}
+      const fn = () => 'result'
 
       if (method === 'trace') {
         llmobs.trace(options, fn)
