@@ -6,12 +6,12 @@ const { inspect, isDeepStrictEqual } = require('node:util')
 
 const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { storage } = require('../../../datadog-core')
 const aiguardAutoInstrumentation = require('../../src/aiguard')
 const NoopAIGuard = require('../../src/aiguard/noop')
-const AIGuard = require('../../src/aiguard/sdk')
 const { withRequest } = require('../../src/appsec/store')
 const agent = require('../plugins/agent')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -40,15 +40,13 @@ describe('AIGuard SDK', () => {
     DD_API_KEY: 'API_KEY',
     DD_APP_KEY: 'APP_KEY',
     protocolVersion: '0.4',
-    experimental: {
-      aiguard: {
-        enabled: true,
-        endpoint: 'https://aiguard.com',
-        maxMessagesLength: 16,
-        maxContentSize: 512 * 1024,
-        redactionEnabled: true,
-        timeout: 10_000,
-      },
+    aiguard: {
+      DD_AI_GUARD_ENABLED: true,
+      DD_AI_GUARD_ENDPOINT: 'https://aiguard.com',
+      DD_AI_GUARD_MAX_MESSAGES_LENGTH: 16,
+      DD_AI_GUARD_MAX_CONTENT_SIZE: 512 * 1024,
+      DD_AI_GUARD_REDACTION_ENABLED: true,
+      DD_AI_GUARD_TIMEOUT: 10_000,
     },
   }
   let tracer
@@ -83,13 +81,15 @@ describe('AIGuard SDK', () => {
     { role: 'user', content: 'Are you sure?' },
   ]
 
-  let originalFetch
+  let request
+  let AIGuard
 
   beforeEach(async () => {
     tracer = await agent.load(null, [], config)
 
-    originalFetch = global.fetch
-    global.fetch = sinon.stub()
+    request = sinon.stub()
+    const Client = proxyquire('../../src/aiguard/client', { '../exporters/common/request': request })
+    AIGuard = proxyquire('../../src/aiguard/sdk', { './client': Client })
 
     count = sinon.stub(aiguardMetrics, 'count').callsFake(() => ({ inc: sinon.spy() }))
     aiguardMetrics.metrics.clear()
@@ -98,55 +98,58 @@ describe('AIGuard SDK', () => {
   })
 
   afterEach(async () => {
-    global.fetch = originalFetch
     sinon.restore()
     aiguardAutoInstrumentation.disable()
     return agent.close()
   })
 
-  const mockFetch = (options) => {
+  const completeRequest = (callback, options) => {
     if (options.error) {
-      global.fetch.rejects(options.error)
+      callback(options.error)
+      return
+    }
+    const status = options.status ?? 200
+    const responseBody = JSON.stringify(options.body)
+    if (status >= 200 && status <= 299) {
+      callback(null, responseBody, status)
     } else {
-      global.fetch.resolves({
-        status: options.status ?? 200,
-        json: sinon.stub().resolves(options.body),
-      })
+      callback(Object.assign(new Error(`HTTP ${status}`), { responseBody }), null, status)
     }
   }
 
-  const mockDeferredFetch = () => {
-    let resolveFetch
-    global.fetch.callsFake(() => new Promise(resolve => {
-      resolveFetch = resolve
-    }))
-
-    return options => resolveFetch({
-      status: options.status ?? 200,
-      json: sinon.stub().resolves(options.body),
-    })
+  const mockRequest = (options) => {
+    request.callsFake((body, opts, callback) => completeRequest(callback, options))
   }
 
-  const assertFetch = (messages, url) => {
+  const mockDeferredRequest = () => {
+    let complete
+    request.callsFake((body, opts, callback) => { complete = callback })
+    return options => completeRequest(complete, options)
+  }
+
+  const assertRequest = (messages, url) => {
     const postData = JSON.stringify(
       { data: { attributes: { messages, meta: { service: config.service, env: config.env } } } }
     )
-    sinon.assert.calledOnceWithExactly(global.fetch,
-      url ?? `${config.experimental.aiguard.endpoint}/evaluate`,
-      {
+    sinon.assert.calledOnceWithExactly(request,
+      postData,
+      sinon.match({
+        url: new URL(url ?? `${config.aiguard.DD_AI_GUARD_ENDPOINT}/evaluate`),
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData),
           'DD-API-KEY': config.DD_API_KEY,
           'DD-APPLICATION-KEY': config.DD_APP_KEY,
           'DD-AI-GUARD-VERSION': tracerVersion,
           'DD-AI-GUARD-SOURCE': 'SDK',
           'DD-AI-GUARD-LANGUAGE': 'nodejs',
         },
-        body: postData,
+        timeout: config.aiguard.DD_AI_GUARD_TIMEOUT,
         signal: sinon.match.instanceOf(AbortSignal),
-      }
+        retry: false,
+        includeErrorResponseBody: true,
+      }),
+      sinon.match.func
     )
   }
 
@@ -198,22 +201,23 @@ describe('AIGuard SDK', () => {
         attributes.tags = Object.keys(tagProbs)
         attributes.tag_probs = tagProbs
       }
-      mockFetch({ body: { data: { attributes } } })
+      mockRequest({ body: { data: { attributes } } })
       const shouldBlock = action !== 'ALLOW' && blocking
 
       if (shouldBlock) {
         await rejects(
           () => aiguard.evaluate(messages, { block: true }),
-          err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === attributes.tags &&
-            err.tagProbabilities === attributes.tag_probs && JSON.stringify(err.sds) === '[]'
+          err => err.name === 'AIGuardAbortError' && err.reason === reason &&
+            isDeepStrictEqual(err.tags, attributes.tags) &&
+            isDeepStrictEqual(err.tagProbabilities, attributes.tag_probs) && JSON.stringify(err.sds) === '[]'
         )
       } else {
         const evaluation = await aiguard.evaluate(messages, { block: true })
         assert.strictEqual(evaluation.action, action)
         assert.strictEqual(evaluation.reason, reason)
         if (tagProbs) {
-          assert.strictEqual(evaluation.tags, attributes.tags)
-          assert.strictEqual(evaluation.tagProbabilities, attributes.tag_probs)
+          assert.deepStrictEqual(evaluation.tags, attributes.tags)
+          assert.deepStrictEqual(evaluation.tagProbabilities, attributes.tag_probs)
         }
         assert.deepStrictEqual(evaluation.sds, [])
         assert.notStrictEqual(evaluation.messages, messages)
@@ -221,7 +225,7 @@ describe('AIGuard SDK', () => {
       }
 
       assertTelemetry('requests', { action, error: false, block: shouldBlock, ...sdkTags })
-      assertFetch(messages)
+      assertRequest(messages)
       await assertAIGuardSpan({
         'ai_guard.target': target,
         'ai_guard.action': action,
@@ -244,7 +248,7 @@ describe('AIGuard SDK', () => {
   ]
   for (const { description, opts, shouldBlock } of blockDefaultsSuite) {
     it(`test evaluate block defaults to remote is_blocking_enabled (${description})`, async () => {
-      mockFetch({
+      mockRequest({
         body: {
           data: {
             attributes: { action: 'DENY', reason: 'Nope', tags: ['deny'], is_blocking_enabled: true },
@@ -286,7 +290,7 @@ describe('AIGuard SDK', () => {
       },
     ]
     const messages = [{ role: 'user', content: 'My SSN is 456-78-9012 and email john.smith@acmebank.com' }]
-    mockFetch({
+    mockRequest({
       body: {
         data: {
           attributes: {
@@ -313,7 +317,7 @@ describe('AIGuard SDK', () => {
 
   it('test evaluate with empty sds_findings', async () => {
     const messages = [{ role: 'user', content: 'Hello' }]
-    mockFetch({
+    mockRequest({
       body: {
         data: {
           attributes: { action: 'ALLOW', reason: 'OK', tags: [], sds_findings: [], is_blocking_enabled: false },
@@ -338,7 +342,7 @@ describe('AIGuard SDK', () => {
     const redactionReplacements = [
       { path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' },
     ]
-    mockFetch({
+    mockRequest({
       body: {
         data: {
           attributes: {
@@ -357,7 +361,7 @@ describe('AIGuard SDK', () => {
     assert.deepStrictEqual(result.messages, [{ role: 'user', content: 'My SSN is <REDACTED>' }])
     assert.deepStrictEqual(result.redactionReplacements, redactionReplacements)
     assert.strictEqual(messages[0].content, 'My SSN is 123-45-6789')
-    assertFetch(messages)
+    assertRequest(messages)
     assertTelemetry('requests', {
       action: 'ALLOW',
       error: false,
@@ -375,11 +379,11 @@ describe('AIGuard SDK', () => {
     const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
     const originalMessages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
     const callerMutation = { role: 'system', content: 'Caller mutation' }
-    const resolveFetch = mockDeferredFetch()
+    const resolveRequest = mockDeferredRequest()
 
     const evaluation = aiguard.evaluate(messages)
     messages.unshift(callerMutation)
-    resolveFetch({
+    resolveRequest({
       body: {
         data: {
           attributes: {
@@ -394,7 +398,7 @@ describe('AIGuard SDK', () => {
 
     const result = await evaluation
 
-    assertFetch(originalMessages)
+    assertRequest(originalMessages)
     assert.deepStrictEqual(result.messages, [{ role: 'user', content: 'My SSN is <REDACTED>' }])
     assert.deepStrictEqual(messages, [callerMutation, ...originalMessages])
     await assertAIGuardSpan(
@@ -408,9 +412,9 @@ describe('AIGuard SDK', () => {
     const atLimit = 'A'.repeat(maxContentSize)
     const limited = new AIGuard(tracer, {
       ...config,
-      experimental: {
-        ...config.experimental,
-        aiguard: { ...config.experimental.aiguard, maxContentSize },
+      aiguard: {
+        ...config.aiguard,
+        DD_AI_GUARD_MAX_CONTENT_SIZE: maxContentSize,
       },
     })
     const messages = [{
@@ -422,7 +426,7 @@ describe('AIGuard SDK', () => {
       ],
     }]
     const replacement = 'My SSN is <REDACTED>'
-    mockFetch({
+    mockRequest({
       body: {
         data: {
           attributes: {
@@ -470,14 +474,14 @@ describe('AIGuard SDK', () => {
         { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
       ],
     }]
-    mockFetch({
+    mockRequest({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
     })
 
     const result = await aiguard.evaluate(messages)
 
     assert.deepStrictEqual(result.messages, messages)
-    assertFetch(messages)
+    assertRequest(messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
       {
@@ -494,7 +498,7 @@ describe('AIGuard SDK', () => {
 
   it('redacts blocked payloads in meta-struct without adding messages to the abort error', async () => {
     const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
-    mockFetch({
+    mockRequest({
       body: {
         data: {
           attributes: {
@@ -530,7 +534,7 @@ describe('AIGuard SDK', () => {
       { role: 'system', content: 'ops@acme.io' },
       { role: 'user', content: '123-45-6789' },
     ]
-    mockFetch({
+    mockRequest({
       body: {
         data: {
           attributes: {
@@ -572,7 +576,7 @@ describe('AIGuard SDK', () => {
 
   it('reports originals when every replacement fails', async () => {
     const messages = [{ role: 'user', content: '123-45-6789' }]
-    mockFetch({
+    mockRequest({
       body: {
         data: {
           attributes: {
@@ -609,7 +613,7 @@ describe('AIGuard SDK', () => {
 
   it('reports a falsy non-array replacement collection as a redaction error', async () => {
     const messages = [{ role: 'user', content: '123-45-6789' }]
-    mockFetch({
+    mockRequest({
       body: {
         data: {
           attributes: {
@@ -641,16 +645,16 @@ describe('AIGuard SDK', () => {
   it('keeps originals and omits redaction tags when the kill-switch is off', async () => {
     const disabled = new AIGuard(tracer, {
       ...config,
-      experimental: {
-        ...config.experimental,
-        aiguard: { ...config.experimental.aiguard, redactionEnabled: false },
+      aiguard: {
+        ...config.aiguard,
+        DD_AI_GUARD_REDACTION_ENABLED: false,
       },
     })
     const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
     const redactionReplacements = [
       { path: 'messages[0].content', replacement: 'My SSN is <REDACTED>' },
     ]
-    mockFetch({
+    mockRequest({
       body: {
         data: {
           attributes: {
@@ -686,7 +690,7 @@ describe('AIGuard SDK', () => {
       },
     ]
     const messages = [{ role: 'user', content: 'My card is 4111111111111111' }]
-    mockFetch({
+    mockRequest({
       body: {
         data: {
           attributes: {
@@ -716,7 +720,7 @@ describe('AIGuard SDK', () => {
 
   it('test evaluate with API error', async () => {
     const errors = [{ status: 400, title: 'Internal server error' }]
-    mockFetch({
+    mockRequest({
       status: 400,
       body: { errors },
     })
@@ -729,7 +733,7 @@ describe('AIGuard SDK', () => {
 
     assertTelemetry('requests', { error: true, ...sdkTags })
     assertTelemetry('error', { type: ERROR_TYPE_STATUS, ...sdkTags })
-    assertFetch(toolCall)
+    assertRequest(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
       'error.type': 'AIGuardClientError',
@@ -740,18 +744,18 @@ describe('AIGuard SDK', () => {
     const messages = [{ role: 'user', content: 'Original message' }]
     const originalMessages = [{ role: 'user', content: 'Original message' }]
     const callerMutation = { role: 'system', content: 'Caller mutation' }
-    const resolveFetch = mockDeferredFetch()
+    const resolveRequest = mockDeferredRequest()
 
     const evaluation = aiguard.evaluate(messages)
     messages.unshift(callerMutation)
-    resolveFetch({ status: 503, body: { errors: [{ title: 'Unavailable' }] } })
+    resolveRequest({ status: 503, body: { errors: [{ title: 'Unavailable' }] } })
 
     await rejects(
       () => evaluation,
       err => err.name === 'AIGuardClientError' && err.message === 'AI Guard service call failed, status 503'
     )
 
-    assertFetch(originalMessages)
+    assertRequest(originalMessages)
     assert.deepStrictEqual(messages, [callerMutation, ...originalMessages])
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'error.type': 'AIGuardClientError' },
@@ -760,7 +764,7 @@ describe('AIGuard SDK', () => {
   })
 
   it('test evaluate with API exception', async () => {
-    mockFetch({
+    mockRequest({
       error: new Error('Boom!!!'),
     })
 
@@ -772,7 +776,7 @@ describe('AIGuard SDK', () => {
 
     assertTelemetry('requests', { error: true, ...sdkTags })
     assertTelemetry('error', { type: ERROR_TYPE_CLIENT, ...sdkTags })
-    assertFetch(toolCall)
+    assertRequest(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
       'error.type': 'AIGuardClientError',
@@ -781,7 +785,7 @@ describe('AIGuard SDK', () => {
 
   it('does not mask a client error when structured content contains nullish parts', async () => {
     const messages = [{ role: 'user', content: [null, { type: 'input_text', text: 'Are you sure?' }] }]
-    mockFetch({ error: new Error('Boom!!!') })
+    mockRequest({ error: new Error('Boom!!!') })
 
     await rejects(
       () => aiguard.evaluate(messages),
@@ -790,7 +794,7 @@ describe('AIGuard SDK', () => {
 
     assertTelemetry('requests', { error: true, ...sdkTags })
     assertTelemetry('error', { type: ERROR_TYPE_CLIENT, ...sdkTags })
-    assertFetch(messages)
+    assertRequest(messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'error.type': 'AIGuardClientError' },
       { messages: [{ role: 'user', content: [{ type: 'input_text', text: 'Are you sure?' }] }] }
@@ -798,7 +802,7 @@ describe('AIGuard SDK', () => {
   })
 
   it('test evaluate with invalid JSON', async () => {
-    mockFetch({ body: { message: 'This is an invalid JSON' } })
+    mockRequest({ body: { message: 'This is an invalid JSON' } })
 
     await rejects(
       () => aiguard.evaluate(toolCall),
@@ -807,7 +811,7 @@ describe('AIGuard SDK', () => {
 
     assertTelemetry('requests', { error: true, ...sdkTags })
     assertTelemetry('error', { type: ERROR_TYPE_RESPONSE, ...sdkTags })
-    assertFetch(toolCall)
+    assertRequest(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
       'error.type': 'AIGuardClientError',
@@ -815,7 +819,7 @@ describe('AIGuard SDK', () => {
   })
 
   it('test evaluate with with missing action or response', async () => {
-    mockFetch({ body: { data: { attributes: { reason: 'I miss something' } } } })
+    mockRequest({ body: { data: { attributes: { reason: 'I miss something' } } } })
 
     await rejects(
       () => aiguard.evaluate(toolCall),
@@ -824,7 +828,7 @@ describe('AIGuard SDK', () => {
 
     assertTelemetry('requests', { error: true, ...sdkTags })
     assertTelemetry('error', { type: ERROR_TYPE_RESPONSE, ...sdkTags })
-    assertFetch(toolCall)
+    assertRequest(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
       'error.type': 'AIGuardClientError',
@@ -841,19 +845,19 @@ describe('AIGuard SDK', () => {
   })
 
   it('test message length truncation', async () => {
-    const maxMessages = config.experimental.aiguard.maxMessagesLength
+    const maxMessages = config.aiguard.DD_AI_GUARD_MAX_MESSAGES_LENGTH
     const messages = Array.from({ length: maxMessages + 1 }, (_, i) => ({
       role: 'user',
       content: `This is a prompt: ${i}`,
     }))
-    mockFetch({
+    mockRequest({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
     })
 
     await aiguard.evaluate(messages)
 
     assertTelemetry('truncated', { type: 'messages', ...sdkTags })
-    assertFetch(messages)
+    assertRequest(messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
       { messages: messages.slice(-maxMessages) }
@@ -861,17 +865,17 @@ describe('AIGuard SDK', () => {
   })
 
   it('test message content truncation', async () => {
-    const maxContent = config.experimental.aiguard.maxContentSize
+    const maxContent = config.aiguard.DD_AI_GUARD_MAX_CONTENT_SIZE
     const content = Array(maxContent + 1).fill('A').join('')
     const messages = [{ role: 'user', content }]
-    mockFetch({
+    mockRequest({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
     })
 
     await aiguard.evaluate(messages)
 
     assertTelemetry('truncated', { type: 'content', ...sdkTags })
-    assertFetch(messages)
+    assertRequest(messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
       { messages: [{ role: 'user', content: content.slice(0, maxContent) }] }
@@ -883,7 +887,7 @@ describe('AIGuard SDK', () => {
       role: 'assistant',
       tool_calls: [{ id: 'call_1', function: { name: 'shell', arguments: '{"cmd": "ls -lah"}' } }],
     }]
-    mockFetch({
+    mockRequest({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
     })
 
@@ -903,14 +907,14 @@ describe('AIGuard SDK', () => {
   })
 
   it('test missing required fields uses noop as default', async () => {
-    const client = new AIGuard(tracer, { aiguard: { endpoint: 'http://aiguard' } })
+    const client = new AIGuard(tracer, { aiguard: { DD_AI_GUARD_ENDPOINT: 'http://aiguard' } })
     const result = await client.evaluate(toolCall)
     assert.strictEqual(result.action, 'ALLOW')
     assert.strictEqual(result.reason, 'AI Guard is not enabled')
   })
 
   it('test ai_guard.event tag on root span', async () => {
-    mockFetch({
+    mockRequest({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
     })
     await tracer.trace('root', async () => {
@@ -929,7 +933,7 @@ describe('AIGuard SDK', () => {
   })
 
   it('copies the client ip of the active request onto the root span', async () => {
-    mockFetch({
+    mockRequest({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
     })
 
@@ -951,7 +955,7 @@ describe('AIGuard SDK', () => {
   })
 
   it('parents the ai_guard span under the explicit childOf span', async () => {
-    mockFetch({
+    mockRequest({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
     })
 
@@ -978,16 +982,16 @@ describe('AIGuard SDK', () => {
   ]
   for (const { site, endpoint } of sites) {
     it(`test endpoint discovery: ${site}`, async () => {
-      const { endpoint: _discardedEndpoint, ...aiguard } = config.experimental.aiguard
-      const newConfig = { ...config, site, experimental: { ...config.experimental, aiguard } }
+      const { DD_AI_GUARD_ENDPOINT: _discardedEndpoint, ...aiguard } = config.aiguard
+      const newConfig = { ...config, site, aiguard }
       const client = new AIGuard(tracer, newConfig)
-      mockFetch({
+      mockRequest({
         body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
       })
 
       await client.evaluate(toolCall)
 
-      assertFetch(toolCall, `${endpoint}/evaluate`)
+      assertRequest(toolCall, `${endpoint}/evaluate`)
     })
   }
 
@@ -1001,7 +1005,7 @@ describe('AIGuard SDK', () => {
     }
 
     it('sets USER_KEEP on root span after ALLOW evaluation', async () => {
-      mockFetch({
+      mockRequest({
         body: { data: { attributes: { action: 'ALLOW', reason: 'OK', tags: [], is_blocking_enabled: false } } },
       })
 
@@ -1013,7 +1017,7 @@ describe('AIGuard SDK', () => {
     })
 
     it('sets USER_KEEP on root span after DENY evaluation (non-blocking)', async () => {
-      mockFetch({
+      mockRequest({
         body: {
           data: { attributes: { action: 'DENY', reason: 'denied', tags: ['deny_tag'], is_blocking_enabled: false } },
         },
@@ -1031,7 +1035,7 @@ describe('AIGuard SDK', () => {
       tracer._tracer._prioritySampler.configure('test', { sampleRate: 0 })
 
       try {
-        mockFetch({
+        mockRequest({
           body: { data: { attributes: { action: 'ALLOW', reason: 'OK', tags: [], is_blocking_enabled: false } } },
         })
 
@@ -1046,7 +1050,7 @@ describe('AIGuard SDK', () => {
     })
 
     it('sets USER_KEEP on root span after ABORT evaluation (blocking)', async () => {
-      mockFetch({
+      mockRequest({
         body: {
           data: { attributes: { action: 'ABORT', reason: 'blocked', tags: ['tag'], is_blocking_enabled: true } },
         },

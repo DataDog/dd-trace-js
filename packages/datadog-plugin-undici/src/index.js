@@ -47,6 +47,8 @@ class UndiciPlugin extends HttpClientPlugin {
     if (!request) return
 
     const store = storage('legacy').getStore()
+    if (store?.skipUndici) return
+
     const { origin = '', path = '/' } = request
     const method = request.method?.toUpperCase() ?? 'GET'
 
@@ -206,6 +208,9 @@ class UndiciPlugin extends HttpClientPlugin {
     ctx.args = { options }
 
     const store = super.bindStart(ctx)
+
+    // Undici 5.0 emits native diagnostics even though its fetch needs the legacy wrapper.
+    store.skipUndici = true
 
     // Inject trace headers back into the request
     for (const name of Object.keys(options.headers)) {

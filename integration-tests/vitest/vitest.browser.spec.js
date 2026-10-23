@@ -24,6 +24,7 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
+  TEST_HAS_FAILED_ALL_RETRIES,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
@@ -46,6 +47,7 @@ const {
 const { NODE_MAJOR } = require('../../version')
 
 const latestVersions = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies
+
 const isLegacyBrowserProvider = process.env.VITEST_BROWSER_LEGACY === '1' || NODE_MAJOR <= 18
 const browserProvider = process.env.VITEST_BROWSER_PROVIDER || 'playwright'
 const latestVitestVersion = browserProvider === 'webdriverio'
@@ -90,6 +92,8 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
   this.timeout(180_000)
 
   const runtimeEfdSuiteAdmissionIt = isLegacyBrowserProvider ? it.skip : it
+  // Vitest 3 does not support aroundEach fixtures.
+  const aroundEachIt = isLegacyBrowserProvider ? it.skip : it
   let childProcess
   let cwd
   let receiver
@@ -125,7 +129,10 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
         DD_SERVICE: undefined,
         NODE_OPTIONS,
         TEST_DIR: testFile ? `ci-visibility/vitest-browser-tests/${testFile}` : undefined,
+        VITEST_BROWSER_BINARY: process.env.VITEST_BROWSER_BINARY,
+        VITEST_BROWSER_DRIVER_BINARY: process.env.VITEST_BROWSER_DRIVER_BINARY,
         VITEST_BROWSER_MODE: '1',
+        VITEST_BROWSER_PROVIDER: browserProvider,
         VITEST_BROWSER_PROVIDER_FACTORY: isLegacyBrowserProvider ? undefined : '1',
         ...extraEnv,
       },
@@ -487,10 +494,34 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
       assert.strictEqual(test.meta[TEST_STATUS], 'skip')
       assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
       assert.strictEqual(test.trace_id.toString(), testExecutionId)
+      assert.ok(Number(test.duration) >= 40 * 1e6)
+      const skipTime = Number(/DD_VITEST_SKIP_TIME:(\d+)/.exec(testOutput)?.[1])
+      assert.ok(Number.isFinite(skipTime), testOutput)
+      assert.ok(Number(test.start) / 1e6 <= skipTime)
+      assert.ok(Number(test.start) / 1e6 + Number(test.duration) / 1e6 < skipTime + 100)
     })
 
     const [exitCode] = await Promise.all([
       runVitest('browser-rum-dynamic-skip.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not reuse RUM correlation when the final browser retry is dynamically skipped', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      const skippedTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
+      const testExecutionId = getRumTestExecutionId(testOutput, 'retry-skip')
+
+      assert.ok(skippedTest)
+      assert.ok(!(TEST_IS_RUM_ACTIVE in skippedTest.meta))
+      assert.notStrictEqual(skippedTest.trace_id.toString(), testExecutionId)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-retry-dynamic-skip.mjs'),
       payloadsPromise,
     ])
 
@@ -646,6 +677,38 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
     assert.strictEqual(exitCode, 0, testOutput)
   })
 
+  if (!isLegacyBrowserProvider) {
+    it('applies the dynamic ATR budget to browser tests', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        early_flake_detection: { enabled: false },
+      })
+
+      const payloadsPromise = gatherEvents(events => {
+        const tests = getEventContents(events, 'test')
+        assert.strictEqual(tests.length, 2)
+        for (const test of tests) {
+          assert.strictEqual(test.meta[TEST_TYPE], 'browser')
+          assert.strictEqual(test.meta[TEST_BROWSER_NAME], browserName)
+          assert.strictEqual(test.meta[TEST_BROWSER_DRIVER], browserProvider)
+          assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+        }
+        assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+        assert.strictEqual(tests[1].meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(tests[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+      })
+
+      await Promise.all([
+        runVitest('browser-multiple-errors.mjs', {
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+        }, 1),
+        payloadsPromise,
+      ])
+    })
+  }
+
   {
     const objectRetryTest = isLegacyBrowserProvider ? it.skip : it
 
@@ -691,7 +754,7 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
-    objectRetryTest('quarantines failures when an object-form retry condition stops retries', async () => {
+    objectRetryTest('quarantines each repetition when an object-form retry condition stops retries', async () => {
       const testSuite = 'ci-visibility/vitest-browser-tests/browser-conditional-retry-quarantine.mjs'
       receiver.setSettings({
         test_management: {
@@ -715,13 +778,16 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
       })
 
       const payloadsPromise = gatherEvents(events => {
-        const [test] = getEventContents(events, 'test')
-        assert.ok(test)
-        assert.strictEqual(test.meta[TEST_STATUS], 'fail')
-        assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
-        assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-        assert.ok(!(TEST_IS_RETRY in test.meta))
-        assert.match(test.meta[ERROR_MESSAGE], /conditional retry attempt 1/)
+        const tests = getEventContents(events, 'test')
+        assert.strictEqual(tests.length, 2)
+        for (const [index, test] of tests.entries()) {
+          assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          assert.match(test.meta[ERROR_MESSAGE], new RegExp(`conditional retry attempt ${index + 1}`))
+        }
+        assert.ok(!(TEST_IS_RETRY in tests[0].meta))
+        assert.strictEqual(tests[1].meta[TEST_IS_RETRY], 'true')
+        assert.strictEqual(tests[1].meta[TEST_FINAL_STATUS], 'skip')
       })
 
       const [exitCode] = await Promise.all([
@@ -800,6 +866,61 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
 
     assert.strictEqual(exitCode, 0, testOutput)
   })
+
+  for (const retries of [0, 1]) {
+    aroundEachIt(`includes fixture teardown when selecting ${retries} EFD retries in Browser Mode`, async () => {
+      receiver.setSettings({
+        known_tests_enabled: true,
+        test_management: { enabled: true },
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 2, '10s': retries },
+          faulty_session_threshold: 100,
+        },
+      })
+      receiver.setKnownTests({ vitest: {} })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            'ci-visibility/vitest-tests/efd-slow-teardown.mjs': {
+              tests: {
+                'quarantined after slow teardown': { properties: { quarantined: true } },
+              },
+            },
+          },
+        },
+      })
+
+      const runPromise = runVitest(undefined, {
+        TEST_DIR: 'ci-visibility/vitest-tests/efd-slow-teardown.mjs',
+      }, 1)
+      const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const tests = getEventContents(getEvents(payloads), 'test')
+          assert.strictEqual(tests.length, 3 * (retries + 1), testOutput)
+          for (const outcome of ['fails', 'passes on retry', 'quarantined']) {
+            const name = `${outcome} after slow teardown`
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+            const passes = retries === 1 && name.startsWith('passes')
+            assert.deepStrictEqual(attempts.map(test => test.meta[TEST_STATUS]),
+              retries ? ['fail', passes ? 'pass' : 'fail'] : ['fail'])
+            const finalStatus = name.startsWith('quarantined') ? 'skip' : passes ? 'pass' : 'fail'
+            assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], finalStatus)
+            assert.ok(!(TEST_IS_RETRY in attempts[0].meta))
+            if (retries) {
+              assert.strictEqual(attempts[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+            } else {
+              assert.strictEqual(attempts[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            }
+          }
+        }
+      )
+
+      await Promise.all([runPromise, payloadsPromise])
+    })
+  }
 
   it('uses an unmocked clock for browser attempt durations and EFD retries', async () => {
     receiver.setSettings({

@@ -185,7 +185,6 @@ function wrapConnection (Connection, version) {
   /**
    * @param {object} cmd
    * @param {object} ctx
-   * @returns {void}
    */
   function wrapCommandOnResult (cmd, ctx) {
     const onResult = cmd?.onResult
@@ -383,7 +382,6 @@ function wrapPool (Pool, version) {
 /**
  * @param {Function} Pool
  * @param {'query'|'execute'} method
- * @returns {boolean}
  */
 function defersPoolAcquire (Pool, method) {
   return !dispatchesAcquireSynchronously(

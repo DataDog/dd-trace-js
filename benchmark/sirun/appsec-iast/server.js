@@ -59,7 +59,7 @@ module.exports = function startServer (onRequest, expectedVulnerability) {
       )
       guard.loopStart()
     } else if (responsesFinished === reqs + warmup) {
-      guard.done(0.1)
+      guard.done()
       server.close()
     }
   }

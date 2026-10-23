@@ -14,6 +14,7 @@ fastify.get('/', function () {
   const baz = 'c'
   const secret = 'shh!'
   const password = 'shh!'
+  const obj = { foo: 'a', baz: 'c', secret: 'shh!', password: 'shh!' }
   /* eslint-enable no-unused-vars */
 
   return { hello: 'world' } // BREAKPOINT: /

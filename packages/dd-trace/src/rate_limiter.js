@@ -21,7 +21,6 @@ class RateLimiter {
    * Attempts to consume a token and reports whether it was allowed.
    * Updates internal counters used for effective rate computation.
    *
-   * @returns {boolean}
    */
   isAllowed () {
     const curIntervalStart = this._limiter.curIntervalStart
@@ -43,7 +42,6 @@ class RateLimiter {
    * Returns the fraction of allowed requests over requested ones in the
    * current and previous intervals combined.
    *
-   * @returns {number}
    */
   effectiveRate () {
     if (this._rateLimit < 0) return 1
@@ -58,7 +56,6 @@ class RateLimiter {
 
   /**
    * Internal token consumption without counter side-effects.
-   * @returns {boolean}
    */
   _isAllowed () {
     if (this._rateLimit < 0) return true
@@ -69,7 +66,6 @@ class RateLimiter {
 
   /**
    * Effective rate within the current interval only.
-   * @returns {number}
    */
   _currentWindowRate () {
     if (this._rateLimit < 0) return 1

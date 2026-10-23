@@ -100,7 +100,6 @@ module.exports = class Plugin {
    *
    * @param {object} span The span to bind as current.
    * @param {object=} store Optional existing store to extend; if omitted, uses current store.
-   * @returns {void}
    */
   enter (span, store) {
     store ||= legacyStorage.getStore()
@@ -112,7 +111,6 @@ module.exports = class Plugin {
    *
    * @param {string} channelName Diagnostic channel name.
    * @param {(message: unknown, name: string) => unknown} handler Handler invoked on messages.
-   * @returns {void}
    */
   addSub (channelName, handler) {
     const wrappedHandler = (message, name) => {
@@ -132,7 +130,6 @@ module.exports = class Plugin {
    *
    * @param {string} channelName Diagnostic channel name.
    * @param {(data: unknown) => object} transform Transform to compute the bound store.
-   * @returns {void}
    */
   addBind (channelName, transform) {
     this._bindings.push(new StoreBinding(channelName, transform))
@@ -142,7 +139,6 @@ module.exports = class Plugin {
    * Attach an error to the current active span (if any).
    *
    * @param {unknown} error Error object or sentinel value.
-   * @returns {void}
    */
   addError (error) {
     const store = legacyStorage.getStore()

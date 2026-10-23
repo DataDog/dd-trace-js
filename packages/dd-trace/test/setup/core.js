@@ -127,7 +127,6 @@ process.on('warning', (warning) => {
  * disappear and this returns false again, so real leaks resume throwing.
  *
  * @param {Error & { emitter?: import('node:events').EventEmitter, type?: string }} warning
- * @returns {boolean}
  */
 function isNodeHttpSocketLeak (warning) {
   if (warning.type !== 'error' || typeof warning.emitter?.listeners !== 'function') {

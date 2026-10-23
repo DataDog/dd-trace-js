@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { exec } = require('child_process')
+const fs = require('node:fs')
+const path = require('node:path')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -68,6 +70,8 @@ function assertAttemptToFixFailures (tests, testName) {
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess
+    // Native module loading was introduced in Vitest 4.1; Vitest 5 requires Node.js >=22.
+    const nativeModuleRunnerIt = version === 'latest' && NODE_MAJOR >= 22 ? it : it.skip
 
     useSandbox([
       `vitest@${version}`,
@@ -525,6 +529,61 @@ versions.forEach((version) => {
             })
           }
 
+          /**
+           * @param {boolean} shouldAlwaysPass
+           * @returns {Promise<void>}
+           */
+          const runNativeModuleRunnerAttemptToFixTest = async (shouldAlwaysPass) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+            let testOutput = ''
+            childProcess = exec(
+              './node_modules/.bin/vitest run --reporter=json --outputFile=atf-results.json',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix.mjs',
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                  VITEST_NATIVE_MODULE_RUNNER: 'true',
+                  ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
+                },
+              }
+            )
+            childProcess.stdout?.on('data', data => { testOutput += data })
+            childProcess.stderr?.on('data', data => { testOutput += data })
+
+            const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url === '/api/v2/citestcycle',
+              payloads => {
+                const attempts = payloads
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+
+                assert.ok(attempts.length > 1, testOutput)
+                assert.ok(attempts.some(test => test.meta[TEST_IS_RETRY] === 'true'), testOutput)
+              }
+            )
+
+            const [[exitCode, signal]] = await Promise.all([
+              once(childProcess, 'exit'),
+              payloadsPromise,
+            ])
+            const expectedSuccess = Boolean(shouldAlwaysPass)
+
+            assert.strictEqual(signal, null, testOutput)
+            assert.strictEqual(exitCode, expectedSuccess ? 0 : 1, testOutput)
+
+            const report = JSON.parse(fs.readFileSync(path.join(cwd, 'atf-results.json'), 'utf8'))
+            const assertionResults = report.testResults.flatMap(({ assertionResults }) => assertionResults)
+
+            assert.strictEqual(report.success, expectedSuccess)
+            assert.strictEqual(assertionResults.length, 1)
+            assert.strictEqual(assertionResults[0].status, expectedSuccess ? 'passed' : 'failed')
+          }
+
           it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
@@ -542,6 +601,18 @@ versions.forEach((version) => {
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailSometimes: true })
           })
+
+          nativeModuleRunnerIt('reports failure when all attempt-to-fix executions fail with native module loading',
+            async function () {
+              this.timeout(60_000)
+              await runNativeModuleRunnerAttemptToFixTest(false)
+            })
+
+          nativeModuleRunnerIt('reports success when all attempt-to-fix executions pass with native module loading',
+            async function () {
+              this.timeout(60_000)
+              await runNativeModuleRunnerAttemptToFixTest(true)
+            })
 
           it('does not suppress exit code for plain ATF tests even when last retry passes', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })

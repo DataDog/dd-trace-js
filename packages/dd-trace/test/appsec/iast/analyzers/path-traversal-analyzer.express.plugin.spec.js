@@ -4,12 +4,12 @@ const path = require('node:path')
 const fs = require('node:fs')
 const os = require('node:os')
 
-const axios = require('axios')
 const semver = require('semver')
 
 const { prepareTestServerForIastInExpress } = require('../utils')
 const { withVersions } = require('../../../setup/mocha')
 const { NODE_MAJOR } = require('../../../../../../version')
+const httpRequest = require('../../../setup/helpers/http-client')
 
 describe('Path traversal analyzer', () => {
   let renderFunctionPath
@@ -27,8 +27,10 @@ describe('Path traversal analyzer', () => {
 
   withVersions('express', 'express', version => {
     if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
-      // Express 4.10.5 and older cannot start on Node.js 24.
-      describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+      it(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`, function () {
+        // Express 4.10.5 and older cannot start on Node.js 24.
+        this.skip()
+      })
       return
     }
     withVersions('express', 'ejs', _ => {
@@ -48,7 +50,7 @@ describe('Path traversal analyzer', () => {
               vulnerability: 'PATH_TRAVERSAL',
               occurrences: 1,
               makeRequest: (done, config) => {
-                axios.get(`http://localhost:${config.port}/?file=template`)
+                httpRequest.get(`http://localhost:${config.port}/?file=template`)
                   .catch((err, ...args) => {
                     done(err)
                   })
@@ -64,7 +66,7 @@ describe('Path traversal analyzer', () => {
               },
               vulnerability: 'PATH_TRAVERSAL',
               makeRequest: (done, config) => {
-                axios.get(`http://localhost:${config.port}/?file=template`)
+                httpRequest.get(`http://localhost:${config.port}/?file=template`)
                   .catch(done)
               },
             })

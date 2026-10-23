@@ -9,7 +9,9 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { promisify } = require('node:util')
 
+const { Context: MochaContext, Runner: MochaRunner, Suite: MochaSuite } = require('mocha')
 const MochaTest = require('mocha/lib/test')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const MochaPlugin = require('../../datadog-plugin-mocha/src')
@@ -23,6 +25,14 @@ const { detectRum, stopRumSession, stopRumSessionAndReportActivity } = require('
 const {
   adjustRunnerFailuresForTestOptimization,
   efdTests,
+  getOnFailHandler,
+  getOnTestHandler,
+  getOnTestEndHandler,
+  getOnTestRetryHandler,
+  patchFailedTestReplayHookUp,
+  resetRunState,
+  runnableWrapper,
+  wrapFailedTestReplayHookUpCallback,
 } = require('../src/mocha/utils')
 const {
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
@@ -30,6 +40,8 @@ const {
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_UPLOADED,
+  TEST_FAILURE_VIDEO_UPLOAD_ERROR,
   TEST_HAS_DYNAMIC_NAME,
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
@@ -45,6 +57,10 @@ const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
   requestWebdriverioScreenshotUpload,
+  VIDEO_UPLOAD,
+  VIDEO_UPLOAD_FLUSH,
+  VIDEO_UPLOAD_RESPONSE,
+  VIDEO_UPLOAD_TIMEOUT_MS,
   SCREENSHOT_UPLOAD_RESPONSE,
   SCREENSHOT_UPLOAD_TIMEOUT_MS,
   SUITE_FINISH,
@@ -107,6 +123,7 @@ const launcherFixtureModulePath = path.join(
   'index.js'
 )
 const utilsFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-utils.mjs')
+const modernRetryUtilsFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-utils-modern-retry.mjs')
 const utilsFixtureModulePath = path.join(
   __dirname,
   'fixtures',
@@ -116,6 +133,16 @@ const utilsFixtureModulePath = path.join(
   'build',
   'index.js'
 )
+const modernRetryUtilsFixtureModulePath = path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  '@wdio',
+  'utils-v10',
+  'build',
+  'index.js'
+)
+const modernRetryUtilsFixtureTarget = { moduleName: '@wdio/utils', filePath: 'build/index.js' }
 const browserFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-browser.mjs')
 const browserFixtureModulePaths = ['index.js', 'node.js'].map(file => path.join(
   __dirname,
@@ -135,7 +162,7 @@ const webdriverFixtureModulePaths = ['index.js', 'node.js'].map(file => path.joi
   file
 ))
 const execFileAsync = promisify(execFile)
-const PNG_SCREENSHOT = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64')
+const PNG_SCREENSHOT = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII='
 
 /**
  * Waits for a rewriter completion callback in unit tests.
@@ -173,6 +200,173 @@ async function cleanupPendingRumTest () {
 }
 
 describe('webdriverio instrumentation', () => {
+  it('suppresses tests only below the suite with a failing suite hook', () => {
+    const testStartCh = channel('ci:mocha:test:start')
+    const starts = []
+    const onTestStart = ctx => starts.push(ctx)
+    const failedSuite = { parent: null }
+    const childSuite = { parent: failedSuite }
+    const siblingSuite = { parent: null }
+    const failingHook = {
+      file: path.join(process.cwd(), 'suite-hook.spec.js'),
+      parent: failedSuite,
+      type: 'hook',
+    }
+    const skippedTest = {
+      file: failingHook.file,
+      parent: childSuite,
+    }
+    const siblingTest = {
+      file: failingHook.file,
+      fn () {},
+      fullTitle: () => 'sibling test',
+      parent: siblingSuite,
+      title: 'sibling test',
+    }
+
+    testStartCh.subscribe(onTestStart)
+    try {
+      resetRunState({ tests: [], suites: [] })
+      const onFail = getOnFailHandler(false, {})
+      const onTest = getOnTestHandler(false)
+      onFail(failingHook, new Error('suite hook failed'))
+      onTest(skippedTest)
+      onTest(siblingTest)
+
+      assert.strictEqual(skippedTest._ddTestFinishPublished, true)
+      assert.strictEqual(siblingTest._ddTestFinishPublished, undefined)
+      assert.strictEqual(starts.length, 1)
+      assert.strictEqual(starts[0].testName, 'sibling test')
+    } finally {
+      testStartCh.unsubscribe(onTestStart)
+      resetRunState({ tests: [], suites: [] })
+    }
+  })
+
+  it('waits for failed test replay setup before running a retried Mocha runnable', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const onTestFinish = () => {}
+    const runOrder = []
+    let resolveReplay
+    class Runnable {
+      run () {
+        runOrder.push('run')
+        return 'done'
+      }
+    }
+    const replayPromise = new Promise(resolve => {
+      resolveReplay = resolve
+    })
+    const retriedTest = { _ddFailedTestReplayPromise: replayPromise }
+    const runnable = new Runnable()
+    runnable.type = 'test'
+    runnable.parent = { _beforeEach: [], _afterEach: [] }
+    runnable.fn = () => {}
+    runnable._retriedTest = retriedTest
+
+    testFinishCh.subscribe(onTestFinish)
+    try {
+      runnableWrapper(Runnable, {})
+      const resultPromise = runnable.run()
+
+      assert.deepStrictEqual(runOrder, [])
+      assert.strictEqual(retriedTest._ddFailedTestReplayPromise, undefined)
+
+      resolveReplay()
+      assert.strictEqual(await resultPromise, 'done')
+      assert.deepStrictEqual(runOrder, ['run'])
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+    }
+  })
+
+  for (const videos of [false, true]) {
+    it(`suppresses Mocha hook-affected test lifecycles with videos=${videos}`, async () => {
+      const testStartCh = channel('ci:mocha:test:start')
+      const testFinishCh = channel('ci:mocha:test:finish')
+      const errorCh = channel('ci:mocha:test:error')
+      const starts = []
+      const finishes = []
+      const errors = []
+      const onTestStart = ctx => starts.push(ctx)
+      const onTestFinish = ctx => finishes.push(ctx)
+      const onTestError = ctx => errors.push(ctx)
+      const suite = {
+        parent: null,
+        _beforeEach: [],
+        _afterEach: [],
+      }
+      const testFn = () => {}
+      const createTest = () => ({
+        file: path.join(process.cwd(), 'hook-affected.spec.js'),
+        fn: testFn,
+        fullTitle: () => 'hook affected test',
+        isFailed () {
+          return this.state === 'failed'
+        },
+        isPending: () => false,
+        parent: suite,
+        retries: () => 0,
+        title: 'hook affected test',
+        _currentRetry: 0,
+        _ddIsNew: true,
+        _retries: 0,
+      })
+      const test = createTest()
+      const hookAffectedTest = createTest()
+      const beforeEachHook = {
+        ctx: { currentTest: test },
+        file: test.file,
+        fullTitle: () => '"before each" hook for "hook affected test"',
+        parent: suite,
+        type: 'hook',
+      }
+      suite._beforeEach.push(beforeEachHook)
+
+      testStartCh.subscribe(onTestStart)
+      testFinishCh.subscribe(onTestFinish)
+      errorCh.subscribe(onTestError)
+      try {
+        resetRunState({ tests: [], suites: [] })
+        const config = {
+          isTestFailureVideosEnabled: videos,
+          earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy(),
+        }
+        const onTest = getOnTestHandler(false)
+        const onFail = getOnFailHandler(false, config)
+        const onTestEnd = getOnTestEndHandler(config)
+
+        onTest(test)
+        onFail(beforeEachHook, new Error('beforeEach failed'))
+
+        test.state = 'failed'
+        onTest(test)
+        onFail(test, new Error('synthetic hook affected failure'))
+        await onTestEnd(test)
+
+        hookAffectedTest.state = 'failed'
+        onTest(hookAffectedTest)
+        onFail(hookAffectedTest, new Error('synthetic remaining hook affected failure'))
+        await onTestEnd(hookAffectedTest)
+
+        assert.strictEqual(finishes.length, videos ? 0 : 1)
+        const finishTeardown = wrapFailedTestReplayHookUpCallback(() => {}, test, undefined)
+        finishTeardown()
+
+        assert.strictEqual(starts.length, 1)
+        assert.strictEqual(errors.length, 1)
+        assert.strictEqual(finishes.length, 1)
+        assert.strictEqual(finishes[0].status, 'fail')
+        assert.strictEqual(Object.values(efdTests)[0].length, 2)
+      } finally {
+        testStartCh.unsubscribe(onTestStart)
+        testFinishCh.unsubscribe(onTestFinish)
+        errorCh.unsubscribe(onTestError)
+        resetRunState({ tests: [], suites: [] })
+      }
+    })
+  }
+
   it('detects RUM before its initialization configuration is available', () => {
     const previousWindow = global.window
     global.window = {
@@ -270,6 +464,276 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
   })
 
+  it('waits for coordinator configuration before completing Mocha adapter initialization', async () => {
+    const source = fs.readFileSync(jasmineFixturePath, 'utf8').replaceAll('JasmineAdapter', 'MochaAdapter')
+    const modulePath = jasmineFixtureModulePath.replace('jasmine-framework', 'mocha-framework')
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-mocha-init-'))
+    const outputPath = path.join(directory, 'index.mjs')
+    fs.writeFileSync(outputPath, rewriter.rewrite(source, modulePath, 'module'))
+    const initCh = tracingChannel('orchestrion:@wdio/mocha-framework:MochaAdapter_init')
+    let release
+    const onInit = context => { context.resolveCallback = onDone => { release = onDone } }
+    initCh.asyncEnd.subscribe(onInit)
+    try {
+      const { MochaAdapter } = await import(pathToFileURL(outputPath))
+      const adapter = new MochaAdapter([])
+      const completed = sinon.spy()
+      const initialized = adapter.init().then(completed)
+      await new Promise(setImmediate)
+      assert.strictEqual(typeof release, 'function')
+      sinon.assert.notCalled(completed)
+      release()
+      await initialized
+      sinon.assert.calledOnceWithExactly(completed, adapter)
+    } finally {
+      initCh.asyncEnd.unsubscribe(onInit)
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  for (const framework of ['mocha', 'jasmine', 'cucumber']) {
+    for (const enabled of [undefined, 'false', 'true']) {
+      it(`defaults video prompt handling for ${framework} with videos=${enabled}`, async () => {
+        require('../src/webdriverio')
+        const previous = process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+        if (enabled === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+        else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = enabled
+        const onFinish = () => {}
+        const finishCh = channel('ci:mocha:test:finish')
+        finishCh.subscribe(onFinish)
+        const capabilitiesCh = channel('ci:webdriverio:video:capabilities')
+        const onCapabilities = ctx => { ctx.enabled = true }
+        capabilitiesCh.subscribe(onCapabilities)
+        const source = fs.readFileSync(runnerFixturePath, 'utf8')
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-prompt-policy-'))
+        const outputPath = path.join(directory, 'index.mjs')
+        fs.writeFileSync(outputPath, rewriter.rewrite(source, runnerFixtureModulePath, 'module'))
+        const expected = enabled === 'true' && framework !== 'cucumber' ? 'ignore' : undefined
+        try {
+          const { Runner } = await import(pathToFileURL(outputPath))
+          const runner = new Runner()
+          const config = { framework }
+          const caps = await runner._startSession(config, { browserName: 'chrome' })
+          assert.strictEqual(caps.unhandledPromptBehavior, expected)
+          for (const policy of ['dismiss and notify', 'accept', 'ignore', { default: 'ignore', prompt: 'accept' }]) {
+            const explicit = await runner._startSession(config, { unhandledPromptBehavior: policy })
+            assert.strictEqual(explicit.unhandledPromptBehavior, policy)
+          }
+          for (const extra of [{ sessionId: 'existing' }, { automationProtocol: './protocol-stub.js' }]) {
+            assert.deepStrictEqual(await runner._startSession({ ...config, ...extra }, {}), {})
+          }
+          const frozen = Object.freeze({})
+          const frozenResult = await runner._startSession(config, frozen)
+          assert.strictEqual(frozenResult.unhandledPromptBehavior, expected)
+          assert.deepStrictEqual(frozen, {})
+          for (const flag of ['_isMultiremote', '_isMultiRemote']) {
+            runner[flag] = true
+            const multi = await runner._startSession(config, {
+              first: { capabilities: { browserName: 'chrome' } },
+              second: { capabilities: { browserName: 'firefox', unhandledPromptBehavior: 'dismiss' } },
+            })
+            assert.strictEqual(multi.first.capabilities.unhandledPromptBehavior, expected)
+            assert.strictEqual(multi.second.capabilities.unhandledPromptBehavior, 'dismiss')
+            delete runner[flag]
+          }
+        } finally {
+          if (previous === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+          else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = previous
+          finishCh.unsubscribe(onFinish)
+          capabilitiesCh.unsubscribe(onCapabilities)
+          fs.rmSync(directory, { recursive: true, force: true })
+        }
+      })
+    }
+  }
+
+  for (const kind of ['frozen', 'sealed', 'non-writable', 'inherited getter', 'throwing getter']) {
+    for (const immutableFirst of [false, true]) {
+      it(`defaults multiremote prompts atomically with ${kind} capabilities first=${immutableFirst}`, async () => {
+        require('../src/webdriverio')
+        const previous = process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+        process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
+        const finishCh = channel('ci:mocha:test:finish')
+        const capabilitiesCh = channel('ci:webdriverio:video:capabilities')
+        const onFinish = () => {}
+        const onCapabilities = ctx => { ctx.enabled = true }
+        finishCh.subscribe(onFinish)
+        capabilitiesCh.subscribe(onCapabilities)
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-prompt-atomic-'))
+        const outputPath = path.join(directory, 'index.mjs')
+        const source = fs.readFileSync(runnerFixturePath, 'utf8')
+        const rewrittenSource = /** @type {string} */ (rewriter.rewrite(source, runnerFixtureModulePath, 'module'))
+        fs.writeFileSync(outputPath, rewrittenSource)
+        try {
+          const { Runner } = await import(pathToFileURL(outputPath).href)
+          const runner = new Runner()
+          runner._isMultiremote = true
+          const immutable = { browserName: 'firefox' }
+          if (kind === 'frozen') Object.freeze(immutable)
+          if (kind === 'sealed') Object.seal(immutable)
+          if (kind === 'non-writable') Object.defineProperty(immutable, 'unhandledPromptBehavior', { value: undefined })
+          if (kind === 'inherited getter') {
+            Object.setPrototypeOf(immutable, { get unhandledPromptBehavior () { return undefined } })
+          }
+          if (kind === 'throwing getter') {
+            Object.defineProperty(immutable, 'unhandledPromptBehavior', {
+              get: () => { throw new Error('getter failed') },
+            })
+          }
+          const mutable = { browserName: 'chrome' }
+          const explicit = { browserName: 'chrome', unhandledPromptBehavior: 'accept' }
+          const input = Object.freeze({
+            first: Object.freeze({ capabilities: immutableFirst ? immutable : mutable, port: 4444 }),
+            second: Object.freeze({ capabilities: immutableFirst ? mutable : immutable, port: 4445 }),
+            explicit: Object.freeze({ capabilities: explicit, port: 4446 }),
+          })
+          const descriptors = Object.getOwnPropertyDescriptors(immutable)
+          const result = await runner._startSession({ framework: 'mocha' }, input)
+          assert.deepStrictEqual(mutable, { browserName: 'chrome' })
+          assert.deepStrictEqual(Object.getOwnPropertyDescriptors(immutable), descriptors)
+          assert.strictEqual(explicit.unhandledPromptBehavior, 'accept')
+          if (kind === 'throwing getter') {
+            assert.strictEqual(result, input)
+          } else {
+            assert.strictEqual(result.first.capabilities.unhandledPromptBehavior, 'ignore')
+            assert.strictEqual(result.second.capabilities.unhandledPromptBehavior, 'ignore')
+            assert.strictEqual(result.explicit.capabilities.unhandledPromptBehavior, 'accept')
+            assert.deepStrictEqual(Object.values(result).map(options => options.port), [4444, 4445, 4446])
+          }
+        } finally {
+          if (previous === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+          else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = previous
+          finishCh.unsubscribe(onFinish)
+          capabilitiesCh.unsubscribe(onCapabilities)
+          fs.rmSync(directory, { recursive: true, force: true })
+        }
+      })
+    }
+  }
+
+  for (const error of [null, undefined, 'capability failure']) {
+    it(`preserves capabilities when prompt handling throws ${error}`, async () => {
+      require('../src/webdriverio')
+      const previous = process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+      process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
+      const finishCh = channel('ci:mocha:test:finish')
+      const capabilitiesCh = channel('ci:webdriverio:video:capabilities')
+      const onFinish = () => {}
+      const onCapabilities = ctx => { ctx.enabled = true }
+      finishCh.subscribe(onFinish)
+      capabilitiesCh.subscribe(onCapabilities)
+      const logError = sinon.stub(log, 'error')
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-prompt-error-'))
+      const outputPath = path.join(directory, 'index.mjs')
+      const source = fs.readFileSync(runnerFixturePath, 'utf8')
+      fs.writeFileSync(outputPath, rewriter.rewrite(source, runnerFixtureModulePath, 'module'))
+      try {
+        const { Runner } = await import(pathToFileURL(outputPath))
+        const getter = Object.defineProperty({}, 'unhandledPromptBehavior', { get () { throw error } })
+        const proxy = new Proxy({}, { ownKeys () { throw error } })
+        for (const caps of [getter, proxy]) {
+          for (const flag of [undefined, '_isMultiremote', '_isMultiRemote']) {
+            const runner = new Runner()
+            const mutable = { browserName: 'chrome' }
+            const input = flag ? { first: { capabilities: mutable }, second: { capabilities: caps } } : caps
+            if (flag) runner[flag] = true
+            logError.resetHistory()
+            assert.strictEqual(await runner._startSession({ framework: 'mocha' }, input), input)
+            assert.deepStrictEqual(mutable, { browserName: 'chrome' })
+            sinon.assert.calledOnceWithExactly(logError,
+              'Error configuring WebdriverIO video prompt handling: %s', String(error))
+          }
+        }
+      } finally {
+        if (previous === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+        else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = previous
+        finishCh.unsubscribe(onFinish)
+        capabilitiesCh.unsubscribe(onCapabilities)
+        logError.restore()
+        fs.rmSync(directory, { recursive: true, force: true })
+      }
+    })
+  }
+
+  for (const canUpload of [undefined, false, true]) {
+    for (const hasFfmpeg of [false, true, 'without libvpx']) {
+      it(`gates video prompt handling on upload=${canUpload} and FFmpeg=${hasFfmpeg}`, async () => {
+        require('../src/webdriverio')
+        const previous = process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+        process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
+        const probe = sinon.stub().returns({
+          status: hasFfmpeg ? 0 : 1,
+          stdout: hasFfmpeg === true ? ' V....D libvpx libvpx VP8\n' : ' V....D libvpx-vp9 libvpx VP9\n',
+        })
+        const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
+          'node:child_process': { spawnSync: probe },
+        })
+        const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+          './webdriverio-video': createVideo,
+          '../../dd-trace/src/config/helper': {
+            getValueFromEnvSources: () => true,
+            getEnvironmentVariable: name => name === WEBDRIVERIO_WORKER_ENV ? 'true' : undefined,
+          },
+        })
+        const { plugin } = createJasminePlugin({ isTestFailureVideosEnabled: canUpload }, {
+          Plugin,
+          testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+        })
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-video-availability-'))
+        const outputPath = path.join(directory, 'index.mjs')
+        const source = fs.readFileSync(runnerFixturePath, 'utf8')
+        fs.writeFileSync(outputPath, rewriter.rewrite(source, runnerFixtureModulePath, 'module'))
+        try {
+          const { Runner } = await import(pathToFileURL(outputPath))
+          const runner = new Runner()
+          const expected = canUpload && hasFfmpeg === true ? 'ignore' : undefined
+          const caps = await runner._startSession({ framework: 'mocha' }, {})
+          assert.strictEqual(caps.unhandledPromptBehavior, expected)
+          runner._isMultiremote = true
+          const multi = await runner._startSession({ framework: 'jasmine' }, {
+            first: { capabilities: {} },
+            second: { capabilities: { unhandledPromptBehavior: 'accept' } },
+          })
+          assert.strictEqual(multi.first.capabilities.unhandledPromptBehavior, expected)
+          assert.strictEqual(multi.second.capabilities.unhandledPromptBehavior, 'accept')
+          if (canUpload) sinon.assert.calledOnce(probe)
+          else sinon.assert.notCalled(probe)
+        } finally {
+          plugin.configure(false)
+          if (previous === undefined) delete process.env.DD_TEST_FAILURE_VIDEOS_ENABLED
+          else process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = previous
+          fs.rmSync(directory, { recursive: true, force: true })
+        }
+      })
+    }
+  }
+
+  it('checks only upload support in the coordinator without probing the worker encoder', () => {
+    const probe = sinon.stub()
+    const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
+      'node:child_process': { spawnSync: probe },
+    })
+    const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+      './webdriverio-video': createVideo,
+      '../../dd-trace/src/config/helper': {
+        getValueFromEnvSources: () => true,
+        getEnvironmentVariable: () => undefined,
+      },
+    })
+    const plugin = new Plugin({ _exporter: { canUploadTestVideos: () => true } }, {
+      testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+    })
+    plugin.configure({ enabled: true, tracing: {} })
+    try {
+      const capabilities = {}
+      channel('ci:webdriverio:video:capabilities').publish(capabilities)
+      assert.strictEqual(capabilities.enabled, true)
+      sinon.assert.notCalled(probe)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
   it('rewrites the ESM WebdriverIO test-function wrapper', () => {
     const source = fs.readFileSync(utilsFixturePath, 'utf8')
     const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
@@ -280,6 +744,20 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rumCleanupCallback/)
+    assert.strictEqual(rewrittenSource.match(/__apm\$ctx\.rumStartCallback/g)?.length, 1)
+    assert.match(rewrittenSource, /__apm\$ctx\.retryCallback/)
+  })
+
+  it('rewrites the WebdriverIO 10.1 executeAsync retry branch', () => {
+    const source = fs.readFileSync(modernRetryUtilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(
+      source,
+      modernRetryUtilsFixtureModulePath,
+      'module',
+      modernRetryUtilsFixtureTarget
+    )
+
+    assert.notStrictEqual(rewrittenSource, source)
     assert.match(rewrittenSource, /__apm\$ctx\.rumStartCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.retryCallback/)
   })
@@ -1023,112 +1501,156 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /orchestrion:jasmine-core:Spec_attemptDone/)
   })
 
-  it('runs the WebdriverIO retry callback before a failed test is retried', async () => {
-    const source = fs.readFileSync(utilsFixturePath, 'utf8')
-    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
-    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
-    const outputPath = path.join(outputDirectory, 'index.mjs')
-    const callbacks = []
-    const retries = { attempts: 0, limit: 2 }
-    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
-    const subscriber = {
-      start (ctx) {
-        ctx.retryCallback = async function (error) {
-          callbacks.push(error.message)
-          await new Promise(resolve => setImmediate(resolve))
+  for (const [version, fixturePath, modulePath, target] of [
+    ['9.0', utilsFixturePath, utilsFixtureModulePath],
+    ['10.1', modernRetryUtilsFixturePath, modernRetryUtilsFixtureModulePath, modernRetryUtilsFixtureTarget],
+  ]) {
+    describe(`WebdriverIO ${version} retries`, () => {
+      let executeAsync
+      let outputDirectory
+      let subscriber
+      const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+
+      beforeEach(async () => {
+        const source = fs.readFileSync(fixturePath, 'utf8')
+        const rewrittenSource = rewriter.rewrite(source, modulePath, 'module', target)
+        outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+        const outputPath = path.join(outputDirectory, 'index.mjs')
+        fs.writeFileSync(outputPath, rewrittenSource)
+        ;({ executeAsync } = await import(pathToFileURL(outputPath)))
+      })
+
+      afterEach(() => {
+        if (subscriber) executeAsyncCh.unsubscribe(subscriber)
+        subscriber = undefined
+        fs.rmSync(outputDirectory, { recursive: true, force: true })
+      })
+
+      it('awaits RUM setup and the retry callback before each attempt', async () => {
+        const calls = []
+        const retries = { attempts: 0, limit: 2 }
+        subscriber = {
+          start (ctx) {
+            ctx.rumStartCallback = async () => {
+              await new Promise(resolve => setImmediate(resolve))
+              calls.push('rum start')
+            }
+            ctx.retryCallback = async error => {
+              calls.push(error.message)
+              await new Promise(resolve => setImmediate(resolve))
+              calls.push('retry ready')
+            }
+          },
         }
-      },
-    }
-    let attempts = 0
+        let attempts = 0
 
-    executeAsyncCh.subscribe(subscriber)
-    try {
-      fs.writeFileSync(outputPath, rewrittenSource)
+        executeAsyncCh.subscribe(subscriber)
+        const result = await executeAsync.call({}, () => {
+          calls.push(`attempt ${++attempts}`)
+          if (attempts === 1) throw new Error('failed attempt')
+          return attempts
+        }, retries)
 
-      const { executeAsync } = await import(pathToFileURL(outputPath))
-      const result = await executeAsync(() => {
-        attempts++
-        if (attempts === 1) {
+        assert.strictEqual(result, 2)
+        assert.strictEqual(retries.attempts, 1)
+        assert.deepStrictEqual(calls, [
+          'rum start', 'attempt 1', 'failed attempt', 'retry ready', 'rum start', 'attempt 2',
+        ])
+      })
+
+      it('honors retry limits changed by the callback', async () => {
+        const retries = { attempts: 0, limit: 1 }
+        subscriber = {
+          start (ctx) {
+            ctx.retryCallback = async () => {
+              await new Promise(resolve => setImmediate(resolve))
+              retries.limit = 0
+            }
+          },
+        }
+        let attempts = 0
+
+        executeAsyncCh.subscribe(subscriber)
+        await assert.rejects(executeAsync.call({}, () => {
+          attempts++
           throw new Error('failed attempt')
+        }, retries), /failed attempt/)
+
+        assert.strictEqual(attempts, 1)
+        assert.strictEqual(retries.attempts, 0)
+      })
+
+      it('preserves retries when the retry callback rejects', async () => {
+        const retries = { attempts: 0, limit: 1 }
+        subscriber = {
+          start (ctx) {
+            ctx.retryCallback = () => Promise.reject(new Error('observability callback failed'))
+          },
         }
-        return attempts
-      }, retries)
+        let attempts = 0
 
-      assert.strictEqual(result, 2)
-      assert.strictEqual(retries.attempts, 1)
-      assert.deepStrictEqual(callbacks, ['failed attempt'])
-    } finally {
-      executeAsyncCh.unsubscribe(subscriber)
-    }
-  })
+        executeAsyncCh.subscribe(subscriber)
+        const result = await executeAsync.call({}, () => {
+          attempts++
+          if (attempts === 1) throw new Error('test failed')
+          return 'passed'
+        }, retries)
 
-  it('honors WebdriverIO retry limits changed by the callback', async () => {
-    const source = fs.readFileSync(utilsFixturePath, 'utf8')
-    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
-    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
-    const outputPath = path.join(outputDirectory, 'index.mjs')
-    const failedRetries = { attempts: 0, limit: 1 }
-    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
-    const subscriber = {
-      start (ctx) {
-        ctx.retryCallback = async function () {
-          failedRetries.limit = 0
-        }
-      },
-    }
-    let failedAttempts = 0
+        assert.strictEqual(result, 'passed')
+        assert.strictEqual(attempts, 2)
+        assert.strictEqual(retries.attempts, 1)
+      })
 
-    executeAsyncCh.subscribe(subscriber)
-    try {
-      fs.writeFileSync(outputPath, rewrittenSource)
+      for (const limit of [0, 1]) {
+        it(`preserves the test error after exhausting ${limit} retries`, async () => {
+          const retries = { attempts: 0, limit }
+          const error = new Error('Timeout')
+          const retryCallback = sinon.spy()
+          subscriber = { start (ctx) { ctx.retryCallback = retryCallback } }
+          let attempts = 0
 
-      const { executeAsync } = await import(pathToFileURL(outputPath))
-      await assert.rejects(executeAsync(() => {
-        failedAttempts++
-        throw new Error('failed attempt')
-      }, failedRetries), /failed attempt/)
+          executeAsyncCh.subscribe(subscriber)
+          await assert.rejects(executeAsync.call({}, () => {
+            attempts++
+            throw error
+          }, retries), actual => actual === error)
 
-      assert.strictEqual(failedAttempts, 1)
-      assert.strictEqual(failedRetries.attempts, 0)
-    } finally {
-      executeAsyncCh.unsubscribe(subscriber)
-    }
-  })
+          assert.strictEqual(attempts, limit + 1)
+          assert.strictEqual(retries.attempts, limit)
+          assert.strictEqual(retryCallback.callCount, limit)
+        })
+      }
 
-  it('preserves WebdriverIO retries when the retry callback rejects', async () => {
-    const source = fs.readFileSync(utilsFixturePath, 'utf8')
-    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
-    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
-    const outputPath = path.join(outputDirectory, 'index.mjs')
-    const retries = { attempts: 0, limit: 1 }
-    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
-    const subscriber = {
-      start (ctx) {
-        ctx.retryCallback = () => Promise.reject(new Error('observability callback failed'))
-      },
-    }
-    let attempts = 0
+      if (version === '10.1') {
+        it('does not retry a Mocha framework timeout', async () => {
+          const clock = sinon.useFakeTimers()
+          const retries = { attempts: 0, limit: 1 }
+          const error = new Error('Mocha framework timeout')
+          const context = { _runnable: { _timeoutError: () => error } }
+          const retryCallback = sinon.spy()
+          subscriber = { start (ctx) { ctx.retryCallback = retryCallback } }
+          let attempts = 0
 
-    executeAsyncCh.subscribe(subscriber)
-    try {
-      fs.writeFileSync(outputPath, rewrittenSource)
+          executeAsyncCh.subscribe(subscriber)
+          try {
+            const result = assert.rejects(executeAsync.call(context, () => {
+              attempts++
+              return new Promise(() => {})
+            }, retries, [], 100), actual => actual === error)
 
-      const { executeAsync } = await import(pathToFileURL(outputPath))
-      const result = await executeAsync(() => {
-        attempts++
-        if (attempts === 1) {
-          throw new Error('test failed')
-        }
-        return 'passed'
-      }, retries)
+            await clock.tickAsync(100)
+            await result
 
-      assert.strictEqual(result, 'passed')
-      assert.strictEqual(attempts, 2)
-      assert.strictEqual(retries.attempts, 1)
-    } finally {
-      executeAsyncCh.unsubscribe(subscriber)
-    }
-  })
+            assert.strictEqual(attempts, 1)
+            assert.strictEqual(retries.attempts, 0)
+            assert.strictEqual(retryCallback.callCount, 0)
+          } finally {
+            clock.restore()
+          }
+        })
+      }
+    })
+  }
 
   it('keeps RUM correlated after a failed beforeEach hook', async () => {
     require('../src/webdriverio')
@@ -2679,7 +3201,7 @@ describe('webdriverio instrumentation', () => {
   it('configures the Mocha worker plugin with the WebdriverIO framework', () => {
     const plugin = new MochaPlugin({ _exporter: {} }, { testOptimization: {} })
     const logError = sinon.stub(log, 'error')
-    plugin.configure({ enabled: true })
+    plugin.configure({ enabled: true, tracing: {} })
 
     try {
       channel('ci:mocha:worker:configuration').publish({
@@ -2702,9 +3224,441 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  for (const uploadError of [undefined, new Error('video upload failed')]) {
+    it(`finishes and tags Jasmine video attempts after upload ${uploadError ? 'failure' : 'success'}`, () => {
+      const clock = sinon.useFakeTimers({ now: 1_700_000_000_000 })
+      const originalBrowser = globalThis.browser
+      globalThis.browser = { takeScreenshot: () => PNG_SCREENSHOT }
+      const recorder = { capture: sinon.spy(), finish: sinon.spy(), waitForCapture: callback => callback() }
+      const createVideo = sinon.stub().returns(recorder)
+      const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+        './webdriverio-video': createVideo,
+        '../../dd-trace/src/config/helper': { getValueFromEnvSources: () => true },
+      })
+      const exporter = {
+        canUploadTestVideos: () => true,
+        canUploadTestScreenshots: () => true,
+        uploadTestVideo: sinon.spy(),
+        uploadTestScreenshot: sinon.spy(),
+        flush: sinon.spy(),
+      }
+      const { plugin, spans } = createJasminePlugin({ isTestFailureVideosEnabled: true }, {
+        Plugin,
+        exporter,
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true, DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+      })
+      const originalNow = Date.now
+      Date.now = () => 0
+      const file = path.join(process.cwd(), 'video.spec.js')
+      const result = {
+        ...createJasmineResult('video', file, 'failed'),
+        failedExpectations: [{ message: 'failed' }],
+      }
+      try {
+        reportJasmineSpecStarted(result, file)
+        channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+          arguments: [result],
+          self: { _specs: [file] },
+        })
+        sinon.assert.calledOnce(createVideo)
+        sinon.assert.calledOnce(recorder.finish)
+        assert.strictEqual(spans[0].context()._isFinished, false)
+        channel('ci:mocha:worker:finish').publish({ onDone: () => {} })
+        sinon.assert.notCalled(exporter.flush)
+        const [failed, upload, complete] = recorder.finish.firstCall.args
+        assert.strictEqual(failed, true)
+        upload('/tmp/attempt.webm', 0, () => {})
+        const options = exporter.uploadTestVideo.firstCall.args[0]
+        assert.strictEqual(options.traceId, spans[0].context().toTraceId())
+        assert.strictEqual(options.idempotencyKey, '1:webdriverio-failure-0.webm')
+        assert.strictEqual(options.capturedAtMs, 1_700_000_000_000)
+        complete(uploadError ? 'error' : 'uploaded')
+        assert.strictEqual(spans[0].context()._isFinished, false)
+        sinon.assert.notCalled(exporter.flush)
+        const screenshotComplete = exporter.uploadTestScreenshot.firstCall.args[1]
+        assert.strictEqual(exporter.uploadTestScreenshot.firstCall.args[0].capturedAtMs, 1_700_000_000_000)
+        screenshotComplete(uploadError ? undefined : new Error('screenshot upload failed'))
+        assert.strictEqual(spans[0].context()._isFinished, true)
+        const tags = spans[0].context().getTags()
+        assert.strictEqual(tags[TEST_FAILURE_VIDEO_UPLOADED], uploadError ? undefined : 'true')
+        assert.strictEqual(tags[TEST_FAILURE_VIDEO_UPLOAD_ERROR], uploadError ? 'true' : undefined)
+        assert.strictEqual(tags[TEST_FAILURE_SCREENSHOT_UPLOADED], uploadError ? 'true' : undefined)
+        assert.strictEqual(tags[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], uploadError ? undefined : 'true')
+        clock.tick(FINAL_FLUSH_TIMEOUT)
+        sinon.assert.calledOnce(exporter.flush)
+      } finally {
+        // @ts-expect-error CiPlugin's type omits the base plugin's supported boolean configuration.
+        plugin.configure(false)
+        if (originalBrowser === undefined) delete globalThis.browser
+        else globalThis.browser = originalBrowser
+        Date.now = originalNow
+        clock.restore()
+      }
+    })
+  }
+
+  for (const boundary of [
+    'next test', 'retry', 'retry with replay', 'Mocha afterEach', 'Mocha afterEach with replay',
+  ]) {
+    it(`waits for the final video capture before ${boundary}, without waiting for upload`, async () => {
+      const recorder = { capture: sinon.spy(), finish: sinon.spy(), waitForCapture: sinon.spy() }
+      const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+        './webdriverio-video': () => recorder,
+        '../../dd-trace/src/config/helper': { getValueFromEnvSources: () => true },
+      })
+      const { plugin, spans } = createJasminePlugin({ isTestFailureVideosEnabled: true }, {
+        Plugin,
+        exporter: { canUploadTestVideos: () => true },
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+      })
+      const file = path.join(process.cwd(), 'video-capture-boundary.spec.js')
+      const result = {
+        ...createJasmineResult('first attempt', file, 'failed'),
+        failedExpectations: [{ message: 'failed' }],
+      }
+      /** @type {(() => void)|undefined} */
+      let finishReplay
+      /** @type {Promise<void>} */
+      const replayFinished = new Promise(resolve => { finishReplay = resolve })
+      try {
+        reportJasmineSpecStarted(result, file)
+        let finishPromise
+        if (boundary.startsWith('Mocha afterEach')) {
+          class Runner extends MochaRunner {}
+          patchFailedTestReplayHookUp(Runner)
+          const runner = new Runner(new MochaSuite('video capture'))
+          const test = new MochaTest('attempt', () => {})
+          runner.test = test
+          // @ts-expect-error Mocha omits its hook scheduler from its public types.
+          const immediately = sinon.stub(MochaRunner, 'immediately').callsFake(callback => callback())
+          try {
+            const publishTestFinish = () => {
+              channel('ci:mocha:test:finish').publish({ span: spans[0], status: 'fail' })
+            }
+            if (boundary === 'Mocha afterEach with replay') {
+              Object.assign(test, {
+                _ddDeferredHookEnd: { publishTestFinish, waitForHitProbePromise: replayFinished },
+              })
+            } else {
+              publishTestFinish()
+            }
+            // @ts-expect-error The continuation hook we instrument is protected in Mocha's types.
+            finishPromise = new Promise(resolve => runner.hookUp('afterEach', resolve))
+          } finally {
+            immediately.restore()
+          }
+        } else if (boundary === 'next test') {
+          const context = { arguments: [result], self: { _specs: [file] }, result: undefined }
+          channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish(context)
+          finishPromise = context.result
+        } else {
+          const promises = { finishTestPromise: boundary === 'retry with replay' ? replayFinished : undefined }
+          channel('ci:mocha:test:retry').publish({ span: spans[0], isFirstAttempt: true, promises })
+          finishPromise = promises.finishTestPromise
+        }
+        assert.ok(finishPromise)
+        const nextAttempt = finishPromise.then(() => {
+          reportJasmineSpecStarted(createJasmineResult('next attempt', file, 'passed'), file)
+        })
+        await Promise.resolve()
+        assert.strictEqual(spans.length, 1)
+        if (boundary === 'Mocha afterEach with replay') {
+          sinon.assert.notCalled(recorder.waitForCapture)
+          assert.ok(finishReplay)
+          finishReplay()
+          await replayFinished
+          await Promise.resolve()
+        }
+        sinon.assert.calledOnce(recorder.waitForCapture)
+        recorder.waitForCapture.firstCall.args[0]()
+        if (boundary === 'retry with replay') {
+          await Promise.resolve()
+          assert.strictEqual(spans.length, 1)
+          assert.ok(finishReplay)
+          finishReplay()
+        }
+        await nextAttempt
+        assert.strictEqual(spans.length, 2)
+        assert.strictEqual(spans[0].context()._isFinished, false)
+        recorder.finish.firstCall.args[2]('uploaded')
+        assert.strictEqual(spans[0].context()._isFinished, true)
+      } finally {
+        // @ts-expect-error CiPlugin's type omits the base plugin's supported boolean configuration.
+        plugin.configure(false)
+      }
+    })
+  }
+
+  it('bounds queued video encoders and pending uploads at worker shutdown with replaced global timers', async () => {
+    const clock = sinon.useFakeTimers()
+    const originalBrowser = globalThis.browser
+    globalThis.browser = Object.assign(new EventEmitter(), {
+      capabilities: { unhandledPromptBehavior: 'ignore' },
+      takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
+    })
+    const encoders = []
+    const directories = []
+    const spawn = sinon.spy(() => {
+      const encoder = Object.assign(new EventEmitter(), {
+        kill: sinon.stub().returns(true),
+        unref: sinon.spy(),
+      })
+      encoders.push(encoder)
+      return encoder
+    })
+    const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
+      'node:child_process': { spawn, spawnSync: () => ({ status: 0, stdout: ' V....D libvpx libvpx VP8\n' }) },
+      'node:fs': {
+        mkdtempSync: prefix => {
+          const directory = fs.mkdtempSync(prefix)
+          directories.push(directory)
+          return directory
+        },
+      },
+    })
+    const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+      './webdriverio-video': createVideo,
+      '../../dd-trace/src/config/helper': { getValueFromEnvSources: () => true },
+    })
+    const exporter = {
+      canUploadTestVideos: () => true,
+      uploadTestVideo: sinon.spy(),
+      flush: sinon.spy(onDone => onDone()),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureVideosEnabled: true }, {
+      Plugin,
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+    })
+    const onDone = sinon.spy()
+    const fakeTimeout = sinon.stub(globalThis, 'setTimeout').throws(new Error('test replaced the global clock'))
+    try {
+      const file = path.join(process.cwd(), 'video-shutdown.spec.js')
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const result = {
+          ...createJasmineResult(`video-${attempt}`, file, 'failed'),
+          failedExpectations: [{ message: 'failed' }],
+        }
+        reportJasmineSpecStarted(result, file)
+        channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+          arguments: [result],
+          self: { _specs: [file] },
+        })
+        await clock.tickAsync(0)
+      }
+      await clock.tickAsync(0)
+      encoders[0].emit('close', 0)
+      await clock.tickAsync(0)
+      sinon.assert.calledOnce(exporter.uploadTestVideo)
+      // Time spent running tests must not consume the final-flush deadline.
+      await clock.tickAsync(10_000)
+      channel('ci:mocha:worker:finish').publish({ onDone })
+      await clock.tickAsync(FINAL_FLUSH_TIMEOUT - 1)
+      sinon.assert.notCalled(exporter.flush)
+      encoders[1].emit('close', 1)
+      await clock.tickAsync(0)
+      sinon.assert.calledThrice(spawn)
+      await clock.tickAsync(1)
+      sinon.assert.calledOnce(encoders[2].kill)
+      sinon.assert.calledOnce(encoders[2].unref)
+      sinon.assert.calledOnce(exporter.flush)
+      sinon.assert.calledOnce(onDone)
+      assert.ok(directories.every(directory => !fs.existsSync(directory)))
+      assert.ok(spans.every(span => span.context()._isFinished))
+      assert.ok(spans.every(span => span.context().getTags()[TEST_FAILURE_VIDEO_UPLOAD_ERROR] === 'true'))
+      encoders[2].emit('close', 0)
+      exporter.uploadTestVideo.firstCall.args[1]()
+      await clock.tickAsync(FINAL_FLUSH_TIMEOUT)
+      sinon.assert.calledThrice(spawn)
+      sinon.assert.calledOnce(exporter.uploadTestVideo)
+      sinon.assert.calledOnce(onDone)
+      sinon.assert.notCalled(fakeTimeout)
+    } finally {
+      // @ts-expect-error CiPlugin's type omits the base plugin's supported boolean configuration.
+      plugin.configure(false)
+      if (originalBrowser === undefined) delete globalThis.browser
+      else globalThis.browser = originalBrowser
+      fakeTimeout.restore()
+      clock.restore()
+      for (const directory of directories) fs.rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('reports completed video flushes to the coordinator before releasing a reused worker', () => {
+    const recorder = { capture: sinon.spy(), finish: sinon.spy(), waitForCapture: callback => callback() }
+    const send = sinon.spy()
+    const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+      './webdriverio-video': () => recorder,
+      '../../datadog-instrumentations/src/mocha/webdriverio-protocol': { sendWebdriverioWorkerMessage: send },
+      '../../dd-trace/src/config/helper': {
+        getValueFromEnvSources: () => true,
+        getEnvironmentVariable: name => name === WEBDRIVERIO_WORKER_ENV ? 'true' : undefined,
+      },
+    })
+    const { plugin } = createJasminePlugin({ isTestFailureVideosEnabled: true }, {
+      Plugin,
+      exporter: { canUploadTestVideos: () => true, flush: callback => callback() },
+      testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'video-flush.spec.js')
+    const result = {
+      ...createJasmineResult('failure', file, 'failed'),
+      failedExpectations: [{ message: 'failed' }],
+    }
+    const onDone = sinon.spy()
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result], self: { _specs: [file] },
+      })
+      channel('ci:mocha:worker:finish').publish({ onDone })
+      sinon.assert.calledOnceWithExactly(send, { name: VIDEO_UPLOAD_FLUSH })
+      sinon.assert.notCalled(onDone)
+      recorder.finish.firstCall.args[2]('uploaded')
+      sinon.assert.calledTwice(send)
+      assert.deepStrictEqual(send.secondCall.args, [{ name: VIDEO_UPLOAD_FLUSH, content: { complete: true } }])
+      sinon.assert.calledOnce(onDone)
+      sinon.assert.callOrder(send, onDone)
+    } finally {
+      // @ts-expect-error CiPlugin's type omits the base plugin's supported boolean configuration.
+      plugin.configure(false)
+    }
+  })
+
+  it('shares the response dispatcher for screenshots and videos and releases it on disconnect', () => {
+    const clock = sinon.useFakeTimers()
+    const { requestWebdriverioScreenshotUpload, requestWebdriverioVideoUpload } = proxyquire(
+      '../src/mocha/webdriverio-protocol', {}
+    )
+    const fakeTimeout = sinon.stub(globalThis, 'setTimeout').throws(new Error('test replaced the global clock'))
+    const originalConnected = process.connected
+    const originalSend = process.send
+    const initialMessageListeners = process.listenerCount('message')
+    const messages = []
+    const screenshotDone = sinon.spy()
+    const videoDone = sinon.spy()
+    process.connected = true
+    process.send = (message, onDone) => { messages.push(message); onDone(); return true }
+    try {
+      requestWebdriverioScreenshotUpload({}, screenshotDone)
+      requestWebdriverioVideoUpload({}, videoDone)
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners + 1)
+      process.emit('message', { name: VIDEO_UPLOAD_RESPONSE, content: messages[1].args.content }, undefined)
+      sinon.assert.calledOnceWithExactly(videoDone, undefined)
+      sinon.assert.notCalled(screenshotDone)
+      process.emit('disconnect')
+      sinon.assert.calledOnce(screenshotDone)
+      assert.match(screenshotDone.firstCall.args[0].message, /disconnected/)
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners)
+      requestWebdriverioVideoUpload({}, videoDone)
+      clock.tick(VIDEO_UPLOAD_TIMEOUT_MS - 1)
+      sinon.assert.calledOnce(videoDone)
+      clock.tick(1)
+      sinon.assert.calledTwice(videoDone)
+      assert.match(videoDone.secondCall.args[0].message, /video upload timed out/)
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners)
+      sinon.assert.notCalled(fakeTimeout)
+    } finally {
+      process.emit('disconnect')
+      if (originalConnected === undefined) Reflect.deleteProperty(process, 'connected')
+      else process.connected = originalConnected
+      if (originalSend === undefined) delete process.send
+      else process.send = originalSend
+      fakeTimeout.restore()
+      clock.restore()
+    }
+  })
+
+  it('bounds final video uploads per worker without aborting a running sibling', () => {
+    const clock = sinon.useFakeTimers()
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const videoUploadCh = channel('ci:webdriverio:video:upload')
+    const uploads = []
+    const onTestFinish = () => {}
+    const onUpload = request => uploads.push(request)
+    testFinishCh.subscribe(onTestFinish)
+    videoUploadCh.subscribe(onUpload)
+    try {
+      require('../src/webdriverio')
+      const runner = { config: { framework: 'mocha', rootDir: process.cwd() } }
+      const first = createWorker()
+      const second = createWorker()
+      registerWorker(runner, first, 'first.spec.js')
+      registerWorker(runner, second, 'second.spec.js')
+      first.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'first' } })
+      second.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'second' } })
+      assert.strictEqual(uploads.length, 2)
+      first.emit('message', { name: VIDEO_UPLOAD_FLUSH })
+      clock.tick(FINAL_FLUSH_TIMEOUT - 1)
+      assert.strictEqual(uploads[0].signal.aborted, false)
+      clock.tick(1)
+      assert.strictEqual(uploads[0].signal.aborted, true)
+      assert.strictEqual(uploads[1].signal.aborted, false)
+      assert.strictEqual(uploads[0].signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+      first.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'late-encoder' } })
+      assert.strictEqual(uploads[2].signal.aborted, true)
+      second.emit('exit', { exitCode: 1 })
+      assert.strictEqual(uploads[1].signal.aborted, true)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      videoUploadCh.unsubscribe(onUpload)
+      clock.restore()
+    }
+  })
+
   it('allows the WebdriverIO screenshot IPC response to outlive the exporter upload deadline', () => {
     assert.strictEqual(SCREENSHOT_UPLOAD_TIMEOUT_MS, FINAL_FLUSH_TIMEOUT + 5000)
   })
+
+  for (const boundary of [WORKER_READY, CONFIGURATION_REQUEST]) {
+    for (const expires of [false, true]) {
+      it(`resets video flush state across ${boundary} after expiry=${expires}`, () => {
+        const clock = sinon.useFakeTimers()
+        const finishCh = channel('ci:mocha:test:finish')
+        const uploadCh = channel('ci:webdriverio:video:upload')
+        const uploads = []
+        const onFinish = () => {}
+        const onUpload = request => uploads.push(request)
+        finishCh.subscribe(onFinish)
+        uploadCh.subscribe(onUpload)
+        try {
+          require('../src/webdriverio')
+          const runner = { config: { framework: 'mocha', rootDir: process.cwd() } }
+          const worker = createWorker()
+          registerWorker(runner, worker, 'watch.spec.js')
+          worker.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'first' } })
+          worker.emit('message', { name: VIDEO_UPLOAD_FLUSH })
+          if (expires) clock.tick(FINAL_FLUSH_TIMEOUT)
+          else uploads[0].onDone()
+          worker.emit('message', { name: VIDEO_UPLOAD_FLUSH, content: { complete: true } })
+          assert.strictEqual(clock.countTimers(), 0)
+          clock.tick(FINAL_FLUSH_TIMEOUT)
+          assert.strictEqual(uploads[0].signal.aborted, true)
+          worker.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'late-first' } })
+          assert.strictEqual(uploads.at(-1).signal.aborted, true)
+          worker.emit('message', { name: boundary, content: { requestId: 'next-run' } })
+          assert.strictEqual(uploads[0].signal.aborted, true)
+          worker.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'second' } })
+          const second = uploads.at(-1)
+          assert.notStrictEqual(second.signal, uploads[0].signal)
+          assert.strictEqual(second.signal.aborted, false)
+          worker.emit('message', { name: VIDEO_UPLOAD_FLUSH })
+          // Finishing an old request must not cancel or clear the new run's deadline.
+          if (expires) uploads[0].onDone()
+          clock.tick(FINAL_FLUSH_TIMEOUT - 1)
+          assert.strictEqual(second.signal.aborted, false)
+          clock.tick(1)
+          assert.strictEqual(second.signal.aborted, true)
+          assert.strictEqual(second.signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+          worker.emit('exit', { exitCode: 1 })
+        } finally {
+          finishCh.unsubscribe(onFinish)
+          uploadCh.unsubscribe(onUpload)
+          clock.restore()
+        }
+      })
+    }
+  }
 
   it('shares one response dispatcher across concurrent screenshot upload requests', () => {
     const originalConnected = process.connected
@@ -2767,7 +3721,7 @@ describe('webdriverio instrumentation', () => {
     }
     const plugin = new MochaPlugin({ _exporter: exporter }, { testOptimization: {} })
     const errors = []
-    plugin.configure({ enabled: true })
+    plugin.configure({ enabled: true, tracing: {} })
 
     try {
       for (const screenshot of [
@@ -2805,6 +3759,7 @@ describe('webdriverio instrumentation', () => {
       takeScreenshot: sinon.stub().returns({ then () {} }),
     }
     const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      Plugin: proxyquire('../../datadog-plugin-mocha/src', {}),
       exporter,
       testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
     })
@@ -3340,6 +4295,281 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  for (const scenario of [
+    { name: 'beforeEach', before: true },
+    { name: 'beforeEach without teardown', before: true, noTeardown: true },
+    { name: 'inner afterEach', inner: true },
+    { name: 'cascading hook failures', before: true, inner: true, outer: true, root: true },
+    { name: 'root afterEach', root: true },
+    { name: 'cancelled native retry', retry: true, inner: true },
+  ]) {
+    for (const videos of scenario.retry ? [true] : [false, true]) {
+      it(`finishes ${scenario.name} after remaining teardown when videos=${videos}`, async () => {
+        const { stdout } = await execFileAsync(process.execPath, [
+          path.join(__dirname, 'fixtures', 'webdriverio-mocha-hook-failure.js'),
+          JSON.stringify(scenario),
+          String(videos),
+        ])
+        const { events, failures, finishes } = JSON.parse(stdout)
+        assert.strictEqual(failures, scenario.name === 'cascading hook failures' ? 4 : 1)
+        assert.strictEqual(finishes.length, 1)
+        assert.strictEqual(finishes[0].status, 'fail')
+        assert.strictEqual(finishes[0].finalStatus, 'fail')
+        const expected = ['setup', ...(!scenario.before ? ['body'] : []),
+          ...(!scenario.noTeardown ? ['inner', 'outer', 'root'] : [])]
+        const finishIndex = videos
+          ? expected.length
+          : expected.indexOf(scenario.before ? 'setup' : scenario.inner ? 'inner' : 'root') + 1
+        expected.splice(finishIndex, 0, 'finish')
+        if (videos) expected.push('capture', 'captured')
+        assert.deepStrictEqual(events, expected)
+      })
+    }
+  }
+
+  for (const videos of [false, true]) {
+    it(`publishes native retries after teardown when videos=${videos}`, async () => {
+      const events = []
+      class Runner extends MochaRunner {}
+      patchFailedTestReplayHookUp(Runner)
+      const suite = new MochaSuite('native video retry', new MochaContext())
+      suite.retries(1)
+      const test = new MochaTest('attempt', function () {
+        events.push(`test ${this.test.currentRetry()}`)
+        if (this.test.currentRetry() === 0) throw new Error('retry me')
+      })
+      test.file = __filename
+      suite.addTest(test)
+      suite.afterEach('teardown', async function () {
+        events.push('teardown start')
+        await Promise.resolve()
+        events.push('teardown end')
+      })
+      const runner = new Runner(suite)
+      runner.on('test', getOnTestHandler(false))
+      runner.on('retry', getOnTestRetryHandler({ isTestFailureVideosEnabled: videos }))
+      const retryCh = channel('ci:mocha:test:retry')
+      const onRetry = () => events.push('publish retry')
+      retryCh.subscribe(onRetry)
+      try {
+        const failures = await new Promise(resolve => runner.run(resolve))
+        assert.strictEqual(failures, 0)
+        assert.deepStrictEqual(events, videos
+          ? ['test 0', 'teardown start', 'teardown end', 'publish retry', 'test 1', 'teardown start', 'teardown end']
+          : ['test 0', 'publish retry', 'teardown start', 'teardown end', 'test 1', 'teardown start', 'teardown end'])
+      } finally {
+        retryCh.unsubscribe(onRetry)
+      }
+    })
+  }
+
+  for (const boundary of ['shutdown', 'the next test']) {
+    for (const status of ['fail', 'pass']) {
+      for (const replay of ['success', 'rejection', 'timeout']) {
+        it(`finishes a terminal Mocha retry video before ${boundary} (${status}, replay=${replay})`, async () => {
+          const clock = sinon.useFakeTimers()
+          const recorders = []
+          const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+            './webdriverio-video': () => {
+              const recorder = {
+                capture: sinon.spy(),
+                finish: sinon.spy((failed, upload, done) => done(failed ? 'uploaded' : undefined)),
+                waitForCapture: callback => callback(),
+              }
+              recorders.push(recorder)
+              return recorder
+            },
+            '../../dd-trace/src/config/helper': { getValueFromEnvSources: () => true },
+          })
+          const config = { isTestFailureVideosEnabled: true, earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy() }
+          const exporter = { canUploadTestVideos: () => true, flush: sinon.spy(onDone => onDone()) }
+          const { plugin, spans } = createJasminePlugin(config, {
+            Plugin, exporter, testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+          })
+          let resolveReplay
+          let rejectReplay
+          /** @type {Promise<void>} */
+          const replayPromise = new Promise((resolve, reject) => {
+            resolveReplay = resolve
+            rejectReplay = reject
+          })
+          const diWaitCh = channel('ci:mocha:test:di:wait')
+          const onDiWait = ({ promises }) => {
+            promises.hitBreakpointPromise = replayPromise
+          }
+          const retryCh = channel('ci:mocha:test:retry')
+          const onRetry = ({ test }) => { test._ddShouldWaitForHitProbe = true }
+          class Runner extends MochaRunner {}
+          patchFailedTestReplayHookUp(Runner)
+          const suite = new MochaSuite('terminal video retry', new MochaContext())
+          suite.retries(1)
+          const test = new MochaTest('attempt', function () {
+            if (this.test.currentRetry() === 0 || status === 'fail') throw new Error('retry me')
+          })
+          test.file = __filename
+          suite.addTest(test)
+          if (boundary === 'the next test') {
+            const next = new MochaTest('next test', () => {})
+            next.file = __filename
+            suite.addTest(next)
+          }
+          const runner = new Runner(suite)
+          runner.on('test', getOnTestHandler(false))
+          runner.on('test end', getOnTestEndHandler(config))
+          runner.on('fail', getOnFailHandler(false, config))
+          runner.on('retry', getOnTestRetryHandler(config))
+          const completed = sinon.spy()
+          // Drive the real runner synchronously so shutdown deterministically races the blocked DI wait.
+          // @ts-expect-error Mocha omits its hook scheduler from its public types.
+          const immediately = sinon.stub(MochaRunner, 'immediately').callsFake(callback => callback())
+          diWaitCh.subscribe(onDiWait)
+          retryCh.subscribe(onRetry)
+          try {
+            runner.run(() => channel('ci:mocha:worker:finish').publish({ onDone: completed }))
+            await clock.tickAsync(0)
+            assert.strictEqual(recorders.length, 2)
+            sinon.assert.notCalled(recorders[1].finish)
+            sinon.assert.notCalled(completed)
+            if (replay === 'rejection') rejectReplay(new Error('DI unavailable'))
+            else if (replay === 'timeout') {
+              setTimeout(resolveReplay, 2000)
+              await clock.tickAsync(1999)
+              sinon.assert.notCalled(completed)
+              await clock.tickAsync(1)
+            } else resolveReplay()
+            await clock.tickAsync(0)
+            sinon.assert.calledOnce(recorders[1].finish)
+            assert.strictEqual(recorders[1].finish.firstCall.args[0], status === 'fail')
+            assert.strictEqual(spans[1].context().getTags()[TEST_STATUS], status)
+            assert.strictEqual(spans[1].context()._isFinished, true)
+            assert.strictEqual(recorders.length, boundary === 'the next test' ? 3 : 2)
+            sinon.assert.calledOnce(completed)
+          } finally {
+            resolveReplay()
+            await clock.tickAsync(0)
+            immediately.restore()
+            runner.dispose()
+            diWaitCh.unsubscribe(onDiWait)
+            retryCh.unsubscribe(onRetry)
+            plugin.configure(false)
+            clock.restore()
+          }
+        })
+      }
+    }
+  }
+
+  for (const capturePending of [false, true]) {
+    for (const completion of ['capture', 'capture timeout', 'replay rejection']) {
+      it(`waits for Jasmine video after replay with capture pending=${capturePending} (${completion})`, async () => {
+        const clock = sinon.useFakeTimers()
+        const originalBrowser = globalThis.browser
+        const browser = Object.assign(new EventEmitter(), {
+          capabilities: { unhandledPromptBehavior: 'ignore' },
+          takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
+        })
+        globalThis.browser = browser
+        const directories = []
+        const recorders = []
+        const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
+          'node:child_process': {
+            spawnSync: () => ({ status: 0, stdout: ' V....D libvpx libvpx VP8\n' }),
+            spawn: () => {
+              const encoder = new EventEmitter()
+              queueMicrotask(() => encoder.emit('close', 0))
+              return encoder
+            },
+          },
+          'node:fs': {
+            mkdtempSync: prefix => {
+              const directory = fs.mkdtempSync(prefix)
+              directories.push(directory)
+              return directory
+            },
+          },
+        })
+        const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+          './webdriverio-video': browser => {
+            const recorder = createVideo(browser)
+            recorders.push(recorder)
+            return recorder
+          },
+          '../../dd-trace/src/config/helper': { getValueFromEnvSources: () => true },
+        })
+        const exporter = { canUploadTestVideos: () => true, uploadTestVideo: sinon.spy() }
+        const { plugin, spans } = createJasminePlugin({ isTestFailureVideosEnabled: true }, {
+          Plugin,
+          exporter,
+          testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+        })
+        const source = fs.readFileSync(jasmineFixturePath, 'utf8')
+        const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-jasmine-video-replay-'))
+        const outputPath = path.join(outputDirectory, 'index.mjs')
+        fs.writeFileSync(outputPath, rewriter.rewrite(source, jasmineFixtureModulePath, 'module'))
+        const file = path.join(process.cwd(), 'video-replay.spec.js')
+        const result = createJasmineResult('captures a replay and video', file, 'failed')
+        let finishReplay
+        const replayFinished = new Promise((resolve, reject) => {
+          finishReplay = completion === 'replay rejection' ? () => reject(new Error('replay failed')) : resolve
+        })
+        sinon.stub(plugin, 'waitForDiBreakpointHits').returns(replayFinished)
+        let finishCapture
+        const captureFinished = new Promise(resolve => { finishCapture = () => resolve(PNG_SCREENSHOT) })
+        try {
+          const { JasmineReporter } = await import(pathToFileURL(outputPath))
+          const reporter = new JasmineReporter([file])
+          reportJasmineSpecStarted(result, file)
+          await clock.tickAsync(0)
+          browser.takeScreenshot.returns(captureFinished)
+          if (capturePending) browser.emit('result', { command: 'elementClick' })
+          plugin._webdriverioJasmineState.tests.get(result.id)._ddShouldWaitForHitProbe = true
+          const nextTest = sinon.spy(reportedResult => {
+            assert.strictEqual(reportedResult, result)
+            reportJasmineSpecStarted(createJasmineResult('next test', file, 'passed'), file)
+          })
+          const reported = reporter.specDone(result).then(nextTest)
+          await clock.tickAsync(0)
+          sinon.assert.notCalled(nextTest)
+
+          finishReplay()
+          await clock.tickAsync(0)
+          sinon.assert.notCalled(nextTest)
+          sinon.assert.calledTwice(browser.takeScreenshot)
+          if (completion === 'capture timeout') {
+            await clock.tickAsync(4999)
+            sinon.assert.notCalled(nextTest)
+            await clock.tickAsync(1)
+          } else {
+            finishCapture()
+            await clock.tickAsync(0)
+          }
+          sinon.assert.calledOnce(nextTest)
+          await reported
+          sinon.assert.calledOnce(exporter.uploadTestVideo)
+          const frames = fs.readdirSync(directories[0]).filter(file => file.endsWith('.png'))
+          assert.strictEqual(frames.length, completion === 'capture timeout' ? 1 : capturePending ? 3 : 2)
+          assert.strictEqual(spans.length, 2)
+          assert.strictEqual(spans[0].context()._isFinished, false)
+          exporter.uploadTestVideo.firstCall.args[1]()
+          assert.strictEqual(spans[0].context()._isFinished, true)
+        } finally {
+          for (const recorder of recorders) {
+            recorder.finish(false, () => {}, () => {})
+            recorder.cancel()
+          }
+          // @ts-expect-error CiPlugin's type omits the base plugin's supported boolean configuration.
+          plugin.configure(false)
+          if (originalBrowser === undefined) delete globalThis.browser
+          else globalThis.browser = originalBrowser
+          clock.restore()
+          for (const directory of [...directories, outputDirectory]) {
+            fs.rmSync(directory, { recursive: true, force: true })
+          }
+        }
+      })
+    }
+  }
+
   it('installs Failed Test Replay on the first Jasmine failure after a passing attempt', () => {
     const { plugin } = createJasminePlugin({
       earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 2 }),
@@ -3759,6 +4989,93 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('starts disabled modern Jasmine specs from startedEvent results', () => {
+    const file = path.join(process.cwd(), 'modern-started-event.spec.js')
+    const testName = 'modern started event'
+    const { plugin } = createJasminePlugin({
+      isTestManagementTestsEnabled: true,
+      testManagementTests: {
+        mocha: {
+          suites: {
+            'modern-started-event.spec.js': {
+              tests: {
+                [testName]: { properties: { disabled: true } },
+              },
+            },
+          },
+        },
+      },
+    })
+    const spec = {
+      id: testName,
+      pend: sinon.spy(),
+      queueableFn: { fn () {} },
+      startedEvent: () => ({
+        description: testName,
+        filename: pathToFileURL(file).href,
+        fullName: testName,
+        id: testName,
+      }),
+    }
+    const executeContext = {
+      arguments: [spec, () => {}],
+      self: {},
+    }
+
+    try {
+      channel('tracing:orchestrion:jasmine-core:Spec_execute:start').runStores(executeContext, () => {})
+
+      assert.strictEqual(spec.pend.callCount, 1)
+      assert.strictEqual(spec.pend.firstCall.args[0], 'Skipped by Datadog Test Management')
+      assert.strictEqual(plugin._webdriverioJasmineState.tests.get(testName).testSuiteAbsolutePath, file)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('starts disabled modern Jasmine specs from spec metadata without a result', () => {
+    const file = path.join(process.cwd(), 'modern-metadata.spec.js')
+    const testName = 'modern metadata'
+    const { plugin } = createJasminePlugin({
+      isTestManagementTestsEnabled: true,
+      testManagementTests: {
+        mocha: {
+          suites: {
+            'modern-metadata.spec.js': {
+              tests: {
+                [testName]: { properties: { disabled: true } },
+              },
+            },
+          },
+        },
+      },
+    })
+    const spec = {
+      description: 'unused description',
+      filename: pathToFileURL(file).href,
+      getFullName: () => testName,
+      id: testName,
+      parentSuiteId: 'suite-1',
+      pend: sinon.spy(),
+      queueableFn: { fn () {} },
+    }
+    const executeContext = {
+      arguments: [spec, () => {}],
+      self: {},
+    }
+
+    try {
+      channel('tracing:orchestrion:jasmine-core:Spec_execute:start').runStores(executeContext, () => {})
+
+      assert.strictEqual(spec.pend.callCount, 1)
+      assert.strictEqual(spec.pend.firstCall.args[0], 'Skipped by Datadog Test Management')
+      assert.strictEqual(plugin._webdriverioJasmineState.tests.get(testName).testName, testName)
+      assert.strictEqual(plugin._webdriverioJasmineState.tests.get(testName).testSuiteAbsolutePath, file)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
   it('keeps Jasmine suite results reported before configuration completes', async () => {
     const testFinishCh = channel('ci:mocha:test:finish')
     const knownTestsCh = channel('ci:mocha:known-tests')
@@ -3976,12 +5293,14 @@ describe('webdriverio instrumentation', () => {
       request.onDone({
         isTestDynamicInstrumentationEnabled: true,
         libraryConfig: {
+          dynamicAtrBuckets: [1, 2, 3, 4, 5],
           earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
           earlyFlakeDetectionFaultyThreshold: 30,
           flakyTestRetriesCount: 5,
           isCodeCoverageEnabled: true,
           isCoverageReportUploadEnabled: true,
           isDiEnabled: true,
+          isDynamicAtrEnabled: true,
           isEarlyFlakeDetectionEnabled: true,
           isFlakyTestRetriesEnabled: true,
           isImpactedTestsEnabled: true,
@@ -4121,13 +5440,17 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(firstWorker.sentMessages[0].content.requestId, 'first-request')
       assert.strictEqual(secondWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
       assert.strictEqual(secondWorker.sentMessages[0].content.requestId, 'second-request')
+      assert.strictEqual(secondWorker.sentMessages[0].content.configuration.isDynamicAtrEnabled, true)
+      assert.deepStrictEqual(secondWorker.sentMessages[0].content.configuration.dynamicAtrBuckets, [1, 2, 3, 4, 5])
       assert.deepStrictEqual(firstWorker.sentMessages[0].content.configuration, {
+        dynamicAtrBuckets: [1, 2, 3, 4, 5],
         earlyFlakeDetectionFaultyThreshold: 30,
         earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
         flakyTestRetriesCount: 5,
         isCodeCoverageEnabled: false,
         isCoverageReportUploadEnabled: false,
         isDiEnabled: true,
+        isDynamicAtrEnabled: true,
         isEarlyFlakeDetectionEnabled: true,
         isFlakyTestRetriesEnabled: true,
         isImpactedTestsEnabled: true,
@@ -4136,6 +5459,7 @@ describe('webdriverio instrumentation', () => {
         isSuitesSkippingEnabled: false,
         isTestDynamicInstrumentationEnabled: true,
         isTestFailureScreenshotsEnabled: false,
+        isTestFailureVideosEnabled: false,
         isTestManagementTestsEnabled: true,
         knownTests: {
           mocha: {
@@ -4539,6 +5863,53 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('does not mark an empty worker failure as expected empty', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionFinishes = []
+
+    function onTestFinish () {}
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const file = path.join(process.cwd(), 'empty.spec.js')
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, file)
+      requestConfiguration(worker, file, 'empty-request')
+      await new Promise(setImmediate)
+
+      worker.emit('message', {
+        name: 'testFrameworkInit',
+        content: { hasTests: false },
+      })
+      worker.emit('exit', { exitCode: 1, retries: 0 })
+
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(sessionFinishes[0].testSessionEmptyReason, undefined)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
   it('reports a worker failure before Mocha loads', async () => {
     const testFinishCh = channel('ci:mocha:test:finish')
     const libraryConfigurationCh = channel('ci:mocha:library-configuration')
@@ -4818,11 +6189,12 @@ function createWorker () {
  * @param {object} [options]
  * @param {object} [options.exporter]
  * @param {object} [options.testOptimization]
+ * @param {typeof MochaPlugin} [options.Plugin]
  * @returns {{plugin: MochaPlugin, spans: object[]}}
  */
 function createJasminePlugin (libraryConfig, options = {}) {
-  const { exporter = {}, testOptimization = {} } = options
-  const plugin = new MochaPlugin({ _exporter: exporter }, { testOptimization })
+  const { exporter = {}, testOptimization = {}, Plugin = MochaPlugin } = options
+  const plugin = new Plugin({ _exporter: exporter }, { testOptimization })
   const spans = []
   sinon.stub(plugin, 'startTestSpan').callsFake(() => {
     const tags = { 'span.type': 'test' }
@@ -4848,7 +6220,7 @@ function createJasminePlugin (libraryConfig, options = {}) {
     spans.push(span)
     return span
   })
-  plugin.configure({ enabled: true })
+  plugin.configure({ enabled: true, tracing: {} })
   channel('ci:mocha:worker:configuration').publish({
     libraryConfig,
     repositoryRoot: process.cwd(),
@@ -4882,7 +6254,6 @@ function createJasmineResult (id, file, status) {
  *
  * @param {object} result
  * @param {string} file
- * @returns {void}
  */
 function reportJasmineSpecStarted (result, file) {
   channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specStarted:end').publish({
@@ -4897,7 +6268,6 @@ function reportJasmineSpecStarted (result, file) {
  * @param {object} localRunner
  * @param {object} worker
  * @param {string|string[]} file
- * @returns {void}
  */
 function registerWorker (localRunner, worker, file) {
   const specs = Array.isArray(file) ? file : [file]
@@ -4931,7 +6301,6 @@ function finishLocalRunner (localRunner, error) {
  * @param {EventEmitter} worker
  * @param {string|string[]} file
  * @param {string} requestId
- * @returns {void}
  */
 function requestConfiguration (worker, file, requestId) {
   const files = Array.isArray(file) ? file : [file]
@@ -4956,7 +6325,6 @@ function requestConfiguration (worker, file, requestId) {
  * @param {string} file
  * @param {string} [status]
  * @param {{message?: string, stack?: string}} [error]
- * @returns {void}
  */
 function reportSuiteFinish (worker, file, status = 'pass', error) {
   worker.emit('message', {

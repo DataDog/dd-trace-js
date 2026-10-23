@@ -328,7 +328,7 @@ describe('IAST Taint tracking plugin', () => {
       it('Should not taint if config is set to 0', () => {
         taintTrackingPlugin.disable()
         const config = getConfigFresh()
-        config.dbRowsToTaint = 0
+        config.DD_IAST_DB_ROWS_TO_TAINT = 0
         taintTrackingPlugin.enable(config)
 
         const result = [
@@ -435,7 +435,7 @@ describe('IAST Taint tracking plugin', () => {
         beforeEach(() => {
           taintTrackingPlugin.disable()
           const config = getConfigFresh()
-          config.dbRowsToTaint = 2
+          config.DD_IAST_DB_ROWS_TO_TAINT = 2
           taintTrackingPlugin.enable(config)
         })
 

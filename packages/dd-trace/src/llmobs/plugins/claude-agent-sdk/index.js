@@ -5,6 +5,7 @@ const { storage: llmobsStorage } = require('../../storage')
 const { NAME, SESSION_ID } = require('../../constants/tags')
 const { splitModel } = require('../../../../../datadog-plugin-claude-agent-sdk/src/util')
 
+const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 const subagentToolIds = new Set()
 
 function normalizeToolOutputString (raw) {
@@ -37,6 +38,27 @@ function getToolOutputText (raw) {
   if (typeof raw === 'string') return normalizeToolOutputString(raw)
 
   return JSON.stringify(raw)
+}
+
+/**
+ * @param {object} [usage]
+ * @returns {Record<string, number> | undefined}
+ */
+function extractUsageMetrics (usage) {
+  if (!usage) return
+
+  const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0
+  const cacheReadTokens = usage.cache_read_input_tokens ?? 0
+  const inputTokens = (usage.input_tokens ?? 0) + cacheWriteTokens + cacheReadTokens
+  const outputTokens = usage.output_tokens ?? 0
+
+  return {
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cache_read_input_tokens: cacheReadTokens,
+    cache_write_input_tokens: cacheWriteTokens,
+    total_tokens: inputTokens + outputTokens,
+  }
 }
 
 function buildOutputMessages (chunks, llmStartIdx, llmEndIdx) {
@@ -85,6 +107,13 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
     super.asyncEnd(ctx)
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return { sessionId: ctx.session_id }
+  }
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
@@ -100,15 +129,20 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
     if (cwd) metadata.cwd = cwd
     if (permissionMode) metadata.permissionMode = permissionMode
     const options = ctx.arguments?.[0]?.options
+    const systemPrompt = options?.systemPrompt
+    if (systemPrompt?.type === 'preset') {
+      if (typeof systemPrompt.preset === 'string') metadata.systemPromptPreset = systemPrompt.preset
+      if (typeof systemPrompt.append === 'string') metadata.systemPromptAppend = systemPrompt.append
+    }
     if (options?.maxTurns) metadata.max_turns = options.maxTurns
     if (options?.maxThinkingTokens) metadata.max_thinking_tokens = options.maxThinkingTokens
     if (options?.maxBudgetUsd) metadata.max_budget_usd = options.maxBudgetUsd
     if (ctx.resultChunk?.stop_reason) metadata.stop_reason = ctx.resultChunk.stop_reason
 
     const initChunk = ctx.initChunk
-    const model = initChunk?.model ?? options?.model
     if (initChunk) {
       const manifest = { framework: 'Claude Agent SDK' }
+      const model = initChunk.model ?? options?.model
       if (model) manifest.model = model
       if (Array.isArray(initChunk.tools)) manifest.tools = initChunk.tools.map(name => ({ name }))
       if (initChunk.mcp_servers) manifest.dependencies = { mcp_servers: initChunk.mcp_servers }
@@ -116,41 +150,10 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
       metadata._dd = { agent_manifest: manifest }
     }
 
-    const usage = ctx.resultChunk?.usage
-    if (usage) {
-      const inputTokens = usage.input_tokens
-      const cacheWriteTokens = usage.cache_creation_input_tokens
-      const cacheReadTokens = usage.cache_read_input_tokens
-      const totalInputTokens = inputTokens
-        ? inputTokens + (cacheWriteTokens || 0) + (cacheReadTokens || 0)
-        : undefined
-      const outputTokens = usage.output_tokens
-      const metrics = {}
-      let hasMetrics = false
-      if (inputTokens) {
-        metrics.inputTokens = totalInputTokens
-        hasMetrics = true
-      }
-      if (outputTokens) {
-        metrics.outputTokens = outputTokens
-        hasMetrics = true
-      }
-      if (inputTokens && outputTokens) {
-        metrics.totalTokens = totalInputTokens + outputTokens
-        hasMetrics = true
-      }
-      if (cacheWriteTokens) {
-        metrics.cacheWriteTokens = cacheWriteTokens
-        hasMetrics = true
-      }
-      if (cacheReadTokens) {
-        metrics.cacheReadTokens = cacheReadTokens
-        hasMetrics = true
-      }
-      if (hasMetrics) this._tagger.tagMetrics(span, metrics)
-    }
+    const metrics = extractUsageMetrics(ctx.resultChunk?.usage)
+    if (metrics) this._tagger.tagMetrics(span, metrics)
 
-    if (Object.getOwnPropertyNames(metadata).length > 0) this._tagger.tagMetadata(span, metadata)
+    this._tagger.tagMetadata(span, metadata)
   }
 }
 
@@ -199,6 +202,13 @@ class LlmLlmObsPlugin extends LLMObsPlugin {
     return { kind: 'llm', name: ctx.model, modelName, modelProvider, sessionId: ctx.sessionId }
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return { metrics: extractUsageMetrics(ctx.usage) }
+  }
+
   end (ctx) {
     super.end(ctx)
     super.asyncEnd(ctx)
@@ -208,31 +218,32 @@ class LlmLlmObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const { chunks, llmStartIdx, llmEndIdx, parentToolUseId, initialPrompt, usage } = ctx
+    const { chunks, llmStartIdx, llmEndIdx, parentToolUseId, initialPrompt, systemPrompt, usage } = ctx
 
     if (chunks) {
-      const inputMessages = this.#buildInputMessages(chunks, llmStartIdx, parentToolUseId, initialPrompt)
+      const inputMessages = this.#buildInputMessages(chunks, llmStartIdx, parentToolUseId, initialPrompt, systemPrompt)
       const outputMessages = buildOutputMessages(chunks, llmStartIdx, llmEndIdx)
       this._tagger.tagLLMIO(span, inputMessages, outputMessages)
     }
 
-    if (usage) {
-      const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0
-      const cacheReadTokens = usage.cache_read_input_tokens ?? 0
-      const inputTokens = (usage.input_tokens ?? 0) + cacheWriteTokens + cacheReadTokens
-      const outputTokens = usage.output_tokens ?? 0
-      this._tagger.tagMetrics(span, {
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        cache_read_input_tokens: cacheReadTokens,
-        cache_write_input_tokens: cacheWriteTokens,
-        total_tokens: inputTokens + outputTokens,
-      })
-    }
+    const metrics = extractUsageMetrics(usage)
+    if (metrics) this._tagger.tagMetrics(span, metrics)
   }
 
-  #buildInputMessages (chunks, llmStartIdx, parentToolUseId, initialPrompt) {
+  #buildInputMessages (chunks, llmStartIdx, parentToolUseId, initialPrompt, systemPrompt) {
     const messages = []
+    let configuredPrompt = systemPrompt
+    if (systemPrompt?.type === 'custom') configuredPrompt = systemPrompt.prompt
+    else if (systemPrompt?.type === 'preset') configuredPrompt = systemPrompt.append
+    if (typeof configuredPrompt === 'string') {
+      if (configuredPrompt) messages.push({ role: 'system', content: configuredPrompt })
+    } else if (Array.isArray(configuredPrompt)) {
+      for (const part of configuredPrompt) {
+        if (typeof part === 'string' && part && part !== SYSTEM_PROMPT_DYNAMIC_BOUNDARY) {
+          messages.push({ role: 'system', content: part })
+        }
+      }
+    }
     if (initialPrompt) messages.push({ role: 'user', content: initialPrompt })
     const seenIds = new Set()
 
@@ -293,6 +304,13 @@ class ToolLlmObsPlugin extends LLMObsPlugin {
   end (ctx) {
     super.end(ctx)
     super.asyncEnd(ctx)
+  }
+
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return subagentToolIds.delete(ctx.id) ? { spanKind: 'agent' } : {}
   }
 
   setLLMObsTags (ctx) {

@@ -1,0 +1,9 @@
+_v: 1
+name: fs
+display_name: Node.js fs
+description: Instruments Node.js file and directory operations, file streams, and file-watching APIs.
+packages: []
+category:
+- other
+systems: []
+creation_date: '2020-01-23'

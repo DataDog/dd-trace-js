@@ -3,8 +3,6 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 
-const axios = require('axios')
-
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -37,6 +35,7 @@ const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 const { withRequest } = require('../../src/appsec/store')
 const { getConfigFresh } = require('../helpers/config')
+const httpRequest = require('../setup/helpers/http-client')
 const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 
 const blockedTemplate = {
@@ -74,29 +73,26 @@ describe('AppSec Index', function () {
   beforeEach(() => {
     config = {
       inferredProxyServicesEnabled: false,
+      tracing: {
+        DD_APM_TRACING_ENABLED: true,
+      },
       appsec: {
-        enabled: true,
-        rules: './path/rules.json',
-        rateLimit: 42,
-        wafTimeout: 42,
-        obfuscatorKeyRegex: '.*',
-        obfuscatorValueRegex: '.*',
-        blockedTemplateHtml: blockedTemplate.html,
-        blockedTemplateJson: blockedTemplate.json,
-        eventTracking: {
-          mode: 'anon',
-        },
+        DD_APPSEC_ENABLED: true,
+        DD_APPSEC_RULES: './path/rules.json',
+        DD_APPSEC_TRACE_RATE_LIMIT: 42,
+        DD_APPSEC_WAF_TIMEOUT: 42,
+        DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: '.*',
+        DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP: '.*',
+        DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: blockedTemplate.html,
+        DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: blockedTemplate.json,
+        DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: 'anon',
         DD_API_SECURITY_ENABLED: false,
         DD_API_SECURITY_SAMPLE_DELAY: 10,
-        rasp: {
-          enabled: true,
-          bodyCollection: true,
-        },
-        extendedHeadersCollection: {
-          enabled: true,
-          redaction: false,
-          maxHeaders: 42,
-        },
+        DD_APPSEC_COLLECT_ALL_HEADERS: true,
+        DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: false,
+        DD_APPSEC_MAX_COLLECTED_HEADERS: 42,
+        DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true,
+        DD_APPSEC_RASP_ENABLED: true,
       },
     }
 
@@ -260,7 +256,7 @@ describe('AppSec Index', function () {
     })
 
     it('should still subscribe to passportVerify if eventTracking is disabled', () => {
-      config.appsec.eventTracking.mode = 'disabled'
+      config.appsec.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = 'disabled'
 
       AppSec.disable()
       AppSec.enable(config)
@@ -285,7 +281,7 @@ describe('AppSec Index', function () {
     })
 
     it('should not call rasp enable when rasp is disabled', () => {
-      config.appsec.rasp.enabled = false
+      config.appsec.DD_APPSEC_RASP_ENABLED = false
       AppSec.enable(config)
 
       sinon.assert.notCalled(rasp.enable)
@@ -1740,7 +1736,7 @@ describe('IP blocking', function () {
 
   describe('do not block the request', () => {
     it('should not block the request by default', async () => {
-      await axios.get(`http://localhost:${port}/`).then((res) => {
+      await httpRequest.get(`http://localhost:${port}/`).then((res) => {
         assert.strictEqual(res.status, 200)
       })
     })
@@ -1759,7 +1755,7 @@ describe('IP blocking', function () {
   ipHeaderList.forEach(ipHeader => {
     describe(`not block - ip in header ${ipHeader}`, () => {
       it('should not block the request with valid X-Forwarded-For ip', async () => {
-        await axios.get(`http://localhost:${port}/`, {
+        await httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: validIp,
           },
@@ -1771,7 +1767,7 @@ describe('IP blocking', function () {
 
     describe(`block - ip in header ${ipHeader}`, () => {
       it('should block the request with JSON content if no headers', async () => {
-        await axios.get(`http://localhost:${port}/`, {
+        await httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
           },
@@ -1782,7 +1778,7 @@ describe('IP blocking', function () {
       })
 
       it('should block the request with JSON content if accept */*', async () => {
-        await axios.get(`http://localhost:${port}/`, {
+        await httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
             Accept: '*/*',
@@ -1794,7 +1790,7 @@ describe('IP blocking', function () {
       })
 
       it('should block the request with html content if accept text/html', async () => {
-        await axios.get(`http://localhost:${port}/`, {
+        await httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
             Accept: 'text/html',
@@ -1840,7 +1836,7 @@ describe('IP blocking', function () {
       })
 
       it('Should block with custom status code and JSON content', () => {
-        return axios.get(`http://localhost:${port}/`, {
+        return httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             'x-forwarded-for': invalidIp,
           },
@@ -1854,7 +1850,7 @@ describe('IP blocking', function () {
       })
 
       it('Should block with custom status code and HTML content', () => {
-        return axios.get(`http://localhost:${port}/`, {
+        return httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             'x-forwarded-for': invalidIp,
             Accept: 'text/html',
@@ -1901,7 +1897,7 @@ describe('IP blocking', function () {
       })
 
       it('Should block with redirect', () => {
-        return axios.get(`http://localhost:${port}/`, {
+        return httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             'x-forwarded-for': invalidIp,
           },

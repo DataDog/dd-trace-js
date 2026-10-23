@@ -2,7 +2,6 @@
 
 const { tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, getHooks } = require('./helpers/instrument')
 const queryChannel = tracingChannel('orchestrion:@anthropic-ai/claude-agent-sdk:query')
 
 const stepCh = tracingChannel('apm:claude-agent-sdk:step')
@@ -44,6 +43,7 @@ const chunkEmitTimes = new WeakMap()
  *   tools: Map<string, ToolState>,
  *   subagents: Map<string, Record<string, unknown>>,
  *   prompt?: string,
+ *   systemPrompt?: string | string[] | { type: string, prompt?: string | string[], append?: string },
  *   model?: string,
  *   resume?: string,
  *   maxTurns?: number,
@@ -235,6 +235,7 @@ function onQueryStart (ctx) {
   const prompt = queryArg.prompt
   const sessionCtx = {
     prompt: typeof prompt === 'string' ? prompt : undefined,
+    systemPrompt: options.systemPrompt,
     model: options.model,
     resume: options.resume,
     maxTurns: options.maxTurns,
@@ -353,7 +354,6 @@ function getToolResultContent (chunk, toolUseId) {
  * @param {SessionContext | null | undefined} sessionCtx
  * @param {GetLifecycle} getLifecycle
  * @param {ToolLifecycle} lifecycle
- * @returns {number} index in chunks where the next step should start iteration
  */
 function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, lifecycle) {
   let chunkIndex = startIndex
@@ -412,7 +412,6 @@ function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, l
  * @param {StepContext | null | undefined} stepCtx
  * @param {SessionContext | null | undefined} sessionCtx
  * @param {GetLifecycle} getLifecycle
- * @returns {number} index in chunks where the next step should start iteration
  */
 function processStep (
   chunks,
@@ -453,6 +452,7 @@ function processStep (
     llmCh.traceSync(() => {}, {
       model,
       usage,
+      systemPrompt: parentToolUseId ? undefined : sessionCtx?.systemPrompt,
       startTime: stepStartTime,
       finishTime: chunkEmitTimes.get(chunks[messageEndIdx - 1]),
       chunks,
@@ -521,6 +521,7 @@ function processStep (
  *   cwd?: string,
  *   permissionMode?: string,
  *   output?: unknown,
+ *   initChunk?: Chunk,
  *   arguments?: Array<{ prompt?: string }>,
  *   runInContext?: (fn: () => number) => number,
  * }} agentCtx
@@ -531,7 +532,9 @@ function processChunks (chunks, agentCtx) {
   const sessionCtx = agentCtx.sessionCtx
   const getLifecycle = createStreamLookup(chunks)
 
-  const { type, subtype, ...rest } = chunks[0]
+  const initChunk = chunks.find(chunk => chunk.type === 'system' && chunk.subtype === 'init')
+  if (initChunk) agentCtx.initChunk = initChunk
+  const { type, subtype, ...rest } = initChunk || chunks[0]
   Object.assign(agentCtx, rest)
   if (sessionCtx) {
     if (sessionCtx.sessionId) agentCtx.session_id = sessionCtx.sessionId
@@ -574,7 +577,6 @@ function finishStream (chunks, ctx, error) {
   if (chunks.length > 0) {
     const lastChunk = chunks.at(-1)
     if (lastChunk?.type === 'result') ctx.output = lastChunk.result
-    ctx.initChunk = chunks.find(chunk => chunk.type === 'system' && chunk.subtype === 'init')
     ctx.resultChunk = lastChunk?.type === 'result' ? lastChunk : undefined
 
     try {
@@ -638,28 +640,15 @@ function wrapQueryAsyncIterator (asyncIterator, ctx) {
   }
 }
 
-let querySubscribed = false
+queryChannel.subscribe({
+  start: onQueryStart,
+  end (ctx) {
+    if (!ctx.claudeAgentSdkTracing) return
 
-for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
-  hook.file = null
+    const { result } = ctx
 
-  addHook(hook, exports => {
-    if (!querySubscribed) {
-      querySubscribed = true
-      queryChannel.subscribe({
-        start: onQueryStart,
-        end (ctx) {
-          if (!ctx.claudeAgentSdkTracing) return
+    ctx.streamResolved = false
 
-          const { result } = ctx
-
-          ctx.streamResolved = false
-
-          shimmer.wrap(result, Symbol.asyncIterator, asyncIterator => wrapQueryAsyncIterator(asyncIterator, ctx))
-        },
-      })
-    }
-
-    return exports
-  })
-}
+    shimmer.wrap(result, Symbol.asyncIterator, asyncIterator => wrapQueryAsyncIterator(asyncIterator, ctx))
+  },
+})

@@ -15,7 +15,10 @@ const {
   MODEL_PROVIDER,
   METADATA,
   COST_TAGS,
+  AGENT_MANIFEST,
   TOOL_DEFINITIONS,
+  EXPERIMENT_INPUT,
+  EXPERIMENT_OUTPUT,
   INPUT_MESSAGES,
   INPUT_VALUE,
   INTEGRATION,
@@ -38,8 +41,11 @@ const {
   SAMPLE_RATE,
   SAMPLING_DECISION,
   TRACE_ID,
+  DEFAULT_MODEL,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
+const { MANUAL_FRAMEWORK_NAME } = require('./agent-manifest')
+const { setGenAiApmTags } = require('./gen-ai-tags')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 
@@ -86,9 +92,14 @@ class LLMObsSpanProcessor {
 
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
   process (span) {
-    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     // if the span is not in our private tagger map, it is not an llmobs span
-    if (!LLMObsTagger.tagMap.has(span)) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED || !LLMObsTagger.tagMap.has(span)) return
+
+    try {
+      this.#setGenAiApmTags(span)
+    } catch (e) {
+      logger.debug('Failed to set gen_ai APM tags:', e.message)
+    }
 
     try {
       const formattedEvent = this.format(span)
@@ -138,18 +149,29 @@ class LLMObsSpanProcessor {
     const output = {}
 
     if (['llm', 'embedding'].includes(spanKind)) {
-      meta.model_name = mlObsTags[MODEL_NAME] || 'custom'
-      meta.model_provider = (mlObsTags[MODEL_PROVIDER] || 'custom').toLowerCase()
+      meta.model_name = mlObsTags[MODEL_NAME] || DEFAULT_MODEL
+      meta.model_provider = (mlObsTags[MODEL_PROVIDER] || DEFAULT_MODEL).toLowerCase()
     }
 
-    if (mlObsTags[METADATA] || mlObsTags[COST_TAGS]) {
+    const name = mlObsTags[NAME] || span._name
+    const agentManifest = spanKind === 'agent' ? mlObsTags[AGENT_MANIFEST] : undefined
+
+    if (mlObsTags[METADATA] || mlObsTags[COST_TAGS] || agentManifest) {
+      /** @type {Record<string, unknown>} */
       const metadata = {}
       if (mlObsTags[METADATA]) this.#addObject(mlObsTags[METADATA], metadata)
-      // Only seed `metadata._dd` when there's something to put in it (currently cost_tags). Mirrors
-      // dd-trace-py and the cross-language wire format enforced by system-tests — metadata-only
-      // spans must not carry an empty `_dd: {}` block.
+      // Only seed `metadata._dd` when there's something to put in it. Mirrors dd-trace-py and the
+      // cross-language wire format enforced by system-tests, so metadata-only spans must not carry
+      // an empty `_dd: {}` block.
       if (mlObsTags[COST_TAGS]) {
         this.#getDdMetadata(metadata).cost_tags = mlObsTags[COST_TAGS]
+      }
+      if (agentManifest) {
+        this.#getDdMetadata(metadata).agent_manifest = {
+          framework: MANUAL_FRAMEWORK_NAME,
+          ...agentManifest,
+          name: agentManifest.name ?? name,
+        }
       }
       meta.metadata = metadata
     }
@@ -174,8 +196,13 @@ class LLMObsSpanProcessor {
     }
 
     const llmObsSpan = new LLMObservabilitySpan(spanKind)
+    const isExperiment = spanKind === 'experiment'
+    const hasExperimentInput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_INPUT)
+    const hasExperimentOutput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_OUTPUT)
 
-    if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
+    if (hasExperimentInput) {
+      llmObsSpan.input = [{ role: '', content: mlObsTags[EXPERIMENT_INPUT] }]
+    } else if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
       llmObsSpan.input = mlObsTags[INPUT_MESSAGES]
       inputType = 'messages'
     } else if (spanKind === 'embedding' && mlObsTags[INPUT_DOCUMENTS]) {
@@ -186,7 +213,9 @@ class LLMObsSpanProcessor {
       inputType = 'value'
     }
 
-    if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
+    if (hasExperimentOutput) {
+      llmObsSpan.output = [{ role: '', content: mlObsTags[EXPERIMENT_OUTPUT] }]
+    } else if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
     } else if (spanKind === 'retrieval' && mlObsTags[OUTPUT_DOCUMENTS]) {
@@ -210,42 +239,47 @@ class LLMObsSpanProcessor {
     const sessionId = mlObsTags[SESSION_ID]
     const parentId = mlObsTags[PARENT_ID_KEY]
 
-    const name = mlObsTags[NAME] || span._name
-
     const tags = this.#getTags(span, mlApp, sessionId, error)
     llmObsSpan._tags = tags
 
     const processedSpan = this.#runProcessor(llmObsSpan)
     if (processedSpan === undefined) return null
 
-    if (processedSpan.input) {
-      if (inputType === 'messages') {
-        input.messages = processedSpan.input
-      } else if (inputType === 'value') {
-        input.value = processedSpan.input[0].content
-      } else if (inputType === 'documents') {
-        input.documents = processedSpan.input.map((processedDocument, processedDocumentIdx) => ({
-          ...mlObsTags[INPUT_DOCUMENTS][processedDocumentIdx],
-          text: processedDocument.content,
-        }))
+    if (isExperiment) {
+      const [processedInput] = processedSpan.input
+      const [processedOutput] = processedSpan.output
+      if (hasExperimentInput && processedInput !== undefined) meta.input = processedInput.content
+      if (hasExperimentOutput && processedOutput !== undefined) meta.output = processedOutput.content
+    } else {
+      if (processedSpan.input) {
+        if (inputType === 'messages') {
+          input.messages = processedSpan.input
+        } else if (inputType === 'value') {
+          input.value = processedSpan.input[0].content
+        } else if (inputType === 'documents') {
+          input.documents = processedSpan.input.map((processedDocument, processedDocumentIdx) => ({
+            ...mlObsTags[INPUT_DOCUMENTS][processedDocumentIdx],
+            text: processedDocument.content,
+          }))
+        }
       }
-    }
 
-    if (processedSpan.output) {
-      if (outputType === 'messages') {
-        output.messages = processedSpan.output
-      } else if (outputType === 'value') {
-        output.value = processedSpan.output[0].content
-      } else if (outputType === 'documents') {
-        output.documents = processedSpan.output.map((processedDocument, processedDocumentIdx) => ({
-          ...mlObsTags[OUTPUT_DOCUMENTS][processedDocumentIdx],
-          text: processedDocument.content,
-        }))
+      if (processedSpan.output) {
+        if (outputType === 'messages') {
+          output.messages = processedSpan.output
+        } else if (outputType === 'value') {
+          output.value = processedSpan.output[0].content
+        } else if (outputType === 'documents') {
+          output.documents = processedSpan.output.map((processedDocument, processedDocumentIdx) => ({
+            ...mlObsTags[OUTPUT_DOCUMENTS][processedDocumentIdx],
+            text: processedDocument.content,
+          }))
+        }
       }
-    }
 
-    if (input) meta.input = input
-    if (output) meta.output = output
+      meta.input = input
+      meta.output = output
+    }
 
     const prompt = mlObsTags[INPUT_PROMPT]
     if (prompt && spanKind === 'llm') {
@@ -281,6 +315,22 @@ class LLMObsSpanProcessor {
     if (sessionId) llmObsSpanEvent.session_id = sessionId
 
     return llmObsSpanEvent
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   */
+  #setGenAiApmTags (span) {
+    const mlObsTags = LLMObsTagger.tagMap.get(span)
+
+    setGenAiApmTags(span, {
+      spanKind: mlObsTags[SPAN_KIND],
+      modelName: mlObsTags[MODEL_NAME],
+      modelProvider: mlObsTags[MODEL_PROVIDER],
+      mlApp: mlObsTags[ML_APP],
+      sessionId: mlObsTags[SESSION_ID],
+      metrics: mlObsTags[METRICS],
+    })
   }
 
   // For now, this only applies to metadata, as we let users annotate this field with any object
