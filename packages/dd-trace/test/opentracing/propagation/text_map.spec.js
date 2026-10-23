@@ -2242,11 +2242,21 @@ describe('TextMapPropagator', () => {
     })
 
     describe('with the v5 B3 propagation style', () => {
-      /** @param {string} envName */
-      function createV5Propagator (envName) {
+      /**
+       * @param {string} envName
+       * @param {string} [injectEnvName]
+       * @param {string} [injectOrigin]
+       */
+      function createV5Propagator (envName, injectEnvName, injectOrigin = 'calculated') {
+        sinon.stub(config, 'getOrigin')
+          .withArgs('tracePropagationStyle.inject')
+          .returns(injectOrigin)
+        const getValidatedConfiguredEnvName = sinon.stub()
+        getValidatedConfiguredEnvName.withArgs('DD_TRACE_PROPAGATION_STYLE').returns(envName)
+        getValidatedConfiguredEnvName.withArgs('DD_TRACE_PROPAGATION_STYLE_INJECT').returns(injectEnvName)
         const V5TextMapPropagator = proxyquire('../../../src/opentracing/propagation/text_map', {
           '../../config/helper': {
-            getConfiguredEnvName: sinon.stub().withArgs('DD_TRACE_PROPAGATION_STYLE').returns(envName),
+            getValidatedConfiguredEnvName,
           },
           '../../log': log,
           '../../telemetry/metrics': telemetryMetrics,
@@ -2295,6 +2305,37 @@ describe('TextMapPropagator', () => {
         }))
       })
 
+      it('should inject the OTEL B3 style as a single header', () => {
+        propagator = createV5Propagator('OTEL_PROPAGATORS')
+        config.tracePropagationStyle.inject = ['b3']
+        const carrier = {}
+
+        propagator.inject(createContext({
+          traceId: id('123', 16),
+          spanId: id('456', 16),
+          sampling: { priority: AUTO_KEEP },
+        }), carrier)
+
+        assert.strictEqual(carrier.b3, '0000000000000123-0000000000000456-1')
+        assert.ok(!('x-b3-traceid' in carrier))
+      })
+
+      it('should inject the OTEL B3 style with tracecontext', () => {
+        propagator = createV5Propagator('OTEL_PROPAGATORS')
+        config.tracePropagationStyle.inject = ['b3', 'tracecontext']
+        const carrier = {}
+
+        propagator.inject(createContext({
+          traceId: id('123', 16),
+          spanId: id('456', 16),
+          sampling: { priority: AUTO_KEEP },
+        }), carrier)
+
+        assert.strictEqual(carrier.b3, '0000000000000123-0000000000000456-1')
+        assert.ok('traceparent' in carrier)
+        assert.ok(!('x-b3-traceid' in carrier))
+      })
+
       it('should inject the legacy B3 style as multiple headers', () => {
         propagator = createV5Propagator('DD_TRACE_PROPAGATION_STYLE')
         config.tracePropagationStyle.inject = ['b3']
@@ -2310,6 +2351,88 @@ describe('TextMapPropagator', () => {
         assert.strictEqual(carrier['x-b3-spanid'], '0000000000000456')
         assert.strictEqual(carrier['x-b3-sampled'], '1')
         assert.strictEqual(carrier.b3, undefined)
+      })
+
+      it('should prefer the explicit DD injection style over OTEL', () => {
+        propagator = createV5Propagator(
+          'OTEL_PROPAGATORS',
+          'DD_TRACE_PROPAGATION_STYLE_INJECT',
+          'env_var'
+        )
+        config.tracePropagationStyle.inject = ['b3']
+        const carrier = {}
+
+        propagator.inject(createContext({
+          traceId: id('123', 16),
+          spanId: id('456', 16),
+          sampling: { priority: AUTO_KEEP },
+        }), carrier)
+
+        assert.strictEqual(carrier['x-b3-traceid'], '0000000000000123')
+        assert.strictEqual(carrier.b3, undefined)
+      })
+
+      it('should prefer the programmatic injection style over OTEL', () => {
+        propagator = createV5Propagator('OTEL_PROPAGATORS', undefined, 'code')
+        config.tracePropagationStyle.inject = ['b3']
+        const carrier = {}
+
+        propagator.inject(createContext({
+          traceId: id('123', 16),
+          spanId: id('456', 16),
+          sampling: { priority: AUTO_KEEP },
+        }), carrier)
+
+        assert.strictEqual(carrier['x-b3-traceid'], '0000000000000123')
+        assert.strictEqual(carrier.b3, undefined)
+      })
+
+      it('should refresh the injection style after remote configuration', () => {
+        propagator = createV5Propagator('OTEL_PROPAGATORS')
+        config.tracePropagationStyle.inject = ['b3']
+        config.getOrigin.withArgs('tracePropagationStyle.inject').returns('remote_config')
+        const carrier = {}
+
+        propagator.inject(createContext({
+          traceId: id('123', 16),
+          spanId: id('456', 16),
+          sampling: { priority: AUTO_KEEP },
+        }), carrier)
+
+        assert.strictEqual(carrier['x-b3-traceid'], '0000000000000123')
+        assert.strictEqual(carrier.b3, undefined)
+      })
+
+      it('should refresh the injection style after shared remote configuration', () => {
+        propagator = createV5Propagator('OTEL_PROPAGATORS')
+        config.tracePropagationStyle.inject = ['b3']
+        config.getOrigin.withArgs('DD_TRACE_PROPAGATION_STYLE').returns('remote_config')
+        const carrier = {}
+
+        propagator.inject(createContext({
+          traceId: id('123', 16),
+          spanId: id('456', 16),
+          sampling: { priority: AUTO_KEEP },
+        }), carrier)
+
+        assert.strictEqual(carrier['x-b3-traceid'], '0000000000000123')
+        assert.strictEqual(carrier.b3, undefined)
+      })
+
+      it('should preserve both B3 styles for the experimental setting', () => {
+        config.experimental = { b3: true }
+        config.tracePropagationStyle.inject = ['b3', 'b3 single header']
+        propagator = createV5Propagator('OTEL_PROPAGATORS')
+        const carrier = {}
+
+        propagator.inject(createContext({
+          traceId: id('123', 16),
+          spanId: id('456', 16),
+          sampling: { priority: AUTO_KEEP },
+        }), carrier)
+
+        assert.strictEqual(carrier['x-b3-traceid'], '0000000000000123')
+        assert.strictEqual(carrier.b3, '0000000000000123-0000000000000456-1')
       })
     })
 

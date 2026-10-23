@@ -376,4 +376,33 @@ module.exports = {
       }
     }
   },
+
+  /**
+   * Returns the environment variable name from the highest-priority source whose value is valid.
+   *
+   * @param {string} name Environment variable name
+   * @returns {string|undefined}
+   */
+  getValidatedConfiguredEnvName (name) {
+    validateAccess(name)
+
+    if (!stableConfigLoaded) {
+      loadStableConfig()
+    }
+
+    const sources = [
+      [fleetStableConfig, 'fleet_stable_config'],
+      [process.env, 'env_var'],
+      [localStableConfig, 'local_stable_config'],
+    ]
+    for (const [source, sourceName] of sources) {
+      if (source !== undefined) {
+        const fromSource = getEnvNameFromSource(name, source)
+        if (fromSource !== undefined &&
+          parseConfigurationValue(fromSource, source[fromSource], sourceName) !== undefined) {
+          return fromSource
+        }
+      }
+    }
+  },
 }

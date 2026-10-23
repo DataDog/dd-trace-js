@@ -323,6 +323,28 @@ describe('config-helper env resolution', () => {
       assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), true)
     })
 
+    it('returns the env name from the highest-priority valid source', () => {
+      process.env.OTEL_PROPAGATORS = 'b3'
+
+      const StableConfigStub = sinon.stub()
+      StableConfigStub.callsFake(function () {
+        this.localEntries = {}
+        this.fleetEntries = {
+          DD_TRACE_PROPAGATION_STYLE: 'invalid',
+        }
+        this.warnings = []
+      })
+
+      const mod = proxyquire('../../src/config/helper', {
+        '../serverless': {
+          IS_SERVERLESS: false,
+        },
+        './stable': StableConfigStub,
+      })
+
+      assert.strictEqual(mod.getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE'), 'OTEL_PROPAGATORS')
+    })
+
     it('does not override defined values with undefined', () => {
       const StableConfigStub = sinon.stub()
       StableConfigStub.callsFake(function () {
