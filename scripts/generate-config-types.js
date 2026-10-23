@@ -111,7 +111,7 @@ function skipQuoted (s, i, quote) {
 
 function findCalculatedFallbackProperties () {
   const source = readFileSync(CONFIG_INDEX_PATH, 'utf8')
-  const marker = /#applyCalculated\s*\(\s*\)\s*\{/.exec(source)
+  const marker = /#applyCalculated\s*\([^)]*\)\s*\{/.exec(source)
   if (!marker) throw new Error('Could not locate #applyCalculated() in config/index.js')
 
   const bodyStart = marker.index + marker[0].length

@@ -357,7 +357,7 @@ class Config extends ConfigBase {
       this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
     }
 
-    this.#applyCalculated(undefined, options)
+    this.#applyCalculated(options)
     configUpdateChannel.publish(this)
   }
 
@@ -369,10 +369,9 @@ class Config extends ConfigBase {
   }
 
   /**
-   * @param {Record<string, string | undefined>} [envs]
-   * @param {Record<string, string | undefined> | null} [remoteConfig]
+   * @param {Record<string, string | undefined> | null} envs Raw environment source applied in this update.
    */
-  #applyCalculated (envs, remoteConfig) {
+  #applyCalculated (envs) {
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
         trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {
@@ -457,15 +456,36 @@ class Config extends ConfigBase {
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', getIsGCPFunction() || getIsAzureFunction())
     }
 
+    const propagationEnvs = {
+      fleet_stable_config: this.stableConfig.fleetEntries,
+      local_stable_config: this.stableConfig.localEntries,
+    }[trackedConfigOrigins.get('DD_TRACE_PROPAGATION_STYLE')] ?? envs
+    const otelPropagators = propagationEnvs?.DD_TRACE_PROPAGATION_STYLE === undefined &&
+      propagationEnvs?.OTEL_PROPAGATORS !== undefined
+    for (const name of /** @type {const} */ ([
+      'DD_TRACE_PROPAGATION_STYLE',
+      'tracePropagationStyle.inject',
+      'tracePropagationStyle.extract',
+    ])) {
+      const styles = get(this, name)
+      if (!styles.includes('b3')) continue
+
+      const b3Style = DD_MAJOR >= 6 || name === 'DD_TRACE_PROPAGATION_STYLE' && otelPropagators
+        ? 'b3 single header'
+        : 'b3multi'
+      const source = trackedConfigOrigins.get(name)
+      const { canonicalName = name } = configurationsTable[name]
+      const rawValue = configWithOrigin.get(`${canonicalName}${source}`)?.value
+      setAndTrack(this, name, styles.map(style => style === 'b3' ? b3Style : style), rawValue, source)
+    }
+
     // TODO: Remove the experimental env vars as a major or deprecate the option?
     if (this.experimental?.b3) {
-      if (!this.tracePropagationStyle.inject.includes('b3multi') &&
-          !this.tracePropagationStyle.inject.includes('b3')) {
-        this.tracePropagationStyle.inject.push('b3')
+      if (!this.tracePropagationStyle.inject.includes('b3multi')) {
+        this.tracePropagationStyle.inject.push('b3multi')
       }
-      if (!this.tracePropagationStyle.extract.includes('b3multi') &&
-          !this.tracePropagationStyle.extract.includes('b3')) {
-        this.tracePropagationStyle.extract.push('b3')
+      if (!this.tracePropagationStyle.extract.includes('b3multi')) {
+        this.tracePropagationStyle.extract.push('b3multi')
       }
       if (!this.tracePropagationStyle.inject.includes('b3 single header')) {
         this.tracePropagationStyle.inject.push('b3 single header')
@@ -694,36 +714,6 @@ class Config extends ConfigBase {
     // OTEL logs and DD log injection are mutually exclusive
     if (this.DD_LOGS_OTEL_ENABLED) {
       setAndTrack(this, 'logInjection', false)
-    }
-
-    const propagationOrigin = trackedConfigOrigins.get('DD_TRACE_PROPAGATION_STYLE')
-    const propagationEnvs = {
-      env_var: envs,
-      fleet_stable_config: this.stableConfig.fleetEntries,
-      local_stable_config: this.stableConfig.localEntries,
-      remote_config: remoteConfig,
-    }[propagationOrigin]
-    const otelPropagators = propagationEnvs?.DD_TRACE_PROPAGATION_STYLE === undefined &&
-      propagationEnvs?.OTEL_PROPAGATORS !== undefined
-    for (const styles of [
-      this.DD_TRACE_PROPAGATION_STYLE,
-      this.tracePropagationStyle.inject,
-      this.tracePropagationStyle.extract,
-    ]) {
-      const b3Style = DD_MAJOR >= 6 || styles === this.DD_TRACE_PROPAGATION_STYLE && otelPropagators
-        ? 'b3 single header'
-        : 'b3multi'
-      for (let index = 0; index < styles.length; index++) {
-        if (styles[index] === 'b3') {
-          styles[index] = b3Style
-        }
-      }
-    }
-
-    // Remote withdrawal must restore the normalized startup value.
-    const propagationBaseline = changeTracker.baseValuesByPath.DD_TRACE_PROPAGATION_STYLE
-    if (envs && propagationBaseline) {
-      propagationBaseline.value = [...this.DD_TRACE_PROPAGATION_STYLE]
     }
 
     // Apply all fallbacks to the calculated config.

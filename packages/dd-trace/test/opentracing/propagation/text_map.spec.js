@@ -101,6 +101,21 @@ describe('TextMapPropagator', () => {
 
     for (const { name, env, options, remote, stable, single, multi, extractSingle = single, tracecontext = false } of [
       { name: 'OTEL b3', env: { OTEL_PROPAGATORS: 'b3' }, single: true, multi: false },
+      {
+        name: 'OTEL b3 overriding experimental B3',
+        env: { OTEL_PROPAGATORS: 'b3' },
+        options: { experimental: { b3: true } },
+        single: true,
+        multi: false,
+      },
+      {
+        name: 'OTEL b3 overriding experimental B3 after an unrelated remote update',
+        env: { OTEL_PROPAGATORS: 'b3' },
+        options: { experimental: { b3: true } },
+        remote: { DD_TRACE_SAMPLE_RATE: '0.5' },
+        single: true,
+        multi: false,
+      },
       { name: 'OTEL uppercase b3', env: { OTEL_PROPAGATORS: 'B3' }, single: true, multi: false },
       { name: 'OTEL b3 with whitespace', env: { OTEL_PROPAGATORS: ' b3 ' }, single: true, multi: false },
       {
@@ -170,6 +185,21 @@ describe('TextMapPropagator', () => {
         multi: DD_MAJOR < 6,
       },
       {
+        name: 'Datadog b3 overriding experimental B3',
+        env: { DD_TRACE_PROPAGATION_STYLE: 'b3' },
+        options: { experimental: { b3: true } },
+        single: DD_MAJOR >= 6,
+        multi: DD_MAJOR < 6,
+      },
+      {
+        name: 'Datadog b3 overriding experimental B3 after an unrelated remote update',
+        env: { DD_TRACE_PROPAGATION_STYLE: 'b3' },
+        options: { experimental: { b3: true } },
+        remote: { DD_TRACE_SAMPLE_RATE: '0.5' },
+        single: DD_MAJOR >= 6,
+        multi: DD_MAJOR < 6,
+      },
+      {
         name: 'Datadog b3 overriding OTEL b3',
         env: { DD_TRACE_PROPAGATION_STYLE: 'b3', OTEL_PROPAGATORS: 'b3' },
         single: DD_MAJOR >= 6,
@@ -189,6 +219,13 @@ describe('TextMapPropagator', () => {
         single: DD_MAJOR >= 6,
         multi: DD_MAJOR < 6,
         extractSingle: true,
+      },
+      {
+        name: 'programmatic inject b3 with experimental B3 and OTEL extraction',
+        env: { OTEL_PROPAGATORS: 'b3' },
+        options: { experimental: { b3: true }, tracePropagationStyle: { inject: ['b3'] } },
+        single: true,
+        multi: DD_MAJOR < 6,
       },
       {
         name: 'Datadog extract b3 overriding OTEL b3',
@@ -259,7 +296,7 @@ describe('TextMapPropagator', () => {
 
     it('should restore OTEL b3 after removing a Datadog remote override', () => {
       sinon.stub(process, 'env').value({ OTEL_PROPAGATORS: 'b3' })
-      config = getConfigFresh()
+      config = getConfigFresh({ experimental: { b3: true } })
       propagator = new TextMapPropagator(config)
 
       process.env.DD_TRACE_PROPAGATION_STYLE = 'b3'
@@ -279,6 +316,31 @@ describe('TextMapPropagator', () => {
         assert.strictEqual(Object.hasOwn(carrier, 'b3'), single)
         assert.strictEqual(Object.hasOwn(carrier, 'x-b3-traceid'), !single)
       }
+    })
+
+    it('should discard experimental B3 styles when restoring explicit styles', function () {
+      if (DD_MAJOR >= 6) this.skip()
+      config = getConfigFresh({ experimental: { b3: true }, tracePropagationStyle: ['b3'] })
+      propagator = new TextMapPropagator(config)
+
+      config.setRemoteConfig({
+        DD_TRACE_EXPERIMENTAL_B3_ENABLED: 'false',
+        DD_TRACE_PROPAGATION_STYLE_INJECT: 'datadog',
+        DD_TRACE_PROPAGATION_STYLE_EXTRACT: 'datadog',
+      })
+      config.setRemoteConfig({ DD_TRACE_EXPERIMENTAL_B3_ENABLED: 'false' })
+      const carrier = {}
+      propagator.inject(createContext({ sampling: { priority: AUTO_KEEP } }), carrier)
+
+      assert.strictEqual(Object.hasOwn(carrier, 'b3'), false)
+      assert.strictEqual(Object.hasOwn(carrier, 'x-b3-traceid'), true)
+      const extracted = propagator.extract({
+        b3: '0000000000000123-0000000000000456-1',
+        'x-b3-traceid': '0000000000000789',
+        'x-b3-spanid': '0000000000000abc',
+        'x-b3-sampled': '1',
+      })
+      assert.strictEqual(extracted.toTraceId(), id('789', 16).toString(10))
     })
   })
 
