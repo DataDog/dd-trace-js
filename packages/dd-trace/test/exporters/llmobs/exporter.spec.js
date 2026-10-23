@@ -1,0 +1,250 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+describe('LLMObsExporter', () => {
+  let AgentExporter
+  let AgentlessExporter
+  let agentExporter
+  let agentlessExporter
+  let fetchAgentInfo
+  let getValueFromEnvSources
+  let logger
+  let Exporter
+
+  beforeEach(() => {
+    agentExporter = {
+      _url: new URL('http://agent:8126'),
+      export: sinon.stub().returns(true),
+      flush: sinon.stub().callsFake(done => done?.()),
+      setUrl: sinon.stub(),
+    }
+    agentlessExporter = {
+      _url: new URL('https://intake.example'),
+      export: sinon.stub().returns(true),
+      flush: sinon.stub().callsFake(done => done?.()),
+      setUrl: sinon.stub(),
+    }
+    AgentExporter = sinon.stub().returns(agentExporter)
+    AgentlessExporter = sinon.stub().returns(agentlessExporter)
+    fetchAgentInfo = sinon.stub()
+    getValueFromEnvSources = sinon.stub().returns(undefined)
+    logger = { warn: sinon.stub() }
+
+    Exporter = proxyquire('../../../src/exporters/llmobs', {
+      '../../agent/info': { fetchAgentInfo },
+      '../../config/helper': { getValueFromEnvSources },
+      '../../log': logger,
+      '../agent': AgentExporter,
+      '../agentless': AgentlessExporter,
+    })
+  })
+
+  afterEach(() => {
+    sinon.restore()
+  })
+
+  function getConfig () {
+    return {
+      llmobs: { DD_LLMOBS_AGENTLESS_ENABLED: undefined },
+      url: new URL('http://agent:8126'),
+    }
+  }
+
+  it('buffers traces and drains them to the Agent exporter when discovery succeeds', () => {
+    const config = getConfig()
+    const prioritySampler = {}
+    const exporter = new Exporter(config, prioritySampler)
+    const trace = [{ name: 'llm.request' }]
+
+    assert.strictEqual(exporter.export(trace), true)
+    sinon.assert.notCalled(AgentExporter)
+    sinon.assert.calledOnceWithExactly(getValueFromEnvSources, 'DD_AGENTLESS_ENABLED', true)
+    sinon.assert.calledOnceWithExactly(fetchAgentInfo, config.url, sinon.match.func, { keepProcessAlive: true })
+
+    fetchAgentInfo.yield(null, { endpoints: [] })
+
+    sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
+    sinon.assert.calledOnceWithExactly(agentExporter.export, trace)
+    sinon.assert.notCalled(AgentlessExporter)
+  })
+
+  it('buffers traces and drains them to the agentless exporter when discovery fails', () => {
+    const config = getConfig()
+    const prioritySampler = {}
+    const exporter = new Exporter(config, prioritySampler)
+    const trace = [{
+      name: 'llm.request',
+      meta_struct: {
+        _llmobs: {
+          tags: {
+            'customer.tier': 'gold',
+            'ddtrace.version': '1.0.0',
+            service: 'test',
+          },
+        },
+      },
+    }]
+
+    exporter.export(trace)
+    fetchAgentInfo.yield(new Error('Agent unavailable'))
+
+    sinon.assert.calledOnceWithExactly(AgentlessExporter, config, prioritySampler)
+    sinon.assert.calledOnceWithExactly(agentlessExporter.export, trace)
+    assert.deepStrictEqual(trace[0].meta_struct._llmobs.tags, {
+      customer_tier: 'gold',
+      ddtrace_version: '1.0.0',
+      service: 'test',
+    })
+    sinon.assert.notCalled(agentlessExporter.setUrl)
+    sinon.assert.notCalled(AgentExporter)
+  })
+
+  it('limits the buffer by span count and evicts the oldest whole trace chunks', () => {
+    const exporter = new Exporter(getConfig(), {})
+    const oldestTrace = Array.from({ length: 300 }, () => ({}))
+    const retainedTrace1 = Array.from({ length: 400 }, () => ({}))
+    const retainedTrace2 = Array.from({ length: 300 }, () => ({}))
+    const newestTrace = Array.from({ length: 250 }, () => ({}))
+
+    exporter.export(oldestTrace)
+    exporter.export(retainedTrace1)
+    exporter.export(retainedTrace2)
+    assert.strictEqual(exporter.export(newestTrace), true)
+    fetchAgentInfo.yield(null, { endpoints: [] })
+
+    sinon.assert.callCount(agentExporter.export, 3)
+    assert.strictEqual(agentExporter.export.getCall(0).args[0], retainedTrace1)
+    assert.strictEqual(agentExporter.export.getCall(1).args[0], retainedTrace2)
+    assert.strictEqual(agentExporter.export.getCall(2).args[0], newestTrace)
+    sinon.assert.calledOnceWithExactly(
+      logger.warn,
+      'LLMObs exporter trace buffer full (limit is %d spans), dropping trace data',
+      1000
+    )
+  })
+
+  it('drops a trace chunk that cannot fit in an empty buffer', () => {
+    const exporter = new Exporter(getConfig(), {})
+    const retainedTrace = [{ name: 'retained' }]
+    const oversizedTrace = Array.from({ length: 1001 }, () => ({}))
+
+    exporter.export(retainedTrace)
+    assert.strictEqual(exporter.export(oversizedTrace), false)
+    fetchAgentInfo.yield(null, { endpoints: [] })
+
+    sinon.assert.calledOnceWithExactly(agentExporter.export, retainedTrace)
+    sinon.assert.calledOnce(logger.warn)
+  })
+
+  it('buffers a trace chunk at the exact span limit', () => {
+    const exporter = new Exporter(getConfig(), {})
+    const trace = Array.from({ length: 1000 }, () => ({}))
+
+    assert.strictEqual(exporter.export(trace), true)
+    fetchAgentInfo.yield(null, { endpoints: [] })
+
+    sinon.assert.calledOnceWithExactly(agentExporter.export, trace)
+    sinon.assert.notCalled(logger.warn)
+  })
+
+  it('preserves dotted tag keys when using the Agent exporter', () => {
+    const config = getConfig()
+    const exporter = new Exporter(config, {})
+    const trace = [{ meta_struct: { _llmobs: { tags: { 'customer.tier': 'gold' } } } }]
+
+    exporter.export(trace)
+    fetchAgentInfo.yield(null, { endpoints: [] })
+
+    assert.deepStrictEqual(trace[0].meta_struct._llmobs.tags, { 'customer.tier': 'gold' })
+    sinon.assert.calledOnceWithExactly(agentExporter.export, trace)
+  })
+
+  it('uses the LLMObs-specific agentless setting when global agentless mode is not configured', () => {
+    const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = true
+    const exporter = new Exporter(config, {})
+
+    exporter.export([{ name: 'llm.request' }])
+
+    sinon.assert.calledOnce(AgentlessExporter)
+    sinon.assert.notCalled(fetchAgentInfo)
+    sinon.assert.notCalled(AgentExporter)
+  })
+
+  it('uses the LLMObs-specific Agent setting when global agentless mode is not configured', () => {
+    const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = false
+    const exporter = new Exporter(config, {})
+
+    exporter.export([{ name: 'llm.request' }])
+
+    sinon.assert.calledOnce(AgentExporter)
+    sinon.assert.notCalled(fetchAgentInfo)
+    sinon.assert.notCalled(AgentlessExporter)
+  })
+
+  it('uses the agentless exporter immediately when global agentless mode is explicitly enabled', () => {
+    getValueFromEnvSources.returns(true)
+    const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = false
+    const prioritySampler = {}
+    const exporter = new Exporter(config, prioritySampler)
+    const trace = [{ name: 'llm.request' }]
+
+    exporter.export(trace)
+
+    sinon.assert.calledOnceWithExactly(AgentlessExporter, config, prioritySampler)
+    sinon.assert.calledOnceWithExactly(agentlessExporter.export, trace)
+    sinon.assert.notCalled(fetchAgentInfo)
+    sinon.assert.notCalled(AgentExporter)
+  })
+
+  it('uses the Agent exporter immediately when global agentless mode is explicitly disabled', () => {
+    getValueFromEnvSources.returns(false)
+    const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = true
+    const prioritySampler = {}
+    const exporter = new Exporter(config, prioritySampler)
+    const trace = [{ name: 'llm.request' }]
+
+    exporter.export(trace)
+
+    sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
+    sinon.assert.calledOnceWithExactly(agentExporter.export, trace)
+    sinon.assert.notCalled(fetchAgentInfo)
+    sinon.assert.notCalled(AgentlessExporter)
+  })
+
+  it('applies a URL set before transport selection to the selected exporter', () => {
+    const exporter = new Exporter(getConfig(), {})
+    const url = new URL('http://custom-agent:8126')
+
+    exporter.setUrl(url)
+    fetchAgentInfo.yield(null, { endpoints: [] })
+
+    sinon.assert.calledOnceWithExactly(agentExporter.setUrl, url)
+  })
+
+  it('waits for transport selection before completing a flush', () => {
+    const exporter = new Exporter(getConfig(), {})
+    const trace = [{ name: 'llm.request' }]
+    const done = sinon.spy()
+
+    exporter.export(trace)
+    exporter.flush(done)
+
+    sinon.assert.notCalled(done)
+    sinon.assert.notCalled(agentExporter.flush)
+
+    fetchAgentInfo.yield(null, { endpoints: [] })
+
+    sinon.assert.callOrder(agentExporter.export, agentExporter.flush)
+    sinon.assert.calledOnceWithExactly(agentExporter.flush, done)
+    sinon.assert.calledOnce(done)
+  })
+})
