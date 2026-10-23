@@ -18,12 +18,6 @@ const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
   withVersions('azure-functions', '@azure/functions', version => {
-    let agent
-    let proc
-    let setup
-    let teardown
-    let cosmosClient
-
     useSandbox([
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',
@@ -33,62 +27,130 @@ describe('esm', () => {
     ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
       './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
 
-    before(async function () {
-      this.timeout(60000)
-      const helpers = await import(pathToFileURL(path.join(sandboxCwd(), 'cosmosdb-helpers.mjs')).href)
-      setup = helpers.setup
-      teardown = helpers.teardown
+    describe('default configuration', () => {
+      let agent
+      let proc
+      let setup
+      let teardown
+      let cosmosClient
 
-      agent = await new FakeAgent().start()
-      cosmosClient = await setup()
+      before(async function () {
+        this.timeout(60000)
+        const helpers = await import(pathToFileURL(path.join(sandboxCwd(), 'cosmosdb-helpers.mjs')).href)
+        setup = helpers.setup
+        teardown = helpers.teardown
 
-      const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-      }
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
-    })
+        agent = await new FakeAgent().start()
+        cosmosClient = await setup()
 
-    after(async () => {
-      await stopProc(proc, { signal: 'SIGINT' })
-      await teardown(cosmosClient)
-      await agent.stop()
-    })
-
-    it('propagates cosmosdb writes to azure function trigger', async () => {
-      const isHttpInvokeGroup = group =>
-        group.some(s => s?.name === 'azure.functions.invoke' && s.resource === 'GET /api/writeToCosmos')
-      const isTriggerGroup = group =>
-        group.some(s => s?.name === 'azure.functions.invoke' && s.resource === 'CosmosDB cosmosDBTrigger1')
-
-      const groups = await agent.collectGroups({
-        trigger: () => curl('http://127.0.0.1:7071/api/writeToCosmos'),
-        predicate: group => isHttpInvokeGroup(group) || isTriggerGroup(group),
-        expectedCount: 2,
-        timeout: 120000,
+        const envArgs = {
+          PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+        }
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       })
 
-      const httpGroup = groups.find(isHttpInvokeGroup)
-      const triggerGroup = groups.find(isTriggerGroup)
-
-      assert.ok(httpGroup, 'expected writeToCosmos HTTP invoke span')
-      assert.ok(triggerGroup, 'expected CosmosDB trigger invoke span')
-
-      const cosmosQueryCount = httpGroup.filter(s => s?.name === 'cosmosdb.query').length
-      assert.ok(cosmosQueryCount >= 2, `expected cosmosdb.query spans; found ${cosmosQueryCount}`)
-
-      const triggerSpan = triggerGroup.find(
-        s => s?.name === 'azure.functions.invoke' && s.resource === 'CosmosDB cosmosDBTrigger1'
-      )
-      assertObjectContains(triggerSpan, {
-        name: 'azure.functions.invoke',
-        resource: 'CosmosDB cosmosDBTrigger1',
-        type: 'serverless',
-        meta: {
-          'aas.function.trigger': 'CosmosDB',
-          'aas.function.name': 'cosmosDBTrigger1',
-        },
+      after(async () => {
+        await stopProc(proc, { signal: 'SIGINT' })
+        await teardown(cosmosClient)
+        await agent.stop()
       })
-    }).timeout(120000)
+
+      it('propagates cosmosdb writes to azure function trigger', async () => {
+        const isHttpInvokeGroup = group =>
+          group.some(s => s?.name === 'azure.functions.invoke' && s.resource === 'GET /api/writeToCosmos')
+        const isTriggerGroup = group =>
+          group.some(s => s?.name === 'azure.functions.invoke' && s.resource === 'CosmosDB cosmosDBTrigger1')
+
+        const groups = await agent.collectGroups({
+          trigger: () => curl('http://127.0.0.1:7071/api/writeToCosmos'),
+          predicate: group => isHttpInvokeGroup(group) || isTriggerGroup(group),
+          expectedCount: 2,
+          timeout: 120000,
+        })
+
+        const httpGroup = groups.find(isHttpInvokeGroup)
+        const triggerGroup = groups.find(isTriggerGroup)
+
+        assert.ok(httpGroup, 'expected writeToCosmos HTTP invoke span')
+        assert.ok(triggerGroup, 'expected CosmosDB trigger invoke span')
+
+        const cosmosQueryCount = httpGroup.filter(s => s?.name === 'cosmosdb.query').length
+        assert.ok(cosmosQueryCount >= 2, `expected cosmosdb.query spans; found ${cosmosQueryCount}`)
+
+        const triggerSpan = triggerGroup.find(
+          s => s?.name === 'azure.functions.invoke' && s.resource === 'CosmosDB cosmosDBTrigger1'
+        )
+        assertObjectContains(triggerSpan, {
+          name: 'azure.functions.invoke',
+          resource: 'CosmosDB cosmosDBTrigger1',
+          type: 'serverless',
+          meta: {
+            'aas.function.trigger': 'CosmosDB',
+            'aas.function.name': 'cosmosDBTrigger1',
+          },
+        })
+      }).timeout(120000)
+    })
+
+    describe('in an Azure Container App', () => {
+      let agent
+      let proc
+      let setup
+      let teardown
+      let cosmosClient
+
+      before(async function () {
+        this.timeout(60000)
+        const helpers = await import(pathToFileURL(path.join(sandboxCwd(), 'cosmosdb-helpers.mjs')).href)
+        setup = helpers.setup
+        teardown = helpers.teardown
+
+        agent = await new FakeAgent().start()
+        cosmosClient = await setup()
+
+        const envArgs = {
+          PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+          CONTAINER_APP_NAME: 'my-container-app',
+        }
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
+      })
+
+      after(async () => {
+        await stopProc(proc, { signal: 'SIGINT' })
+        await teardown(cosmosClient)
+        await agent.stop()
+      })
+
+      it('namespaces the trigger span under aca instead of aas', async () => {
+        const isHttpInvokeGroup = group =>
+          group.some(s => s?.name === 'azure.functions.invoke' && s.resource === 'GET /api/writeToCosmos')
+        const isTriggerGroup = group =>
+          group.some(s => s?.name === 'azure.functions.invoke' && s.resource === 'CosmosDB cosmosDBTrigger1')
+
+        const groups = await agent.collectGroups({
+          trigger: () => curl('http://127.0.0.1:7071/api/writeToCosmos'),
+          predicate: group => isHttpInvokeGroup(group) || isTriggerGroup(group),
+          expectedCount: 2,
+          timeout: 120000,
+        })
+
+        const triggerGroup = groups.find(isTriggerGroup)
+        assert.ok(triggerGroup, 'expected CosmosDB trigger invoke span')
+
+        const triggerSpan = triggerGroup.find(
+          s => s?.name === 'azure.functions.invoke' && s.resource === 'CosmosDB cosmosDBTrigger1'
+        )
+        assertObjectContains(triggerSpan, {
+          name: 'azure.functions.invoke',
+          resource: 'CosmosDB cosmosDBTrigger1',
+          type: 'serverless',
+          meta: {
+            'aca.function.trigger': 'CosmosDB',
+            'aca.function.name': 'cosmosDBTrigger1',
+          },
+        })
+      }).timeout(120000)
+    })
   })
 })
 

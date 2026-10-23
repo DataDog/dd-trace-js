@@ -81,7 +81,6 @@ function defineField (fieldName, headerName, read, operations) {
     /**
      * @param {Carrier} carrier
      * @param {Value} value
-     * @returns {void}
      */
     write (carrier, value) {
       carrier[headerName] = value
@@ -89,7 +88,6 @@ function defineField (fieldName, headerName, read, operations) {
 
     /**
      * @param {Carrier} carrier
-     * @returns {boolean}
      */
     has (carrier) {
       return headerName in carrier
@@ -97,7 +95,6 @@ function defineField (fieldName, headerName, read, operations) {
 
     /**
      * @param {Carrier} carrier
-     * @returns {void}
      */
     delete (carrier) {
       delete carrier[headerName]
@@ -106,7 +103,6 @@ function defineField (fieldName, headerName, read, operations) {
     /**
      * @param {Carrier} carrier
      * @param {Carrier} target
-     * @returns {void}
      */
     copy (carrier, target) {
       if (Object.hasOwn(carrier, headerName)) target[headerName] = carrier[headerName]
@@ -308,7 +304,6 @@ defineCapability('legacyBaggage', FIELD_READ | FIELD_WRITE, {
   /**
    * @param {Carrier} carrier
    * @param {Record<string, string>} target
-   * @returns {void}
    */
   read (carrier, target) {
     for (const name of Object.keys(carrier)) {

@@ -1,0 +1,9 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`snapshot ownership ordinary 1`] = `"stored"`;
+
+exports[`snapshot ownership ordinary: quarantined 1`] = `"stored"`;
+
+exports[`snapshot ownership ordinary: quarantined 2`] = `"stored"`;
+
+exports[`snapshot ownership ordinary: quarantined: response 1`] = `"stored"`;

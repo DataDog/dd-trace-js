@@ -1,0 +1,11 @@
+_v: 1
+name: couchbase
+display_name: Couchbase
+description: Instruments Couchbase cluster queries and collection document writes.
+packages:
+- name: couchbase
+category:
+- db.client
+systems:
+- couchbase
+creation_date: '2019-08-30'

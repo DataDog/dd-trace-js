@@ -4,6 +4,8 @@ const log = require('../../log')
 const { ExperimentsClient } = require('./client')
 const { Dataset } = require('./dataset')
 const { Experiment, ExternalExperiment } = require('./experiment')
+const evaluatorTypes = require('./evaluator')
+const remoteEvaluatorTypes = require('./remote-evaluator')
 const { validateTagsList } = require('./util')
 const NoopExperiments = require('./noop')
 
@@ -35,9 +37,41 @@ class Experiments {
 
   constructor (config, llmobs) {
     this.#config = config
-    this.#llmobs = config.llmobs?.mlApp || config.service ? llmobs : undefined
-    this.#projectName = config.llmobs?.projectName || DEFAULT_PROJECT_NAME
+    this.#llmobs = config.llmobs?.DD_LLMOBS_ML_APP || config.service ? llmobs : undefined
+    this.#projectName = config.llmobs?.DD_LLMOBS_PROJECT_NAME || DEFAULT_PROJECT_NAME
     this.#client = this.#clientForProject(this.#projectName)
+  }
+
+  get BaseEvaluator () {
+    return evaluatorTypes.BaseEvaluator
+  }
+
+  get BaseSummaryEvaluator () {
+    return evaluatorTypes.BaseSummaryEvaluator
+  }
+
+  get EvaluatorContext () {
+    return evaluatorTypes.EvaluatorContext
+  }
+
+  get SummaryEvaluatorContext () {
+    return evaluatorTypes.SummaryEvaluatorContext
+  }
+
+  get EvaluatorResult () {
+    return evaluatorTypes.EvaluatorResult
+  }
+
+  get MultiEvaluatorResult () {
+    return evaluatorTypes.MultiEvaluatorResult
+  }
+
+  get RemoteEvaluator () {
+    return remoteEvaluatorTypes.RemoteEvaluator
+  }
+
+  get RemoteEvaluatorError () {
+    return remoteEvaluatorTypes.RemoteEvaluatorError
   }
 
   /**
@@ -179,9 +213,9 @@ class Experiments {
     const projectName = options?.projectName ?? datasetProjectName
     const client = this.#clientForOperation(projectName)
     const usesDatasetOverride = datasetProjectName !== undefined && datasetProjectName !== this.#projectName
-    const resolvedProjectName = projectName ?? this.#config.llmobs?.projectName
+    const resolvedProjectName = projectName ?? this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME
     const experimentOptions = options?.projectName === undefined &&
-      (usesDatasetOverride || this.#config.llmobs?.projectName !== undefined) &&
+      (usesDatasetOverride || this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME !== undefined) &&
       resolvedProjectName !== undefined
       ? { ...options, projectName: resolvedProjectName }
       : options
@@ -198,8 +232,9 @@ class Experiments {
    */
   startExperiment (options) {
     const client = this.#clientForOperation(options?.projectName)
-    const experimentOptions = options?.projectName === undefined && this.#config.llmobs?.projectName !== undefined
-      ? { ...options, projectName: this.#config.llmobs.projectName }
+    const experimentOptions = options?.projectName === undefined &&
+      this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME !== undefined
+      ? { ...options, projectName: this.#config.llmobs.DD_LLMOBS_PROJECT_NAME }
       : options
     return new Experiment(client, { ...experimentOptions, external: true }).start()
       .then(experiment => new ExternalExperiment(experiment))
@@ -219,4 +254,9 @@ function createExperiments (config, llmobs) {
   return new Experiments(config, llmobs)
 }
 
-module.exports = { Experiments, createExperiments }
+module.exports = {
+  Experiments,
+  createExperiments,
+  ...evaluatorTypes,
+  ...remoteEvaluatorTypes,
+}

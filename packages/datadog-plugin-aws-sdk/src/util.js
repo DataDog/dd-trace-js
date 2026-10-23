@@ -7,7 +7,6 @@ const log = require('../../dd-trace/src/log')
  * Generates a unique hash from an array of strings by joining them with | before hashing.
  * Used to uniquely identify AWS requests for span pointers.
  * @param {string[]} components - Array of strings to hash
- * @returns {string} A 32-character hash uniquely identifying the components
  */
 function generatePointerHash (components) {
   // If passing S3's ETag as a component, make sure any quotes have already been removed!

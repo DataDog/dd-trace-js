@@ -84,6 +84,6 @@ if (VARIANT === 'full') {
     sink += injectOnce().length
   }
 }
-guard.done(0.05)
+guard.done()
 
 if (sink === 0) throw new Error('unreachable')

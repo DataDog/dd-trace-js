@@ -30,7 +30,6 @@ function getTestsuiteAttr (openTag, name) {
 
 /**
  * @param {string|number|undefined} value
- * @returns {string}
  */
 function escapeXmlAttribute (value) {
   return String(value)
@@ -42,7 +41,6 @@ function escapeXmlAttribute (value) {
 
 /**
  * @param {Record<string, string|number|undefined>} properties
- * @returns {string}
  */
 function formatXunitProperties (properties) {
   let xml = '<properties>'
@@ -291,8 +289,7 @@ async function main () {
    * @param {Error & { code?: string }} error
    */
   const onPipeError = (error) => {
-    if (!error || error.code !== 'EPIPE') return
-    if (interrupted) return
+    if (!error || error.code !== 'EPIPE' || interrupted) return
     interrupted = true
     for (const child of liveChildren) {
       child.kill('SIGTERM')

@@ -14,7 +14,6 @@ const AGENTS_ERROR_TYPE = 'AgentsCoreError'
  * missing).
  *
  * @param {object} oaiSpan
- * @returns {string}
  */
 function deriveSpanName (oaiSpan) {
   const spanData = oaiSpan.spanData

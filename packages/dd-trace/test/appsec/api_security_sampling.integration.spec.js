@@ -4,9 +4,9 @@ const assert = require('node:assert/strict')
 const path = require('path')
 const { inspect } = require('node:util')
 
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../integration-tests/helpers')
 const { calculateHttpEndpoint } = require('../../src/plugins/util/url')
+const HttpRequest = require('../setup/helpers/http-client')
 
 describe('API Security sampling integration', () => {
   let cwd
@@ -40,7 +40,7 @@ describe('API Security sampling integration', () => {
   describe('route and endpoint fallback sampling', () => {
     let agent
     let proc
-    let axios
+    let httpRequest
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -56,7 +56,7 @@ describe('API Security sampling integration', () => {
         },
       })
 
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -73,7 +73,7 @@ describe('API Security sampling integration', () => {
         )
       }, 10_000)
 
-      await axios.post('/api_security_sampling/1', { key: 'value' })
+      await httpRequest.post('/api_security_sampling/1', { key: 'value' })
       await firstMessage
 
       const secondMessage = agent.assertMessageReceived(({ payload }) => {
@@ -84,7 +84,7 @@ describe('API Security sampling integration', () => {
         )
       }, 10_000)
 
-      await axios.post('/api_security_sampling/2', { key: 'value' })
+      await httpRequest.post('/api_security_sampling/2', { key: 'value' })
       await secondMessage
     })
 
@@ -99,7 +99,7 @@ describe('API Security sampling integration', () => {
         )
       }, 10_000)
 
-      await axios.post('/api_security_sampling_resource_renaming/101', { key: 'value' })
+      await httpRequest.post('/api_security_sampling_resource_renaming/101', { key: 'value' })
       await firstMessage
 
       const secondMessage = agent.assertMessageReceived(({ payload }) => {
@@ -110,7 +110,7 @@ describe('API Security sampling integration', () => {
         )
       }, 10_000)
 
-      await axios.post('/api_security_sampling_resource_renaming/202', { key: 'value' })
+      await httpRequest.post('/api_security_sampling_resource_renaming/202', { key: 'value' })
       await secondMessage
     }).timeout(20_000)
   })

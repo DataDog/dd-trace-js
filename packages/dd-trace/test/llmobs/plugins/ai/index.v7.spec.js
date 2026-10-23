@@ -194,6 +194,41 @@ describe('Plugin', () => {
       })
     })
 
+    it('preserves excluded runtime context fields', async function () {
+      if (!semifies(resolvedVersion, '>=7.0.127')) {
+        // this case is not relevant on lower `ai` versions
+        this.skip()
+      }
+
+      await ai.generateText({
+        model: openai('gpt-4o-mini'),
+        instructions: { role: 'system', content: 'You are a helpful assistant' },
+        prompt: 'Hello, OpenAI!',
+        maxOutputTokens: 100,
+        temperature: 0.5,
+        runtimeContext: MOCK_TELEMETRY_METADATA,
+        telemetry: { includeRuntimeContext: { organizationId: false } },
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(3)
+      const generateTextSpan = llmobsSpans.find(s => s.name === 'generateText')
+      const generateTextApmSpan = apmSpans.find(s => s.name === 'generateText')
+
+      assertLlmObsSpanEvent(generateTextSpan, {
+        span: generateTextApmSpan,
+        name: 'generateText',
+        spanKind: 'workflow',
+        inputValue: 'Hello, OpenAI!',
+        outputValue: MOCK_STRING,
+        metadata: {
+          temperature: 0.5,
+          userId: MOCK_TELEMETRY_METADATA.userId,
+          conversationId: MOCK_TELEMETRY_METADATA.conversationId,
+        },
+        tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+
     it('creates a span for embed', async () => {
       await ai.embed({
         model: openai.embedding('text-embedding-ada-002'),

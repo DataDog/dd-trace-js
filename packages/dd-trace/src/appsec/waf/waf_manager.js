@@ -8,9 +8,9 @@ const contexts = new WeakMap()
 
 /**
  * @typedef {object} WAFManagerConfig
- * @property {number} wafTimeout - Maximum time in microseconds for WAF execution
- * @property {string} obfuscatorKeyRegex - Regex to redact sensitive data by key
- * @property {string} obfuscatorValueRegex - Regex to redact sensitive data by value
+ * @property {number} DD_APPSEC_WAF_TIMEOUT - Maximum time in microseconds for WAF execution
+ * @property {string} DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP - Regex to redact sensitive data by key
+ * @property {string} DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP - Regex to redact sensitive data by value
  */
 
 class WAFManager {
@@ -22,7 +22,7 @@ class WAFManager {
    */
   constructor (rules, config) {
     this.config = config
-    this.wafTimeout = config.wafTimeout
+    this.wafTimeout = config.DD_APPSEC_WAF_TIMEOUT
     this.ddwaf = this._loadDDWAF(rules)
     this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
     this.defaultRules = rules
@@ -36,7 +36,10 @@ class WAFManager {
       const { DDWAF } = require('@datadog/native-appsec')
       this.ddwafVersion = DDWAF.version()
 
-      const { obfuscatorKeyRegex, obfuscatorValueRegex } = this.config
+      const {
+        DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: obfuscatorKeyRegex,
+        DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP: obfuscatorValueRegex,
+      } = this.config
       return new DDWAF(rules, WAFManager.defaultWafConfigPath, { obfuscatorKeyRegex, obfuscatorValueRegex })
     } catch (err) {
       this.ddwafVersion ||= 'unknown'

@@ -1,13 +1,12 @@
 'use strict'
 
-const guard = require('../startup-guard')
-// eslint-disable-next-line import/order -- The startup guard must run before every other require.
 const assert = require('node:assert/strict')
 
 const { USER_REJECT } = require('../../../ext/priority')
 const id = require('../../../packages/dd-trace/src/id')
 const DatadogSpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
 const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
+const guard = require('../startup-guard')
 
 const { VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)

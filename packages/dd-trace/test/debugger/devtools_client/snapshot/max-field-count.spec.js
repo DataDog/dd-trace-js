@@ -7,6 +7,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 require('../../../setup/mocha')
 
 const { DEFAULT_MAX_FIELD_COUNT } = require('../../../../src/debugger/devtools_client/snapshot/constants')
+const { INCOMPLETE_REASON } = require('../../../../src/debugger/guardrail-metrics')
 const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
 
 const target = getTargetCodePath(__filename)
@@ -26,6 +27,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
 function generateTestCases (config) {
   const maxFieldCount = config?.maxFieldCount ?? DEFAULT_MAX_FIELD_COUNT
   let state
+  let incomplete
 
   const expectedFields = {}
   for (let i = 1; i <= maxFieldCount; i++) {
@@ -34,10 +36,15 @@ function generateTestCases (config) {
 
   return function () {
     beforeEach(function (done) {
-      assertOnBreakpoint(done, config, (_state) => {
+      assertOnBreakpoint(done, config, (_state, _incomplete) => {
         state = _state
+        incomplete = _incomplete
       })
       setAndTriggerBreakpoint(target, 11)
+    })
+
+    it('should record the field count limit as an incomplete capture reason', function () {
+      assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.FIELD_COUNT)
     })
 
     it('should capture expected snapshot', function () {

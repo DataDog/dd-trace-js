@@ -59,4 +59,5 @@ const stream = query({
 
 for await (const message of stream) {
   if (!message.type) throw new Error('unexpected message')
+  if (message.type === 'result') break
 }

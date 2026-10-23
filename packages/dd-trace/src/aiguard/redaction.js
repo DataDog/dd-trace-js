@@ -49,7 +49,6 @@ function parsePath (path) {
  * Reports whether a parsed path targets an allowed message string.
  *
  * @param {Array<{ name: string, index: number|undefined }>} segments
- * @returns {boolean}
  */
 function isRedactablePath (segments) {
   const first = segments[0]
@@ -103,8 +102,14 @@ function resolveWritableString (root, path) {
     }
   }
 
-  if (!node || typeof node !== 'object') return
-  if (!Object.hasOwn(node, terminal.name) || typeof node[terminal.name] !== 'string') return
+  if (
+    !node ||
+    typeof node !== 'object' ||
+    !Object.hasOwn(node, terminal.name) ||
+    typeof node[terminal.name] !== 'string'
+  ) {
+    return
+  }
   return { container: node, key: terminal.name }
 }
 
