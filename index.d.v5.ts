@@ -218,7 +218,6 @@ interface Tracer extends opentracing.Tracer {
    * @env DD_FEATURE_FLAGS_ENABLED
    * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
    * @env DD_FLAGGING_EVALUATION_COUNTS_ENABLED
-   * @beta This feature is in preview and not ready for production use
    */
   openfeature: tracer.OpenFeatureProvider;
 
@@ -275,7 +274,7 @@ interface Tracer extends opentracing.Tracer {
    *
    * Removes all baggage items from the current context and returns the new context.
    *
-   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#remove-all-values
+   * @see https://opentelemetry.io/docs/specs/otel/baggage/api/#clear-baggage-in-the-context
    */
   removeAllBaggageItems (): Record<string, string>;
 }
@@ -855,6 +854,22 @@ declare namespace tracer {
     site?: string;
 
     /**
+     * Feature Flags configuration.
+     */
+    featureFlags?: {
+      /**
+       * Allow boolean true in dd_evaluation_telemetry_opt_out to suppress evaluation events, metrics, and span tags.
+       * Enabling this option does not change exposure events or flag evaluation results.
+       * Captured when the provider is constructed.
+       * The attribute remains available to targeting rules and exposure reporting.
+       * Explicit configuration takes precedence over the environment variable, including false.
+       * @default false
+       * @env DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED
+       */
+      enableEvaluationTelemetryOptOutParameter?: boolean
+    }
+
+    /**
      * Experimental features can be enabled individually using key / value pairs.
      * @default {}
      */
@@ -961,8 +976,6 @@ declare namespace tracer {
 
       /**
        * Configuration for Feature Flagging & Experimentation.
-       *
-       * @beta This feature is in preview and not ready for production use
        */
       flaggingProvider?: {
         /**
@@ -1841,8 +1854,6 @@ declare namespace tracer {
    *
    * Wraps @datadog/openfeature-node-server with agentless and Agent Remote Config delivery.
    * Implements the OpenFeature Provider interface for flag evaluation.
-   *
-   * @beta This feature is in preview and not ready for production use
    */
   export interface OpenFeatureProvider {
     /**
@@ -2623,14 +2634,14 @@ declare namespace tracer {
     /**
      * This plugin patches the [browser-bunyan](https://github.com/philmander/browser-bunyan)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface browser_bunyan extends Integration {}
 
     /**
      * This plugin automatically instruments the
-     * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
+     * [bullmq](https://www.npmjs.com/package/bullmq) message queue library.
      */
     interface bullmq extends Instrumentation {
       /**
@@ -2651,7 +2662,7 @@ declare namespace tracer {
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface bunyan extends Integration {}
@@ -3146,7 +3157,7 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [langgraph](https://github.com/npmjs/package/langgraph) library.
+     * [langgraph](https://www.npmjs.com/package/@langchain/langgraph) library.
      */
     interface langgraph extends Instrumentation, LLMObsIntegration {}
 
@@ -3182,7 +3193,7 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
+     * [modelcontextprotocol-sdk](https://www.npmjs.com/package/@modelcontextprotocol/sdk) library.
      */
     interface modelcontextprotocol_sdk extends Instrumentation, LLMObsIntegration {}
 
@@ -3361,7 +3372,7 @@ declare namespace tracer {
     /**
      * This plugin patches the [pino](http://getpino.io)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface pino extends Integration {}
@@ -3554,7 +3565,7 @@ declare namespace tracer {
     /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
      * to automatically inject trace identifiers in log records when the
-     * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
+     * {@link TracerOptions.logInjection | logInjection} option is enabled
      * on the tracer.
      */
     interface winston extends Integration {}
@@ -3855,7 +3866,7 @@ declare namespace tracer {
        * key/value pair separated by an equals sign `=`. Spaces and horizontal tabs
        * surrounding `list-members` are ignored. There can be a maximum of 32
        * `list-members` in a `list`.
-       * More Info: https://www.w3.org/TR/trace-context/#tracestate-field
+       * More Info: https://www.w3.org/TR/trace-context/#tracestate-header
        *
        * Examples:
        *     Single tracing system (generic format):

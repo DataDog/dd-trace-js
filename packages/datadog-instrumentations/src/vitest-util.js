@@ -33,7 +33,7 @@ const testManagementTestsCh = channel('ci:vitest:test-management-tests')
 const modifiedFilesCh = channel('ci:vitest:modified-files')
 
 const CLOSING_SCRIPT_TAG_RE = /<\/script/i
-const SERIALIZED_CONTEXT_PREFIX = '\u0000dd-vitest-context:'
+const SERIALIZED_CONTEXT_PREFIX = '\0dd-vitest-context:'
 
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
 const workerReportCoverageCh = channel('ci:vitest:worker-report:coverage')
@@ -299,7 +299,7 @@ function getVitestTestProperties (providedContext, testSuiteAbsolutePath, testNa
 
   return {
     testSuite: testProperties?.testSuite,
-    isNew: Array.isArray(knownTests) ? !knownTests.includes(testName) : false,
+    isNew: Array.isArray(knownTests) && !knownTests.includes(testName),
     isModified: testProperties?.isModified === true,
     isAttemptToFix: testManagementProperties.isAttemptToFix,
     isDisabled: testManagementProperties.isDisabled,

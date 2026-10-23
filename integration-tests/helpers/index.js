@@ -1301,16 +1301,27 @@ function deepFreeze (value) {
  * When `withReceiver: true` is set, each test function receives
  * `(receiver, run)` arguments automatically — see `withReceiver` for details.
  *
- * @param {(name: string, fn: () => Promise<void>) => void} mochaIt
- * @param {{ concurrency?: number, withReceiver?: boolean }} [options]
- * @returns {(name: string, fn: (...args: unknown[]) => Promise<void>, opts?: { retries?: number }) => void}
+ * @param {import('mocha').TestFunction} mochaIt
+ * @param {{
+ *   concurrency?: number,
+ *   withReceiver?: boolean,
+ *   shard?: { index: number, count: number }
+ * }} [options]
+ * @returns {(
+ *   name: string,
+ *   fn: (...args: unknown[]) => Promise<void>,
+ *   opts?: { retries?: number }
+ * ) => import('mocha').Test}
  */
-function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver = false } = {}) {
+function createParallelIt (
+  mochaIt,
+  { concurrency = 2, withReceiver: useReceiver = false, shard } = {}
+) {
   // Keyed by Mocha Suite object; populated lazily on first run within each suite.
   const suiteStates = new Map()
-  // All registered entries, queued by test title. A queue (array) per title
-  // lets multiple suites with duplicate test names each claim their own entry.
-  const entriesByTitle = new Map()
+  const shardStatesBySuite = new Map()
+  const entriesByTest = new Map()
+  let nextShardBatch = 0
 
   function getState (suite) {
     if (!suiteStates.has(suite)) {
@@ -1325,7 +1336,16 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
     state.active++
     Promise.resolve(entry.fn()).then(
       (val) => { entry.done = true; state.active--; flush(state); resolve(val) },
-      (err) => { entry.done = true; entry.rejected = true; state.active--; flush(state); reject(err) }
+      (err) => {
+        entry.done = true
+        entry.rejected = true
+        state.active--
+        reject(err)
+        // Give Mocha a chance to enqueue a retry before another scenario
+        // consumes the freed slot. A terminal failure resumes the queue on
+        // the next turn without delaying successful scenarios.
+        setImmediate(() => flush(state))
+      }
     )
   }
 
@@ -1336,12 +1356,14 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
     }
   }
 
-  function schedule (entry, state) {
+  function schedule (entry, state, priority = false) {
     entry.promise = new Promise((resolve, reject) => {
       if (state.active < concurrency) {
         startNow(entry, state, resolve, reject)
       } else {
-        state.waiting.push({ entry, resolve, reject })
+        const queued = { entry, resolve, reject }
+        if (priority) state.waiting.unshift(queued)
+        else state.waiting.push(queued)
       }
     })
     // Suppress unhandled-rejection until Mocha attaches its own handler via
@@ -1351,11 +1373,9 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
 
   return function it (name, fn, opts = {}) {
     const wrappedFn = useReceiver ? withReceiver(fn) : fn
-    const entry = { name, fn: wrappedFn, promise: null, done: false, rejected: false }
-    if (!entriesByTitle.has(name)) entriesByTitle.set(name, [])
-    entriesByTitle.get(name).push(entry)
+    const entry = { name, fn: wrappedFn, promise: null, done: false, observed: false, rejected: false }
 
-    mochaIt(name, function () {
+    const test = mochaIt(name, function () {
       if (opts.retries !== undefined) {
         this.retries(opts.retries)
       }
@@ -1364,18 +1384,36 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
       if (!state.launched) {
         state.launched = true
         for (const test of suite.tests) {
-          const queue = entriesByTitle.get(test.title)
-          const e = queue && queue.shift()
-          if (e) schedule(e, state)
+          const registeredEntry = entriesByTest.get(test)
+          if (registeredEntry) schedule(registeredEntry, state)
         }
-      } else if (entry.done && entry.rejected) {
+      } else if (entry.observed && entry.done && entry.rejected) {
         // Mocha is retrying a failed test — restart only this scenario
-        schedule(entry, state)
+        schedule(entry, state, true)
       }
+      entry.observed = true
       // If done && !rejected: already passed, return resolved promise
       // If !done: still running or queued, return pending promise
       return entry.promise
     })
+
+    // Keep the same scenarios together that would share a suite's concurrency
+    // pool without sharding, since some integration fixtures share a sandbox.
+    const suite = test.parent
+    const shardState = shardStatesBySuite.get(suite) || { testCount: 0, assignedShard: 0 }
+    if (shardState.testCount % concurrency === 0) {
+      shardState.assignedShard = nextShardBatch++ % (shard?.count || 1)
+    }
+    shardState.testCount++
+    shardStatesBySuite.set(suite, shardState)
+    const { assignedShard } = shardState
+    if (shard && assignedShard !== shard.index) {
+      test.pending = true
+      return test
+    }
+
+    entriesByTest.set(test, entry)
+    return test
   }
 }
 
@@ -1386,7 +1424,8 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
  *
  * @param {(
  *   receiver: FakeCiVisIntake,
- *   run: (cmd: string, opts?: object) => import('child_process').ChildProcess
+ *   run: ((cmd: string, opts?: object) => import('child_process').ChildProcess) &
+ *     { stop: () => Promise<void> }
  * ) => Promise<void>} fn
  * @returns {() => Promise<void>}
  */
@@ -1417,28 +1456,33 @@ function withReceiver (fn) {
       }
     }
 
+    async function stopLastProcess () {
+      if (useProcessGroup && lastProc?.pid) {
+        let timeout
+        try {
+          killProcessGroup('SIGTERM')
+          // The shell can exit before its children; close waits for their inherited pipes too.
+          await Promise.race([
+            closed,
+            new Promise(resolve => { timeout = setTimeout(resolve, defaultStopProcTimeoutMs) }),
+          ])
+        } finally {
+          clearTimeout(timeout)
+          // Also stop descendants that ignore SIGTERM or close their pipes before exiting.
+          killProcessGroup('SIGKILL')
+        }
+        await closed
+      } else {
+        await stopProc(lastProc)
+      }
+    }
+    run.stop = stopLastProcess
+
     try {
       await fn(receiver, run)
     } finally {
       try {
-        if (useProcessGroup && lastProc?.pid) {
-          let timeout
-          try {
-            killProcessGroup('SIGTERM')
-            // The shell can exit before its children; close waits for their inherited pipes too.
-            await Promise.race([
-              closed,
-              new Promise(resolve => { timeout = setTimeout(resolve, defaultStopProcTimeoutMs) }),
-            ])
-          } finally {
-            clearTimeout(timeout)
-            // Also stop descendants that ignore SIGTERM or close their pipes before exiting.
-            killProcessGroup('SIGKILL')
-          }
-          await closed
-        } else {
-          await stopProc(lastProc)
-        }
+        await stopLastProcess()
       } finally {
         await receiver.stop()
       }

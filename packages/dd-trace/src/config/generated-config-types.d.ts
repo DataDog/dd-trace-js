@@ -3,6 +3,8 @@
 
 export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
+  _DD_TEST_PARALLELIZATION_METADATA_FILE: string | undefined;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   aiguard: {
     DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
@@ -75,6 +77,7 @@ export interface GeneratedConfig {
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
   DD_APP_KEY: string | undefined;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
+  DD_BUNDLER_INJECT_GIT_METADATA: boolean;
   DD_CRASHTRACKING_ENABLED: boolean;
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
@@ -436,6 +439,7 @@ export interface GeneratedConfig {
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
     DD_FEATURE_FLAGS_ENABLED: boolean;
+    DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED: boolean;
     DD_FLAGGING_EVALUATION_COUNTS_ENABLED: boolean;
   };
   flushInterval: number;
@@ -607,6 +611,8 @@ export interface GeneratedConfig {
 
 export interface GeneratedEnvVarConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
+  _DD_TEST_PARALLELIZATION_METADATA_FILE: string | undefined;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   DATADOG_API_KEY: string | undefined;
   DD_ACTION_EXECUTION_ID: string | undefined;
@@ -657,6 +663,7 @@ export interface GeneratedEnvVarConfig {
   DD_APPSEC_TRACE_RATE_LIMIT: number;
   DD_APPSEC_WAF_TIMEOUT: number;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
+  DD_BUNDLER_INJECT_GIT_METADATA: boolean;
   DD_CIVISIBILITY_AGENTLESS_ENABLED: boolean;
   DD_CIVISIBILITY_AGENTLESS_URL: URL | undefined;
   DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER: string | undefined;
@@ -719,6 +726,7 @@ export interface GeneratedEnvVarConfig {
   DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
   DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
   DD_FEATURE_FLAGS_ENABLED: boolean;
+  DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED: boolean;
   DD_FLAGGING_EVALUATION_COUNTS_ENABLED: boolean;
   DD_GIT_BRANCH: string | undefined;
   DD_GIT_COMMIT_AUTHOR_DATE: string | undefined;
