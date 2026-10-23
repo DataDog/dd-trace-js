@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
 
 const DatadogWebpackPlugin = require('../index')
 const loader = require('../src/loader')
@@ -47,6 +47,81 @@ describe('DatadogWebpackPlugin', () => {
 
       plugin.apply(compiler)
       assert.equal(tapped[0], 'DatadogWebpackPlugin')
+    })
+
+    describe('git metadata injection', () => {
+      const pluginPath = require.resolve('../index')
+      const original = process.env.DD_BUNDLER_INJECT_GIT_METADATA
+
+      afterEach(() => {
+        if (original === undefined) {
+          delete process.env.DD_BUNDLER_INJECT_GIT_METADATA
+        } else {
+          process.env.DD_BUNDLER_INJECT_GIT_METADATA = original
+        }
+        delete require.cache[pluginPath]
+      })
+
+      function applyAndProcessAssets (Plugin) {
+        let processAssets
+        const source = 'module.exports = 1\n'
+        let asset
+        const compilation = {
+          chunks: [
+            {
+              canBeInitial: () => false,
+              files: new Set(['lazy.js']),
+            },
+            {
+              canBeInitial: () => true,
+              files: new Set(['bundle.js', 'notes.txt', 'bundle.mjs']),
+            },
+          ],
+          hooks: {
+            processAssets: {
+              tap: (_options, fn) => { processAssets = fn },
+            },
+          },
+          updateAsset (filename, fn) {
+            const previous = { source: () => source, map: () => null }
+            asset = { filename, value: fn(previous) }
+          },
+        }
+        const plugin = new Plugin()
+        plugin.apply({
+          options: { optimization: { minimize: false } },
+          hooks: {
+            environment: { tap: () => {} },
+            thisCompilation: { tap: (_name, fn) => fn(compilation) },
+            normalModuleFactory: { tap: () => {} },
+          },
+        })
+        processAssets?.()
+        return asset
+      }
+
+      it('prefixes initial js assets with git metadata', () => {
+        const asset = applyAndProcessAssets(DatadogWebpackPlugin)
+
+        assert.ok(asset, 'expected an updated asset')
+        assert.equal(asset.filename, 'bundle.mjs')
+        const content = asset.value.source()
+        assert.match(content, /DD_GIT_COMMIT_SHA|DD_GIT_REPOSITORY_URL/)
+        assert.match(content, /module\.exports = 1\n$/)
+        assert.equal(typeof asset.value.size(), 'number')
+        assert.equal(asset.value.map(), null)
+        assert.equal(asset.value.sourceAndMap().source, content)
+        asset.value.updateHash({ update () {} })
+      })
+
+      it('skips asset rewriting when DD_BUNDLER_INJECT_GIT_METADATA=false', () => {
+        process.env.DD_BUNDLER_INJECT_GIT_METADATA = 'false'
+        delete require.cache[pluginPath]
+        const Plugin = require('../index')
+        const asset = applyAndProcessAssets(Plugin)
+
+        assert.equal(asset, undefined)
+      })
     })
   })
 })

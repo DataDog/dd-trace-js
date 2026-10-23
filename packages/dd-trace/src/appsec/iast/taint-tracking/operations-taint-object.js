@@ -5,7 +5,7 @@ const { IAST_TRANSACTION_ID } = require('../iast-context')
 const log = require('../../../log')
 const { HTTP_REQUEST_PARAMETER } = require('./source-types')
 
-const SEPARATOR = '\u0000' // Unit Separator (cannot be in URL keys)
+const SEPARATOR = '\0' // Unit Separator (cannot be in URL keys)
 
 function taintObject (iastContext, object, type) {
   let result = object

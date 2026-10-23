@@ -118,6 +118,7 @@ const runTestsWithCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=text-summa
 const testFile = 'ci-visibility/run-mocha.js'
 const expectedStdout = '2 passing'
 const extraStdout = 'end event: can add event listeners to mocha'
+const finalFlushMarker = 'dd-trace final flush completed\n'
 
 const requestedMochaVersion = process.env.MOCHA_VERSION || 'latest'
 const oldestMochaVersion = DD_MAJOR >= 6 ? '8.0.0' : '5.2.0'
@@ -137,6 +138,43 @@ const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
 const parallelIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.3.0') ? it : it.skip
 // TODO: Remove this temporary release unblock once the Mocha 5.2 regressions introduced by #9798 are fixed.
 const reporterFinalizationIt = DD_MAJOR === 5 && MOCHA_VERSION === '5.2.0' ? it.skip : it
+
+/**
+ * Captures matching intake payloads until the child confirms its final transport flush.
+ *
+ * @param {FakeCiVisIntake} intake
+ * @param {import('node:child_process').ChildProcess} process
+ * @param {(message: object) => boolean} matches
+ * @returns {Promise<object[]>}
+ */
+function capturePayloadsUntilFinalFlush (intake, process, matches) {
+  const payloads = []
+  let output = ''
+  const onMessage = message => {
+    if (matches(message)) payloads.push(message)
+  }
+  intake.on('message', onMessage)
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      intake.off('message', onMessage)
+      process.stdout.off('data', onData)
+      process.off('close', onClose)
+    }
+    const onData = chunk => {
+      output += chunk.toString()
+      if (!output.includes(finalFlushMarker)) return
+      cleanup()
+      resolve(payloads)
+    }
+    const onClose = code => {
+      cleanup()
+      reject(new Error(`Child closed with code ${code} before confirming its final flush`))
+    }
+    process.stdout.on('data', onData)
+    process.once('close', onClose)
+  })
+}
 
 describe('mocha failed test replay helpers', () => {
   describe('finishDeferredHookEnd', () => {
@@ -2749,6 +2787,213 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
+        for (const mode of ['all', 'first', 'last', 'mixed']) {
+          it(`associates skipped top-level tests with their suite (${mode})`, async () => {
+            const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            childProcess = exec(`node node_modules/mocha/bin/mocha ./${suiteFile}`, {
+              cwd,
+              env: { ...envVars, DD_INJECT_FORCE: 'true', MOCHA_TOP_LEVEL_SKIP_MODE: mode },
+            })
+
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+
+                assert.strictEqual(suites.length, 1)
+                assert.strictEqual(tests.length, mode === 'mixed' ? 3 : 2)
+                assertObjectContains(suites[0], {
+                  meta: { [TEST_SUITE]: suiteFile, [TEST_STATUS]: mode === 'all' ? 'skip' : 'pass' },
+                })
+                for (const test of tests) {
+                  assert.ok(test.test_suite_id, 'Skipped tests must reference their suite')
+                  assert.strictEqual(test.test_suite_id.toString(), suites[0].test_suite_id.toString())
+                }
+                const skippedTests = tests.filter(test => test.meta[TEST_STATUS] === 'skip')
+                assert.strictEqual(skippedTests.length, mode === 'all' || mode === 'mixed' ? 2 : 1)
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0)
+          })
+        }
+
+        for (const followingFile of ['top-level-it-no-describe.js', 'top-level-it-with-hooks.js']) {
+          it(`finishes skipped root files before ${followingFile}`, async () => {
+            const skippedFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            const passingFile = `ci-visibility/mocha-plugin-tests/${followingFile}`
+            childProcess = exec(`node node_modules/mocha/bin/mocha ./${skippedFile} ./${passingFile}`, {
+              cwd,
+              env: { ...envVars, DD_INJECT_FORCE: 'true' },
+            })
+
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                assert.strictEqual(suites.length, 2)
+                const skippedSuite = suites.find(suite => suite.meta[TEST_SUITE] === skippedFile)
+                const passingSuite = suites.find(suite => suite.meta[TEST_SUITE] === passingFile)
+                assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+                assert.strictEqual(passingSuite.meta[TEST_STATUS], 'pass')
+                assert.ok(skippedSuite.start + BigInt(skippedSuite.duration) <= passingSuite.start,
+                  'Skipped files must finish before the following file starts')
+                assert.strictEqual(tests.length, 4)
+                for (const test of tests) {
+                  const suite = test.meta[TEST_SUITE] === skippedFile ? skippedSuite : passingSuite
+                  assert.strictEqual(test.test_suite_id.toString(), suite.test_suite_id.toString())
+                }
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0)
+          })
+        }
+
+        for (const { hook, skippedFileFirst, reporterThrows } of [
+          { hook: 'beforeEach', skippedFileFirst: false, reporterThrows: false },
+          { hook: 'afterEach', skippedFileFirst: false, reporterThrows: false },
+          { hook: 'beforeEach', skippedFileFirst: false, reporterThrows: true },
+          { hook: 'afterEach', skippedFileFirst: false, reporterThrows: true },
+          { hook: 'afterEach', skippedFileFirst: true, reporterThrows: false },
+        ]) {
+          it(`preserves top-level suite coverage after an aborting ${hook}` +
+            ` (skipped file first=${skippedFileFirst}, reporter throws=${reporterThrows})`, async () => {
+            const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-aborted.js'
+            const skippedFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            const files = skippedFileFirst ? `./${skippedFile} ./${suiteFile}` : `./${suiteFile}`
+            receiver.setSettings({ itr_enabled: true, code_coverage: true, tests_skipping: false })
+            childProcess = exec(
+              `node node_modules/nyc/bin/nyc.js --silent node node_modules/mocha/bin/mocha ${files}` +
+              ' --reporter ./ci-visibility/mocha-root-coverage-reporter.js',
+              {
+                cwd,
+                env: {
+                  ...envVars,
+                  DD_INJECT_FORCE: 'true',
+                  MOCHA_FAILING_HOOK: hook,
+                  MOCHA_COVERAGE_REPORTER_THROWS: reporterThrows ? '1' : '',
+                },
+              }
+            )
+            childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+            childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+            const payloadsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle') || url.endsWith('/api/v2/citestcov'), payloads => {
+                const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                const coverages = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcov'))
+                  .flatMap(({ payload }) => payload).flatMap(({ content }) => content.coverages)
+
+                assert.strictEqual(suites.length, skippedFileFirst ? 2 : 1)
+                const abortedSuite = suites.find(suite => suite.meta[TEST_SUITE] === suiteFile)
+                assert.strictEqual(abortedSuite.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(coverages.length, suites.length)
+                const abortedCoverage = coverages.find(coverage =>
+                  coverage.test_suite_id === Number(abortedSuite.test_suite_id))
+                assertObjectContains(abortedCoverage.files.map(({ filename }) => filename), [
+                  suiteFile,
+                  'ci-visibility/test/sum.js',
+                ])
+                const abortedSum = abortedCoverage.files.find(
+                  ({ filename }) => filename === 'ci-visibility/test/sum.js')
+                assert.ok(abortedSum.bitmap[0] & (1 << 4), 'The aborted file must own coverage of the sum body')
+                if (skippedFileFirst) {
+                  const skippedSuite = suites.find(suite => suite.meta[TEST_SUITE] === skippedFile)
+                  const skippedCoverage = coverages.find(coverage =>
+                    coverage.test_suite_id === Number(skippedSuite.test_suite_id))
+                  assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+                  const skippedSum = skippedCoverage.files.find(
+                    ({ filename }) => filename === 'ci-visibility/test/sum.js')
+                  assert.strictEqual((skippedSum?.bitmap[0] || 0) & (1 << 4), 0,
+                    'Skipped files must not receive coverage executed by a later file')
+                }
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), payloadsPromise])
+            assert.strictEqual(exitCode, 1, testOutput)
+            assert.match(testOutput, /MOCHA ROOT REPORTER COVERAGE: 1/)
+            assert.match(testOutput, /MOCHA ROOT COVERAGE AFTER REPORTERS: 0/)
+          })
+        }
+
+        for (const invert of [false, true]) {
+          it(`keeps filtered root-file coverage separate (invert=${invert})`, async () => {
+            const suiteFiles = [
+              'ci-visibility/mocha-plugin-tests/top-level-it-filtered.js',
+              'ci-visibility/mocha-plugin-tests/top-level-it-filtered2.js',
+            ]
+            const grep = invert ? '--grep excluded --invert' : '--grep included'
+            receiver.setSettings({ itr_enabled: true, code_coverage: true, tests_skipping: false })
+            childProcess = exec(
+              'node node_modules/nyc/bin/nyc.js --silent node node_modules/mocha/bin/mocha ' +
+              `${suiteFiles.join(' ')} ${grep} --reporter ./ci-visibility/mocha-root-coverage-reporter.js`,
+              { cwd, env: { ...envVars, DD_INJECT_FORCE: 'true' } }
+            )
+            childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+            childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+            const payloadsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle') || url.endsWith('/api/v2/citestcov'), payloads => {
+                const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                const coverages = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcov'))
+                  .flatMap(({ payload }) => payload).flatMap(({ content }) => content.coverages)
+
+                assert.strictEqual(tests.length, 2)
+                assert.strictEqual(suites.length, 2)
+                assert.strictEqual(coverages.length, 2)
+                const [suiteA, suiteB] = suiteFiles.map(file => suites.find(suite => suite.meta[TEST_SUITE] === file))
+                assert.ok(suiteA.start + BigInt(suiteA.duration) <= suiteB.start,
+                  'Filtered files must finish at their own execution boundary')
+                for (const suite of suites) {
+                  assert.strictEqual(suite.meta[TEST_STATUS], 'pass')
+                  const coverage = coverages.find(item => item.test_suite_id === Number(suite.test_suite_id))
+                  const ownFile = coverage.files.find(({ filename }) => filename === suite.meta[TEST_SUITE])
+                  assert.ok(ownFile.bitmap[0] & (1 << 6), 'Each suite must cover its own executed test body')
+                  const otherFile = suiteFiles.find(file => file !== suite.meta[TEST_SUITE])
+                  const otherCoverage = coverage.files.find(({ filename }) => filename === otherFile)
+                  assert.strictEqual((otherCoverage?.bitmap[0] || 0) & (1 << 6), 0,
+                    'A suite must not claim the other file\'s executed test body')
+                }
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), payloadsPromise])
+            assert.strictEqual(exitCode, 0, testOutput)
+            assert.match(testOutput, /MOCHA RESTORED SUM HITS: 2/)
+          })
+
+          it(`keeps filtered skipped root suites skipped (invert=${invert})`, async () => {
+            const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-skipped.js'
+            const grep = invert ? '--grep second --invert' : '--grep first'
+            childProcess = exec(`node node_modules/mocha/bin/mocha ./${suiteFile} ${grep}`, {
+              cwd,
+              env: { ...envVars, DD_INJECT_FORCE: 'true', MOCHA_TOP_LEVEL_SKIP_MODE: 'first' },
+            })
+
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                assert.strictEqual(tests.length, 1)
+                assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
+                assert.strictEqual(suites.length, 1)
+                assert.strictEqual(suites[0].meta[TEST_STATUS], 'skip')
+                assert.strictEqual(tests[0].test_suite_id.toString(), suites[0].test_suite_id.toString())
+              })
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0)
+          })
+        }
+
         context('suite span timing', () => {
           it('suite spans for top-level-only files are bounded to their own file execution', async () => {
             const suiteFiles = [
@@ -3643,7 +3888,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     it('does not say TIA skipped all tests when a root-level test still runs', async () => {
-      const suiteFile = 'ci-visibility/mocha-plugin-tests/top-level-it-mixed.js'
+      const suiteFile = 'ci-visibility/test/ci-visibility-test.js'
+      const rootFile = 'ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js'
       receiver.setSettings({
         itr_enabled: true,
         code_coverage: false,
@@ -3658,12 +3904,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          assert.strictEqual(tests.length, 1)
-          assert.strictEqual(tests[0].meta[TEST_NAME], 'top-level passing test')
+          assert.strictEqual(tests.length, 2)
+          assert.ok(tests.every(test => test.meta[TEST_SUITE] === rootFile))
         })
 
       childProcess = exec(
-        `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+        `node node_modules/mocha/bin/mocha ./${suiteFile} ./${rootFile}`,
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
@@ -3677,6 +3923,434 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ])
       assert.strictEqual(exitCode, 0)
       assert.strictEqual(testOutput.includes(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE), false, testOutput)
+    })
+
+    describe('TIA skipping root-level tests', () => {
+      const defaultFixtureRoot = 'ci-visibility/mocha-plugin-tests/'
+
+      for (const scenario of [
+        {
+          name: 'skips a file containing only root-level tests',
+          files: ['top-level-it-no-describe.js'],
+          skippedFiles: ['top-level-it-no-describe.js'],
+        },
+        {
+          name: 'skips root-level tests in multiple files',
+          files: ['top-level-it-no-describe.js', 'top-level-it-no-describe2.js'],
+          skippedFiles: ['top-level-it-no-describe.js', 'top-level-it-no-describe2.js'],
+        },
+        {
+          name: 'preserves root-level tests from files not selected for skipping',
+          files: ['top-level-it-no-describe.js', 'top-level-it-no-describe2.js'],
+          skippedFiles: ['top-level-it-no-describe.js'],
+          expectedTests: 2,
+        },
+        {
+          name: 'skips root-level and nested tests in the same file once',
+          files: ['top-level-it-mixed-failing.js'],
+          skippedFiles: ['top-level-it-mixed-failing.js'],
+        },
+        {
+          name: 'preserves nested and root-level tests in other files',
+          files: ['top-level-it-mixed-failing.js', 'top-level-it-mixed2.js'],
+          skippedFiles: ['top-level-it-mixed-failing.js'],
+          expectedTests: 2,
+        },
+        {
+          name: 'preserves unskippable root-level tests',
+          files: ['top-level-it-no-describe.js', 'top-level-it-unskippable.js'],
+          skippedFiles: ['top-level-it-no-describe.js'],
+          expectedTests: 1,
+        },
+        ...['relative', 'absolute'].flatMap(programmatic => [
+          {
+            name: `preserves programmatic ${programmatic}-path unskippable root tests and hooks`,
+            files: ['top-level-it-no-describe.js', 'top-level-it-unskippable.js'],
+            skippedFiles: ['top-level-it-no-describe.js'],
+            expectedTests: 1,
+            programmatic,
+          },
+          {
+            name: `preserves programmatic ${programmatic}-path unskippable nested tests`,
+            files: ['test-to-skip.js', 'test-unskippable.js'],
+            fixtureRoot: 'ci-visibility/unskippable-test/',
+            skippedFiles: ['test-to-skip.js'],
+            expectedTests: 1,
+            programmatic,
+          },
+        ]),
+        ...['before', 'after', 'beforeEach', 'afterEach'].flatMap(hookType => [
+          {
+            name: `removes ${hookType} hooks from skipped files`,
+            files: ['top-level-it-skippable-hook.js', 'top-level-it-mixed2.js'],
+            skippedFiles: ['top-level-it-skippable-hook.js'],
+            expectedTests: 2,
+            hookType,
+          },
+          {
+            name: `preserves ${hookType} hooks from retained files`,
+            files: ['top-level-it-skippable-hook.js', 'top-level-it-mixed2.js'],
+            skippedFiles: ['top-level-it-mixed2.js'],
+            expectedTests: 2,
+            hookType,
+            expectedHooks: hookType.endsWith('Each') ? 2 : 1,
+          },
+          {
+            name: `removes ${hookType} hooks from symlinked skipped files`,
+            files: [`top-level-it-skippable-${hookType}-link.js`, 'top-level-it-mixed2.js'],
+            skippedFiles: [`top-level-it-skippable-${hookType}-link.js`],
+            symlinkTarget: 'top-level-it-skippable-hook.js',
+            expectedTests: 2,
+            hookType,
+          },
+        ]),
+        ...['plugins-false', 'use-false'].flatMap(latePluginMode =>
+          ['before', 'after', 'beforeEach', 'afterEach'].map(hookType => ({
+            name: `removes ${hookType} hooks after late plugin enablement (${latePluginMode})`,
+            files: ['top-level-it-skippable-hook.js', 'top-level-it-mixed2.js'],
+            skippedFiles: ['top-level-it-skippable-hook.js'],
+            expectedTests: 2,
+            hookType,
+            latePluginMode,
+          }))
+        ),
+        {
+          name: 'removes a failing hook from a file containing only root-level tests',
+          files: ['top-level-it-with-failing-hook.js', 'top-level-it-no-describe2.js'],
+          skippedFiles: ['top-level-it-with-failing-hook.js'],
+          expectedTests: 2,
+        },
+        {
+          name: 'preserves global root hook plugins when skipping a file',
+          files: ['top-level-it-no-describe.js', 'top-level-it-mixed2.js'],
+          skippedFiles: ['top-level-it-no-describe.js'],
+          expectedTests: 2,
+          args: ' --require ./ci-visibility/mocha-plugin-tests/root-hook-plugin.js',
+          rootHookPlugin: true,
+        },
+        {
+          name: 'skips root-level tests selected by grep',
+          files: ['top-level-it-mixed-failing.js'],
+          skippedFiles: ['top-level-it-mixed-failing.js'],
+          args: " --grep 'top-level'",
+        },
+        {
+          name: 'skips exclusive root-level tests without restoring them',
+          files: ['top-level-it-exclusive.js'],
+          skippedFiles: ['top-level-it-exclusive.js'],
+        },
+        {
+          name: 'skips root-level tests in an ES module',
+          files: ['top-level-it-skippable.mjs'],
+          skippedFiles: ['top-level-it-skippable.mjs'],
+          esm: true,
+        },
+        {
+          name: 'removes root hooks from an ES module while retaining other tests',
+          files: ['top-level-it-skippable.mjs', 'top-level-it-mixed2.js'],
+          skippedFiles: ['top-level-it-skippable.mjs'],
+          expectedTests: 2,
+          esm: true,
+        },
+        {
+          name: 'preserves shared helper hooks when skipping their first importer',
+          files: ['top-level-it-shared-hooks.js', 'top-level-it-shared-hooks-retained.js'],
+          skippedFiles: ['top-level-it-shared-hooks.js'],
+          expectedTests: 2,
+        },
+        {
+          name: 'removes root hooks from a symlinked ES module while retaining other tests',
+          files: ['top-level-it-skippable-link.mjs', 'top-level-it-mixed2.js'],
+          skippedFiles: ['top-level-it-skippable-link.mjs'],
+          symlinkTarget: 'top-level-it-skippable.mjs',
+          expectedTests: 2,
+          esm: true,
+        },
+        {
+          name: 'runs bundled Mocha without module metadata and skips root-level tests',
+          files: ['top-level-it-no-describe.js', 'top-level-it-mixed2.js'],
+          skippedFiles: ['top-level-it-no-describe.js'],
+          expectedTests: 2,
+          bundled: true,
+        },
+        ...['before', 'after', 'beforeEach', 'afterEach'].flatMap(hookType => [
+          ...[false, true].map(metadataAfterUi => ({
+            name: `bundled Mocha removes ${hookType} hooks with metadata after UI=${metadataAfterUi}`,
+            files: ['top-level-it-skippable-hook.js', 'top-level-it-mixed2.js'],
+            skippedFiles: ['top-level-it-skippable-hook.js'],
+            expectedTests: 2,
+            hookType,
+            bundled: true,
+            metadataAfterUi,
+          })),
+          {
+            name: `bundled Mocha preserves ${hookType} hooks from retained files`,
+            files: ['top-level-it-skippable-hook.js', 'top-level-it-mixed2.js'],
+            skippedFiles: ['top-level-it-mixed2.js'],
+            expectedTests: 2,
+            hookType,
+            expectedHooks: hookType.endsWith('Each') ? 2 : 1,
+            bundled: true,
+          },
+        ]),
+        {
+          name: 'preserves shared helper hooks in bundled Mocha',
+          files: ['top-level-it-shared-hooks.js', 'top-level-it-shared-hooks-retained.js'],
+          skippedFiles: ['top-level-it-shared-hooks.js'],
+          expectedTests: 2,
+          bundled: true,
+        },
+      ]) {
+        const {
+          name, files, skippedFiles, expectedTests = 0, args = '', esm = false,
+          hookType, expectedHooks = 0, rootHookPlugin = false, latePluginMode, symlinkTarget, bundled = false,
+          metadataAfterUi = false, programmatic, fixtureRoot = defaultFixtureRoot,
+        } = scenario
+        // Mocha added native ES module loading in 7.1.0.
+        const unsupportedEsm = esm && MOCHA_VERSION !== 'latest' && !satisfies(MOCHA_VERSION, '>=7.1.0')
+        // Root hook plugins were introduced in Mocha 8.0.0.
+        const runTest = unsupportedEsm || (rootHookPlugin && mochaMajor < 8) ? it.skip : it
+        runTest(name, async () => {
+          if (symlinkTarget) fs.symlinkSync(symlinkTarget, path.join(cwd, fixtureRoot, files[0]))
+          const suitesToSkip = files.filter(file => skippedFiles.includes(file) || file.includes('unskippable'))
+          receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
+          receiver.setSuitesToSkip(suitesToSkip.map(file => ({
+            type: 'suite',
+            attributes: { suite: fixtureRoot + file },
+          })))
+
+          const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, expectedTests)
+              assert.ok(tests.every(test => !skippedFiles.includes(test.meta[TEST_SUITE].slice(fixtureRoot.length))))
+              const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.strictEqual(suites.length, files.length)
+              for (const file of files) {
+                const suite = suites.find(suite => suite.meta[TEST_SUITE] === fixtureRoot + file)
+                assert.ok(suite, file)
+                assert.strictEqual(suite.meta[TEST_STATUS], skippedFiles.includes(file) ? 'skip' : 'pass')
+                assert.strictEqual(suite.meta[TEST_SKIPPED_BY_ITR], skippedFiles.includes(file) ? 'true' : undefined)
+                if (file.includes('unskippable')) {
+                  assert.strictEqual(suite.meta[TEST_ITR_UNSKIPPABLE], 'true')
+                  assert.strictEqual(suite.meta[TEST_ITR_FORCED_RUN], 'true')
+                }
+              }
+              for (const type of ['test_session_end', 'test_module_end']) {
+                const event = events.find(event => event.type === type).content
+                assert.strictEqual(event.meta[TEST_STATUS], expectedTests ? 'pass' : 'skip')
+                assert.strictEqual(event.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+                assert.strictEqual(event.metrics[TEST_ITR_SKIPPING_COUNT], skippedFiles.length)
+              }
+            }
+          )
+          const testFiles = files.map(file => programmatic === 'absolute'
+            ? path.join(fs.realpathSync(cwd), fixtureRoot, file)
+            : `./${fixtureRoot}${file}`).join(' ')
+          const command = latePluginMode
+            ? 'node ./ci-visibility/run-mocha-late-plugin.js'
+            : bundled
+              ? 'node ./ci-visibility/run-mocha-bundler.js'
+              : programmatic
+                ? 'node ./ci-visibility/run-mocha-tia-programmatic.js'
+                : 'node node_modules/mocha/bin/mocha'
+          const env = getCiVisAgentlessConfig(receiver.port)
+          if (latePluginMode || bundled) env.NODE_OPTIONS = undefined
+          childProcess = exec(`${command} ${testFiles}${args}`, {
+            cwd,
+            env: {
+              ...env,
+              MOCHA_LATE_PLUGIN_MODE: latePluginMode,
+              MOCHA_BUNDLER_METADATA_AFTER_UI: String(metadataAfterUi),
+              ROOT_HOOK_TYPE: hookType,
+              ROOT_HOOK_FAIL: String(expectedHooks === 0),
+            },
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+          const [, [exitCode]] = await Promise.all([eventsPromise, once(childProcess, 'close')])
+          assert.strictEqual(exitCode, 0, testOutput)
+          assert.strictEqual(testOutput.includes(TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE), expectedTests === 0)
+          if (hookType) {
+            assert.strictEqual(testOutput.split(`file-owned ${hookType} hook`).length - 1, expectedHooks, testOutput)
+          }
+          for (const hook of ['before', 'after', 'beforeEach', 'afterEach']) {
+            if (files.includes('top-level-it-unskippable.js')) {
+              assert.strictEqual(testOutput.split(`unskippable ${hook} hook`).length - 1, 1, testOutput)
+            }
+            if (args.includes('root-hook-plugin')) {
+              const expectedCount = hook.endsWith('Each') ? expectedTests : 1
+              assert.strictEqual(testOutput.split(`global ${hook} hook`).length - 1, expectedCount, testOutput)
+            }
+          }
+          if (files.includes('top-level-it-shared-hooks.js')) {
+            assert.strictEqual(testOutput.split('shared afterEach hook').length - 1, 2, testOutput)
+            assert.strictEqual(testOutput.split('shared after hook').length - 1, 1, testOutput)
+          }
+        })
+      }
+    })
+
+    describe('TIA root hooks with cross-file exclusivity', () => {
+      const fixtureRoot = 'ci-visibility/mocha-plugin-tests/'
+      for (const exclusiveFile of ['top-level-it-reusable-exclusive.js', 'top-level-suite-retained-exclusive.js']) {
+        for (const hookType of ['before', 'after', 'beforeEach', 'afterEach']) {
+          it(`removes ${hookType} hooks while retaining ${exclusiveFile}`, async () => {
+            const skippedFile = fixtureRoot + 'top-level-it-skippable-hook.js'
+            receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
+            receiver.setSuitesToSkip([{ type: 'suite', attributes: { suite: skippedFile } }])
+            childProcess = exec(`node node_modules/mocha/bin/mocha ./${skippedFile} ./${fixtureRoot}${exclusiveFile}`, {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                ROOT_HOOK_TYPE: hookType,
+                ROOT_HOOK_FAIL: 'true',
+              },
+            })
+            childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+            childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                for (const type of ['test', 'test_suite_end', 'test_module_end', 'test_session_end']) {
+                  const matching = events.filter(event => event.type === type)
+                  assert.strictEqual(matching.length, 1, testOutput)
+                  assert.strictEqual(matching[0].content.meta[TEST_STATUS], 'pass', testOutput)
+                }
+                const test = events.find(event => event.type === 'test').content
+                assert.strictEqual(test.meta[TEST_SUITE], fixtureRoot + exclusiveFile)
+                const session = events.find(event => event.type === 'test_session_end').content
+                assert.strictEqual(session.metrics[TEST_ITR_SKIPPING_COUNT], 0)
+                assert.strictEqual(session.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+              }
+            )
+            const [[exitCode]] = await Promise.all([once(childProcess, 'close'), eventsPromise])
+            assert.strictEqual(exitCode, 0, testOutput)
+            assert.doesNotMatch(testOutput, /file-owned .* hook/)
+          })
+        }
+      }
+    })
+
+    for (const [exclusiveFile, retainedFiles] of [
+      ['top-level-it-exclusive.js', []],
+      ['top-level-it-mixed-only.js', []],
+      ['top-level-it-mixed-only.js', ['top-level-suite-retained-exclusive.js']],
+    ]) {
+      it(`cleans skipped exclusivity references for ${exclusiveFile} with ${retainedFiles.length} retained files`,
+        async () => {
+          const fixtureRoot = 'ci-visibility/mocha-plugin-tests/'
+          const skippedFile = fixtureRoot + exclusiveFile
+          receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
+          receiver.setSuitesToSkip([{ type: 'suite', attributes: { suite: skippedFile } }])
+          const files = [exclusiveFile, ...retainedFiles].map(file => fixtureRoot + file).join(' ')
+          childProcess = exec(`node ./ci-visibility/run-mocha-tia-cleanup.js ${files}`, {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, retainedFiles.length, testOutput)
+              assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'))
+              const suite = events.find(event => event.type === 'test_suite_end' &&
+                event.content.meta[TEST_SUITE] === skippedFile)?.content
+              assert.ok(suite, testOutput)
+              assert.strictEqual(suite.meta[TEST_STATUS], 'skip')
+            }
+          )
+          const [[exitCode]] = await Promise.all([once(childProcess, 'close'), eventsPromise])
+          assert.strictEqual(exitCode, 0, testOutput)
+          assert.match(testOutput, /EXCLUSIVITY REFERENCES CLEANED/)
+        })
+    }
+
+    describe('TIA skipping on reused Mocha instances', () => {
+      // Reuse requires cleanReferencesAfterRun(false), unavailable on Mocha 5.2.
+      const reuseIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.0.0') ? it : it.skip
+      const fixtureRoot = 'ci-visibility/mocha-plugin-tests/'
+
+      for (const mode of ['changed-skip-list', 'disabled-plugin']) {
+        for (const hookType of ['before', 'after', 'beforeEach', 'afterEach', 'exclusive', 'exclusive-suite']) {
+          reuseIt(`restores root tests and ${hookType} hooks for ${mode}`, async () => {
+            const exclusive = hookType.startsWith('exclusive')
+            const file = fixtureRoot + (hookType === 'exclusive-suite'
+              ? 'top-level-suite-retained-exclusive.js'
+              : exclusive ? 'top-level-it-reusable-exclusive.js' : 'top-level-it-skippable-hook.js')
+            const retainedFile = fixtureRoot + 'top-level-it-mixed2.js'
+            receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
+            receiver.setSuitesToSkip([{ type: 'suite', attributes: { suite: file } }])
+
+            childProcess = fork('./ci-visibility/run-mocha-tia-rerun.js', [file, retainedFile], {
+              cwd,
+              silent: true,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                MOCHA_TIA_RERUN_MODE: mode,
+                ROOT_HOOK_TYPE: hookType,
+                ROOT_HOOK_FAIL: 'false',
+              },
+            })
+            childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+            childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+            const firstRunPromise = once(childProcess, 'message').then(([failures]) => {
+              assert.strictEqual(failures, 0, testOutput)
+              receiver.setSuitesToSkip([])
+              childProcess.send('run again')
+            })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const firstTests = exclusive ? 0 : 2
+                const secondTests = exclusive ? 1 : 4
+                const expectedTests = firstTests + (mode === 'changed-skip-list' ? secondTests : 0)
+                assert.strictEqual(tests.length, expectedTests, testOutput)
+                assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'), testOutput)
+                const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                const restoredSuites = suites.filter(suite => suite.meta[TEST_SUITE] === file)
+                assert.deepStrictEqual(restoredSuites.map(suite => suite.meta[TEST_STATUS]),
+                  mode === 'changed-skip-list' ? ['skip', 'pass'] : ['skip'], testOutput)
+                for (const type of ['test_session_end', 'test_module_end']) {
+                  const sessions = events.filter(event => event.type === type).map(event => event.content)
+                  assert.strictEqual(sessions.length, mode === 'changed-skip-list' ? 2 : 1, testOutput)
+                  assert.strictEqual(sessions[0].metrics[TEST_ITR_SKIPPING_COUNT], 1)
+                  if (mode === 'changed-skip-list') {
+                    assert.strictEqual(sessions[1].meta[TEST_STATUS], 'pass', testOutput)
+                    assert.strictEqual(sessions[1].metrics[TEST_ITR_SKIPPING_COUNT], 0)
+                  }
+                }
+              }
+            )
+            const [[exitCode]] = await Promise.all([once(childProcess, 'close'), eventsPromise, firstRunPromise])
+            assert.strictEqual(exitCode, 0, testOutput)
+            assert.match(testOutput, exclusive ? /1 passing/ : /4 passing/)
+            assert.match(testOutput, /SECOND RUN FAILURES: 0/)
+            if (exclusive) {
+              if (hookType === 'exclusive') {
+                for (const type of ['before', 'after', 'beforeEach', 'afterEach']) {
+                  assert.strictEqual(testOutput.split(`exclusive ${type} hook`).length - 1, 1, testOutput)
+                }
+              }
+            } else {
+              const expectedHooks = hookType.endsWith('Each') ? 4 : 1
+              assert.strictEqual(testOutput.split(`file-owned ${hookType} hook`).length - 1,
+                expectedHooks, testOutput)
+            }
+          })
+        }
+      }
     })
 
     it('says TIA skipped all tests when grep excludes the remaining root-level test', async () => {
@@ -6165,7 +6839,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   context('dynamic instrumentation', () => {
     // retry listener was released in mocha@6.0.0
     onlyLatestIt('does not activate dynamic instrumentation if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false',
-      (done) => {
+      async () => {
         receiver.setSettings({
           flaky_test_retries_enabled: true,
           di_enabled: true,
@@ -6189,13 +6863,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(hasDebugTags, false)
           })
 
-        const logsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-            if (payloads.length > 0) {
-              throw new Error('Unexpected logs')
-            }
-          }, 5000)
-
         childProcess = exec(
           runTestsCommand,
           {
@@ -6207,19 +6874,26 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               ]),
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
+              REPORT_FINAL_FLUSH: finalFlushMarker,
             },
           }
         )
 
-        childProcess.on('exit', (code) => {
-          Promise.all([eventsPromise, logsPromise]).then(() => {
-            assert.strictEqual(code, 0)
-            done()
-          }).catch(done)
-        })
+        const logsPromise = capturePayloadsUntilFinalFlush(
+          receiver,
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/logs')
+        )
+        const [[exitCode], logs] = await Promise.all([
+          once(childProcess, 'exit'),
+          logsPromise,
+          eventsPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
+        assert.deepStrictEqual(logs, [])
       })
 
-    onlyLatestIt('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
+    onlyLatestIt('does not activate dynamic instrumentation if remote settings are disabled', async () => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: false,
@@ -6243,13 +6917,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(hasDebugTags, false)
         })
 
-      const logsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-          if (payloads.length > 0) {
-            throw new Error('Unexpected logs')
-          }
-        }, 5000)
-
       childProcess = exec(
         runTestsCommand,
         {
@@ -6260,16 +6927,23 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './dynamic-instrumentation/test-hit-breakpoint',
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            REPORT_FINAL_FLUSH: finalFlushMarker,
           },
         }
       )
 
-      childProcess.on('exit', (code) => {
-        Promise.all([eventsPromise, logsPromise]).then(() => {
-          assert.strictEqual(code, 0)
-          done()
-        }).catch(done)
-      })
+      const logsPromise = capturePayloadsUntilFinalFlush(
+        receiver,
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/logs')
+      )
+      const [[exitCode], logs] = await Promise.all([
+        once(childProcess, 'exit'),
+        logsPromise,
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
+      assert.deepStrictEqual(logs, [])
     })
 
     onlyLatestIt('runs retries with dynamic instrumentation', (done) => {
@@ -6667,7 +7341,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
-    onlyLatestIt('does not crash if the retry does not hit the breakpoint', (done) => {
+    onlyLatestIt('does not crash if the retry does not hit the breakpoint', async () => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true,
@@ -6690,13 +7364,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           assert.strictEqual(hasDebugTags, false)
         })
-      const logsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-          if (payloads.length > 0) {
-            throw new Error('Unexpected logs')
-          }
-        }, 5000)
-
       childProcess = exec(
         'node ./ci-visibility/run-mocha.js',
         {
@@ -6707,15 +7374,23 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './dynamic-instrumentation/test-not-hit-breakpoint',
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            REPORT_FINAL_FLUSH: finalFlushMarker,
           },
         }
       )
 
-      childProcess.on('exit', () => {
-        Promise.all([eventsPromise, logsPromise]).then(() => {
-          done()
-        }).catch(done)
-      })
+      const logsPromise = capturePayloadsUntilFinalFlush(
+        receiver,
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/logs')
+      )
+      const [[exitCode], logs] = await Promise.all([
+        once(childProcess, 'exit'),
+        logsPromise,
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
+      assert.deepStrictEqual(logs, [])
     })
 
     onlyLatestIt('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
@@ -9391,98 +10066,114 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           early_flake_detection: { enabled: false },
         })
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const assertEvents = (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-            // Test that eventually passes: finalStatus 'pass' only on last attempt per test name
-            // These tests will pass after the second retry
-            const eventuallyPassingTests = tests.filter(
-              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-passes.js'
-            )
-            const eventuallyPassingByName = eventuallyPassingTests.reduce((acc, test) => {
-              const name = test.meta[TEST_NAME]
-              if (!acc[name]) acc[name] = []
-              acc[name].push(test)
-              return acc
-            }, {}) // Object that associates name to test retries events
-            Object.values(eventuallyPassingByName).forEach(testGroup => {
-              testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
-                if (index < testGroup.length - 1) {
-                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                } else {
-                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
-                }
-              })
-            })
+          const expectedTestsBySuite = new Map([
+            ['ci-visibility/mocha-flaky/flaky-passes.js', 3],
+            ['ci-visibility/test/ci-visibility-test.js', 1],
+            ['ci-visibility/mocha-flaky/flaky-fails.js', 6],
+            ['ci-visibility/mocha-hooks/flaky-passes-with-hooks.js', 3],
+            ['ci-visibility/mocha-hooks/flaky-fails-with-hooks.js', 6],
+          ])
+          assert.strictEqual(tests.length, 19)
+          for (const [suite, expectedCount] of expectedTestsBySuite) {
+            assert.strictEqual(tests.filter(test => test.meta[TEST_SUITE] === suite).length, expectedCount)
+          }
 
-            // Test that always passes: finalStatus 'pass' only on last attempt
-            const alwaysPassingTests = tests.filter(
-              test => test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
-            )
-            alwaysPassingTests.sort((a, b) =>
-              (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
-              if (index < alwaysPassingTests.length - 1) {
+          // Test that eventually passes: finalStatus 'pass' only on last attempt per test name
+          // These tests will pass after the second retry
+          const eventuallyPassingTests = tests.filter(
+            test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-passes.js'
+          )
+          const eventuallyPassingByName = eventuallyPassingTests.reduce((acc, test) => {
+            const name = test.meta[TEST_NAME]
+            if (!acc[name]) acc[name] = []
+            acc[name].push(test)
+            return acc
+          }, {}) // Object that associates name to test retries events
+          Object.values(eventuallyPassingByName).forEach(testGroup => {
+            testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+              if (index < testGroup.length - 1) {
                 assert.ok(!(TEST_FINAL_STATUS in test.meta))
               } else {
                 assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
               }
             })
+          })
 
-            // Test that always fails: finalStatus 'fail' only on last attempt
-            const alwaysFailingTests = tests.filter(
-              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-fails.js'
-            )
-            alwaysFailingTests.sort((a, b) =>
-              (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
-              if (index < alwaysFailingTests.length - 1) {
+          // Test that always passes: finalStatus 'pass' only on last attempt
+          const alwaysPassingTests = tests.filter(
+            test => test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
+          )
+          alwaysPassingTests.sort((a, b) =>
+            (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+            if (index < alwaysPassingTests.length - 1) {
+              assert.ok(!(TEST_FINAL_STATUS in test.meta))
+            } else {
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+            }
+          })
+
+          // Test that always fails: finalStatus 'fail' only on last attempt
+          const alwaysFailingTests = tests.filter(
+            test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-fails.js'
+          )
+          alwaysFailingTests.sort((a, b) =>
+            (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+            if (index < alwaysFailingTests.length - 1) {
+              assert.ok(!(TEST_FINAL_STATUS in test.meta))
+            } else {
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+            }
+          })
+
+          // With hooks — test that eventually passes
+          const eventuallyPassingTestsWithHooks = tests.filter(
+            test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-passes-with-hooks.js'
+          )
+          const eventuallyPassingByNameWithHooks = eventuallyPassingTestsWithHooks.reduce((acc, test) => {
+            const name = test.meta[TEST_NAME]
+            if (!acc[name]) acc[name] = []
+            acc[name].push(test)
+            return acc
+          }, {})
+          Object.values(eventuallyPassingByNameWithHooks).forEach(testGroup => {
+            testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+              if (index < testGroup.length - 1) {
+                assert.ok(!(TEST_FINAL_STATUS in test.meta))
+              } else {
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+              }
+            })
+          })
+
+          // With hooks — test that always fails
+          const alwaysFailingTestsWithHooks = tests.filter(
+            test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-fails-with-hooks.js'
+          )
+          const alwaysFailingByNameWithHooks = alwaysFailingTestsWithHooks.reduce((acc, test) => {
+            const name = test.meta[TEST_NAME]
+            if (!acc[name]) acc[name] = []
+            acc[name].push(test)
+            return acc
+          }, {})
+          Object.values(alwaysFailingByNameWithHooks).forEach(testGroup => {
+            testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+              if (index < testGroup.length - 1) {
                 assert.ok(!(TEST_FINAL_STATUS in test.meta))
               } else {
                 assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
               }
             })
-
-            // With hooks — test that eventually passes
-            const eventuallyPassingTestsWithHooks = tests.filter(
-              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-passes-with-hooks.js'
-            )
-            const eventuallyPassingByNameWithHooks = eventuallyPassingTestsWithHooks.reduce((acc, test) => {
-              const name = test.meta[TEST_NAME]
-              if (!acc[name]) acc[name] = []
-              acc[name].push(test)
-              return acc
-            }, {})
-            Object.values(eventuallyPassingByNameWithHooks).forEach(testGroup => {
-              testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
-                if (index < testGroup.length - 1) {
-                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                } else {
-                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
-                }
-              })
-            })
-
-            // With hooks — test that always fails
-            const alwaysFailingTestsWithHooks = tests.filter(
-              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-fails-with-hooks.js'
-            )
-            const alwaysFailingByNameWithHooks = alwaysFailingTestsWithHooks.reduce((acc, test) => {
-              const name = test.meta[TEST_NAME]
-              if (!acc[name]) acc[name] = []
-              acc[name].push(test)
-              return acc
-            }, {})
-            Object.values(alwaysFailingByNameWithHooks).forEach(testGroup => {
-              testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
-                if (index < testGroup.length - 1) {
-                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
-                } else {
-                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
-                }
-              })
-            })
           })
+        }
+
+        const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          assertEvents
+        )
 
         childProcess = exec(runTestsCommand, {
           cwd,
@@ -9490,7 +10181,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './mocha-flaky/flaky-passes.js',
-              'ci-visibility/test/ci-visibility-test.js',
+              './test/ci-visibility-test.js',
               './mocha-flaky/flaky-fails.js',
               './mocha-hooks/flaky-passes-with-hooks.js',
               './mocha-hooks/flaky-fails-with-hooks.js',
@@ -9498,7 +10189,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           },
         })
 
-        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          payloadsPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
       })
 
     it('sets final_status tag to skip for disabled tests', async () => {

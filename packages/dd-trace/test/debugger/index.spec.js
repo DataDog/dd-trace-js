@@ -379,7 +379,7 @@ describe('debugger/index', () => {
 
       const { metrics, sketches } = telemetryMetrics.manager.get(TELEMETRY_NAMESPACE).toJSON()
       assert.strictEqual(metrics, undefined)
-      assert.strictEqual(sketches.namespace, 'live_debugger')
+      assert.strictEqual(sketches.namespace, 'debugger')
       assert.strictEqual(sketches.series.length, 1)
       const [series] = sketches.series
       assert.strictEqual(series.metric, 'execution.pause.duration')

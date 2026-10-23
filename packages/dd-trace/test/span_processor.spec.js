@@ -10,7 +10,7 @@ const proxyquire = require('proxyquire')
 require('./setup/core')
 
 const { APM_TRACING_ENABLED_KEY, SDK_OTLP_EXPORT_KEY } = require('../src/constants')
-const { AUTO_REJECT, USER_KEEP } = require('../../../ext/priority')
+const { AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../ext/priority')
 const TraceState = require('../src/opentracing/propagation/tracestate')
 
 describe('SpanProcessor', () => {
@@ -419,6 +419,27 @@ describe('SpanProcessor', () => {
     assert.ok(!Object.hasOwn(formattedSpan, 'trace_state'))
     sinon.assert.notCalled(updateOtelTraceState)
   })
+
+  for (const priority of [AUTO_REJECT, USER_REJECT]) {
+    it(`should retain stats without building OTLP tracestate for priority ${priority}`, () => {
+      config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+      const stats = { onSpanFinished: sinon.stub() }
+      SpanStatsProcessor.returns(stats)
+      const formattedSpan = { meta: {}, metrics: {} }
+      spanFormat.returns(formattedSpan)
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+      finishedSpan.context()._sampling.priority = priority
+      const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, true)
+
+      processor.process(finishedSpan)
+
+      assert.ok(!Object.hasOwn(formattedSpan, 'trace_state'))
+      sinon.assert.notCalled(updateOtelTraceState)
+      sinon.assert.calledOnceWithExactly(stats.onSpanFinished, formattedSpan)
+      sinon.assert.calledOnceWithExactly(exporter.export, [formattedSpan])
+    })
+  }
 
   it('should add APM disabled marker to every span in a chunk when APM tracing is disabled', () => {
     config.apmTracingEnabled = false

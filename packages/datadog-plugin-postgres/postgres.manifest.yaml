@@ -1,0 +1,12 @@
+_v: 1
+name: postgres
+display_name: Postgres.js
+description: Instruments PostgreSQL queries executed through Postgres.js, including transaction, cursor, and COPY operations,
+  with optional Database Monitoring SQL comment propagation.
+packages:
+- name: postgres
+category:
+- db.client
+systems:
+- postgresql
+creation_date: '2026-09-16'
