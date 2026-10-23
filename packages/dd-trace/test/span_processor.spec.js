@@ -536,8 +536,11 @@ describe('SpanProcessor', () => {
       assert.ok(!('http.method' in exported.meta))
     })
 
-    it('records span stats from the Datadog tag names, before the export-only rename', () => {
-      spanFormat.returns(formattedHttpSpan())
+    it('records span stats from the OTel span shape used for export', () => {
+      const formattedSpan = formattedHttpSpan()
+      formattedSpan.resource = 'PROPFIND /u'
+      formattedSpan.meta['http.method'] = 'PROPFIND'
+      spanFormat.returns(formattedSpan)
       const otelConfig = {
         flushMinSpans: 3,
         stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
@@ -548,8 +551,9 @@ describe('SpanProcessor', () => {
       const statsView = {}
       processor._stats = {
         onSpanFinished: sinon.spy(span => {
-          statsView.method = span.meta['http.method']
-          statsView.statusCode = span.meta['http.status_code']
+          statsView.resource = span.resource
+          statsView.method = span.meta['http.request.method']
+          statsView.statusCode = span.metrics['http.response.status_code']
           statsView.endpoint = span.meta['http.endpoint']
         }),
       }
@@ -558,7 +562,7 @@ describe('SpanProcessor', () => {
 
       processor.process(finishedSpan)
 
-      assert.deepStrictEqual(statsView, { method: 'GET', statusCode: '200', endpoint: '/u' })
+      assert.deepStrictEqual(statsView, { resource: 'HTTP /u', method: '_OTHER', statusCode: 200, endpoint: '/u' })
     })
   })
 })
