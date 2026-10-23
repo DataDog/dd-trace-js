@@ -1,7 +1,7 @@
 'use strict'
 
-const { BaseEvaluator, assertOptionalFunction, booleanResult } = require('./base')
-const { toText } = require('./util')
+const { BaseEvaluator } = require('../experiments/evaluator')
+const { assertOptionalFunction, booleanResult, toText } = require('./util')
 
 const OPERATIONS = ['eq', 'ne', 'contains', 'icontains']
 const MATCH_MODES = new Set(['search', 'match', 'fullmatch'])

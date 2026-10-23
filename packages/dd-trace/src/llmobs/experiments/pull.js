@@ -169,7 +169,7 @@ function parseExperimentEvents (response, experimentId, url) {
     const label = metric?.label
     if (typeof label !== 'string' || label === '') continue
     const detail = evaluationDetailFromMetric(metric)
-    summaryEvaluations[label] = { value: detail.value, error: detail.error ?? null, ...detail }
+    summaryEvaluations[label] = { ...detail, error: detail.error ?? null }
   }
 
   const run = new ExperimentRun({

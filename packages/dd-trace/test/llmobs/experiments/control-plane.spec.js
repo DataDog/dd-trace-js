@@ -336,7 +336,7 @@ describe('LLMObs experiments facade control-plane methods', () => {
     DD_API_KEY: 'k',
     DD_APP_KEY: 'a',
     service: 'my-service',
-    llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-app', ...llmobs },
+    llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'my-app', ...llmobs },
   })
 
   let tmpDir
@@ -357,7 +357,7 @@ describe('LLMObs experiments facade control-plane methods', () => {
       provider: 'openai',
       model: 'gpt-4o',
       structuredOutput: new BooleanStructuredOutput({ description: 'ok?' }),
-      modelCall () {},
+      client () {},
     })
   }
 
@@ -391,7 +391,7 @@ describe('LLMObs experiments facade control-plane methods', () => {
     })
 
     it('rejects non-publishable evaluators and blank agent services', async () => {
-      const experiments = createExperiments(enabledConfig({ mlApp: undefined }))
+      const experiments = createExperiments(enabledConfig({ DD_LLMOBS_ML_APP: undefined }))
       await assert.rejects(experiments.publishEvaluator({}), { name: 'TypeError', message: /LLMJudge/ })
       await assert.rejects(experiments.publishEvaluator(judge(), { agentService: '  ' }), {
         message: /agentService/,
@@ -424,7 +424,7 @@ describe('LLMObs experiments facade control-plane methods', () => {
     it('falls back to the configured project name and validates the id', async () => {
       sinon.stub(ExperimentsClient.prototype, 'getExperiment').resolves({ id: 'exp-1', attributes: {} })
       sinon.stub(ExperimentsClient.prototype, 'getExperimentEvents').resolves({})
-      const experiments = createExperiments(enabledConfig({ projectName: 'configured' }))
+      const experiments = createExperiments(enabledConfig({ DD_LLMOBS_PROJECT_NAME: 'configured' }))
       const pulled = await experiments.pullExperiment('exp-1')
       assert.equal(pulled.projectName, 'configured')
       await assert.rejects(experiments.pullExperiment(''), { message: 'experimentId is required.' })
