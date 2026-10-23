@@ -14,6 +14,7 @@ const {
   getSegment,
   stripQueryAndFragment,
   truncateString,
+  typedArrayLength,
 } = require('../src/util')
 
 const TRUES = [
@@ -119,6 +120,39 @@ describe('util', () => {
     assert.strictEqual(isEmpty(Object.assign(Object.create({ inherited: 1 }), { own: 2 })), false)
     // `for-in` walks inherited enumerable keys, so a prototype-only object counts as non-empty.
     assert.strictEqual(isEmpty(Object.create({ inherited: 1 })), false)
+    assert.strictEqual(isEmpty([]), true)
+    assert.strictEqual(isEmpty([1]), false)
+    assert.strictEqual(isEmpty(Buffer.alloc(0)), true)
+    assert.strictEqual(isEmpty(Buffer.from('a')), false)
+    assert.strictEqual(isEmpty(new Uint8Array(0)), true)
+    assert.strictEqual(isEmpty(new Uint8Array(1)), false)
+    assert.strictEqual(isEmpty(Buffer.alloc(64 * 1024 * 1024)), false)
+    assert.strictEqual(isEmpty(new DataView(new ArrayBuffer(0))), true)
+    assert.strictEqual(isEmpty(new DataView(new ArrayBuffer(1))), true)
+    assert.strictEqual(isEmpty(Object.assign([], { key: 'value' })), false)
+    assert.strictEqual(isEmpty(Object.assign(new Uint8Array(0), { key: 'value' })), false)
+    assert.strictEqual(isEmpty(new Array(1)), false)
+    assert.strictEqual(isEmpty(''), true)
+    assert.strictEqual(isEmpty('a'), false)
+    assert.strictEqual(isEmpty('a'.repeat(32 * 1024 * 1024)), false)
+  })
+
+  it('isEmpty and typedArrayLength do not call shadowed typed array length getters', () => {
+    const throwing = () => { throw new TypeError('length') }
+    const empty = Object.defineProperty(new Uint8Array(0), 'length', { get: throwing })
+    const nonEmpty = Object.defineProperty(new Uint8Array(2), 'length', { get: throwing })
+
+    class ShadowedLength extends Uint8Array {
+      get length () { throw new TypeError('length') }
+    }
+
+    assert.strictEqual(isEmpty(empty), true)
+    assert.strictEqual(isEmpty(nonEmpty), false)
+    assert.strictEqual(isEmpty(new ShadowedLength(2)), false)
+    assert.strictEqual(typedArrayLength(nonEmpty), 2)
+    assert.strictEqual(typedArrayLength(new ShadowedLength(3)), 3)
+    assert.strictEqual(typedArrayLength(Buffer.alloc(4)), 4)
+    assert.strictEqual(typedArrayLength(new DataView(new ArrayBuffer(5))), 0)
   })
 
   describe('getSegment', () => {
