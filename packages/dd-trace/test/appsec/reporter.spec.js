@@ -671,6 +671,60 @@ describe('reporter', () => {
           assert.strictEqual(truncatedRequestBody.specialValues.arrayWithToJSON.length, 4096)
         })
 
+        it('should truncate large binary bodies before serializing every byte', () => {
+          const size = 32 * 1024 * 1024
+          const buffer = Buffer.alloc(size, 1)
+          const toJSON = sinon.spy(buffer, 'toJSON')
+
+          const bufferResult = Reporter.truncateRequestBody(buffer)
+          const typedResult = Reporter.truncateRequestBody(new Uint8Array(size))
+
+          sinon.assert.notCalled(toJSON)
+          assert.strictEqual(bufferResult.truncated, true)
+          assert.strictEqual(bufferResult.value.type, 'Buffer')
+          assert.strictEqual(bufferResult.value.data.length, 256)
+          assert.strictEqual(typedResult.truncated, true)
+          assert.strictEqual(Object.keys(typedResult.value).length, 256)
+        })
+
+        it('should truncate large binary bodies without calling overridable methods', () => {
+          const throwing = () => { throw new TypeError('overridden') }
+
+          const throwingSubarray = new Uint8Array(257)
+          throwingSubarray.subarray = throwing
+
+          const selfSubarray = new Uint8Array(257)
+          selfSubarray.subarray = () => selfSubarray
+
+          const throwingLength = new Uint8Array(257)
+          Object.defineProperty(throwingLength, 'length', { get: throwing })
+
+          class ThrowingSpecies extends Uint8Array {
+            static get [Symbol.species] () { throw new TypeError('overridden') }
+          }
+
+          for (const body of [throwingSubarray, selfSubarray, throwingLength, new ThrowingSpecies(257)]) {
+            const { truncated, value } = Reporter.truncateRequestBody(body)
+
+            assert.strictEqual(truncated, true)
+            assert.strictEqual(Object.keys(value).length, 256)
+          }
+        })
+
+        it('should serialize a large DataView as an empty object', () => {
+          assert.deepStrictEqual(
+            Reporter.truncateRequestBody(new DataView(new ArrayBuffer(257))),
+            { value: {}, truncated: false }
+          )
+        })
+
+        it('should not flag binary bodies at the element limit as truncated', () => {
+          const { truncated, value } = Reporter.truncateRequestBody(Buffer.alloc(256, 1))
+
+          assert.strictEqual(truncated, false)
+          assert.strictEqual(value.data.length, 256)
+        })
+
         it('should set request body size exceeded when reporter request body has been truncated', () => {
           const config = getReporterConfig({
             DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true,
