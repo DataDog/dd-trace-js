@@ -1054,11 +1054,15 @@ describe('OpenTelemetry Traces', () => {
       })
       const config = getConfigFresh()
       const exporter = createOtlpTraceExporter(config)
+      const initialRuntimeId = config.tags['runtime-id']
+      const startupResource = exporter.getStartupResourceAttributes()
 
       config.tags['runtime-id'] = 'refreshed-id'
       identityRefreshChannel.publish(config)
       exporter.export([createMockSpan()])
 
+      assert.strictEqual(startupResource['runtime-id'], initialRuntimeId)
+      assert.strictEqual(exporter.getStartupResourceAttributes(), startupResource)
       validator()
     })
 

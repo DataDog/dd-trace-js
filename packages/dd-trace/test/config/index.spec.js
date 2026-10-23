@@ -315,6 +315,7 @@ describe('Config', () => {
     const INTERNAL_RUNTIME_PROPERTIES = [
       'debug',
       'isServiceNameInferred',
+      'otelSdkEnabled',
       'sampler',
       'stableConfig',
     ]
@@ -332,6 +333,31 @@ describe('Config', () => {
       assert.deepStrictEqual(unknownConfigurations, [], 'Unknown Config properties detected.\n' +
         'Add it to supported-configurations.json (or index.d.ts), if it truly is a Config property.\n' +
         'Otherwise, remove / handle elsewhere. This reports telemetry about unrecognized properties.')
+    })
+  })
+
+  describe('OTel SDK bridge startup eligibility', () => {
+    it('snapshots the OTel opt-in without changing the configured DD flag', () => {
+      process.env.OTEL_SDK_DISABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.otelSdkEnabled, true)
+      assert.strictEqual(config.DD_TRACE_OTEL_ENABLED, false)
+    })
+
+    it('honors the existing OTel opt-out without changing the configured DD flag', () => {
+      process.env.DD_TRACE_OTEL_ENABLED = 'true'
+      process.env.OTEL_SDK_DISABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.otelSdkEnabled, false)
+      assert.strictEqual(config.DD_TRACE_OTEL_ENABLED, true)
+    })
+
+    it('keeps startup eligibility after later environment and configuration changes', () => {
+      process.env.OTEL_SDK_DISABLED = 'false'
+      const config = getConfig()
+      process.env.OTEL_SDK_DISABLED = 'true'
+      config.setRemoteConfig({ DD_SERVICE: 'later-service' })
+      assert.strictEqual(config.otelSdkEnabled, true)
     })
   })
 

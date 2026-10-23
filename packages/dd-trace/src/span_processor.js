@@ -26,6 +26,12 @@ function serializeOtlpTraceState (context) {
 class SpanProcessor {
   #exportOtlpTraces
 
+  /**
+   * @readonly
+   * @type {import('./opentelemetry/startup-config').InitializedExporter | undefined}
+   */
+  #spanMetricsStartupConfig
+
   constructor (exporter, prioritySampler, config, otlpStatsExporter, exportOtlpTraces) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
@@ -37,6 +43,12 @@ class SpanProcessor {
         !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
+      if (otlpStatsExporter) {
+        this.#spanMetricsStartupConfig = {
+          protocol: otlpStatsExporter.protocol,
+          resourceAttributes: otlpStatsExporter.getStartupResourceAttributes(),
+        }
+      }
     }
 
     this._spanSampler = new SpanSampler(config.sampler)
@@ -46,6 +58,14 @@ class SpanProcessor {
       ? processTags.serialized
       : false
     this._nativeExport = config.OTEL_TRACES_EXPORTER !== 'otlp'
+  }
+
+  /**
+   * Returns the OTLP span-metrics configuration accepted during initialization, if active.
+   * @returns {import('./opentelemetry/startup-config').InitializedExporter | undefined}
+   */
+  getSpanMetricsStartupConfig () {
+    return this.#spanMetricsStartupConfig
   }
 
   sample (span) {

@@ -15,6 +15,7 @@ export interface ConfigProperties extends GeneratedConfig {
   isServiceUserProvided: boolean
   logger: import('../../../../index').TracerOptions['logger'] | undefined
   lookup: NonNullable<import('../../../../index').TracerOptions['lookup']>
+  readonly otelSdkEnabled: boolean
   readonly parsedDdTags: Record<string, string>
   plugins: boolean
   sampler: {

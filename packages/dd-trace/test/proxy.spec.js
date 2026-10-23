@@ -81,6 +81,7 @@ describe('TracerProxy', () => {
     }
 
     tracer = {
+      getStartupConfig: sinon.stub(),
       use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('test'),
       wrap: sinon.stub().returns('fn'),
@@ -296,6 +297,11 @@ describe('TracerProxy', () => {
       './config': Config,
       './plugin_manager': PluginManager,
       './runtime_metrics': runtimeMetrics,
+      './startup-log': {
+        setStartupLogConfig: sinon.spy(),
+        setStartupLogPluginManager: sinon.spy(),
+        startupLog: sinon.spy(),
+      },
       './debugger': dynamicInstrumentation,
       './log': log,
       './profiler': profiler,
@@ -487,6 +493,48 @@ describe('TracerProxy', () => {
 
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.notCalled(RemoteConfig)
+      })
+
+      it('preserves the no-op entrypoint for tracing opt-outs even when OTel signals are requested', () => {
+        const repoRoot = path.resolve(__dirname, '../../..')
+        const inactiveModules = ['remote_config', 'opentelemetry/logs', 'opentelemetry/metrics', 'debugger']
+          .map(name => require.resolve(`../src/${name}`))
+        const script = `
+          const lines = []
+          console.warn = line => lines.push(line)
+          const tracer = require(${JSON.stringify(repoRoot)}).init({ startupLogs: true })
+          const carrier = {}
+          tracer.inject(tracer.startSpan('disabled'), 'text_map', carrier)
+          process.stdout.write(JSON.stringify({
+            loaded: ${JSON.stringify(inactiveModules)}.map(file => require.cache[file] !== undefined),
+            lines,
+            carrier,
+          }), () => process.exit(0))
+        `
+        const inherited = Object.fromEntries(Object.entries(process.env)
+          .filter(([name]) => !/^(DD_|_DD_|OTEL_)/.test(name)))
+        for (const signal of ['LOGS', 'METRICS']) {
+          for (const optOut of ['DD_TRACE_ENABLED', 'OTEL_TRACES_EXPORTER']) {
+            for (const remoteConfig of [undefined, 'true']) {
+              const result = spawnSync(process.execPath, ['--eval', script], {
+                encoding: 'utf8',
+                timeout: 10000,
+                env: {
+                  ...inherited,
+                  [`DD_${signal}_OTEL_ENABLED`]: 'true',
+                  [optOut]: optOut === 'DD_TRACE_ENABLED' ? 'false' : 'none',
+                  DD_REMOTE_CONFIGURATION_ENABLED: remoteConfig,
+                },
+              })
+              assert.strictEqual(result.status, 0, result.stderr)
+              assert.deepStrictEqual(JSON.parse(result.stdout), {
+                loaded: inactiveModules.map(() => false),
+                lines: [],
+                carrier: {},
+              })
+            }
+          }
+        }
       })
 
       it('should not initialize when disabled', () => {

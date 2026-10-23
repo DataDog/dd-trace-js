@@ -59,4 +59,9 @@ function trace (log) {
   withNoop(() => logger.debug(log))
 }
 
-module.exports = { configure, error, warn, info, debug, trace }
+function getLogLevel () {
+  if (!enabled) return 'none'
+  return logChannel.getLevel()
+}
+
+module.exports = { configure, error, warn, info, debug, trace, getLogLevel }

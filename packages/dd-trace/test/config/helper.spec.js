@@ -265,6 +265,23 @@ describe('config-helper env resolution', () => {
       getEnvironmentVariable = mod.getEnvironmentVariable
     })
 
+    for (const [name, value] of [['DD_TRACE_OTEL_ENABLED', 'false'], ['OTEL_SDK_DISABLED', 'true']]) {
+      it(`honors fleet ${name} when resolving bridge eligibility`, () => {
+        process.env.DD_TRACE_OTEL_ENABLED = 'true'
+        process.env.OTEL_SDK_DISABLED = 'false'
+        const StableConfigStub = sinon.stub().callsFake(function () {
+          this.localEntries = { DD_TRACE_OTEL_ENABLED: 'true', OTEL_SDK_DISABLED: 'false' }
+          this.fleetEntries = { [name]: value }
+          this.warnings = []
+        })
+        const { isOtelSdkEnabled } = proxyquire('../../src/config/helper', {
+          '../serverless': { IS_SERVERLESS: false },
+          './stable': StableConfigStub,
+        })
+        assert.strictEqual(isOtelSdkEnabled(), false)
+      })
+    }
+
     it('uses fleet over env over local', () => {
       process.env.DD_TRACE_SAMPLE_RATE = '0.5'
       process.env.DD_TRACE_ENABLED = 'true'
