@@ -1,0 +1,27 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/embeddings" },
+      "status": 200,
+      "body": {
+        "object": "list",
+        "data": [
+          { "object": "embedding", "index": 0, "embedding": [0.1, 0.2, 0.3] },
+          { "object": "embedding", "index": 1, "embedding": [0.3, 0.2, 0.1] }
+        ],
+        "model": "text-embedding-3-small",
+        "usage": { "prompt_tokens": 6, "total_tokens": 6 }
+      }
+    },
+    {
+      "match": { "method": "POST", "path": "/v1/embeddings" },
+      "status": 200,
+      "body": {
+        "object": "list",
+        "data": [{ "object": "embedding", "index": 0, "embedding": [0.1, 0.2, 0.3] }],
+        "model": "text-embedding-3-small",
+        "usage": { "prompt_tokens": 3, "total_tokens": 3 }
+      }
+    }
+  ]
+}
