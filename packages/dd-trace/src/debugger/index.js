@@ -4,16 +4,23 @@ const { readFile } = require('fs')
 const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
+const dc = require('dc-polyfill')
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
+const telemetryMetrics = require('../telemetry/metrics')
+const { logGenericError } = require('../startup-log')
 const getDebuggerConfig = require('./config')
 const {
   DEBUGGER_DIAGNOSTICS_V1,
   DEBUGGER_INPUT_DIRECT,
   DEBUGGER_INPUT_V2,
   INSPECT_SEGMENT_GLOBAL_PROPERTY,
+  METRICS_FLUSH_INTERVAL_MS,
+  WORKER_ERROR_REASON,
 } = require('./constants')
-const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
+const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
+const { PauseDurationHistogram } = require('./pause-duration-histogram')
+const { configureProbeSampler, installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
  * @typedef {ReturnType<import('../config')>} Config
@@ -23,12 +30,24 @@ const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler'
  * @typedef {import('../remote_config')} RemoteConfig
  */
 
+// Published by telemetry right before it sends its final metrics on process exit. The flush interval timer is unref'ed
+// and the worker does not keep the process alive, so without this hook everything counted since the last tick would
+// be lost when the application exits on its own.
+const TELEMETRY_APP_CLOSING_CHANNEL = 'datadog:telemetry:app-closing'
+
+const WORKER_FILENAME = join(__dirname, 'devtools_client', 'index.js')
+
 let worker = null
 let configChannel = null
 let ackId = 0
 let rcAckCallbacks = null
 let rc = null
 let inputPath = null
+/** @type {GuardrailMetrics | null} */
+let guardrailMetrics = null
+/** @type {PauseDurationHistogram | null} */
+let pauseDurations = null
+let metricsFlushTimer = null
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
@@ -43,7 +62,6 @@ module.exports = {
 /**
  * Check if the Debugger worker is currently running
  *
- * @returns {boolean} True if the worker is started, false otherwise
  */
 function isStarted () {
   return worker !== null
@@ -75,11 +93,22 @@ function start (config, rcInstance) {
 
   const debuggerGlobals = globalThis[Symbol.for('dd-trace')]
   debuggerGlobals.utilTypes = types
-  debuggerGlobals[INSPECT_SEGMENT_GLOBAL_PROPERTY] = require('./inspect-segment')
+  const createInspectSegment = require('./inspect-segment')
+  const { createIsRedactedIdentifier } = require('./redaction')
+  debuggerGlobals[INSPECT_SEGMENT_GLOBAL_PROPERTY] =
+    createInspectSegment(createIsRedactedIdentifier(config.dynamicInstrumentation))
 
-  const probeSamplerBuffer = installProbeSampler()
+  const guardrailMetricsBuffer = GuardrailMetrics.createBuffer()
+  guardrailMetrics = new GuardrailMetrics(guardrailMetricsBuffer)
+  const pauseDurationBuffer = PauseDurationHistogram.createBuffer()
+  pauseDurations = new PauseDurationHistogram(pauseDurationBuffer)
+  metricsFlushTimer = setInterval(flushMetrics, METRICS_FLUSH_INTERVAL_MS)
+  metricsFlushTimer.unref?.()
+  dc.subscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushMetrics)
 
-  readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
+  const probeSamplerBuffer = installProbeSampler(guardrailMetrics, config)
+
+  readProbeFile(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE, (probes) => {
     const action = 'apply'
     for (const probe of probes) {
       probeChannel.port2.postMessage({ action, probe })
@@ -91,7 +120,8 @@ function start (config, rcInstance) {
     probeChannel.port2.postMessage({ action, probe, ackId })
   })
 
-  probeChannel.port2.on('message', ({ ackId, error }) => {
+  probeChannel.port2.on('message', ({ ackId, error, reason }) => {
+    if (error && reason !== undefined) logWorkerError(error, reason)
     const ack = rcAckCallbacks.get(ackId)
     if (ack === undefined) {
       // This should never happen, but just in case something changes in the future, we should guard against it
@@ -113,7 +143,7 @@ function start (config, rcInstance) {
     inputPath = _inputPath
 
     worker = new Worker(
-      join(__dirname, 'devtools_client', 'index.js'),
+      WORKER_FILENAME,
       {
         name: 'dd-debugger',
         execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
@@ -125,6 +155,8 @@ function start (config, rcInstance) {
           logPort: logChannel.port1,
           configPort: configChannel.port1,
           probeSamplerBuffer,
+          guardrailMetricsBuffer,
+          pauseDurationBuffer,
         },
         transferList: [probeChannel.port1, logChannel.port1, configChannel.port1],
       }
@@ -137,12 +169,14 @@ function start (config, rcInstance) {
       )
     })
 
-    worker.on('error', (err) => log.error('[debugger] worker thread error', err))
+    worker.on('error', onWorkerError)
     worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 
     worker.once('exit', (code) => {
       const error = new Error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
-      log.error('[debugger] worker thread exited unexpectedly', error)
+      // Telemetry omits printf arguments, so the numeric exit code must be part of the message.
+      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+      log.error(() => `[debugger] worker thread exited unexpectedly exit_code=${code}`, error)
       cleanup(error) // Be nice, clean up now that the worker thread encountered an issue and we can't continue
     })
 
@@ -154,6 +188,42 @@ function start (config, rcInstance) {
     configChannel.port1.unref?.()
     configChannel.port2.unref?.()
   })
+}
+
+/**
+ * @param {Error & { code?: unknown, requireStack?: unknown }} error - The error emitted by the worker thread
+ */
+function onWorkerError (error) {
+  // Node.js reports an empty require stack when the module it cannot find is the worker entry point itself, rather
+  // than one of its dependencies. This happens when the dd-trace files are not on disk where dd-trace expects them,
+  // e.g. because dd-trace was bundled into the application, or because some of its files were not deployed.
+  if (error.code === 'MODULE_NOT_FOUND' && Array.isArray(error.requireStack) && error.requireStack.length === 0) {
+    logGenericError(
+      `Dynamic Instrumentation is disabled, because its worker thread could not load ${WORKER_FILENAME}. ` +
+      'Make sure dd-trace is installed as regular files on disk and is not bundled into the application.'
+    )
+    logWorkerError(error, WORKER_ERROR_REASON.WORKER_ENTRY_POINT_NOT_FOUND)
+    return
+  }
+  logWorkerError(error)
+}
+
+/**
+ * Failure metadata belongs in the telemetry message; exception messages remain in the redacted cause.
+ *
+ * @param {Error & { code?: unknown, reason?: unknown }} error - The worker failure
+ * @param {unknown} [reason] - Explicit reason preserved across a probe acknowledgement's structured clone
+ */
+function logWorkerError (error, reason = error.reason) {
+  // Telemetry omits printf arguments, so the failure metadata must be part of the message.
+  // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+  log.error(() => `[debugger] worker thread error name=${
+      typeof error.name === 'string' ? error.name : 'unknown'
+    } code=${
+      typeof error.code === 'string' ? error.code : 'unknown'
+    } reason=${
+      typeof reason === 'string' ? reason : 'unknown'
+    }`, error)
 }
 
 /**
@@ -170,6 +240,7 @@ function configure (config) {
     log.error('[debugger] Invalid DD_SITE for agentless Dynamic Instrumentation: %s', config.site)
     return
   }
+  configureProbeSampler(config)
   configChannel.port2.postMessage(debuggerConfig)
 }
 
@@ -211,6 +282,21 @@ function cleanup (error) {
   configChannel = null
   inputPath = null
 
+  if (metricsFlushTimer !== null) {
+    clearInterval(metricsFlushTimer)
+    metricsFlushTimer = null
+  }
+  if (guardrailMetrics !== null) {
+    dc.unsubscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushMetrics)
+    // Report what the worker recorded up until it was stopped. Known limitation: `Worker#terminate()` interrupts the
+    // worker asynchronously, so anything it records between this drain and its actual termination is lost. That only
+    // concerns events still sitting in the worker's upload buffer, which die with the worker anyway, and a pause that
+    // might still be in progress, so it isn't worth deferring the drain until the worker has exited.
+    flushMetrics()
+    guardrailMetrics = null
+    pauseDurations = null
+  }
+
   // Call any pending ack callbacks
   // Pass error for unexpected exits, or undefined for graceful shutdown
   if (rcAckCallbacks) {
@@ -221,6 +307,22 @@ function cleanup (error) {
     }
     rcAckCallbacks = null
   }
+}
+
+/**
+ * Convert the guardrail counters accumulated by the probe sampler and the worker, and the pause durations recorded by
+ * the worker, into telemetry metrics.
+ */
+function flushMetrics () {
+  if (guardrailMetrics === null || pauseDurations === null) return
+  const namespace = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
+  guardrailMetrics.drain((metric, tags, count) => {
+    namespace.count(metric, tags).inc(count)
+  })
+  const pauseDurationMetric = namespace.distribution('execution.pause.duration')
+  pauseDurations.drain((durationMs, count) => {
+    pauseDurationMetric.track(durationMs, count)
+  })
 }
 
 /**

@@ -16,8 +16,6 @@ class Row {
     this.errorStack = fields.errorStack
     this.evaluations = fields.evaluations
     this.evaluationErrors = fields.evaluationErrors
-    // Only populated for rows pulled from the backend (`experiments.pullExperiment`).
-    this.evaluationDetails = fields.evaluationDetails
   }
 
   get isError () {

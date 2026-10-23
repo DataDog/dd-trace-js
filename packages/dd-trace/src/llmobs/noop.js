@@ -1,5 +1,7 @@
 'use strict'
 
+const NoopPrompts = require('./prompts/noop')
+
 let NoopExperiments
 
 class NoopLLMObs {
@@ -17,12 +19,11 @@ class NoopLLMObs {
   }
 
   /**
-   * Built-in evaluators for experiments. Pure local computation, so they are
-   * available whether or not LLM Observability is enabled.
-   * @returns {typeof import('./evaluators')}
+   * Prompt Management API.
+   * @returns {import('../../../../index').llmobs.Prompts}
    */
-  get evaluators () {
-    return require('./evaluators')
+  get prompts () {
+    return new NoopPrompts()
   }
 
   enable (options) {}

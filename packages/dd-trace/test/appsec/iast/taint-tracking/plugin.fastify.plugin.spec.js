@@ -1,9 +1,9 @@
 'use strict'
 
 const { URL } = require('url')
-const axios = require('axios')
 const { prepareTestServerForIastInFastify } = require('../utils')
 const { withVersions } = require('../../../setup/mocha')
+const httpRequest = require('../../../setup/helpers/http-client')
 
 function noop () {}
 
@@ -13,7 +13,7 @@ describe('Taint tracking plugin sources fastify tests', () => {
       (testThatRequestHasVulnerability, _, config) => {
         describe('tainted body', () => {
           function makePostRequest (done) {
-            axios.post(`http://localhost:${config.port}/`, {
+            httpRequest.post(`http://localhost:${config.port}/`, {
               command: 'echo 1',
             }).catch(done)
           }
@@ -26,7 +26,7 @@ describe('Taint tracking plugin sources fastify tests', () => {
 
         describe('tainted query param', () => {
           function makeRequestWithQueryParam (done) {
-            axios.get(`http://localhost:${config.port}/?command=echo`).catch(done)
+            httpRequest.get(`http://localhost:${config.port}/?command=echo`).catch(done)
           }
 
           testThatRequestHasVulnerability((req) => {
@@ -37,7 +37,7 @@ describe('Taint tracking plugin sources fastify tests', () => {
 
         describe('tainted header', () => {
           function makeRequestWithHeader (done) {
-            axios.get(`http://localhost:${config.port}/`, {
+            httpRequest.get(`http://localhost:${config.port}/`, {
               headers: {
                 'x-iast-test-command': 'echo 1',
               },
@@ -52,7 +52,7 @@ describe('Taint tracking plugin sources fastify tests', () => {
 
         describe('url parse taint tracking', () => {
           function makePostRequest (done) {
-            axios.post(`http://localhost:${config.port}/`, {
+            httpRequest.post(`http://localhost:${config.port}/`, {
               url: 'http://www.datadoghq.com/',
             }).catch(done)
           }
@@ -141,7 +141,7 @@ describe('Taint tracking plugin sources fastify tests', () => {
 
         describe('tainted path parameters', () => {
           function makeRequestWithPathParam (done) {
-            axios.get(`http://localhost:${config.port}/?id=malicious-path`).catch(done)
+            httpRequest.get(`http://localhost:${config.port}/?id=malicious-path`).catch(done)
           }
 
           testThatRequestHasVulnerability((req) => {

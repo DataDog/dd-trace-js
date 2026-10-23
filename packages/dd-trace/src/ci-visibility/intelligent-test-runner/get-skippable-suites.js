@@ -86,7 +86,6 @@ function parseSkippableSuitesResponse (
  * }} result - Parsed skippable response.
  * @param {'suite'|'test'} testLevel - Test optimization skipping level.
  * @param {boolean} shouldConsiderLineCoverage - Whether line coverage can affect suite skipping.
- * @returns {void}
  */
 function logSkippableSuitesResponse (result, testLevel, shouldConsiderLineCoverage) {
   if (!shouldConsiderLineCoverage || result.numReceivedSkippableItems === undefined) {

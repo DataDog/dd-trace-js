@@ -90,7 +90,6 @@ function splitLcovLine (line) {
  * @param {string[]} recordLines
  * @param {Map<string, LcovFileRecord>} files source file path -> merge state
  * @param {string[]} order source file paths in first-seen order
- * @returns {void}
  */
 function mergeLcovRecord (recordLines, files, order) {
   const sourceFileLine = recordLines.find(line => line.startsWith('SF:'))
@@ -143,7 +142,6 @@ function mergeLcovRecord (recordLines, files, order) {
  *
  * @param {string} path
  * @param {LcovFileRecord} record
- * @returns {string}
  */
 function serializeLcovRecord (path, record) {
   const lines = [`SF:${path}`]
@@ -179,7 +177,6 @@ function serializeLcovRecord (path, record) {
  * coverage when the same file appears in more than one cell's report.
  *
  * @param {string[]} reportPaths
- * @returns {string}
  */
 function mergeLcov (reportPaths) {
   const files = new Map()

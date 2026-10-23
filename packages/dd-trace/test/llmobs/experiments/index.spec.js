@@ -35,7 +35,7 @@ const enabledConfig = (overrides = {}) => ({
   site: 'datadoghq.com',
   DD_API_KEY: 'k',
   DD_APP_KEY: 'a',
-  llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-app' },
+  llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'my-app' },
   ...overrides,
 })
 
@@ -135,6 +135,19 @@ describe('LLMObs Experiments facade', () => {
 
     it('returns a working facade when enabled and credentialed', () => {
       const exp = createExperiments(enabledConfig())
+      for (const name of [
+        'BaseEvaluator',
+        'BaseSummaryEvaluator',
+        'EvaluatorContext',
+        'SummaryEvaluatorContext',
+        'EvaluatorResult',
+        'MultiEvaluatorResult',
+        'RemoteEvaluator',
+        'RemoteEvaluatorError',
+      ]) {
+        assert.equal(typeof exp[name], 'function')
+      }
+
       const dataset = exp.createDataset('d', {
         description: 'desc',
         records: [{ inputData: 'in', expectedOutput: 'out', metadata: { source: 'test' } }],
@@ -159,12 +172,29 @@ describe('LLMObs Experiments facade', () => {
       })
 
       const exp = createWithProjectCapture(enabledConfig({
-        llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'ml-app', projectName: 'configured-project' },
+        llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'ml-app', DD_LLMOBS_PROJECT_NAME: 'configured-project' },
       }))
       exp.createDataset('default')
       exp.createDataset('override', { projectName: 'override-project' })
 
       assert.deepEqual(constructedProjects, ['configured-project', 'override-project'])
+    })
+
+    it('uses the configured project name for experiments without an operation override', async () => {
+      const projectNames = []
+      const stopBeforeBackend = new Error('stop before backend request')
+      sinon.stub(ExperimentsClient.prototype, 'ensureProjectId').callsFake(function () {
+        projectNames.push(this.projectName)
+        throw stopBeforeBackend
+      })
+      const exp = createExperiments(enabledConfig({
+        llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_PROJECT_NAME: 'configured-project' },
+      }))
+
+      await assert.rejects(exp.experiment({ name: 'local', dataset: {}, task: String }).run(), stopBeforeBackend)
+      await assert.rejects(exp.startExperiment({ name: 'external' }), stopBeforeBackend)
+
+      assert.deepEqual(projectNames, ['configured-project', 'configured-project'])
     })
 
     it('preserves a dataset project and rejects mismatched experiment overrides', () => {
@@ -180,7 +210,7 @@ describe('LLMObs Experiments facade', () => {
       })
 
       const exp = createWithProjectCapture(enabledConfig({
-        llmobs: { DD_LLMOBS_ENABLED: true, projectName: 'default-project' },
+        llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_PROJECT_NAME: 'default-project' },
       }))
       const dataset = exp.createDataset('dataset', { projectName: 'dataset-project' })
       exp.experiment({ name: 'dataset-exp', dataset, task: input => input })
@@ -211,7 +241,7 @@ describe('LLMObs Experiments facade', () => {
     it('does not use mlApp or service as the experiment project fallback', () => {
       const withMlApp = createExperiments(enabledConfig({
         service: 'my-service',
-        llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-app' },
+        llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'my-app' },
       }))
       assert.equal(withMlApp.createDataset('with-ml-app').projectName(), 'default-project')
 

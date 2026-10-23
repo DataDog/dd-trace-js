@@ -2,9 +2,11 @@
 
 const assert = require('node:assert/strict')
 const { describe, it, afterEach, beforeEach } = require('mocha')
+const sinon = require('sinon')
 
 require('../../setup/core')
 
+const log = require('../../../src/log')
 const OtlpHttpExporterBase = require('../../../src/opentelemetry/otlp/otlp_http_exporter_base')
 const { version: tracerVersion } = require('../../../../../package.json')
 
@@ -31,6 +33,7 @@ describe('OtlpHttpExporterBase', () => {
   })
 
   afterEach(() => {
+    sinon.restore()
     for (const [name, value] of originalEnvironment) {
       if (value === undefined) {
         delete process.env[name]
@@ -95,6 +98,40 @@ describe('OtlpHttpExporterBase', () => {
       exporter.setUrl('http://intake.example/other-path')
 
       assert.strictEqual(exporter.options.agent, undefined)
+    })
+
+    for (const url of ['not a URL', 'ftp://intake.example/other-path']) {
+      it(`keeps the current target when re-targeted to ${url}`, () => {
+        const exporter = new OtlpHttpExporterBase(
+          'http://intake.example/path', undefined, 1000, 'http/protobuf', 'traces'
+        )
+        const error = sinon.stub(log, 'error')
+
+        exporter.setUrl(url)
+
+        assert.strictEqual(exporter.options.hostname, 'intake.example')
+        assert.strictEqual(exporter.options.port, '')
+        assert.strictEqual(exporter.options.path, '/path')
+        assert.strictEqual(exporter.options.agent, undefined)
+        assert.strictEqual(exporter.telemetryTags[0], 'protocol:http')
+        sinon.assert.calledOnce(error)
+      })
+    }
+
+    it('keeps the current target when proxy configuration is invalid', () => {
+      const exporter = new OtlpHttpExporterBase(
+        'http://intake.example/path', undefined, 1000, 'http/protobuf', 'traces'
+      )
+      const error = sinon.stub(log, 'error')
+      process.env.HTTPS_PROXY = '://invalid'
+
+      exporter.setUrl('https://other.example/other-path')
+
+      assert.strictEqual(exporter.options.hostname, 'intake.example')
+      assert.strictEqual(exporter.options.path, '/path')
+      assert.strictEqual(exporter.options.agent, undefined)
+      assert.strictEqual(exporter.telemetryTags[0], 'protocol:http')
+      sinon.assert.calledOnce(error)
     })
   })
 })

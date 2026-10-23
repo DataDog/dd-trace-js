@@ -74,13 +74,11 @@ class CrossPayloadAgentEncoder extends AgentEncoder {
     return super.makePayload()
   }
 
-  /** @returns {void} */
   reset () {
     this.#prepareReset()
     super.reset()
   }
 
-  /** @returns {void} */
   #prepareReset () {
     const crossPayloadState = this.#crossPayloadState
     if (crossPayloadState !== undefined && !prepareCrossPayloadReset(crossPayloadState)) {
@@ -129,7 +127,6 @@ function markPayloadString (crossPayloadState, value) {
 
 /**
  * @param {ReturnType<typeof createCrossPayloadState>} crossPayloadState
- * @returns {boolean}
  */
 function prepareCrossPayloadReset (crossPayloadState) {
   const learning = crossPayloadState.learningPayloadCount < CROSS_PAYLOAD_LEARNING_PAYLOAD_LIMIT

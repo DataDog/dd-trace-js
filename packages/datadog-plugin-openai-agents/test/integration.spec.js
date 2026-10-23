@@ -70,8 +70,8 @@ describe('OpenAIAgentsIntegration', () => {
         config: {
           llmobs: {
             DD_LLMOBS_ENABLED: true,
-            mlApp: 'test',
-            sampleRate: 1,
+            DD_LLMOBS_ML_APP: 'test',
+            DD_LLMOBS_SAMPLE_RATE: 1,
           },
         },
       })
@@ -125,8 +125,8 @@ describe('OpenAIAgentsIntegration', () => {
         config: {
           llmobs: {
             DD_LLMOBS_ENABLED: true,
-            mlApp: 'test',
-            sampleRate: 1,
+            DD_LLMOBS_ML_APP: 'test',
+            DD_LLMOBS_SAMPLE_RATE: 1,
           },
         },
       })
@@ -145,8 +145,8 @@ describe('OpenAIAgentsIntegration', () => {
       const config = {
         llmobs: {
           DD_LLMOBS_ENABLED: true,
-          mlApp: 'test',
-          sampleRate: 1,
+          DD_LLMOBS_ML_APP: 'test',
+          DD_LLMOBS_SAMPLE_RATE: 1,
         },
       }
       const { integration, tracer } = build({ tracerSpans: [workflowSpan], config })
@@ -181,8 +181,8 @@ describe('OpenAIAgentsIntegration', () => {
       const config = {
         llmobs: {
           DD_LLMOBS_ENABLED: true,
-          mlApp: 'test',
-          sampleRate: 1,
+          DD_LLMOBS_ML_APP: 'test',
+          DD_LLMOBS_SAMPLE_RATE: 1,
         },
       }
       const { integration } = build({ tracerSpans: [workflowSpan, agentSpan], config })
@@ -221,8 +221,8 @@ describe('OpenAIAgentsIntegration', () => {
         config: {
           llmobs: {
             DD_LLMOBS_ENABLED: true,
-            mlApp: 'test',
-            sampleRate: 1,
+            DD_LLMOBS_ML_APP: 'test',
+            DD_LLMOBS_SAMPLE_RATE: 1,
           },
         },
       })
@@ -233,7 +233,13 @@ describe('OpenAIAgentsIntegration', () => {
     })
 
     it('registers spans after LLMObs is enabled at runtime', () => {
-      const config = { llmobs: { DD_LLMOBS_ENABLED: false, mlApp: 'test', sampleRate: 1 } }
+      const config = {
+        llmobs: {
+          DD_LLMOBS_ENABLED: false,
+          DD_LLMOBS_ML_APP: 'test',
+          DD_LLMOBS_SAMPLE_RATE: 1,
+        },
+      }
       const disabledSpan = makeFakeSpan()
       const enabledSpan = makeFakeSpan()
       const { integration } = build({ tracerSpans: [disabledSpan, enabledSpan], config })
@@ -393,8 +399,8 @@ describe('OpenAIAgentsIntegration', () => {
         config: {
           llmobs: {
             DD_LLMOBS_ENABLED: true,
-            mlApp: 'test',
-            sampleRate: 1,
+            DD_LLMOBS_ML_APP: 'test',
+            DD_LLMOBS_SAMPLE_RATE: 1,
           },
         },
       })
@@ -457,8 +463,8 @@ describe('OpenAIAgentsIntegration', () => {
         config: {
           llmobs: {
             DD_LLMOBS_ENABLED: true,
-            mlApp: 'test',
-            sampleRate: 1,
+            DD_LLMOBS_ML_APP: 'test',
+            DD_LLMOBS_SAMPLE_RATE: 1,
           },
         },
       })
@@ -669,7 +675,13 @@ describe('OpenAIAgentsIntegration', () => {
       const responseSpan = makeFakeSpan('response-dd')
       const { integration, processor } = buildWithProcessor({
         tracerSpans: [workflowSpan, agentSpan, responseSpan],
-        config: { llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'test', sampleRate: 1 } },
+        config: {
+          llmobs: {
+            DD_LLMOBS_ENABLED: true,
+            DD_LLMOBS_ML_APP: 'test',
+            DD_LLMOBS_SAMPLE_RATE: 1,
+          },
+        },
       })
 
       integration.startTrace({ traceId: 't1', name: 'my workflow' })

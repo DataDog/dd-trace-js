@@ -3,6 +3,7 @@
 const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
 const propagationHash = require('../propagation-hash')
+const { truncateString } = require('../util')
 const StoragePlugin = require('./storage')
 
 // Unreserved RFC 3986 set that `encodeURIComponent` leaves untouched (a conservative subset:
@@ -24,7 +25,7 @@ class DatabasePlugin extends StoragePlugin {
   // trails ddh — so per-query work shrinks to encoding dddb / dddbs / ddh and concatenating.
   #dbmEnvFragment
   #dbmEndFragment
-  // Cache the rendered prefix per `${db.name}\0${out.host}\0${dbmService}`. The triple is
+  // Cache the rendered prefix per `${db.name}\0${out.host}\0${serviceName}`. The triple is
   // connection-stable for a real workload, so the steady state is one `LRUCache.get` plus the
   // optional per-call `,ddprs='...'` suffix.
   #dbmPrefixCache = new LRUCache({ max: DBM_PREFIX_CACHE_MAX })
@@ -46,7 +47,6 @@ class DatabasePlugin extends StoragePlugin {
    * @param {string} serviceName
    * @param {import('../../../..').Span} span
    * @param {object} peerData
-   * @returns {string}
    */
   #createDBMPropagationCommentService (serviceName, span, peerData) {
     const spanTags = span.context().getTags()
@@ -61,22 +61,13 @@ class DatabasePlugin extends StoragePlugin {
       this.#dbmPrefixCache.set(cacheKey, prefix)
     }
 
-    if (peerData !== undefined && peerData[PEER_SERVICE_SOURCE_KEY] === PEER_SERVICE_KEY) {
-      return `${prefix},ddprs='${encode(peerData[PEER_SERVICE_KEY])}'`
+    // `dddbs` never follows the peer service: it is always the configured database service, and the
+    // peer service is reported through `ddprs` only, and only when it was set explicitly.
+    const peerService = peerData?.[PEER_SERVICE_KEY]
+    if (peerService && peerData[PEER_SERVICE_SOURCE_KEY] === PEER_SERVICE_KEY) {
+      return `${prefix},ddprs='${encode(peerService)}'`
     }
     return prefix
-  }
-
-  /**
-   * @param {string} tracerService
-   * @param {object} peerData
-   * @returns {string}
-   */
-  #getDbmServiceName (tracerService, peerData) {
-    if (this._tracerConfig.spanComputePeerService) {
-      return this.getPeerServiceRemap(peerData)[PEER_SERVICE_KEY] || tracerService
-    }
-    return tracerService
   }
 
   /**
@@ -92,8 +83,7 @@ class DatabasePlugin extends StoragePlugin {
     }
 
     const peerData = this.getPeerService(span.context().getTags())
-    const dbmService = this.#getDbmServiceName(serviceName, peerData)
-    const servicePropagation = this.#createDBMPropagationCommentService(dbmService, span, peerData)
+    const servicePropagation = this.#createDBMPropagationCommentService(serviceName, span, peerData)
 
     let dbmComment = servicePropagation
 
@@ -123,7 +113,6 @@ class DatabasePlugin extends StoragePlugin {
    * @param {string} query
    * @param {string} serviceName
    * @param {boolean} disableFullMode
-   * @returns {string}
    */
   injectDbmQuery (span, query, serviceName, disableFullMode = false) {
     const dbmTraceComment = this.createDbmComment(span, serviceName, disableFullMode)
@@ -139,7 +128,6 @@ class DatabasePlugin extends StoragePlugin {
 
   /**
    * @param {string} query
-   * @returns {string}
    */
   maybeTruncate (query) {
     const maxLength = typeof this.config.truncate === 'number'
@@ -147,7 +135,7 @@ class DatabasePlugin extends StoragePlugin {
       : 5000 // same as what the agent does
 
     if (this.config.truncate && query && query.length > maxLength) {
-      query = `${query.slice(0, maxLength - 3)}...`
+      query = truncateString(query, maxLength, '...')
     }
 
     return query
@@ -156,7 +144,6 @@ class DatabasePlugin extends StoragePlugin {
 
 /**
  * @param {string | number | undefined | null} value
- * @returns {string}
  */
 function encode (value) {
   if (!value) return ''

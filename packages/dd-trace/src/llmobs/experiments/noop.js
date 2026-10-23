@@ -1,7 +1,25 @@
 'use strict'
 
 const log = require('../../log')
-const { ExternalExperiment } = require('./experiment')
+
+let ExternalExperiment
+let evaluatorTypes
+let remoteEvaluatorTypes
+
+function getExternalExperiment () {
+  ExternalExperiment ??= require('./experiment').ExternalExperiment
+  return ExternalExperiment
+}
+
+function getEvaluatorTypes () {
+  evaluatorTypes ??= require('./evaluator')
+  return evaluatorTypes
+}
+
+function getRemoteEvaluatorTypes () {
+  remoteEvaluatorTypes ??= require('./remote-evaluator')
+  return remoteEvaluatorTypes
+}
 
 const NOOP_EXPERIMENT_ID = '00000000-0000-0000-0000-000000000000'
 const NOOP_SPAN_ID = '0000000000000000'
@@ -246,6 +264,38 @@ class NoopExperiments {
     log.warn('LLMObs experiments unavailable: %s', this.#reason)
   }
 
+  get BaseEvaluator () {
+    return getEvaluatorTypes().BaseEvaluator
+  }
+
+  get BaseSummaryEvaluator () {
+    return getEvaluatorTypes().BaseSummaryEvaluator
+  }
+
+  get EvaluatorContext () {
+    return getEvaluatorTypes().EvaluatorContext
+  }
+
+  get SummaryEvaluatorContext () {
+    return getEvaluatorTypes().SummaryEvaluatorContext
+  }
+
+  get EvaluatorResult () {
+    return getEvaluatorTypes().EvaluatorResult
+  }
+
+  get MultiEvaluatorResult () {
+    return getEvaluatorTypes().MultiEvaluatorResult
+  }
+
+  get RemoteEvaluator () {
+    return getRemoteEvaluatorTypes().RemoteEvaluator
+  }
+
+  get RemoteEvaluatorError () {
+    return getRemoteEvaluatorTypes().RemoteEvaluatorError
+  }
+
   createDataset (name, options = {}) {
     this.#warn()
     return new NoopDataset(name, options)
@@ -267,61 +317,8 @@ class NoopExperiments {
    */
   startExperiment (options = {}) {
     this.#warn()
-    return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name, true)))
-  }
-
-  /**
-   * @returns {Promise<{ uiUrl: null }>}
-   */
-  publishEvaluator () {
-    this.#warn()
-    return Promise.resolve({ uiUrl: null })
-  }
-
-  /**
-   * @param {string} experimentId
-   * @returns {Promise<object>}
-   */
-  pullExperiment (experimentId = '') {
-    this.#warn()
-    return Promise.resolve({
-      id: experimentId,
-      name: '',
-      experiment: '',
-      projectId: '',
-      projectName: '',
-      datasetId: '',
-      datasetVersion: 0,
-      description: '',
-      config: {},
-      runCount: 0,
-      tags: {},
-      parentExperimentId: null,
-      aggregateData: null,
-      status: null,
-      error: null,
-      createdAt: null,
-      updatedAt: null,
-      url: null,
-      result: { experimentId: null, rows: [], summaryEvaluations: {}, runs: [], url: null },
-    })
-  }
-
-  /**
-   * @returns {Promise<never[]>}
-   */
-  listExperiments () {
-    this.#warn()
-    return Promise.resolve([])
-  }
-
-  /**
-   * @param {{ datasetName?: string, description?: string }} [options]
-   * @returns {Promise<NoopDataset>}
-   */
-  createDatasetFromCsv (options = {}) {
-    this.#warn()
-    return Promise.resolve(new NoopDataset(options.datasetName, { description: options.description }))
+    const NoopExternalExperiment = getExternalExperiment()
+    return Promise.resolve(new NoopExternalExperiment(new NoopExperiment(options.name, true)))
   }
 }
 

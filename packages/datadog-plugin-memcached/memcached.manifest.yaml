@@ -1,0 +1,11 @@
+_v: 1
+name: memcached
+display_name: Memcached
+description: Instruments Memcached client commands with spans that capture operation names, server addresses, and errors.
+packages:
+- name: memcached
+category:
+- db.client
+systems:
+- memcached
+creation_date: '2018-09-24'

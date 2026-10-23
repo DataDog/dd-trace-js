@@ -14,7 +14,8 @@ describe('OpenFeature Module', () => {
   let openfeatureModule
   let mockWriter
   let ExposuresWriterStub
-  let setExposureDeliveryStrategyStub
+  let setEventDeliveryStrategyStub
+  let stopEventDeliveryStrategy
 
   beforeEach(() => {
     config = {
@@ -30,11 +31,12 @@ describe('OpenFeature Module', () => {
     }
 
     ExposuresWriterStub = sinon.stub().returns(mockWriter)
-    setExposureDeliveryStrategyStub = sinon.stub()
+    stopEventDeliveryStrategy = sinon.spy()
+    setEventDeliveryStrategyStub = sinon.stub().returns(stopEventDeliveryStrategy)
 
     openfeatureModule = proxyquire('../../src/openfeature', {
       './writers/exposures': ExposuresWriterStub,
-      './writers/util': { setExposureDeliveryStrategy: setExposureDeliveryStrategyStub },
+      './writers/util': { setEventDeliveryStrategy: setEventDeliveryStrategyStub },
     })
   })
 
@@ -52,12 +54,12 @@ describe('OpenFeature Module', () => {
       openfeatureModule.enable(config)
 
       sinon.assert.calledOnceWithExactly(ExposuresWriterStub, config)
-      sinon.assert.calledOnce(setExposureDeliveryStrategyStub)
+      sinon.assert.calledOnce(setEventDeliveryStrategyStub)
     })
 
     it('configures the writer with the selected exposure route', () => {
       openfeatureModule.enable(config)
-      const setWriterEnabled = setExposureDeliveryStrategyStub.firstCall.args[1]
+      const setWriterEnabled = setEventDeliveryStrategyStub.firstCall.args[1]
       const route = {
         url: new URL('http://serverless-init:8126'),
         basePath: '/evp_proxy/v4',
@@ -85,10 +87,10 @@ describe('OpenFeature Module', () => {
       ExposuresWriterStub.onSecondCall().returns(replacementWriter)
 
       openfeatureModule.enable(config)
-      const staleCallback = setExposureDeliveryStrategyStub.firstCall.args[1]
+      const staleCallback = setEventDeliveryStrategyStub.firstCall.args[1]
       openfeatureModule.disable()
       openfeatureModule.enable(config)
-      const currentCallback = setExposureDeliveryStrategyStub.secondCall.args[1]
+      const currentCallback = setEventDeliveryStrategyStub.secondCall.args[1]
 
       staleCallback(true, staleRoute)
       sinon.assert.notCalled(replacementWriter.setEnabled)
@@ -102,7 +104,7 @@ describe('OpenFeature Module', () => {
       openfeatureModule.enable(config)
 
       sinon.assert.calledOnceWithExactly(ExposuresWriterStub, config)
-      sinon.assert.calledOnceWithExactly(setExposureDeliveryStrategyStub, config, sinon.match.func)
+      sinon.assert.calledOnceWithExactly(setEventDeliveryStrategyStub, config, sinon.match.func)
     })
 
     it('should handle multiple enable calls gracefully', () => {
@@ -117,6 +119,7 @@ describe('OpenFeature Module', () => {
       openfeatureModule.disable()
 
       sinon.assert.calledOnce(mockWriter.destroy)
+      sinon.assert.calledOnce(stopEventDeliveryStrategy)
     })
   })
 
