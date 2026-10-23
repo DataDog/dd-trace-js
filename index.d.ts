@@ -332,6 +332,7 @@ interface Plugins {
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
   "langgraph": tracer.plugins.langgraph;
+  "llamaindex": tracer.plugins.llamaindex;
   "mariadb": tracer.plugins.mariadb;
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
@@ -2989,6 +2990,11 @@ declare namespace tracer {
      * [langgraph](https://www.npmjs.com/package/@langchain/langgraph) library.
      */
     interface langgraph extends Instrumentation, LLMObsIntegration {}
+
+    /**
+     * This plugin automatically instruments the llamaindex / @llamaindex/core module.
+     */
+    interface llamaindex extends Instrumentation, LLMObsIntegration {}
 
       /**
      * This plugin automatically instruments the

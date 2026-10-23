@@ -54,11 +54,20 @@ const missingInstrumentationHooks = [
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
   'langchain',
   'langgraph',
+  'llamaindex',
   'postgres',
   'supabase',
 ]
 
-const hooklessOrchestrionPlugins = new Set(['azure-cosmos', 'bullmq', 'langchain', 'langgraph', 'postgres', 'supabase'])
+const hooklessOrchestrionPlugins = new Set([
+  'azure-cosmos',
+  'bullmq',
+  'langchain',
+  'langgraph',
+  'llamaindex',
+  'postgres',
+  'supabase',
+])
 
 function extractPluginIds (source, re, index) {
   const ids = new Set()
@@ -194,6 +203,7 @@ describe('Plugin Structure Validation', () => {
       '@azure/cosmos',
       '@langchain/core',
       '@langchain/langgraph',
+      '@llamaindex/core',
       '@supabase/auth-js',
       '@supabase/functions-js',
       '@supabase/postgrest-js',
