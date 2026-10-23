@@ -280,7 +280,7 @@ jobs:
           timeout_minutes: 5
           retry_wait_seconds: 30
           command: >-
-            sudo timeout 3m sh -c 'apt-get update && apt-get install -y --no-install-recommends ffmpeg'
+            sudo timeout 3m sh -c 'dpkg --configure -a && apt-get update && apt-get install -y --no-install-recommends ffmpeg'
       - name: Use installed Chrome and ChromeDriver
         if: matrix.spec == 'webdriverio'
         run: |
