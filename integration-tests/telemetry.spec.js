@@ -9,8 +9,8 @@ const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc, assertObjectCont
 
 describe('telemetry', () => {
   describe('ESM dependencies', () => {
-    // initialize.mjs always registers the asynchronous loader (module.register). register.js
-    // registers the synchronous loader (module.registerHooks) on Node.js versions that support it.
+    // Both entry points register the synchronous loader (module.registerHooks) on Node.js versions that
+    // support it, and the asynchronous loader (module.register) otherwise.
     const setups = [
       { execArgv: ['--import', 'dd-trace/initialize.mjs'], app: 'index.mjs' },
       { execArgv: ['--import', 'dd-trace/register.js', '--require', 'dd-trace/init'], app: 'index.mjs' },
