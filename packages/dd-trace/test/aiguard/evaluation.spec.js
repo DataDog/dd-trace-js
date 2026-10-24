@@ -38,7 +38,18 @@ describe('AI Guard evaluation response', () => {
       hasTagProbabilities: true,
       blockingEnabled: true,
       redactionReplacements,
+      extraTags: undefined,
     })
+  })
+
+  it('passes extra_tags through unvalidated so a malformed value is not a bad response', () => {
+    for (const extraTags of [{ 'ai_guard.policy': 'default' }, 'not-an-object', ['a'], null, 42]) {
+      const evaluation = parseEvaluationResponse({ data: { attributes: { action: 'ALLOW', extra_tags: extraTags } } })
+      assert.ok(evaluation)
+      assert.strictEqual(evaluation.extraTags, extraTags)
+      const outcome = createEvaluationOutcome([], evaluation, { block: true, redactionEnabled: true })
+      assert.strictEqual(outcome.extraTags, extraTags)
+    }
   })
 
   it('uses safe defaults for optional backend fields', () => {
@@ -51,6 +62,7 @@ describe('AI Guard evaluation response', () => {
       hasTagProbabilities: false,
       blockingEnabled: false,
       redactionReplacements: undefined,
+      extraTags: undefined,
     })
   })
 
@@ -105,6 +117,7 @@ describe('AI Guard evaluation response', () => {
         applied: true,
         failures: 0,
       },
+      extraTags: undefined,
     })
     assert.strictEqual(outcome.result.messages, privateSnapshot)
     assert.strictEqual(privateSnapshot[0].content, 'My SSN is <REDACTED>')

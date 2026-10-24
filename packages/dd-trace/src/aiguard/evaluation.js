@@ -1,10 +1,24 @@
 'use strict'
 
-const { HTTP_CLIENT_IP, HTTP_USERAGENT, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
+const {
+  ERROR,
+  HTTP_CLIENT_IP,
+  HTTP_USERAGENT,
+  MANUAL_DROP,
+  MANUAL_KEEP,
+  NETWORK_CLIENT_IP,
+  RESOURCE_NAME,
+  SAMPLING_PRIORITY,
+  SERVICE_NAME,
+  SPAN_KIND,
+  SPAN_TYPE,
+} = require('../../../../ext/tags')
 const createRfdc = require('../../../../vendor/dist/rfdc')
 const clone = createRfdc({ proto: false, circles: false })
 const { USER_ID, USER_SESSION_ID } = require('../appsec/addresses')
 const { getActiveRequest } = require('../appsec/store')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, PROCESS_ID, SAMPLING_PRIORITY_KEY } = require('../constants')
+const log = require('../log')
 const { keepTrace } = require('../priority_sampler')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { AI_GUARD } = require('../standalone/product')
@@ -30,6 +44,7 @@ const ALLOW = 'ALLOW'
  * @property {boolean} hasTagProbabilities
  * @property {boolean} blockingEnabled
  * @property {unknown} redactionReplacements
+ * @property {unknown} extraTags
  */
 
 /**
@@ -40,6 +55,7 @@ const ALLOW = 'ALLOW'
  * @property {boolean} shouldBlock
  * @property {boolean} hasTagProbabilities
  * @property {{ enabled: boolean, applied: boolean, failures: number }} redaction
+ * @property {unknown} extraTags
  */
 
 /**
@@ -89,6 +105,8 @@ function parseEvaluationResponse (body) {
     hasTagProbabilities: isRecord(attributes.tag_probs),
     blockingEnabled: attributes.is_blocking_enabled === true,
     redactionReplacements: attributes.redaction_replacements,
+    // Validated when applied to the span: a malformed value must not turn into a bad_response.
+    extraTags: attributes.extra_tags,
   }
 }
 
@@ -132,6 +150,7 @@ function createEvaluationOutcome (messages, evaluation, options) {
       applied: redaction.redacted,
       failures: redaction.failures,
     },
+    extraTags: evaluation.extraTags,
   }
 }
 
@@ -146,6 +165,104 @@ const SERVICE_ENTRY_TAG_MAPPINGS = [
   [USER_ID, TAGS.USR_ID_TAG_KEY],
   [USER_SESSION_ID, TAGS.USR_SESSION_ID_TAG_KEY],
 ]
+
+// Backend extra tags never override what the tracer computes itself, nor keys that control the
+// span or its trace (sampling, service, resource, error state). Internal _dd keys are covered by
+// isReservedExtraTag instead of being listed here.
+const RESERVED_EXTRA_TAGS = new Set([
+  TAGS.ACTION_TAG_KEY,
+  TAGS.REASON_TAG_KEY,
+  TAGS.TARGET_TAG_KEY,
+  TAGS.TOOL_NAME_TAG_KEY,
+  TAGS.BLOCKED_TAG_KEY,
+  TAGS.REDACTED_TAG_KEY,
+  TAGS.EVENT_TAG_KEY,
+  ...SERVICE_ENTRY_TAG_MAPPINGS.map(([, destinationTag]) => destinationTag),
+  MANUAL_KEEP,
+  MANUAL_DROP,
+  SAMPLING_PRIORITY,
+  SERVICE_NAME,
+  RESOURCE_NAME,
+  SPAN_TYPE,
+  SPAN_KIND,
+  ERROR,
+  ERROR_TYPE,
+  ERROR_MESSAGE,
+  ERROR_STACK,
+  SAMPLING_PRIORITY_KEY,
+  PROCESS_ID,
+  'analytics.event',
+  'language',
+  'runtime-id',
+  'service.version',
+  'version',
+  'env',
+])
+
+/**
+ * Returns whether a backend extra tag key must not be set on the span.
+ *
+ * @param {string} key
+ */
+function isReservedExtraTag (key) {
+  // _dd is the tracer's internal namespace (_dd.*, _dd1.*): the span formatter writes sampling,
+  // top-level and propagation keys there and a span tag with the same key would overwrite them.
+  // This is not an AI Guard namespace filter; the backend owns ai_guard.* keys.
+  return key.startsWith('_dd') || RESERVED_EXTRA_TAGS.has(key)
+}
+
+const RESERVED_EXTRA_META_STRUCT_KEYS = new Set(['messages', 'attack_categories', 'sds', 'tag_probs'])
+
+/**
+ * Copies backend-provided extra tags to the span: scalars as span tags, objects and arrays to the
+ * AI Guard meta-struct. Keys are used verbatim. Malformed input is skipped and never throws.
+ *
+ * @param {Span} span
+ * @param {EvaluationMetaStruct} metaStruct
+ * @param {unknown} extraTags
+ */
+function applyExtraTags (span, metaStruct, extraTags) {
+  if (extraTags === undefined) return
+  if (!isRecord(extraTags)) {
+    log.debug('AI Guard: ignoring extra_tags of type %s', extraTags === null ? 'null' : typeof extraTags)
+    return
+  }
+
+  // The client decodes the payload with JSON.parse, so keys are own strings and values are JSON types.
+  for (const key of Object.keys(extraTags)) {
+    // JSON.parse creates an own __proto__ key; assigning it would replace a prototype instead.
+    if (key.length === 0 || key === '__proto__') {
+      log.debug('AI Guard: ignoring extra tag with invalid key %s', key)
+      continue
+    }
+
+    const value = extraTags[key]
+    const type = typeof value
+    let tagValue
+    if (type === 'string' || (type === 'number' && Number.isFinite(value))) {
+      tagValue = value
+    } else if (type === 'boolean') {
+      tagValue = value ? 'true' : 'false'
+    } else if (value !== null && type === 'object') {
+      if (RESERVED_EXTRA_META_STRUCT_KEYS.has(key)) {
+        log.debug('AI Guard: ignoring reserved extra tag %s', key)
+      } else {
+        metaStruct[key] = value
+      }
+      continue
+    } else {
+      // JSON.parse yields Infinity for out-of-range numbers, which is not a meaningful metric.
+      log.debug('AI Guard: ignoring extra tag %s with unsupported value', key)
+      continue
+    }
+
+    if (isReservedExtraTag(key)) {
+      log.debug('AI Guard: ignoring reserved extra tag %s', key)
+    } else {
+      span.setTag(key, tagValue)
+    }
+  }
+}
 
 class EvaluationReporter {
   #config
@@ -230,6 +347,7 @@ class EvaluationReporter {
     if (result.tags.length > 0) report.metaStruct.attack_categories = result.tags
     if (result.sds.length > 0) report.metaStruct.sds = result.sds
     if (outcome.hasTagProbabilities) report.metaStruct.tag_probs = result.tagProbabilities
+    applyExtraTags(report.span, report.metaStruct, outcome.extraTags)
 
     if (redaction.enabled) {
       report.span.setTag(TAGS.REDACTED_TAG_KEY, redaction.applied ? 'true' : 'false')
