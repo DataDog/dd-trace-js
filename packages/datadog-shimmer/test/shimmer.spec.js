@@ -698,6 +698,132 @@ describe('shimmer', () => {
     })
   })
 
+  describe('runHook', () => {
+    const wrapper = original => function () { return original.apply(this, arguments) }
+
+    function noop () {}
+
+    it('returns the hook result and forwards its arguments', () => {
+      const result = shimmer.runHook({}, (a, b) => [a, b], 1, 2)
+
+      assert.deepStrictEqual(result, [1, 2])
+    })
+
+    it('does not wrap again what an earlier invocation of the same hook wrapped', () => {
+      const owner = {}
+      const shared = { method: noop }
+      const hook = target => shimmer.wrap(target, 'method', wrapper)
+
+      shimmer.runHook(owner, hook, shared)
+      const once = shared.method
+
+      assert.strictEqual(shimmer.runHook(owner, hook, shared), shared)
+      assert.strictEqual(shared.method, once)
+    })
+
+    it('does not wrap again what an earlier invocation of the same hook wrapped with wrapFunction', () => {
+      const owner = {}
+      const hook = fn => shimmer.wrapFunction(fn, wrapper)
+
+      const once = shimmer.runHook(owner, hook, noop)
+
+      assert.notStrictEqual(once, noop)
+      assert.strictEqual(shimmer.runHook(owner, hook, once), once)
+    })
+
+    it('keeps a getter wrapped once across invocations of the same hook', () => {
+      const owner = {}
+      const shared = { get method () { return noop } }
+      const hook = target => shimmer.wrap(target, 'method', getter => function () { return getter.call(this) })
+
+      shimmer.runHook(owner, hook, shared)
+      const once = Object.getOwnPropertyDescriptor(shared, 'method').get
+      shimmer.runHook(owner, hook, shared)
+
+      assert.strictEqual(Object.getOwnPropertyDescriptor(shared, 'method').get, once)
+    })
+
+    it('allows one invocation to layer wrappers on the same method', () => {
+      const calls = []
+      const shared = { method () { calls.push('original') } }
+      const layer = name => original => function () {
+        calls.push(name)
+        return original.apply(this, arguments)
+      }
+
+      shimmer.runHook({}, target => {
+        shimmer.wrap(target, 'method', layer('inner'))
+        shimmer.wrap(target, 'method', layer('outer'))
+      }, shared)
+      shared.method()
+
+      assert.deepStrictEqual(calls, ['outer', 'inner', 'original'])
+    })
+
+    it('lets a different hook wrap what another hook wrapped', () => {
+      const shared = { method: noop }
+      const hook = target => shimmer.wrap(target, 'method', wrapper)
+
+      shimmer.runHook({}, hook, shared)
+      const first = shared.method
+      shimmer.runHook({}, hook, shared)
+
+      assert.notStrictEqual(shared.method, first)
+    })
+
+    it('wraps a distinct copy of the module in a later invocation', () => {
+      const owner = {}
+      const hook = target => shimmer.wrap(target, 'method', wrapper)
+      const first = { method: noop }
+      const second = { method () {} }
+      const original = second.method
+
+      shimmer.runHook(owner, hook, first)
+      shimmer.runHook(owner, hook, second)
+
+      assert.notStrictEqual(second.method, original)
+    })
+
+    it('wraps a hook wrapper again outside of a hook', () => {
+      const shared = { method: noop }
+
+      shimmer.runHook({}, target => shimmer.wrap(target, 'method', wrapper), shared)
+      const hooked = shared.method
+      shimmer.wrap(shared, 'method', wrapper)
+
+      assert.notStrictEqual(shared.method, hooked)
+    })
+
+    it('restores the outer invocation after a nested hook', () => {
+      const owner = {}
+      const shared = { method: noop }
+      const hook = target => {
+        shimmer.runHook({}, () => {})
+        shimmer.wrap(target, 'method', wrapper)
+      }
+
+      shimmer.runHook(owner, hook, shared)
+      const once = shared.method
+      shimmer.runHook(owner, hook, shared)
+
+      assert.strictEqual(shared.method, once)
+    })
+
+    it('restores the outer invocation when a hook throws', () => {
+      const shared = { method: noop }
+      const error = new Error('boom')
+
+      assert.throws(() => shimmer.runHook({}, () => {
+        shimmer.wrap(shared, 'method', wrapper)
+        throw error
+      }), error)
+      const hooked = shared.method
+      shimmer.wrap(shared, 'method', wrapper)
+
+      assert.notStrictEqual(shared.method, hooked)
+    })
+  })
+
   describe('wrapCallback', () => {
     it('preserves the empty name of an anonymous arrow even when the wrapper closure has a name', () => {
       // Inline arrow has no V8-lifted assignment-target name, so `original.name === ''`.

@@ -16,6 +16,57 @@ const skipMethodSize = skipMethods.size
 const nonConfigurableModuleExports = new WeakMap()
 
 /**
+ * @typedef {{ owner: object }} HookInvocation
+ */
+
+/** @type {HookInvocation | undefined} */
+let currentInvocation
+/** @type {WeakMap<Function, HookInvocation>} */
+const wrapperInvocations = new WeakMap()
+
+/**
+ * A module can reach the same hook through more than one view, e.g. the CommonJS exports and the ESM namespace
+ * that shares their classes. A wrapper the same hook created in an earlier invocation is not wrapped again.
+ * Wrapping twice within one invocation stays allowed, since some hooks layer wrappers deliberately.
+ *
+ * @param {unknown} original
+ */
+function isWrappedByEarlierInvocation (original) {
+  if (currentInvocation === undefined || typeof original !== 'function') return false
+  const invocation = wrapperInvocations.get(original)
+  return invocation !== undefined && invocation !== currentInvocation && invocation.owner === currentInvocation.owner
+}
+
+/**
+ * @param {Function} wrapped
+ */
+function trackWrapper (wrapped) {
+  if (currentInvocation !== undefined && typeof wrapped === 'function') {
+    wrapperInvocations.set(wrapped, currentInvocation)
+  }
+}
+
+/**
+ * Runs a module hook so that wrappers it creates are attributed to `owner`.
+ *
+ * @template {unknown[]} A
+ * @template R
+ * @param {object} owner - Identity shared by every invocation of the same hook.
+ * @param {(...args: A) => R} hook
+ * @param {A} args
+ * @returns {R}
+ */
+function runHook (owner, hook, ...args) {
+  const previous = currentInvocation
+  currentInvocation = { owner }
+  try {
+    return hook(...args)
+  } finally {
+    currentInvocation = previous
+  }
+}
+
+/**
  * @typedef {NonNullable<ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>>} Descriptor
  */
 
@@ -90,11 +141,12 @@ function copyObjectProperties (original, wrapped, skipKey) {
  * @param {(original: Function) => Function} wrapper
  */
 function wrapFunction (original, wrapper) {
-  if (typeof original !== 'function') return original
+  if (typeof original !== 'function' || isWrappedByEarlierInvocation(original)) return original
 
   const wrapped = wrapper(original)
   assertNotClass(original)
   copyProperties(original, wrapped)
+  trackWrapper(wrapped)
 
   return wrapped
 }
@@ -177,9 +229,12 @@ function wrap (target, name, wrapper, options) {
 
   assertMethod(target, name, original)
 
+  if (isWrappedByEarlierInvocation(original)) return target
+
   const wrapped = wrapper(original)
 
   copyProperties(original, wrapped)
+  trackWrapper(wrapped)
 
   const immutableModuleNamespace = descriptor.configurable === false &&
     descriptor.writable && isModuleNamespaceObject(target)
@@ -343,6 +398,7 @@ function assertNotClass (target) {
 }
 
 module.exports = {
+  runHook,
   wrap,
   wrapCallback,
   wrapFunction,
