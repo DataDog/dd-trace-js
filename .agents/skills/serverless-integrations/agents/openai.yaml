@@ -1,0 +1,4 @@
+interface:
+  display_name: "dd-trace serverless integrations"
+  short_description: "Review cloud-function tracing ownership"
+  default_prompt: "Use $serverless-integrations to inspect this dd-trace-js serverless change."
