@@ -30,6 +30,7 @@ const registry = [
     activate: { setup: () => require('../../claude-agent-sdk') },
     instrumentations: require('./instrumentations/claude-agent-sdk'),
   },
+  { activate: true, instrumentations: require('./instrumentations/google-adk') },
   { instrumentations: require('./instrumentations/graphql') },
   { instrumentations: require('./instrumentations/graphql-jit') },
   { activate: true, instrumentations: require('./instrumentations/langchain') },

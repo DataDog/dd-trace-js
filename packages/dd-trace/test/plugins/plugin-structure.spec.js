@@ -52,13 +52,22 @@ const missingInstrumentationHooks = [
   'azure-cosmos',
   'bullmq',
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
+  'google-adk',
   'langchain',
   'langgraph',
   'postgres',
   'supabase',
 ]
 
-const hooklessOrchestrionPlugins = new Set(['azure-cosmos', 'bullmq', 'langchain', 'langgraph', 'postgres', 'supabase'])
+const hooklessOrchestrionPlugins = new Set([
+  'azure-cosmos',
+  'bullmq',
+  'google-adk',
+  'langchain',
+  'langgraph',
+  'postgres',
+  'supabase',
+])
 
 function extractPluginIds (source, re, index) {
   const ids = new Set()
@@ -192,6 +201,7 @@ describe('Plugin Structure Validation', () => {
   it('registers pure Orchestrion integrations only as rewrite targets', () => {
     const names = [
       '@azure/cosmos',
+      '@google/adk',
       '@langchain/core',
       '@langchain/langgraph',
       '@supabase/auth-js',
