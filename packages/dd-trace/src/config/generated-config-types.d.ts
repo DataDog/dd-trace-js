@@ -318,6 +318,7 @@ export interface GeneratedConfig {
   DD_TRACE_LDAPJS_ENABLED: boolean;
   DD_TRACE_LDAPJS_PROMISE_ENABLED: boolean;
   DD_TRACE_LIMITD_CLIENT_ENABLED: boolean;
+  DD_TRACE_LLAMAINDEX_ENABLED: boolean;
   DD_TRACE_LODASH_ENABLED: boolean;
   DD_TRACE_LOOPBACK_ENABLED: boolean;
   DD_TRACE_MARIADB_ENABLED: boolean;
@@ -1034,6 +1035,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_LDAPJS_PROMISE_ENABLED: boolean;
   DD_TRACE_LEGACY_BAGGAGE_ENABLED: boolean;
   DD_TRACE_LIMITD_CLIENT_ENABLED: boolean;
+  DD_TRACE_LLAMAINDEX_ENABLED: boolean;
   DD_TRACE_LODASH_ENABLED: boolean;
   DD_TRACE_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_TRACE_LOOPBACK_ENABLED: boolean;

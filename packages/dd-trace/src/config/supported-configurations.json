@@ -3441,6 +3441,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_LLAMAINDEX_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_LDAPJS_ENABLED": [
       {
         "implementation": "A",

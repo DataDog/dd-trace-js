@@ -34,6 +34,7 @@ const registry = [
   { instrumentations: require('./instrumentations/graphql-jit') },
   { activate: true, instrumentations: require('./instrumentations/langchain') },
   { activate: true, instrumentations: require('./instrumentations/langgraph') },
+  { activate: true, instrumentations: require('./instrumentations/llamaindex') },
   { activate: true, instrumentations: require('./instrumentations/mercurius') },
   { instrumentations: require('./instrumentations/modelcontextprotocol-sdk') },
   { instrumentations: require('./instrumentations/openai-agents') },

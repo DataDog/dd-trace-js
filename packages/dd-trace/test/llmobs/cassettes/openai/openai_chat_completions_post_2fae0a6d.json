@@ -1,0 +1,37 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.17.0.1:8787/chat/completions",
+    "headers": {
+      "Content-Length": "179",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.12.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "60",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"gpt-4o-mini\",\n  \"temperature\": 0,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Complete this sentence.\"\n    }\n  ],\n  \"top_p\": 1,\n  \"stream\": false\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "282",
+      "Date": "Tue, 08 Sep 2026 16:39:23 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5"
+    },
+    "body": "{\"id\":\"chatcmpl-llamaindex\",\"object\":\"chat.completion\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"LlamaIndex test response.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":7,\"total_tokens\":16}}"
+  }
+}

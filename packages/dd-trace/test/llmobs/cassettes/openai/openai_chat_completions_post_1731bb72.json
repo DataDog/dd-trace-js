@@ -1,0 +1,27 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.17.0.1:8787/chat/completions",
+    "headers": {
+      "User-Agent": "curl/7.81.0",
+      "Accept": "*/*",
+      "Content-Type": "application/json",
+      "Content-Length": "37"
+    },
+    "body": "{\"model\":\"test-manual\",\"messages\":[]}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "282",
+      "Date": "Tue, 08 Sep 2026 16:39:16 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5"
+    },
+    "body": "{\"id\":\"chatcmpl-llamaindex\",\"object\":\"chat.completion\",\"created\":1700000000,\"model\":\"test-manual\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"LlamaIndex test response.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":7,\"total_tokens\":16}}"
+  }
+}

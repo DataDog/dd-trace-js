@@ -153,7 +153,7 @@ tracer.use('pg', {
 
 LLM Observability integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.
 
-The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
+The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `llamaindex`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
 
 ```javascript
 // Keep APM tracing for OpenAI, but let another integration own the LLM Observability spans.
@@ -237,6 +237,7 @@ for other operations is unaffected.
 <h5 id="koa"></h5>
 <h5 id="langchain"></h5>
 <h5 id="langgraph"></h5>
+<h5 id="llamaindex"></h5>
 <h5 id="mariadb"></h5>
 <h5 id="memcached"></h5>
 <h5 id="microgateway-core"></h5>
@@ -325,6 +326,7 @@ for other operations is unaffected.
 * [koa](./interfaces/plugins.koa.html)
 * [langchain](./interfaces/plugins.langchain.html)
 * [langgraph](./interfaces/plugins.langgraph.html)
+* [llamaindex](./interfaces/plugins.llamaindex.html)
 * [mariadb](./interfaces/plugins.mariadb.html)
 * [memcached](./interfaces/plugins.memcached.html)
 * [microgateway-core](./interfaces/plugins.microgateway_core.html)

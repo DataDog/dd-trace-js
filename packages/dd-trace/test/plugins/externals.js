@@ -474,6 +474,17 @@ module.exports = {
       dep: true,
     },
   ],
+  llamaindex: [
+    {
+      name: '@llamaindex/openai',
+      versions: ['>=0.4'],
+    },
+    {
+      name: '@llamaindex/core',
+      versions: ['>=0.6.0'],
+      dep: true,
+    },
+  ],
   ldapjs: [
     {
       name: 'ldapjs',
