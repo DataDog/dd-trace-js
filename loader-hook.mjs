@@ -5,11 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { isMainThread } from 'node:worker_threads'
 
 import { createHook, supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
-import {
-  initialize as origInitialize,
-  load as origLoad,
-  resolve as origResolve,
-} from 'import-in-the-middle/hook.mjs'
+import { initialize as origInitialize, load as origLoad } from 'import-in-the-middle/hook.mjs'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 
 // This file must support Node.js 12.0.0 syntax
@@ -76,25 +72,12 @@ function initialize (data = {}) {
   return origInitialize(data)
 }
 
-async function resolve (specifier, context, nextResolve) {
-  const result = await origResolve(specifier, context, nextResolve)
-  reportUnwrappedPackage(result.url)
-  return result
-}
-
-function resolveSync (specifier, context, nextResolve) {
-  const result = getSyncImportInTheMiddleHook().resolveSync(specifier, context, nextResolve)
-  // require() loads are already published by require-in-the-middle.
-  if (!hasRequireCondition(context)) reportUnwrappedPackage(result.url)
-  return result
-}
-
 /**
- * Reports the first resolved file of each `node_modules` package that import-in-the-middle leaves
- * unwrapped. Wrapped modules are already published through iitm's `addHook`; the rest would
- * otherwise never reach `dd-trace:moduleLoadStart`.
+ * Reports the first loaded file of each `node_modules` package, so packages that
+ * import-in-the-middle leaves unwrapped reach `dd-trace:moduleLoadStart` too. Wrapped
+ * modules are also published through iitm's `addHook`; dependency telemetry deduplicates.
  *
- * @param {string} url Resolved module URL.
+ * @param {string} url Loaded module URL.
  */
 function reportUnwrappedPackage (url) {
   if (!reportModuleLoad || !url.startsWith('file:') || url.includes('iitm=true')) return
@@ -173,10 +156,14 @@ function buildIncludeSource (securityControlsConfig) {
 }
 
 function load (url, context, nextLoad) {
+  reportUnwrappedPackage(url)
   return rewriterLoader.load(url, context, (url, context) => origLoad(url, context, nextLoad))
 }
 
 function loadSync (url, context, nextLoad) {
+  // require() loads are already published by require-in-the-middle.
+  if (!hasRequireCondition(context)) reportUnwrappedPackage(url)
+
   if (isCommonJSLoad(context)) {
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
   }
@@ -248,11 +235,12 @@ function registerSyncLoaderHooks (data = {}) {
   // The synchronous hooks run on the application thread, so publish directly.
   reportModuleLoad = require('./packages/dd-trace/src/esm-module-load.js').publishModuleLoad
   Module.registerHooks({
-    resolve: resolveSync,
+    resolve: syncHook.resolveSync,
     load: loadSync,
   })
 
   return true
 }
 
-export { initialize, load, registerSyncLoaderHooks, resolve }
+export { resolve } from 'import-in-the-middle/hook.mjs'
+export { initialize, load, registerSyncLoaderHooks }

@@ -190,24 +190,28 @@ describe('loader hook', () => {
     const appUrl = 'file:///app/'
 
     /**
-     * @param {Array<[string, string, string?]>} resolutions [specifier, resolved URL, format]
+     * @param {Array<[string, string?]>} loads [loaded URL, format]
      * @param {boolean} withPort
      */
-    function resolveWithAsyncLoader (resolutions, withPort = true) {
+    function loadWithAsyncLoader (loads, withPort = true) {
       const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
-        const { initialize, resolve } = await import(${JSON.stringify(loaderHookUrl)})
+        const { initialize, load, resolve } = await import(${JSON.stringify(loaderHookUrl)})
         const reported = []
         const moduleLoadPort = { unref () {}, postMessage (url) { reported.push(url) } }
 
         await initialize(${withPort} ? { moduleLoadPort } : {})
 
-        const context = { conditions: ['node', 'import'], parentURL: '${appUrl}index.mjs' }
-        const urls = []
-        for (const [specifier, url, format = 'module'] of ${JSON.stringify(resolutions)}) {
-          urls.push((await resolve(specifier, context, () => ({ url, format }))).url)
+        const conditions = ['node', 'import']
+        // Resolving without loading, as import.meta.resolve() does, is not a load.
+        await resolve('resolved-only', { conditions, parentURL: '${appUrl}index.mjs' }, () => ({
+          url: '${appUrl}node_modules/resolved-only/index.js',
+          format: 'module',
+        }))
+        for (const [url, format = 'module'] of ${JSON.stringify(loads)}) {
+          await load(url, { conditions, format }, () => ({ format, source: '' }))
         }
 
-        console.log(JSON.stringify({ reported, urls }))
+        console.log(JSON.stringify(reported))
       `], {
         encoding: 'utf8',
         env: { ...process.env, DD_IAST_SECURITY_CONTROLS_CONFIGURATION: undefined },
@@ -218,18 +222,19 @@ describe('loader hook', () => {
       return JSON.parse(result.stdout)
     }
 
-    it('reports the first resolved file of each unwrapped package from the asynchronous loader', () => {
-      const { reported, urls } = resolveWithAsyncLoader([
-        ['nanoid', `${appUrl}node_modules/nanoid/index.js`],
-        ['nanoid/non-secure', `${appUrl}node_modules/nanoid/non-secure/index.js`],
-        ['@scope/first', `${appUrl}node_modules/@scope/first/index.js`],
-        ['@scope/second', `${appUrl}node_modules/@scope/second/dist/index.js`],
-        ['nested', `${appUrl}node_modules/parent/node_modules/nested/index.js`],
-        ['pnpm-package', `${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/index.js`],
-        ['pnpm-package/other', `${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/other.js`],
-        ['express', `${appUrl}node_modules/express/index.js`, 'commonjs'],
-        ['./local.mjs', `${appUrl}local.mjs`],
-        ['node:path', 'node:path', 'builtin'],
+    it('reports the first loaded file of each package from the asynchronous loader', () => {
+      const reported = loadWithAsyncLoader([
+        [`${appUrl}node_modules/nanoid/index.js`],
+        [`${appUrl}node_modules/nanoid/non-secure/index.js`],
+        [`${appUrl}node_modules/@scope/first/index.js`],
+        [`${appUrl}node_modules/@scope/second/dist/index.js`],
+        [`${appUrl}node_modules/parent/node_modules/nested/index.js`],
+        [`${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/index.js`],
+        [`${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/other.js`],
+        // The import-in-the-middle wrapper of an instrumented module.
+        [`${appUrl}node_modules/express/index.js?iitm=true`],
+        [`${appUrl}local.mjs`],
+        ['node:path', 'builtin'],
       ])
 
       assert.deepStrictEqual(reported, [
@@ -239,17 +244,10 @@ describe('loader hook', () => {
         `${appUrl}node_modules/parent/node_modules/nested/index.js`,
         `${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/index.js`,
       ])
-      // Instrumented packages are wrapped and published by import-in-the-middle instead.
-      assert.match(urls[7], /node_modules\/express\/index\.js\?iitm=true$/)
     })
 
     it('does not report without a port', () => {
-      const { reported, urls } = resolveWithAsyncLoader([
-        ['nanoid', `${appUrl}node_modules/nanoid/index.js`],
-      ], false)
-
-      assert.deepStrictEqual(reported, [])
-      assert.deepStrictEqual(urls, [`${appUrl}node_modules/nanoid/index.js`])
+      assert.deepStrictEqual(loadWithAsyncLoader([[`${appUrl}node_modules/nanoid/index.js`]], false), [])
     })
 
     it('publishes unwrapped ES module packages from the synchronous loader', function () {
@@ -260,6 +258,9 @@ describe('loader hook', () => {
       writeFileSync(join(nodeModules, 'esm-only', 'other.js'), 'export default 2\n')
       mkdirSync(join(nodeModules, 'cjs-only'), { recursive: true })
       writeFileSync(join(nodeModules, 'cjs-only', 'index.js'), 'module.exports = 3\n')
+      mkdirSync(join(nodeModules, 'resolved-only'), { recursive: true })
+      writeFileSync(join(nodeModules, 'resolved-only', 'package.json'), JSON.stringify({ type: 'module' }))
+      writeFileSync(join(nodeModules, 'resolved-only', 'index.js'), 'export default 4\n')
 
       const mainPath = join(temporaryDirectory, 'main.mjs')
       writeFileSync(mainPath, `
@@ -279,6 +280,7 @@ describe('loader hook', () => {
           await import('esm-only')
           await import('esm-only/other.js')
           require('cjs-only')
+          import.meta.resolve('resolved-only')
         }
 
         console.log(JSON.stringify({ registered, reported }))
@@ -293,7 +295,7 @@ describe('loader hook', () => {
         this.skip()
       }
 
-      // require() loads are left to require-in-the-middle.
+      // require() loads are left to require-in-the-middle, and resolving alone is not a load.
       assert.deepStrictEqual(reported, ['node_modules/esm-only/index.js'])
     })
   })

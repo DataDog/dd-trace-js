@@ -28,7 +28,7 @@ function queueModuleLoad (filename) {
     flushTimer = setTimeout(flushModuleLoads, FLUSH_DELAY_MS)
     flushTimer.unref?.()
     // Short-lived apps can exit before the timer fires. The handlers exist once the tracer started.
-    globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers.add(flushModuleLoads)
+    globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers?.add(flushModuleLoads)
   }
 }
 
