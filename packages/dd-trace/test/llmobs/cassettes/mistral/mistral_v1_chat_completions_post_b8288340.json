@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.17.0.1:9127/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "Cookie": "",
+      "User-Agent": "mistral-client-typescript/2.0.0",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "216"
+    },
+    "body": "{\"model\":\"mistral-large-latest\",\"temperature\":0.7,\"top_p\":0.9,\"max_tokens\":100,\"stream\":false,\"random_seed\":42,\"messages\":[{\"role\":\"user\",\"content\":\"Why is the sky blue?\"}],\"presence_penalty\":0,\"frequency_penalty\":0}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Content-Type": "application/json",
+      "Date": "Tue, 08 Sep 2026 16:26:52 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "{\"id\":\"b6fb3feaa0154b08bad5a1ea48f56374\",\"created\":1784566709,\"model\":\"mistral-large-latest\",\"usage\":{\"prompt_tokens\":9,\"total_tokens\":109,\"completion_tokens\":100,\"prompt_tokens_details\":{\"cached_tokens\":0}},\"object\":\"chat.completion\",\"choices\":[{\"index\":0,\"finish_reason\":\"length\",\"message\":{\"role\":\"assistant\",\"tool_calls\":null,\"content\":\"The sky appears blue due to a phenomenon called **Rayleigh scattering**, which describes how light interacts with molecules and tiny particles in Earth's atmosphere. Here\u2019s a step-by-step explanation:\\n\\n### 1. **Sunlight is White Light**\\n   - Sunlight appears white but is actually a mix of all colors (wavelengths) of the visible spectrum: red, orange, yellow, green, blue, indigo, and violet.\\n\\n### 2. **Scattering by Air Molecules**\\n\"}}]}"
+  }
+}

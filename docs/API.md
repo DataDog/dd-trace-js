@@ -153,7 +153,7 @@ tracer.use('pg', {
 
 LLM Observability integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.
 
-The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
+The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `mistralai`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
 
 ```javascript
 // Keep APM tracing for OpenAI, but let another integration own the LLM Observability spans.
@@ -240,6 +240,7 @@ for other operations is unaffected.
 <h5 id="mariadb"></h5>
 <h5 id="memcached"></h5>
 <h5 id="microgateway-core"></h5>
+<h5 id="mistralai"></h5>
 <h5 id="mocha"></h5>
 <h5 id="modelcontextprotocol-sdk"></h5>
 <h5 id="moleculer"></h5>
@@ -329,6 +330,7 @@ for other operations is unaffected.
 * [memcached](./interfaces/plugins.memcached.html)
 * [microgateway-core](./interfaces/plugins.microgateway_core.html)
 * [mocha](./interfaces/plugins.mocha.html)
+* [mistralai](./interfaces/plugins.mistralai.html)
 * [modelcontextprotocol-sdk](./interfaces/plugins.modelcontextprotocol_sdk.html)
 * [moleculer](./interfaces/plugins.moleculer.html)
 * [mongodb-core](./interfaces/plugins.mongodb_core.html)

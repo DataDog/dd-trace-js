@@ -19,6 +19,7 @@ module.exports = {
   '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo'),
+  '@mistralai/mistralai': { esmFirst: true, fn: () => require('../mistralai') },
   '@modelcontextprotocol/sdk': { esmFirst: true, fn: () => require('../modelcontextprotocol-sdk') },
   '@openai/agents': () => require('../openai-agents'),
   '@openai/agents-openai': () => require('../openai-agents'),
