@@ -5,7 +5,15 @@ const path = require('node:path')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc, assertObjectContains } = require('./helpers')
+const {
+  sandboxCwd,
+  useSandbox,
+  FakeAgent,
+  spawnProc,
+  spawnProcAndExpectExit,
+  stopProc,
+  assertObjectContains,
+} = require('./helpers')
 
 describe('telemetry', () => {
   describe('ESM dependencies', () => {
@@ -15,6 +23,7 @@ describe('telemetry', () => {
       { execArgv: ['--import', 'dd-trace/initialize.mjs'], app: 'index.mjs' },
       { execArgv: ['--import', 'dd-trace/register.js', '--require', 'dd-trace/init'], app: 'index.mjs' },
       { execArgv: ['--import', 'dd-trace/register.js'], app: 'late-init.mjs' },
+      { execArgv: ['--import', 'dd-trace/initialize.mjs'], app: 'short-lived.mjs', exits: true },
     ]
 
     let cwd
@@ -32,8 +41,9 @@ describe('telemetry', () => {
       await agent.stop()
     })
 
-    for (const { execArgv, app } of setups) {
+    for (const { execArgv, app, exits } of setups) {
       it(`reports non-instrumented ESM-only packages with ${execArgv.join(' ')} (${app})`, async () => {
+        proc = undefined
         agent = await new FakeAgent().start()
 
         const reported = new Set()
@@ -52,13 +62,11 @@ describe('telemetry', () => {
           timeout: 10_000,
         })
 
-        const spawned = spawnProc(path.join(cwd, 'telemetry/esm-dependencies', app), {
-          cwd,
-          execArgv,
-          env: {
-            DD_TRACE_AGENT_PORT: String(agent.port),
-          },
-        }).then(spawnedProc => { proc = spawnedProc })
+        const appFile = path.join(cwd, 'telemetry/esm-dependencies', app)
+        const options = { cwd, execArgv, env: { DD_TRACE_AGENT_PORT: String(agent.port) } }
+        const spawned = exits
+          ? spawnProcAndExpectExit(appFile, options)
+          : spawnProc(appFile, options).then(spawnedProc => { proc = spawnedProc })
 
         await Promise.all([spawned, telemetryReceived])
       })
