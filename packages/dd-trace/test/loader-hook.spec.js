@@ -231,6 +231,8 @@ describe('loader hook', () => {
         [`${appUrl}node_modules/parent/node_modules/nested/index.js`],
         [`${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/index.js`],
         [`${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/other.js`],
+        // A CommonJS package imported from ESM.
+        [`${appUrl}node_modules/cjs-package/index.js`, 'commonjs'],
         // The import-in-the-middle wrapper of an instrumented module.
         [`${appUrl}node_modules/express/index.js?iitm=true`],
         [`${appUrl}local.mjs`],
@@ -243,6 +245,7 @@ describe('loader hook', () => {
         `${appUrl}node_modules/@scope/second/dist/index.js`,
         `${appUrl}node_modules/parent/node_modules/nested/index.js`,
         `${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/index.js`,
+        `${appUrl}node_modules/cjs-package/index.js`,
       ])
     })
 
@@ -250,7 +253,7 @@ describe('loader hook', () => {
       assert.deepStrictEqual(loadWithAsyncLoader([[`${appUrl}node_modules/nanoid/index.js`]], false), [])
     })
 
-    it('publishes unwrapped ES module packages from the synchronous loader', function () {
+    it('reports the packages imported through the synchronous loader', function () {
       const nodeModules = join(temporaryDirectory, 'node_modules')
       mkdirSync(join(nodeModules, 'esm-only'), { recursive: true })
       writeFileSync(join(nodeModules, 'esm-only', 'package.json'), JSON.stringify({ type: 'module' }))
@@ -258,6 +261,10 @@ describe('loader hook', () => {
       writeFileSync(join(nodeModules, 'esm-only', 'other.js'), 'export default 2\n')
       mkdirSync(join(nodeModules, 'cjs-only'), { recursive: true })
       writeFileSync(join(nodeModules, 'cjs-only', 'index.js'), 'module.exports = 3\n')
+      // An explicit type gives the load hook a known CommonJS format, unlike syntax detection.
+      mkdirSync(join(nodeModules, 'cjs-imported'), { recursive: true })
+      writeFileSync(join(nodeModules, 'cjs-imported', 'package.json'), JSON.stringify({ type: 'commonjs' }))
+      writeFileSync(join(nodeModules, 'cjs-imported', 'index.js'), 'module.exports = 5\n')
       mkdirSync(join(nodeModules, 'resolved-only'), { recursive: true })
       writeFileSync(join(nodeModules, 'resolved-only', 'package.json'), JSON.stringify({ type: 'module' }))
       writeFileSync(join(nodeModules, 'resolved-only', 'index.js'), 'export default 4\n')
@@ -279,6 +286,7 @@ describe('loader hook', () => {
         if (registered) {
           await import('esm-only')
           await import('esm-only/other.js')
+          await import('cjs-imported')
           require('cjs-only')
           import.meta.resolve('resolved-only')
         }
@@ -296,7 +304,7 @@ describe('loader hook', () => {
       }
 
       // require() loads are left to require-in-the-middle, and resolving alone is not a load.
-      assert.deepStrictEqual(reported, ['node_modules/esm-only/index.js'])
+      assert.deepStrictEqual(reported, ['node_modules/esm-only/index.js', 'node_modules/cjs-imported/index.js'])
     })
   })
 
