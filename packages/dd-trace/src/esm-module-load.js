@@ -6,47 +6,16 @@ const dc = require('dc-polyfill')
 
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
-// Reports from the loader thread arrive one event loop turn apart. Publishing them together lets
-// dependency telemetry send one request for the module graph instead of one per package.
-const FLUSH_DELAY_MS = 100
-
-/** @type {string[]} */
-let pendingFilenames = []
-let flushTimer
-
-// The loader reports a package once, possibly before dependency telemetry subscribes (the synchronous
-// loader resolves the whole graph before the app starts the tracer), so late consumers replay these.
+// The loader reports a package once, possibly before dependency telemetry subscribes (the loader handles
+// the whole graph before an app that starts the tracer itself runs), so late consumers replay these.
 /** @type {string[]} */
 const publishedFilenames = []
-
-/**
- * @param {string} filename Resolved module URL reported by the loader thread.
- */
-function queueModuleLoad (filename) {
-  pendingFilenames.push(filename)
-  if (flushTimer === undefined) {
-    flushTimer = setTimeout(flushModuleLoads, FLUSH_DELAY_MS)
-    flushTimer.unref?.()
-    // Short-lived apps can exit before the timer fires. The handlers exist once the tracer started.
-    globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers?.add(flushModuleLoads)
-  }
-}
-
-function flushModuleLoads () {
-  clearTimeout(flushTimer)
-  const filenames = pendingFilenames
-  pendingFilenames = []
-  flushTimer = undefined
-  for (const filename of filenames) {
-    publishModuleLoad(filename)
-  }
-}
 
 /**
  * Publishes an ESM module load that the loader observed but did not wrap, so consumers such as
  * dependency telemetry see packages without dd-trace instrumentation too.
  *
- * @param {string} filename Resolved module URL.
+ * @param {string} filename Loaded module URL.
  */
 function publishModuleLoad (filename) {
   publishedFilenames.push(filename)
@@ -73,7 +42,7 @@ function getPublishedModuleLoads () {
  */
 function getLoaderRegisterOptions () {
   const { port1, port2 } = new MessageChannel()
-  port1.on('message', queueModuleLoad)
+  port1.on('message', publishModuleLoad)
   // The loader thread outlives short-lived applications; never keep them running.
   port1.unref?.()
   return { data: { moduleLoadPort: port2 }, transferList: [port2] }
