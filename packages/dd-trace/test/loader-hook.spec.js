@@ -186,6 +186,120 @@ describe('loader hook', () => {
     })
   })
 
+  describe('unwrapped package reports', () => {
+    const appUrl = 'file:///app/'
+
+    /**
+     * @param {Array<[string, string?]>} loads [loaded URL, format]
+     * @param {boolean} withPort
+     */
+    function loadWithAsyncLoader (loads, withPort = true) {
+      const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
+        const { initialize, load, resolve } = await import(${JSON.stringify(loaderHookUrl)})
+        const reported = []
+        const moduleLoadPort = { unref () {}, postMessage (url) { reported.push(url) } }
+
+        await initialize(${withPort} ? { moduleLoadPort } : {})
+
+        const conditions = ['node', 'import']
+        // Resolving without loading, as import.meta.resolve() does, is not a load.
+        await resolve('resolved-only', { conditions, parentURL: '${appUrl}index.mjs' }, () => ({
+          url: '${appUrl}node_modules/resolved-only/index.js',
+          format: 'module',
+        }))
+        for (const [url, format = 'module'] of ${JSON.stringify(loads)}) {
+          await load(url, { conditions, format }, () => ({ format, source: '' }))
+        }
+
+        console.log(JSON.stringify(reported))
+      `], {
+        encoding: 'utf8',
+        env: { ...process.env, DD_IAST_SECURITY_CONTROLS_CONFIGURATION: undefined },
+      })
+
+      assert.strictEqual(result.status, 0, result.stderr)
+
+      return JSON.parse(result.stdout)
+    }
+
+    it('reports the first loaded file of each package from the asynchronous loader', () => {
+      const reported = loadWithAsyncLoader([
+        [`${appUrl}node_modules/nanoid/index.js`],
+        [`${appUrl}node_modules/nanoid/non-secure/index.js`],
+        [`${appUrl}node_modules/@scope/first/index.js`],
+        [`${appUrl}node_modules/@scope/second/dist/index.js`],
+        [`${appUrl}node_modules/parent/node_modules/nested/index.js`],
+        [`${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/index.js`],
+        [`${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/other.js`],
+        // The import-in-the-middle wrapper of an instrumented module.
+        [`${appUrl}node_modules/express/index.js?iitm=true`],
+        [`${appUrl}local.mjs`],
+        ['node:path', 'builtin'],
+      ])
+
+      assert.deepStrictEqual(reported, [
+        `${appUrl}node_modules/nanoid/index.js`,
+        `${appUrl}node_modules/@scope/first/index.js`,
+        `${appUrl}node_modules/@scope/second/dist/index.js`,
+        `${appUrl}node_modules/parent/node_modules/nested/index.js`,
+        `${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/index.js`,
+      ])
+    })
+
+    it('does not report without a port', () => {
+      assert.deepStrictEqual(loadWithAsyncLoader([[`${appUrl}node_modules/nanoid/index.js`]], false), [])
+    })
+
+    it('publishes unwrapped ES module packages from the synchronous loader', function () {
+      const nodeModules = join(temporaryDirectory, 'node_modules')
+      mkdirSync(join(nodeModules, 'esm-only'), { recursive: true })
+      writeFileSync(join(nodeModules, 'esm-only', 'package.json'), JSON.stringify({ type: 'module' }))
+      writeFileSync(join(nodeModules, 'esm-only', 'index.js'), 'export default 1\n')
+      writeFileSync(join(nodeModules, 'esm-only', 'other.js'), 'export default 2\n')
+      mkdirSync(join(nodeModules, 'cjs-only'), { recursive: true })
+      writeFileSync(join(nodeModules, 'cjs-only', 'index.js'), 'module.exports = 3\n')
+      mkdirSync(join(nodeModules, 'resolved-only'), { recursive: true })
+      writeFileSync(join(nodeModules, 'resolved-only', 'package.json'), JSON.stringify({ type: 'module' }))
+      writeFileSync(join(nodeModules, 'resolved-only', 'index.js'), 'export default 4\n')
+
+      const mainPath = join(temporaryDirectory, 'main.mjs')
+      writeFileSync(mainPath, `
+        import { createRequire } from 'node:module'
+
+        const require = createRequire(import.meta.url)
+        const dc = require(${JSON.stringify(require.resolve('dc-polyfill'))})
+        const { registerSyncLoaderHooks } = await import(${JSON.stringify(loaderHookUrl)})
+
+        const reported = []
+        dc.channel('dd-trace:moduleLoadStart').subscribe(({ filename }) => {
+          reported.push(filename.slice(filename.lastIndexOf('node_modules/')))
+        })
+
+        const registered = registerSyncLoaderHooks()
+        if (registered) {
+          await import('esm-only')
+          await import('esm-only/other.js')
+          require('cjs-only')
+          import.meta.resolve('resolved-only')
+        }
+
+        console.log(JSON.stringify({ registered, reported }))
+      `)
+
+      const result = spawnSync(process.execPath, [mainPath], { encoding: 'utf8' })
+      assert.strictEqual(result.status, 0, result.stderr)
+      const { registered, reported } = JSON.parse(result.stdout.trim())
+
+      if (!registered) {
+        // Node.js versions without fixed synchronous hooks use the asynchronous loader instead.
+        this.skip()
+      }
+
+      // require() loads are left to require-in-the-middle, and resolving alone is not a load.
+      assert.deepStrictEqual(reported, ['node_modules/esm-only/index.js'])
+    })
+  })
+
   function runPureLoaderPipeline ({ disabled = false, version }) {
     const packageDirectory = join(temporaryDirectory, 'node_modules', 'bullmq')
     const fixturePath = join(packageDirectory, 'dist', 'esm', 'classes', 'queue.js')
