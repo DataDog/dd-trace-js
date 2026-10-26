@@ -796,6 +796,28 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_BUNDLER_INJECT_GIT_METADATA', () => {
+    it('should default to true', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_BUNDLER_INJECT_GIT_METADATA, true)
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_BUNDLER_INJECT_GIT_METADATA', value: true, origin: 'default' },
+      ])
+    })
+
+    it('should initialize from the environment', () => {
+      process.env.DD_BUNDLER_INJECT_GIT_METADATA = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_BUNDLER_INJECT_GIT_METADATA, false)
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_BUNDLER_INJECT_GIT_METADATA', value: false, origin: 'env_var' },
+      ])
+    })
+  })
+
   describe('OTEL_RESOURCE_ATTRIBUTES mapping', () => {
     it('maps deployment.environment as a fallback', () => {
       process.env.OTEL_RESOURCE_ATTRIBUTES =
@@ -1322,6 +1344,7 @@ describe('Config', () => {
       { name: 'DD_APPSEC_MAX_STACK_TRACES', value: 2, origin: 'default' },
       { name: 'DD_APPSEC_WAF_TIMEOUT', value: 5e3, origin: 'default' },
       { name: 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_BUNDLER_INJECT_GIT_METADATA', value: true, origin: 'default' },
       { name: 'DD_TEST_SESSION_NAME', value: null, origin: 'default' },
       { name: 'DD_CODE_COVERAGE_FLAGS', value: null, origin: 'default' },
       { name: 'DD_TRACE_CLIENT_IP_ENABLED', value: false, origin: 'default' },
