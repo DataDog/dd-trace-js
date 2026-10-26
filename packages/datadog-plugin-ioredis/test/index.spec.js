@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -133,6 +134,46 @@ describe('Plugin', () => {
               'network.destination.port': 6379,
             },
           }, { spanResourceMatch: /^get$/ })
+        })
+
+        describe('with enableAutoPipelining', () => {
+          let autoPipelined
+
+          afterEach(() => autoPipelined.quit())
+
+          async function commandSpansFor (rawCommand) {
+            const spans = []
+            const collect = traces => spans.push(...traces.flat())
+            agent.subscribe(collect)
+
+            try {
+              await autoPipelined.set('foo', 'bar')
+              // Traces are flushed in order, so once the follow-up command is reported
+              // every span of the first command has been received too.
+              await autoPipelined.get('marker')
+              await agent.assertSomeTraces(() => {
+                assert.ok(spans.some(span => span.meta['redis.raw_command'] === 'GET marker'))
+              })
+            } finally {
+              agent.unsubscribe(collect)
+            }
+
+            return spans.filter(span => span.name === expectedSchema.outbound.opName &&
+              span.meta['redis.raw_command'] === rawCommand)
+          }
+
+          it('should create a single span for a command sent while the connection is being established', async () => {
+            autoPipelined = new Redis({ enableAutoPipelining: true })
+
+            assert.equal((await commandSpansFor('SET foo bar')).length, 1)
+          })
+
+          it('should create a single span for a command sent on a ready connection', async () => {
+            autoPipelined = new Redis({ enableAutoPipelining: true })
+            await once(autoPipelined, 'ready')
+
+            assert.equal((await commandSpansFor('SET foo bar')).length, 1)
+          })
         })
 
         withNamingSchema(
