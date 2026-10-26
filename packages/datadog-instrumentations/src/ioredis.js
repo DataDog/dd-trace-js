@@ -11,10 +11,16 @@ const finishCh = channel('apm:ioredis:command:finish')
 const errorCh = channel('apm:ioredis:command:error')
 
 const connectionOptionsCache = new WeakMap()
+// Commands queued while offline are replayed through `sendCommand` once connected.
+const tracedCommands = new WeakSet()
 
 function wrapRedis (Redis) {
   shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
-    if (!startCh.hasSubscribers || !command?.promise) return sendCommand.call(this, command, stream)
+    if (!startCh.hasSubscribers || !command?.promise || tracedCommands.has(command)) {
+      return sendCommand.call(this, command, stream)
+    }
+
+    tracedCommands.add(command)
 
     const options = this.options || {}
     let connectionOptions = connectionOptionsCache.get(this)
