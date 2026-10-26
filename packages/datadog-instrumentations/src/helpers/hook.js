@@ -24,6 +24,22 @@ function getVersion (moduleBaseDir) {
 }
 
 /**
+ * @param {Record<string, unknown>} namespace
+ * @param {unknown} moduleExports
+ */
+function syncExports (namespace, moduleExports) {
+  for (const key of Object.keys(namespace)) {
+    if (key === 'default' || key === 'module.exports') {
+      namespace[key] = moduleExports
+    } else if (moduleExports != null && Object.hasOwn(moduleExports, key)) {
+      const wrapped = moduleExports[key]
+      if (namespace[key] !== wrapped) namespace[key] = wrapped
+    }
+  }
+  return namespace
+}
+
+/**
  * This is called for every package/internal-module that dd-trace supports instrumentation for
  * In practice, `modules` is always an array with a single entry.
  *
@@ -106,16 +122,7 @@ function Hook (modules, hookOptions, onrequire) {
     // `patched` cannot relate them because it keys on the object the hook ran against.
     let newExports
     if (defaultWrapResult && isNodeBuiltinModuleName(moduleName)) {
-      // Accessor exports are read, not skipped: `replaceGetter` leaves Node 20's `fs.opendir`
-      // an accessor, and Node's ESM facade resolved every export before handing us this view.
-      for (const key of Object.keys(defaultWrapResult)) {
-        const wrapped = defaultWrapResult[key]
-        const existing = moduleExports[key]
-        if (existing !== wrapped && existing !== undefined) {
-          moduleExports[key] = wrapped
-        }
-      }
-      newExports = moduleExports
+      newExports = syncExports(moduleExports, defaultWrapResult)
     } else {
       newExports = wrappedOnrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
     }
@@ -133,9 +140,20 @@ function Hook (modules, hookOptions, onrequire) {
   }
 
   this._ritmHook = ritm(modules, {}, safeHook)
-  this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
+  /**
+   * @param {Record<string, unknown>} moduleExports
+   * @param {string} moduleName
+   * @param {string | undefined} moduleBaseDir
+   * @param {string | undefined} format
+   */
+  const onimport = (moduleExports, moduleName, moduleBaseDir, format) => {
+    if (format === 'commonjs') {
+      const wrapped = safeHook(moduleExports.default, moduleName, moduleBaseDir, undefined, false)
+      return syncExports(moduleExports, wrapped)
+    }
     return safeHook(moduleExports, moduleName, moduleBaseDir, null, true)
-  })
+  }
+  this._iitmHook = iitm(modules, hookOptions, onimport)
 }
 
 module.exports = Hook

@@ -186,7 +186,7 @@
   ],
   "dependencies": {
     "dc-polyfill": "^0.1.11",
-    "import-in-the-middle": "3.5.1",
+    "import-in-the-middle": "git+https://github.com/BridgeAR/import-in-the-middle.git#e404ff4ddc2f67f39fbde100cfd491ea0c68c06e",
     "opentracing": ">=0.14.7"
   },
   "optionalDependencies": {

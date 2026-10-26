@@ -31,6 +31,31 @@ const bootstrapModes = {
   'register.js + init.js': `--import ${moduleUrl('register.js')} --require ${initPath}`,
 }
 
+/** @param {string} nodeOptions */
+function childEnv (nodeOptions) {
+  return {
+    PATH: process.env.PATH,
+    DD_INJECT_FORCE: injectForce,
+    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+    DD_REMOTE_CONFIG_ENABLED: 'false',
+    DD_TRACE_STARTUP_LOGS: 'false',
+    NODE_OPTIONS: nodeOptions,
+  }
+}
+
+/**
+ * @param {string} nodeOptions
+ * @param {string} kind
+ * @param {string[]} orders
+ */
+async function loadPackageViews (nodeOptions, kind, orders) {
+  const { stdout, stderr } = await execFileAsync(process.execPath, [
+    path.join(__dirname, 'hook-module-views', 'package.js'), kind, ...orders,
+  ], { env: childEnv(nodeOptions) })
+  assert.doesNotMatch(stderr, /Error during ddtrace instrumentation/, stderr)
+  return JSON.parse(stdout)
+}
+
 /**
  * @typedef {object} ViewReport
  * @property {string} request
@@ -50,14 +75,7 @@ async function loadViews (nodeOptions, requests) {
   // own `DD_*` settings out of the child, and keeps stdout to the fixture's JSON.
   const { stdout, stderr } = await execFileAsync(process.execPath, [fixture, ...requests], {
     cwd: repositoryRoot,
-    env: {
-      PATH: process.env.PATH,
-      DD_INJECT_FORCE: injectForce,
-      DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-      DD_REMOTE_CONFIG_ENABLED: 'false',
-      DD_TRACE_STARTUP_LOGS: 'false',
-      NODE_OPTIONS: nodeOptions,
-    },
+    env: childEnv(nodeOptions),
   })
 
   assert.doesNotMatch(stderr, /Error during ddtrace instrumentation/, stderr)
@@ -66,6 +84,10 @@ async function loadViews (nodeOptions, requests) {
 }
 
 ;(runtimeSupported ? describe : describe.skip)('builtin instrumentation across CommonJS and ESM views', () => {
+  it('preserves native CommonJS operation results and aliases', async () => {
+    assert.deepStrictEqual((await loadPackageViews('', 'native', ['cjs', 'esm'])).counts, [0, 0])
+  })
+
   for (const [mode, nodeOptions] of Object.entries(bootstrapModes)) {
     describe(`with ${mode}`, () => {
       it('wraps url and its getters once when CommonJS loads it before ESM', async () => {
@@ -110,6 +132,28 @@ async function loadViews (nodeOptions, requests) {
           { request: 'esm:node:vm', publishes: 1, matchesFirstView: true, matchesOwnDefaultExport: true },
         ])
       })
+
+      for (const orders of [['cjs', 'esm'], ['esm', 'cjs'], ['esm']]) {
+        it(`wraps CommonJS exports once with load order ${orders.join(' then ')}`, async () => {
+          const report = await loadPackageViews(nodeOptions, 'commonjs', orders)
+          assert.deepStrictEqual(report.counts, orders.map(() => 2))
+        })
+      }
+
+      it('wraps independent default and named ESM exports', async () => {
+        assert.deepStrictEqual((await loadPackageViews(nodeOptions, 'esm', ['esm'])).counts, [2, 1])
+      })
+
+      it('wraps a cached namespace when the hook is registered after import', async () => {
+        assert.deepStrictEqual((await loadPackageViews(nodeOptions, 'late', ['esm', 'cjs'])).counts, [2, 2])
+      })
+
+      for (const patchDefault of ['true', 'false', 'unspecified']) {
+        it(`dispatches a registered CommonJS hook with patchDefault ${patchDefault}`, async () => {
+          const report = await loadPackageViews(nodeOptions, `registered-${patchDefault}`, ['esm', 'cjs'])
+          assert.deepStrictEqual(report.counts, [2, 2])
+        })
+      }
     })
   }
 })
