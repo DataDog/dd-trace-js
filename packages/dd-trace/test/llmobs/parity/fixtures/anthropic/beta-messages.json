@@ -1,0 +1,18 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/messages" },
+      "status": 200,
+      "body": {
+        "id": "msg-parity-beta",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-3-5-sonnet-20241022",
+        "content": [{ "type": "text", "text": "Beta parity." }],
+        "stop_reason": "end_turn",
+        "stop_sequence": null,
+        "usage": { "input_tokens": 9, "output_tokens": 3 }
+      }
+    }
+  ]
+}

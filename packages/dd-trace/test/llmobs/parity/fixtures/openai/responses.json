@@ -1,0 +1,43 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/responses" },
+      "status": 200,
+      "body": {
+        "id": "resp-parity",
+        "object": "response",
+        "created_at": 1700000000,
+        "status": "completed",
+        "error": null,
+        "incomplete_details": null,
+        "model": "gpt-4o-mini",
+        "output": [
+          {
+            "id": "msg-parity",
+            "type": "message",
+            "status": "completed",
+            "role": "assistant",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "text": "Parity."
+              }
+            ]
+          }
+        ],
+        "parallel_tool_calls": true,
+        "temperature": 0,
+        "top_p": 1,
+        "tools": [],
+        "usage": {
+          "input_tokens": 8,
+          "input_tokens_details": { "cached_tokens": 2 },
+          "output_tokens": 2,
+          "output_tokens_details": { "reasoning_tokens": 0 },
+          "total_tokens": 10
+        }
+      }
+    }
+  ]
+}

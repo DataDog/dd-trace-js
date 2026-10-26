@@ -1,0 +1,27 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/chat/completions" },
+      "status": 200,
+      "body": {
+        "id": "chatcmpl-parity-multiturn",
+        "object": "chat.completion",
+        "created": 1700000000,
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "message": { "role": "assistant", "content": "It is 72F in NYC." },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 32,
+          "completion_tokens": 6,
+          "total_tokens": 38,
+          "completion_tokens_details": { "reasoning_tokens": 0 }
+        }
+      }
+    }
+  ]
+}
