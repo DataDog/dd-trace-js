@@ -744,6 +744,68 @@ describe('Plugin', () => {
           })
         })
 
+        it('should keep req.next equal to the next passed to middleware', async () => {
+          const app = express()
+          const router = express.Router()
+          const seen = []
+
+          app.use((req, res, next) => {
+            seen.push(next === req.next)
+            next()
+          })
+          router.use((req, res, next) => {
+            seen.push(next === req.next)
+            next()
+          })
+          app.use(router)
+          app.use((req, res, next) => {
+            seen.push(next === req.next)
+            // express passes `req.next` to the negotiated formatter.
+            res.format({
+              default: (req, res, formatNext) => {
+                seen.push(formatNext === next)
+                res.status(200).send()
+              },
+            })
+          })
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+
+          const response = await httpRequest.get(`http://localhost:${appListener.address().port}/`)
+
+          assert.strictEqual(response.status, 200)
+          assert.deepStrictEqual(seen, [true, true, true, true])
+        })
+
+        it('should finish middleware spans when req.next() is called', done => {
+          const app = express()
+
+          let span
+
+          app.use((req, res, next) => {
+            span = storage('legacy').getStore()?.span
+
+            sinon.spy(span, 'finish')
+
+            req.next()
+          })
+
+          app.use((req, res, next) => {
+            sinon.assert.called(span.finish)
+            res.status(200).send()
+            done()
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            httpRequest
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
+          })
+        })
+
         it('should not lose the current path when changing scope', done => {
           const app = express()
           const router = express.Router()
