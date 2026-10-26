@@ -820,6 +820,35 @@ describe('Plugin', () => {
           assert.strictEqual(notAcceptable.data, 'app error handler')
         })
 
+        it('should tag the middleware span with errors forwarded through req.next', async () => {
+          const app = express()
+
+          // An unmatched format forwards a 406 error through `req.next(error)`.
+          app.get('/406', function negotiate (req, res) {
+            res.format({ text: () => res.send('text') })
+          })
+          app.use((err, req, res, next) => res.status(err.status || 500).send())
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            // express 5 dispatches through router, whose spans are `router.middleware`.
+            const forwarded = traces[0].filter(span => span.name.endsWith('.middleware') && span.error === 1)
+            assert.ok(
+              forwarded.some(span => span.meta[ERROR_MESSAGE] === 'Not Acceptable'),
+              'a middleware span should carry the error forwarded through req.next'
+            )
+          })
+          const responsePromise = httpRequest.get(`http://localhost:${appListener.address().port}/406`, {
+            headers: { accept: 'application/json' },
+            validateStatus: () => true,
+          })
+          const [, response] = await Promise.all([tracePromise, responsePromise])
+
+          assert.strictEqual(response.status, 406)
+        })
+
         it('should finish middleware spans when req.next() is called', done => {
           const app = express()
 
