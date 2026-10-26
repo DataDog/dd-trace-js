@@ -325,6 +325,8 @@ describe('config-helper env resolution', () => {
 
     it('returns the env name from the highest-priority valid source', () => {
       process.env.OTEL_PROPAGATORS = 'b3'
+      const log = require('../../src/log')
+      sinon.spy(log, 'warn')
 
       const StableConfigStub = sinon.stub()
       StableConfigStub.callsFake(function () {
@@ -343,6 +345,7 @@ describe('config-helper env resolution', () => {
       })
 
       assert.strictEqual(mod.getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE'), 'OTEL_PROPAGATORS')
+      sinon.assert.notCalled(log.warn)
     })
 
     it('does not override defined values with undefined', () => {

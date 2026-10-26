@@ -180,14 +180,17 @@ function loadConfigurationsTable () {
  * @param {string} name Canonical or alias environment variable name.
  * @param {string} value Raw value read from an environment source.
  * @param {'env_var'|'fleet_stable_config'|'local_stable_config'} source Source the value was read from.
+ * @param {boolean} [reportInvalid] Whether invalid values should produce configuration diagnostics.
  * @returns {string | number | boolean | object | undefined}
  */
-function parseConfigurationValue (name, value, source) {
+function parseConfigurationValue (name, value, source, reportInvalid = true) {
   loadConfigurationsTable()
   const canonical = aliasToCanonical[name] ?? name
   const entry = configurationsTable[canonical]
-  const parsed = entry.parser(value, canonical, source)
-  return parsed !== undefined && entry.transformer ? entry.transformer(parsed, canonical, source) : parsed
+  const parsed = entry.parser(value, canonical, source, reportInvalid)
+  return parsed !== undefined && entry.transformer
+    ? entry.transformer(parsed, canonical, source, reportInvalid)
+    : parsed
 }
 
 /**
@@ -381,7 +384,6 @@ module.exports = {
    * Returns the environment variable name from the highest-priority source whose value is valid.
    *
    * @param {string} name Environment variable name
-   * @returns {string|undefined}
    */
   getValidatedConfiguredEnvName (name) {
     validateAccess(name)
@@ -399,7 +401,7 @@ module.exports = {
       if (source !== undefined) {
         const fromSource = getEnvNameFromSource(name, source)
         if (fromSource !== undefined &&
-          parseConfigurationValue(fromSource, source[fromSource], sourceName) !== undefined) {
+          parseConfigurationValue(fromSource, source[fromSource], sourceName, false) !== undefined) {
           return fromSource
         }
       }

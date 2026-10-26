@@ -2246,11 +2246,16 @@ describe('TextMapPropagator', () => {
        * @param {string} envName
        * @param {string} [injectEnvName]
        * @param {string} [injectOrigin]
+       * @param {boolean} [trackOrigins]
        */
-      function createV5Propagator (envName, injectEnvName, injectOrigin = 'calculated') {
-        sinon.stub(config, 'getOrigin')
-          .withArgs('tracePropagationStyle.inject')
-          .returns(injectOrigin)
+      function createV5Propagator (envName, injectEnvName, injectOrigin = 'calculated', trackOrigins = true) {
+        if (trackOrigins) {
+          sinon.stub(config, 'getOrigin')
+            .withArgs('tracePropagationStyle.inject')
+            .returns(injectOrigin)
+        } else {
+          config.getOrigin = undefined
+        }
         const getValidatedConfiguredEnvName = sinon.stub()
         getValidatedConfiguredEnvName.withArgs('DD_TRACE_PROPAGATION_STYLE').returns(envName)
         getValidatedConfiguredEnvName.withArgs('DD_TRACE_PROPAGATION_STYLE_INJECT').returns(injectEnvName)
@@ -2272,6 +2277,21 @@ describe('TextMapPropagator', () => {
 
         return new V5TextMapPropagator(config)
       }
+
+      it('should support configs without origin tracking', () => {
+        propagator = createV5Propagator('DD_TRACE_PROPAGATION_STYLE', undefined, undefined, false)
+        config.tracePropagationStyle.inject = ['b3']
+        const carrier = {}
+
+        propagator.inject(createContext({
+          traceId: id('123', 16),
+          spanId: id('456', 16),
+          sampling: { priority: AUTO_KEEP },
+        }), carrier)
+
+        assert.strictEqual(carrier['x-b3-traceid'], '0000000000000123')
+        assert.strictEqual(carrier.b3, undefined)
+      })
 
       it('should extract B3 as multiple headers', () => {
         propagator = createV5Propagator('DD_TRACE_PROPAGATION_STYLE')

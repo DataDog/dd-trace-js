@@ -304,7 +304,7 @@ class TextMapPropagator {
   /** @type {string[] | undefined} Source array that `#baggageTagKeysSet` was built from. */
   #baggageTagKeysSetSource
 
-  /** @type {import('../../config')} */
+  /** @type {ReturnType<import('../../config')>} */
   #config
 
   /** @type {typeof extractB3SingleContext | typeof extractB3MultiContext} */
@@ -322,7 +322,7 @@ class TextMapPropagator {
   /** Cached origin of the shared v5 propagation style. */
   #b3SharedOrigin
 
-  /** @param {import('../../config')} config */
+  /** @param {ReturnType<import('../../config')>} config */
   constructor (config) {
     this.#config = config
 
@@ -344,10 +344,10 @@ class TextMapPropagator {
   }
 
   #refreshB3InjectionStyle () {
-    const origin = this.#config.getOrigin('tracePropagationStyle.inject')
+    const origin = this.#config.getOrigin?.('tracePropagationStyle.inject') ?? 'default'
     const experimentalEnabled = this.#config.experimental?.b3 === true
     const sharedOrigin = origin === 'calculated'
-      ? this.#config.getOrigin('DD_TRACE_PROPAGATION_STYLE')
+      ? this.#config.getOrigin?.('DD_TRACE_PROPAGATION_STYLE') ?? 'default'
       : undefined
     if (origin === this.#b3InjectOrigin &&
       experimentalEnabled === this.#b3ExperimentalEnabled &&
