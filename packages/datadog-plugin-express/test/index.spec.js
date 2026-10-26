@@ -753,16 +753,19 @@ describe('Plugin', () => {
             seen.push(next === req.next)
             next()
           })
+          // Nested routers set `req.next` themselves only from express 4.2.0.
+          const routersSetReqNext = semver.gte(require(`../../../versions/express@${version}`).version(), '4.2.0')
           router.use((req, res, next) => {
-            seen.push(next === req.next)
+            if (routersSetReqNext) seen.push(next === req.next)
             next()
           })
           app.use(router)
           app.use((req, res, next) => {
             seen.push(next === req.next)
-            // express passes `req.next` to the negotiated formatter.
+            // express passes `req.next` to a negotiated formatter in every version;
+            // only newer versions pass arguments to `.default`.
             res.format({
-              default: (req, res, formatNext) => {
+              text: (formatReq, formatRes, formatNext) => {
                 seen.push(formatNext === next)
                 res.status(200).send()
               },
@@ -772,19 +775,21 @@ describe('Plugin', () => {
           appListener = app.listen(0, 'localhost')
           await once(appListener, 'listening')
 
-          const response = await httpRequest.get(`http://localhost:${appListener.address().port}/`)
+          const response = await httpRequest.get(`http://localhost:${appListener.address().port}/`, {
+            headers: { accept: 'text/plain' },
+          })
 
           assert.strictEqual(response.status, 200)
-          assert.deepStrictEqual(seen, [true, true, true, true])
+          assert.deepStrictEqual(seen, routersSetReqNext ? [true, true, true, true] : [true, true, true])
         })
 
         it('should keep req.next at the router level inside route handlers', async () => {
           const app = express()
 
-          // res.format passes `req.next`, which must advance to the next route,
-          // not to the remaining handlers of the current one.
+          // res.format hands formatters `req.next`, which must advance to the next
+          // route, not to the remaining handlers of the current one.
           app.get('/next', (req, res) => {
-            res.format({ default: (req, res, next) => next() })
+            res.format({ text: () => req.next() })
           }, (req, res) => res.send('same route'))
           app.get('/next', (req, res) => res.send('next route'))
 
@@ -792,19 +797,25 @@ describe('Plugin', () => {
           app.get('/406', (req, res) => {
             res.format({ text: () => res.send('text') })
           }, (err, req, res, next) => res.status(500).send('route error handler'))
-          app.use((err, req, res, next) => res.status(err.status).send('app error handler'))
+          app.use((err, req, res, next) => res.status(err.status || 500).send('app error handler'))
 
           appListener = app.listen(0, 'localhost')
           await once(appListener, 'listening')
 
           const base = `http://localhost:${appListener.address().port}`
-          const next = await httpRequest.get(`${base}/next`)
+          const next = await httpRequest.get(`${base}/next`, {
+            headers: { accept: 'text/plain' },
+            validateStatus: () => true,
+          })
           const notAcceptable = await httpRequest.get(`${base}/406`, {
             headers: { accept: 'application/json' },
             validateStatus: () => true,
           })
 
-          assert.strictEqual(next.data, 'next route')
+          // express 4.3.0 itself answers a route handler's `req.next()` with a 404 (fixed in 4.3.1).
+          if (require(`../../../versions/express@${version}`).version() !== '4.3.0') {
+            assert.strictEqual(next.data, 'next route')
+          }
           assert.strictEqual(notAcceptable.status, 406)
           assert.strictEqual(notAcceptable.data, 'app error handler')
         })
