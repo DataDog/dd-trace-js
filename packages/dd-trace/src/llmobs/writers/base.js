@@ -4,7 +4,7 @@ const { URL, format } = require('node:url')
 const path = require('node:path')
 const request = require('../../exporters/common/request')
 const { getEnvironmentVariable } = require('../../config/helper')
-const { createServerlessDeliveryTracker } = require('../../serverless')
+const { createServerlessDeliveryTracker, IS_STANDARD_AWS_LAMBDA } = require('../../serverless')
 
 const logger = require('../../log')
 
@@ -23,13 +23,12 @@ class LLMObsBuffer {
   /**
    * @param {{
    *   events: Record<string, unknown>[],
-   *   size: number,
    *   routing?: { apiKey?: string, site?: string }
    * }} options
    */
-  constructor ({ events, size, routing = {} }) {
+  constructor ({ events, routing = {} }) {
     this.events = events
-    this.size = size
+    this.size = 0
     this.routing = routing
   }
 
@@ -53,7 +52,7 @@ class BaseLLMObsWriter {
     this._eventType = eventType
 
     /** @type {LLMObsBuffer} */
-    this._buffer = new LLMObsBuffer({ events: [], size: 0 })
+    this._buffer = new LLMObsBuffer({ events: [] })
 
     /** @type {import('../../config/config-base')} */
     this._config = config
@@ -92,7 +91,7 @@ class BaseLLMObsWriter {
     const apiKey = routing.apiKey
     let buffer = this.#multiTenantBuffers.get(apiKey)
     if (!buffer) {
-      buffer = new LLMObsBuffer({ events: [], size: 0, routing })
+      buffer = new LLMObsBuffer({ events: [], routing })
       this.#multiTenantBuffers.set(apiKey, buffer)
     }
     return buffer
@@ -118,6 +117,8 @@ class BaseLLMObsWriter {
 
     buffer.size += eventSize
     buffer.events.push(event)
+    // The standard Lambda sandbox can freeze before the periodic flush runs.
+    if (IS_STANDARD_AWS_LAMBDA) this.flush()
     return true
   }
 

@@ -10,6 +10,7 @@ const { performance } = require('node:perf_hooks')
 const path = require('path')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
+const { storage } = require('../../datadog-core')
 const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
@@ -88,6 +89,8 @@ const testSkippedCh = channel('ci:jest:test:skip')
 const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 const testFnCh = channel('ci:jest:test:fn')
+const snapshotStorage = storage('ci:jest:snapshots')
+let activeSnapshotTrackers = 0
 const testSuiteHookFnCh = channel('ci:jest:test-suite:hook:fn')
 const consoleLogSubmissionCh = channel('ci:log-submission:console')
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
@@ -666,7 +669,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     #discardedEfdRetryTests
     #earlyFlakeDetectionRetryPolicy
     #efdRetryGatesByName
+    #expect
     #pendingPre30ConcurrentTests
+    /** @type {(() => void)|undefined} */
+    #restoreSnapshotState
+    /** @type {Set<string>|undefined} */
+    #snapshotTestNames
 
     constructor (config, context) {
       super(config, context)
@@ -883,8 +891,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      */
     wrapConcurrentTestFunction (target, methodName, state) {
       let concurrentTest = target?.[methodName]
-      if (typeof concurrentTest !== 'function') return
-      if (this.wrappedConcurrentTestFunctions.has(concurrentTest)) return
+      if (typeof concurrentTest !== 'function' || this.wrappedConcurrentTestFunctions.has(concurrentTest)) return
 
       const originalConcurrentTest = getOriginalConcurrentTest(concurrentTest)
       if (originalConcurrentTest !== concurrentTest) {
@@ -1445,6 +1452,98 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
     }
 
+    getSnapshotState () {
+      return this.#expect?.getState?.()?.snapshotState
+    }
+
+    /**
+     * Attributes snapshot increments to the executing test when serial and concurrent bodies can overlap.
+     * Both Jest and image snapshot matchers write this shared counter directly.
+     */
+    #trackQuarantinedSnapshots () {
+      if (!this.hasConcurrentTests || !this.testManagementTestsForThisSuite?.quarantined?.length) return
+
+      const snapshotState = this.getSnapshotState()
+      const descriptor = snapshotState && Object.getOwnPropertyDescriptor(snapshotState, 'unmatched')
+      if (!descriptor?.configurable || typeof descriptor.value !== 'number') return
+
+      let unmatched = descriptor.value
+      try {
+        Object.defineProperty(snapshotState, 'unmatched', {
+          configurable: true,
+          enumerable: descriptor.enumerable,
+          get () { return unmatched },
+          /** @param {number} value */
+          set (value) {
+            const ctx = /** @type {{ unmatchedSnapshots?: number }|undefined} */ (snapshotStorage.getStore())
+            if (ctx?.unmatchedSnapshots !== undefined && value > unmatched) {
+              ctx.unmatchedSnapshots += value - unmatched
+            }
+            unmatched = value
+          },
+        })
+      } catch (error) {
+        log.error('Could not track quarantined Jest snapshots: %s', error)
+        return
+      }
+
+      if (activeSnapshotTrackers++ === 0) testFnCh.bindStore(snapshotStorage)
+      this.#restoreSnapshotState = () => {
+        try {
+          Object.defineProperty(snapshotState, 'unmatched', { ...descriptor, value: unmatched })
+        } catch (error) {
+          log.error('Could not restore Jest snapshot state: %s', error)
+        } finally {
+          if (--activeSnapshotTrackers === 0) testFnCh.unbindStore(snapshotStorage)
+        }
+      }
+    }
+
+    /**
+     * Keeps the snapshot results of a quarantined test from failing the run.
+     *
+     * Jest fails the run on unmatched or obsolete snapshots even when no test failed.
+     *
+     * @param {object} test
+     */
+    ignoreQuarantinedSnapshotResults (test) {
+      const ctx = testContexts.get(test)
+      const unmatchedBeforeTest = ctx?.unmatchedSnapshotsBeforeTest
+      const unmatchedSnapshots = ctx?.unmatchedSnapshots
+      // Jest retries the attempts that still have errors and resets their snapshot results itself.
+      if ((unmatchedBeforeTest === undefined && unmatchedSnapshots === undefined) || test.errors?.length) return
+
+      const snapshotState = this.getSnapshotState()
+      if (!snapshotState) return
+
+      if (unmatchedSnapshots !== undefined) {
+        snapshotState.unmatched -= unmatchedSnapshots
+        ctx.unmatchedSnapshots = 0
+      } else if (snapshotState.unmatched > unmatchedBeforeTest) {
+        snapshotState.unmatched = unmatchedBeforeTest
+      }
+      // Jest's name-based marker can consume other tests' keys, so delete only keys owned by this test.
+      const keys = snapshotState._uncheckedKeys
+      const testNames = this.#snapshotTestNames
+      if (!keys?.delete || !testNames) return
+      const testName = getRawJestTestName(test)
+      const hintPrefix = `${testName}: `
+      for (const key of keys) {
+        const snapshotName = key.slice(0, key.lastIndexOf(' '))
+        if (snapshotName !== testName && !snapshotName.startsWith(hintPrefix)) continue
+        let belongsToAnotherTest = false
+        // Snapshot names do not identify their owner when another registered name matches the same key.
+        for (const name of testNames) {
+          if (name !== testName &&
+            (snapshotName === name || snapshotName.startsWith(`${name}: `))) {
+            belongsToAnotherTest = true
+            break
+          }
+        }
+        if (!belongsToAnotherTest) keys.delete(key)
+      }
+    }
+
     // This function returns an array if the known tests are valid and null otherwise.
     getKnownTestsForSuite (suiteKnownTests) {
       // `suiteKnownTests` is `this.testEnvironmentOptions._ddKnownTests`,
@@ -1819,6 +1918,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (event.concurrent) {
         this.hasConcurrentTests = true
       }
+      const registeredTest = getTestEntries(state.currentDescribeBlock)?.at(-1)
+      if (registeredTest && this.testManagementTestsForThisSuite?.quarantined?.length) {
+        this.#snapshotTestNames ??= new Set()
+        this.#snapshotTestNames.add(getRawJestTestName(registeredTest))
+      }
       if (event.failing) {
         return
       }
@@ -1827,7 +1931,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const concurrentTestContexts = this.concurrentTestContexts.get(testFullName)
       const concurrentTestState = this.concurrentTestStates.get(event.fn) ||
         concurrentTestContexts?.at(-1)?.concurrentTestState
-      const registeredTest = getTestEntries(state.currentDescribeBlock)?.at(-1)
       if (concurrentTestState && registeredTest?.fn === event.fn) {
         testContexts.set(registeredTest, concurrentTestState.ctx)
       }
@@ -1925,10 +2028,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       if (event.name === 'run_start') {
+        this.#trackQuarantinedSnapshots()
         const registerResultHandler = dynamicAtrResultHandlerRegistrations.get(this)
         dynamicAtrResultHandlerRegistrations.delete(this)
         registerResultHandler?.()
       } else if (event.name === 'setup') {
+        this.#expect = event.runtimeGlobals?.expect ?? this.global.expect
         this.wrapConcurrentTest(state)
         this.bindTestEach(this.global.test)
       }
@@ -2043,6 +2148,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (concurrentTestState) {
           ctx.concurrentTestState = concurrentTestState
           concurrentTestState.ctx = ctx
+        }
+        if (isQuarantined && !isAttemptToFix && !event.test.concurrent && !ctx.concurrentTestState) {
+          if (this.#restoreSnapshotState) {
+            ctx.unmatchedSnapshots = 0
+          } else if (!this.hasConcurrentTests) {
+            ctx.unmatchedSnapshotsBeforeTest = this.getSnapshotState()?.unmatched
+          }
         }
         testContexts.set(event.test, ctx)
 
@@ -2282,6 +2394,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             event.test.errors = []
           }
         }
+        this.ignoreQuarantinedSnapshotResults(event.test)
 
         // Quarantine must consume terminal failures before we save errors for Jest's final result.
         if (dynamicAtrCount !== undefined && failedAllTests && event.test.errors?.length) {
@@ -2359,6 +2472,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           ctx.currentStore = undefined
         }
       } else if (event.name === 'run_finish') {
+        this.#restoreSnapshotState?.()
+        this.#restoreSnapshotState = undefined
         this.removeDiscardedEfdRetries()
         for (const [test, errors] of atrSuppressedErrors) {
           // Do not restore errors for non-ATF quarantined tests — they should stay suppressed
@@ -2528,6 +2643,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     teardown () {
+      this.#restoreSnapshotState?.()
+      this.#restoreSnapshotState = undefined
       if (this._globalProxy?.propertyToValue) {
         for (const [key] of this._globalProxy.propertyToValue) {
           if (typeof key === 'string' && key.startsWith('_dd')) {
@@ -2557,10 +2674,7 @@ function getTestEnvironment (pkg, jestVersion) {
     const wrappedTestEnvironment = getWrappedEnvironment(pkg.default, jestVersion)
     return new Proxy(pkg, {
       get (target, prop) {
-        if (prop === 'default') {
-          return wrappedTestEnvironment
-        }
-        if (prop === 'TestEnvironment') {
+        if (prop === 'default' || prop === 'TestEnvironment') {
           return wrappedTestEnvironment
         }
         return target[prop]
@@ -4377,10 +4491,7 @@ function sendWrapper (send) {
       // In here we modify the `config.testEnvironmentOptions` to include the known tests for the suite.
       // This way the suite only knows about the tests that are part of it.
       const args = request.at(-1)
-      if (args.length > 1) {
-        return send.apply(this, arguments)
-      }
-      if (!args[0]?.config) {
+      if (args.length > 1 || !args[0]?.config) {
         return send.apply(this, arguments)
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args

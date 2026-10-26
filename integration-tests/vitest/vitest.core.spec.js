@@ -117,7 +117,14 @@ function assertCompleteTestSessionTrace (events, testOutput) {
 }
 
 // vitest@4.x requires Node.js >= 20
-const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const supportedVersions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const requestedVersion = process.env.VITEST_VERSION
+const versions = requestedVersion && requestedVersion !== 'all'
+  ? [requestedVersion === 'oldest'
+      ? supportedVersions[0]
+      : requestedVersion === 'latest' ? supportedVersions.at(-1) : requestedVersion]
+  : supportedVersions
+const runVersionIndependentSuites = !requestedVersion || requestedVersion === 'all' || requestedVersion === 'latest'
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
@@ -130,6 +137,9 @@ versions.forEach((version) => {
 
     useSandbox([
       `vitest@${version}`,
+      // Vite 8.3.5's source-map parser rejects the Buffers returned by Vitest's server runner.
+      // TODO: remove the pin once Vitest reads cached server modules as UTF-8.
+      ...(version === 'latest' ? ['vite@8.3.4'] : []),
       `@vitest/coverage-istanbul@${version}`,
       `@vitest/coverage-v8@${version}`,
       '@types/node',
@@ -152,6 +162,57 @@ versions.forEach((version) => {
     })
 
     const poolConfig = ['forks', 'threads']
+
+    for (const pool of poolConfig) {
+      it(`reports tests when the global URL is mocked during a DogStatsD flush (${pool})`, async () => {
+        testOutput = ''
+        receiver.setSettings({ itr_enabled: false })
+        childProcess = exec('./node_modules/.bin/vitest run', {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_INJECT_FORCE: 'true',
+            DD_TRACE_AGENT_URL: `http://127.0.0.1:${receiver.port}`,
+            DD_RUNTIME_METRICS_ENABLED: 'false',
+            TEST_DIR: 'ci-visibility/vitest-tests/mocked-url.mjs',
+            POOL_CONFIG: pool,
+          },
+        })
+        childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle') || url === '/dogstatsd/v2/proxy',
+          payloads => {
+            const metrics = payloads.filter(({ url }) => url === '/dogstatsd/v2/proxy')
+            assert.ok(metrics.length, `expected DogStatsD telemetry: ${testOutput}`)
+            assert.match(metrics[0].payload, /datadog\.dogstatsd\.client\.metrics:0\|c/)
+
+            const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+            const { testSession, testModule, testSuite, tests } = assertCompleteTestSessionTrace(events, testOutput)
+            for (const event of [testSession, testModule, testSuite]) {
+              assert.strictEqual(event.meta[TEST_STATUS], 'fail', testOutput)
+            }
+            assert.strictEqual(tests.length, 2, testOutput)
+            const passedTest = tests.find(test => test.meta[TEST_NAME].endsWith('is flushed'))
+            const failedTest = tests.find(test => test.meta[TEST_NAME].endsWith('original test failure'))
+            assert.ok(passedTest, testOutput)
+            assert.ok(failedTest, testOutput)
+            assert.strictEqual(passedTest.meta[TEST_STATUS], 'pass', testOutput)
+            assert.strictEqual(passedTest.error, 0)
+            assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail', testOutput)
+            assert.strictEqual(failedTest.meta[ERROR_TYPE], 'Error')
+            assert.strictEqual(failedTest.meta[ERROR_MESSAGE], 'expected test failure')
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1, testOutput)
+        assert.doesNotMatch(testOutput, /URL is not a constructor/)
+      })
+    }
 
     if (version === 'latest') {
       for (const pool of poolConfig) {
@@ -3391,7 +3452,10 @@ versions.forEach(version => {
     this.timeout(60_000)
     let receiver, childProcess
 
-    useSandbox([`vitest@${version}`], false, ['./integration-tests/ci-visibility/vitest-empty-sessions'])
+    useSandbox([
+      `vitest@${version}`,
+      ...(version === 'latest' ? ['vite@8.3.4'] : []),
+    ], false, ['./integration-tests/ci-visibility/vitest-empty-sessions'])
 
     beforeEach(async () => {
       receiver = await new FakeCiVisIntake().start()
@@ -3406,6 +3470,7 @@ versions.forEach(version => {
     const scenarios = [
       'empty-shard', 'empty-shard-default', 'empty-file', 'empty-file-disallowed', 'setup-error', 'normal', 'skipped',
       'no-candidates', 'no-candidates-default', 'no-candidates-sharded', 'no-candidates-sharded-default',
+      'collected-only',
     ]
     for (const scenario of scenarios) {
       // Vitest 1.6 aborts global setup before the session finalizer can be installed.
@@ -3421,7 +3486,7 @@ versions.forEach(version => {
             ? 'zero_test_shard'
             : scenario === 'empty-file' || scenario.startsWith('no-candidates')
               ? 'zero_tests'
-              : scenario === 'skipped' ? 'all_tests_skipped' : undefined
+              : ['skipped', 'collected-only'].includes(scenario) ? 'all_tests_skipped' : undefined
         const skipReason = reason === 'zero_test_shard'
           ? 'No tests were assigned to this shard'
           : reason === 'zero_tests'
@@ -3438,6 +3503,7 @@ versions.forEach(version => {
               ...getCiVisEvpProxyConfig(receiver.port),
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+              DD_INJECT_FORCE: 'true',
               EMPTY_SESSION_SCENARIO: scenario,
             },
           }
@@ -3454,7 +3520,10 @@ versions.forEach(version => {
             const tests = events.filter(event => event.type === 'test')
             assert.strictEqual(sessions.length, 1, output)
             assert.strictEqual(modules.length, 1, output)
-            assert.strictEqual(tests.length, ['normal', 'skipped'].includes(scenario) ? 1 : 0, output)
+            assert.strictEqual(tests.length, ['normal', 'skipped', 'collected-only'].includes(scenario) ? 1 : 0, output)
+            if (scenario === 'collected-only') {
+              assert.strictEqual(tests[0].content.meta[TEST_STATUS], 'skip', output)
+            }
             for (const event of [...sessions, ...modules]) {
               assert.strictEqual(event.content.meta[TEST_STATUS], expectedStatus, output)
               assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], reason, output)
@@ -3469,7 +3538,7 @@ versions.forEach(version => {
   })
 })
 
-const describeCloudflareWorkers = NODE_MAJOR < 20 ? describe.skip : describe
+const describeCloudflareWorkers = NODE_MAJOR < 20 || !runVersionIndependentSuites ? describe.skip : describe
 
 describeCloudflareWorkers('vitest@3.2.4 with @cloudflare/vitest-pool-workers@0.12.21', () => {
   let cwd, receiver, childProcess, testOutput
@@ -3524,7 +3593,7 @@ describeCloudflareWorkers('vitest@3.2.4 with @cloudflare/vitest-pool-workers@0.1
 
 // Keep the legacy fork transport covered independently of the broad oldest/latest matrix.
 // Runtime EFD suite admission starts at Vitest 4, which requires Node.js >=20.
-const describeTransport = NODE_MAJOR >= 20 ? describe : describe.skip
+const describeTransport = NODE_MAJOR >= 20 && runVersionIndependentSuites ? describe : describe.skip
 
 for (const version of ['4.0.5', 'latest']) {
   describeTransport(`vitest@${version} EFD worker transport`, () => {
@@ -3591,7 +3660,7 @@ for (const version of ['4.0.5', 'latest']) {
 // Vitest 4 requires Node >=20; Vitest 5 requires Node >=22.
 for (const version of ['4.1.10', 'latest']) {
   let describeRunnerReuse = describe
-  if (NODE_MAJOR < 20 || (version === 'latest' && NODE_MAJOR < 22)) {
+  if (!runVersionIndependentSuites || NODE_MAJOR < 20 || (version === 'latest' && NODE_MAJOR < 22)) {
     describeRunnerReuse = describe.skip
   }
 

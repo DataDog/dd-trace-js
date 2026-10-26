@@ -129,7 +129,10 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
         DD_SERVICE: undefined,
         NODE_OPTIONS,
         TEST_DIR: testFile ? `ci-visibility/vitest-browser-tests/${testFile}` : undefined,
+        VITEST_BROWSER_BINARY: process.env.VITEST_BROWSER_BINARY,
+        VITEST_BROWSER_DRIVER_BINARY: process.env.VITEST_BROWSER_DRIVER_BINARY,
         VITEST_BROWSER_MODE: '1',
+        VITEST_BROWSER_PROVIDER: browserProvider,
         VITEST_BROWSER_PROVIDER_FACTORY: isLegacyBrowserProvider ? undefined : '1',
         ...extraEnv,
       },
@@ -491,10 +494,34 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
       assert.strictEqual(test.meta[TEST_STATUS], 'skip')
       assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], 'true')
       assert.strictEqual(test.trace_id.toString(), testExecutionId)
+      assert.ok(Number(test.duration) >= 40 * 1e6)
+      const skipTime = Number(/DD_VITEST_SKIP_TIME:(\d+)/.exec(testOutput)?.[1])
+      assert.ok(Number.isFinite(skipTime), testOutput)
+      assert.ok(Number(test.start) / 1e6 <= skipTime)
+      assert.ok(Number(test.start) / 1e6 + Number(test.duration) / 1e6 < skipTime + 100)
     })
 
     const [exitCode] = await Promise.all([
       runVitest('browser-rum-dynamic-skip.mjs'),
+      payloadsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+
+  it('does not reuse RUM correlation when the final browser retry is dynamically skipped', async () => {
+    const payloadsPromise = gatherEvents(events => {
+      const tests = getEventContents(events, 'test')
+      const skippedTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
+      const testExecutionId = getRumTestExecutionId(testOutput, 'retry-skip')
+
+      assert.ok(skippedTest)
+      assert.ok(!(TEST_IS_RUM_ACTIVE in skippedTest.meta))
+      assert.notStrictEqual(skippedTest.trace_id.toString(), testExecutionId)
+    })
+
+    const [exitCode] = await Promise.all([
+      runVitest('browser-rum-retry-dynamic-skip.mjs'),
       payloadsPromise,
     ])
 

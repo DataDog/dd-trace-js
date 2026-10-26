@@ -28,6 +28,46 @@ import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
 import { metrics } from '@opentelemetry/api';
 import { IncomingMessage, OutgoingMessage } from 'http';
+import {
+  configurationToString,
+  ConfigurationFetchError,
+  fetchRulesConfiguration,
+} from '../openfeature/rules-based';
+import type {
+  ConfigurationFetchErrorCode,
+  FlagsConfiguration,
+  FlagsConfigurationWire,
+  RulesConfigurationFetchOptions,
+} from '../openfeature/rules-based';
+import * as openFeatureRules from '../openfeature/rules-based';
+
+async function testOpenFeatureConfigurationHelpers() {
+  const options: RulesConfigurationFetchOptions = {
+    distributionChannel: 'client', clientToken: 'client-token', env: 'production',
+    site: 'datadoghq.com', timeoutMs: 1000, signal: new AbortController().signal, fetch: globalThis.fetch,
+  };
+  const configuration: FlagsConfiguration = await fetchRulesConfiguration(options);
+  const wire: FlagsConfigurationWire = configurationToString(configuration);
+  await fetchRulesConfiguration({ apiKey: 'api-key', env: 'production' });
+  await fetchRulesConfiguration({ distributionChannel: 'server', apiKey: 'api-key', env: 'production' });
+  const error = new ConfigurationFetchError('http', 'Request failed', 403);
+  const code: ConfigurationFetchErrorCode = error.code;
+  const status: number | undefined = error.status;
+
+  // @ts-expect-error Portable configuration parsing is not part of the Node SSR API.
+  openFeatureRules.configurationFromString(wire);
+  // @ts-expect-error Binary decoding remains internal to the fetch helper.
+  openFeatureRules.configurationFromRulesBinary(new Uint8Array());
+
+  // @ts-expect-error Client distribution requires a client token, not an API key.
+  await fetchRulesConfiguration({ distributionChannel: 'client', apiKey: 'api-key', env: 'production' });
+  // @ts-expect-error Server distribution is the default and requires an API key.
+  await fetchRulesConfiguration({ clientToken: 'client-token', env: 'production' });
+  // @ts-expect-error Both credentials cannot be supplied together.
+  await fetchRulesConfiguration({ apiKey: 'api-key', clientToken: 'client-token', env: 'production' });
+  // @ts-expect-error Only supported distribution channels are accepted.
+  await fetchRulesConfiguration({ distributionChannel: 'browser', clientToken: 'client-token', env: 'production' });
+}
 
 opentracing.initGlobalTracer(tracer);
 
@@ -39,6 +79,12 @@ let traceparent: string;
 let promise: Promise<void>;
 
 ddTrace.init();
+const evaluationTelemetryOptOutOption: TracerOptions = {
+  featureFlags: {
+    // @ts-expect-error The activation option must be a boolean.
+    enableEvaluationTelemetryOptOutParameter: 'true'
+  }
+};
 tracer.init({
   apmTracingEnabled: false,
   logInjection: true,
@@ -47,6 +93,9 @@ tracer.init({
   version: '1.0.0',
   url: 'http://localhost',
   runtimeMetrics: true,
+  featureFlags: {
+    enableEvaluationTelemetryOptOutParameter: true
+  },
   experimental: {
     exporter: 'log'
   },
@@ -884,6 +933,20 @@ llmobs.annotate(span, {
   tags: { team: 'ml' },
   costTags: ['team']
 })
+
+// declare an agent
+const agentDeclaration: import('..').llmobs.Agent = {
+  name: 'travel_desk',
+  instructions: 'Book travel.',
+  model: 'gpt-4o',
+  modelSettings: { temperature: 0.1, max_tokens: 1024 },
+  tools: [
+    { name: 'get_weather', description: 'Look up the weather.', parameters: { city: { type: 'string', required: true } } },
+    { name: 'get_time', parameters: { type: 'object', properties: { tz: { type: 'string' } }, required: ['tz'] } },
+  ]
+}
+llmobs.annotate({ agent: agentDeclaration })
+llmobs.annotationContext({ agent: agentDeclaration }, () => {})
 
 
 

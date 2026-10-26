@@ -300,8 +300,7 @@ function configureEfdSuiteTracker (testFilepaths, repositoryRoot) {
  * @param {boolean} hasNewTest
  */
 function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
-  if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string') return false
-  if (isEarlyFlakeDetectionFaulty) return false
+  if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string' || isEarlyFlakeDetectionFaulty) return false
 
   if (hasNewTest) {
     suitesWithNewTests.add(testSuite)
@@ -1201,11 +1200,7 @@ function getSortWrapper (sort, frameworkVersion) {
 
 function getFinishWrapper (exitOrClose) {
   return async function () {
-    if (finishedSessionContexts.has(this)) {
-      return exitOrClose.apply(this, arguments)
-    }
-
-    if (!testSessionFinishCh.hasSubscribers) {
+    if (finishedSessionContexts.has(this) || !testSessionFinishCh.hasSubscribers) {
       return exitOrClose.apply(this, arguments)
     }
     finishedSessionContexts.add(this)
@@ -1230,15 +1225,15 @@ function getFinishWrapper (exitOrClose) {
     const tests = getTypeTasks(this.state.getFiles())
     const hasExecutedTests = tests.some(test =>
       test.mode !== 'skip' && test.mode !== 'todo' &&
-      test.result?.state !== 'skip' && test.result?.state !== 'todo'
+      (test.result?.state === 'pass' || test.result?.state === 'fail')
     )
     const hasErrors = hasRunError || error ||
       this.state.getCountOfFailedTests() > 0 || this.state.getUnhandledErrors().length > 0
-    const testSessionEmptyReason = !hasErrors && !hasExecutedTests
-      ? (isEmptyShard
-          ? 'zero_test_shard'
-          : tests.length > 0 || skippedSuites.length > 0 ? 'all_tests_skipped' : 'zero_tests')
-      : undefined
+    const testSessionEmptyReason = hasErrors || hasExecutedTests
+      ? undefined
+      : isEmptyShard
+        ? 'zero_test_shard'
+        : tests.length > 0 || skippedSuites.length > 0 ? 'all_tests_skipped' : 'zero_tests'
     const status = hasErrors ? 'fail' : (testSessionEmptyReason ? 'skip' : 'pass')
     const flushPromise = getChannelPromise(testSessionFinishCh, {
       status,
@@ -1758,8 +1753,7 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
 }
 
 async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker, files = result?.files) {
-  if (!testSuiteFinishCh.hasSubscribers) return
-  if (!Array.isArray(result?.files) || !Array.isArray(files)) return
+  if (!testSuiteFinishCh.hasSubscribers || !Array.isArray(result?.files) || !Array.isArray(files)) return
 
   const setupState = ctx && mainProcessSetupStates.get(ctx)
   if (
@@ -2239,8 +2233,6 @@ addHook({
   versions: ['>=5.0.0'],
   filePattern: 'dist/chunks/index.*',
 }, (vitestPackage, frameworkVersion) => {
-  if (!getVitestExport(vitestPackage)) return vitestPackage
-
   wrapVitestInternals(vitestPackage, frameworkVersion)
 
   const typecheckPoolWorker = getTypecheckPoolWorkerExport(vitestPackage)

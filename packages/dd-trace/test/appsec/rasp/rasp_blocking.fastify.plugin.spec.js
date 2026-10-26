@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 
 const path = require('node:path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { describe, it, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 const agent = require('../../plugins/agent')
@@ -13,6 +12,7 @@ const appsec = require('../../../src/appsec')
 
 const { withVersions } = require('../../setup/mocha')
 const { blockedTemplateJson: blockedJson, setTestBlockingTemplates } = require('../utils')
+const HttpRequest = require('../../setup/helpers/http-client')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - fastify blocking', () => {
@@ -34,7 +34,7 @@ describe('RASP - fastify blocking', () => {
   })
 
   withVersions('fastify', 'fastify', '>=2', (version) => {
-    let app, hooks, axios, pool
+    let app, hooks, httpRequest, pool
 
     before(async () => {
       await agent.load(['http', 'fastify'], { client: false })
@@ -104,7 +104,7 @@ describe('RASP - fastify blocking', () => {
 
       await app.listen({ host: '127.0.0.1', port: 0 })
 
-      axios = Axios.create({
+      httpRequest = HttpRequest.create({
         baseURL: `http://127.0.0.1:${app.server.address().port}`,
         validateStatus: () => true,
         responseType: 'text',
@@ -125,7 +125,7 @@ describe('RASP - fastify blocking', () => {
     })
 
     it('should not block on user error', async () => {
-      const res = await axios('/error')
+      const res = await httpRequest('/error')
 
       sinon.assert.calledOnce(hooks.onSend)
       sinon.assert.calledOnce(hooks.onResponse)
@@ -137,7 +137,7 @@ describe('RASP - fastify blocking', () => {
     })
 
     it('should not block without attack', async () => {
-      const res = await axios('/shi')
+      const res = await httpRequest('/shi')
 
       sinon.assert.calledOnce(hooks.onSend)
       sinon.assert.calledOnce(hooks.onResponse)
@@ -148,7 +148,7 @@ describe('RASP - fastify blocking', () => {
     })
 
     it('should block with CMDI', async () => {
-      const res = await axios('/cmdi?payload=cat /etc/passwd')
+      const res = await httpRequest('/cmdi?payload=cat /etc/passwd')
 
       sinon.assert.calledOnce(hooks.onSend)
       sinon.assert.calledOnce(hooks.onResponse)
@@ -159,7 +159,7 @@ describe('RASP - fastify blocking', () => {
     })
 
     it('should block with SHI', async () => {
-      const res = await axios('/shi?payload=$(cat /etc/passwd 1>%262 ; echo .)')
+      const res = await httpRequest('/shi?payload=$(cat /etc/passwd 1>%262 ; echo .)')
 
       sinon.assert.calledOnce(hooks.onSend)
       sinon.assert.calledOnce(hooks.onResponse)
@@ -170,7 +170,7 @@ describe('RASP - fastify blocking', () => {
     })
 
     it('should block with LFI', async () => {
-      const res = await axios('/lfi?payload=/etc/passwd')
+      const res = await httpRequest('/lfi?payload=/etc/passwd')
 
       sinon.assert.calledOnce(hooks.onSend)
       sinon.assert.calledOnce(hooks.onResponse)
@@ -181,7 +181,7 @@ describe('RASP - fastify blocking', () => {
     })
 
     it('should block with SQLI', async () => {
-      const res = await axios('/sqli?payload=\' OR 1 = 1 --')
+      const res = await httpRequest('/sqli?payload=\' OR 1 = 1 --')
 
       sinon.assert.calledOnce(hooks.onSend)
       sinon.assert.calledOnce(hooks.onResponse)
@@ -192,7 +192,7 @@ describe('RASP - fastify blocking', () => {
     })
 
     it('should block with SSRF', async () => {
-      const res = await axios('/ssrf?payload=169.254.169.254')
+      const res = await httpRequest('/ssrf?payload=169.254.169.254')
 
       // some hooks won't be called because SSRF is blocked out of band
       sinon.assert.notCalled(hooks.onSend)

@@ -68,7 +68,7 @@ const PRODUCTS = [
     'selenium',
   ], ['test-optimization']],
   ['Crash Tracking', ['crashtracking', 'crash-tracking']],
-  ['Dynamic Instrumentation', ['debugger', 'code-origin', 'dynamic-instrumentation'], ['debugger']],
+  ['Debugger', ['debugger', 'code-origin', 'dynamic-instrumentation'], ['debugger']],
   ['LLM Observability', [
     'llmobs',
     'ai',
