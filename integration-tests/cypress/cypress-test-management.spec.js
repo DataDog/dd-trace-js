@@ -1,13 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { exec } = require('node:child_process')
 const { once } = require('node:events')
 
 const semver = require('semver')
 const {
   sandboxCwd,
   useSandbox,
+  execInProcessGroup,
   getCiVisEvpProxyConfig,
   assertObjectContains,
   stopCiVisTestEnv,
@@ -159,7 +159,7 @@ moduleTypes.forEach(({
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
-        childProcess = exec(
+        childProcess = execInProcessGroup(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
@@ -202,7 +202,7 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/multi-origin.js'
 
-        childProcess = exec(
+        childProcess = execInProcessGroup(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
@@ -243,7 +243,7 @@ moduleTypes.forEach(({
     it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', async () => {
       const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-      childProcess = exec(
+      childProcess = execInProcessGroup(
         testCommand,
         {
           cwd,
@@ -397,7 +397,7 @@ moduleTypes.forEach(({
 
           const specToRun = 'cypress/e2e/attempt-to-fix.js'
 
-          childProcess = exec(
+          childProcess = execInProcessGroup(
             version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
             {
               cwd,
@@ -517,7 +517,7 @@ moduleTypes.forEach(({
           const envVars = getCiVisEvpProxyConfig(receiver.port)
           const specToRun = 'cypress/e2e/attempt-to-fix-after-hook.js'
 
-          childProcess = exec(
+          childProcess = execInProcessGroup(
             version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
             {
               cwd,
@@ -588,7 +588,7 @@ moduleTypes.forEach(({
           const envVars = getCiVisEvpProxyConfig(receiver.port)
           const specToRun = 'cypress/e2e/attempt-to-fix.js'
 
-          childProcess = exec(
+          childProcess = execInProcessGroup(
             version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
             {
               cwd,
@@ -747,7 +747,7 @@ moduleTypes.forEach(({
             ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${cypress67SpecToRun}"`
             : version === 'latest' ? testCommand : `${testCommand} --spec "${specToRun}"`
 
-          childProcess = exec(
+          childProcess = execInProcessGroup(
             command,
             {
               cwd,
@@ -806,7 +806,7 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/attempt-to-fix.js'
 
-        childProcess = exec(
+        childProcess = execInProcessGroup(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
@@ -862,7 +862,7 @@ moduleTypes.forEach(({
         const envVars = getCiVisEvpProxyConfig(receiver.port)
         const specToRun = 'cypress/e2e/skipped-test.js'
 
-        childProcess = exec(
+        childProcess = execInProcessGroup(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
@@ -921,7 +921,7 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/attempt-to-fix.js'
 
-        childProcess = exec(
+        childProcess = execInProcessGroup(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
@@ -994,7 +994,7 @@ moduleTypes.forEach(({
 
         const specToRun = 'cypress/e2e/attempt-to-fix-order.js'
 
-        childProcess = exec(
+        childProcess = execInProcessGroup(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
