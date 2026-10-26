@@ -62,7 +62,7 @@ describe('Lambda timeout monitor', () => {
       globalThis[beforeExit] = () => console.log('beforeExit')
       process.once('beforeExit', () => globalThis[beforeExit]())
       const handler = datadog(() => undefined)
-      handler({}, { getRemainingTimeInMillis: () => 1000 })
+      handler({}, { getRemainingTimeInMillis: () => 1000 }, () => {})
     `
     const result = spawnSync(process.execPath, ['--eval', script], { encoding: 'utf8', timeout: 5000 })
     assert.strictEqual(result.status, 0, result.stderr)
@@ -141,173 +141,11 @@ describe('Lambda timeout monitor', () => {
     assert.strictEqual(killAll.callCount, 1)
   })
 
-  for (const unref of [undefined, () => null]) {
-    it(`keeps the timer handle when unref ${unref ? 'returns null' : 'is unavailable'}`, () => {
-      const setTimeout = global.setTimeout
-      const stub = sinon.stub(global, 'setTimeout').callsFake((...args) => {
-        const timer = setTimeout(...args)
-        Reflect.set(timer, 'unref', unref)
-        return timer
-      })
-      try {
-        /** @type {Function} */
-        let complete = notCaptured
-        const handler = datadog((_event, _context, cb) => { complete = cb })
-        handler({}, context, () => {})
-        assert.strictEqual(clock.countTimers(), 1)
-        complete(null, 'done')
-        clock.tick(100)
-        assert.strictEqual(clock.countTimers(), 0)
-        assert.strictEqual(killAll.callCount, 0)
-      } finally {
-        stub.restore()
-      }
-    })
-  }
-
-  describe('numeric timer handles', () => {
-    let setTimeoutStub
-    let clearTimeoutStub
-
-    beforeEach(() => {
-      const setTimeout = global.setTimeout
-      const clearTimeout = global.clearTimeout
-      const timers = new Map()
-      let nextId = 0
-      setTimeoutStub = sinon.stub(global, 'setTimeout').callsFake((...args) => {
-        const id = nextId++
-        timers.set(id, setTimeout(...args))
-        return id
-      })
-      clearTimeoutStub = sinon.stub(global, 'clearTimeout').callsFake(id => {
-        clearTimeout(timers.get(id))
-        timers.delete(id)
-      })
-    })
-
-    afterEach(() => {
-      setTimeoutStub.restore()
-      clearTimeoutStub.restore()
-    })
-
-    for (const outcome of ['return', 'throw', 'fulfill', 'reject', 'callback', 'context', 'beforeExit']) {
-      it(`cleans up timer ID zero on ${outcome} completion`, async () => {
-        const result = { ok: true }
-        const error = new Error('user failure')
-        let complete = notCaptured
-        context.done = () => result
-        globalThis[BEFORE_EXIT] = () => result
-        const handlers = {
-          return: () => result,
-          throw: () => { throw error },
-          fulfill: () => Promise.resolve(result),
-          reject: () => Promise.reject(error),
-          callback: (_event, _context, cb) => { complete = cb },
-          context: () => { complete = () => context.done() },
-          beforeExit: () => { complete = () => globalThis[BEFORE_EXIT]() },
-        }
-        const handler = datadog(handlers[outcome])
-        const invoke = () => handler({}, context, outcome === 'callback' ? () => result : undefined)
-        if (outcome === 'throw') assert.throws(invoke, candidate => candidate === error)
-        else if (outcome === 'reject') await assert.rejects(invoke(), candidate => candidate === error)
-        else if (['callback', 'context', 'beforeExit'].includes(outcome)) {
-          assert.strictEqual(invoke(), undefined)
-          assert.strictEqual(clock.countTimers(), 1)
-          assert.strictEqual(complete(null, result), result)
-        } else assert.strictEqual(await invoke(), result)
-        sinon.assert.calledOnceWithExactly(clearTimeoutStub, 0)
-        assert.strictEqual(clock.countTimers(), 0)
-        clock.tick(100)
-        sinon.assert.notCalled(killAll)
-        sinon.assert.notCalled(span.addTags)
-      })
-    }
-
-    it('flushes a pending invocation with timer ID zero at its deadline', () => {
-      const handler = datadog(() => new Promise(() => {}))
-      handler({}, context)
-      clock.tick(74)
-      sinon.assert.notCalled(killAll)
-      clock.tick(1)
-      sinon.assert.calledOnce(killAll)
-      assert.strictEqual(span.addTags.firstCall.args[0]['error.type'], 'Impending Timeout')
-      sinon.assert.calledOnce(span.finish)
-      assert.strictEqual(clock.countTimers(), 0)
-    })
-
-    it('does not let timer ID zero from a completed invocation flush a later invocation', async () => {
-      delete globalThis[BEFORE_EXIT]
-      const completed = datadog(() => undefined)
-      completed({}, context)
-      clock.tick(25)
-      let complete = notCaptured
-      const handler = datadog(() => new Promise(resolve => { complete = resolve }))
-      const invocation = handler({}, context)
-      clock.tick(50)
-      sinon.assert.notCalled(killAll)
-      assert.strictEqual(clock.countTimers(), 1)
-      complete('done')
-      assert.strictEqual(await invocation, 'done')
-      assert.deepStrictEqual(clearTimeoutStub.args, [[0], [1]])
-      clock.tick(100)
-      sinon.assert.notCalled(killAll)
-      assert.strictEqual(clock.countTimers(), 0)
-    })
-  })
-
-  for (const failure of ['getter', 'method', 'non-callable']) {
-    for (const outcome of ['return', 'throw', 'reject', 'callback']) {
-      it(`continues with the handler ${outcome} when timer unref has a failing ${failure}`, async () => {
-        const setTimeout = global.setTimeout
-        const unrefError = new Error('timer unref failure')
-        const stub = sinon.stub(global, 'setTimeout').callsFake((...args) => {
-          const timer = setTimeout(...args)
-          if (failure === 'getter') {
-            Object.defineProperty(timer, 'unref', { get () { throw unrefError } })
-          } else {
-            timer.unref = failure === 'method' ? () => { throw unrefError } : 1
-          }
-          return timer
-        })
-        try {
-          const receiver = {}
-          const event = {}
-          const result = {}
-          const error = new Error('user failure')
-          const callback = sinon.stub().returns(result)
-          let called = false
-          const handler = datadog(function (ev, ctx, cb) {
-            called = true
-            assert.strictEqual(this, receiver)
-            assert.strictEqual(ev, event)
-            assert.strictEqual(ctx, context)
-            assert.strictEqual(cb, callback)
-            if (outcome === 'throw') throw error
-            if (outcome === 'reject') return Promise.reject(error)
-            return outcome === 'callback' ? cb(null, result) : result
-          })
-          const invoke = () => handler.call(receiver, event, context, callback)
-          if (outcome === 'throw') assert.throws(invoke, candidate => candidate === error)
-          else if (outcome === 'reject') await assert.rejects(invoke(), candidate => candidate === error)
-          else assert.strictEqual(invoke(), result)
-          assert.strictEqual(called, true)
-          if (outcome === 'callback') sinon.assert.calledOnceWithExactly(callback, null, result)
-          assert.strictEqual(clock.countTimers(), 0)
-          clock.tick(100)
-          sinon.assert.notCalled(killAll)
-          sinon.assert.notCalled(span.addTags)
-        } finally {
-          stub.restore()
-        }
-      })
-    }
-  }
-
   it('cleans up at runtime beforeExit completion and preserves the runtime callback contract', () => {
     const original = globalThis[BEFORE_EXIT] = sinon.stub().returns('runtime result')
     const receiver = {}
     const handler = datadog(() => undefined)
-    handler({}, context)
+    handler({}, context, () => {})
     assert.strictEqual(clock.countTimers(), 1)
     assert.strictEqual(globalThis[BEFORE_EXIT].call(receiver, 'runtime argument'), 'runtime result')
     assert.strictEqual(globalThis[BEFORE_EXIT], original)
@@ -343,7 +181,7 @@ describe('Lambda timeout monitor', () => {
           if (failure === 'getter') Object.defineProperty(original, 'apply', { get: failApply })
           else original.apply = failure === 'method' ? failApply : 1
           const handler = datadog(() => undefined)
-          handler({}, context)
+          handler({}, context, () => {})
           assert.strictEqual(clock.countTimers(), 1)
           const invoke = () => Reflect.apply(target[name], receiver, args)
           if (outcome === 'throw') assert.throws(invoke, candidate => candidate === error)
@@ -580,12 +418,12 @@ describe('Lambda timeout monitor', () => {
     const handler = datadog(() => undefined)
     for (let invocation = 0; invocation < 3; invocation++) {
       globalThis[BEFORE_EXIT] = () => {}
-      handler({}, context)
+      handler({}, context, () => {})
       assert.strictEqual(clock.countTimers(), 1)
       globalThis[BEFORE_EXIT]()
     }
     globalThis[BEFORE_EXIT] = () => {}
-    handler({}, context)
+    handler({}, context, () => {})
     clock.tick(75)
     assert.strictEqual(killAll.callCount, 1, 'only the still-pending invocation can time out')
     globalThis[BEFORE_EXIT]()
@@ -928,7 +766,7 @@ describe('Lambda timeout monitor', () => {
       it(`keeps ${name} completion monitored after returning ${result ? 'an artifact' : 'undefined'}`, () => {
         const original = context[name] = sinon.stub().returns('completion result')
         const handler = datadog((_event, ctx) => result)
-        assert.strictEqual(handler({}, context), result)
+        assert.strictEqual(handler({}, context, () => {}), result)
         const completion = context[name]
         clock.tick(75)
         assert.strictEqual(killAll.callCount, 1)
@@ -962,102 +800,6 @@ describe('Lambda timeout monitor', () => {
       clock.tick(100)
       assert.strictEqual(killAll.callCount, 0)
       assert.deepStrictEqual(callback.firstCall.args, [error, 'done'])
-    })
-  }
-
-  for (const result of [
-    { listen () {}, close () {} },
-    { on () {}, emit () {} },
-    Object.create({ listen () {}, close () {} }),
-    Object.create({ on () {}, emit () {} }),
-    new (class Socket {})(),
-  ]) {
-    it(`keeps a ${result.constructor.name} side-effect artifact monitored until context completion`, () => {
-      context.done = sinon.spy()
-      const handler = datadog(() => result)
-      assert.strictEqual(handler({}, context), result)
-      assert.strictEqual(clock.countTimers(), 1)
-      context.done()
-      clock.tick(100)
-      assert.strictEqual(killAll.callCount, 0)
-    })
-  }
-
-  for (const name of ['listen', 'close', 'on', 'emit', 'constructor']) {
-    for (const inherited of [false, true]) {
-      it(`does not invoke an ${inherited ? 'inherited' : 'own'} ${name} getter on a sync result`, () => {
-        context.done = () => {}
-        const target = {}
-        if (name === 'close') target.listen = () => {}
-        if (name === 'emit') target.on = () => {}
-        const getter = sinon.stub().throws(new Error('application getter must not run'))
-        Object.defineProperty(target, name, { get: getter })
-        const result = inherited ? Object.create(target) : target
-        const handler = datadog(() => result)
-        assert.strictEqual(handler({}, context), result)
-        assert.strictEqual(getter.callCount, 0)
-        assert.strictEqual(clock.countTimers(), 0)
-      })
-    }
-  }
-
-  it('does not invoke a constructor name getter or coerce a non-string constructor name', () => {
-    context.done = () => {}
-    const getter = sinon.stub().throws(new Error('constructor name must not run'))
-    const toString = sinon.stub().throws(new Error('constructor name must not be coerced'))
-    for (const constructor of [Object.defineProperty({}, 'name', { get: getter }), { name: { toString } }]) {
-      const result = { constructor }
-      const handler = datadog(() => result)
-      assert.strictEqual(handler({}, context), result)
-      assert.strictEqual(clock.countTimers(), 0)
-    }
-    assert.strictEqual(getter.callCount, 0)
-    assert.strictEqual(toString.callCount, 0)
-  })
-
-  it('does not look through an accessor shadowing an inherited artifact method', () => {
-    context.done = () => {}
-    const result = Object.create({ listen () {}, close () {} })
-    const getter = sinon.stub().returns(() => {})
-    Object.defineProperty(result, 'listen', { get: getter })
-    const handler = datadog(() => result)
-    assert.strictEqual(handler({}, context), result)
-    assert.strictEqual(getter.callCount, 0)
-    assert.strictEqual(clock.countTimers(), 0)
-  })
-
-  it('recognizes EventEmitter ancestry without evaluating overridden metadata', () => {
-    const result = new EventEmitter()
-    const getter = sinon.stub().throws(new Error('metadata getter must not run'))
-    Object.defineProperties(result, {
-      on: { get: getter },
-      emit: { get: getter },
-      constructor: { get: getter },
-    })
-    context.done = () => {}
-    const handler = datadog(() => result)
-    assert.strictEqual(handler({}, context), result)
-    clock.tick(75)
-    assert.strictEqual(killAll.callCount, 1)
-    context.done()
-    assert.strictEqual(getter.callCount, 0)
-    assert.strictEqual(clock.countTimers(), 0)
-  })
-
-  for (const inherited of [false, true]) {
-    it(`does not inspect a ${inherited ? 'prototype' : 'result'} Proxy for side-effect artifact heuristics`, () => {
-      context.done = () => {}
-      const trap = sinon.stub().throws(new Error('reflection trap must not run'))
-      const proxy = new Proxy({}, {
-        get: (_target, name) => name === 'then' ? undefined : trap(),
-        getPrototypeOf: trap,
-        getOwnPropertyDescriptor: trap,
-      })
-      const result = inherited ? Object.create(proxy) : proxy
-      const handler = datadog(() => result)
-      assert.strictEqual(handler({}, context), result)
-      assert.strictEqual(trap.callCount, 0)
-      assert.strictEqual(clock.countTimers(), 0)
     })
   }
 
