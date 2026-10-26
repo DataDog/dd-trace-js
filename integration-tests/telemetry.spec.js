@@ -5,9 +5,74 @@ const path = require('node:path')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc, assertObjectContains } = require('./helpers')
+const {
+  sandboxCwd,
+  useSandbox,
+  FakeAgent,
+  spawnProc,
+  spawnProcAndExpectExit,
+  stopProc,
+  assertObjectContains,
+} = require('./helpers')
 
 describe('telemetry', () => {
+  describe('ESM dependencies', () => {
+    // Both entry points register the synchronous loader (module.registerHooks) on Node.js versions that
+    // support it, and the asynchronous loader (module.register) otherwise.
+    const setups = [
+      { execArgv: ['--import', 'dd-trace/initialize.mjs'], app: 'index.mjs' },
+      { execArgv: ['--import', 'dd-trace/register.js', '--require', 'dd-trace/init'], app: 'index.mjs' },
+      { execArgv: ['--import', 'dd-trace/register.js'], app: 'late-init.mjs' },
+      { execArgv: ['--import', 'dd-trace/initialize.mjs'], app: 'short-lived.mjs', exits: true },
+    ]
+
+    let cwd
+    let agent
+    let proc
+
+    useSandbox(['axios', 'nanoid'])
+
+    before(() => {
+      cwd = sandboxCwd()
+    })
+
+    afterEach(async () => {
+      await stopProc(proc)
+      await agent.stop()
+    })
+
+    for (const { execArgv, app, exits } of setups) {
+      it(`reports non-instrumented ESM-only packages with ${execArgv.join(' ')} (${app})`, async () => {
+        proc = undefined
+        agent = await new FakeAgent().start()
+
+        const reported = new Set()
+
+        // Listen before spawning: the dependencies loaded at startup are sent before the app reports its port.
+        const telemetryReceived = agent.assertTelemetryReceived({
+          fn: ({ payload }) => {
+            for (const { name } of payload.payload.dependencies ?? []) {
+              reported.add(name)
+            }
+            assert.ok(reported.has('axios'), `axios not reported, got: ${[...reported].join(', ')}`)
+            assert.ok(reported.has('nanoid'), `nanoid not reported, got: ${[...reported].join(', ')}`)
+          },
+          requestType: 'app-dependencies-loaded',
+          resolveAtFirstSuccess: true,
+          timeout: 10_000,
+        })
+
+        const appFile = path.join(cwd, 'telemetry/esm-dependencies', app)
+        const options = { cwd, execArgv, env: { DD_TRACE_AGENT_PORT: String(agent.port) } }
+        const spawned = exits
+          ? spawnProcAndExpectExit(appFile, options)
+          : spawnProc(appFile, options).then(spawnedProc => { proc = spawnedProc })
+
+        await Promise.all([spawned, telemetryReceived])
+      })
+    }
+  })
+
   describe('dependencies', () => {
     let cwd
     let startupTestFile
