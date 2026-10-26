@@ -1,0 +1,12 @@
+_v: 1
+name: google-cloud-vertexai
+display_name: Google Cloud Vertex AI
+description: Instruments Google Cloud Vertex AI content generation and chat requests, including streaming, with tracing
+  and LLM Observability.
+packages:
+- name: '@google-cloud/vertexai'
+category:
+- gen_ai
+systems:
+- gcp.vertex_ai
+creation_date: '2025-03-13'
