@@ -11,19 +11,25 @@ require('./setup/core')
 
 describe('esm-module-load', () => {
   const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
+  const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
   const port2 = {}
 
   let port1
-  let published
+  let events
   let esmModuleLoad
 
   function onModuleLoadStart ({ filename }) {
-    published.push(filename)
+    events.push(`start ${filename}`)
+  }
+
+  function onModuleLoadEnd ({ filename }) {
+    events.push(`end ${filename}`)
   }
 
   beforeEach(() => {
-    published = []
+    events = []
     moduleLoadStartChannel.subscribe(onModuleLoadStart)
+    moduleLoadEndChannel.subscribe(onModuleLoadEnd)
 
     port1 = Object.assign(new EventEmitter(), { unref: sinon.spy() })
     class MessageChannel {
@@ -37,6 +43,7 @@ describe('esm-module-load', () => {
 
   afterEach(() => {
     moduleLoadStartChannel.unsubscribe(onModuleLoadStart)
+    moduleLoadEndChannel.unsubscribe(onModuleLoadEnd)
   })
 
   it('hands the loader thread a transferable port that does not keep the process alive', () => {
@@ -47,32 +54,38 @@ describe('esm-module-load', () => {
     sinon.assert.calledOnce(port1.unref)
   })
 
-  it('publishes the loader thread reports as they arrive', () => {
+  it('publishes the loader thread reports as they arrive, each start closed by an end', () => {
     esmModuleLoad.getLoaderRegisterOptions()
 
     port1.emit('message', 'file:///app/node_modules/axios/index.js')
     port1.emit('message', 'file:///app/node_modules/nanoid/index.js')
 
-    assert.deepStrictEqual(published, [
-      'file:///app/node_modules/axios/index.js',
-      'file:///app/node_modules/nanoid/index.js',
+    assert.deepStrictEqual(events, [
+      'start file:///app/node_modules/axios/index.js',
+      'end file:///app/node_modules/axios/index.js',
+      'start file:///app/node_modules/nanoid/index.js',
+      'end file:///app/node_modules/nanoid/index.js',
     ])
   })
 
-  it('publishes synchronous loader reports immediately', () => {
+  it('publishes synchronous loader reports immediately, each start closed by an end', () => {
     esmModuleLoad.publishModuleLoad('file:///app/node_modules/nanoid/index.js')
 
-    assert.deepStrictEqual(published, ['file:///app/node_modules/nanoid/index.js'])
+    assert.deepStrictEqual(events, [
+      'start file:///app/node_modules/nanoid/index.js',
+      'end file:///app/node_modules/nanoid/index.js',
+    ])
   })
 
   it('keeps the reports published before anyone subscribes for late consumers', () => {
     moduleLoadStartChannel.unsubscribe(onModuleLoadStart)
+    moduleLoadEndChannel.unsubscribe(onModuleLoadEnd)
     esmModuleLoad.getLoaderRegisterOptions()
 
     esmModuleLoad.publishModuleLoad('file:///app/node_modules/nanoid/index.js')
     port1.emit('message', 'file:///app/node_modules/axios/index.js')
 
-    assert.deepStrictEqual(published, [])
+    assert.deepStrictEqual(events, [])
     assert.deepStrictEqual(esmModuleLoad.getPublishedModuleLoads(), [
       'file:///app/node_modules/nanoid/index.js',
       'file:///app/node_modules/axios/index.js',

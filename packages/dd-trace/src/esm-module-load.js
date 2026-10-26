@@ -5,6 +5,7 @@ const { MessageChannel } = require('node:worker_threads')
 const dc = require('dc-polyfill')
 
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
+const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
 // The loader reports a package once, possibly before dependency telemetry subscribes (the loader handles
 // the whole graph before an app that starts the tracer itself runs), so late consumers replay these.
@@ -19,8 +20,14 @@ const publishedFilenames = []
  */
 function publishModuleLoad (filename) {
   publishedFilenames.push(filename)
+  const payload = { filename }
   if (moduleLoadStartChannel.hasSubscribers) {
-    moduleLoadStartChannel.publish({ filename })
+    moduleLoadStartChannel.publish(payload)
+  }
+  // Consumers such as datadog-lambda-js cold start tracing pair every start with an end. The load has
+  // already happened, so close it right away.
+  if (moduleLoadEndChannel.hasSubscribers) {
+    moduleLoadEndChannel.publish(payload)
   }
 }
 
