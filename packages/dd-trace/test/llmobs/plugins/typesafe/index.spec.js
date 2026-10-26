@@ -27,9 +27,9 @@ const EXPECTED_QUESTIONS = {
   refund: { type: 'noul', instructions: 'Is the customer asking for a refund?' },
   urgency: { type: 'score', instructions: 'How urgent is this message?', criteria: ['Low', 'Medium', 'High'] },
 }
-// The response bodies exactly as recorded, which is what the span's output records
-const STRING_STATE_RESPONSE_TEXT = recordedResponseText('typesafe_v1_systemone_post_8e45a9dd.json')
-const JSON_STATE_RESPONSE_TEXT = recordedResponseText('typesafe_v1_systemone_post_3b431e67.json')
+// The recorded response bodies as the span's output records them: parsed, then serialized again
+const STRING_STATE_RESPONSE = recordedResponse('typesafe_v1_systemone_post_8e45a9dd.json')
+const JSON_STATE_RESPONSE = recordedResponse('typesafe_v1_systemone_post_3b431e67.json')
 const STRING_STATE_METRICS = { input_tokens: 403, output_tokens: 69, total_tokens: 472 }
 const JSON_STATE_METRICS = { input_tokens: 417, output_tokens: 69, total_tokens: 486 }
 const STUB_RESPONSE = {
@@ -42,9 +42,9 @@ const IMAGE_REFERENCE = '<image:[0-9a-f]{32}>'
 /**
  * @param {string} cassette
  */
-function recordedResponseText (cassette) {
+function recordedResponse (cassette) {
   const file = path.join(__dirname, '..', '..', 'cassettes', 'typesafe', cassette)
-  return JSON.parse(readFileSync(file, 'utf8')).response.body
+  return JSON.stringify(JSON.parse(JSON.parse(readFileSync(file, 'utf8')).response.body))
 }
 
 /**
@@ -125,7 +125,7 @@ describe('Plugin', () => {
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
           content: requestBody(STATE),
-          output: STRING_STATE_RESPONSE_TEXT,
+          output: STRING_STATE_RESPONSE,
           metrics: STRING_STATE_METRICS,
         })
       })
@@ -137,7 +137,7 @@ describe('Plugin', () => {
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
           content: requestBody(state),
-          output: JSON_STATE_RESPONSE_TEXT,
+          output: JSON_STATE_RESPONSE,
           metrics: JSON_STATE_METRICS,
         })
       })
@@ -150,7 +150,33 @@ describe('Plugin', () => {
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
           content: requestBody(STATE),
-          output: STRING_STATE_RESPONSE_TEXT,
+          output: STRING_STATE_RESPONSE,
+          metrics: STRING_STATE_METRICS,
+        })
+      })
+
+      it('captures the answers when the caller reads the raw response as text', async () => {
+        const response = await createClient().systemOne({ state: STATE, questions: questions(), model: MODEL })
+          .asResponse()
+        assert.equal(JSON.parse(await response.text()).model, MODEL)
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
+          content: requestBody(STATE),
+          output: STRING_STATE_RESPONSE,
+          metrics: STRING_STATE_METRICS,
+        })
+      })
+
+      it('captures the answers when the caller reads a clone of the raw response', async () => {
+        const response = await createClient().systemOne({ state: STATE, questions: questions(), model: MODEL })
+          .asResponse()
+        assert.equal((await response.clone().json()).model, MODEL)
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
+          content: requestBody(STATE),
+          output: STRING_STATE_RESPONSE,
           metrics: STRING_STATE_METRICS,
         })
       })
@@ -165,7 +191,7 @@ describe('Plugin', () => {
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
           content: requestBody(STATE),
-          output: STRING_STATE_RESPONSE_TEXT,
+          output: STRING_STATE_RESPONSE,
           metrics: STRING_STATE_METRICS,
         })
       })
@@ -179,7 +205,7 @@ describe('Plugin', () => {
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
           content: requestBody(STATE),
-          output: STRING_STATE_RESPONSE_TEXT,
+          output: STRING_STATE_RESPONSE,
           metrics: STRING_STATE_METRICS,
         })
       })
@@ -191,7 +217,7 @@ describe('Plugin', () => {
         const { apmSpans, llmobsSpans } = await getEvents()
         assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
           content: requestBody(STATE),
-          output: STRING_STATE_RESPONSE_TEXT,
+          output: STRING_STATE_RESPONSE,
           metrics: STRING_STATE_METRICS,
         })
       })
@@ -265,6 +291,31 @@ describe('Plugin', () => {
 
         const { llmobsSpans } = await getEvents()
         assert.deepEqual(llmobsSpans[0].meta.input.messages, [{ role: 'user', content: requestBody(STATE) }])
+      })
+
+      it('calls toJSON on the request only once', async () => {
+        let calls = 0
+        let sent
+        const client = new sdk.TypeSafeClient({
+          apiKey: 'not-a-real-key',
+          retry: { maxRetries: 0 },
+          fetch: (url, init) => {
+            sent = JSON.parse(init.body)
+            return Promise.resolve(new Response(JSON.stringify(STUB_RESPONSE), {
+              headers: { 'content-type': 'application/json' },
+            }))
+          },
+        })
+
+        const state = { toJSON: () => ({ counter: ++calls }) }
+        await client.systemOne({ state, questions: questions(), model: MODEL })
+
+        assert.deepEqual(sent.state, { counter: 1 })
+        const { llmobsSpans } = await getEvents()
+        const recorded = JSON.parse(llmobsSpans[0].meta.input.messages[0].content)
+        // Earlier versions don't serialize the request before sending it, so the span serializes it again, after
+        // the SDK has
+        assert.deepEqual(recorded.state, { counter: sdk.withAssets ? 1 : 2 })
       })
 
       it('records non-finite numbers the way this SDK version sends them', async () => {
