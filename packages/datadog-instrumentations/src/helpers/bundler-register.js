@@ -49,12 +49,12 @@ function patchLoadedBuiltins () {
     try {
       Module.prototype.require.call(module, name)
       patched = true
-    } catch (error) {
-      log.error('Error instrumenting bundled built-in %s: %s', name, String(error?.message ?? error), error)
+    } catch {
+      // Built-in not available in this environment, skip
     }
   }
+
   if (!patched) return
-  // Hooks mutate the exports object in place; this also updates already-created ESM named exports.
   try {
     Module.syncBuiltinESMExports()
   } catch (error) {

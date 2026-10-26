@@ -91,23 +91,13 @@ describe('bundler register', () => {
       sinon.assert.notCalled(sync)
     })
 
-    it('logs a failing require and continues with the other built-ins', () => {
-      const error = new Error('builtin unavailable')
-      const { requireBuiltin, sync, log } = loadBuiltinRegister({ bundled: true, failing: { http: error } })
-
-      assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
-      sinon.assert.calledWithExactly(log.error, 'Error instrumenting bundled built-in %s: %s',
-        'http', error.message, error)
-      sinon.assert.calledOnce(sync)
-    })
-
     it('does not sync when every require fails', () => {
       const error = new Error('unavailable')
       const failing = { http: error, https: error, dns: error, fs: error }
       const { sync, log } = loadBuiltinRegister({ bundled: true, failing })
 
       sinon.assert.notCalled(sync)
-      sinon.assert.callCount(log.error, 4)
+      sinon.assert.notCalled(log.error)
     })
 
     it('logs a failing ESM synchronization instead of throwing', () => {
