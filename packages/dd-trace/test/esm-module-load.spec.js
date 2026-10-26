@@ -4,8 +4,8 @@ const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 
 const dc = require('dc-polyfill')
-const sinon = require('sinon')
 const proxyquire = require('proxyquire').noPreserveCache()
+const sinon = require('sinon')
 
 require('./setup/core')
 

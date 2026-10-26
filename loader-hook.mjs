@@ -182,6 +182,9 @@ function isCommonJSLoad (context) {
   return hasRequireCondition(context)
 }
 
+/**
+ * @param {import('node:module').LoadHookContext} context
+ */
 function hasRequireCondition (context) {
   const conditions = context.conditions
   if (!conditions) return false
