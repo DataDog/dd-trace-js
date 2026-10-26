@@ -778,6 +778,37 @@ describe('Plugin', () => {
           assert.deepStrictEqual(seen, [true, true, true, true])
         })
 
+        it('should keep req.next at the router level inside route handlers', async () => {
+          const app = express()
+
+          // res.format passes `req.next`, which must advance to the next route,
+          // not to the remaining handlers of the current one.
+          app.get('/next', (req, res) => {
+            res.format({ default: (req, res, next) => next() })
+          }, (req, res) => res.send('same route'))
+          app.get('/next', (req, res) => res.send('next route'))
+
+          // An unmatched format's 406 must skip route-local error handlers.
+          app.get('/406', (req, res) => {
+            res.format({ text: () => res.send('text') })
+          }, (err, req, res, next) => res.status(500).send('route error handler'))
+          app.use((err, req, res, next) => res.status(err.status).send('app error handler'))
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+
+          const base = `http://localhost:${appListener.address().port}`
+          const next = await httpRequest.get(`${base}/next`)
+          const notAcceptable = await httpRequest.get(`${base}/406`, {
+            headers: { accept: 'application/json' },
+            validateStatus: () => true,
+          })
+
+          assert.strictEqual(next.data, 'next route')
+          assert.strictEqual(notAcceptable.status, 406)
+          assert.strictEqual(notAcceptable.data, 'app error handler')
+        })
+
         it('should finish middleware spans when req.next() is called', done => {
           const app = express()
 

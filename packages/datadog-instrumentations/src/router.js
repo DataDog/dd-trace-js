@@ -91,23 +91,26 @@ function resolveLayerRouteOrForwardError (meta, layer, next) {
   }
 }
 
-const layerNexts = new WeakSet()
+// Wrapped `next` -> the host continuation it calls.
+const hostNexts = new WeakMap()
 
 /**
  * Routers store their continuation on `req.next` once per `handle()`, and host
  * APIs call it directly (express `res.format`, `res.sendFile` and `res.render`
- * errors). Point it at the wrapper the current handler receives, replacing the
- * host's continuation or an earlier layer's wrapper, so `next === req.next`
- * still holds and those calls finish the current middleware span. A nested
- * router restores its parent's `req.next` when it finishes.
+ * errors). Point it at the wrapper the current handler receives when that
+ * wrapper wraps the same continuation: `req.next` is the host continuation
+ * itself, or an earlier layer's wrapper of it. Route handlers receive a
+ * route-local continuation from `Route.dispatch`, so `req.next` keeps the
+ * router-level one there. A nested router restores its parent's `req.next`
+ * when it finishes.
  *
  * @param {import('node:http').IncomingMessage | undefined} req
- * @param {Function} originalNext
+ * @param {Function} hostNext
  * @param {Function} wrappedNext
  */
-function adoptRequestNext (req, originalNext, wrappedNext) {
-  layerNexts.add(wrappedNext)
-  if (req && (req.next === originalNext || layerNexts.has(req.next))) req.next = wrappedNext
+function adoptRequestNext (req, hostNext, wrappedNext) {
+  hostNexts.set(wrappedNext, hostNext)
+  if (req && (req.next === hostNext || hostNexts.get(req.next) === hostNext)) req.next = wrappedNext
 }
 
 /**
