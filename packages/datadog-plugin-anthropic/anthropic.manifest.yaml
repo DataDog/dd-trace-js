@@ -1,0 +1,12 @@
+_v: 1
+name: anthropic
+display_name: Anthropic
+description: Instruments Anthropic message generation, including streamed responses, with request tracing, LLM
+  Observability, and optional AI Guard input and output evaluation.
+packages:
+- name: '@anthropic-ai/sdk'
+category:
+- gen_ai
+systems:
+- anthropic
+creation_date: '2025-10-07'
