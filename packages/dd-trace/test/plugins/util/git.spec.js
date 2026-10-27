@@ -1153,6 +1153,48 @@ done
     assert.match(diff, /\+head/)
   })
 
+  for (const { snapshot, branch, includeTarget, cachedShallow } of [
+    { snapshot: 'base', branch: 'head', includeTarget: true },
+    { snapshot: 'target', branch: 'base', includeTarget: true },
+    { snapshot: 'base and target', branch: 'root', includeTarget: true },
+    { snapshot: 'base for a working-tree diff', branch: 'head', includeTarget: false },
+    { snapshot: 'target with a stale cached depth', branch: 'base', includeTarget: true, cachedShallow: true },
+  ]) {
+    it(`preserves a full single-branch clone when fetching the missing ${snapshot}`, () => {
+      const diffBase = git(remote, ['rev-parse', 'refs/heads/juan-fernandez/merge^1'])
+      git(remote, ['update-ref', 'refs/heads/juan-fernandez/base', diffBase])
+      git(remote, ['update-ref', 'refs/heads/juan-fernandez/root', baseSha])
+      fs.rmSync(checkout, { recursive: true, force: true })
+      git(directory, [
+        'clone', '--single-branch', '--branch', `juan-fernandez/${branch}`,
+        pathToFileURL(remote).href, checkout,
+      ])
+      const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+      const originalRefs = git(checkout, ['show-ref'])
+      assert.strictEqual(git(checkout, ['rev-parse', '--is-shallow-repository']), 'false')
+      if (cachedShallow) {
+        getGitDiff = proxyquire('../../../src/plugins/util/git', {
+          './git-cache': {
+            cachedExec: (command, flags, options) => flags[1] === '--is-shallow-repository'
+              ? 'true'
+              : cachedExecSpy(command, flags, options),
+          },
+          'node:child_process': { execFileSync: cachedExecSpy },
+        }).getGitDiff
+      }
+
+      const diff = getGitDiff(diffBase, includeTarget ? headSha : undefined)
+
+      assert.match(diff, /-root/)
+      assert.match(diff, /\+head/)
+      assert.strictEqual(git(checkout, ['rev-parse', '--is-shallow-repository']), 'false')
+      assert.strictEqual(git(checkout, ['rev-list', '--count', diffBase]), '2')
+      assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
+      assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+      assert.strictEqual(git(checkout, ['show-ref']), originalRefs)
+    })
+  }
+
   it('preserves existing base history while preparing a missing head for the diff', () => {
     git(remote, ['config', 'uploadpack.allowFilter', 'false'])
     git(remote, ['fast-import', '--quiet'], {

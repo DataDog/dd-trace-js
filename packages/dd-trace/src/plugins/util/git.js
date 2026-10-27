@@ -108,12 +108,14 @@ function isGitAvailable () {
   }
 }
 
-function isShallowRepository () {
+function isShallowRepository (uncached = false) {
   return sanitizedExec(
     ['rev-parse', '--is-shallow-repository'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'check_shallow' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'check_shallow' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'check_shallow' } }
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'check_shallow' } },
+    true,
+    { uncached }
   ) === 'true'
 }
 
@@ -230,7 +232,10 @@ function getLatestCommits () {
 function getGitDiff (baseCommit, targetCommit) {
   // Fetch the required snapshots explicitly; a depth-1 metadata fetch does not provide their ancestry.
   for (const commit of targetCommit ? [baseCommit, targetCommit] : [baseCommit]) {
-    if (!hasLocalGitObject(commit)) fetchHeadCommitSha(commit)
+    if (!hasLocalGitObject(commit)) {
+      // Use the current checkout state so a stale cache cannot shorten a complete clone.
+      fetchHeadCommitSha(commit, isShallowRepository(true))
+    }
   }
   const flags = ['diff', '-U0', '--word-diff=porcelain', baseCommit]
   if (targetCommit) {
