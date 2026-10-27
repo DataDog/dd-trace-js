@@ -1,0 +1,11 @@
+_v: 1
+name: router
+display_name: router
+description: Instruments router HTTP middleware execution and route and error tracking, with AppSec hooks for request query
+  and path parameters.
+packages:
+- name: router
+category:
+- http.server
+systems: []
+creation_date: '2018-10-30'

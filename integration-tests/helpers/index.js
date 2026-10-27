@@ -38,6 +38,7 @@ const ANY_STRING = Symbol('test.ANY_STRING')
 const ANY_NUMBER = Symbol('test.ANY_NUMBER')
 const ANY_VALUE = Symbol('test.ANY_VALUE')
 const defaultStopProcTimeoutMs = 2_000
+const processGroupClosePromises = new WeakMap()
 
 /**
  * @param {string} filename
@@ -345,6 +346,31 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
  */
 async function stopProc (proc, options = {}) {
   if (!proc) return
+
+  const processGroupClosed = processGroupClosePromises.get(proc)
+  if (processGroupClosed) {
+    const signal = options.signal ?? 'SIGTERM'
+    const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
+
+    try {
+      let closed
+      try {
+        killProcessGroup(proc, signal)
+        closed = await waitForPromise(processGroupClosed, timeoutMs)
+      } finally {
+        // Also stop descendants that ignore the initial signal or close their pipes before exiting.
+        killProcessGroup(proc, 'SIGKILL')
+      }
+
+      if (!closed && !await waitForPromise(processGroupClosed, timeoutMs)) {
+        throw new Error(`Process group ${proc.pid} did not close after SIGKILL`)
+      }
+    } finally {
+      processGroupClosePromises.delete(proc)
+    }
+    return
+  }
+
   if (proc.exitCode !== null || proc.signalCode !== null) return
 
   const signal = options.signal ?? 'SIGTERM'
@@ -368,6 +394,56 @@ async function stopProc (proc, options = {}) {
 
   if (!exitedAfterSigkill) {
     throw new Error(`Process ${proc.pid} did not exit after SIGKILL`)
+  }
+}
+
+/**
+ * Runs a shell command in an isolated process group on POSIX so cleanup can
+ * stop descendants even after the shell exits.
+ *
+ * @param {string} command - Shell command to run.
+ * @param {childProcess.ExecOptions} [options] - Process options.
+ * @returns {childProcess.ChildProcess}
+ */
+function execInProcessGroup (command, options = {}) {
+  if (process.platform === 'win32') return exec(command, options)
+
+  const proc = spawn(command, { ...options, shell: options.shell || true, detached: true })
+  // Like exec(), drain output even when the caller does not consume it.
+  proc.stdout.resume()
+  proc.stderr.resume()
+  const closed = once(proc, 'close')
+  closed.catch(() => {})
+  if (proc.pid !== undefined) processGroupClosePromises.set(proc, closed)
+  return proc
+}
+
+/**
+ * @param {childProcess.ChildProcess} proc - Process whose group should be stopped.
+ * @param {keyof import('node:os').SignalConstants} signal - Signal to send.
+ */
+function killProcessGroup (proc, signal) {
+  try {
+    process.kill(-proc.pid, signal)
+  } catch (error) {
+    if (error.code !== 'ESRCH') throw error
+  }
+}
+
+/**
+ * @param {Promise<unknown>} promise - Promise to wait for.
+ * @param {number} timeoutMs - Max time to wait in milliseconds.
+ * @returns {Promise<boolean>} `true` if the promise resolved before timeout.
+ */
+async function waitForPromise (promise, timeoutMs) {
+  let timeout
+  try {
+    return await Promise.race([
+      promise.then(() => true),
+      new Promise(resolve => { timeout = setTimeout(resolve, timeoutMs, false) }),
+    ])
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
@@ -1301,16 +1377,27 @@ function deepFreeze (value) {
  * When `withReceiver: true` is set, each test function receives
  * `(receiver, run)` arguments automatically — see `withReceiver` for details.
  *
- * @param {(name: string, fn: () => Promise<void>) => void} mochaIt
- * @param {{ concurrency?: number, withReceiver?: boolean }} [options]
- * @returns {(name: string, fn: (...args: unknown[]) => Promise<void>, opts?: { retries?: number }) => void}
+ * @param {import('mocha').TestFunction} mochaIt
+ * @param {{
+ *   concurrency?: number,
+ *   withReceiver?: boolean,
+ *   shard?: { index: number, count: number }
+ * }} [options]
+ * @returns {(
+ *   name: string,
+ *   fn: (...args: unknown[]) => Promise<void>,
+ *   opts?: { retries?: number }
+ * ) => import('mocha').Test}
  */
-function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver = false } = {}) {
+function createParallelIt (
+  mochaIt,
+  { concurrency = 2, withReceiver: useReceiver = false, shard } = {}
+) {
   // Keyed by Mocha Suite object; populated lazily on first run within each suite.
   const suiteStates = new Map()
-  // All registered entries, queued by test title. A queue (array) per title
-  // lets multiple suites with duplicate test names each claim their own entry.
-  const entriesByTitle = new Map()
+  const shardStatesBySuite = new Map()
+  const entriesByTest = new Map()
+  let nextShardBatch = 0
 
   function getState (suite) {
     if (!suiteStates.has(suite)) {
@@ -1325,7 +1412,16 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
     state.active++
     Promise.resolve(entry.fn()).then(
       (val) => { entry.done = true; state.active--; flush(state); resolve(val) },
-      (err) => { entry.done = true; entry.rejected = true; state.active--; flush(state); reject(err) }
+      (err) => {
+        entry.done = true
+        entry.rejected = true
+        state.active--
+        reject(err)
+        // Give Mocha a chance to enqueue a retry before another scenario
+        // consumes the freed slot. A terminal failure resumes the queue on
+        // the next turn without delaying successful scenarios.
+        setImmediate(() => flush(state))
+      }
     )
   }
 
@@ -1336,12 +1432,14 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
     }
   }
 
-  function schedule (entry, state) {
+  function schedule (entry, state, priority = false) {
     entry.promise = new Promise((resolve, reject) => {
       if (state.active < concurrency) {
         startNow(entry, state, resolve, reject)
       } else {
-        state.waiting.push({ entry, resolve, reject })
+        const queued = { entry, resolve, reject }
+        if (priority) state.waiting.unshift(queued)
+        else state.waiting.push(queued)
       }
     })
     // Suppress unhandled-rejection until Mocha attaches its own handler via
@@ -1351,11 +1449,9 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
 
   return function it (name, fn, opts = {}) {
     const wrappedFn = useReceiver ? withReceiver(fn) : fn
-    const entry = { name, fn: wrappedFn, promise: null, done: false, rejected: false }
-    if (!entriesByTitle.has(name)) entriesByTitle.set(name, [])
-    entriesByTitle.get(name).push(entry)
+    const entry = { name, fn: wrappedFn, promise: null, done: false, observed: false, rejected: false }
 
-    mochaIt(name, function () {
+    const test = mochaIt(name, function () {
       if (opts.retries !== undefined) {
         this.retries(opts.retries)
       }
@@ -1364,18 +1460,36 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
       if (!state.launched) {
         state.launched = true
         for (const test of suite.tests) {
-          const queue = entriesByTitle.get(test.title)
-          const e = queue && queue.shift()
-          if (e) schedule(e, state)
+          const registeredEntry = entriesByTest.get(test)
+          if (registeredEntry) schedule(registeredEntry, state)
         }
-      } else if (entry.done && entry.rejected) {
+      } else if (entry.observed && entry.done && entry.rejected) {
         // Mocha is retrying a failed test — restart only this scenario
-        schedule(entry, state)
+        schedule(entry, state, true)
       }
+      entry.observed = true
       // If done && !rejected: already passed, return resolved promise
       // If !done: still running or queued, return pending promise
       return entry.promise
     })
+
+    // Keep the same scenarios together that would share a suite's concurrency
+    // pool without sharding, since some integration fixtures share a sandbox.
+    const suite = test.parent
+    const shardState = shardStatesBySuite.get(suite) || { testCount: 0, assignedShard: 0 }
+    if (shardState.testCount % concurrency === 0) {
+      shardState.assignedShard = nextShardBatch++ % (shard?.count || 1)
+    }
+    shardState.testCount++
+    shardStatesBySuite.set(suite, shardState)
+    const { assignedShard } = shardState
+    if (shard && assignedShard !== shard.index) {
+      test.pending = true
+      return test
+    }
+
+    entriesByTest.set(test, entry)
+    return test
   }
 }
 
@@ -1386,59 +1500,30 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
  *
  * @param {(
  *   receiver: FakeCiVisIntake,
- *   run: (cmd: string, opts?: object) => import('child_process').ChildProcess
+ *   run: ((cmd: string, opts?: object) => import('child_process').ChildProcess) &
+ *     { stop: () => Promise<void> }
  * ) => Promise<void>} fn
  * @returns {() => Promise<void>}
  */
 function withReceiver (fn) {
   return async () => {
     const receiver = await new FakeCiVisIntake().start()
-    const useProcessGroup = process.platform !== 'win32'
-    let lastProc, closed
+    let lastProc
     const run = (cmd, opts) => {
-      // Keep shell operators intact and isolate descendants for cleanup on POSIX.
-      lastProc = useProcessGroup
-        ? spawn(cmd, { ...opts, shell: opts?.shell || true, detached: true })
-        : exec(cmd, opts)
-      closed = once(lastProc, 'close')
-      closed.catch(() => {})
-      // Like exec(), drain output even when the caller does not consume it.
-      lastProc.stdout.resume()
-      lastProc.stderr.resume()
+      lastProc = execInProcessGroup(cmd, opts)
       return lastProc
     }
 
-    /** @param {keyof import('node:os').SignalConstants} signal */
-    function killProcessGroup (signal) {
-      try {
-        process.kill(-lastProc.pid, signal)
-      } catch (error) {
-        if (error.code !== 'ESRCH') throw error
-      }
+    async function stopLastProcess () {
+      await stopProc(lastProc)
     }
+    run.stop = stopLastProcess
 
     try {
       await fn(receiver, run)
     } finally {
       try {
-        if (useProcessGroup && lastProc?.pid) {
-          let timeout
-          try {
-            killProcessGroup('SIGTERM')
-            // The shell can exit before its children; close waits for their inherited pipes too.
-            await Promise.race([
-              closed,
-              new Promise(resolve => { timeout = setTimeout(resolve, defaultStopProcTimeoutMs) }),
-            ])
-          } finally {
-            clearTimeout(timeout)
-            // Also stop descendants that ignore SIGTERM or close their pipes before exiting.
-            killProcessGroup('SIGKILL')
-          }
-          await closed
-        } else {
-          await stopProc(lastProc)
-        }
+        await stopLastProcess()
       } finally {
         await receiver.stop()
       }
@@ -1455,6 +1540,7 @@ module.exports = {
   assertObjectContains,
   assertUUID,
   deepFreeze,
+  execInProcessGroup,
   stopProc,
   stopCiVisTestEnv,
   spawnProc,
