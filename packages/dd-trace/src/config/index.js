@@ -441,6 +441,14 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.DD_APPSEC_ENABLED ?? false)
     }
 
+    // Enable the thread context writer when appsec is enabled and only
+    // if DD_TRACE_OTEL_CTX_ENABLED is not explicitly set. The writer is started once
+    // at init, so appsec enabled later through remote config does not start it.
+    // Serverless functions are left out: the eBPF reader cannot run there.
+    if (!trackedConfigOrigins.has('DD_TRACE_OTEL_CTX_ENABLED')) {
+      setAndTrack(this, 'DD_TRACE_OTEL_CTX_ENABLED', !IS_SERVERLESS && (this.appsec.DD_APPSEC_ENABLED ?? false))
+    }
+
     if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
       setAndTrack(this, 'spanComputePeerService', true)
     }
