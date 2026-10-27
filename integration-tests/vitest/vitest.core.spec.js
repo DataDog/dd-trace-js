@@ -117,7 +117,14 @@ function assertCompleteTestSessionTrace (events, testOutput) {
 }
 
 // vitest@4.x requires Node.js >= 20
-const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const supportedVersions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const requestedVersion = process.env.VITEST_VERSION
+const versions = requestedVersion && requestedVersion !== 'all'
+  ? [requestedVersion === 'oldest'
+      ? supportedVersions[0]
+      : requestedVersion === 'latest' ? supportedVersions.at(-1) : requestedVersion]
+  : supportedVersions
+const runVersionIndependentSuites = !requestedVersion || requestedVersion === 'all' || requestedVersion === 'latest'
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
@@ -3531,7 +3538,7 @@ versions.forEach(version => {
   })
 })
 
-const describeCloudflareWorkers = NODE_MAJOR < 20 ? describe.skip : describe
+const describeCloudflareWorkers = NODE_MAJOR < 20 || !runVersionIndependentSuites ? describe.skip : describe
 
 describeCloudflareWorkers('vitest@3.2.4 with @cloudflare/vitest-pool-workers@0.12.21', () => {
   let cwd, receiver, childProcess, testOutput
@@ -3586,7 +3593,7 @@ describeCloudflareWorkers('vitest@3.2.4 with @cloudflare/vitest-pool-workers@0.1
 
 // Keep the legacy fork transport covered independently of the broad oldest/latest matrix.
 // Runtime EFD suite admission starts at Vitest 4, which requires Node.js >=20.
-const describeTransport = NODE_MAJOR >= 20 ? describe : describe.skip
+const describeTransport = NODE_MAJOR >= 20 && runVersionIndependentSuites ? describe : describe.skip
 
 for (const version of ['4.0.5', 'latest']) {
   describeTransport(`vitest@${version} EFD worker transport`, () => {
@@ -3653,7 +3660,7 @@ for (const version of ['4.0.5', 'latest']) {
 // Vitest 4 requires Node >=20; Vitest 5 requires Node >=22.
 for (const version of ['4.1.10', 'latest']) {
   let describeRunnerReuse = describe
-  if (NODE_MAJOR < 20 || (version === 'latest' && NODE_MAJOR < 22)) {
+  if (!runVersionIndependentSuites || NODE_MAJOR < 20 || (version === 'latest' && NODE_MAJOR < 22)) {
     describeRunnerReuse = describe.skip
   }
 

@@ -6,6 +6,7 @@ const fs = require('node:fs')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const { getRewriteTarget } = require('../datadog-instrumentations/src/helpers/rewriter/targets')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
 const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
@@ -154,8 +155,9 @@ class DatadogWebpackPlugin {
         }
 
         const request = resolveData.request
+        const isModuleOfInterest = modulesOfInterest.has(request) || modulesOfInterest.has(`${pkg}/${modulePath}`)
 
-        if (!modulesOfInterest.has(request) && !modulesOfInterest.has(`${pkg}/${modulePath}`)) {
+        if (!isModuleOfInterest && getRewriteTarget(normalizedResource) === undefined) {
           return
         }
 
@@ -185,10 +187,12 @@ class DatadogWebpackPlugin {
         const version = packageJson.version
         const pkgPath = request === pkg ? pkg : `${pkg}/${modulePath}`
 
+        // Webpack runs loaders right-to-left, so appending makes this loader see the package's original source
+        // before any user transpiler lowers the syntax Orchestrion function queries match on.
         createData.loaders ||= []
-        createData.loaders.unshift({
+        createData.loaders.push({
           loader: require.resolve('./src/loader'),
-          options: { pkg, version, path: pkgPath },
+          options: { pkg, version, path: pkgPath, rewriteOnly: !isModuleOfInterest },
         })
 
         log.debug('LOAD: %s@%s, pkg "%s"', pkg, version, pkgPath)

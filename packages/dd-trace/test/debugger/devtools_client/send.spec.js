@@ -26,7 +26,7 @@ const hostname = getHostname()
 const message = 'my-message'
 const logger = { logger: true }
 const dd = { dd: true }
-const snapshot = { snapshot: true, probe: { id: 'my-probe-id' } }
+const snapshot = { snapshot: true, timestamp: 1_700_000_000_000, probe: { id: 'my-probe-id' } }
 const MAX_LOG_PAYLOAD_SIZE_BYTES = 1024 * 1024 - 4 * 1024 // Mirrors the limit in send.js
 
 describe('input message http requests', function () {
@@ -330,6 +330,15 @@ describe('input message http requests', function () {
     )
 
     done()
+  })
+
+  it('should include the snapshot timestamp at root level', function () {
+    send(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+
+    const written = JSON.parse(jsonBufferWrite.getCall(0).args[0])
+
+    assert.strictEqual(written.timestamp, snapshot.timestamp)
+    assert.strictEqual(written.debugger.snapshot.timestamp, snapshot.timestamp)
   })
 
   it('should include process_tags at root level when provided', function () {
@@ -664,6 +673,7 @@ function getPayload (_message = message, _snapshot = snapshot) {
     ddsource,
     hostname,
     service,
+    timestamp: _snapshot.timestamp,
     message: _message,
     logger,
     dd,

@@ -151,12 +151,20 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
         // Responses API - always include
         const cacheReadTokens = tokenUsage.input_tokens_details.cached_tokens
         if (cacheReadTokens !== undefined) metrics.cacheReadTokens = cacheReadTokens
+        const cacheWriteTokens = tokenUsage.input_tokens_details.cache_write_tokens
+        if (cacheWriteTokens != null) metrics.cacheWriteTokens = cacheWriteTokens
+        // Cache writes are billed at a different rate per TTL
+        const cacheWriteDetails = tokenUsage.input_tokens_details.cache_write_tokens_details
+        if (cacheWriteDetails?.ttl_30m_tokens != null) metrics.cacheWrite30mTokens = cacheWriteDetails.ttl_30m_tokens
+        if (cacheWriteDetails?.ttl_12h_tokens != null) metrics.cacheWrite12hTokens = cacheWriteDetails.ttl_12h_tokens
       } else if (tokenUsage.prompt_tokens_details) {
         // Chat/Completions API - only include if > 0
         const cacheReadTokens = tokenUsage.prompt_tokens_details.cached_tokens
         if (cacheReadTokens != null) {
           metrics.cacheReadTokens = cacheReadTokens
         }
+        const cacheWriteTokens = tokenUsage.prompt_tokens_details.cache_write_tokens
+        if (cacheWriteTokens != null) metrics.cacheWriteTokens = cacheWriteTokens
       }
       // Reasoning tokens - Responses API returns `output_tokens_details`, `completion_tokens_details`
       const reasoningOutputObject = tokenUsage.output_tokens_details ?? tokenUsage.completion_tokens_details

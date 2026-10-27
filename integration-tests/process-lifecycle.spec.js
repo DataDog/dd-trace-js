@@ -11,6 +11,7 @@ const sinon = require('sinon')
 
 const {
   createParallelIt,
+  execInProcessGroup,
   spawnPluginIntegrationTestProcAndExpectExit,
   spawnProcAndExpectExit,
   stopProc,
@@ -113,6 +114,71 @@ describe('spawnProcAndExpectExit', () => {
   })
 })
 
+describe('execInProcessGroup', () => {
+  const posixIt = process.platform === 'win32' ? it.skip : it
+
+  posixIt('drains output without a consumer', async () => {
+    const proc = execInProcessGroup(`node -e "process.stdout.write(Buffer.alloc(${256 * 1024}))"`)
+
+    try {
+      await once(proc, 'close')
+      assert.strictEqual(proc.exitCode, 0)
+    } finally {
+      await stopProc(proc)
+    }
+  })
+
+  posixIt('stops the shell and its descendants', async () => {
+    const proc = execInProcessGroup('node -e "' +
+      "process.on('SIGTERM', () => { process.stdout.write('stopped'); process.exit(0) }); " +
+      "process.stdout.write('ready'); setInterval(() => {}, 1000)" + '"')
+    let output = ''
+    proc.stdout.on('data', chunk => { output += chunk })
+
+    try {
+      await once(proc.stdout, 'data')
+      await stopProc(proc)
+
+      assert.strictEqual(output, 'readystopped')
+      assert.ok(proc.stdout.destroyed, 'child pipes must close before cleanup resolves')
+      assert.ok(proc.exitCode !== null || proc.signalCode !== null, 'shell must exit before cleanup resolves')
+    } finally {
+      await stopProc(proc)
+    }
+  })
+
+  posixIt('bounds cleanup when an escaped descendant keeps output open', async () => {
+    const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const proc = execInProcessGroup('node -e "' +
+      "const { spawn } = require('node:child_process'); " +
+      "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], " +
+      "{ detached: true, stdio: ['ignore', process.stdout, process.stderr] }); " +
+      'process.stdout.write(String(child.pid), () => process.exit(0))' + '"')
+    let escapedPid
+
+    try {
+      const [chunk] = await once(proc.stdout, 'data')
+      escapedPid = Number(chunk)
+      await once(proc, 'exit')
+      const stopped = assert.rejects(stopProc(proc, { timeoutMs: 100 }), {
+        message: `Process group ${proc.pid} did not close after SIGKILL`,
+      })
+
+      await clock.tickAsync(200)
+      await stopped
+    } finally {
+      clock.restore()
+      const closed = proc.stdout.destroyed ? undefined : once(proc, 'close')
+      try {
+        if (escapedPid) process.kill(-escapedPid, 'SIGKILL')
+      } catch (error) {
+        assert.strictEqual(error.code, 'ESRCH')
+      }
+      if (closed) await closed
+    }
+  })
+})
+
 describe('withReceiver', () => {
   for (const exitCode of [0, 1]) {
     it(`preserves compound commands when the first command exits with ${exitCode}`, async () => {
@@ -187,7 +253,11 @@ describe('withReceiver', () => {
 
   it('preserves a failure and starts a fresh retry after closing a pending request', async () => {
     const mocha = new Mocha({ reporter: class {} })
-    const parallelIt = createParallelIt((name, fn) => mocha.suite.addTest(new Mocha.Test(name, fn)), {
+    const parallelIt = createParallelIt((name, fn) => {
+      const test = new Mocha.Test(name, fn)
+      mocha.suite.addTest(test)
+      return test
+    }, {
       withReceiver: true,
     })
     const error = new Error('original assertion')
@@ -223,5 +293,95 @@ describe('withReceiver', () => {
     } finally {
       for (const request of requests) request.destroy()
     }
+  })
+})
+
+describe('createParallelIt', () => {
+  it('assigns complete concurrency batches to each shard', async () => {
+    for (const [index, expected] of [
+      [0, ['first', 'second']],
+      [1, ['third', 'last']],
+    ]) {
+      const mocha = new Mocha({ reporter: class {} })
+      const started = []
+      let suite = mocha.suite
+      const mochaIt = (name, fn) => {
+        const test = new Mocha.Test(name, fn)
+        suite.addTest(test)
+        return test
+      }
+      const parallelIt = createParallelIt(mochaIt, { shard: { index, count: 2 } })
+
+      parallelIt('first', async () => { started.push('first') })
+      parallelIt('second', async () => { started.push('second') })
+      parallelIt('third', async () => { started.push('third') })
+      parallelIt('last', async () => { started.push('last') })
+      suite = Mocha.Suite.create(mocha.suite, 'nested')
+      parallelIt('nested first', async () => { started.push('nested first') })
+      parallelIt('nested second', async () => { started.push('nested second') })
+      parallelIt('nested third', async () => { started.push('nested third') })
+      parallelIt('nested last', async () => { started.push('nested last') })
+
+      const failures = await new Promise(resolve => mocha.run(resolve))
+      assert.strictEqual(failures, 0)
+      assert.deepStrictEqual(started.sort(), [
+        ...expected,
+        ...expected.map(name => `nested ${name}`),
+      ].sort())
+    }
+  })
+
+  it('prioritizes retries over scenarios waiting in the pool', async () => {
+    const mocha = new Mocha({ reporter: class {} })
+    const started = []
+    let attempts = 0
+
+    const parallelIt = createParallelIt((name, fn) => {
+      const test = new Mocha.Test(name, fn)
+      mocha.suite.addTest(test)
+      return test
+    }, { concurrency: 1 })
+
+    parallelIt('retried', async () => {
+      started.push(`retried ${++attempts}`)
+      if (attempts === 1) throw new Error('retry me')
+    }, { retries: 1 })
+    parallelIt('first queued', async () => {
+      started.push('first queued')
+      await new Promise(resolve => setTimeout(resolve, 20))
+    })
+    parallelIt('last queued', async () => { started.push('last queued') })
+
+    const failures = await new Promise(resolve => mocha.run(resolve))
+    assert.strictEqual(failures, 0)
+    assert.deepStrictEqual(started, [
+      'retried 1',
+      'first queued',
+      'retried 2',
+      'last queued',
+    ])
+  })
+
+  it('does not retry a failure before Mocha observes it', async () => {
+    const mocha = new Mocha({ reporter: class {} })
+    let attempts = 0
+
+    const parallelIt = createParallelIt((name, fn) => {
+      const test = new Mocha.Test(name, fn)
+      mocha.suite.addTest(test)
+      return test
+    }, { concurrency: 2 })
+
+    parallelIt('slow', async () => {
+      await new Promise(resolve => setTimeout(resolve, 20))
+    })
+    parallelIt('fails before its wrapper runs', async () => {
+      attempts++
+      throw new Error('expected failure')
+    })
+
+    const failures = await new Promise(resolve => mocha.run(resolve))
+    assert.strictEqual(failures, 1)
+    assert.strictEqual(attempts, 1)
   })
 })

@@ -45,6 +45,8 @@ describe('esm', () => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'postgres.query'), true)
+          const querySpan = payload.flat().find(span => span.meta?.component === 'postgres')
+          assert.ok(querySpan.metrics['db.pool.wait_time_ms'] > 0)
         })
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(
