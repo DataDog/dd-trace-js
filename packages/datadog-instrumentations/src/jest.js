@@ -3982,12 +3982,11 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver/chromium',
 ])
 
-function recordMockedFile (suiteFilePath, moduleName) {
+function recordMockedFile (suiteFilePath, moduleName, from = suiteFilePath) {
   if (!suiteFilePath || typeof moduleName !== 'string') return
 
   const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
-  const suiteDir = path.dirname(suiteFilePath)
-  const mockPath = path.resolve(suiteDir, moduleName)
+  const mockPath = path.resolve(path.dirname(from), moduleName)
   existingMockedFiles.push(mockPath)
   testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
 }
@@ -4022,7 +4021,7 @@ function getMockedFiles (suiteFilePath) {
   return staticMockedFiles
 }
 
-function wrapJestObject (jestObject, suiteFilePath) {
+function wrapJestObject (jestObject, suiteFilePath, from = suiteFilePath) {
   if (!jestObject || !suiteFilePath || wrappedJestObjects.has(jestObject)) return
 
   testSuiteJestObjects.set(suiteFilePath, jestObject)
@@ -4036,7 +4035,7 @@ function wrapJestObject (jestObject, suiteFilePath) {
   })
 
   shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
-    recordMockedFile(suiteFilePath, moduleName)
+    recordMockedFile(suiteFilePath, moduleName, from)
     return mock.apply(this, arguments)
   })
 }
@@ -4050,7 +4049,7 @@ function wrapJestGlobalsForRuntime (runtime) {
   wrappedJestGlobals.add(jestGlobals)
   shimmer.wrap(jestGlobals, 'jestObjectFor', jestObjectFor => function (from) {
     const jestObject = jestObjectFor.apply(this, arguments)
-    wrapJestObject(jestObject, runtime._testPath || from)
+    wrapJestObject(jestObject, runtime._testPath || from, from)
     return jestObject
   })
 }
@@ -4345,9 +4344,9 @@ addHook({
   if (typeof Runtime.prototype._createJestObjectFor === 'function') {
     shimmer.wrap(Runtime.prototype, '_createJestObjectFor', _createJestObjectFor => function (from) {
       const result = _createJestObjectFor.apply(this, arguments)
-      const suiteFilePath = this._testPath || from
+      const suiteFilePath = this._testPath || this._environment?.testSuiteAbsolutePath || from
 
-      wrapJestObject(result, suiteFilePath)
+      wrapJestObject(result, suiteFilePath, from)
       return result
     })
   }
