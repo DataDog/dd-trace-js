@@ -62,6 +62,11 @@ const wrappedMethods = new WeakSet()
 
 // `webhooks` is shared by every Stripe instance, so wrapping it on each
 // construction would stack one wrapper per client until the stack overflows
+/**
+ * @param {object|undefined} target
+ * @param {string} name
+ * @param {Function} wrapper
+ */
 function wrapOnce (target, name, wrapper) {
   if (typeof target?.[name] !== 'function' || wrappedMethods.has(target[name])) return
 
