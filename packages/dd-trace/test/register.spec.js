@@ -156,7 +156,7 @@ function createThrowingLoaderHook (error) {
 function loadRegister ({ register, registerSyncLoaderHooks, loaderHook, supportsSyncHooks, version }) {
   proxyquire('../../../register.js', {
     'node:module': { register },
-    'import-in-the-middle/create-hook.mjs': { supportsSyncHooks },
+    './vendor/dist/import-in-the-middle/create-hook.js': { supportsSyncHooks },
     './loader-hook.mjs': loaderHook || { registerSyncLoaderHooks },
     './version': version || SUPPORTED_SYNC_HOOKS_NODE_VERSION,
   })

@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const { toHook } = require('import-in-the-middle/lib/register')
+const { toHook } = require('dd-trace/vendor/dist/import-in-the-middle/lib/register.js')
 
 await import('./unrelated-module.mjs')
 const unrelatedStayedUnwrapped = toHook.length === 0

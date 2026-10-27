@@ -37,9 +37,8 @@ describe('telemetry', () => {
       await agent.stop()
     })
 
-    it('Test that tracer and iitm are sent as dependencies', async () => {
+    it('Test that tracer is sent as a dependency', async () => {
       let ddTraceFound = false
-      let importInTheMiddleFound = false
 
       await agent.assertTelemetryReceived({
         fn: msg => {
@@ -51,9 +50,6 @@ describe('telemetry', () => {
                 if (dependency.name === 'dd-trace') {
                   ddTraceFound = true
                 }
-                if (dependency.name === 'import-in-the-middle') {
-                  importInTheMiddleFound = true
-                }
               })
             }
           }
@@ -63,7 +59,6 @@ describe('telemetry', () => {
       })
 
       assert.strictEqual(ddTraceFound, true)
-      assert.strictEqual(importInTheMiddleFound, true)
     })
 
     it('Assert configuration chaining data is sent', async () => {

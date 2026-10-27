@@ -25,7 +25,7 @@ describe('iitm.js', () => {
     before(() => {
       listener = sinon.stub()
       iitmjs = proxyquire('../src/iitm', {
-        'import-in-the-middle': iitm,
+        '../../../vendor/dist/import-in-the-middle': iitm,
       })
     })
 

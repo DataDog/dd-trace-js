@@ -36,11 +36,9 @@ function shouldRegisterSyncLoaderHooks () {
   }
 
   try {
-    return require('import-in-the-middle/create-hook.mjs').supportsSyncHooks()
+    return require('./vendor/dist/import-in-the-middle/create-hook.js').supportsSyncHooks()
   } catch (error) {
-    if (error?.code !== 'ERR_REQUIRE_ESM') {
-      warnSyncLoaderFallback(error)
-    }
+    warnSyncLoaderFallback(error)
   }
 
   return false
