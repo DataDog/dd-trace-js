@@ -7,6 +7,9 @@ const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
 const { inspect } = require('node:util')
+
+const satisfies = require('semifies')
+
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -61,6 +64,10 @@ const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
+const supportsImportedGlobals = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=26.0.0')
+const supportsConcurrentSnapshots = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=28.0.0')
+// Jest resets the snapshot state of retried tests since 24.9.0
+const itIfRetriesResetSnapshots = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=24.9.0') ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
 
 // TODO: add ESM tests
@@ -2416,6 +2423,287 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
         assert.strictEqual(exitCode, 1, 'exit code 1 when suite fails (resolution error)')
+      })
+
+      context('snapshot assertions', () => {
+        beforeEach(() => {
+          receiver.setTestManagementTests({
+            jest: {
+              suites: {
+                'ci-visibility/test-management/test-snapshot-quarantine.js': {
+                  tests: {
+                    'quarantine snapshot fails a snapshot': { properties: { quarantined: true } },
+                    'quarantine snapshot fails before a snapshot': { properties: { quarantined: true } },
+                    'quarantine snapshot fails a snapshot before passing': { properties: { quarantined: true } },
+                    'quarantine snapshot passes with an unused snapshot': { properties: { quarantined: true } },
+                  },
+                },
+                'ci-visibility/test-management/test-snapshot-image.js': {
+                  tests: {
+                    'snapshot can match': { properties: { quarantined: true } },
+                  },
+                },
+                'ci-visibility/test-management/test-mixed-snapshot-quarantine.js': {
+                  tests: {
+                    'mixed snapshots quarantined snapshot': { properties: { quarantined: true } },
+                    'mixed snapshots quarantined unused snapshot': { properties: { quarantined: true } },
+                  },
+                },
+                'ci-visibility/test-management/test-mixed-snapshot-overlap.js': {
+                  tests: {
+                    'overlapping snapshots quarantined snapshot': { properties: { quarantined: true } },
+                  },
+                },
+                'ci-visibility/test-management/test-snapshot-ownership.js': {
+                  tests: {
+                    'snapshot ownership ordinary: quarantined': { properties: { quarantined: true } },
+                  },
+                },
+              },
+            },
+          })
+        })
+
+        const runSnapshotTests = async (env, onEvents) => {
+          let stdout = ''
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              const executions = {}
+              for (const { content } of events.filter(event => event.type === 'test')) {
+                executions[content.meta[TEST_NAME]] ??= []
+                executions[content.meta[TEST_NAME]].push(
+                  [content.meta[TEST_STATUS], content.meta[TEST_MANAGEMENT_IS_QUARANTINED]]
+                )
+              }
+              onEvents(testSession, executions)
+            })
+
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                SHOULD_CHECK_RESULTS: '1',
+                ...env,
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (chunk) => {
+            stdout += chunk.toString()
+          })
+          childProcess.stderr?.on('data', (chunk) => {
+            stdout += chunk.toString()
+          })
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          return { exitCode, stdout }
+        }
+
+        const snapshotModes = [
+          { parallel: false, injectGlobals: true },
+          { parallel: true, injectGlobals: true },
+          { parallel: false, injectGlobals: false },
+          { parallel: true, injectGlobals: false },
+        ]
+        for (const { parallel, injectGlobals, mixed } of snapshotModes.flatMap(mode => [
+          { ...mode, mixed: false },
+          { ...mode, mixed: true },
+        ])) {
+          const modeIt = (injectGlobals || supportsImportedGlobals) && (!mixed || supportsConcurrentSnapshots)
+            ? it
+            : it.skip
+          const mode = `parallel=${parallel}, injectGlobals=${injectGlobals}, mixed=${mixed}`
+          modeIt(`ignores quarantined snapshots (${mode})`, async () => {
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            const { exitCode, stdout } = await runSnapshotTests(
+              {
+                TESTS_TO_RUN: 'test-management/test-snapshot-(quarantine|image)',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                MIXED_SNAPSHOT_SUITE: mixed ? 'true' : undefined,
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              },
+              (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+                assert.deepStrictEqual(executions, {
+                  'quarantine snapshot fails a snapshot': [['fail', 'true']],
+                  'quarantine snapshot fails before a snapshot': [['fail', 'true']],
+                  'quarantine snapshot fails a snapshot before passing': [['fail', 'true']],
+                  'quarantine snapshot can pass normally': [['pass', undefined]],
+                  'quarantine snapshot passes with an unused snapshot': [['pass', 'true']],
+                  'snapshot can match': [['fail', 'true']],
+                  ...(mixed
+                    ? {
+                        'quarantine snapshot concurrent passing sibling': [['pass', undefined]],
+                        'snapshot concurrent passing sibling': [['pass', undefined]],
+                      }
+                    : {}),
+                })
+              }
+            )
+
+            assert.strictEqual(exitCode, 0)
+            assert.match(stdout, /Quarantined: 5 tests run; 4 failures did not affect the test session\./)
+            assert.doesNotMatch(stdout, /snapshots? failed/)
+            assert.doesNotMatch(stdout, /obsolete/)
+          })
+        }
+
+        for (const { parallel, injectGlobals } of snapshotModes) {
+          const ownershipIt = injectGlobals || supportsImportedGlobals ? it : it.skip
+          for (const unused of [false, true]) {
+            const mode = `parallel=${parallel}, injectGlobals=${injectGlobals}, unused=${unused}`
+            ownershipIt(`preserves snapshots shared with shorter ordinary names (${mode})`, async () => {
+              receiver.setSettings({ test_management: { enabled: true } })
+
+              const { exitCode, stdout } = await runSnapshotTests({
+                TESTS_TO_RUN: 'test-management/test-snapshot-(ownership|image)',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                SKIP_ORDINARY_HINT: unused ? 'true' : undefined,
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              }, (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], unused ? 'fail' : 'pass')
+                assert.deepStrictEqual(executions, {
+                  'snapshot ownership ordinary: quarantined': [['pass', 'true']],
+                  'snapshot ownership ordinary': [['pass', undefined]],
+                  'snapshot can match': [['fail', 'true']],
+                })
+              })
+
+              assert.strictEqual(exitCode, unused ? 1 : 0, stdout)
+              assert.doesNotMatch(stdout, /snapshots? failed/)
+              if (unused) {
+                assert.match(stdout, /3 snapshots obsolete/)
+              } else {
+                assert.doesNotMatch(stdout, /obsolete/)
+              }
+            })
+          }
+
+          const modeIt = supportsConcurrentSnapshots && (injectGlobals || supportsImportedGlobals) ? it : it.skip
+          for (const ordinaryFailure of ['none', 'serial', 'concurrent', 'obsolete', 'prefixed-obsolete']) {
+            const mode = `parallel=${parallel}, injectGlobals=${injectGlobals}, ordinaryFailure=${ordinaryFailure}`
+            modeIt(`reports serial snapshot quarantine in mixed files (${mode})`, async () => {
+              receiver.setSettings({ test_management: { enabled: true } })
+              const { exitCode, stdout } = await runSnapshotTests({
+                TESTS_TO_RUN: 'test-management/test-mixed-snapshot-quarantine',
+                MIXED_SNAPSHOT_SUITE: 'true',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                FAIL_ORDINARY_SNAPSHOT: ordinaryFailure === 'serial' ? 'true' : undefined,
+                FAIL_CONCURRENT_SNAPSHOT: ordinaryFailure === 'concurrent' ? 'true' : undefined,
+                SKIP_ORDINARY_SNAPSHOT: ordinaryFailure === 'obsolete' ? 'true' : undefined,
+                SKIP_PREFIXED_SNAPSHOT: ordinaryFailure === 'prefixed-obsolete' ? 'true' : undefined,
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              }, (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], ordinaryFailure === 'none' ? 'pass' : 'fail')
+                assert.deepStrictEqual(executions, {
+                  'mixed snapshots quarantined snapshot': [['fail', 'true']],
+                  'mixed snapshots quarantined unused snapshot': [['pass', 'true']],
+                  'mixed snapshots quarantined unused snapshot: ordinary': [['pass', undefined]],
+                  'mixed snapshots ordinary snapshot': [[ordinaryFailure === 'serial' ? 'fail' : 'pass', undefined]],
+                  'mixed snapshots concurrent sibling': [
+                    [ordinaryFailure === 'concurrent' ? 'fail' : 'pass', undefined],
+                  ],
+                })
+              })
+              assert.strictEqual(exitCode, ordinaryFailure === 'none' ? 0 : 1, stdout)
+              if (ordinaryFailure === 'obsolete' || ordinaryFailure === 'prefixed-obsolete') {
+                const obsoleteCount = ordinaryFailure === 'obsolete' ? 3 : 2
+                assert.match(stdout, new RegExp(`${obsoleteCount} snapshots obsolete`))
+                assert.doesNotMatch(stdout, /snapshots? failed/)
+              } else if (ordinaryFailure !== 'none') {
+                assert.match(stdout, /1 snapshot failed/)
+                assert.doesNotMatch(stdout, /obsolete/)
+              } else {
+                assert.doesNotMatch(stdout, /snapshots? failed/)
+                assert.doesNotMatch(stdout, /obsolete/)
+              }
+            })
+          }
+
+          // Before Jest 30, concurrent bodies can run while a serial test is awaiting.
+          const overlapIt = (JEST_VERSION !== 'latest' && satisfies(JEST_VERSION, '<30.0.0')) ? modeIt : it.skip
+          overlapIt(`preserves overlapping snapshots (parallel=${parallel}, injectGlobals=${injectGlobals})`,
+            async () => {
+              receiver.setSettings({ test_management: { enabled: true } })
+              const { exitCode, stdout } = await runSnapshotTests({
+                TESTS_TO_RUN: 'test-management/test-mixed-snapshot-overlap',
+                DO_NOT_INJECT_GLOBALS: injectGlobals ? undefined : 'true',
+                ...(parallel ? { RUN_IN_PARALLEL: 'true' } : {}),
+              }, (testSession, executions) => {
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+                assert.deepStrictEqual(executions, {
+                  'overlapping snapshots quarantined snapshot': [['fail', 'true']],
+                  'overlapping snapshots ordinary concurrent image snapshot': [['fail', undefined]],
+                })
+              })
+              assert.strictEqual(exitCode, 1, stdout)
+              assert.match(stdout, /1 snapshot failed/)
+              assert.doesNotMatch(stdout, /obsolete/)
+            })
+        }
+
+        itIfRetriesResetSnapshots('does not fail the run when ATR retries quarantined snapshot tests', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: true,
+          })
+
+          const { exitCode, stdout } = await runSnapshotTests(
+            {
+              TESTS_TO_RUN: 'test-management/test-snapshot-quarantine',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+              MIXED_SNAPSHOT_SUITE: supportsConcurrentSnapshots ? 'true' : undefined,
+            },
+            (testSession, executions) => {
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+              assert.deepStrictEqual(executions, {
+                'quarantine snapshot fails a snapshot': [['fail', 'true'], ['fail', 'true'], ['fail', 'true']],
+                'quarantine snapshot fails before a snapshot': [['fail', 'true'], ['fail', 'true'], ['fail', 'true']],
+                'quarantine snapshot fails a snapshot before passing': [['fail', 'true'], ['pass', 'true']],
+                'quarantine snapshot can pass normally': [['pass', undefined]],
+                ...(supportsConcurrentSnapshots
+                  ? { 'quarantine snapshot concurrent passing sibling': [['pass', undefined]] }
+                  : {}),
+                'quarantine snapshot passes with an unused snapshot': [['pass', 'true']],
+              })
+            }
+          )
+
+          assert.strictEqual(exitCode, 0)
+          assert.doesNotMatch(stdout, /snapshots? failed/)
+          assert.doesNotMatch(stdout, /obsolete/)
+        })
+
+        it('fails the run when snapshot assertions fail and quarantine is not enabled', async () => {
+          receiver.setSettings({ test_management: { enabled: false } })
+
+          const { exitCode, stdout } = await runSnapshotTests(
+            {
+              TESTS_TO_RUN: 'test-management/test-mixed-snapshot-quarantine',
+              MIXED_SNAPSHOT_SUITE: supportsConcurrentSnapshots ? 'true' : undefined,
+            },
+            (testSession, executions) => {
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+              assert.deepStrictEqual(executions, {
+                'mixed snapshots quarantined snapshot': [['fail', undefined]],
+                'mixed snapshots quarantined unused snapshot': [['pass', undefined]],
+                'mixed snapshots quarantined unused snapshot: ordinary': [['pass', undefined]],
+                'mixed snapshots ordinary snapshot': [['pass', undefined]],
+                ...(supportsConcurrentSnapshots
+                  ? { 'mixed snapshots concurrent sibling': [['pass', undefined]] }
+                  : {}),
+              })
+            }
+          )
+
+          assert.strictEqual(exitCode, 1)
+          assert.match(stdout, /1 snapshot failed/)
+          assert.match(stdout, /4 snapshots obsolete/)
+        })
       })
     })
 

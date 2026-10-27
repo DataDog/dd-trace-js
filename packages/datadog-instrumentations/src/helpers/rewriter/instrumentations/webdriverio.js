@@ -3,6 +3,19 @@
 module.exports = [
   {
     module: {
+      name: '@wdio/config',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node/index.js',
+    },
+    functionQuery: {
+      className: 'ConfigParser',
+      methodName: 'shard',
+      kind: 'Sync',
+    },
+    channelName: 'ConfigParser_shard',
+  },
+  {
+    module: {
       name: '@wdio/cli',
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
@@ -73,6 +86,19 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
+    functionQuery: {
+      className: 'Runner',
+      methodName: '_startSession',
+      kind: 'Async',
+    },
+    channelName: 'Runner_startSession',
+  },
+  {
+    module: {
+      name: '@wdio/runner',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
     astQuery: 'VariableDeclarator[id.name="Runner"] > ClassExpression > ClassBody > ' +
       'MethodDefinition[key.name="run"] IfStatement[test.operator="!"]' +
       '[test.argument.object.name="args"][test.argument.property.name="watch"], ' +
@@ -115,6 +141,33 @@ module.exports = [
       'MethodDefinition[key.name="waitForSync"] ReturnStatement > ' +
       'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
     channelName: 'BaseReporter_waitForSync',
+    transform: 'waitForAsyncEnd',
+  },
+  {
+    module: {
+      name: '@wdio/mocha-framework',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    functionQuery: {
+      className: 'MochaAdapter',
+      methodName: 'init',
+      kind: 'Async',
+    },
+    channelName: 'MochaAdapter_init',
+  },
+  {
+    module: {
+      name: '@wdio/mocha-framework',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    astQuery: 'VariableDeclarator[id.name="MochaAdapter"] > ClassExpression > ClassBody > ' +
+      'MethodDefinition[key.name="init"] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"], ' +
+      'ClassDeclaration[id.name="MochaAdapter"] > ClassBody > MethodDefinition[key.name="init"] ReturnStatement > ' +
+      'CallExpression[callee.object.name="promise"][callee.property.name="then"]',
+    channelName: 'MochaAdapter_init',
     transform: 'waitForAsyncEnd',
   },
   {
@@ -453,9 +506,8 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
-    astQuery: 'TryStatement:has(CatchClause IfStatement[test.operator=">"]' +
-      '[test.left.object.name="retries"][test.left.property.name="limit"]' +
-      '[test.right.object.name="retries"][test.right.property.name="attempts"]) > BlockStatement',
+    astQuery: 'FunctionDeclaration[id.name="executeAsync"] TryStatement:has(CatchClause ' +
+      'CallExpression[callee.object.name="executeAsync"][callee.property.name="call"]) > BlockStatement',
     channelName: 'executeAsync',
     transform: 'awaitContextCallback',
     transformOptions: {
@@ -468,10 +520,8 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
-    astQuery: 'FunctionDeclaration[id.name="executeAsync"] CatchClause ' +
-      'IfStatement[test.operator=">"][test.left.object.name="retries"]' +
-      '[test.left.property.name="limit"][test.right.object.name="retries"]' +
-      '[test.right.property.name="attempts"]',
+    astQuery: 'FunctionDeclaration[id.name="executeAsync"] CatchClause > BlockStatement > ' +
+      'IfStatement:has(CallExpression[callee.object.name="executeAsync"][callee.property.name="call"])',
     channelName: 'executeAsync',
     transform: 'awaitContextCallback',
     transformOptions: {
@@ -482,12 +532,15 @@ module.exports = [
   {
     module: {
       name: 'jasmine-core',
-      versionRange: '>=5.0.0 <6.0.0',
+      versionRange: '>=5.0.0 <7.0.0',
       filePath: 'lib/jasmine-core/jasmine.js',
     },
     astQuery: 'AssignmentExpression[left.object.object.name="Spec"]' +
       '[left.object.property.name="prototype"][left.property.name="execute"] > FunctionExpression',
+    // A method name keeps the original function expression, so the start context
+    // carries `self` (the legacy Spec) that the WebdriverIO Jasmine lifecycle reads.
     functionQuery: {
+      methodName: 'execute',
       kind: 'Sync',
     },
     channelName: 'Spec_execute',
@@ -495,7 +548,7 @@ module.exports = [
   {
     module: {
       name: 'jasmine-core',
-      versionRange: '>=5.0.0 <6.0.0',
+      versionRange: '>=5.0.0 <7.0.0',
       filePath: 'lib/jasmine-core/jasmine.js',
     },
     astQuery: 'AssignmentExpression[left.object.object.name="Spec"]' +
@@ -508,7 +561,20 @@ module.exports = [
   {
     module: {
       name: 'jasmine-core',
-      versionRange: '>=5.0.0 <6.0.0',
+      versionRange: '>=5.0.0 <7.0.0',
+      filePath: 'lib/jasmine-core/jasmine.js',
+    },
+    functionQuery: {
+      className: 'Spec',
+      methodName: 'status',
+      kind: 'Sync',
+    },
+    channelName: 'Spec_attemptDone',
+  },
+  {
+    module: {
+      name: 'jasmine-core',
+      versionRange: '>=5.0.0 <7.0.0',
       filePath: 'lib/jasmine-core/jasmine.js',
     },
     functionQuery: {
@@ -521,7 +587,7 @@ module.exports = [
   {
     module: {
       name: 'jasmine-core',
-      versionRange: '>=5.0.0 <6.0.0',
+      versionRange: '>=5.0.0 <7.0.0',
       filePath: 'lib/jasmine-core/jasmine.js',
     },
     functionQuery: {

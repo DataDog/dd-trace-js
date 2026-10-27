@@ -248,9 +248,9 @@ class Config extends ConfigBase {
     const { experimental, ...rest } = options
     if (experimental) {
       // @ts-expect-error - Difficult to type this correctly.
-      this.#applyOptions(experimental, 'code', 'experimental')
+      this.#applyOptions(experimental, 'experimental')
     }
-    this.#applyOptions(rest, 'code')
+    this.#applyOptions(rest)
     this.#applyCalculated()
 
     warnWrongOtelSettings()
@@ -280,10 +280,9 @@ class Config extends ConfigBase {
 
   /**
    * @param {TracerOptions} options
-   * @param {'code'} source
    * @param {string} [root]
    */
-  #applyOptions (options, source, root = '') {
+  #applyOptions (options, root = '') {
     for (const [name, value] of Object.entries(options)) {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
@@ -300,7 +299,7 @@ class Config extends ConfigBase {
             // Defining an option that receives an object as value may not contain a property that is also
             // potentially a nested property!
             if (Object.hasOwn(value, nestedProperty)) {
-              this.#applyOptions(value, source, fullName)
+              this.#applyOptions(value, fullName)
               matched = true
               break
             }
@@ -316,7 +315,7 @@ class Config extends ConfigBase {
             // TracePropagationStyle is special. It is a single option that is used to set both inject and extract.
             // TODO: Consider what to do with this later
             // @ts-expect-error - Difficult to type this correctly.
-            this.#applyOptions({ inject: value, extract: value }, source, 'tracePropagationStyle')
+            this.#applyOptions({ inject: value, extract: value }, 'tracePropagationStyle')
           } else {
             log.warn('Unknown option %s with value %o', fullName, value)
           }
@@ -325,12 +324,12 @@ class Config extends ConfigBase {
       }
       const coerced = programmaticTypeCoercions[entry.type](value)
       if (coerced === undefined && value !== undefined) {
-        warnInvalidValue(value, fullName, source, `Invalid ${entry.type} input`)
+        warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
       }
       const transformed = coerced !== undefined && entry.transformer
-        ? entry.transformer(coerced, fullName, source)
+        ? entry.transformer(coerced, fullName, 'code')
         : coerced
-      setAndTrack(this, entry.property ?? name, transformed, value, source)
+      setAndTrack(this, entry.property ?? name, transformed, value, 'code')
     }
   }
 
@@ -370,8 +369,8 @@ class Config extends ConfigBase {
 
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
-        trackedConfigOrigins.has('experimental.flaggingProvider.enabled')) {
-      if (this.experimental.flaggingProvider.enabled) {
+        trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {
+      if (this.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED) {
         setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'remote_config')
       } else {
         setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_ENABLED', false)
@@ -505,7 +504,8 @@ class Config extends ConfigBase {
     // dd-trace's own sampling policy in that case.
     if (!trackedConfigOrigins.has('sampleRate') &&
         (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
-          (this.OTEL_TRACES_EXPORTER === 'otlp' && this.experimental.exporter !== 'electron'))) {
+          (this.OTEL_TRACES_EXPORTER === 'otlp' &&
+            this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'))) {
       setAndTrack(this, 'sampleRate',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
@@ -638,7 +638,7 @@ class Config extends ConfigBase {
     }
 
     const isTestOptimizationWorker = this.isCiVisibility &&
-      TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.experimental.exporter)
+      TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (isTestOptimizationWorker) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
@@ -651,7 +651,7 @@ class Config extends ConfigBase {
       setAndTrack(this, 'llmobs.DD_LLMOBS_AGENTLESS_ENABLED', true)
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
       if (this.DD_API_KEY === undefined) {
-        setAndTrack(this, 'dynamicInstrumentation.enabled', false)
+        setAndTrack(this, 'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED', false)
       }
       setAndTrack(this, 'runtimeMetrics.enabled', false)
       setAndTrack(this, 'dsmEnabled', false)
@@ -667,7 +667,7 @@ class Config extends ConfigBase {
     }
 
     if (agentlessTracingEnabled && !this.isCiVisibility) {
-      setAndTrack(this, 'experimental.exporter', 'agentless')
+      setAndTrack(this, 'tracing.DD_TRACE_EXPERIMENTAL_EXPORTER', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting

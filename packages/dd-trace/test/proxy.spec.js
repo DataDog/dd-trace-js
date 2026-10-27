@@ -166,6 +166,9 @@ describe('TracerProxy', () => {
       DD_TRACE_ENABLED: true,
       testOptimization: {},
       featureFlags: {
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: false,
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 30_000,
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED: false,
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
         DD_FEATURE_FLAGS_ENABLED: false,
       },
@@ -453,7 +456,7 @@ describe('TracerProxy', () => {
       })
 
       it('starts and configures Dynamic Instrumentation when enabled', () => {
-        config.dynamicInstrumentation.enabled = true
+        config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED = true
 
         proxy.init()
 
@@ -515,7 +518,8 @@ describe('TracerProxy', () => {
 
       it('does not load Dynamic Instrumentation for a disabled remote config update', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
+          config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
+            conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
@@ -532,7 +536,8 @@ describe('TracerProxy', () => {
 
       it('loads Dynamic Instrumentation when remote config enables it', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
+          config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
+            conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
@@ -1361,9 +1366,13 @@ describe('TracerProxy', () => {
     let storeConfig
     let uuidStub
     let buildProxy
+    let id
+    let randomFillSync
 
     beforeEach(() => {
       uuidStub = sinon.stub().returns('00000000-0000-4000-8000-000000000000')
+      randomFillSync = sinon.stub().callsFake(data => data.fill(randomFillSync.callCount))
+      id = proxyquire('../src/id', { crypto: { randomFillSync } })
 
       channelMock = {
         subscribe: sinon.stub(),
@@ -1393,6 +1402,7 @@ describe('TracerProxy', () => {
         './tracer': DatadogTracer,
         './noop/proxy': NoopProxy,
         './config': Config,
+        './id': id,
         './plugin_manager': PluginManager,
         './runtime_metrics': runtimeMetrics,
         './log': log,
@@ -1468,9 +1478,27 @@ describe('TracerProxy', () => {
       sinon.assert.alwaysCalledWithExactly(channelMock.publish, config)
     })
 
+    for (const state of ['enabled', 'disabled', 'failed']) {
+      it(`should reseed IDs before publishing identity updates when tracing is ${state}`, () => {
+        const before = id().toString()
+        if (state === 'disabled') config.DD_TRACE_ENABLED = false
+        if (state === 'failed') DatadogTracer.throws(new Error('tracer initialization failed'))
+        microProxy.init()
+
+        channelMock.publish.callsFake(() => {
+          assert.notStrictEqual(id().toString(), before)
+        })
+        const subscriber = channelMock.subscribe.firstCall.args[0]
+        subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
+
+        sinon.assert.calledTwice(channelMock.publish)
+        sinon.assert.calledTwice(randomFillSync)
+      })
+    }
+
     it('should update identity, store metadata, and then refresh consumers', () => {
-      // Core identity producers (id/config/remote_config) self-subscribe to identity:update and
-      // must finish reseeding before identity:refresh notifies downstream cache-holders
+      // Core identity producers (id/config/remote_config) must finish reseeding before
+      // identity:refresh notifies downstream cache-holders
       // (dogstatsd, otel metrics, debugger); otherwise those subsystems would refresh from the
       // pre-reseed identity.
       storeConfig.returns(undefined)
@@ -1543,6 +1571,7 @@ describe('TracerProxy', () => {
     })
 
     it('should not drain the UUID pool when the request is not the run hook', () => {
+      id()
       microProxy.init()
 
       const subscriber = channelMock.subscribe.firstCall.args[0]
@@ -1550,6 +1579,8 @@ describe('TracerProxy', () => {
       subscriber({ request: { method: 'POST', url: '/other' } })
 
       sinon.assert.notCalled(uuidStub)
+      id()
+      sinon.assert.calledOnce(randomFillSync)
     })
 
     it('should unsubscribe HTTP channel after first fire', () => {

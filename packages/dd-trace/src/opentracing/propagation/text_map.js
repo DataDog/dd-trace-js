@@ -77,12 +77,21 @@ const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
 const percentByte = /%([0-9A-Fa-f]{2})/g
 
+let otelSampling
+
 /**
  * @typedef {object} B3Context
  * @property {string} [flags]
  * @property {string} [sampled]
  * @property {string} [spanId]
  * @property {string} [traceId]
+ */
+
+/**
+ * @typedef {object} TraceTagInjection
+ * @property {DatadogSpanContext} spanContext
+ * @property {Array<string | undefined>} [traceTagReplacements]
+ * @property {number} [optionalTraceTagCount]
  */
 
 /**
@@ -96,6 +105,28 @@ function hasTraceTagReplacement (traceTagReplacements, key) {
   return false
 }
 
+/** @param {string} key */
+function toTraceStateTagKey (key) {
+  return 't.' + key.slice(6).replaceAll(tracestateTagKeyFilter, '_')
+}
+
+/**
+ * @param {string} key
+ * @param {TraceTagInjection | undefined} injection
+ */
+function isOptionalDatadogTraceStateField (key, injection) {
+  if (!key.startsWith('t.') || key === 't.dm' || key === 't.ts') return false
+
+  const traceTagReplacements = injection?.traceTagReplacements
+  if (!traceTagReplacements) return true
+  const firstOptionalTraceTagIndex = traceTagReplacements.length - (injection.optionalTraceTagCount ?? 0) * 2
+  for (let index = 0; index < firstOptionalTraceTagIndex; index += 2) {
+    const traceTagKey = traceTagReplacements[index]
+    if (traceTagKey.startsWith('_dd.p.') && toTraceStateTagKey(traceTagKey) === key) return false
+  }
+  return true
+}
+
 /**
  * @param {string | undefined} traceId
  * @param {string | undefined} spanId
@@ -103,8 +134,7 @@ function hasTraceTagReplacement (traceTagReplacements, key) {
  * @returns {DatadogSpanContext | undefined}
  */
 function extractGenericContext (traceId, spanId, radix) {
-  if (!traceId || invalidSegment.test(traceId)) return
-  if (!spanId) return
+  if (!traceId || invalidSegment.test(traceId) || !spanId) return
 
   return new DatadogSpanContext({
     traceId: id(traceId, radix),
@@ -149,12 +179,15 @@ function getB3Priority (sampled, debug) {
  * @returns {DatadogSpanContext | undefined}
  */
 function extractB3Context (b3) {
-  const priority = getB3Priority(b3.sampled, b3.flags === '1')
-  const spanContext = extractGenericContext(b3.traceId, b3.spanId, 16)
+  const debug = b3.flags === '1'
+  const priority = getB3Priority(b3.sampled, debug)
+  let spanContext = extractGenericContext(b3.traceId, b3.spanId, 16)
 
   if (priority !== undefined) {
-    if (!spanContext) {
-      return new DatadogSpanContext({
+    if (spanContext) {
+      spanContext._sampling.priority = priority
+    } else {
+      spanContext = new DatadogSpanContext({
         traceId: id(),
         spanId: null,
         sampling: { priority },
@@ -162,7 +195,7 @@ function extractB3Context (b3) {
       })
     }
 
-    spanContext._sampling.priority = priority
+    if (debug) spanContext._sampling.isProbabilityDecision = false
   }
 
   if (spanContext && b3.traceId) extract128BitTraceId(b3.traceId, spanContext)
@@ -326,13 +359,15 @@ class TextMapPropagator {
       hasTraceSourcePropagationTag(spanContext._trace.tags)
     let traceTagReplacements
     let optionalTraceTagCount = 0
+    /** @type {TraceTagInjection | undefined} */
+    let traceTagInjection
     if (injectTraceContext && injectCh.hasSubscribers && (
       this.#hasPropagationStyle('inject', 'datadog') || this.#hasPropagationStyle('inject', 'tracecontext')
     )) {
-      const injection = { spanContext }
-      injectCh.publish(injection)
-      traceTagReplacements = injection.traceTagReplacements
-      optionalTraceTagCount = injection.optionalTraceTagCount ?? 0
+      traceTagInjection = { spanContext }
+      injectCh.publish(traceTagInjection)
+      traceTagReplacements = traceTagInjection.traceTagReplacements
+      optionalTraceTagCount = traceTagInjection.optionalTraceTagCount ?? 0
     }
     if (injectTraceContext) {
       injectedCarrier = this.#injectDatadog(
@@ -343,7 +378,7 @@ class TextMapPropagator {
     }
     injectedCarrier = this
       .#injectTraceparent(
-        spanContext, injectedCarrier ?? carrier, injectTraceContext, traceTagReplacements
+        spanContext, injectedCarrier ?? carrier, injectTraceContext, traceTagReplacements, traceTagInjection
       ) ?? injectedCarrier
 
     if (injectedCarrier === undefined) return
@@ -509,7 +544,7 @@ class TextMapPropagator {
     }
 
     if (traceTagReplacements) {
-      const requiredEntryCount = traceTagReplacements.length - optionalTraceTagCount * 2
+      const firstOptionalTraceTagIndex = traceTagReplacements.length - optionalTraceTagCount * 2
       for (let index = 0; index < traceTagReplacements.length; index += 2) {
         const key = traceTagReplacements[index]
         const value = traceTagReplacements[index + 1]
@@ -520,7 +555,7 @@ class TextMapPropagator {
         }
 
         const entry = `${header ? ',' : ''}${key}=${value}`
-        if (index >= requiredEntryCount && header.length + entry.length > maxLength) break
+        if (index >= firstOptionalTraceTagIndex && header.length + entry.length > maxLength) break
         header += entry
       }
     }
@@ -589,13 +624,14 @@ class TextMapPropagator {
    * @param {Record<string, string> | undefined} carrier
    * @param {boolean} injectTraceContext
    * @param {Array<string | undefined>} [traceTagReplacements]
+   * @param {TraceTagInjection} [traceTagInjection]
    * @returns {Record<string, string> | undefined}
    */
-  #injectTraceparent (spanContext, carrier, injectTraceContext, traceTagReplacements) {
+  #injectTraceparent (spanContext, carrier, injectTraceContext, traceTagReplacements, traceTagInjection) {
     if (!this.#hasPropagationStyle('inject', 'tracecontext')) return
 
     if (!injectTraceContext) {
-      const tracestate = TraceState.fromString(spanContext._tracestate?.toString())
+      const tracestate = spanContext._tracestate?.clone() ?? new TraceState()
       tracestate.delete('dd')
       const header = tracestate.toString()
       if (!header) return
@@ -611,10 +647,13 @@ class TextMapPropagator {
       _trace: { origin },
     } = spanContext
     const ts = traceTagReplacements
-      ? TraceState.fromString(_tracestate?.toString())
+      ? _tracestate?.clone() ?? new TraceState()
       : _tracestate ?? new TraceState()
 
     writeTraceparent(carrier, spanContext.toTraceparent())
+
+    otelSampling ??= require('../../otel-sampling')
+    otelSampling.updateOtelTraceState(spanContext, ts)
 
     ts.forVendor('dd', state => {
       if (!spanContext._isRemote) {
@@ -643,8 +682,7 @@ class TextMapPropagator {
         const tagValueRaw = spanContext._trace.tags[key]
         if (!tagValueRaw || !key.startsWith('_dd.p.')) continue
 
-        const tagKey = 't.' + key.slice(6)
-          .replaceAll(tracestateTagKeyFilter, '_')
+        const tagKey = toTraceStateTagKey(key)
 
         const tagValue = tagValueRaw
           .toString()
@@ -659,8 +697,7 @@ class TextMapPropagator {
           const key = traceTagReplacements[index]
           if (!key.startsWith('_dd.p.')) continue
 
-          const tagKey = 't.' + key.slice(6)
-            .replaceAll(tracestateTagKeyFilter, '_')
+          const tagKey = toTraceStateTagKey(key)
           const tagValueRaw = traceTagReplacements[index + 1]
           if (!tagValueRaw) {
             state.delete(tagKey)
@@ -675,7 +712,7 @@ class TextMapPropagator {
           state.set(tagKey, tagValue)
         }
       }
-    })
+    }, isOptionalDatadogTraceStateField, traceTagInjection)
 
     writeTracestate(carrier, ts.toString())
 
@@ -691,6 +728,32 @@ class TextMapPropagator {
   }
 
   /**
+   * Merges W3C sampling state into the context selected by propagation-style precedence.
+   *
+   * @param {DatadogSpanContext} w3cSpanContext
+   * @param {DatadogSpanContext} selectedSpanContext
+   */
+  #mergeTraceContextState (w3cSpanContext, selectedSpanContext) {
+    const selectedPriority = selectedSpanContext._sampling.priority
+    if (selectedPriority === undefined) {
+      selectedSpanContext._sampling.priority = w3cSpanContext._sampling.priority
+      selectedSpanContext._sampling.mechanism = w3cSpanContext._sampling.mechanism
+      selectedSpanContext._trace.tags['_dd.p.dm'] = w3cSpanContext._trace.tags['_dd.p.dm']
+    } else if (
+      selectedSpanContext._sampling.isProbabilityDecision === false ||
+      (selectedPriority >= AUTO_KEEP) !== (w3cSpanContext._sampling.priority >= AUTO_KEEP)
+    ) {
+      // Copied sampling metadata must not describe a conflicting or non-probabilistic selected decision.
+      selectedSpanContext._sampling.isProbabilityDecision = false
+      w3cSpanContext._tracestate.forVendor('dd', state => {
+        if (state.get('t.dm') !== undefined) state.delete('t.dm')
+      })
+    }
+
+    selectedSpanContext._tracestate = w3cSpanContext._tracestate
+  }
+
+  /**
    * @param {DatadogSpanContext | undefined} w3cSpanContext
    * @param {DatadogSpanContext} firstSpanContext
    * @param {Record<string, unknown>} carrier
@@ -699,10 +762,13 @@ class TextMapPropagator {
    */
   #resolveTraceContextConflicts (w3cSpanContext, firstSpanContext, carrier, datadogContext) {
     if (w3cSpanContext === undefined ||
-        firstSpanContext.toTraceId(true) !== w3cSpanContext.toTraceId(true) ||
-        firstSpanContext.toSpanId() === w3cSpanContext.toSpanId()) {
+        firstSpanContext.toTraceId(true) !== w3cSpanContext.toTraceId(true)) {
       return firstSpanContext
     }
+
+    this.#mergeTraceContextState(w3cSpanContext, firstSpanContext)
+    if (firstSpanContext.toSpanId() === w3cSpanContext.toSpanId()) return firstSpanContext
+
     if (tags.DD_PARENT_ID in w3cSpanContext._trace.tags) {
       // tracecontext headers contain a p value, ensure this value is sent to backend
       firstSpanContext._trace.tags[tags.DD_PARENT_ID] = w3cSpanContext._trace.tags[tags.DD_PARENT_ID]
@@ -740,7 +806,8 @@ class TextMapPropagator {
               traceContext = this.#extractTraceparentContext(carrier)
               traceContextExtracted = true
             }
-            this.#addTraceContextState(extractedContext, traceContext)
+            const selectedContext = context && context !== traceContext ? context : extractedContext
+            this.#addTraceContextState(selectedContext, traceContext)
           }
           break
         case 'tracecontext':
@@ -842,7 +909,25 @@ class TextMapPropagator {
     }
 
     const traceTags = this.#extractTags(carrier)
-    if (traceTags) spanContext._trace.tags = traceTags
+    if (traceTags) {
+      spanContext._trace.tags = traceTags
+      const decisionMaker = traceTags['_dd.p.dm']
+      if (decisionMaker !== undefined) {
+        // Avoid general integer parsing for the common single-digit mechanisms.
+        const digit = decisionMaker.length === 2 && decisionMaker[0] === '-'
+          ? decisionMaker.charCodeAt(1) - 48
+          : -1
+        if (digit >= 0 && digit <= 9) {
+          spanContext._sampling.mechanism = digit
+        } else {
+          // Preserve integer-prefix parsing; Number() also turns empty values into zero.
+          const mechanism = Math.abs(Number.parseInt(decisionMaker, 10))
+          if (Number.isInteger(mechanism) && mechanism >= 0) {
+            spanContext._sampling.mechanism = mechanism
+          }
+        }
+      }
+    }
 
     return spanContext
   }
@@ -879,7 +964,7 @@ class TextMapPropagator {
   #addTraceContextState (datadogContext, traceContext) {
     if (traceContext && datadogContext._traceId.equals(traceContext._traceId)) {
       datadogContext._traceparent = traceContext._traceparent
-      datadogContext._tracestate = traceContext._tracestate
+      this.#mergeTraceContextState(traceContext, datadogContext)
     }
   }
 
@@ -896,14 +981,16 @@ class TextMapPropagator {
       const traceparent = { version }
       // W3C Trace Context §3.3.1.1: multiple tracestate fields MUST be combined per RFC 7230 §3.2.2.
       const tracestate = TraceState.fromString(readTracestate(carrier))
-      if (invalidSegment.test(traceId)) return
-      if (invalidSegment.test(spanId)) return
-
       // Version ff is considered invalid
-      if (version === 'ff') return
+      if (invalidSegment.test(traceId) || invalidSegment.test(spanId) || version === 'ff') return
 
       // Version 00 should have no tail, but future versions may
       if (tail && version === '00') return
+
+      if (tracestate.get('ot') !== undefined) {
+        otelSampling ??= require('../../otel-sampling')
+        otelSampling.normalizeOtelTraceState(tracestate)
+      }
 
       const spanContext = new DatadogSpanContext({
         traceId: id(traceId, 16),

@@ -137,16 +137,17 @@ class DistributionMetric extends Metric {
 
   /**
    * @param {number} [value]
+   * @param {number} [count] - The number of times the value was observed, which must be a positive integer
    */
-  track (value = 1) {
+  track (value = 1, count = 1) {
     if (typeof value !== 'number' || !Number.isFinite(value)) return
 
     if (this.sketch === undefined) {
       this.sketch = createSketch()
     }
 
-    this.sketch.accept(value)
-    this.pointCount++
+    this.sketch.accept(value, count)
+    this.pointCount += count
   }
 
   /**

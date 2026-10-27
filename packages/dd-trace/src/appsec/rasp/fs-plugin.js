@@ -1,11 +1,13 @@
 'use strict'
 
-const Plugin = require('../../plugins/plugin')
+const dc = require('dc-polyfill')
+
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
 const RASP_MODULE = 'rasp'
 const IAST_MODULE = 'iast'
+const APPSEC_FS_STORAGE = 'appsec-fs'
 
 const enabledFor = {
   [RASP_MODULE]: false,
@@ -13,42 +15,53 @@ const enabledFor = {
 }
 
 let fsPlugin
+const legacyStorage = storage('legacy')
+const appsecFsStorage = storage(APPSEC_FS_STORAGE)
+const fsOperationStart = dc.channel('apm:fs:operation:start')
+const fsOperationFinish = dc.channel('apm:fs:operation:finish')
+const responseRenderStart = dc.channel('tracing:datadog:express:response:render:start')
+const responseRenderEnd = dc.channel('tracing:datadog:express:response:render:end')
 
-function getStoreToStart (fsProps, store = storage('legacy').getStore()) {
-  if (store && !store.fs?.opExcluded) {
+function getStoreToStart (fsProps, store = appsecFsStorage.getStore()) {
+  // Only track operations inside a traced context, like a request. Callbacks of fs streams and watchers keep
+  // the state of the operation that created them, so state created outside of one would leak into every request
+  // of a server started from such a callback. The tracing fs plugin enters a noop store when no span is active.
+  const legacyStore = legacyStorage.getStore()
+  if (!legacyStore || legacyStore.noop) return
+
+  if (!store || !store.opExcluded) {
     return {
       ...store,
-      fs: {
-        ...store.fs,
-        ...fsProps,
-        parentStore: store,
-      },
+      ...fsProps,
+      parentStore: store,
     }
   }
 
   return store
 }
 
-class AppsecFsPlugin extends Plugin {
+class AppsecFsPlugin {
   enable () {
-    this.addBind('apm:fs:operation:start', this._onFsOperationStart)
-    this.addBind('apm:fs:operation:finish', this._onFsOperationFinishOrRenderEnd)
-    this.addBind('tracing:datadog:express:response:render:start', this._onResponseRenderStart)
-    this.addBind('tracing:datadog:express:response:render:end', this._onFsOperationFinishOrRenderEnd)
-    // We might have to add the same subscribers for fastify later
-
-    super.configure(true)
+    // The tracing fs plugin binds the legacy store on these channels. AppSec
+    // keeps its fs-only state in a dedicated storage namespace to avoid
+    // clobbering tracing state while still tracking nested operations.
+    fsOperationStart.bindStore(appsecFsStorage, this._onFsOperationStart)
+    fsOperationFinish.bindStore(appsecFsStorage, this._onFsOperationFinishOrRenderEnd)
+    responseRenderStart.bindStore(appsecFsStorage, this._onResponseRenderStart)
+    responseRenderEnd.bindStore(appsecFsStorage, this._onFsOperationFinishOrRenderEnd)
   }
 
   disable () {
-    super.configure(false)
+    fsOperationStart.unbindStore(appsecFsStorage)
+    fsOperationFinish.unbindStore(appsecFsStorage)
+    responseRenderStart.unbindStore(appsecFsStorage)
+    responseRenderEnd.unbindStore(appsecFsStorage)
   }
 
   _onFsOperationStart () {
-    const store = storage('legacy').getStore()
-    if (store) {
-      return getStoreToStart({ root: store.fs?.root === undefined }, store)
-    }
+    const store = appsecFsStorage.getStore()
+
+    return getStoreToStart({ root: store?.root === undefined }, store)
   }
 
   _onResponseRenderStart () {
@@ -56,11 +69,7 @@ class AppsecFsPlugin extends Plugin {
   }
 
   _onFsOperationFinishOrRenderEnd () {
-    const store = storage('legacy').getStore()
-    if (store?.fs) {
-      return store.fs.parentStore
-    }
-    return store
+    return appsecFsStorage.getStore()?.parentStore
   }
 }
 
@@ -97,6 +106,7 @@ module.exports = {
   disable,
 
   AppsecFsPlugin,
+  APPSEC_FS_STORAGE,
 
   RASP_MODULE,
   IAST_MODULE,

@@ -3,6 +3,8 @@
 
 export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
+  _DD_TEST_PARALLELIZATION_METADATA_FILE: string | undefined;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   aiguard: {
     DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
@@ -75,6 +77,7 @@ export interface GeneratedConfig {
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
   DD_APP_KEY: string | undefined;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
+  DD_BUNDLER_INJECT_GIT_METADATA: boolean;
   DD_CRASHTRACKING_ENABLED: boolean;
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
@@ -118,6 +121,10 @@ export interface GeneratedConfig {
   DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD: number;
   DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: boolean;
   DD_LAMBDA_HANDLER: string | undefined;
+  DD_LLMOBS_PROMPTS_CACHE_DIR: string | undefined;
+  DD_LLMOBS_PROMPTS_CACHE_TTL: number;
+  DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: boolean;
+  DD_LLMOBS_PROMPTS_TIMEOUT: number;
   DD_LOGS_OTEL_ENABLED: boolean;
   DD_METRICS_OTEL_ENABLED: boolean;
   DD_MINI_AGENT_PATH: string | undefined;
@@ -410,32 +417,29 @@ export interface GeneratedConfig {
   };
   dsmEnabled: boolean;
   dynamicInstrumentation: {
-    captureTimeoutMs: number;
-    enabled: boolean;
-    probeFile: string | undefined;
-    redactedIdentifiers: string[];
-    redactionExcludedIdentifiers: string[];
-    uploadIntervalSeconds: number;
+    DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: number;
+    DD_DYNAMIC_INSTRUMENTATION_ENABLED: boolean;
+    DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: number;
+    DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: string | undefined;
+    DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: string[];
+    DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: string[];
+    DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: number;
   };
   env: string | undefined;
   experimental: {
     b3: boolean;
-    enableGetRumData: boolean;
-    exporter: string;
-    flaggingProvider: {
-      enabled: boolean;
-      initializationTimeoutMs: number;
-      spanEnrichment: {
-        enabled: boolean;
-      };
-    };
   };
   featureFlags: {
+    DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: boolean;
+    DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: number;
+    DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED: boolean;
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: string;
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: string | undefined;
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
     DD_FEATURE_FLAGS_ENABLED: boolean;
+    DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED: boolean;
+    DD_FLAGGING_EVALUATION_COUNTS_ENABLED: boolean;
   };
   flushInterval: number;
   flushMinSpans: number;
@@ -518,6 +522,9 @@ export interface GeneratedConfig {
     pollInterval: number;
   };
   reportHostname: boolean;
+  rum: {
+    DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: boolean;
+  };
   runtimeMetrics: {
     enabled: boolean;
     eventLoop: boolean;
@@ -573,8 +580,8 @@ export interface GeneratedConfig {
     DD_CODE_COVERAGE_FLAGS: string | undefined;
     DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
     DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
-    DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
-    DD_TEST_FAILURE_VIDEOS_ENABLED: boolean | undefined;
+    DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean;
+    DD_TEST_FAILURE_VIDEOS_ENABLED: boolean;
     DD_TEST_FLEET_CONFIG_PATH: string | undefined;
     DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
     DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
@@ -590,6 +597,9 @@ export interface GeneratedConfig {
   traceWebsocketMessagesEnabled: boolean;
   traceWebsocketMessagesInheritSampling: boolean;
   traceWebsocketMessagesSeparateTraces: boolean;
+  tracing: {
+    DD_TRACE_EXPERIMENTAL_EXPORTER: string;
+  };
   url: string | URL;
   version: string | undefined;
   vertexai: {
@@ -600,6 +610,8 @@ export interface GeneratedConfig {
 
 export interface GeneratedEnvVarConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
+  _DD_TEST_PARALLELIZATION_METADATA_FILE: string | undefined;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   DATADOG_API_KEY: string | undefined;
   DD_ACTION_EXECUTION_ID: string | undefined;
@@ -650,6 +662,7 @@ export interface GeneratedEnvVarConfig {
   DD_APPSEC_TRACE_RATE_LIMIT: number;
   DD_APPSEC_WAF_TIMEOUT: number;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
+  DD_BUNDLER_INJECT_GIT_METADATA: boolean;
   DD_CIVISIBILITY_AGENTLESS_ENABLED: boolean;
   DD_CIVISIBILITY_AGENTLESS_URL: URL | undefined;
   DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER: string | undefined;
@@ -686,6 +699,7 @@ export interface GeneratedEnvVarConfig {
   DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED: boolean;
   DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: number;
   DD_DYNAMIC_INSTRUMENTATION_ENABLED: boolean;
+  DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: number;
   DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: string | undefined;
   DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: string[];
   DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: string[];
@@ -711,6 +725,8 @@ export interface GeneratedEnvVarConfig {
   DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
   DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
   DD_FEATURE_FLAGS_ENABLED: boolean;
+  DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED: boolean;
+  DD_FLAGGING_EVALUATION_COUNTS_ENABLED: boolean;
   DD_GIT_BRANCH: string | undefined;
   DD_GIT_COMMIT_AUTHOR_DATE: string | undefined;
   DD_GIT_COMMIT_AUTHOR_EMAIL: string | undefined;
@@ -761,6 +777,12 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_ENABLED: boolean;
   DD_LLMOBS_ML_APP: string | undefined;
   DD_LLMOBS_PROJECT_NAME: string | undefined;
+  DD_LLMOBS_PROMPTS_CACHE_DIR: string | undefined;
+  DD_LLMOBS_PROMPTS_CACHE_TTL: number;
+  DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: number;
+  DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: boolean;
+  DD_LLMOBS_PROMPTS_TIMEOUT: number;
+  DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS: number;
   DD_LLMOBS_SAMPLE_RATE: number;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
@@ -825,8 +847,8 @@ export interface GeneratedEnvVarConfig {
   DD_TELEMETRY_METRICS_ENABLED: boolean;
   DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
-  DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
-  DD_TEST_FAILURE_VIDEOS_ENABLED: boolean | undefined;
+  DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean;
+  DD_TEST_FAILURE_VIDEOS_ENABLED: boolean;
   DD_TEST_FLEET_CONFIG_PATH: string | undefined;
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;

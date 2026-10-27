@@ -932,6 +932,58 @@ describe('integrations', () => {
         })
       })
 
+      it('submits a response span with cache write token metrics split by ttl', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        const instructions = 'You are a meticulous API design reviewer '.repeat(200)
+
+        await openai.responses.create({
+          model: 'gpt-5.6-sol',
+          instructions,
+          input: 'What are the best practices for API design?',
+          max_output_tokens: 100,
+          prompt_cache_options: { ttl: '12h' },
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'system', content: instructions },
+            { role: 'user', content: 'What are the best practices for API design?' },
+          ],
+          outputMessages: [
+            { role: 'reasoning', content: MOCK_STRING },
+            { role: 'assistant', content: MOCK_STRING },
+          ],
+          metrics: {
+            input_tokens: 1420,
+            output_tokens: 100,
+            total_tokens: 1520,
+            cache_read_input_tokens: 0,
+            cache_write_input_tokens: 1417,
+            ephemeral_30m_input_tokens: 0,
+            ephemeral_12h_input_tokens: 1417,
+            reasoning_output_tokens: 76,
+          },
+          modelName: 'gpt-5.6-sol',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 100,
+            temperature: 1,
+            top_p: 0.98,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+          },
+          tags: { ml_app: 'test', integration: 'openai' },
+        })
+      })
+
       it('submits a response.parse span', async function () {
         if (semifies(realVersion, '<4.87.0')) {
           this.skip()
@@ -1025,6 +1077,290 @@ describe('integrations', () => {
             stream: true,
           },
           tags: { ml_app: 'test', integration: 'openai' },
+        })
+      })
+
+      it('keeps submitting response spans after a streamed response is aborted', async function () {
+        // openai v4 uses node-fetch, which still delivers already-buffered chunks after an abort
+        if (semifies(realVersion, '<5.0.0')) {
+          this.skip()
+        }
+
+        const request = {
+          model: 'gpt-4o-mini',
+          input: 'Stream this please',
+          max_output_tokens: 50,
+          temperature: 0,
+          stream: true,
+        }
+
+        // Abort before reading: the SDK ends the stream quietly without delivering any chunk
+        const controller = new AbortController()
+        const abortedStream = await openai.responses.create(request, { signal: controller.signal })
+        controller.abort()
+        for await (const part of abortedStream) {
+          assert.fail(`unexpected chunk after abort: ${inspect(part)}`)
+        }
+
+        const stream = await openai.responses.create(request)
+        for await (const part of stream) {
+          assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
+        }
+
+        const { llmobsSpans } = await getEvents(2)
+        const [abortedSpan, nextSpan] = llmobsSpans
+
+        assert.deepStrictEqual(abortedSpan.meta.input.messages, [{ role: 'user', content: 'Stream this please' }])
+        assert.deepStrictEqual(abortedSpan.meta.output.messages, [{ content: '', role: '' }])
+        assert.strictEqual(nextSpan.meta.output.messages[0].role, 'assistant')
+        assert.ok(nextSpan.meta.output.messages[0].content)
+      })
+
+      // The cassettes below were recorded through the testagent, then truncated before `response.completed`.
+      // The testagent buffers the full upstream response while recording, so a stream that ends early (as when the
+      // caller aborts mid-stream) cannot be recorded directly.
+      describe('streamed response that ends early', function () {
+        beforeEach(function () {
+          if (semifies(realVersion, '<4.87.0')) {
+            this.skip()
+          }
+        })
+
+        // openai_responses_post_0ad13443.json is truncated after `response.in_progress`
+        it('submits the input with an empty output when no output was streamed', async () => {
+          const stream = await openai.responses.create({
+            model: 'gpt-4o-mini',
+            input: 'Say hello in one sentence',
+            stream: true,
+          })
+          for await (const part of stream) {
+            assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createResponse',
+            inputMessages: [{ role: 'user', content: 'Say hello in one sentence' }],
+            modelName: 'gpt-4o-mini-2024-07-18',
+            modelProvider: 'openai',
+            metadata: {
+              stream: true,
+              temperature: 1,
+              top_p: 1,
+              tool_choice: 'auto',
+              truncation: 'disabled',
+              text: { format: { type: 'text' }, verbosity: 'medium' },
+            },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+          assert.strictEqual(llmobsSpans[0].meta.output?.messages, undefined)
+        })
+
+        // openai_responses_post_45a20fff.json is truncated after the third text delta
+        it('submits the text streamed before the stream ended', async () => {
+          const stream = await openai.responses.create({
+            model: 'gpt-4o-mini',
+            input: 'Write a haiku about the ocean',
+            stream: true,
+          })
+          const parts = []
+          for await (const part of stream) {
+            parts.push(part)
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createResponse',
+            inputMessages: [{ role: 'user', content: 'Write a haiku about the ocean' }],
+            outputMessages: [{ role: 'assistant', content: 'Waves whisper' }],
+            modelName: 'gpt-4o-mini-2024-07-18',
+            modelProvider: 'openai',
+            metadata: {
+              stream: true,
+              temperature: 1,
+              top_p: 1,
+              tool_choice: 'auto',
+              truncation: 'disabled',
+              text: { format: { type: 'text' }, verbosity: 'medium' },
+            },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+
+          // the chunks delivered to the application are left untouched
+          const addedItem = parts.find(part => part.type === 'response.output_item.added').item
+          assert.deepStrictEqual(addedItem.content, [])
+        })
+
+        // openai_responses_post_c17a3c24.json is truncated after the second tool call's arguments, before it is done
+        it('submits completed items and the tool call streamed before the stream ended', async () => {
+          const stream = await openai.responses.create({
+            model: 'gpt-4o-mini',
+            input: 'What is the weather in Paris and Tokyo?',
+            tools: [{
+              type: 'function',
+              name: 'get_weather',
+              description: 'Get the current weather for a city',
+              parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+            }],
+            stream: true,
+          })
+          const parts = []
+          for await (const part of stream) {
+            parts.push(part)
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createResponse',
+            inputMessages: [{ role: 'user', content: 'What is the weather in Paris and Tokyo?' }],
+            outputMessages: [
+              {
+                role: 'assistant',
+                tool_calls: [{
+                  tool_id: MOCK_STRING,
+                  name: 'get_weather',
+                  arguments: { city: 'Paris' },
+                  type: 'function_call',
+                }],
+              },
+              {
+                role: 'assistant',
+                tool_calls: [{
+                  tool_id: MOCK_STRING,
+                  name: 'get_weather',
+                  arguments: { city: 'Tokyo' },
+                  type: 'function_call',
+                }],
+              },
+            ],
+            modelName: 'gpt-4o-mini-2024-07-18',
+            modelProvider: 'openai',
+            metadata: {
+              stream: true,
+              temperature: 1,
+              top_p: 1,
+              tool_choice: 'auto',
+              truncation: 'disabled',
+              text: { format: { type: 'text' }, verbosity: 'medium' },
+            },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+
+          // the chunks delivered to the application are left untouched
+          const toolCallItem = parts.find(part => part.item?.type === 'function_call').item
+          assert.strictEqual(toolCallItem.arguments, '')
+        })
+      })
+
+      describe('decisions', function () {
+        const input = 'I was charged twice for my subscription this month.'
+        const questions = [
+          {
+            type: 'choice',
+            name: 'department',
+            instructions: 'Which team should handle this request?',
+            choices: [{ value: 'billing' }, { value: 'technical' }, { value: 'sales' }],
+          },
+          {
+            type: 'score',
+            name: 'severity',
+            instructions: 'How severe is the issue?',
+            levels: [{ label: 'Minor' }, { label: 'Workaround available' }, { label: 'Blocking' }],
+          },
+          { type: 'predicate', name: 'needs_refund', instructions: 'Is the customer asking for a refund?' },
+        ]
+
+        beforeEach(function () {
+          if (semifies(realVersion, '<7.30.0')) {
+            this.skip()
+          }
+        })
+
+        it('submits a decision span', async function () {
+          const decision = await openai.decisions.create({ model: 'gpt-6-luna', input, questions })
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const answers = JSON.parse(llmobsSpans[0].meta.output.messages[0].content)
+          assert.deepStrictEqual(answers.map(answer => answer.name), ['department', 'severity', 'needs_refund'])
+
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createDecision',
+            inputMessages: [{ role: 'user', content: input }],
+            outputMessages: [{ role: 'assistant', content: JSON.stringify(decision.answers) }],
+            metrics: {
+              input_tokens: MOCK_NUMBER,
+              output_tokens: 0,
+              total_tokens: MOCK_NUMBER,
+              cache_read_input_tokens: 0,
+              cache_write_input_tokens: 0,
+              reasoning_output_tokens: 0,
+            },
+            modelName: 'gpt-6-luna',
+            modelProvider: 'openai',
+            metadata: { questions },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+        })
+
+        it('submits a decision span with image input', async function () {
+          const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEU' +
+            'lEQVR4nGO4IyeHFTEMLQkAid1GAXiz9RcAAAAASUVORK5CYII='
+          await openai.decisions.create({
+            model: 'gpt-6-luna',
+            input: [{
+              role: 'user',
+              content: [
+                { type: 'input_text', text: 'Classify this image.' },
+                { type: 'input_image', image_url: image },
+              ],
+            }],
+            questions: [{
+              type: 'choice',
+              name: 'color',
+              instructions: 'What is the dominant color of the image?',
+              choices: [{ value: 'red' }, { value: 'green' }, { value: 'blue' }],
+            }],
+          })
+
+          const { llmobsSpans } = await getEvents()
+          assert.deepStrictEqual(llmobsSpans[0].meta.input.messages, [
+            { role: 'user', content: 'Classify this image.\n[image]' },
+          ])
+        })
+
+        it('submits a decision span with an error', async function () {
+          let error
+          try {
+            await openai.decisions.create({ model: 'not-a-decision-model', input, questions })
+          } catch (e) {
+            error = e
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createDecision',
+            inputMessages: [{ role: 'user', content: input }],
+            outputMessages: [{ content: '', role: '' }],
+            modelName: 'not-a-decision-model',
+            modelProvider: 'openai',
+            metadata: { questions },
+            tags: { ml_app: 'test', integration: 'openai' },
+            error: {
+              type: MOCK_STRING,
+              message: error.message,
+              stack: error.stack,
+            },
+          })
         })
       })
 
@@ -1270,6 +1606,108 @@ describe('integrations', () => {
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
             stream: false,
+          },
+          tags: { ml_app: 'test', integration: 'openai' },
+        })
+      })
+
+      it('submits a response span with web search tool usage', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          model: 'gpt-4.1-mini',
+          input: 'What was a positive news story from today? Answer in one sentence.',
+          tools: [{ type: 'web_search' }],
+          max_output_tokens: 200,
+          stream: false,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'What was a positive news story from today? Answer in one sentence.' },
+          ],
+          outputMessages: [
+            { role: 'assistant', content: '' },
+            { role: 'assistant', content: MOCK_STRING },
+          ],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0,
+            cache_write_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            web_search_count: 1,
+          },
+          modelName: 'gpt-4.1-mini-2025-04-14',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 200,
+            temperature: 1,
+            top_p: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            stream: false,
+          },
+          tags: { ml_app: 'test', integration: 'openai' },
+        })
+      })
+
+      it('submits a streamed response span with web search tool usage', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        const stream = await openai.responses.create({
+          model: 'gpt-4.1-mini',
+          input: 'What was a positive news story from today? Answer in one sentence, streamed.',
+          tools: [{ type: 'web_search' }],
+          max_output_tokens: 200,
+          stream: true,
+        })
+
+        for await (const part of stream) {
+          assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
+        }
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'What was a positive news story from today? Answer in one sentence, streamed.' },
+          ],
+          outputMessages: [
+            { role: 'assistant', content: '' },
+            { role: 'assistant', content: MOCK_STRING },
+          ],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0,
+            cache_write_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            web_search_count: 1,
+          },
+          modelName: 'gpt-4.1-mini-2025-04-14',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 200,
+            temperature: 1,
+            top_p: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            stream: true,
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })

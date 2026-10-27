@@ -3,6 +3,57 @@
 // Playwright keeps several hook targets in private local classes/functions.
 // Keep these rewrites limited to bundled internals that addHook cannot wrap.
 module.exports = [
+  ...[
+    ['>=1.38.0 <1.60.0', 'lib/common/config.js'],
+    ['>=1.60.0', 'lib/common/index.js'],
+  ].map(([versionRange, filePath]) => ({
+    module: { name: 'playwright', versionRange, filePath },
+    functionQuery: { className: 'FullProjectInternal', methodName: 'constructor', kind: 'Sync' },
+    channelName: 'FullProjectInternal',
+  })),
+  {
+    module: {
+      name: '@playwright/test',
+      versionRange: '>=1.18.0 <1.38.0',
+      filePath: 'lib/reporters/multiplexer.js',
+    },
+    functionQuery: {
+      className: 'Multiplexer',
+      methodName: 'onError',
+      kind: 'Sync',
+    },
+    channelName: 'Multiplexer_onError',
+  },
+  {
+    module: {
+      name: 'playwright',
+      versionRange: '>=1.44.0 <1.60.0',
+      filePath: 'lib/runner/runner.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="writeLastRunInfo"] ' +
+      'CallExpression[callee.property.name="map"] > ArrowFunctionExpression',
+    channelName: 'lastRunTestId',
+  },
+  {
+    module: {
+      name: 'playwright',
+      versionRange: '>=1.44.0 <1.60.0',
+      filePath: 'lib/runner/lastRun.js',
+    },
+    astQuery: 'ClassDeclaration[id.name="LastRunReporter"] ' +
+      'CallExpression[callee.property.name="map"] > ArrowFunctionExpression',
+    channelName: 'lastRunTestId',
+  },
+  {
+    module: {
+      name: 'playwright',
+      versionRange: '>=1.60.0',
+      filePath: 'lib/runner/index.js',
+    },
+    astQuery: 'VariableDeclarator[id.name="LastRunReporter"] ' +
+      'CallExpression[callee.property.name="map"] > ArrowFunctionExpression',
+    channelName: 'lastRunTestId',
+  },
   {
     module: {
       name: 'playwright',

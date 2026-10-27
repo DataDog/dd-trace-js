@@ -1,0 +1,12 @@
+_v: 1
+name: openai-agents
+display_name: OpenAI Agents SDK
+description: Instruments OpenAI Agents SDK workflows, agent execution, tool calls, handoffs, guardrails, custom
+  operations, and model generations, with context propagation and optional LLM Observability annotations.
+packages:
+- name: '@openai/agents'
+category:
+- gen_ai
+systems:
+- openai
+creation_date: '2026-07-23'

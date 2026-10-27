@@ -107,6 +107,13 @@ function isCollectable (scope) {
  */
 
 /**
+ * @typedef {object} RedactedCaptureExpression
+ * @property {string} name - The name of the expression
+ * @property {{ expr: string, message: string }} redactionError - Reported instead of evaluating the expression, as it
+ *   reads a redacted identifier
+ */
+
+/**
  * @typedef {object} CaptureExpressionResult
  * @property {() => Record<string, ReturnType<typeof processRemoteObject>>} processCaptureExpressions - Callback to
  *   process raw data into snapshot format
@@ -116,6 +123,7 @@ function isCollectable (scope) {
  * @property {import('./processor').IncompleteCapture} incomplete - The capture limits enforced on the expressions,
  *   including a runtime error for every expression that threw or could not be evaluated. Only fully populated once
  *   `processCaptureExpressions` has run.
+ * @property {boolean} timedOut - Whether evaluating an expression exceeded the evaluation time budget
  */
 
 /**
@@ -130,12 +138,20 @@ function isCollectable (scope) {
  * Collects raw data while paused, returns a callback to process after resume.
  *
  * @param {import('inspector').Debugger.CallFrame} callFrame - The call frame to evaluate expressions on
- * @param {CompiledCaptureExpression[]} expressions - The compiled expressions with precomputed capture limits
+ * @param {(CompiledCaptureExpression|RedactedCaptureExpression)[]} expressions - The compiled expressions with
+ *   precomputed capture limits
  * @param {bigint} [deadlineNs] - The deadline in nanoseconds. Defaults to {@link BIGINT_MAX}. If the deadline is
  *   reached, the snapshot will be truncated.
+ * @param {bigint} [evaluationTimeoutNs] - The time budget in nanoseconds for evaluating a single expression. Defaults
+ *   to {@link BIGINT_MAX}. Evaluation can't be interrupted, so an exceeded budget is reported as an evaluation error.
  * @returns {Promise<CaptureExpressionResult>} Raw results with deferred processing callback
  */
-async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = BIGINT_MAX) {
+async function evaluateCaptureExpressions (
+  callFrame,
+  expressions,
+  deadlineNs = BIGINT_MAX,
+  evaluationTimeoutNs = BIGINT_MAX
+) {
   /** @type {{ name: string, remoteObject: object, maxLength: number }[]} */
   const rawResults = []
   /** @type {{ expr: string, message: string }[]} */
@@ -146,12 +162,20 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
   const incomplete = { reasons: 0 }
   /** @type {Record<string, ReturnType<typeof processRemoteObject>> | null} */
   let processedResult = null
+  let timedOut = false
 
   for (let i = 0; i < expressions.length; i++) {
-    const { name, expression, limits } = expressions[i]
+    const captureExpression = expressions[i]
+    if ('redactionError' in captureExpression) {
+      evaluationErrors.push(captureExpression.redactionError)
+      continue
+    }
+
+    const { name, expression, limits } = captureExpression
     const { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength } = limits
 
     try {
+      const evaluationStart = process.hrtime.bigint()
       const { result, exceptionDetails } = /** @type {EvaluateOnCallFrameResult} */ (
         // eslint-disable-next-line no-await-in-loop
         await session.post('Debugger.evaluateOnCallFrame', {
@@ -159,6 +183,13 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
           expression,
         })
       )
+      if (process.hrtime.bigint() - evaluationStart > evaluationTimeoutNs) {
+        timedOut = true
+        evaluationErrors.push({
+          expr: name,
+          message: `Expression evaluation exceeded its time budget of ${evaluationTimeoutNs / 1_000_000n}ms`,
+        })
+      }
 
       // Handle evaluation exceptions (maybe transient - bad expression, undefined var, etc.)
       if (exceptionDetails) {
@@ -197,10 +228,16 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
           // and are recorded when processed, unless they end up redacted.
           rawResults.push({ name, remoteObject: result, maxLength })
           // Add stub entries for remaining uncaptured expressions. The stubs are used as-is, so record them here.
-          if (i + 1 < expressions.length) incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
+          // Redacted expressions are never evaluated, so they are reported the same way as without a timeout.
           for (let j = i + 1; j < expressions.length; j++) {
+            const remaining = expressions[j]
+            if ('redactionError' in remaining) {
+              evaluationErrors.push(remaining.redactionError)
+              continue
+            }
+            incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
             rawResults.push({
-              name: expressions[j].name,
+              name: remaining.name,
               remoteObject: { notCapturedReason: 'timeout' },
               maxLength: 0,
             })
@@ -238,6 +275,7 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
     evaluationErrors,
     fatalErrors,
     incomplete,
+    timedOut,
   }
 }
 

@@ -8,7 +8,7 @@ const {
 } = require('../../constants/tags')
 const { audioMimeTypeFromFormat, formatAudioPart } = require('../../audio-utils')
 const { safeJsonParse } = require('../../util')
-const { AUDIO_MIME_TYPES } = require('./constants')
+const { AUDIO_MIME_TYPES, IMAGE_FALLBACK, INPUT_TYPE_IMAGE } = require('./constants')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
@@ -16,6 +16,7 @@ const {
   extractContentParts,
   hasMultimodalInputs,
   getModelProviderAndClient,
+  getServerToolUsageMetrics,
 } = require('./utils')
 
 const allowedParamKeys = new Set([
@@ -74,6 +75,19 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    const response = ctx.result?.data
+
+    return {
+      // the response model is the resolved one, e.g. the dated version behind an alias
+      modelName: response?.model,
+      metrics: response && this._extractMetrics(response),
+    }
+  }
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     const resource = ctx.methodName
@@ -81,8 +95,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     if (!methodName) return // we will not trace all openai methods for llmobs
 
     const inputs = ctx.args[0] // completion, chat completion, and embeddings take one argument
-    const response = ctx.result?.data // no result if error
-    const error = !!span.context().getTag('error')
+    const response = ctx.result?.data // no result if error, or if a stream ended before any response arrived
+    const error = !!span.context().getTag('error') || response == null
 
     const operation = getOperation(methodName)
 
@@ -94,6 +108,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       this._tagEmbedding(span, inputs, response, error)
     } else if (operation === 'response') {
       this.#tagResponse(span, inputs, response, error)
+    } else if (operation === 'decision') {
+      this.#tagDecision(span, inputs, response, error)
     }
 
     if (!error) {
@@ -135,18 +151,28 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
         // Responses API - always include
         const cacheReadTokens = tokenUsage.input_tokens_details.cached_tokens
         if (cacheReadTokens !== undefined) metrics.cacheReadTokens = cacheReadTokens
+        const cacheWriteTokens = tokenUsage.input_tokens_details.cache_write_tokens
+        if (cacheWriteTokens != null) metrics.cacheWriteTokens = cacheWriteTokens
+        // Cache writes are billed at a different rate per TTL
+        const cacheWriteDetails = tokenUsage.input_tokens_details.cache_write_tokens_details
+        if (cacheWriteDetails?.ttl_30m_tokens != null) metrics.cacheWrite30mTokens = cacheWriteDetails.ttl_30m_tokens
+        if (cacheWriteDetails?.ttl_12h_tokens != null) metrics.cacheWrite12hTokens = cacheWriteDetails.ttl_12h_tokens
       } else if (tokenUsage.prompt_tokens_details) {
         // Chat/Completions API - only include if > 0
         const cacheReadTokens = tokenUsage.prompt_tokens_details.cached_tokens
         if (cacheReadTokens != null) {
           metrics.cacheReadTokens = cacheReadTokens
         }
+        const cacheWriteTokens = tokenUsage.prompt_tokens_details.cache_write_tokens
+        if (cacheWriteTokens != null) metrics.cacheWriteTokens = cacheWriteTokens
       }
       // Reasoning tokens - Responses API returns `output_tokens_details`, `completion_tokens_details`
       const reasoningOutputObject = tokenUsage.output_tokens_details ?? tokenUsage.completion_tokens_details
       const reasoningOutputTokens = reasoningOutputObject?.reasoning_tokens ?? 0
       if (reasoningOutputTokens !== undefined) metrics.reasoningOutputTokens = reasoningOutputTokens
     }
+
+    Object.assign(metrics, getServerToolUsageMetrics(response))
 
     return metrics
   }
@@ -451,6 +477,30 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     this._tagger.tagMetadata(span, outputMetadata) // update the metadata with the output metadata
   }
+
+  #tagDecision (span, inputs, response, error) {
+    const { input, questions } = inputs
+
+    const inputMessages = typeof input === 'string'
+      ? [{ role: 'user', content: input }]
+      : (Array.isArray(input) ? input : []).map(message => ({
+          role: message.role ?? 'user',
+          content: decisionMessageContent(message.content),
+        }))
+
+    if (Array.isArray(questions)) {
+      this._tagger.tagMetadata(span, { questions })
+    }
+
+    if (error) {
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
+      return
+    }
+
+    this._tagger.tagLLMIO(span, inputMessages, [
+      { role: 'assistant', content: JSON.stringify(response.answers ?? []) },
+    ])
+  }
 }
 
 // TODO: this will be moved to the APM integration
@@ -472,13 +522,28 @@ function normalizeOpenAIResourceName (resource) {
     case 'responses.create':
       return 'createResponse'
 
+    // decisions
+    case 'decisions.create':
+      return 'createDecision'
+
     default:
       return resource
   }
 }
 
+// Decision images must be inline data URLs, so they are replaced with a marker instead of copied onto the span
+function decisionMessageContent (content) {
+  if (!Array.isArray(content)) return content ?? ''
+
+  return content
+    .map(part => (part?.type === INPUT_TYPE_IMAGE ? IMAGE_FALLBACK : part?.text ?? ''))
+    .filter(Boolean)
+    .join('\n')
+}
+
 function gateResource (resource) {
-  return ['createCompletion', 'createChatCompletion', 'createEmbedding', 'createResponse'].includes(resource)
+  return ['createCompletion', 'createChatCompletion', 'createEmbedding', 'createResponse', 'createDecision']
+    .includes(resource)
     ? resource
     : undefined
 }
@@ -493,6 +558,8 @@ function getOperation (resource) {
       return 'embedding'
     case 'createResponse':
       return 'response'
+    case 'createDecision':
+      return 'decision'
     default:
       // should never happen
       return 'unknown'

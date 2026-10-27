@@ -1,23 +1,37 @@
 'use strict'
 
-const { AUTO_REJECT } = require('../../../ext/priority')
+const { AUTO_KEEP, AUTO_REJECT } = require('../../../ext/priority')
 const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
-const { APM_TRACING_ENABLED_KEY } = require('./constants')
+const TraceState = require('./opentracing/propagation/tracestate')
+const { APM_TRACING_ENABLED_KEY, SDK_OTLP_EXPORT_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
+let otelSampling
+
+/** @param {import('./opentracing/span_context')} context */
+function serializeOtlpTraceState (context) {
+  const traceState = context._tracestate?.clone() ?? new TraceState()
+  otelSampling ??= require('./otel-sampling')
+  otelSampling.updateOtelTraceState(context, traceState)
+  return traceState.toString()
+}
+
 class SpanProcessor {
-  constructor (exporter, prioritySampler, config, otlpStatsExporter) {
+  #exportOtlpTraces
+
+  constructor (exporter, prioritySampler, config, otlpStatsExporter, exportOtlpTraces) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
+    this.#exportOtlpTraces = exportOtlpTraces
 
     if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
         !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
@@ -31,6 +45,7 @@ class SpanProcessor {
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
+    this._nativeExport = config.OTEL_TRACES_EXPORTER !== 'otlp'
   }
 
   sample (span) {
@@ -71,14 +86,24 @@ class SpanProcessor {
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
       const discard = this.#isDiscarded(spanContext)
+      const exportOtlpTraces = this.#exportOtlpTraces && !(spanContext._sampling.priority < AUTO_KEEP)
+      let traceState
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else if (!discard) {
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          if (exportOtlpTraces) {
+            traceState ??= serializeOtlpTraceState(spanContext)
+            formattedSpan.trace_state = traceState
+          }
           if (stampApmDisabled) {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
+          }
+          // Stamped after formatting so a span tag with the same key can't override it.
+          if (isFirstSpanInChunk && this._nativeExport) {
+            formattedSpan.meta[SDK_OTLP_EXPORT_KEY] = 'false'
           }
           isFirstSpanInChunk = false
           // Span stats read Datadog HTTP tag names from the formatted span, so

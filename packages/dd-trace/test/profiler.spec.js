@@ -1,8 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { EventEmitter } = require('node:events')
 
-const { before, beforeEach, describe, it } = require('mocha')
+const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -24,13 +25,17 @@ describe('profiler', () => {
     // profiler.js subscribes to the shared config-update channel once at module load, like it
     // would in production, so it is proxyquired once for the whole suite rather than per test.
     profilingModule = {
-      profiler: {
+      // The real profiler is an EventEmitter that announces a settled shutdown, and profiler.js
+      // subscribes to that when it first loads the profiling layer.
+      profiler: Object.assign(new EventEmitter(), {
         enabled: false,
+        stopping: false,
+        isStopping () { return this.stopping },
         start: sinon.stub(),
         stop: sinon.stub(),
         setCustomLabelKeys: sinon.spy(),
         runWithLabels: sinon.stub().callsFake((labels, fn) => fn()),
-      },
+      }),
     }
 
     FakeSSIHeuristics = sinon.stub().callsFake((config) => {
@@ -130,39 +135,6 @@ describe('profiler', () => {
 
       sinon.assert.calledOnce(profilingModule.profiler.stop)
       assert.strictEqual(profiler.isStarted(), false)
-    })
-
-    it('cancels a queued restart when disabled again before shutdown settles', () => {
-      let stopping = false
-      let pendingStart = false
-      profilingModule.profiler.start.callsFake(() => {
-        if (stopping) {
-          pendingStart = true
-          return true
-        }
-        profilingModule.profiler.enabled = true
-        return true
-      })
-      profilingModule.profiler.stop.callsFake(() => {
-        pendingStart = false
-        if (!profilingModule.profiler.enabled) return
-        stopping = true
-        profilingModule.profiler.enabled = false
-      })
-
-      publishConfig('true')
-      publishConfig('false')
-      publishConfig('true')
-      publishConfig('false')
-
-      // Model the shutdown export settling. The last false publish must have canceled the start
-      // queued by the intervening true publish.
-      stopping = false
-      if (pendingStart) profilingModule.profiler.start({})
-
-      sinon.assert.calledTwice(profilingModule.profiler.start)
-      sinon.assert.calledTwice(profilingModule.profiler.stop)
-      assert.strictEqual(profilingModule.profiler.enabled, false)
     })
 
     it('logs and does not propagate when stopping the profiler throws', () => {
@@ -296,6 +268,109 @@ describe('profiler', () => {
 
       assert.strictEqual(profiler.isStarted(), false)
       sinon.assert.calledOnce(log.error)
+    })
+  })
+
+  describe('shutdown in flight', () => {
+    // A stop() keeps exporting one final profile after the profiler has gone quiet. During that
+    // window the real profiler refuses to start, so the fakes model both halves of it.
+    beforeEach(() => {
+      profilingModule.profiler.start.callsFake(() => {
+        if (profilingModule.profiler.stopping) {
+          throw new Error('Cannot start the profiler while a shutdown collection is still in flight')
+        }
+        profilingModule.profiler.enabled = true
+        return true
+      })
+      profilingModule.profiler.stop.callsFake(() => {
+        if (!profilingModule.profiler.enabled) return
+        profilingModule.profiler.enabled = false
+        profilingModule.profiler.stopping = true
+      })
+    })
+
+    afterEach(() => {
+      profilingModule.profiler.stopping = false
+    })
+
+    function settleShutdown () {
+      profilingModule.profiler.stopping = false
+      profilingModule.profiler.emit('stopped')
+      // Deferring must keep the coordinator from ever attempting a start the profiler would
+      // refuse; the coordinator's start() would log that refusal as an error.
+      sinon.assert.notCalled(log.error)
+    }
+
+    it('applies a start published during the shutdown once it has settled', () => {
+      publishConfig('true')
+      publishConfig('false')
+      publishConfig('true')
+
+      sinon.assert.calledOnce(profilingModule.profiler.start)
+      assert.strictEqual(profiler.isStarted(), false)
+
+      settleShutdown()
+
+      sinon.assert.calledTwice(profilingModule.profiler.start)
+      assert.strictEqual(profiler.isStarted(), true)
+    })
+
+    it('applies only the last configuration published during the shutdown', () => {
+      publishConfig('true')
+      publishConfig('false')
+      publishConfig('true')
+      publishConfig('false')
+
+      settleShutdown()
+
+      sinon.assert.calledOnce(profilingModule.profiler.start)
+      assert.strictEqual(profiler.isStarted(), false)
+    })
+
+    it('hands a start published during the shutdown back to the heuristics when auto follows it', () => {
+      publishConfig('true')
+      publishConfig('false')
+      publishConfig('true')
+      publishConfig('auto')
+
+      sinon.assert.notCalled(FakeSSIHeuristics)
+
+      settleShutdown()
+
+      // The intervening 'true' must not survive the 'auto' that superseded it: the start decision
+      // belongs to the heuristics again.
+      sinon.assert.calledOnce(profilingModule.profiler.start)
+      sinon.assert.calledOnce(FakeSSIHeuristics)
+      assert.strictEqual(profiler.isStarted(), false)
+
+      ssiHeuristics.triggeredCallback()
+
+      sinon.assert.calledTwice(profilingModule.profiler.start)
+      assert.strictEqual(profiler.isStarted(), true)
+    })
+
+    it('retracts the deferred configuration when the profiler is stopped explicitly', () => {
+      publishConfig('true')
+      publishConfig('false')
+      publishConfig('true')
+
+      // e.g. the beforeExit handler, which supersedes anything published earlier
+      profiler.stop()
+      settleShutdown()
+
+      sinon.assert.calledOnce(profilingModule.profiler.start)
+      assert.strictEqual(profiler.isStarted(), false)
+    })
+
+    it('makes no decision when a shutdown settles with nothing published during it', () => {
+      publishConfig('true')
+      publishConfig('false')
+
+      settleShutdown()
+
+      sinon.assert.calledOnce(profilingModule.profiler.start)
+      sinon.assert.notCalled(FakeSSIHeuristics)
+      assert.strictEqual(profiler.isStarted(), false)
     })
   })
 

@@ -41,32 +41,62 @@ shimmer is still necessary, leave a code comment naming the reason.
 
 ```text
 packages/datadog-instrumentations/src/
-├── <name>.js                                 # Hooks file — triggers the rewriter
-└── helpers/
-    ├── hooks.js                              # Add: '<name>': () => require('../<name>')
-    └── rewriter/
-        └── instrumentations/
-            ├── index.js                      # Add: ...require('./<name>')
-            └── <name>.js                     # The config array
+└── helpers/rewriter/
+    ├── instrumentation-registry.js            # Add the config group and optional activation flag or config
+    └── instrumentations/<name>.js             # The config array
 ```
 
 Add to `transforms.js` only when the built-in operators cannot express the
 required lifecycle.
 
-Hooks file (`src/<name>.js`):
+Pure Orchestrion integrations are discovered from their rewrite targets and publish plugin activation from successfully
+rewritten source when the module is evaluated. They do not need an identity instrumentation file or `hooks.js` entry.
+Hybrid integrations still need both when export modification complements source rewriting. Pure
+integrations report compatibility at the rewrite-target level when an exact target is evaluated, so loading other files
+from the same package is not reported. Bundler rewrites keep their existing activation path and do not report this
+compatibility telemetry.
+
+Register a pure integration by adding its config and a config-registry entry with `activate: true`, then run
+`npm run generate:rewriter:targets`. Generated targets control runtime and bundler discovery; `activate` controls
+evaluation-time plugin activation and covers every rewrite target in the entry. Omitting `activate` makes the entry
+rewrite-only.
 
 ```javascript
-'use strict'
-
-const { addHook, getHooks } = require('./helpers/instrument')
-
-for (const hook of getHooks('<npm-package>').values()) {
-  addHook(hook, exports => exports)
+{
+  activate: true,
+  instrumentations: require('./instrumentations/bullmq'),
 }
 ```
 
-`getHooks` reads the config and registers `addHook` entries so the rewriter
-runs on the matched files. Without this file the rewriter is never triggered.
+When an entry also rewrites helper packages that must not trigger activation, name the packages that should:
+
+```javascript
+{
+  activate: { modules: ['@wdio/cli', '@wdio/local-runner', 'webdriverio'] },
+  instrumentations: require('./instrumentations/webdriverio'),
+}
+```
+
+Listed modules must be unique, non-empty package names with rewrite descriptors in the same entry. Under
+`activate: true` a newly added descriptor also activates its package, so prefer the explicit list for entries
+spanning several packages.
+
+For runtime subscribers, add a synchronous setup callback:
+
+```javascript
+{
+  activate: { setup: activation => require('../../<name>').recordVersion(activation) },
+  instrumentations: require('./instrumentations/<name>'),
+}
+```
+
+For subscriber-only setup without metadata, use `setup: () => require('../../<name>')`. Setup runs before each plugin
+activation, receives `{ moduleName, version }` (version may be undefined), and its return value is ignored. Do not
+turn it into a once-per-group callback: a later package activation may supply additional metadata. Module caching
+loads top-level subscribers once. The setup file must not call `addHook`, load rewrite targets, or depend on
+subscriber order relative to plugins. Re-entrant activation using the same setup callback is blocked until it
+returns. A throwing setup permanently prevents activation for every package sharing that callback. Conflicting
+setup callbacks for one package are rejected.
 
 ## Config Schema
 
@@ -283,13 +313,12 @@ directly.
 ## Reference Implementations
 
 - **Langchain** (multi-method, CompositePlugin): config
-  `helpers/rewriter/instrumentations/langchain.js`, hooks `src/langchain.js`,
+  `helpers/rewriter/instrumentations/langchain.js`,
   plugin `packages/datadog-plugin-langchain/src/tracing.js`.
 - **LangGraph** (`returnKind: 'AsyncIterator'`):
   `helpers/rewriter/instrumentations/langgraph.js` and
   `packages/datadog-plugin-langgraph/src/stream.js`.
 - **graphql** (`functionName` + `Sync`, and why per-field resolve hooks are
   *not* done via orchestrion): `helpers/rewriter/instrumentations/graphql.js`.
-- **BullMQ** (single package): config
-  `helpers/rewriter/instrumentations/bullmq.js`, hooks `src/bullmq.js`.
+- **BullMQ** (single package): config `helpers/rewriter/instrumentations/bullmq.js`.
 - **Custom transform**: `helpers/rewriter/transforms.js` (`waitForAsyncEnd`).

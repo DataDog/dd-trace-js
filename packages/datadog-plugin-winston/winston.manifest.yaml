@@ -1,0 +1,11 @@
+_v: 1
+name: winston
+display_name: Winston
+description: Instruments Winston log records for trace and service metadata correlation and optional automatic log
+  submission.
+packages:
+- name: winston
+category:
+- log.emission
+systems: []
+creation_date: '2019-02-06'

@@ -274,16 +274,12 @@ class SamplingRule {
    * Determines whether a span should be sampled based on the configured sampling rule.
    *
    * @param {DatadogSpan|DatadogSpanContext} span - The span or span context to evaluate.
+   * @param {boolean} [distinguishRateLimit] Return `undefined` instead of `false` for a rate-limit rejection.
    */
-  sample (span) {
-    if (!this._sampler.isSampled(span)) {
-      return false
-    }
+  sample (span, distinguishRateLimit = false) {
+    if (!this._sampler.isSampled(span)) return false
 
-    if (this._limiter) {
-      return this._limiter.isAllowed()
-    }
-
+    if (this._limiter && !this._limiter.isAllowed()) return distinguishRateLimit ? undefined : false
     return true
   }
 }

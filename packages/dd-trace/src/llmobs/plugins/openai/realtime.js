@@ -155,6 +155,11 @@ class RealtimeLLMObsPlugin extends LLMObsPlugin {
   static integration = 'openai'
   static system = 'openai'
 
+  // The instrumentation retains a turn's audio only while these plugins are subscribed, and only
+  // the LLM Observability payload reads those bytes. Staying subscribed for the `gen_ai.*` tags
+  // alone would buffer megabytes per turn for no consumer, so realtime opts out.
+  static emitsGenAiApmTags = false
+
   /**
    * The instrumentation replays the turn with `traceSync`, which never publishes `asyncEnd`, so tag
    * on `end` instead — before the sibling tracing plugin's `end` finishes the span, since the LLM

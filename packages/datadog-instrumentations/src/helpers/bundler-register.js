@@ -4,7 +4,7 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const log = require('../../../dd-trace/src/log')
-const { loadChannel } = require('./register.js')
+const { activate, loadChannel } = require('./register.js')
 const {
   filename,
   getDisabledInstrumentations,
@@ -13,6 +13,7 @@ const {
 } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
+const { isRewriteActivationEnabled } = require('./rewriter/targets')
 const disabledInstrumentations = getDisabledInstrumentations()
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
@@ -93,6 +94,11 @@ dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
   if (disabledInstrumentations.has(name)) return
+
+  if (payload.activate && isRewriteActivationEnabled(name)) {
+    activate(name, payload.version)
+    return
+  }
 
   const isPrefixedWithNode = name.startsWith('node:')
   const isNodeModule = isPrefixedWithNode || !hooks[name]

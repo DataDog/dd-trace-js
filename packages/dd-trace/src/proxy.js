@@ -6,6 +6,7 @@ const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
 const { getEnvironmentVariable } = require('./config/helper')
+const { reseed } = require('./id')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager, startupLog } = require('./startup-log')
@@ -234,8 +235,7 @@ class Tracer extends NoopProxy {
         })
 
         rc.setProductHandler('AGENT_TASK', (action, conf) => {
-          if (action === 'unapply' || !conf) return
-          if (conf.task_type !== 'tracer_flare' || !conf.args) return
+          if (action === 'unapply' || !conf || conf.task_type !== 'tracer_flare' || !conf.args) return
 
           this._flare.enable(config)
           this._flare.module.send(conf.args)
@@ -246,7 +246,7 @@ class Tracer extends NoopProxy {
           appsecRemoteConfig.enable(rc, config, this._modules.appsec)
         }
 
-        if (config.dynamicInstrumentation.enabled) {
+        if (config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED) {
           getDynamicInstrumentation().start(config, rc)
         }
 
@@ -353,6 +353,7 @@ class Tracer extends NoopProxy {
       if (request.method === 'POST' && request.url === '/aws/lambda-microvms/runtime/v1/run') {
         ch.unsubscribe(onHttpRequest)
         drainUuidPool()
+        reseed()
         channel('datadog:identity:update').publish(config)
         if (this._tracingInitialized) {
           const storeTracerMetadata = require('./tracer_metadata')
@@ -420,7 +421,8 @@ class Tracer extends NoopProxy {
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
-        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
+          () => this.openfeature)
 
         if (config.aiguard.DD_AI_GUARD_ENABLED) {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
@@ -462,7 +464,7 @@ class Tracer extends NoopProxy {
    * @param {object} rc - The RemoteConfig instance
    */
   #updateDebugger (config, rc) {
-    const shouldBeEnabled = config.dynamicInstrumentation.enabled
+    const shouldBeEnabled = config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED
     if (!shouldBeEnabled && dynamicInstrumentation === undefined) return
 
     const DynamicInstrumentation = getDynamicInstrumentation()

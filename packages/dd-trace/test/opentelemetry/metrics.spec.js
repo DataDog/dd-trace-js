@@ -382,10 +382,16 @@ describe('OpenTelemetry Meter Provider', () => {
         })
         assert.strictEqual(attrs['service.name'], 'custom')
         assert.strictEqual(attrs['service.version'], '2.0.0')
+        assert.strictEqual(attrs['deployment.environment.name'], 'production')
         assert(attrs['host.name'], 'should include host.name')
       })
 
-      setupMetrics({ DD_SERVICE: 'custom', DD_VERSION: '2.0.0', DD_TRACE_REPORT_HOSTNAME: 'true' })
+      setupMetrics({
+        DD_SERVICE: 'custom',
+        DD_VERSION: '2.0.0',
+        DD_ENV: 'production',
+        DD_TRACE_REPORT_HOSTNAME: 'true',
+      })
       const meter = metrics.getMeter('app')
       meter.createCounter('test').add(1)
 

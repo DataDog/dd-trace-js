@@ -69,6 +69,7 @@ const earlyLoadFrameworks = new Map([
  */
 module.exports.checkForRequiredModules = function () {
   const packages = require('./hooks')
+  const { isRewriteTargetName } = require('./rewriter/targets')
   const naughties = new Set()
   const frameworksSeen = new Set()
   let didWarn = false
@@ -98,7 +99,7 @@ module.exports.checkForRequiredModules = function () {
       continue
     }
 
-    if (naughties.has(pkg) || !(pkg in packages)) continue
+    if (naughties.has(pkg) || (!(pkg in packages) && !isRewriteTargetName(pkg))) continue
 
     loadOrderWarnings.push(
       () => `Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`
@@ -131,8 +132,7 @@ module.exports.checkForPotentialConflicts = function () {
 
   for (const pathToModule of Object.keys(require.cache)) {
     const { pkg } = extractPackageAndModulePath(pathToModule)
-    if (naughties.has(pkg)) continue
-    if (!potentialConflicts.has(pkg)) continue
+    if (naughties.has(pkg) || !potentialConflicts.has(pkg)) continue
 
     warnings.push(() => `Warning: Package '${pkg}' may cause conflicts with dd-trace.`)
 

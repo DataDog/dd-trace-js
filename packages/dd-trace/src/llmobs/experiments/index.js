@@ -4,6 +4,8 @@ const log = require('../../log')
 const { ExperimentsClient } = require('./client')
 const { Dataset } = require('./dataset')
 const { Experiment, ExternalExperiment } = require('./experiment')
+const evaluatorTypes = require('./evaluator')
+const remoteEvaluatorTypes = require('./remote-evaluator')
 const { validateTagsList } = require('./util')
 const NoopExperiments = require('./noop')
 
@@ -38,6 +40,38 @@ class Experiments {
     this.#llmobs = config.llmobs?.DD_LLMOBS_ML_APP || config.service ? llmobs : undefined
     this.#projectName = config.llmobs?.DD_LLMOBS_PROJECT_NAME || DEFAULT_PROJECT_NAME
     this.#client = this.#clientForProject(this.#projectName)
+  }
+
+  get BaseEvaluator () {
+    return evaluatorTypes.BaseEvaluator
+  }
+
+  get BaseSummaryEvaluator () {
+    return evaluatorTypes.BaseSummaryEvaluator
+  }
+
+  get EvaluatorContext () {
+    return evaluatorTypes.EvaluatorContext
+  }
+
+  get SummaryEvaluatorContext () {
+    return evaluatorTypes.SummaryEvaluatorContext
+  }
+
+  get EvaluatorResult () {
+    return evaluatorTypes.EvaluatorResult
+  }
+
+  get MultiEvaluatorResult () {
+    return evaluatorTypes.MultiEvaluatorResult
+  }
+
+  get RemoteEvaluator () {
+    return remoteEvaluatorTypes.RemoteEvaluator
+  }
+
+  get RemoteEvaluatorError () {
+    return remoteEvaluatorTypes.RemoteEvaluatorError
   }
 
   /**
@@ -220,4 +254,9 @@ function createExperiments (config, llmobs) {
   return new Experiments(config, llmobs)
 }
 
-module.exports = { Experiments, createExperiments }
+module.exports = {
+  Experiments,
+  createExperiments,
+  ...evaluatorTypes,
+  ...remoteEvaluatorTypes,
+}

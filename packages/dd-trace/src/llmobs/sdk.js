@@ -7,6 +7,8 @@ const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
 const {
+  EXPERIMENT_INPUT,
+  EXPERIMENT_OUTPUT,
   SPAN_KIND,
   OUTPUT_VALUE,
   INPUT_VALUE,
@@ -27,10 +29,13 @@ const {
   getFunctionArguments,
   validateKind,
 } = require('./util')
+const { buildAgentDeclaration } = require('./agent-manifest')
+/** @typedef {import('./agent-manifest').AgentDeclaration} AgentDeclaration */
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
+const PromptManager = require('./prompts/manager')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -45,12 +50,17 @@ class LLMObs extends NoopLLMObs {
    */
   #hasUserSpanProcessor = false
 
+  #promptManager
+
+  #getOpenFeatureProvider
+
   /**
    * @param {import('../tracer')} tracer - Tracer instance
    * @param {import('./index')} llmobsModule - LLMObs module instance
    * @param {import('../config/config-base')} config - Tracer configuration
+   * @param {() => object} getOpenFeatureProvider - Lazy getter for the tracer's existing OpenFeature provider
    */
-  constructor (tracer, llmobsModule, config) {
+  constructor (tracer, llmobsModule, config, getOpenFeatureProvider = () => {}) {
     super(tracer)
 
     /** @type {import('../config/config-base')} */
@@ -58,6 +68,7 @@ class LLMObs extends NoopLLMObs {
 
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
+    this.#getOpenFeatureProvider = getOpenFeatureProvider
   }
 
   get enabled () {
@@ -71,6 +82,15 @@ class LLMObs extends NoopLLMObs {
    */
   get experiments () {
     return createExperiments(this._config, this)
+  }
+
+  /**
+   * Prompt Management API.
+   * @returns {import('../../../../index').llmobs.Prompts}
+   */
+  get prompts () {
+    this.#promptManager ??= new PromptManager(this._config, this.#getOpenFeatureProvider)
+    return this.#promptManager
   }
 
   enable (options = {}) {
@@ -282,15 +302,20 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions, agent } = options
 
-      if (inputData || outputData) {
+      const hasInputOrOutput = spanKind === 'experiment'
+        ? inputData !== undefined || outputData !== undefined
+        : inputData || outputData
+      if (hasInputOrOutput) {
         if (spanKind === 'llm') {
           this._tagger.tagLLMIO(span, inputData, outputData)
         } else if (spanKind === 'embedding') {
           this._tagger.tagEmbeddingIO(span, inputData, outputData)
         } else if (spanKind === 'retrieval') {
           this._tagger.tagRetrievalIO(span, inputData, outputData)
+        } else if (spanKind === 'experiment') {
+          this._tagger.tagExperimentIO(span, inputData, outputData)
         } else {
           this._tagger.tagTextIO(span, inputData, outputData)
         }
@@ -314,6 +339,15 @@ class LLMObs extends NoopLLMObs {
       }
       if (toolDefinitions != null) {
         this._tagger.tagToolDefinitions(span, toolDefinitions)
+      }
+      if (agent != null) {
+        if (spanKind === 'agent') {
+          this._tagger.tagAgent(span, agent)
+        } else {
+          logger.warn(
+            'Dropping agent annotation on non-agent span kind, annotating agents is only supported for agent spans.'
+          )
+        }
       }
     } catch (e) {
       if (e.ddErrorTag) {
@@ -579,14 +613,20 @@ class LLMObs extends NoopLLMObs {
   annotationContext (options, fn) {
     if (!this.enabled) return fn()
 
+    /** @type {{ annotationContext?: object, agentDeclarations?: AgentDeclaration[] } | undefined} */
     const currentStore = storage.getStore()
-
+    const { agent, ...contextOptions } = options ?? {}
+    /** @type {{ annotationContext: object, agentDeclarations?: AgentDeclaration[] }} */
     const store = {
       ...currentStore,
-      annotationContext: {
-        ...currentStore?.annotationContext,
-        ...options,
-      },
+      annotationContext: { ...currentStore?.annotationContext, ...contextOptions },
+    }
+
+    if (agent != null) {
+      const declaration = buildAgentDeclaration(agent)
+      // Outside `annotationContext`, whose keys come from the caller. Outermost first, so nested declarations fold
+      // onto the outer ones.
+      if (declaration) store.agentDeclarations = [...(currentStore?.agentDeclarations ?? []), declaration]
     }
 
     return storage.run(store, fn)
@@ -622,11 +662,20 @@ class LLMObs extends NoopLLMObs {
 
   #autoAnnotate (span, kind, input, output) {
     const annotations = {}
-    if (input && !['llm', 'embedding'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[INPUT_VALUE]) {
+    const spanTags = LLMObsTagger.tagMap.get(span)
+    const isExperiment = kind === 'experiment'
+    const inputKey = isExperiment ? EXPERIMENT_INPUT : INPUT_VALUE
+    const outputKey = isExperiment ? EXPERIMENT_OUTPUT : OUTPUT_VALUE
+    const hasInput = isExperiment ? input !== undefined : input
+    const hasOutput = isExperiment ? output !== undefined : output
+    const hasInputTag = spanTags !== undefined && Object.hasOwn(spanTags, inputKey)
+    const hasOutputTag = spanTags !== undefined && Object.hasOwn(spanTags, outputKey)
+
+    if (hasInput && !['llm', 'embedding'].includes(kind) && !hasInputTag) {
       annotations.inputData = input
     }
 
-    if (output && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
+    if (hasOutput && !['llm', 'retrieval'].includes(kind) && !hasOutputTag) {
       annotations.outputData = output
     }
 

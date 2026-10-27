@@ -7,6 +7,11 @@ import {
   getAllGreenOutcome,
   shouldRetryConclusion,
 } from './all-green-outcome.mjs'
+import {
+  hasPendingWorkflowRuns,
+  markWorkflowRunsForRetry,
+  mergeWorkflowRuns,
+} from './all-green-runs.mjs'
 import { downloadArtifacts } from './download-artifacts.mjs'
 import { logUploads, hasUploadFailed } from './run-upload.mjs'
 import { uploadAllJunit } from './upload-junit.mjs'
@@ -72,6 +77,7 @@ const staleFailureRunIds = new Set()
 // limit. workflow_runs are sorted newest first, so an unchanged first page is
 // a reliable proxy for "no changes since last poll".
 let runsCache
+let observedRuns = []
 
 async function getRuns () {
   try {
@@ -100,8 +106,9 @@ async function getRuns () {
       r.event === context.eventName &&
       (myPR == null || r.pull_requests?.some(pr => pr.number === myPR))
     )
-    runsCache = { etag, runs: filtered }
-    return filtered
+    observedRuns = mergeWorkflowRuns(observedRuns, filtered)
+    runsCache = { etag, runs: observedRuns }
+    return observedRuns
   } catch (err) {
     if (err.status === 304 && runsCache) return runsCache.runs
     throw err
@@ -199,8 +206,8 @@ async function pollUntilDone () {
     !retriedRunIds.has(r.id)
   )
 
-  const pending = runs.filter(r => r.status !== 'completed').length
-  if (pending === 0 && toRetry.length === 0) return { runs, done: true }
+  const pending = hasPendingWorkflowRuns(runs)
+  if (!pending && toRetry.length === 0) return { runs, done: true }
 
   retries++
 
@@ -208,8 +215,7 @@ async function pollUntilDone () {
 
   if (toRetry.length > 0) {
     await rerunFailedWorkflows(toRetry)
-    for (const run of toRetry) retriedRunIds.add(run.id)
-    runsCache = undefined
+    trackWorkflowRetries(toRetry)
   }
 
   console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
@@ -243,6 +249,14 @@ async function rerunFailedWorkflows (workflowRuns) {
   )
 }
 
+/** @param {Array<{ id: number }>} runs */
+function trackWorkflowRetries (runs) {
+  const startedRetryIds = new Set(runs.filter(run => !staleFailureRunIds.has(run.id)).map(run => run.id))
+  observedRuns = markWorkflowRunsForRetry(observedRuns, startedRetryIds)
+  for (const run of runs) retriedRunIds.add(run.id)
+  runsCache = undefined
+}
+
 async function rerunOnStartup () {
   if (RUN_ATTEMPT <= 1) return
   const runs = await getRuns()
@@ -253,8 +267,7 @@ async function rerunOnStartup () {
   if (toRerun.length > 0) {
     console.log(`Rerunning ${toRerun.length} failed workflow(s) before polling.`)
     await rerunFailedWorkflows(toRerun)
-    for (const run of toRerun) retriedRunIds.add(run.id)
-    runsCache = undefined
+    trackWorkflowRetries(toRerun)
     console.log(`Waiting for ${POLLING_INTERVAL} minutes before polling.`)
     await setTimeout(POLLING_INTERVAL * 60_000)
   }
@@ -339,7 +352,11 @@ async function checkAllGreen () {
   }
 
   if (outcome === 'success') {
-    console.log('All jobs were successful.')
+    if (process.exitCode) {
+      console.error('All workflows passed, but report processing failed. See the errors above.')
+    } else {
+      console.log('All jobs were successful.')
+    }
   } else {
     console.log('One or more jobs failed.')
     process.exitCode = 1

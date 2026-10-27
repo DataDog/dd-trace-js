@@ -14,6 +14,7 @@ const {
   matchesInstrumentation,
 } = require('./instrumentation-utils')
 const rewriter = require('./rewriter')
+const { getActivationSetup } = require('./rewriter/instrumentation-registry')
 
 const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG')
 
@@ -25,6 +26,7 @@ const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const disabledInstrumentations = getDisabledInstrumentations()
 
 const loadChannel = channel('dd-trace:instrumentation:load')
+const orchestrionLoadChannel = channel('dd-trace:instrumentation:load:orchestrion')
 
 // Globals
 if (!disabledInstrumentations.has('fetch')) {
@@ -55,6 +57,58 @@ const instrumentedNodeModules = new Map()
 const instrumentedIntegrationsSuccess = new Map()
 /** @type {Set<string>} */
 const alreadyLoggedIncompatibleIntegrations = new Set()
+/** @type {Set<string>} */
+const compatibleOrchestrionTargets = new Set()
+/** @type {Set<(activation: import('./rewriter/instrumentation-registry').Activation) => void>} */
+const blockedActivationSetups = new Set()
+
+/**
+ * @param {string} moduleName
+ * @param {string} [version]
+ */
+function activate (moduleName, version) {
+  const setup = getActivationSetup(moduleName)
+  if (setup) {
+    if (blockedActivationSetups.has(setup)) return
+    // Block re-entrant activation until setup completes, and never retry a failed setup.
+    blockedActivationSetups.add(setup)
+    try {
+      setup({ moduleName, version })
+      blockedActivationSetups.delete(setup)
+    } catch (error) {
+      const message = String(error?.message ?? error)
+      log.error('Error during activation setup of %s: %s', moduleName, message, error)
+      telemetry('error', [
+        `error_type:${error?.constructor?.name ?? typeof error}`,
+        `integration:${moduleName}`,
+        `integration_version:${version ?? 'unknown'}`,
+      ], {
+        result: 'error',
+        result_class: 'internal_error',
+        result_reason: `Error during activation of ${moduleName}: ${message}`,
+      })
+      return
+    }
+  }
+  loadChannel.publish({ name: moduleName })
+}
+
+orchestrionLoadChannel.subscribe(({ moduleName, version, result }) => {
+  const nameVersion = `${moduleName}@${version}`
+
+  if (result === 'unsupported') {
+    if (!compatibleOrchestrionTargets.has(nameVersion) && !instrumentedIntegrationsSuccess.has(nameVersion)) {
+      instrumentedIntegrationsSuccess.set(nameVersion, false)
+    }
+    return
+  }
+
+  if (result === 'matched' || result === 'rewritten') {
+    compatibleOrchestrionTargets.add(nameVersion)
+    instrumentedIntegrationsSuccess.set(nameVersion, true)
+    if (result === 'rewritten') activate(moduleName, version)
+  }
+})
 
 for (const name of names) {
   if (disabledInstrumentations.has(name)) continue
@@ -156,6 +210,7 @@ function logAbortedIntegrations () {
 }
 
 module.exports = {
+  activate,
   filename,
   pathSepExpr,
   loadChannel,

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const Module = require('node:module')
 
+const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
 
 const instrumentationUtils = require('../../src/helpers/instrumentation-utils')
@@ -97,9 +98,98 @@ describe('bundler register', () => {
     sinon.assert.calledOnceWithExactly(hook)
     sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-rewritten-integration' })
     sinon.assert.calledOnceWithExactly(integrationHook, undefined, '1.0.0')
+    sinon.assert.callOrder(hook, loadChannel.publish, integrationHook)
     sinon.assert.notCalled(duplicateHook)
     sinon.assert.notCalled(ordinaryHook)
     assert.equal(Object.hasOwn(payload, 'module'), false)
+  })
+
+  it('activates a hookless source-rewritten integration without loading a hook', () => {
+    const { loadChannel, log, publish } = loadBundlerRegister({
+      rewriteActivationEnabled: new Set(['test-hookless']),
+      hooks: {},
+      instrumentations: {},
+    })
+
+    publish({
+      activate: true,
+      package: 'test-hookless',
+      path: 'test-hookless/index.js',
+      version: '1.0.0',
+    })
+
+    sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-hookless' })
+    sinon.assert.notCalled(log.error)
+  })
+
+  it('passes metadata to activation setup before publishing for every bundled module in a group', () => {
+    const setup = sinon.stub()
+    const { activate, loadChannel, log, publish } = loadBundlerRegister({
+      rewriteActivationEnabled: new Set(['first', 'second']),
+      activationSetups: new Map([['first', setup], ['second', setup]]),
+      hooks: {},
+      instrumentations: {},
+    })
+
+    publish({ activate: true, package: 'first', version: '1.0.0' })
+    publish({ activate: true, package: 'second', version: '2.0.0' })
+    publish({ activate: true, package: 'first', version: '1.0.1' })
+
+    assert.deepStrictEqual(setup.args, [
+      [{ moduleName: 'first', version: '1.0.0' }],
+      [{ moduleName: 'second', version: '2.0.0' }],
+      [{ moduleName: 'first', version: '1.0.1' }],
+    ])
+    sinon.assert.callOrder(setup, loadChannel.publish)
+    assert.ok(setup.getCall(1).calledBefore(loadChannel.publish.getCall(1)))
+    assert.ok(setup.getCall(2).calledBefore(loadChannel.publish.getCall(2)))
+    assert.deepStrictEqual(activate.args, [['first', '1.0.0'], ['second', '2.0.0'], ['first', '1.0.1']])
+    assert.deepStrictEqual(loadChannel.publish.args,
+      [[{ name: 'first' }], [{ name: 'second' }], [{ name: 'first' }]])
+    sinon.assert.notCalled(log.error)
+  })
+
+  it('does not publish or retry bundled group activation when setup fails', () => {
+    const error = new Error('setup failed')
+    const setup = sinon.stub().throws(error)
+    const { loadChannel, log, publish, telemetry } = loadBundlerRegister({
+      rewriteActivationEnabled: new Set(['first', 'second']),
+      activationSetups: new Map([['first', setup], ['second', setup]]),
+      hooks: {},
+      instrumentations: {},
+    })
+
+    publish({ activate: true, package: 'first' })
+    publish({ activate: true, package: 'second' })
+    publish({ activate: true, package: 'first' })
+
+    sinon.assert.calledOnceWithExactly(setup, { moduleName: 'first', version: undefined })
+    sinon.assert.notCalled(loadChannel.publish)
+    sinon.assert.calledOnceWithExactly(log.error,
+      'Error during activation setup of %s: %s', 'first', 'setup failed', error)
+    sinon.assert.calledOnceWithExactly(telemetry, 'error', [
+      'error_type:Error', 'integration:first', 'integration_version:unknown',
+    ], {
+      result: 'error',
+      result_class: 'internal_error',
+      result_reason: 'Error during activation of first: setup failed',
+    })
+  })
+
+  it('does not activate a disabled hookless source-rewritten integration', () => {
+    const setup = sinon.stub()
+    const { loadChannel, publish } = loadBundlerRegister({
+      disabled: new Set(['test-hookless']),
+      rewriteActivationEnabled: new Set(['test-hookless']),
+      activationSetups: new Map([['test-hookless', setup]]),
+      hooks: {},
+      instrumentations: {},
+    })
+
+    publish({ activate: true, package: 'test-hookless' })
+
+    sinon.assert.notCalled(loadChannel.publish)
+    sinon.assert.notCalled(setup)
   })
 
   it('does not report activation-only integrations as missing export hooks', () => {
@@ -229,22 +319,51 @@ function throwValue (value) {
 /**
  * @param {{
  *   disabled?: Set<string>,
+ *   rewriteActivationEnabled?: Set<string>,
+ *   activationSetups?: Map<string, (activation: { moduleName: string, version?: string }) => void>,
  *   hooks: Record<string, Function|{ fn: Function }>,
  *   instrumentations: Record<string, Array<object>>
  * }} options
  */
-function loadBundlerRegister ({ disabled = new Set(), hooks, instrumentations }) {
+function loadBundlerRegister ({
+  disabled = new Set(),
+  rewriteActivationEnabled = new Set(),
+  activationSetups = new Map(),
+  hooks,
+  instrumentations,
+}) {
   const bundlerRegisterPath = require.resolve('../../src/helpers/bundler-register')
   const originalRequire = Module.prototype.require
   const loadChannel = { publish: sinon.stub() }
   const log = { error: sinon.stub() }
+  const telemetry = sinon.stub()
   const dc = {
     subscribe: (channel, callback) => {
       if (channel === CHANNEL) bundledModuleSubscriber = callback
     },
   }
   let bundledModuleSubscriber
-  const register = { loadChannel }
+  const register = proxyquire('../../src/helpers/register', {
+    './hooks': {},
+    './hook': sinon.stub(),
+    './instrumentations': {},
+    './instrumentation-utils': {
+      ...instrumentationUtils,
+      getDisabledInstrumentations: () => disabled,
+    },
+    './check-require-cache': { checkForRequiredModules: sinon.stub(), checkForPotentialConflicts: sinon.stub() },
+    './rewriter': { disable: sinon.stub() },
+    './rewriter/instrumentation-registry': { getActivationSetup: name => activationSetups.get(name) },
+    '../fetch': {},
+    '../process': {},
+    '../console': {},
+    '../../../dd-trace/src/log': log,
+    '../../../dd-trace/src/guardrails/telemetry': telemetry,
+    'dc-polyfill': {
+      channel: name => name === 'dd-trace:instrumentation:load' ? loadChannel : { subscribe: sinon.stub() },
+    },
+  })
+  const activate = sinon.spy(register, 'activate')
 
   Module.prototype.require = function (request) {
     if (this.filename === bundlerRegisterPath) {
@@ -255,6 +374,9 @@ function loadBundlerRegister ({ disabled = new Set(), hooks, instrumentations })
           getDisabledInstrumentations: () => disabled,
         },
         './instrumentations': instrumentations,
+        './rewriter/targets': {
+          isRewriteActivationEnabled: name => rewriteActivationEnabled.has(name),
+        },
         './register.js': register,
         '../../../dd-trace/src/log': log,
         'dc-polyfill': dc,
@@ -268,9 +390,11 @@ function loadBundlerRegister ({ disabled = new Set(), hooks, instrumentations })
   Module.prototype.require = originalRequire
 
   return {
+    activate,
     dc,
     loadChannel,
     log,
+    telemetry,
     publish: message => bundledModuleSubscriber(message),
   }
 }

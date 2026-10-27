@@ -27,6 +27,8 @@ const message = 'my-message'
 const logger = { logger: true }
 const dd = { dd: true }
 const snapshot = { snapshot: true, probe: { id: 'my-probe-id' } }
+const MAX_LOG_PAYLOAD_SIZE_BYTES = 1024 * 1024 - 4 * 1024 // Mirrors the limit in send.js
+
 describe('input message http requests', function () {
   /** @type {sinon.SinonFakeTimers} */
   let clock
@@ -376,6 +378,7 @@ describe('input message http requests', function () {
       // Recreated for each test since the pruning fallback mutates the snapshot in place
       largeSnapshot = {
         id: '123',
+        probe: { id: 'my-probe-id' },
         stack: [{ function: 'test' }],
         captures: {
           lines: {
@@ -394,9 +397,8 @@ describe('input message http requests', function () {
       sinon.assert.notCalled(pruneSnapshotStub)
     })
 
-    it('should attempt to prune if payload exceeds 1MB', function () {
-      const prunedJson = JSON.stringify(getPayload(message, largeSnapshot))
-      pruneSnapshotStub.returns(prunedJson)
+    it('should attempt to prune if payload exceeds the size limit', function () {
+      pruneSnapshotStub.returns(JSON.stringify(prunedPayload))
 
       send(message, logger, dd, largeSnapshot, undefined, EVENT_TYPE.LOG, 0)
 
@@ -404,7 +406,34 @@ describe('input message http requests', function () {
       const call = pruneSnapshotStub.getCall(0)
       assert.strictEqual(typeof call.args[0], 'string') // json
       assert.strictEqual(typeof call.args[1], 'number') // currentSize
-      assert.strictEqual(call.args[2], 1024 * 1024) // maxSize
+      assert.strictEqual(call.args[2], MAX_LOG_PAYLOAD_SIZE_BYTES) // maxSize
+    })
+
+    it('should not prune a payload exactly at the size limit', function () {
+      const atLimit = snapshotOfPayloadSize(MAX_LOG_PAYLOAD_SIZE_BYTES)
+
+      send(message, logger, dd, atLimit, undefined, EVENT_TYPE.SNAPSHOT, 0)
+
+      sinon.assert.notCalled(pruneSnapshotStub)
+      sinon.assert.calledOnceWithExactly(
+        jsonBufferWrite, payloadJsonOfSize(MAX_LOG_PAYLOAD_SIZE_BYTES), MAX_LOG_PAYLOAD_SIZE_BYTES
+      )
+      sinon.assert.notCalled(guardrailMetrics.captureIncomplete)
+    })
+
+    it('should prune a payload one byte over the size limit', function () {
+      const overLimit = snapshotOfPayloadSize(MAX_LOG_PAYLOAD_SIZE_BYTES + 1)
+      pruneSnapshotStub.returns(JSON.stringify(prunedPayload))
+
+      send(message, logger, dd, overLimit, undefined, EVENT_TYPE.SNAPSHOT, 0)
+
+      sinon.assert.calledOnce(pruneSnapshotStub)
+      const call = pruneSnapshotStub.getCall(0)
+      assert.strictEqual(call.args[1], MAX_LOG_PAYLOAD_SIZE_BYTES + 1) // currentSize
+      assert.strictEqual(call.args[2], MAX_LOG_PAYLOAD_SIZE_BYTES) // maxSize
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.captureIncomplete, INCOMPLETE_REASON.PAYLOAD_TOO_LARGE, EVENT_TYPE.SNAPSHOT
+      )
     })
 
     it('should use pruned snapshot if pruning succeeds', function () {
@@ -432,7 +461,7 @@ describe('input message http requests', function () {
       assert.strictEqual(written.message, message)
     })
 
-    it('should not throw if pruning fails for a snapshot without captures', function () {
+    it('should drop a snapshot without captures if pruning fails', function () {
       // Log probes don't capture anything, so there's nothing for the fallback to drop
       pruneSnapshotStub.returns(undefined)
       const logSnapshot = {
@@ -444,14 +473,10 @@ describe('input message http requests', function () {
       send(message, logger, dd, logSnapshot, undefined, EVENT_TYPE.LOG, 0)
 
       sinon.assert.calledOnce(pruneSnapshotStub)
-      sinon.assert.calledOnce(jsonBufferWrite)
-
-      const written = JSON.parse(jsonBufferWrite.getCall(0).args[0])
-
-      assert.deepStrictEqual(written.debugger.snapshot, logSnapshot)
-      assert.strictEqual(written.message, message)
+      sinon.assert.notCalled(jsonBufferWrite)
+      sinon.assert.notCalled(guardrailMetrics.captureIncomplete)
       sinon.assert.calledOnceWithExactly(
-        guardrailMetrics.captureIncomplete, INCOMPLETE_REASON.PAYLOAD_TOO_LARGE, EVENT_TYPE.LOG
+        guardrailMetrics.eventDropped, DROPPED_REASON.PAYLOAD_TOO_LARGE, EVENT_TYPE.LOG
       )
     })
 
@@ -474,6 +499,49 @@ describe('input message http requests', function () {
         guardrailMetrics.captureIncomplete,
         INCOMPLETE_REASON.DEPTH | INCOMPLETE_REASON.PAYLOAD_TOO_LARGE,
         EVENT_TYPE.SNAPSHOT
+      )
+    })
+
+    it('should send a pruned payload that is exactly at the size limit', function () {
+      const prunedJson = payloadJsonOfSize(MAX_LOG_PAYLOAD_SIZE_BYTES)
+      pruneSnapshotStub.returns(prunedJson)
+
+      send(message, logger, dd, largeSnapshot, undefined, EVENT_TYPE.SNAPSHOT, 0)
+
+      sinon.assert.calledOnceWithExactly(jsonBufferWrite, prunedJson, MAX_LOG_PAYLOAD_SIZE_BYTES)
+      sinon.assert.notCalled(guardrailMetrics.eventDropped)
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.captureIncomplete, INCOMPLETE_REASON.PAYLOAD_TOO_LARGE, EVENT_TYPE.SNAPSHOT
+      )
+    })
+
+    it('should drop a pruned payload that is one byte over the size limit', function () {
+      pruneSnapshotStub.returns(payloadJsonOfSize(MAX_LOG_PAYLOAD_SIZE_BYTES + 1))
+
+      send(message, logger, dd, largeSnapshot, undefined, EVENT_TYPE.SNAPSHOT, 0)
+
+      sinon.assert.notCalled(jsonBufferWrite)
+      sinon.assert.notCalled(guardrailMetrics.captureIncomplete)
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.eventDropped, DROPPED_REASON.PAYLOAD_TOO_LARGE, EVENT_TYPE.SNAPSHOT
+      )
+    })
+
+    it('should drop the event if it is still too large after the pruning fallback', function () {
+      // The pruner only replaces leaf nodes deep inside the snapshot and the fallback only drops captures, so bytes
+      // spent on the stack can keep the payload oversized no matter what either of them does
+      pruneSnapshotStub.returns(undefined)
+      const deepStackSnapshot = {
+        ...largeSnapshot,
+        stack: [{ function: 'x'.repeat(2 * 1024 * 1024) }],
+        captures: { lines: { 10: { locals: {} } } },
+      }
+
+      send(message, logger, dd, deepStackSnapshot, undefined, EVENT_TYPE.SNAPSHOT, 0)
+
+      sinon.assert.notCalled(jsonBufferWrite)
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.eventDropped, DROPPED_REASON.PAYLOAD_TOO_LARGE, EVENT_TYPE.SNAPSHOT
       )
     })
   })
@@ -604,6 +672,33 @@ function getPayload (_message = message, _snapshot = snapshot) {
 }
 
 /**
+ * Build a snapshot whose serialized payload is an exact size, by padding a single stack frame.
+ *
+ * @param {number} bytes - The size of the serialized payload in bytes
+ * @returns {object} - The snapshot
+ */
+function snapshotOfPayloadSize (bytes) {
+  const padded = { id: '123', stack: [''], captures: { pruned: true } }
+  const baseline = Buffer.byteLength(JSON.stringify(getPayload(message, padded)))
+
+  padded.stack[0] = 'x'.repeat(bytes - baseline)
+
+  // Guard the padding arithmetic: an off-by-one here would silently defeat the boundary assertions
+  assert.strictEqual(Buffer.byteLength(JSON.stringify(getPayload(message, padded))), bytes)
+
+  return padded
+}
+
+/**
+ * Build a payload-shaped JSON document of an exact size, by padding a single stack frame.
+ *
+ * @param {number} bytes - The size of the returned document in bytes
+ */
+function payloadJsonOfSize (bytes) {
+  return JSON.stringify(getPayload(message, snapshotOfPayloadSize(bytes)))
+}
+
+/**
  * Creates a config mock with default values and optional overrides
  * @param {object} [overrides] - Config properties to override
  * @returns {object} Config mock object
@@ -620,7 +715,7 @@ function createConfigMock (overrides = {}) {
     maxTotalPayloadSize: 5 * 1024 * 1024,
     queueMaxBytes: DEFAULT_QUEUE_MAX_BYTES,
     dynamicInstrumentation: {
-      uploadIntervalSeconds: 1,
+      DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
     },
     ...overrides,
     '@noCallThru': true,

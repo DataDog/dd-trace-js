@@ -6,6 +6,7 @@ const path = require('node:path')
 
 const satisfies = require('../../vendor/dist/semifies')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const { getRewriteTargetNames } = require('../datadog-instrumentations/src/helpers/rewriter/targets')
 const { SYNTHETIC_EXTENSION } = require('./src/constants')
 
 const BUILTIN_MODULES = new Set(Module.builtinModules)
@@ -158,7 +159,9 @@ function hasDatadogLoader (value) {
  */
 function createPackagePathPattern () {
   const names = []
-  for (const name of Object.keys(hooks)) {
+  const targetPackages = new Set(Object.keys(hooks))
+  for (const name of getRewriteTargetNames()) targetPackages.add(name)
+  for (const name of targetPackages) {
     if (!name.startsWith('.') && !BUILTIN_MODULES.has(name)) names.push(escapeRegExp(name))
   }
   names.sort()

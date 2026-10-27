@@ -445,8 +445,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.ok(testSessionEvent, testOutput)
           const testSession = testSessionEvent.content
           assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
-          assert.strictEqual(testSession.meta[TEST_SKIP_REASON], 'No tests were found')
-          assert.strictEqual(testSession.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+          assert.strictEqual(testSession.meta[TEST_SKIP_REASON], 'All tests were skipped')
+          assert.strictEqual(testSession.meta[TEST_SESSION_EMPTY_REASON], 'all_tests_skipped')
         })
       childProcess = exec(
         runTestsCommand,

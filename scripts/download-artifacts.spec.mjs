@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { afterEach, describe, it } from 'mocha'
 import sinon from 'sinon'
@@ -74,5 +78,74 @@ describe('download-artifacts', () => {
     assert.equal(fetchStub.calledWith('https://api.github.com/repos/DataDog/dd-trace-js/actions/artifacts/2/zip'), true)
     assert.equal(fetchStub.calledWith('https://api.github.com/repos/DataDog/dd-trace-js/actions/artifacts/3/zip'), false)
     assert.deepEqual(result, { downloaded: 0, failed: 2 })
+  })
+
+  it('recovers when a transient download failure clears', async () => {
+    const originalCwd = process.cwd()
+    const tempDir = mkdtempSync(join(tmpdir(), 'dd-trace-artifact-test-'))
+    writeFileSync(join(tempDir, 'lcov.info'), 'TN:\n')
+    execFileSync('zip', ['-q', 'artifact.zip', 'lcov.info'], { cwd: tempDir })
+    const zip = readFileSync(join(tempDir, 'artifact.zip'))
+    const artifacts = [{ id: 10, name: 'coverage-unit' }]
+    const octokit = {
+      paginate: sinon.stub().resolves(artifacts),
+      rest: { actions: { listWorkflowRunArtifacts: sinon.stub() } },
+    }
+    const fetchStub = sinon.stub(globalThis, 'fetch')
+    fetchStub.onFirstCall().resolves(new Response(null, {
+      status: 503,
+      headers: { 'retry-after': '0' },
+    }))
+    fetchStub.onSecondCall().resolves(new Response(zip))
+    const logStub = sinon.stub(console, 'log')
+
+    try {
+      process.chdir(tempDir)
+      const result = await downloadArtifacts(octokit, {
+        owner: 'DataDog',
+        repo: 'dd-trace-js',
+        token: 'token',
+        runs: [{ id: 42 }],
+        delayMs: 10_000,
+      })
+
+      assert.equal(fetchStub.callCount, 2)
+      assert.deepEqual(result, { downloaded: 1, failed: 0 })
+      assert.match(logStub.firstCall.firstArg, /\[retry 1\/4\] coverage-unit from run 42: HTTP 503/)
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('returns the exact failure after exhausting all attempts', async () => {
+    const artifacts = [{ id: 10, name: 'coverage-unit' }]
+    const octokit = {
+      paginate: sinon.stub().resolves(artifacts),
+      rest: { actions: { listWorkflowRunArtifacts: sinon.stub() } },
+    }
+    const fetchStub = sinon.stub(globalThis, 'fetch').resolves({
+      ok: false,
+      status: 503,
+      headers: new Headers({ 'retry-after': '0' }),
+    })
+    const errorStub = sinon.stub(console, 'error')
+
+    const result = await downloadArtifacts(octokit, {
+      owner: 'DataDog',
+      repo: 'dd-trace-js',
+      token: 'token',
+      runs: [{ id: 42 }],
+      delayMs: 0,
+    })
+
+    assert.equal(fetchStub.callCount, 5)
+    assert.deepEqual(result, { downloaded: 0, failed: 1 })
+    assert.equal(
+      errorStub.calledWith(
+        'Failed to download coverage-unit from run 42: HTTP 503'
+      ),
+      true
+    )
   })
 })

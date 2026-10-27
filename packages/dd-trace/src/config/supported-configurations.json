@@ -59,7 +59,7 @@
         "type": "boolean",
         "namespace": "aiguard",
         "default": "false",
-        "description": "Analyze streamed OpenAI and Vercel AI responses with AI Guard After Model evaluation."
+        "description": "Analyze streamed Anthropic, OpenAI, and Vercel AI responses with AI Guard After Model evaluation."
       }
     ],
     "DD_AI_GUARD_BLOCK": [
@@ -508,6 +508,14 @@
         "default": null
       }
     ],
+    "DD_BUNDLER_INJECT_GIT_METADATA": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "description": "When using the Datadog esbuild or webpack plugin, inject DD_GIT_COMMIT_SHA and DD_GIT_REPOSITORY_URL into the bundle. Set to false for stable artifact hashes across commits."
+      }
+    ],
     "DD_CIVISIBILITY_AGENTLESS_ENABLED": [
       {
         "implementation": "A",
@@ -802,6 +810,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.captureTimeoutMs"
         ],
@@ -812,16 +821,30 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.enabled"
         ],
         "default": "false"
       }
     ],
+    "DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "namespace": "dynamicInstrumentation",
+        "configurationNames": [
+          "dynamicInstrumentation.evaluationTimeoutMs"
+        ],
+        "default": "50",
+        "allowed": "\\d+"
+      }
+    ],
     "DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE": [
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.probeFile"
         ],
@@ -832,6 +855,7 @@
       {
         "implementation": "A",
         "type": "array",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.redactedIdentifiers"
         ],
@@ -842,6 +866,7 @@
       {
         "implementation": "C",
         "type": "array",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.redactionExcludedIdentifiers"
         ],
@@ -852,6 +877,7 @@
       {
         "implementation": "C",
         "type": "decimal",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.uploadIntervalSeconds"
         ],
@@ -890,6 +916,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.initializationTimeoutMs"
         ],
@@ -900,6 +927,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.enabled"
         ],
@@ -910,8 +938,20 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.spanEnrichment.enabled"
+        ],
+        "default": "false"
+      }
+    ],
+    "DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "namespace": "featureFlags",
+        "configurationNames": [
+          "featureFlags.enableEvaluationTelemetryOptOutParameter"
         ],
         "default": "false"
       }
@@ -961,6 +1001,15 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
+        "namespace": "featureFlags"
+      }
+    ],
+    "DD_FLAGGING_EVALUATION_COUNTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "description": "Enable aggregated Feature Flagging evaluation telemetry.",
         "namespace": "featureFlags"
       }
     ],
@@ -1435,6 +1484,41 @@
         ],
         "default": null,
         "namespace": "llmobs"
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_CACHE_DIR": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_CACHE_TTL": [
+      {
+        "implementation": "B",
+        "type": "decimal",
+        "default": "60",
+        "aliases": [
+          "DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS"
+        ]
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_TIMEOUT": [
+      {
+        "implementation": "B",
+        "type": "decimal",
+        "default": "5.0",
+        "allowed": "\\d+(\\.\\d+)?",
+        "aliases": [
+          "DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS"
+        ]
       }
     ],
     "DD_LLMOBS_SAMPLE_RATE": [
@@ -2011,17 +2095,17 @@
     ],
     "DD_TEST_FAILURE_SCREENSHOTS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": null,
+        "default": "true",
         "namespace": "testOptimization"
       }
     ],
     "DD_TEST_FAILURE_VIDEOS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": null,
+        "default": "true",
         "namespace": "testOptimization"
       }
     ],
@@ -2063,6 +2147,22 @@
         "type": "boolean",
         "default": null,
         "namespace": "testOptimization"
+      }
+    ],
+    "_DD_TEST_PARALLELIZATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "description": "Internal: Identifies test processes started by ddtest run."
+      }
+    ],
+    "_DD_TEST_PARALLELIZATION_METADATA_FILE": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "description": "Internal: Absolute path to planning metadata supplied by ddtest run."
       }
     ],
     "DD_TEST_SESSION_NAME": [
@@ -2836,6 +2936,7 @@
         "configurationNames": [
           "experimental.exporter"
         ],
+        "namespace": "tracing",
         "default": ""
       }
     ],
@@ -2846,6 +2947,7 @@
         "configurationNames": [
           "experimental.enableGetRumData"
         ],
+        "namespace": "rum",
         "default": "false"
       }
     ],
@@ -3588,9 +3690,9 @@
     ],
     "DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP": [
       {
-        "implementation": "F",
+        "implementation": "I",
         "type": "string",
-        "default": "(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:\"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:\"|%22)(?:%2[^2]|%[^2]|[^\"%])+(?:\"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}"
+        "default": "(?:(?:\"|%22)?)(?:(?:old[-_]?|new[-_]?)?p(?:ass)?w(?:or)?d(?:1|2)?|pass(?:[-_]?phrase)?|secret|(?:api[-_]?|private[-_]?|public[-_]?|access[-_]?|secret[-_]?|app(?:lication)?[-_]?)key(?:[-_]?id)?|token|consumer[-_]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:\"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:\"|%22)(?:%2[^2]|%[^2]|[^\"%])+(?:\"|%22))|(?:bearer(?:\\s|%20)+[a-z0-9._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|(^|[^\\w%-]|%[0-9a-f]{2})ey[I-L][\\w-]+(?:=|%3D)*\\.ey[I-L][\\w-]+(?:=|%3D)*(?:\\.(?:[\\w.+/=-]|%3D|%2F|%2B)+)?|-{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY-{5}[^\\-]+-{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY(?:-{5})?(?:\\n|%0A)?|(?:ssh-(?:rsa|dss)|ecdsa-[a-z0-9]+-[a-z0-9]+)(?:\\s|%20|%09)+(?:[a-z0-9/.+]|%2F|%5C|%2B){100,}(?:=|%3D)*(?:(?:\\s|%20|%09)+[a-z0-9._-]+)?)"
       }
     ],
     "DD_TRACE_OPENAI_ENABLED": [

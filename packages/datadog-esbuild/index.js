@@ -8,6 +8,7 @@ const { pathToFileURL, fileURLToPath } = require('node:url')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
 const { createEsmResolver } = require('./src/resolver')
 const { isESMFile, processModule } = require('./src/utils')
@@ -60,6 +61,7 @@ for (const builtin of builtinModules) {
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
+const DD_BUNDLER_INJECT_GIT_METADATA = getValueFromEnvSources('DD_BUNDLER_INJECT_GIT_METADATA') !== false
 
 module.exports.name = 'datadog-esbuild'
 
@@ -143,30 +145,32 @@ globalThis.__dirname ??= $dd_dirname(globalThis.__filename);
 ${build.initialOptions.banner.js}`
   }
 
-  // Get git metadata at build time and add it to the banner for both ESM and CommonJS builds
-  const gitMetadata = getGitMetadata()
-  if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
-    build.initialOptions.banner ??= {}
-    build.initialOptions.banner.js ??= ''
+  // Bake DD_GIT_* into the banner unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
+  if (DD_BUNDLER_INJECT_GIT_METADATA) {
+    const gitMetadata = getGitMetadata()
+    if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
+      build.initialOptions.banner ??= {}
+      build.initialOptions.banner.js ??= ''
 
-    build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null &&
+      build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null &&
     process.env !== null && typeof process.env === 'object') {
   ${gitMetadata.repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = '${gitMetadata.repositoryURL}';` : ''}
   ${gitMetadata.commitSHA ? `process.env.DD_GIT_COMMIT_SHA = '${gitMetadata.commitSHA}';` : ''}
 }
 ${build.initialOptions.banner.js}`
 
-    log.debug(
-      'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
-      gitMetadata.repositoryURL || 'not available',
-      gitMetadata.commitSHA || 'not available'
-    )
+      log.debug(
+        'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
+        gitMetadata.repositoryURL || 'not available',
+        gitMetadata.commitSHA || 'not available'
+      )
+    } else {
+      log.warn('No git metadata available - skipping injection')
+    }
   } else {
-    log.warn('No git metadata available - skipping injection')
+    log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
   }
 
-  // first time is intercepted, proxy should be created, next time the original should be loaded
-  const interceptedESMModules = new Set()
   let resolver
 
   build.onEnd(async () => {
@@ -217,11 +221,18 @@ ${build.initialOptions.banner.js}`
 
     const internal = builtins.has(args.path)
 
+    // Only the generated wrapper module, and the real module importing itself, must reach the real module unwrapped.
+    // Every other importer must get the wrapper regardless of whether it has already been loaded: onLoad runs
+    // concurrently with onResolve, so tracking loaded modules makes which importer sees the wrapper depend on timing,
+    // leaving some bindings uninstrumented. Routing a self-import to the wrapper would create a wrapper -> original ->
+    // wrapper cycle that can hit the wrapper's exports in their temporal dead zone.
+    const isInterceptedImporter = args.importer.endsWith(ESM_INTERCEPTED_SUFFIX) || args.importer === fullPathToModule
+
     if (args.namespace === 'file' && (
       modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
     ) {
       // Internal module like http/fs is imported and the build output is ESM
-      if (internal && args.kind === 'import-statement' && esmBuild && !interceptedESMModules.has(fullPathToModule)) {
+      if (internal && args.kind === 'import-statement' && esmBuild && !isInterceptedImporter) {
         fullPathToModule = `${INTERNAL_ESM_INTERCEPTED_PREFIX}${fullPathToModule}${ESM_INTERCEPTED_SUFFIX}`
 
         return {
@@ -263,7 +274,7 @@ ${build.initialOptions.banner.js}`
         const packageJson = JSON.parse(fs.readFileSync(/** @type {string} */(pathToPackageJson)).toString())
 
         const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
-        if (isESM && !interceptedESMModules.has(fullPathToModule)) {
+        if (isESM && !isInterceptedImporter) {
           fullPathToModule += ESM_INTERCEPTED_SUFFIX
         }
 
@@ -321,8 +332,6 @@ ${build.initialOptions.banner.js}`
           if (data.internal) {
             args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
           }
-
-          interceptedESMModules.add(args.path)
 
           resolver ??= createEsmResolver()
           const setters = await processModule({

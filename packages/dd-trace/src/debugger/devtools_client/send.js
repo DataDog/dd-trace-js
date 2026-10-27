@@ -17,8 +17,12 @@ const buildTags = require('./tags')
 
 module.exports = send
 
-const MAX_LOG_PAYLOAD_SIZE_MB = 1
-const MAX_LOG_PAYLOAD_SIZE_BYTES = MAX_LOG_PAYLOAD_SIZE_MB * 1024 * 1024
+// The backend caps a single debugger event at 1 MiB, but measures the CBOR-encoded event *after* the
+// intake has enriched it with host tags, `ddtags` and other metadata we cannot size from here. Leave
+// the same 4 KiB of headroom as dd-trace-go: crossing the backend cap is worse than pruning, since
+// its truncation destroys the log message before it drops the snapshot.
+const BACKEND_ENRICHMENT_HEADROOM_BYTES = 4 * 1024
+const MAX_LOG_PAYLOAD_SIZE_BYTES = 1024 * 1024 - BACKEND_ENRICHMENT_HEADROOM_BYTES
 
 const ddsource = 'dd_debugger'
 const hostname = getHostname()
@@ -32,7 +36,7 @@ setInputPath(config.inputPath)
 const jsonBuffer = new JSONBuffer({
   size: config.maxTotalPayloadSize,
   maxQueueBytes: config.queueMaxBytes,
-  timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
+  timeout: config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS * 1000,
   onFlush,
 })
 
@@ -85,6 +89,20 @@ function send (message, logger, dd, snapshot, processTags, eventType, incomplete
       json = JSON.stringify(payload)
     }
     size = Buffer.byteLength(json)
+
+    if (size > MAX_LOG_PAYLOAD_SIZE_BYTES) {
+      // Trimming is best-effort: the pruner can only replace leaf nodes deep inside the snapshot and the fallback only
+      // drops captures, so a payload whose bytes sit elsewhere - a very deep stack, say - can stay over the cap. There
+      // is nothing to gain from sending it: the intake truncates the log message, then throws the snapshot away, and
+      // drops the event anyway if that still doesn't fit.
+      log.debug(
+        '[debugger:devtools_client] Dropping probe result for probe %s: payload is too large (%d bytes)',
+        snapshot.probe.id,
+        size
+      )
+      guardrailMetrics.eventDropped(DROPPED_REASON.PAYLOAD_TOO_LARGE, eventType)
+      return
+    }
   }
 
   if (jsonBuffer.write(json, size)) {
