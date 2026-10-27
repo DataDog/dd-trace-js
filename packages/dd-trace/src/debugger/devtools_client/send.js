@@ -61,6 +61,7 @@ function send (message, logger, dd, snapshot, processTags, eventType, incomplete
     ddsource,
     hostname,
     service,
+    timestamp: snapshot.timestamp,
     message,
     logger,
     dd,
