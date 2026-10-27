@@ -60,6 +60,35 @@ withVersions('stripe', 'stripe', version => {
         constructEventFinishCh.unsubscribe(onPublish)
       })
 
+      for (const method of ['constructEvent', 'constructEventAsync']) {
+        it(`wraps a replaced ${method} once and reuses the restored wrapper`, async function () {
+          const { webhooks } = new Stripe('sk_test_FAKE')
+          if (webhooks !== Stripe('sk_test_FAKE').webhooks) this.skip()
+
+          const original = webhooks[method]
+          const event = { id: 'evt_replacement', object: 'event' }
+          const header = webhooks.generateTestHeaderString({ payload, secret })
+
+          try {
+            webhooks[method] = method === 'constructEvent' ? () => event : async () => event
+            assert.equal(new Stripe('sk_test_FAKE').webhooks, webhooks)
+            assert.equal(Stripe('sk_test_FAKE').webhooks, webhooks)
+
+            assert.equal(await webhooks[method](payload, header, secret), event)
+            assert.equal(publishes, 1)
+
+            webhooks[method] = original
+            assert.equal(new Stripe('sk_test_FAKE').webhooks, webhooks)
+            assert.equal(Stripe('sk_test_FAKE').webhooks, webhooks)
+
+            assert.equal((await webhooks[method](payload, header, secret)).id, 'evt_test')
+            assert.equal(publishes, 2)
+          } finally {
+            webhooks[method] = original
+          }
+        })
+      }
+
       it('does not stack wrappers when many clients are created', async () => {
         let stripe
         for (let i = 0; i < 20_000; i++) {
