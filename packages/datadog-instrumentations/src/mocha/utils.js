@@ -43,6 +43,7 @@ const originalEfdFns = new WeakMap()
 const originalFns = new WeakMap()
 const originalPendingByTest = new WeakMap()
 const originalRetriesByTest = new WeakMap()
+const automaticRetryTests = new WeakSet()
 const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
 const datadogRetryOriginals = new WeakMap()
@@ -534,6 +535,12 @@ function inheritDatadogPropertiesFromRetriedTest (test) {
 
 function runnableWrapper (RunnablePackage, libraryConfig) {
   const Runnable = RunnablePackage.Runnable ?? RunnablePackage
+  // Mocha 12 can load its ESM class through require() without the ESM rewriter.
+  // Intercept the exported prototype to observe setters in both injection modes.
+  shimmer.wrap(Runnable.prototype, 'retries', retries => function () {
+    if (arguments.length) automaticRetryTests.delete(this)
+    return retries.apply(this, arguments)
+  })
   shimmer.wrap(Runnable.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, args)
@@ -581,6 +588,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       } else {
         test.retries(libraryConfig.flakyTestRetriesCount)
       }
+      automaticRetryTests.add(test)
     }
 
     if (isTestHook || this.type === 'test') {
@@ -833,6 +841,7 @@ function getTestFinishInfo (test, status, config, error) {
 
   const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
   const isAtrRetry = config.isFlakyTestRetriesEnabled &&
+    automaticRetryTests.has(test) &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry
   const isFinalAttempt = isTerminalHookFailure || status !== 'fail' || test._currentRetry >= test._retries
@@ -1181,6 +1190,7 @@ function getOnTestRetryHandler (config) {
     const isFirstAttempt = test._currentRetry === 0
     const isDynamicAtrTest = config.isDynamicAtrEnabled &&
       config.isFlakyTestRetriesEnabled &&
+      automaticRetryTests.has(test) &&
       !test._ddIsAttemptToFix &&
       !isEarlyFlakeDetectionTest(test, config)
     if (isDynamicAtrTest && isFirstAttempt) {
@@ -1217,6 +1227,7 @@ function publishTestRetry (test, err, config) {
     const willBeRetried = test._currentRetry < test._retries
     const isAtrRetry = !isFirstAttempt &&
       config.isFlakyTestRetriesEnabled &&
+      automaticRetryTests.has(test) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
     const promises = {}

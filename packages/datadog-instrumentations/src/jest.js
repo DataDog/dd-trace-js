@@ -741,9 +741,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
 
+      this.hasAutomaticRetries = false
       if (this.isFlakyTestRetriesEnabled) {
         const currentNumRetries = this.global[RETRY_TIMES]
         if (!currentNumRetries) {
+          this.hasAutomaticRetries = true
           // When dynamic ATR is enabled, use the max bucket value as the initial count.
           // The actual duration-based count is computed per test after the first attempt.
           if (this.isDynamicAtrEnabled) {
@@ -2445,7 +2447,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         let isAtrRetry = false
-        if (this.isFlakyTestRetriesEnabled && event.test?.invocations > 1 && !isAttemptToFix && !isEfdRetry) {
+        const hasAutomaticRetries = this.hasAutomaticRetries || dynamicAtrRetryCountByTest.has(event.test)
+        if (this.isFlakyTestRetriesEnabled && hasAutomaticRetries &&
+          event.test?.invocations > 1 && !isAttemptToFix && !isEfdRetry) {
           isAtrRetry = true
         }
 
@@ -4024,6 +4028,13 @@ function wrapJestObject (jestObject, suiteFilePath) {
   testSuiteJestObjects.set(suiteFilePath, jestObject)
   wrappedJestObjects.add(jestObject)
 
+  // retryTimes is created per runtime, so wrap the returned public API object.
+  shimmer.wrap(jestObject, 'retryTimes', retryTimes => function () {
+    const environment = testSuiteDatadogEnvironments.get(suiteFilePath)
+    if (environment) environment.hasAutomaticRetries = false
+    return retryTimes.apply(this, arguments)
+  })
+
   shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
     recordMockedFile(suiteFilePath, moduleName)
     return mock.apply(this, arguments)
@@ -4039,7 +4050,7 @@ function wrapJestGlobalsForRuntime (runtime) {
   wrappedJestGlobals.add(jestGlobals)
   shimmer.wrap(jestGlobals, 'jestObjectFor', jestObjectFor => function (from) {
     const jestObject = jestObjectFor.apply(this, arguments)
-    wrapJestObject(jestObject, from)
+    wrapJestObject(jestObject, runtime._testPath || from)
     return jestObject
   })
 }
