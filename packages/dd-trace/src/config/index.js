@@ -124,6 +124,8 @@ const changeTracker = {
  */
 function undo (config, source) {
   for (const name of changeTracker[source]) {
+    if (trackedConfigOrigins.get(name) !== source) continue
+
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }

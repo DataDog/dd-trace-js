@@ -70,6 +70,7 @@ function expectProbeEvents (agent, configId, expectedPayloads, expectedAckUpdate
           assert.ok(expected, 'Received an unexpected diagnostics payload')
           assertObjectContains(event, expected)
           assertUUID(event.debugger.diagnostics.runtimeId)
+          assert.strictEqual(typeof event.timestamp, 'number')
           if (event.debugger.diagnostics.status === 'INSTALLED') onInstalled?.()
         }
         observeQuietPeriod()

@@ -129,6 +129,7 @@ function statusPayload (probeId, probeVersion, status) {
   return {
     ddsource,
     service,
+    timestamp: Date.now(),
     debugger: {
       diagnostics: { probeId, runtimeId, probeVersion, status },
     },
