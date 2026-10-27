@@ -38,7 +38,7 @@ const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
-const { getConfiguredEnvName } = require('../../config/helper')
+const { getValidatedConfiguredEnvName } = require('../../config/helper')
 const { setAllBaggageItems, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
 const { hasTraceSourcePropagationTag } = require('../../standalone/tracesource')
 const telemetryMetrics = require('../../telemetry/metrics')
@@ -304,13 +304,25 @@ class TextMapPropagator {
   /** @type {string[] | undefined} Source array that `#baggageTagKeysSet` was built from. */
   #baggageTagKeysSetSource
 
-  /** @type {import('../../config')} */
+  /** @type {ReturnType<import('../../config')>} */
   #config
 
   /** @type {typeof extractB3SingleContext | typeof extractB3MultiContext} */
   #extractB3Context
 
-  /** @param {import('../../config')} config */
+  /** Whether the `b3` injection style resolves to single-header propagation. */
+  #b3InjectIsSingleHeader
+
+  /** Cached origin used to resolve the v5 `b3` injection style. */
+  #b3InjectOrigin
+
+  /** Cached state of the v5 experimental B3 setting. */
+  #b3ExperimentalEnabled
+
+  /** Cached origin of the shared v5 propagation style. */
+  #b3SharedOrigin
+
+  /** @param {ReturnType<import('../../config')>} config */
   constructor (config) {
     this.#config = config
 
@@ -318,14 +330,42 @@ class TextMapPropagator {
     // expect single, legacy `DD_TRACE_PROPAGATION_STYLE` callers expect multi.
     /* istanbul ignore else: v5 fallback */
     if (DD_MAJOR >= 6) {
+      this.#b3InjectIsSingleHeader = true
       this.#extractB3Context = extractB3SingleContext
     } else {
-      const envName = getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
+      const envName = getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
       // eslint-disable-next-line eslint-rules/eslint-env-aliases
       this.#extractB3Context = envName === 'OTEL_PROPAGATORS'
         ? extractB3SingleContext
         : extractB3MultiContext
+
+      this.#refreshB3InjectionStyle()
     }
+  }
+
+  #refreshB3InjectionStyle () {
+    const origin = this.#config.getOrigin?.('tracePropagationStyle.inject') ?? 'default'
+    const experimentalEnabled = this.#config.experimental?.b3 === true
+    const sharedOrigin = origin === 'calculated'
+      ? this.#config.getOrigin?.('DD_TRACE_PROPAGATION_STYLE') ?? 'default'
+      : undefined
+    if (origin === this.#b3InjectOrigin &&
+      experimentalEnabled === this.#b3ExperimentalEnabled &&
+      sharedOrigin === this.#b3SharedOrigin) return
+
+    let envName
+    if (origin === 'calculated' && !experimentalEnabled && sharedOrigin !== 'remote_config') {
+      envName = getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
+    } else if (origin === 'env_var' ||
+      origin === 'local_stable_config' ||
+      origin === 'fleet_stable_config') {
+      envName = getValidatedConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE_INJECT')
+    }
+    // eslint-disable-next-line eslint-rules/eslint-env-aliases
+    this.#b3InjectIsSingleHeader = envName === 'OTEL_PROPAGATORS'
+    this.#b3InjectOrigin = origin
+    this.#b3ExperimentalEnabled = experimentalEnabled
+    this.#b3SharedOrigin = sharedOrigin
   }
 
   /**
@@ -573,9 +613,8 @@ class TextMapPropagator {
    * @returns {Record<string, string> | undefined}
    */
   #injectB3MultipleHeaders (spanContext, carrier) {
-    // v5 also accepts the legacy `'b3'` spelling for multi; v6+ routes `'b3'` to single-header.
     const hasB3multi = this.#hasPropagationStyle('inject', 'b3multi') ||
-      (DD_MAJOR < 6 && this.#hasPropagationStyle('inject', 'b3'))
+      (this.#hasPropagationStyle('inject', 'b3') && !this.#usesB3SingleHeaderInjection())
     if (!hasB3multi) return
 
     carrier ??= {}
@@ -602,7 +641,7 @@ class TextMapPropagator {
   #injectB3SingleHeader (spanContext, carrier) {
     // v6+ keeps `'b3 single header'` as a back-compat alias for callers that bypass parser normalisation.
     const hasB3SingleHeader = this.#hasPropagationStyle('inject', 'b3 single header') ||
-      (DD_MAJOR >= 6 && this.#hasPropagationStyle('inject', 'b3'))
+      (this.#hasPropagationStyle('inject', 'b3') && this.#usesB3SingleHeaderInjection())
     if (!hasB3SingleHeader) return
 
     carrier ??= {}
@@ -617,6 +656,11 @@ class TextMapPropagator {
     writeB3(carrier, header)
 
     return carrier
+  }
+
+  #usesB3SingleHeaderInjection () {
+    if (DD_MAJOR < 6) this.#refreshB3InjectionStyle()
+    return this.#b3InjectIsSingleHeader
   }
 
   /**
