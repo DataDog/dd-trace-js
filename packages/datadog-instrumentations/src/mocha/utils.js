@@ -43,7 +43,8 @@ const originalEfdFns = new WeakMap()
 const originalFns = new WeakMap()
 const originalPendingByTest = new WeakMap()
 const originalRetriesByTest = new WeakMap()
-const automaticRetryTests = new WeakSet()
+let automaticRetryTests = new WeakSet()
+let nativeRetryTests = new WeakSet()
 const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
 const datadogRetryOriginals = new WeakMap()
@@ -347,6 +348,8 @@ function resetRunState (rootSuite) {
   efdRetryCountByTestFullName.clear()
   efdSlowAbortedTests.clear()
   suiteHookFailureSuites.clear()
+  automaticRetryTests = new WeakSet()
+  nativeRetryTests = new WeakSet()
   dynamicAtrRetryCountByTest = new WeakMap()
   attemptToFixExecutions.clear()
   loggedAttemptToFixTests.clear()
@@ -538,7 +541,10 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
   // Mocha 12 can load its ESM class through require() without the ESM rewriter.
   // Intercept the exported prototype to observe setters in both injection modes.
   shimmer.wrap(Runnable.prototype, 'retries', retries => function () {
-    if (arguments.length) automaticRetryTests.delete(this)
+    if (arguments.length && automaticRetryTests.delete(this)) {
+      // Native clones retain this budget and point back to the original test.
+      nativeRetryTests.add(this._retriedTest || this)
+    }
     return retries.apply(this, arguments)
   })
   shimmer.wrap(Runnable.prototype, 'run', run => function (...args) {
@@ -566,11 +572,12 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
           return onRunnableFinished.apply(this, arguments)
         }
       }
-    } else if (libraryConfig?.isFlakyTestRetriesEnabled) {
+    } else if (libraryConfig?.isFlakyTestRetriesEnabled && !nativeRetryTests.has(test._retriedTest || test)) {
       if (!originalRetriesByTest.has(test)) {
         const originalRetries = originalRetriesByTest.get(test._retriedTest) ?? test.retries()
         originalRetriesByTest.set(test, originalRetries)
       }
+      automaticRetryTests.delete(test)
       if (libraryConfig.isDynamicAtrEnabled) {
         // Dynamic ATR: set the max possible retries initially.
         // The actual duration-based count is computed after the first attempt.

@@ -162,24 +162,29 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           ...getCiVisAgentlessConfig(receiver.port),
           DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(dynamic),
-          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,5,5,5,5',
         },
       })
       const eventsPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const tests = payloads.flatMap(({ payload }) => payload.events)
             .filter(event => event.type === 'test').map(event => event.content)
-          for (const [name, count] of [['inherited', 2], ['native override 1', 2], ['native override 2', 3]]) {
+          for (const [name, count] of [
+            ['inherited', 2],
+            ['native override 1', 2], ['native override 1 once', 2],
+            ['native override 2', 3], ['native override 2 once', 3],
+          ]) {
             const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
             assert.strictEqual(attempts.length, count, name)
             const reason = name === 'inherited' ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
             const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retries.length, count - 1, name)
             assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === reason), name)
+            assert.strictEqual(attempts.filter(test => test.meta[TEST_FINAL_STATUS] === 'fail').length, 1, name)
           }
         })
       const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
-      assert.strictEqual(exitCode, 3)
+      assert.strictEqual(exitCode, 5)
     })
   }
 
