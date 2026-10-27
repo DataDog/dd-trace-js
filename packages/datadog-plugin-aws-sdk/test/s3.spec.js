@@ -183,7 +183,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should trace an S3 request', async () => {
+        it('should allow disabling a specific span kind of a service', async () => {
           const tracePromise = agent.assertFirstTraceSpan(span => {
             assertObjectContains(span, {
               name: 'aws.request',
