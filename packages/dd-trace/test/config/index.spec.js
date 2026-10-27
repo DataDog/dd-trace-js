@@ -5359,6 +5359,24 @@ rules:
   })
 
   describe('setRemoteConfig', () => {
+    it('should preserve remote configuration that overrides a calculated fallback', () => {
+      process.env.OTEL_PROPAGATORS = 'b3'
+      const config = getConfig(undefined, { ddMajor: 5 })
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
+
+      config.setRemoteConfig({ DD_TRACE_PROPAGATION_STYLE_INJECT: 'b3' })
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'remote_config')
+
+      config.setRemoteConfig(null)
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
+    })
+
     it('should resolve deprecated AppSec env configs to canonical Remote Config fields', () => {
       const config = getConfig()
 
