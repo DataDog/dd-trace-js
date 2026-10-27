@@ -1,0 +1,10 @@
+_v: 1
+name: http2
+display_name: HTTP/2
+description: Instruments outgoing HTTP/2 requests and incoming HTTP/2 server requests through Node.js's built-in http2 module.
+packages: []
+category:
+- http.client
+- http.server
+systems: []
+creation_date: '2019-06-13'

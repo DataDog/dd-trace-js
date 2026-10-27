@@ -41,7 +41,7 @@ updates:
     directories:
       - "/.github/editorconfig-checker"
       - "/.github/playwright"
-      - "/.github/selenium"
+      - "/.github/browser-tools"
       - "/benchmark/sirun"
     schedule:
       interval: "weekly"
