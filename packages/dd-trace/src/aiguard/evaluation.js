@@ -45,6 +45,7 @@ const ALLOW = 'ALLOW'
  * @property {boolean} blockingEnabled
  * @property {unknown} redactionReplacements
  * @property {unknown} extraTags
+ * @property {unknown} extraMetastruct
  */
 
 /**
@@ -56,6 +57,7 @@ const ALLOW = 'ALLOW'
  * @property {boolean} hasTagProbabilities
  * @property {{ enabled: boolean, applied: boolean, failures: number }} redaction
  * @property {unknown} extraTags
+ * @property {unknown} extraMetastruct
  */
 
 /**
@@ -107,6 +109,7 @@ function parseEvaluationResponse (body) {
     redactionReplacements: attributes.redaction_replacements,
     // Validated when applied to the span: a malformed value must not turn into a bad_response.
     extraTags: attributes.extra_tags,
+    extraMetastruct: attributes.extra_metastruct,
   }
 }
 
@@ -151,6 +154,7 @@ function createEvaluationOutcome (messages, evaluation, options) {
       failures: redaction.failures,
     },
     extraTags: evaluation.extraTags,
+    extraMetastruct: evaluation.extraMetastruct,
   }
 }
 
@@ -214,52 +218,76 @@ function isReservedExtraTag (key) {
 const RESERVED_EXTRA_META_STRUCT_KEYS = new Set(['messages', 'attack_categories', 'sds', 'tag_probs'])
 
 /**
- * Copies backend-provided extra tags to the span: scalars as span tags, objects and arrays to the
- * AI Guard meta-struct. Keys are used verbatim. Malformed input is skipped and never throws.
+ * Returns whether a backend extra field is a list of entries, logging when it is malformed.
+ *
+ * @param {string} field
+ * @param {unknown} entries
+ * @returns {entries is unknown[]}
+ */
+function isEntryList (field, entries) {
+  if (entries === undefined) return false
+  if (Array.isArray(entries)) return true
+
+  log.debug('AI Guard: ignoring %s of type %s', field, entries === null ? 'null' : typeof entries)
+  return false
+}
+
+/**
+ * Returns the key of a backend extra field entry, or undefined when the entry is malformed.
+ *
+ * @param {string} field
+ * @param {unknown} entry
+ */
+function getEntryKey (field, entry) {
+  const key = isRecord(entry) ? entry.key : undefined
+  // A __proto__ key cannot be stored as an own entry on the span tags or the meta-struct.
+  const isValid = typeof key === 'string' && key.length > 0 && key !== '__proto__'
+  if (!isValid) log.debug('AI Guard: ignoring malformed %s entry', field)
+  return isValid ? key : undefined
+}
+
+/**
+ * Copies backend-provided extra_tags to the span and extra_metastruct to the AI Guard meta-struct.
+ * Both are lists of key/value entries because their dotted keys are not valid JSON:API member
+ * names. Keys are used verbatim, a repeated key keeps its last value, and malformed input is
+ * skipped without throwing.
  *
  * @param {Span} span
  * @param {EvaluationMetaStruct} metaStruct
  * @param {unknown} extraTags
+ * @param {unknown} extraMetastruct
  */
-function applyExtraTags (span, metaStruct, extraTags) {
-  if (extraTags === undefined) return
-  if (!isRecord(extraTags)) {
-    log.debug('AI Guard: ignoring extra_tags of type %s', extraTags === null ? 'null' : typeof extraTags)
-    return
+function applyExtraSpanData (span, metaStruct, extraTags, extraMetastruct) {
+  // The client decodes the payload with JSON.parse, so values are JSON types.
+  if (isEntryList('extra_tags', extraTags)) {
+    for (const entry of extraTags) {
+      const key = getEntryKey('extra_tags', entry)
+      if (key === undefined) continue
+
+      const { value } = /** @type {{ value?: unknown }} */ (entry)
+      if (typeof value !== 'string') {
+        log.debug('AI Guard: ignoring extra_tags entry %s with non-string value', key)
+      } else if (isReservedExtraTag(key)) {
+        log.debug('AI Guard: ignoring reserved extra tag %s', key)
+      } else {
+        span.setTag(key, value)
+      }
+    }
   }
 
-  // The client decodes the payload with JSON.parse, so keys are own strings and values are JSON types.
-  for (const key of Object.keys(extraTags)) {
-    // JSON.parse creates an own __proto__ key; assigning it would replace a prototype instead.
-    if (key.length === 0 || key === '__proto__') {
-      log.debug('AI Guard: ignoring extra tag with invalid key %s', key)
-      continue
-    }
+  if (isEntryList('extra_metastruct', extraMetastruct)) {
+    for (const entry of extraMetastruct) {
+      const key = getEntryKey('extra_metastruct', entry)
+      if (key === undefined) continue
 
-    const value = extraTags[key]
-    const type = typeof value
-    let tagValue
-    if (type === 'string' || (type === 'number' && Number.isFinite(value))) {
-      tagValue = value
-    } else if (type === 'boolean') {
-      tagValue = value ? 'true' : 'false'
-    } else if (value !== null && type === 'object') {
-      if (RESERVED_EXTRA_META_STRUCT_KEYS.has(key)) {
-        log.debug('AI Guard: ignoring reserved extra tag %s', key)
+      const { value } = /** @type {{ value?: unknown }} */ (entry)
+      if (value === undefined || value === null) {
+        log.debug('AI Guard: ignoring extra_metastruct entry %s with null value', key)
+      } else if (RESERVED_EXTRA_META_STRUCT_KEYS.has(key)) {
+        log.debug('AI Guard: ignoring reserved extra_metastruct key %s', key)
       } else {
         metaStruct[key] = value
       }
-      continue
-    } else {
-      // JSON.parse yields Infinity for out-of-range numbers, which is not a meaningful metric.
-      log.debug('AI Guard: ignoring extra tag %s with unsupported value', key)
-      continue
-    }
-
-    if (isReservedExtraTag(key)) {
-      log.debug('AI Guard: ignoring reserved extra tag %s', key)
-    } else {
-      span.setTag(key, tagValue)
     }
   }
 }
@@ -347,7 +375,7 @@ class EvaluationReporter {
     if (result.tags.length > 0) report.metaStruct.attack_categories = result.tags
     if (result.sds.length > 0) report.metaStruct.sds = result.sds
     if (outcome.hasTagProbabilities) report.metaStruct.tag_probs = result.tagProbabilities
-    applyExtraTags(report.span, report.metaStruct, outcome.extraTags)
+    applyExtraSpanData(report.span, report.metaStruct, outcome.extraTags, outcome.extraMetastruct)
 
     if (redaction.enabled) {
       report.span.setTag(TAGS.REDACTED_TAG_KEY, redaction.applied ? 'true' : 'false')

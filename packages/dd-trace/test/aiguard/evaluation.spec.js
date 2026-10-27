@@ -39,16 +39,27 @@ describe('AI Guard evaluation response', () => {
       blockingEnabled: true,
       redactionReplacements,
       extraTags: undefined,
+      extraMetastruct: undefined,
     })
   })
 
-  it('passes extra_tags through unvalidated so a malformed value is not a bad response', () => {
-    for (const extraTags of [{ 'ai_guard.policy': 'default' }, 'not-an-object', ['a'], null, 42]) {
-      const evaluation = parseEvaluationResponse({ data: { attributes: { action: 'ALLOW', extra_tags: extraTags } } })
+  it('passes extra_tags and extra_metastruct through unvalidated so a malformed value is not a bad response', () => {
+    for (const payload of [
+      [{ key: 'ai_guard.evaluate_id', value: 'id' }],
+      { 'ai_guard.policy': 'default' },
+      'not-a-list',
+      null,
+      42,
+    ]) {
+      const evaluation = parseEvaluationResponse({
+        data: { attributes: { action: 'ALLOW', extra_tags: payload, extra_metastruct: payload } },
+      })
       assert.ok(evaluation)
-      assert.strictEqual(evaluation.extraTags, extraTags)
+      assert.strictEqual(evaluation.extraTags, payload)
+      assert.strictEqual(evaluation.extraMetastruct, payload)
       const outcome = createEvaluationOutcome([], evaluation, { block: true, redactionEnabled: true })
-      assert.strictEqual(outcome.extraTags, extraTags)
+      assert.strictEqual(outcome.extraTags, payload)
+      assert.strictEqual(outcome.extraMetastruct, payload)
     }
   })
 
@@ -63,6 +74,7 @@ describe('AI Guard evaluation response', () => {
       blockingEnabled: false,
       redactionReplacements: undefined,
       extraTags: undefined,
+      extraMetastruct: undefined,
     })
   })
 
@@ -118,6 +130,7 @@ describe('AI Guard evaluation response', () => {
         failures: 0,
       },
       extraTags: undefined,
+      extraMetastruct: undefined,
     })
     assert.strictEqual(outcome.result.messages, privateSnapshot)
     assert.strictEqual(privateSnapshot[0].content, 'My SSN is <REDACTED>')
