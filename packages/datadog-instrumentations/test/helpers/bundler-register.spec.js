@@ -4,17 +4,13 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const Module = require('node:module')
 const vm = require('node:vm')
-
 const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
 
 const instrumentationUtils = require('../../src/helpers/instrumentation-utils')
-const sharedUtils = require('../../src/helpers/shared-utils')
-
 const CHANNEL = 'dd-trace:bundler:load'
 const registerPath = require.resolve('../../src/helpers/bundler-register')
 const registerSource = fs.readFileSync(registerPath, 'utf8')
-
 describe('bundler register', () => {
   let originalRequire
 
@@ -28,7 +24,7 @@ describe('bundler register', () => {
   })
 
   describe('loaded built-ins in a bundled tracer', () => {
-    const HOOKED_BUILTINS = [['http'], ['https'], ['dns'], ['fs']]
+    const REGISTERED_BUILTINS = [['http'], ['https'], ['dns'], ['fs']]
     let moduleLoadListDescriptor
 
     beforeEach(() => {
@@ -39,10 +35,10 @@ describe('bundler register', () => {
       Object.defineProperty(process, 'moduleLoadList', moduleLoadListDescriptor)
     })
 
-    it('re-requires every loaded hooked built-in, then syncs ESM exports once', () => {
+    it('re-requires every loaded registered built-in, then syncs ESM exports once', () => {
       const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true })
 
-      assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
+      assert.deepStrictEqual(requireBuiltin.args, REGISTERED_BUILTINS)
       sinon.assert.calledOnce(sync)
       for (const call of requireBuiltin.getCalls()) assert.ok(call.calledBefore(sync.firstCall))
     })
@@ -54,34 +50,32 @@ describe('bundler register', () => {
       sinon.assert.notCalled(sync)
     })
 
-    it('skips hooked built-ins that were never loaded', () => {
+    it('skips registered built-ins that were never loaded', () => {
       const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, loaded: ['http', 'fs'] })
 
       assert.deepStrictEqual(requireBuiltin.args, [['http'], ['fs']])
       sinon.assert.calledOnce(sync)
     })
 
-    it('re-requires every hooked built-in when the loaded built-ins are unknown', () => {
+    it('re-requires every registered built-in when the loaded built-ins are unknown', () => {
       const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, moduleLoadListMissing: true })
 
-      assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
+      assert.deepStrictEqual(requireBuiltin.args, REGISTERED_BUILTINS)
       sinon.assert.calledOnce(sync)
     })
 
-    it('skips disabled instrumentations and serverless exclusions', () => {
-      const { requireBuiltin } = loadBuiltinRegister({
-        bundled: true,
-        disabled: new Set(['http', 'dns']),
-        serverless: true,
-      })
+    it('only re-requires built-ins that register.js hooked', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, registered: ['https', 'fs'] })
 
-      assert.deepStrictEqual(requireBuiltin.args, [['https']])
+      assert.deepStrictEqual(requireBuiltin.args, [['https'], ['fs']])
+      sinon.assert.calledOnce(sync)
     })
 
-    it('keeps serverless-excluded built-ins outside serverless', () => {
-      const { requireBuiltin } = loadBuiltinRegister({ bundled: true, loaded: ['fs'] })
+    it('does not sync when register.js hooked no built-ins', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, registered: [] })
 
-      assert.deepStrictEqual(requireBuiltin.args, [['fs']])
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
     })
 
     it('does not sync when nothing was patched', () => {
@@ -407,8 +401,7 @@ function throwValue (value) {
  * Execute the real CommonJS entrypoint with the module wrapper supplied by Node or a bundler.
  * @param {{
  *   bundled: boolean,
- *   disabled?: Set<string>,
- *   serverless?: boolean,
+ *   registered?: string[],
  *   loaded?: string[],
  *   moduleLoadListMissing?: boolean,
  *   failing?: Record<string, Error>,
@@ -417,8 +410,7 @@ function throwValue (value) {
  */
 function loadBuiltinRegister ({
   bundled,
-  disabled = new Set(),
-  serverless = false,
+  registered = ['http', 'https', 'dns', 'fs'],
   loaded = ['http', 'https', 'dns', 'fs'],
   moduleLoadListMissing = false,
   failing = {},
@@ -437,18 +429,10 @@ function loadBuiltinRegister ({
     module: Module,
     'dc-polyfill': { subscribe: sinon.stub() },
     '../../../dd-trace/src/log': log,
-    '../../../dd-trace/src/serverless': { IS_SERVERLESS: serverless },
-    './register.js': {},
-    './instrumentation-utils': { getDisabledInstrumentations: () => disabled },
-    './hooks': {
-      http () {},
-      https () {},
-      dns () {},
-      fs: { serverless: false, fn () {} },
-      express () {},
-    },
+    './register.js': { registeredBuiltinNames: registered },
+    './instrumentation-utils': { getDisabledInstrumentations: () => new Set() },
+    './hooks': {},
     './instrumentations': {},
-    './shared-utils': sharedUtils,
     './rewriter/targets': {},
   }
   // Naming the script after the real file attributes its coverage to that file.

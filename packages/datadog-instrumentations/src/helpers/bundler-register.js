@@ -4,8 +4,7 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const log = require('../../../dd-trace/src/log')
-const { IS_SERVERLESS } = require('../../../dd-trace/src/serverless')
-const { activate, loadChannel } = require('./register.js')
+const { activate, loadChannel, registeredBuiltinNames } = require('./register.js')
 const {
   filename,
   getDisabledInstrumentations,
@@ -14,7 +13,6 @@ const {
 } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
-const { isNodeBuiltinModuleName } = require('./shared-utils')
 const { isRewriteActivationEnabled } = require('./rewriter/targets')
 const disabledInstrumentations = getDisabledInstrumentations()
 
@@ -34,17 +32,14 @@ if (!(module instanceof Module)) {
 
 function patchLoadedBuiltins () {
   // A built-in nobody has loaded cannot be cached by the bundle yet, and a later require reaches ritm, so it is
-  // skipped. moduleLoadList is undocumented: if it ever disappears, every hooked built-in is loaded instead.
+  // skipped. moduleLoadList is undocumented: if it ever disappears, every registered built-in is loaded instead.
   // @ts-expect-error - process.moduleLoadList is not typed
   const { moduleLoadList } = process
   const loadedBuiltins = Array.isArray(moduleLoadList) ? moduleLoadList : undefined
 
   let patched = false
-  for (const name of Object.keys(hooks)) {
-    if (!isNodeBuiltinModuleName(name) ||
-      disabledInstrumentations.has(name) ||
-      (IS_SERVERLESS && hooks[name].serverless === false) ||
-      loadedBuiltins?.includes(`NativeModule ${name}`) === false) continue
+  for (const name of registeredBuiltinNames) {
+    if (loadedBuiltins?.includes(`NativeModule ${name}`) === false) continue
 
     try {
       Module.prototype.require.call(module, name)
