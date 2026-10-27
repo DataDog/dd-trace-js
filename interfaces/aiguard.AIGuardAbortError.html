@@ -16,14 +16,14 @@
 and the client is configured to enforce blocking mode.</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AIGuardAbortError</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#reason">reason</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#sds">sds</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Object</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tagprobabilities">tagProbabilities</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tags">tags</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
-<section class="tsd-panel tsd-hierarchy" data-refl="535">
+<section class="tsd-panel tsd-hierarchy" data-refl="538">
 <h4>Hierarchy</h4>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><span class="tsd-signature-type">Error</span>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><span class="tsd-hierarchy-target">AIGuardAbortError</span></li></ul></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3fba13ce668a3eea0c6abfdacac3ab660220b16b/index.d.ts#L1962">index.d.ts:1962</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/6718c6585a7d62b532746474bfb1d10c9e0aaf16/index.d.ts#L1973">index.d.ts:1973</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -45,28 +45,28 @@ and the client is configured to enforce blocking mode.</p>
 <div class="tsd-comment tsd-typography"><p>Human-readable explanation from AI Guard describing why the conversation was blocked.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3fba13ce668a3eea0c6abfdacac3ab660220b16b/index.d.ts#L1966">index.d.ts:1966</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/6718c6585a7d62b532746474bfb1d10c9e0aaf16/index.d.ts#L1977">index.d.ts:1977</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="sds"><span>sds</span><a href="#sds" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">sds</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Object</span><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p>Sensitive Data Scanner findings from the evaluation.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3fba13ce668a3eea0c6abfdacac3ab660220b16b/index.d.ts#L1978">index.d.ts:1978</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/6718c6585a7d62b532746474bfb1d10c9e0aaf16/index.d.ts#L1989">index.d.ts:1989</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tagprobabilities"><span>tag<wbr/>Probabilities</span><a href="#tagprobabilities" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tagProbabilities</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>Dictionary of tag probabilities (e.g. { indirect-prompt-injection: 0.2, jailbreak-attempt: 0.8 })</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3fba13ce668a3eea0c6abfdacac3ab660220b16b/index.d.ts#L1974">index.d.ts:1974</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/6718c6585a7d62b532746474bfb1d10c9e0aaf16/index.d.ts#L1985">index.d.ts:1985</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tags"><span>tags</span><a href="#tags" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tags</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
 <div class="tsd-comment tsd-typography"><p>List of tags associated with the evaluation (e.g. indirect-prompt-injection)</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/3fba13ce668a3eea0c6abfdacac3ab660220b16b/index.d.ts#L1970">index.d.ts:1970</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/6718c6585a7d62b532746474bfb1d10c9e0aaf16/index.d.ts#L1981">index.d.ts:1981</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
