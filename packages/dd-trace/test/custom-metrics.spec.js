@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const http = require('node:http')
 const path = require('node:path')
 const os = require('node:os')
-const { exec } = require('node:child_process')
+const { exec, execFile } = require('node:child_process')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
@@ -68,4 +68,25 @@ describe('Custom Metrics', () => {
       done()
     })
   })
+
+  for (const workerId of [undefined, '1']) {
+    const mode = workerId ? 'Jest workers' : 'the main process'
+    it(`does not initialize or send DogStatsD metrics in Test Optimization ${mode}`, (done) => {
+      execFile(process.execPath, [path.join(__dirname, 'custom-metrics-test-optimization-app.js')], {
+        env: {
+          DD_TRACE_AGENT_URL: `http://127.0.0.1:${httpPort}`,
+          DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+          DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+          DD_RUNTIME_METRICS_ENABLED: 'true',
+          DD_RUNTIME_METRICS_NATIVE: 'false',
+          JEST_WORKER_ID: workerId,
+        },
+      }, (error, stdout, stderr) => {
+        if (error) return done(error)
+        assert.strictEqual(metricsPayloads.length, 0, stderr)
+        done()
+      })
+    })
+  }
 })

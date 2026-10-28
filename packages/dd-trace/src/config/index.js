@@ -639,6 +639,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
+    if (this.isCiVisibility) {
+      // Test Optimization reports its metrics through instrumentation telemetry, not DogStatsD.
+      set(this, 'dogstatsd', undefined)
+      setAndTrack(this, 'runtimeMetrics.enabled', false)
+    }
+
     const isTestOptimizationWorker = this.isCiVisibility &&
       TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (isTestOptimizationWorker) {
