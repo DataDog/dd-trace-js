@@ -38,6 +38,31 @@ const ANY_STRING = Symbol('test.ANY_STRING')
 const ANY_NUMBER = Symbol('test.ANY_NUMBER')
 const ANY_VALUE = Symbol('test.ANY_VALUE')
 const defaultStopProcTimeoutMs = 2_000
+const processGroupClosePromises = new WeakMap()
+
+/**
+ * @param {string} out
+ * @param {string} expectedOut
+ */
+function assertOutputMatchesInOrder (out, expectedOut) {
+  let offset = 0
+  let expectedOffset = 0
+
+  while (expectedOffset < expectedOut.length) {
+    const newline = expectedOut.indexOf('\n', expectedOffset)
+    const end = newline === -1 ? expectedOut.length : newline + 1
+    const expectedLine = expectedOut.slice(expectedOffset, end)
+    const match = out.slice(offset).match(new RegExp(expectedLine))
+
+    assert.notStrictEqual(
+      match,
+      null,
+      `output "${out}" does not contain expected output line "${expectedLine}" after offset ${offset}`
+    )
+    offset += match.index + match[0].length
+    expectedOffset = end
+  }
+}
 
 /**
  * @param {string} filename
@@ -49,7 +74,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
   assert.notStrictEqual(proc.pid, undefined, 'Process PID is not available')
   const pid = proc.pid
-  let out = await new Promise((resolve, reject) => {
+  const out = await new Promise((resolve, reject) => {
     proc.once('error', reject)
     const out = []
     proc.stdout.on('data', data => {
@@ -67,10 +92,10 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
     expectedOut(out)
   } else {
     if (process.env.DD_TRACE_DEBUG) {
-      // Debug adds this, which we don't care about in these tests
-      out = out.replace('Flushing 0 metrics via HTTP\n', '')
+      assertOutputMatchesInOrder(out, expectedOut)
+    } else {
+      assert.match(out, new RegExp(expectedOut), `output "${out}" does not contain expected output "${expectedOut}"`)
     }
-    assert.match(out, new RegExp(expectedOut), `output "${out}" does not contain expected output "${expectedOut}"`)
   }
 
   if (expectedSource) {
@@ -345,6 +370,31 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
  */
 async function stopProc (proc, options = {}) {
   if (!proc) return
+
+  const processGroupClosed = processGroupClosePromises.get(proc)
+  if (processGroupClosed) {
+    const signal = options.signal ?? 'SIGTERM'
+    const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
+
+    try {
+      let closed
+      try {
+        killProcessGroup(proc, signal)
+        closed = await waitForPromise(processGroupClosed, timeoutMs)
+      } finally {
+        // Also stop descendants that ignore the initial signal or close their pipes before exiting.
+        killProcessGroup(proc, 'SIGKILL')
+      }
+
+      if (!closed && !await waitForPromise(processGroupClosed, timeoutMs)) {
+        throw new Error(`Process group ${proc.pid} did not close after SIGKILL`)
+      }
+    } finally {
+      processGroupClosePromises.delete(proc)
+    }
+    return
+  }
+
   if (proc.exitCode !== null || proc.signalCode !== null) return
 
   const signal = options.signal ?? 'SIGTERM'
@@ -368,6 +418,56 @@ async function stopProc (proc, options = {}) {
 
   if (!exitedAfterSigkill) {
     throw new Error(`Process ${proc.pid} did not exit after SIGKILL`)
+  }
+}
+
+/**
+ * Runs a shell command in an isolated process group on POSIX so cleanup can
+ * stop descendants even after the shell exits.
+ *
+ * @param {string} command - Shell command to run.
+ * @param {childProcess.ExecOptions} [options] - Process options.
+ * @returns {childProcess.ChildProcess}
+ */
+function execInProcessGroup (command, options = {}) {
+  if (process.platform === 'win32') return exec(command, options)
+
+  const proc = spawn(command, { ...options, shell: options.shell || true, detached: true })
+  // Like exec(), drain output even when the caller does not consume it.
+  proc.stdout.resume()
+  proc.stderr.resume()
+  const closed = once(proc, 'close')
+  closed.catch(() => {})
+  if (proc.pid !== undefined) processGroupClosePromises.set(proc, closed)
+  return proc
+}
+
+/**
+ * @param {childProcess.ChildProcess} proc - Process whose group should be stopped.
+ * @param {keyof import('node:os').SignalConstants} signal - Signal to send.
+ */
+function killProcessGroup (proc, signal) {
+  try {
+    process.kill(-proc.pid, signal)
+  } catch (error) {
+    if (error.code !== 'ESRCH') throw error
+  }
+}
+
+/**
+ * @param {Promise<unknown>} promise - Promise to wait for.
+ * @param {number} timeoutMs - Max time to wait in milliseconds.
+ * @returns {Promise<boolean>} `true` if the promise resolved before timeout.
+ */
+async function waitForPromise (promise, timeoutMs) {
+  let timeout
+  try {
+    return await Promise.race([
+      promise.then(() => true),
+      new Promise(resolve => { timeout = setTimeout(resolve, timeoutMs, false) }),
+    ])
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
@@ -1432,49 +1532,14 @@ function createParallelIt (
 function withReceiver (fn) {
   return async () => {
     const receiver = await new FakeCiVisIntake().start()
-    const useProcessGroup = process.platform !== 'win32'
-    let lastProc, closed
+    let lastProc
     const run = (cmd, opts) => {
-      // Keep shell operators intact and isolate descendants for cleanup on POSIX.
-      lastProc = useProcessGroup
-        ? spawn(cmd, { ...opts, shell: opts?.shell || true, detached: true })
-        : exec(cmd, opts)
-      closed = once(lastProc, 'close')
-      closed.catch(() => {})
-      // Like exec(), drain output even when the caller does not consume it.
-      lastProc.stdout.resume()
-      lastProc.stderr.resume()
+      lastProc = execInProcessGroup(cmd, opts)
       return lastProc
     }
 
-    /** @param {keyof import('node:os').SignalConstants} signal */
-    function killProcessGroup (signal) {
-      try {
-        process.kill(-lastProc.pid, signal)
-      } catch (error) {
-        if (error.code !== 'ESRCH') throw error
-      }
-    }
-
     async function stopLastProcess () {
-      if (useProcessGroup && lastProc?.pid) {
-        let timeout
-        try {
-          killProcessGroup('SIGTERM')
-          // The shell can exit before its children; close waits for their inherited pipes too.
-          await Promise.race([
-            closed,
-            new Promise(resolve => { timeout = setTimeout(resolve, defaultStopProcTimeoutMs) }),
-          ])
-        } finally {
-          clearTimeout(timeout)
-          // Also stop descendants that ignore SIGTERM or close their pipes before exiting.
-          killProcessGroup('SIGKILL')
-        }
-        await closed
-      } else {
-        await stopProc(lastProc)
-      }
+      await stopProc(lastProc)
     }
     run.stop = stopLastProcess
 
@@ -1496,9 +1561,11 @@ module.exports = {
   ANY_VALUE,
   FakeAgent,
   hookFile,
+  assertOutputMatchesInOrder,
   assertObjectContains,
   assertUUID,
   deepFreeze,
+  execInProcessGroup,
   stopProc,
   stopCiVisTestEnv,
   spawnProc,

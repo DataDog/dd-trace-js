@@ -124,6 +124,8 @@ const changeTracker = {
  */
 function undo (config, source) {
   for (const name of changeTracker[source]) {
+    if (trackedConfigOrigins.get(name) !== source) continue
+
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
@@ -635,6 +637,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
       setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
+    }
+
+    if (this.isCiVisibility) {
+      // Test Optimization reports its metrics through instrumentation telemetry, not DogStatsD.
+      set(this, 'dogstatsd', undefined)
+      setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
 
     const isTestOptimizationWorker = this.isCiVisibility &&

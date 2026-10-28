@@ -480,8 +480,9 @@ module.exports = {
       versions: ['>= 2'],
     },
     {
+      // TODO: ldapjs-promise 4 bundles its own LDAP client instead of wrapping ldapjs, so it is not instrumented yet.
       name: 'ldapjs-promise',
-      versions: ['>=2'],
+      versions: ['>=2 <4'],
     },
   ],
   'light-my-request': [

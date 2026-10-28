@@ -1,0 +1,10 @@
+_v: 1
+name: http
+display_name: HTTP
+description: Instruments Node.js HTTP and HTTPS client requests and server request handling.
+packages: []
+category:
+- http.client
+- http.server
+systems: []
+creation_date: '2018-03-27'
