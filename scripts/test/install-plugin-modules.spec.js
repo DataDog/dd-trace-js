@@ -178,30 +178,64 @@ externals.express.push(
     })
 
     assert.strictEqual(result.status, 1)
-    assert.match(result.stderr, /Conflicting overrides for 'axios': '1' and '2'/)
+    assert.match(result.stderr, /Conflicting overrides for 'axios': "1" and "2"/)
   })
 
-  // Both forms are what a reader reaches for when a single sandbox needs a different transitive, and Bun
-  // takes either into the manifest and then ignores it.
-  for (const [label, override, rejected] of [
-    ['a Yarn-style selective path', "{ 'axios@1.0.0/follow-redirects': '^1' }", 'axios@1.0.0/follow-redirects'],
-    ['an npm-style nested object', "{ axios: { 'follow-redirects': '^1' } }", 'axios'],
-  ]) {
-    it(`rejects ${label}, which Bun would silently ignore`, () => {
-      const preload = path.join(wrapperDirectory, `override-${rejected.replaceAll(/\W/g, '-')}.js`)
-      fs.writeFileSync(preload, `
+  it('rejects conflicting nested overrides before installing', () => {
+    const preload = path.join(wrapperDirectory, 'conflicting-nested-overrides.js')
+    fs.writeFileSync(preload, `
 const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
-externals.express.push({ name: 'axios', overrides: ${override} })
+externals.q = [
+  { name: 'collections', overrides: { q: { collections: '^5' } } },
+  { name: 'collections', overrides: { q: { collections: '^2' } } },
+]
 `)
 
-      const result = spawnInstall('express', {
-        NODE_OPTIONS: `--require=${preload}`,
-      })
+    const result = spawnInstall('q', { NODE_OPTIONS: `--require=${preload}` })
 
-      assert.strictEqual(result.status, 1)
-      assert.ok(result.stderr.includes(`Override '${rejected}' cannot be expressed as a Bun override`), result.stderr)
+    assert.doesNotMatch(result.stdout, /bun install/)
+    assert.strictEqual(result.status, 1)
+    assert.match(result.stderr, /Conflicting overrides for 'q'/)
+    assert.match(result.stderr, /\^5/)
+    assert.match(result.stderr, /\^2/)
+  })
+
+  for (const [label, overrides] of [
+    ['an npm-style nested object', { q: { collections: '^5.0.0' } }],
+    ['a pnpm-style parent selector', { 'q@^2>collections': '^5.0.0' }],
+  ]) {
+    it(`applies ${label} without overriding unrelated dependencies`, () => {
+      const preload = path.join(wrapperDirectory, 'nested-overrides.js')
+      fs.writeFileSync(preload, `
+const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
+externals.q = [{ name: 'collections', versions: ['^2.0.3'], overrides: ${JSON.stringify(overrides)} }]
+`)
+
+      runInstall('q', undefined, undefined, { NODE_OPTIONS: `--require=${preload}` })
+
+      const dependency = require(path.join(versionsDir, 'q@2.0.0'))
+      const unrelated = require(path.join(versionsDir, 'collections'))
+      assert.strictEqual(semver.major(unrelated.version()), 2)
+      const requireFromQ = createRequire(dependency.getPath())
+      assert.strictEqual(semver.major(requireFromQ('collections/package.json').version), 5)
+      dependency.get()
     })
   }
+
+  it('merges equivalent nested overrides from multiple declarations', () => {
+    const preload = path.join(wrapperDirectory, 'equivalent-overrides.js')
+    fs.writeFileSync(preload, `
+const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
+externals.q = [
+  { name: 'collections', versions: ['^2.0.3'], overrides: { q: { collections: '^5.0.0', asap: '^1' } } },
+  { name: 'collections', versions: ['^2.0.3'], overrides: { q: { asap: '^1', collections: '^5.0.0' } } },
+]
+`)
+
+    runInstall('q', undefined, undefined, { NODE_OPTIONS: `--require=${preload}` })
+
+    require(path.join(versionsDir, 'q@2.0.0')).get()
+  })
 
   it('supports a plugin filter that generates no workspaces', () => {
     fs.rmSync(path.join(versionsDir, 'node_modules'), { recursive: true, force: true })
@@ -306,7 +340,7 @@ path.join = function join (...parts) {
     runInstall('q')
 
     assert.deepStrictEqual(readVersionsManifest().overrides, {
-      collections: '^5.0.0',
+      'q@^2>collections': '^5.0.0',
     })
     require(path.join(versionsDir, 'q')).get()
   })
@@ -315,7 +349,7 @@ path.join = function join (...parts) {
     runInstall('langchain')
 
     // No override pins `@langchain/core` here. A workspace-wide one would drag langgraph's `>=1.1.16`
-    // sandboxes down to the 0.2 line, and Bun ignores a selective one, so the range is left to
+    // sandboxes down to the 0.2 line, so the range is left to
     // `@langchain/openai@0.0.34`'s own declaration — which is what the assertion below verifies.
     assert.deepStrictEqual(readVersionsManifest().overrides, {})
     const manifest = require(path.join(versionsDir, 'langchain', 'package.json'))

@@ -810,7 +810,7 @@ module.exports = {
       versions: ['5'],
       // q@2 requires collections/shim, which is absent from its declared collections@^2.
       overrides: {
-        collections: '^5.0.0',
+        'q@^2>collections': '^5.0.0',
       },
     },
     {
