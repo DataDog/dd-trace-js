@@ -25,7 +25,7 @@ const invocationChannel = dc.tracingChannel('datadog:aws-lambda:invoke')
  *
  * @param {Function} handler Customer Lambda handler.
  * @param {Record<string, unknown>} [config] Per-handler configuration overrides.
- * @param {(handler: Function) => Function} [monitor] Observes the selected completion inside invocation scope.
+ * @param {(handler: Function, normalized: boolean) => Function} [monitor] Monitors selected completion.
  * @returns {Function} Wrapped handler, or the existing wrapper when already marked.
  */
 function wrapHandler (handler, config, monitor) {
@@ -37,7 +37,7 @@ function wrapHandler (handler, config, monitor) {
 
   const isResponseStream = getDataProperty(handler, HANDLER_STREAMING) === STREAM_RESPONSE
   const completion = promisifiedHandler(handler)
-  const invoke = monitor ? monitor(completion) : completion
+  const invoke = monitor ? monitor(completion, true) : completion
 
   function wrappedHandler (...args) {
     const contextIndex = isResponseStream ? 2 : findContextIndex(args)

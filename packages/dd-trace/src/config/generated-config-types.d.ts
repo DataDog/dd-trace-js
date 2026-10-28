@@ -77,6 +77,7 @@ export interface GeneratedConfig {
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
   DD_APP_KEY: string | undefined;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
+  DD_BUNDLER_INJECT_GIT_METADATA: boolean;
   DD_CRASHTRACKING_ENABLED: boolean;
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
@@ -681,6 +682,7 @@ export interface GeneratedEnvVarConfig {
   DD_APPSEC_TRACE_RATE_LIMIT: number;
   DD_APPSEC_WAF_TIMEOUT: number;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
+  DD_BUNDLER_INJECT_GIT_METADATA: boolean;
   DD_CAPTURE_LAMBDA_PAYLOAD: boolean;
   DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: number;
   DD_CIVISIBILITY_AGENTLESS_ENABLED: boolean;

@@ -1,15 +1,16 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const Module = require('node:module')
-
+const vm = require('node:vm')
 const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
 
 const instrumentationUtils = require('../../src/helpers/instrumentation-utils')
-
 const CHANNEL = 'dd-trace:bundler:load'
-
+const registerPath = require.resolve('../../src/helpers/bundler-register')
+const registerSource = fs.readFileSync(registerPath, 'utf8')
 describe('bundler register', () => {
   let originalRequire
 
@@ -20,6 +21,86 @@ describe('bundler register', () => {
   afterEach(() => {
     Module.prototype.require = originalRequire
     sinon.restore()
+  })
+
+  describe('loaded built-ins in a bundled tracer', () => {
+    const REGISTERED_BUILTINS = [['http'], ['https'], ['dns'], ['fs']]
+    let moduleLoadListDescriptor
+
+    beforeEach(() => {
+      moduleLoadListDescriptor = Object.getOwnPropertyDescriptor(process, 'moduleLoadList')
+    })
+
+    afterEach(() => {
+      Object.defineProperty(process, 'moduleLoadList', moduleLoadListDescriptor)
+    })
+
+    it('re-requires every loaded registered built-in, then syncs ESM exports once', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true })
+
+      assert.deepStrictEqual(requireBuiltin.args, REGISTERED_BUILTINS)
+      sinon.assert.calledOnce(sync)
+      for (const call of requireBuiltin.getCalls()) assert.ok(call.calledBefore(sync.firstCall))
+    })
+
+    it('does not touch built-ins in an unbundled process', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: false })
+
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
+    })
+
+    it('skips registered built-ins that were never loaded', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, loaded: ['http', 'fs'] })
+
+      assert.deepStrictEqual(requireBuiltin.args, [['http'], ['fs']])
+      sinon.assert.calledOnce(sync)
+    })
+
+    it('re-requires every registered built-in when the loaded built-ins are unknown', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, moduleLoadListMissing: true })
+
+      assert.deepStrictEqual(requireBuiltin.args, REGISTERED_BUILTINS)
+      sinon.assert.calledOnce(sync)
+    })
+
+    it('only re-requires built-ins that register.js hooked', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, registered: ['https', 'fs'] })
+
+      assert.deepStrictEqual(requireBuiltin.args, [['https'], ['fs']])
+      sinon.assert.calledOnce(sync)
+    })
+
+    it('does not sync when register.js hooked no built-ins', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, registered: [] })
+
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
+    })
+
+    it('does not sync when nothing was patched', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, loaded: [] })
+
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
+    })
+
+    it('does not sync when every require fails', () => {
+      const error = new Error('unavailable')
+      const failing = { http: error, https: error, dns: error, fs: error }
+      const { sync, log } = loadBuiltinRegister({ bundled: true, failing })
+
+      sinon.assert.notCalled(sync)
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('logs a failing ESM synchronization instead of throwing', () => {
+      const error = new Error('sync failed')
+      const { log } = loadBuiltinRegister({ bundled: true, syncError: error })
+
+      sinon.assert.calledWithExactly(log.error, 'Error synchronizing bundled built-in ESM exports: %s',
+        error.message, error)
+    })
   })
 
   it('patches modules published by existing bundlers', () => {
@@ -314,6 +395,54 @@ describe('bundler register', () => {
  */
 function throwValue (value) {
   throw value
+}
+
+/**
+ * Execute the real CommonJS entrypoint with the module wrapper supplied by Node or a bundler.
+ * @param {{
+ *   bundled: boolean,
+ *   registered?: string[],
+ *   loaded?: string[],
+ *   moduleLoadListMissing?: boolean,
+ *   failing?: Record<string, Error>,
+ *   syncError?: Error
+ * }} options
+ */
+function loadBuiltinRegister ({
+  bundled,
+  registered = ['http', 'https', 'dns', 'fs'],
+  loaded = ['http', 'https', 'dns', 'fs'],
+  moduleLoadListMissing = false,
+  failing = {},
+  syncError,
+}) {
+  Object.defineProperty(process, 'moduleLoadList', {
+    value: moduleLoadListMissing ? undefined : loaded.map(name => `NativeModule ${name}`),
+    configurable: true,
+  })
+  const requireBuiltin = sinon.stub(Module.prototype, 'require').returns({})
+  for (const [name, error] of Object.entries(failing)) requireBuiltin.withArgs(name).throws(error)
+  const sync = sinon.stub(Module, 'syncBuiltinESMExports')
+  if (syncError) sync.throws(syncError)
+  const log = { error: sinon.stub() }
+  const stubs = {
+    module: Module,
+    'dc-polyfill': { subscribe: sinon.stub() },
+    '../../../dd-trace/src/log': log,
+    './register.js': { registeredBuiltinNames: registered },
+    './instrumentation-utils': { getDisabledInstrumentations: () => new Set() },
+    './hooks': {},
+    './instrumentations': {},
+    './rewriter/targets': {},
+  }
+  // Naming the script after the real file attributes its coverage to that file.
+  const wrapped = vm.runInThisContext(Module.wrap(registerSource), { filename: registerPath })
+  const mod = bundled ? { exports: {} } : new Module(__filename)
+  wrapped(mod.exports, name => {
+    assert.ok(Object.hasOwn(stubs, name), `Unexpected startup dependency: ${name}`)
+    return stubs[name]
+  }, mod, __filename, __dirname)
+  return { requireBuiltin, sync, log }
 }
 
 /**

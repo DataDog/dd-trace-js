@@ -95,6 +95,11 @@ const DD_ERROR_META_KEYS = new Set(['error.message'])
 class OtlpTraceTransformer extends OtlpTransformerBase {
   #otelTraceSemanticsEnabled
 
+  // Span meta entries with the same key and value as a resource attribute are already carried by
+  // the resource (e.g. DD_TAGS), so they are not repeated as span attributes.
+  /** @type {import('@opentelemetry/api').Attributes} */
+  #resourceAttributes
+
   /**
    * Creates a new OtlpTraceTransformer instance.
    *
@@ -104,6 +109,16 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   constructor (resourceAttributes, otelTraceSemanticsEnabled) {
     super(resourceAttributes, 'http/json', 'traces')
     this.#otelTraceSemanticsEnabled = otelTraceSemanticsEnabled
+    this.#resourceAttributes = resourceAttributes
+  }
+
+  /**
+   * @override
+   * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
+   */
+  updateResourceAttributes (resourceAttributes) {
+    super.updateResourceAttributes(resourceAttributes)
+    this.#resourceAttributes = resourceAttributes
   }
 
   /**
@@ -169,7 +184,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     return {
       traceId: span.trace_id.toTraceIdHex(traceIdHigh).padStart(32, '0'),
       spanId: this.#spanIdToHex(span.span_id),
-      parentSpanId: (parentId && !parentId.equals(ZERO_ID)) ? this.#spanIdToHex(parentId) : undefined,
+      parentSpanId: parentId && !parentId.equals(ZERO_ID) ? this.#spanIdToHex(parentId) : undefined,
       traceState: span.trace_state,
       name: span.resource,
       kind: this.#mapSpanKind(span.meta?.['span.kind']),
@@ -216,11 +231,13 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       }
     }
 
-    // Add meta string tags, skipping keys that map to dedicated OTLP fields
+    // Add meta string tags, skipping keys that map to dedicated OTLP fields and tags the
+    // resource already carries with the same value (e.g. global tags from DD_TAGS)
     if (span.meta) {
       for (const [key, value] of Object.entries(span.meta)) {
         if (EXCLUDED_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && DD_ERROR_META_KEYS.has(key)) continue
+        if (this.#resourceAttributes[key] === value) continue
         attributes.push({ key, value: { stringValue: value } })
       }
     }

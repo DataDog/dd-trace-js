@@ -1,7 +1,7 @@
 'use strict'
 
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
-const { copyHandlerMetadata, getDataProperty, isCallbackCompletion } =
+const { copyHandlerMetadata, getDataProperty } =
   require('../../../datadog-instrumentations/src/helpers/lambda-handler')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const log = require('../log')
@@ -31,13 +31,8 @@ function checkTimeout (context) {
   const timeout = setTimeout(() => {
     timeoutChannel.publish()
   }, Math.max(0, remainingTimeInMillis - apmFlushDeadline))
-  try {
-    timeout.unref?.()
-  } catch (error) {
-    clearTimeout(timeout)
-    log.error('Error unreferencing Lambda timeout monitor: %s', error)
-    return
-  }
+  // eslint-disable-next-line eslint-rules/eslint-timer-unref -- AWS Lambda uses Node.js timers.
+  timeout.unref()
   return timeout
 }
 
@@ -72,8 +67,9 @@ function crashFlush () {
  * Monitors an AWS Lambda handler for impending timeouts without creating a span.
  *
  * @param {Function} lambdaHandler a Lambda handler function.
+ * @param {boolean} normalized whether a completion adapter owns completion selection.
  */
-exports.datadog = function datadog (lambdaHandler) {
+exports.datadog = function datadog (lambdaHandler, normalized = false) {
   function monitored (...args) {
     const context = extractContext(args)
     if (!context || monitoredContexts.has(context)) return Reflect.apply(lambdaHandler, this, args)
@@ -97,21 +93,22 @@ exports.datadog = function datadog (lambdaHandler) {
         }
       }
     }
-    const clearOnHandlerCompletion = () => {
-      // Once a native callback selects event-loop drain, later handler signals are ignored by RIC.
-      if (!callbackPending) clear()
-    }
+    const clearOnHandlerCompletion = normalized
+      ? clear
+      : () => {
+          // Once a native callback selects event-loop drain, later handler signals are ignored by RIC.
+          if (!callbackPending) clear()
+        }
 
     const contextIndex = args.indexOf(context)
     const callbackObservable = contextIndex !== 2 && typeof args[2] === 'function'
-    let completionObservable = true
-    for (const name of ['done', 'succeed', 'fail']) {
-      if (!wrapCompletion(context, name, clearOnHandlerCompletion, completionMethods)) completionObservable = false
+    if (!normalized) {
+      for (const name of ['done', 'succeed', 'fail']) {
+        wrapCompletion(context, name, clearOnHandlerCompletion, completionMethods)
+      }
     }
     // Legacy Lambda runtimes complete idle invocations through this callback instead of the handler's callback.
-    if (!wrapCompletion(globalThis, BEFORE_EXIT, clear, completionMethods)) completionObservable = false
-    // Newer runtimes complete from the return value and expose no legacy completion hooks.
-    if (completionMethods.length === 0) completionObservable = false
+    wrapCompletion(globalThis, BEFORE_EXIT, clear, completionMethods)
 
     if (callbackObservable) {
       const callback = args[2]
@@ -159,12 +156,8 @@ exports.datadog = function datadog (lambdaHandler) {
           throw error
         })
       }
-      // An observed callback can complete later regardless of arity or an incidental return value.
-      // Otherwise, retain monitoring only when context/runtime completion is observable and expected.
-      // The shim streaming adapter omits its marker but still receives context as argument three.
-      if (!callbackObservable &&
-          (contextIndex === 2 || !completionObservable ||
-            !isCallbackCompletion(monitored, result, contextIndex))) clear()
+      // Legacy RIC supplies a callback; newer runtimes complete from the return value.
+      if (!callbackObservable) clear()
       return result
     } catch (error) {
       clearOnHandlerCompletion()
@@ -173,6 +166,8 @@ exports.datadog = function datadog (lambdaHandler) {
       monitoredContexts.delete(context)
     }
   }
+
+  if (normalized) return monitored
 
   copyHandlerMetadata(lambdaHandler, monitored)
   return monitored

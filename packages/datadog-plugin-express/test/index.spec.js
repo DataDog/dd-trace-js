@@ -744,6 +744,139 @@ describe('Plugin', () => {
           })
         })
 
+        it('should keep req.next equal to the next passed to middleware', async () => {
+          const app = express()
+          const router = express.Router()
+          const seen = []
+
+          app.use((req, res, next) => {
+            seen.push(next === req.next)
+            next()
+          })
+          // Nested routers set `req.next` themselves only from express 4.2.0.
+          const routersSetReqNext = semver.gte(require(`../../../versions/express@${version}`).version(), '4.2.0')
+          router.use((req, res, next) => {
+            if (routersSetReqNext) seen.push(next === req.next)
+            next()
+          })
+          app.use(router)
+          app.use((req, res, next) => {
+            seen.push(next === req.next)
+            // express passes `req.next` to a negotiated formatter in every version;
+            // only newer versions pass arguments to `.default`.
+            res.format({
+              text: (formatReq, formatRes, formatNext) => {
+                seen.push(formatNext === next)
+                res.status(200).send()
+              },
+            })
+          })
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+
+          const response = await httpRequest.get(`http://localhost:${appListener.address().port}/`, {
+            headers: { accept: 'text/plain' },
+          })
+
+          assert.strictEqual(response.status, 200)
+          assert.deepStrictEqual(seen, routersSetReqNext ? [true, true, true, true] : [true, true, true])
+        })
+
+        it('should keep req.next at the router level inside route handlers', async () => {
+          const app = express()
+
+          // res.format hands formatters `req.next`, which must advance to the next
+          // route, not to the remaining handlers of the current one.
+          app.get('/next', (req, res) => {
+            res.format({ text: () => req.next() })
+          }, (req, res) => res.send('same route'))
+          app.get('/next', (req, res) => res.send('next route'))
+
+          // An unmatched format's 406 must skip route-local error handlers.
+          app.get('/406', (req, res) => {
+            res.format({ text: () => res.send('text') })
+          }, (err, req, res, next) => res.status(500).send('route error handler'))
+          app.use((err, req, res, next) => res.status(err.status || 500).send('app error handler'))
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+
+          const base = `http://localhost:${appListener.address().port}`
+          const next = await httpRequest.get(`${base}/next`, {
+            headers: { accept: 'text/plain' },
+            validateStatus: () => true,
+          })
+          const notAcceptable = await httpRequest.get(`${base}/406`, {
+            headers: { accept: 'application/json' },
+            validateStatus: () => true,
+          })
+
+          // express 4.3.0 itself answers a route handler's `req.next()` with a 404 (fixed in 4.3.1).
+          if (require(`../../../versions/express@${version}`).version() !== '4.3.0') {
+            assert.strictEqual(next.data, 'next route')
+          }
+          assert.strictEqual(notAcceptable.status, 406)
+          assert.strictEqual(notAcceptable.data, 'app error handler')
+        })
+
+        it('should tag the middleware span with errors forwarded through req.next', async () => {
+          const app = express()
+
+          // An unmatched format forwards a 406 error through `req.next(error)`.
+          app.get('/406', function negotiate (req, res) {
+            res.format({ text: () => res.send('text') })
+          })
+          app.use((err, req, res, next) => res.status(err.status || 500).send())
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            // express 5 dispatches through router, whose spans are `router.middleware`.
+            const forwarded = traces[0].filter(span => span.name.endsWith('.middleware') && span.error === 1)
+            assert.ok(
+              forwarded.some(span => span.meta[ERROR_MESSAGE] === 'Not Acceptable'),
+              'a middleware span should carry the error forwarded through req.next'
+            )
+          })
+          const responsePromise = httpRequest.get(`http://localhost:${appListener.address().port}/406`, {
+            headers: { accept: 'application/json' },
+            validateStatus: () => true,
+          })
+          const [, response] = await Promise.all([tracePromise, responsePromise])
+
+          assert.strictEqual(response.status, 406)
+        })
+
+        it('should finish middleware spans when req.next() is called', done => {
+          const app = express()
+
+          let span
+
+          app.use((req, res, next) => {
+            span = storage('legacy').getStore()?.span
+
+            sinon.spy(span, 'finish')
+
+            req.next()
+          })
+
+          app.use((req, res, next) => {
+            sinon.assert.called(span.finish)
+            res.status(200).send()
+            done()
+          })
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            httpRequest
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
+          })
+        })
+
         it('should not lose the current path when changing scope', done => {
           const app = express()
           const router = express.Router()

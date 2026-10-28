@@ -18,6 +18,7 @@ describe('register', () => {
   let telemetryMock
   let logMock
   let getActivationSetupMock
+  let serverlessMock
   let subscriptions
 
   const clearRegisterCache = () => {
@@ -47,6 +48,7 @@ describe('register', () => {
     telemetryMock = sinon.stub()
     logMock = { error: sinon.stub(), info: sinon.stub() }
     getActivationSetupMock = sinon.stub()
+    serverlessMock = { IS_SERVERLESS: false }
     subscriptions = []
 
     const registerPath = require.resolve('../../src/helpers/register')
@@ -69,6 +71,7 @@ describe('register', () => {
           './rewriter/instrumentation-registry': { getActivationSetup: getActivationSetupMock },
           '../../../dd-trace/src/log': logMock,
           '../../../dd-trace/src/guardrails/telemetry': telemetryMock,
+          '../../../dd-trace/src/serverless': serverlessMock,
           'dc-polyfill': {
             channel: name => {
               const ch = channel(name)
@@ -141,6 +144,46 @@ describe('register', () => {
       assert.deepStrictEqual(registeredNames.sort(), ['@confluentinc/kafka-javascript', 'mongodb-core'])
     })
   }
+
+  describe('registeredBuiltinNames', () => {
+    beforeEach(() => {
+      hooksMock.fs = { serverless: false, fn: sinon.stub() }
+      hooksMock.http = sinon.stub()
+      hooksMock.dns = { esmFirst: true, fn: sinon.stub() }
+    })
+
+    it('lists every hooked built-in and no third-party modules', () => {
+      const { registeredBuiltinNames } = loadRegisterWithEnv()
+
+      assert.deepStrictEqual(registeredBuiltinNames, ['fs', 'http', 'dns'])
+    })
+
+    for (const disabledName of ['http', 'node:http']) {
+      it(`omits http when ${disabledName} is disabled`, () => {
+        const { registeredBuiltinNames } = loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: disabledName })
+
+        assert.deepStrictEqual(registeredBuiltinNames, ['fs', 'dns'])
+      })
+    }
+
+    it('omits serverless-excluded built-ins in serverless', () => {
+      serverlessMock.IS_SERVERLESS = true
+
+      const { registeredBuiltinNames } = loadRegisterWithEnv()
+
+      assert.deepStrictEqual(registeredBuiltinNames, ['http', 'dns'])
+    })
+
+    it('matches the built-ins handed to Hook', () => {
+      serverlessMock.IS_SERVERLESS = true
+
+      const { registeredBuiltinNames } = loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: 'dns' })
+
+      const hookedNames = HookMock.args.map(([[name]]) => name)
+      assert.deepStrictEqual(registeredBuiltinNames, ['http'])
+      assert.deepStrictEqual(hookedNames, ['@confluentinc/kafka-javascript', 'mongodb-core', 'http'])
+    })
+  })
 
   for (const disabledName of ['console', 'node:console']) {
     it(`should not load console instrumentation when ${disabledName} is disabled`, () => {

@@ -134,6 +134,28 @@ describe('Lambda facade and hook composition', () => {
   }
 
   for (const entry of ['facade', 'layer', 'npm']) {
+    for (const streaming of [false, true]) {
+      it(`avoids reading completion accessors through ${entry} with streaming ${streaming}`, async () => {
+        process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
+        const unexpected = sinon.stub().throws(new Error('completion accessors must not run'))
+        // The completion adapter can install its own methods; the monitor must not read or wrap
+        // the original context methods before that adapter selects invocation completion.
+        for (const name of ['done', 'succeed', 'fail']) {
+          Object.defineProperty(context, name, { get: unexpected, set () {} })
+        }
+        const handler = streaming
+          ? (_event, _stream, _context) => Promise.resolve('done')
+          : (_event, _context, callback) => callback(null, 'done')
+        if (streaming) handler[HANDLER_STREAMING] = STREAM_RESPONSE
+        const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+        const args = streaming ? [{}, {}, context] : [{}, context]
+        assert.strictEqual(await wrapped(...args), 'done')
+        assert.strictEqual(unexpected.callCount, 0)
+        assertExactlyOneLambdaSpan(traces)
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+
     for (const shape of ['plain', 'rest', 'default']) {
       it(`clears the selected synchronous ${shape} completion through ${entry}`, async () => {
         process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'

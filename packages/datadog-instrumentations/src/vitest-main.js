@@ -680,6 +680,7 @@ function resetMainProcessProvidedContext (ctx) {
     _ddIsEfdSuiteAdmissionEnabled: false,
     _ddIsFlakyTestRetriesEnabled: false,
     _ddFlakyTestRetriesCount: 0,
+    _ddFlakyTestRetriesUseRetryMarker: false,
     _ddIsDynamicAtrEnabled: false,
     _ddDynamicAtrBuckets: undefined,
     _ddFlakyTestRetriesIncludesUnnamedProject: false,
@@ -823,7 +824,7 @@ async function runMainProcessSetup (
     }
   }
 
-  const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
+  const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications, frameworkVersion)
   if (flakyTestRetriesConfiguration) {
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
@@ -832,6 +833,7 @@ async function runMainProcessSetup (
       _ddDynamicAtrBuckets: dynamicAtrBuckets,
       _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
       _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
+      _ddFlakyTestRetriesUseRetryMarker: flakyTestRetriesConfiguration.usesRetryMarker,
     }, 'Could not send library configuration to workers.')
   }
 
@@ -1038,7 +1040,7 @@ function shouldUseBrowserReporter (frameworkVersion, testSpecifications) {
     testSpecifications.some(isBrowserTestSpecification)
 }
 
-function configureFlakyTestRetries (ctx, testSpecifications) {
+function configureFlakyTestRetries (ctx, testSpecifications, frameworkVersion) {
   if (!isFlakyTestRetriesEnabled || (!isDynamicAtrEnabled && flakyTestRetriesCount <= 0)) return
 
   const maximumDynamicAtrRetries = dynamicAtrBuckets
@@ -1047,13 +1049,14 @@ function configureFlakyTestRetries (ctx, testSpecifications) {
   const retryCount = isDynamicAtrEnabled
     ? Math.max(1, maximumDynamicAtrRetries)
     : flakyTestRetriesCount
+  const usesRetryMarker = isDynamicAtrEnabled || satisfies(frameworkVersion, '>=4.1.0')
   let configured = false
   let includesUnnamedProject = false
   const projectNames = []
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
     if (!config.retry || config.retry.__ddTestOptAtr) {
       // The serializable marker survives task inheritance and setup refreshes, unlike numeric retry counts.
-      config.retry = isDynamicAtrEnabled ? { count: retryCount, __ddTestOptAtr: true } : retryCount
+      config.retry = usesRetryMarker ? { count: retryCount, __ddTestOptAtr: true } : retryCount
       configured = true
       if (projectName) {
         projectNames.push(projectName)
@@ -1068,6 +1071,7 @@ function configureFlakyTestRetries (ctx, testSpecifications) {
   return {
     includesUnnamedProject,
     projectNames,
+    usesRetryMarker,
   }
 }
 

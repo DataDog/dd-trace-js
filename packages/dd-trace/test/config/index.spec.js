@@ -901,6 +901,28 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_BUNDLER_INJECT_GIT_METADATA', () => {
+    it('should default to true', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_BUNDLER_INJECT_GIT_METADATA, true)
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_BUNDLER_INJECT_GIT_METADATA', value: true, origin: 'default' },
+      ])
+    })
+
+    it('should initialize from the environment', () => {
+      process.env.DD_BUNDLER_INJECT_GIT_METADATA = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_BUNDLER_INJECT_GIT_METADATA, false)
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_BUNDLER_INJECT_GIT_METADATA', value: false, origin: 'env_var' },
+      ])
+    })
+  })
+
   describe('OTEL_RESOURCE_ATTRIBUTES mapping', () => {
     it('maps deployment.environment as a fallback', () => {
       process.env.OTEL_RESOURCE_ATTRIBUTES =
@@ -1427,6 +1449,7 @@ describe('Config', () => {
       { name: 'DD_APPSEC_MAX_STACK_TRACES', value: 2, origin: 'default' },
       { name: 'DD_APPSEC_WAF_TIMEOUT', value: 5e3, origin: 'default' },
       { name: 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_BUNDLER_INJECT_GIT_METADATA', value: true, origin: 'default' },
       { name: 'DD_TEST_SESSION_NAME', value: null, origin: 'default' },
       { name: 'DD_CODE_COVERAGE_FLAGS', value: null, origin: 'default' },
       { name: 'DD_TRACE_CLIENT_IP_ENABLED', value: false, origin: 'default' },
@@ -3566,6 +3589,30 @@ describe('Config', () => {
   })
 
   for (const exporter of [
+    exporters.AGENT_PROXY,
+    exporters.DATADOG,
+    exporters.CUCUMBER_WORKER,
+    exporters.JEST_WORKER,
+    exporters.MOCHA_WORKER,
+    exporters.PLAYWRIGHT_WORKER,
+    exporters.VITEST_WORKER,
+  ]) {
+    it(`should disable DogStatsD and runtime metrics for the ${exporter} Test Optimization exporter`, () => {
+      process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        dogstatsd: { hostname: 'metrics.example', port: 8125 },
+        runtimeMetrics: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.dogstatsd, undefined)
+      assert.strictEqual(config.runtimeMetrics.enabled, false)
+    })
+  }
+
+  for (const exporter of [
     exporters.CUCUMBER_WORKER,
     exporters.JEST_WORKER,
     exporters.MOCHA_WORKER,
@@ -5441,6 +5488,24 @@ rules:
   })
 
   describe('setRemoteConfig', () => {
+    it('should preserve remote configuration that overrides a calculated fallback', () => {
+      process.env.OTEL_PROPAGATORS = 'b3'
+      const config = getConfig(undefined, { ddMajor: 5 })
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
+
+      config.setRemoteConfig({ DD_TRACE_PROPAGATION_STYLE_INJECT: 'b3' })
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'remote_config')
+
+      config.setRemoteConfig(null)
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
+    })
+
     it('should resolve deprecated AppSec env configs to canonical Remote Config fields', () => {
       const config = getConfig()
 

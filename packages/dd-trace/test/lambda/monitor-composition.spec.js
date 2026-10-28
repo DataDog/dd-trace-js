@@ -100,7 +100,7 @@ describe('Lambda timeout monitor', () => {
       it(`keeps ${name} completion monitored after returning ${result ? 'an artifact' : 'undefined'}`, () => {
         const original = context[name] = sinon.spy()
         const handler = withTimeoutMonitor((_event, ctx) => result)
-        assert.strictEqual(handler({}, context), result)
+        assert.strictEqual(handler({}, context, () => {}), result)
         const completion = context[name]
         clock.tick(75)
         assert.strictEqual(killAll.callCount, 1)
