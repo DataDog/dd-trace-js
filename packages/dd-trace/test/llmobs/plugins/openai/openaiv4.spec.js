@@ -1306,7 +1306,7 @@ describe('integrations', () => {
             modelName: 'gpt-6-luna',
             modelProvider: 'openai',
             metadata: { questions },
-            tags: { ml_app: 'test', integration: 'openai' },
+            tags: { ml_app: 'test', integration: 'openai', decision_provider: 'openai' },
           })
         })
 
@@ -1354,7 +1354,7 @@ describe('integrations', () => {
             modelName: 'not-a-decision-model',
             modelProvider: 'openai',
             metadata: { questions },
-            tags: { ml_app: 'test', integration: 'openai' },
+            tags: { ml_app: 'test', integration: 'openai', decision_provider: 'openai' },
             error: {
               type: MOCK_STRING,
               message: error.message,
