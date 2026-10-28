@@ -57,6 +57,25 @@ describe('OpenFeature Module', () => {
       sinon.assert.calledOnce(setEventDeliveryStrategyStub)
     })
 
+    it('does not create an exposure writer or subscribe when Datadog exposure logging is disabled', () => {
+      config.featureFlags = { DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED: false }
+      openfeatureModule.enable(config)
+      openfeatureModule.disable()
+
+      sinon.assert.notCalled(ExposuresWriterStub)
+      sinon.assert.notCalled(setEventDeliveryStrategyStub)
+      assert.strictEqual(channel('ffe:exposure:submit').hasSubscribers, false)
+      assert.strictEqual(channel('ffe:writers:flush').hasSubscribers, false)
+    })
+
+    it('creates an exposure writer when Datadog exposure logging is explicitly enabled', () => {
+      config.featureFlags = { DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED: true }
+      openfeatureModule.enable(config)
+
+      sinon.assert.calledOnceWithExactly(ExposuresWriterStub, config)
+      sinon.assert.calledOnceWithExactly(setEventDeliveryStrategyStub, config, sinon.match.func)
+    })
+
     it('configures the writer with the selected exposure route', () => {
       openfeatureModule.enable(config)
       const setWriterEnabled = setEventDeliveryStrategyStub.firstCall.args[1]

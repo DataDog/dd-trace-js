@@ -33,6 +33,8 @@ function _handleFlush () {
  * @param {import('../config')} config - Tracer configuration object
  */
 function enable (config) {
+  if (config.featureFlags?.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED === false) return
+
   if (exposuresWriter) {
     log.warn('%s already enabled', exposuresWriter.constructor.name)
     return

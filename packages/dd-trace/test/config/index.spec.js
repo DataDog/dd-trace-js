@@ -5951,6 +5951,24 @@ rules:
   })
 
   context('Feature Flagging configuration source', () => {
+    it('enables Datadog exposure logging by default', () => {
+      assert.strictEqual(defaults['featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED'], true)
+      assert.strictEqual(getConfig().featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED, true)
+    })
+
+    for (const enabled of [false, true]) {
+      it(`sets Datadog exposure logging to ${enabled} independently of evaluation and counts`, () => {
+        process.env.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED = String(enabled)
+        const config = getConfig()
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED, enabled)
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, true)
+        assert.strictEqual(config.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED, true)
+        assert.strictEqual(
+          config.getOrigin('featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED'), 'env_var'
+        )
+      })
+    }
+
     it('enables evaluation counts by default', () => {
       assert.strictEqual(defaults['featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED'], true)
       assert.strictEqual(getConfig().featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED, true)
