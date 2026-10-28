@@ -45,29 +45,32 @@ describe('Custom Metrics', () => {
     sockets.forEach(socket => socket.destroy())
   })
 
-  it('should send metrics before process exit', (done) => {
-    exec(`${process.execPath} ${path.join(__dirname, 'custom-metrics-app.js')}`, {
-      env: {
-        DD_TRACE_AGENT_URL: `http://127.0.0.1:${httpPort}`,
-      },
-    }, (err, stdout, stderr) => {
-      if (err) return done(err)
-      // eslint-disable-next-line no-console
-      if (stdout) console.log(stdout)
-      // eslint-disable-next-line no-console
-      if (stderr) console.error(stderr)
+  for (const mockGlobalUrl of [false, true]) {
+    it(`sends metrics before process exit with mocked global URL: ${mockGlobalUrl}`, (done) => {
+      exec(`${process.execPath} ${path.join(__dirname, 'custom-metrics-app.js')}`, {
+        env: {
+          DD_TRACE_AGENT_URL: `http://127.0.0.1:${httpPort}`,
+          MOCK_GLOBAL_URL: String(mockGlobalUrl),
+        },
+      }, (err, stdout, stderr) => {
+        if (err) return done(err)
+        // eslint-disable-next-line no-console
+        if (stdout) console.log(stdout)
+        // eslint-disable-next-line no-console
+        if (stderr) console.error(stderr)
 
-      assert.strictEqual(metricsPayloads.length, 2)
+        assert.strictEqual(metricsPayloads.length, 2)
 
-      const [userMetrics, telemetryMetrics] = metricsPayloads
+        const [userMetrics, telemetryMetrics] = metricsPayloads
 
-      assert.strictEqual(userMetrics.split('#')[0], 'page.views.data:1|c|')
-      assert.match(telemetryMetrics, /datadog\.dogstatsd\.client\.metrics:1\|c\|/)
-      assert.match(telemetryMetrics, /datadog\.dogstatsd\.client\.metrics_by_type:1\|c\|.*metrics_type:count/)
+        assert.strictEqual(userMetrics.split('#')[0], 'page.views.data:1|c|')
+        assert.match(telemetryMetrics, /datadog\.dogstatsd\.client\.metrics:1\|c\|/)
+        assert.match(telemetryMetrics, /datadog\.dogstatsd\.client\.metrics_by_type:1\|c\|.*metrics_type:count/)
 
-      done()
+        done()
+      })
     })
-  })
+  }
 
   for (const workerId of [undefined, '1']) {
     const mode = workerId ? 'Jest workers' : 'the main process'
