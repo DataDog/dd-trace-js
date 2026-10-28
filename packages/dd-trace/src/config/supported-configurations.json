@@ -1004,12 +1004,15 @@
         "namespace": "featureFlags"
       }
     ],
-    "DD_FLAGGING_EVALUATION_COUNTS_ENABLED": [
+    "DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
         "default": "true",
         "description": "Enable aggregated Feature Flagging evaluation telemetry.",
+        "aliases": [
+          "DD_FLAGGING_EVALUATION_COUNTS_ENABLED"
+        ],
         "namespace": "featureFlags"
       }
     ],

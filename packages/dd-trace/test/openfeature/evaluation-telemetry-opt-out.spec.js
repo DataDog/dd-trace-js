@@ -117,7 +117,7 @@ describe('evaluation telemetry opt-out', () => {
       DD_METRICS_OTEL_ENABLED: true,
       featureFlags: {
         [option]: enabled,
-        DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true,
+        DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true,
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 1000,
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED: true,
       },

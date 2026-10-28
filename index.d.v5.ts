@@ -217,7 +217,7 @@ interface Tracer extends opentracing.Tracer {
    *
    * @env DD_FEATURE_FLAGS_ENABLED
    * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
-   * @env DD_FLAGGING_EVALUATION_COUNTS_ENABLED
+   * @env DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED
    */
   openfeature: tracer.OpenFeatureProvider;
 

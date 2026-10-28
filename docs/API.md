@@ -61,8 +61,11 @@ Use `require('dd-trace/openfeature/rules-based')` for CommonJS or named imports 
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 
 The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
-`DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false` to disable this collection. This setting does not disable
-flag evaluation, exposure events, span enrichment, or OpenTelemetry evaluation metrics.
+`DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED=false` before tracer initialization to disable this collection.
+`DD_FLAGGING_EVALUATION_COUNTS_ENABLED` remains supported as a compatibility alias. If both variables are set,
+`DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED` takes precedence, including when its value is empty or invalid
+(which uses the default, `true`). This setting does not disable flag evaluation, exposure events, span enrichment,
+or OpenTelemetry evaluation metrics.
 
 Privacy consent comes from `observeFullEvaluationData` in the flag configuration used for each evaluation:
 

@@ -56,7 +56,7 @@ describe('FlaggingProvider EVP lifecycle', () => {
       url: new URL('http://localhost:8126'),
       service: 'checkout',
       featureFlags: {
-        DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true,
+        DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true,
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 1000,
       },
     }
@@ -74,7 +74,7 @@ describe('FlaggingProvider EVP lifecycle', () => {
   })
 
   async function register (enabled = true) {
-    config.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED = enabled
+    config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED = enabled
     provider = new Provider({}, config)
     provider.setConfiguration({ flags: {} })
     await OpenFeature.setProviderAndWait('evp-lifecycle', provider)
