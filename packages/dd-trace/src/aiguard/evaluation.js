@@ -5,6 +5,8 @@ const createRfdc = require('../../../../vendor/dist/rfdc')
 const clone = createRfdc({ proto: false, circles: false })
 const { USER_ID, USER_SESSION_ID } = require('../appsec/addresses')
 const { getActiveRequest } = require('../appsec/store')
+const { MAX_META_KEY_LENGTH, MAX_META_VALUE_LENGTH } = require('../encode/tags-processors')
+const log = require('../log')
 const { keepTrace } = require('../priority_sampler')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { AI_GUARD } = require('../standalone/product')
@@ -58,6 +60,8 @@ const ALLOW = 'ALLOW'
  * @property {{ source: string, integration: string }} telemetryTags
  */
 
+/** @typedef {{ [key: string]: string | number | boolean }} CustomTags */
+
 /**
  * Returns whether a value is a non-array object.
  *
@@ -66,6 +70,81 @@ const ALLOW = 'ALLOW'
  */
 function isRecord (value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * Returns whether a value is a plain object, so boxed primitives, typed arrays and class instances
+ * cannot leak their indexes or fields as tags.
+ *
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+function isPlainObject (value) {
+  if (value === null || typeof value !== 'object') return false
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
+/**
+ * Returns whether a custom tag entry can be set on the AI Guard span.
+ *
+ * Only primitive values are accepted because the span flattens nested objects into dotted keys,
+ * which could otherwise smuggle reserved ai_guard.* keys in through a non-reserved parent key.
+ * Entries above the agent meta limits are dropped rather than truncated. The limits are checked in
+ * characters (UTF-16 code units), so the agent may still truncate values with multi-byte characters.
+ *
+ * @param {string} key
+ * @param {unknown} value
+ */
+function isValidCustomTag (key, value) {
+  if (key.length === 0 || key.length > MAX_META_KEY_LENGTH) return false
+  if (key === TAGS.RESERVED_TAG_KEY || key.startsWith(TAGS.RESERVED_TAG_PREFIX)) return false
+
+  switch (typeof value) {
+    case 'string':
+      return value.length <= MAX_META_VALUE_LENGTH
+    case 'number':
+      return Number.isFinite(value)
+    case 'boolean':
+      return true
+    default:
+      return false
+  }
+}
+
+/**
+ * Sets caller-provided tags on the AI Guard span, dropping invalid or reserved entries.
+ *
+ * Must run after the service entry tags are copied: when the AI Guard span is the trace root, a
+ * custom usr.id or http.client_ip would otherwise be copied into the reserved ai_guard.* keys.
+ * Must also run before the verdict tags set in finish(): some of them are only set conditionally,
+ * and filtering reserved keys here is what keeps a caller value from misreporting the verdict.
+ *
+ * @param {Span} span
+ * @param {unknown} tags
+ */
+function setCustomTags (span, tags) {
+  let keys
+  try {
+    if (!isPlainObject(tags)) return
+    keys = Object.keys(tags)
+  } catch (error) {
+    log.debug('AIGuard: failed to read custom tags: %s', error?.message)
+    return
+  }
+
+  for (const key of keys) {
+    try {
+      const value = tags[key]
+      if (isValidCustomTag(key, value)) {
+        span.setTag(key, value)
+      } else {
+        log.debug('AIGuard: dropping invalid custom tag %s', key)
+      }
+    } catch (error) {
+      log.debug('AIGuard: failed to set custom tag %s: %s', key, error?.message)
+    }
+  }
 }
 
 /**
@@ -168,7 +247,7 @@ class EvaluationReporter {
    *
    * @param {Span} span
    * @param {Message[]} messages
-   * @param {{ source: string, integration: string }} options
+   * @param {{ source: string, integration: string, tags?: CustomTags }} options
    * @returns {EvaluationReport}
    */
   start (span, messages, options) {
@@ -197,6 +276,8 @@ class EvaluationReporter {
       keepTrace(rootSpan, AI_GUARD)
       rootSpan.setTag(TAGS.EVENT_TAG_KEY, 'true')
     }
+
+    if (options.tags !== undefined) setCustomTags(span, options.tags)
 
     return {
       span,

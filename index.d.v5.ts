@@ -2129,11 +2129,21 @@ declare namespace tracer {
        * @param opts - Optional configuration object:
        *   - `block`: When true, throws an exception if evaluation result is not 'ALLOW'
        *              and the AI Guard service has blocking mode enabled (default: false).
+       *   - `tags`: Custom tags to set on the AI Guard span. Keys are set verbatim. Keys equal to
+       *             `ai_guard` or starting with `ai_guard.` are reserved and ignored. Entries with an
+       *             empty key, a key longer than 200 characters, a string value longer than 25000
+       *             characters, or a value that is not a string, finite number or boolean are dropped.
        * @returns Promise resolving to an Evaluation with the security decision and reasoning.
        *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
        *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
        */
-      evaluate (messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
+      evaluate (
+        messages: Message[],
+        opts?: {
+          block?: boolean,
+          tags?: { [key: string]: string | number | boolean },
+        }
+      ): Promise<Evaluation>;
     }
   }
 
