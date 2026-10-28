@@ -146,7 +146,7 @@ versions.forEach((version) => {
     const poolConfig = ['forks', 'threads']
 
     for (const pool of poolConfig) {
-      it(`reports tests when the global URL is mocked during a DogStatsD flush (${pool})`, async () => {
+      it(`reports tests with a mocked global URL and disabled DogStatsD (${pool})`, async () => {
         testOutput = ''
         receiver.setSettings({ itr_enabled: false })
         childProcess = exec('./node_modules/.bin/vitest run', {
@@ -169,8 +169,7 @@ versions.forEach((version) => {
           ({ url }) => url.endsWith('/api/v2/citestcycle') || url === '/dogstatsd/v2/proxy',
           payloads => {
             const metrics = payloads.filter(({ url }) => url === '/dogstatsd/v2/proxy')
-            assert.ok(metrics.length, `expected DogStatsD telemetry: ${testOutput}`)
-            assert.match(metrics[0].payload, /datadog\.dogstatsd\.client\.metrics:0\|c/)
+            assert.strictEqual(metrics.length, 0, `unexpected DogStatsD telemetry: ${testOutput}`)
 
             const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
               .flatMap(({ payload }) => payload.events)
@@ -179,7 +178,7 @@ versions.forEach((version) => {
               assert.strictEqual(event.meta[TEST_STATUS], 'fail', testOutput)
             }
             assert.strictEqual(tests.length, 2, testOutput)
-            const passedTest = tests.find(test => test.meta[TEST_NAME].endsWith('is flushed'))
+            const passedTest = tests.find(test => test.meta[TEST_NAME].endsWith('is disabled'))
             const failedTest = tests.find(test => test.meta[TEST_NAME].endsWith('original test failure'))
             assert.ok(passedTest, testOutput)
             assert.ok(failedTest, testOutput)

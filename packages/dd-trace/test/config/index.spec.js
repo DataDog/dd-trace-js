@@ -3484,6 +3484,30 @@ describe('Config', () => {
   })
 
   for (const exporter of [
+    exporters.AGENT_PROXY,
+    exporters.DATADOG,
+    exporters.CUCUMBER_WORKER,
+    exporters.JEST_WORKER,
+    exporters.MOCHA_WORKER,
+    exporters.PLAYWRIGHT_WORKER,
+    exporters.VITEST_WORKER,
+  ]) {
+    it(`should disable DogStatsD and runtime metrics for the ${exporter} Test Optimization exporter`, () => {
+      process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        dogstatsd: { hostname: 'metrics.example', port: 8125 },
+        runtimeMetrics: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.dogstatsd, undefined)
+      assert.strictEqual(config.runtimeMetrics.enabled, false)
+    })
+  }
+
+  for (const exporter of [
     exporters.CUCUMBER_WORKER,
     exporters.JEST_WORKER,
     exporters.MOCHA_WORKER,

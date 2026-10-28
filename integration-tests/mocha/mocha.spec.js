@@ -291,7 +291,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   }
 
   for (const status of ['pass', 'fail']) {
-    it(`reports a ${status}ing test when the global URL is mocked during a DogStatsD flush`, async () => {
+    it(`reports a ${status}ing test with a mocked global URL and disabled DogStatsD`, async () => {
       receiver.setSettings({ itr_enabled: false })
       childProcess = exec('node node_modules/mocha/bin/mocha ci-visibility/mocha-plugin-tests/mocked-url.js', {
         cwd,
@@ -311,8 +311,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ({ url }) => url.endsWith('/api/v2/citestcycle') || url === '/dogstatsd/v2/proxy',
         payloads => {
           const metrics = payloads.filter(({ url }) => url === '/dogstatsd/v2/proxy')
-          assert.ok(metrics.length, `expected DogStatsD telemetry: ${testOutput}`)
-          assert.match(metrics[0].payload, /datadog\.dogstatsd\.client\.metrics:0\|c/)
+          assert.strictEqual(metrics.length, 0, `unexpected DogStatsD telemetry: ${testOutput}`)
 
           const events = payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
             .flatMap(({ payload }) => payload.events)
