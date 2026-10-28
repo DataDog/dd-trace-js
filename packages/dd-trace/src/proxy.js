@@ -223,6 +223,9 @@ class Tracer extends NoopProxy {
           this.#updateDebugger(config, rc)
         })
 
+        // Subscribe even when profiling is off so RC can enable it.
+        require('./profiling/remote-config').enable(rc, config, profiler.getRunningProfileTypes)
+
         rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
           if (!conf?.name?.startsWith('flare-log-level.')) return
 
