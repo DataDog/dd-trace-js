@@ -992,7 +992,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     assert.strictEqual(exitCode, 0)
   })
 
-  for (const retryCount of [1, 2]) {
+  for (const retryCount of [1, 2, 3]) {
     for (const passes of [false, true]) {
       it(`attributes explicit native retries correctly (count=${retryCount}, passes=${passes})`, async () => {
         receiver.setSettings({
