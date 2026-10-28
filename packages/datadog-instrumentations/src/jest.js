@@ -64,7 +64,7 @@ const {
   getChannelPromise,
   publishWithCompletion,
 } = require('./helpers/channel')
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, getHooks, tracingChannel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -195,12 +195,11 @@ const dynamicAtrResultHandlerRegistrations = new WeakMap()
 // Tests that are genuinely new (not in known tests list).
 const newTests = new Set()
 const testSuiteJestObjects = new Map()
-const deferredTestSuiteFinishes = new WeakMap()
+const deferredTestSuiteFinishes = new Map()
 const testSuiteDatadogEnvironments = new Map()
 const wrappedJestGlobals = new WeakSet()
 const wrappedJestEsmLoaders = new WeakSet()
 const wrappedJestObjects = new WeakSet()
-const wrappedEnvironmentTeardowns = new WeakSet()
 const wrappedWorkerInitializers = new WeakSet()
 const publishedRuntimeReferenceErrors = new WeakMap()
 const jestEsmLoggingModulePathsByRuntime = new WeakMap()
@@ -785,7 +784,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       this[DD_JEST_HANDLE_TEST_EVENT_DATADOG] = DatadogEnvironment.prototype.handleTestEvent
       this.wrapCustomHandleTestEvent(DatadogEnvironment.prototype.handleTestEvent)
-      wrapEnvironmentTeardown(this)
     }
 
     /**
@@ -3484,54 +3482,33 @@ function shouldWaitForTestSuiteFinish (environment) {
 }
 
 /**
- * @param {InstanceType<ReturnType<typeof getWrappedEnvironment>>} environment
+ * @param {string} testSuiteAbsolutePath
  */
-function wrapEnvironmentTeardown (environment) {
-  if (wrappedEnvironmentTeardowns.has(environment.teardown)) return
-
-  // The actual method may be a user-defined subclass method or instance field, selected only at runtime.
-  shimmer.wrap(
-    /** @type {Record<string | symbol, unknown>} */ (/** @type {unknown} */ (environment)),
-    'teardown', teardown => {
-      const wrapped = function () {
-        const clearActiveTestSuite = () => {
-          realSetTimeout(() => {
-            if (activeTestSuiteAbsolutePath === this.testSuiteAbsolutePath) {
-              activeTestSuiteAbsolutePath = undefined
-            }
-          }, 0)
-        }
-        const finishTestSuite = () => {
-          const payload = deferredTestSuiteFinishes.get(this)
-          deferredTestSuiteFinishes.delete(this)
-          if (payload) {
-            // Wait for the outermost environment teardown before flushing for worker recycling.
-            return getChannelPromise(testSuiteFinishCh, { ...payload, waitForFinish: true })
-              .finally(clearActiveTestSuite)
-          }
-          return clearActiveTestSuite()
-        }
-        let result
-        try {
-          result = teardown.apply(this, arguments)
-        } catch (error) {
-          if (!deferredTestSuiteFinishes.has(this)) throw error
-          const finish = finishTestSuite()
-          if (finish?.then) {
-            return finish.then(() => { throw error })
-          }
-          throw error
-        }
-        if (result?.then) {
-          return result.finally(finishTestSuite)
-        }
-        return finishTestSuite() ?? result
+function finishTestSuiteAfterRun (testSuiteAbsolutePath) {
+  const clearActiveTestSuite = () => {
+    realSetTimeout(() => {
+      if (activeTestSuiteAbsolutePath === testSuiteAbsolutePath) {
+        activeTestSuiteAbsolutePath = undefined
       }
-      wrappedEnvironmentTeardowns.add(wrapped)
-      return wrapped
-    }
-  )
+    }, 0)
+  }
+  const payload = deferredTestSuiteFinishes.get(testSuiteAbsolutePath)
+  deferredTestSuiteFinishes.delete(testSuiteAbsolutePath)
+  if (payload) {
+    return getChannelPromise(testSuiteFinishCh, { ...payload, waitForFinish: true })
+      .finally(clearActiveTestSuite)
+  }
+  return clearActiveTestSuite()
 }
+
+tracingChannel('orchestrion:jest-runner:runTestInternal').end.subscribe((message) => {
+  const ctx = /** @type {{ arguments: [string, ...unknown[]], result: Promise<unknown> }} */ (message)
+  const [testSuiteAbsolutePath] = ctx.arguments
+  // Jest's runner awaits the complete custom teardown before this promise settles.
+  ctx.result = ctx.result.finally(() => finishTestSuiteAfterRun(testSuiteAbsolutePath))
+})
+
+for (const hook of getHooks('jest-runner').values()) addHook(hook)
 
 /**
  * @param {Record<string, unknown>} payload
@@ -3541,9 +3518,7 @@ function publishTestSuiteFinish (payload, environment) {
   if (!testSuiteFinishCh.hasSubscribers) return
 
   if (shouldWaitForTestSuiteFinish(environment)) {
-    // Instance fields and setup may replace the method captured by the base constructor.
-    wrapEnvironmentTeardown(environment)
-    deferredTestSuiteFinishes.set(environment, payload)
+    deferredTestSuiteFinishes.set(environment.testSuiteAbsolutePath, payload)
     return
   }
 

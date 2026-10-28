@@ -2083,8 +2083,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('when using off timing imports', () => {
-    for (const definition of ['method', 'field']) {
-      for (const errorMode of ['sync', 'async', 'after-super', 'success']) {
+    for (const definition of ['method', 'field', 'getter', 'accessor', 'constructor-decorator', 'setup-decorator']) {
+      const errorModes = definition.endsWith('-decorator')
+        ? ['after-super', 'success']
+        : ['sync', 'async', 'after-super', 'success']
+      for (const errorMode of errorModes) {
         // Worker recycling was introduced in Jest 29.
         const teardownIt = supportsWorkerIdleMemoryLimit ? it : it.skip
         teardownIt(`flushes suites after custom teardown ${definition}: ${errorMode}`, async () => {
@@ -2129,6 +2132,37 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
       }
     }
+
+    it('clears the active suite after a synchronous post-super teardown failure', async () => {
+      const config = JSON.stringify({
+        testRegex: 'jest-teardown-timers/passing-one-test.js$',
+        testRunner: 'jest-circus/runner',
+        testEnvironment: './ci-visibility/jest-environment-teardown-error.js',
+        watchman: false,
+      })
+      childProcess = exec(`node node_modules/jest/bin/jest --runInBand --config '${config}'`, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          JEST_TEARDOWN_ERROR_MODE: 'sync-after-super',
+        },
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1, testOutput)
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 1, testOutput)
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 1, testOutput)
+      assert.match(testOutput, /^UNRELATED_POST_TEARDOWN_REFERENCE_ERROR:/m)
+      assert.doesNotMatch(testOutput, /UNEXPECTED_LATE_SUITE_ERROR/)
+    })
 
     for (const workerIdleMemoryLimit of [undefined, '1024']) {
       for (const errorMode of ['sync', 'async']) {
