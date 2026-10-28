@@ -2670,7 +2670,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
         return clearActiveTestSuite()
       }
-      const result = super.teardown()
+      let result
+      try {
+        result = super.teardown()
+      } catch (error) {
+        if (!deferredTestSuiteFinishes.has(this)) throw error
+        const finish = finishTestSuite()
+        if (finish?.then) {
+          return finish.then(() => { throw error })
+        }
+        throw error
+      }
       if (result?.then) {
         return result.finally(finishTestSuite)
       }
