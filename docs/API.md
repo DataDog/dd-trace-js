@@ -58,6 +58,16 @@ Catch `ConfigurationFetchError` to handle loading failures using its `code` and 
 Use `require('dd-trace/openfeature/rules-based')` for CommonJS or named imports from
 `dd-trace/openfeature/rules-based.js` for native Node.js ESM.
 
+<h2 id="feature-flag-exposure-logging">Feature Flag Exposure Logging</h2>
+
+Built-in Datadog exposure logging is enabled by default (`DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED=true`).
+Set `DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED=false` before tracer initialization to disable exposure
+buffering and delivery to Datadog in both agentless and Remote Configuration modes. Local flag evaluation and
+application OpenFeature hooks continue to work.
+
+This switch is independent of [evaluation counts](#feature-flag-evaluation-counts), which remain enabled by default.
+To disable aggregated `flagevaluation` events as well, also set `DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false`.
+
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 
 The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
