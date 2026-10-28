@@ -41,6 +41,8 @@
   "@supabase/realtime-js/dist/module/RealtimeChannel.js": "@supabase/realtime-js",
   "@supabase/storage-js/dist/index.cjs": "@supabase/storage-js",
   "@supabase/storage-js/dist/index.mjs": "@supabase/storage-js",
+  "@typesafe-ai/sdk/dist/index.cjs": "@typesafe-ai/sdk",
+  "@typesafe-ai/sdk/dist/index.mjs": "@typesafe-ai/sdk",
   "@wdio/cli/build/index.js": "@wdio/cli",
   "@wdio/config/build/node/index.js": "@wdio/config",
   "@wdio/jasmine-framework/build/index.js": "@wdio/jasmine-framework",

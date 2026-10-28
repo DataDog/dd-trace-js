@@ -27,7 +27,7 @@ const EXPECTED_QUESTIONS = {
   refund: { type: 'noul', instructions: 'Is the customer asking for a refund?' },
   urgency: { type: 'score', instructions: 'How urgent is this message?', criteria: ['Low', 'Medium', 'High'] },
 }
-// The recorded response bodies as the span's output records them: parsed, then serialized again
+// The response bodies exactly as recorded, which is what the span's output records
 const STRING_STATE_RESPONSE = recordedResponse('typesafe_v1_systemone_post_8e45a9dd.json')
 const JSON_STATE_RESPONSE = recordedResponse('typesafe_v1_systemone_post_3b431e67.json')
 const STRING_STATE_METRICS = { input_tokens: 403, output_tokens: 69, total_tokens: 472 }
@@ -44,7 +44,7 @@ const IMAGE_REFERENCE = '<image:[0-9a-f]{32}>'
  */
 function recordedResponse (cassette) {
   const file = path.join(__dirname, '..', '..', 'cassettes', 'typesafe', cassette)
-  return JSON.stringify(JSON.parse(JSON.parse(readFileSync(file, 'utf8')).response.body))
+  return JSON.parse(readFileSync(file, 'utf8')).response.body
 }
 
 /**
@@ -181,6 +181,17 @@ describe('Plugin', () => {
         })
       })
 
+      it('captures the answers when the caller never awaits the request', async () => {
+        createClient().systemOne({ state: STATE, questions: questions(), model: MODEL })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertSystemOneSpan(apmSpans[0], llmobsSpans[0], {
+          content: requestBody(STATE),
+          output: STRING_STATE_RESPONSE,
+          metrics: STRING_STATE_METRICS,
+        })
+      })
+
       it('captures the answers when the caller uses withResponse()', async () => {
         const { data, response } = await createClient()
           .systemOne({ state: STATE, questions: questions(), model: MODEL })
@@ -293,7 +304,7 @@ describe('Plugin', () => {
         assert.deepEqual(llmobsSpans[0].meta.input.messages, [{ role: 'user', content: requestBody(STATE) }])
       })
 
-      it('calls toJSON on the request only once', async () => {
+      it('sends what toJSON returned on its first call', async () => {
         let calls = 0
         let sent
         const client = new sdk.TypeSafeClient({
@@ -313,18 +324,15 @@ describe('Plugin', () => {
         assert.deepEqual(sent.state, { counter: 1 })
         const { llmobsSpans } = await getEvents()
         const recorded = JSON.parse(llmobsSpans[0].meta.input.messages[0].content)
-        // Earlier versions don't serialize the request before sending it, so the span serializes it again, after
-        // the SDK has
-        assert.deepEqual(recorded.state, { counter: sdk.withAssets ? 1 : 2 })
+        // The span serializes the request again when it finishes, after the SDK has sent it
+        assert.deepEqual(recorded.state, { counter: 2 })
       })
 
-      it('records non-finite numbers the way this SDK version sends them', async () => {
+      it('records non-finite numbers as JSON writes them', async () => {
         await createStubbedClient().systemOne({ state: { score: Number.NaN }, questions: questions(), model: MODEL })
 
         const { llmobsSpans } = await getEvents()
-        // 0.7.0's serializer writes them as strings; earlier versions send plain JSON, where they become null
-        const expected = sdk.withAssets ? 'NaN' : null
-        assert.equal(llmobsSpans[0].meta.input.messages[0].content, requestBody({ score: expected }))
+        assert.equal(llmobsSpans[0].meta.input.messages[0].content, requestBody({ score: null }))
       })
 
       it('records a successful response that is not JSON as received', async () => {
@@ -352,14 +360,11 @@ describe('Plugin', () => {
 
         const { llmobsSpans } = await getEvents()
         const body = JSON.parse(llmobsSpans[0].meta.input.messages[0].content)
-        const [reference] = Object.keys(body.assets)
-        assert.match(reference, new RegExp(`^${IMAGE_REFERENCE}$`))
-        assert.equal(body.questions.damaged.instructions, `Is ${reference} damaged?`)
-        assert.deepEqual(body.assets, { [reference]: { type: 'image', part: 'asset-0' } })
+        assert.match(body.questions.damaged.instructions, new RegExp(`^Is ${IMAGE_REFERENCE} damaged\\?$`))
         assert.ok(JSON.stringify(llmobsSpans[0]).length < 10_000, 'image bytes must not reach the span')
       })
 
-      it('records named assets by the names the SDK sends', async () => {
+      it('records named assets by their references', async () => {
         const photo = sdk.image(new Uint8Array(1_000).fill(255))
         await createStubbedClient().systemOne({
           state: 'Compare photo with the listing.',
@@ -370,8 +375,8 @@ describe('Plugin', () => {
 
         const { llmobsSpans } = await getEvents()
         const body = JSON.parse(llmobsSpans[0].meta.input.messages[0].content)
-        assert.equal(body.questions.damaged.instructions, 'Is photo damaged?')
-        assert.deepEqual(body.assets, { photo: { type: 'image', part: 'asset-0' } })
+        assert.match(body.assets.photo, new RegExp(`^${IMAGE_REFERENCE}$`))
+        assert.equal(body.questions.damaged.instructions, `Is ${body.assets.photo} damaged?`)
       })
 
       it('records text with assets as the text that was sent', async () => {

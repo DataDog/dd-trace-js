@@ -8,13 +8,13 @@ const OPENROUTER_MODEL_PROVIDER = 'openrouter'
 class TypeSafeLLMObsPlugin extends LLMObsPlugin {
   static integration = 'typesafe' // used for llmobs telemetry
   static id = 'typesafe'
-  static prefix = 'tracing:apm:typesafe:request'
+  static prefix = 'tracing:orchestrion:@typesafe-ai/sdk:TypeSafeClient_systemOne'
 
   getLLMObsSpanRegisterOptions (ctx) {
     return {
       kind: 'llm',
       modelName: getModelName(ctx),
-      modelProvider: getModelProvider(ctx.baseURL),
+      modelProvider: getModelProvider(ctx.self?.baseURL),
       name: 'typesafe.request',
     }
   }
@@ -30,16 +30,15 @@ class TypeSafeLLMObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const { result } = ctx
+    const { result, responseText } = ctx
     const inputMessages = [{ role: 'user', content: serializeRequest(ctx) ?? '' }]
 
-    if (ctx.error || result === undefined) {
+    if (ctx.error || responseText === undefined) {
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
 
-    const output = typeof result === 'string' ? result : JSON.stringify(result)
-    this._tagger.tagLLMIO(span, inputMessages, [{ role: 'assistant', content: output }])
+    this._tagger.tagLLMIO(span, inputMessages, [{ role: 'assistant', content: responseText }])
 
     const metrics = extractMetrics(result)
     if (metrics) this._tagger.tagMetrics(span, metrics)
@@ -53,7 +52,7 @@ class TypeSafeLLMObsPlugin extends LLMObsPlugin {
  * @returns {string|undefined}
  */
 function getModelName (ctx) {
-  return ctx.request?.model ?? ctx.defaultModel
+  return ctx.arguments?.[0]?.model ?? ctx.self?.defaultModel
 }
 
 /**
@@ -82,17 +81,16 @@ function extractMetrics (result) {
 }
 
 /**
- * The body the SDK sent, or, when it sent none (e.g. a request that failed validation), the request as passed.
+ * The request as `systemOne` received it, with the model the SDK fills in. Serialized at finish, after the SDK has
+ * serialized it to send.
  *
  * @param {object} ctx
  */
 function serializeRequest (ctx) {
-  const { request, requestBody, defaultModel } = ctx
+  const { request } = ctx
+  if (!request) return
   try {
-    if (requestBody !== undefined) return JSON.stringify(requestBody)
-    if (request && typeof request === 'object') {
-      return JSON.stringify({ ...request, model: request.model ?? defaultModel })
-    }
+    return JSON.stringify({ ...request, model: request.model ?? ctx.self?.defaultModel })
   } catch {}
 }
 

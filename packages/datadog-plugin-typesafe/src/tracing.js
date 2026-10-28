@@ -6,13 +6,13 @@ class TypeSafeTracingPlugin extends TracingPlugin {
   static id = 'typesafe'
   static operation = 'request'
   static system = 'typesafe'
-  static prefix = 'tracing:apm:typesafe:request'
+  static prefix = 'tracing:orchestrion:@typesafe-ai/sdk:TypeSafeClient_systemOne'
 
   bindStart (ctx) {
     this.startSpan('typesafe.request', {
       meta: {
         'resource.name': 'TypeSafeClient.systemOne',
-        'typesafe.request.model': ctx.request?.model ?? ctx.defaultModel,
+        'typesafe.request.model': ctx.arguments?.[0]?.model ?? ctx.self?.defaultModel,
       },
     }, ctx)
 
