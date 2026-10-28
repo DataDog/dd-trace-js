@@ -102,6 +102,16 @@ describe('profilers/native/space', () => {
     sinon.assert.calledOnceWithExactly(pprof.heap.start, 512 * 1024, 64, true)
   })
 
+  it('should report whether it collects allocations, as started', () => {
+    const profiler = makeSpace(NativeSpaceProfiler, { allocationProfilingEnabled: true })
+    assert.strictEqual(profiler.collectsAllocations, false)
+
+    profiler.start()
+    assert.strictEqual(profiler.collectsAllocations, true)
+
+    assert.strictEqual(makeSpace(NativeSpaceProfiler, { allocationProfilingEnabled: false }).collectsAllocations, false)
+  })
+
   it('should stop the internal space profiler', () => {
     const profiler = makeSpace(NativeSpaceProfiler)
 

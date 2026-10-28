@@ -95,6 +95,24 @@ class Profiler extends EventEmitter {
   }
 
   /**
+   * Types of the running profilers (e.g. 'wall', 'space', 'events'), plus 'cpu' when the wall
+   * profiler also collects CPU time and 'allocations' when the space profiler also collects
+   * allocations. Empty while the profiler isn't running.
+   *
+   * @returns {string[]}
+   */
+  getRunningTypes () {
+    if (!this.#enabled || !this.#profilers) return []
+    const types = []
+    for (const profiler of this.#profilers) {
+      types.push(profiler.type)
+      if (profiler.collectsCpuTime) types.push('cpu')
+      if (profiler.collectsAllocations) types.push('allocations')
+    }
+    return types
+  }
+
+  /**
    * Declares the set of custom label keys that will be used with
    * {@link runWithLabels}. This is used for profile upload metadata and
    * for pprof serialization optimization (low-cardinality deduplication).
