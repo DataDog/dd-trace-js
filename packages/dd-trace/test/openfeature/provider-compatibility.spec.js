@@ -70,7 +70,7 @@ describe('bundled flagging provider smoke tests', () => {
       service: 'provider-compatibility',
       featureFlags: {
         // These tests exercise the evaluator, not EVP route discovery or delivery.
-        DD_FLAGGING_EVALUATION_COUNTS_ENABLED: false,
+        DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: false,
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 30000,
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED: false,
       },

@@ -14,7 +14,7 @@ const telemetryMetrics = require('../../../src/telemetry/metrics')
 const config = {
   url: new URL('http://localhost:8126'),
   service: 'checkout',
-  featureFlags: { DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true },
+  featureFlags: { DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true },
 }
 const route = { url: config.url, basePath: '/evp_proxy/v2' }
 const now = 1_759_276_800_000

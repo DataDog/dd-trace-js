@@ -27,7 +27,7 @@ describe('Feature Flags shared event delivery', () => {
       service: 'checkout',
       featureFlags: {
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
-        DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true,
+        DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true,
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 1000,
       },
     }

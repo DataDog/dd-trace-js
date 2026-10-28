@@ -128,7 +128,7 @@ async function main () {
       url: new URL(collectorUrl),
       service: 'openfeature-benchmark',
       featureFlags: {
-        DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true,
+        DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true,
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 1000,
       },
       // The same benchmark fixture also runs against baseline revisions with the legacy internal config shape.

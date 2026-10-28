@@ -22,6 +22,8 @@ const Provider = proxyquire(path.join(root, 'packages/dd-trace/src/openfeature/f
 })
 const config = {
   featureFlags: {
+    DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: false,
+    // Keep historical tracer revisions comparable when running this benchmark.
     DD_FLAGGING_EVALUATION_COUNTS_ENABLED: false,
     DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 30_000,
   },
