@@ -11,16 +11,23 @@ const finishCh = channel('apm:ioredis:command:finish')
 const errorCh = channel('apm:ioredis:command:error')
 
 const connectionOptionsCache = new WeakMap()
-// Commands queued while offline are replayed through `sendCommand` once connected.
-const tracedCommands = new WeakSet()
+// Commands sent before the connection is ready are replayed through `sendCommand` once
+// connected. Only those are tracked, and only looked up while any of them is pending.
+const queuedCommands = new WeakSet()
+let pendingQueuedCommands = 0
 
 function wrapRedis (Redis) {
   shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
-    if (!startCh.hasSubscribers || !command?.promise || tracedCommands.has(command)) {
+    if (!startCh.hasSubscribers || !command?.promise ||
+      (pendingQueuedCommands !== 0 && queuedCommands.has(command))) {
       return sendCommand.call(this, command, stream)
     }
 
-    tracedCommands.add(command)
+    if (this.status !== 'ready') {
+      queuedCommands.add(command)
+      pendingQueuedCommands++
+      command.promise.then(settleQueuedCommand, settleQueuedCommand)
+    }
 
     const options = this.options || {}
     let connectionOptions = connectionOptionsCache.get(this)
@@ -54,6 +61,10 @@ addHook({ name: 'ioredis', versions: ['>=4.11.0 <5'], file: 'built/redis/index.j
 })
 
 addHook({ name: 'ioredis', versions: ['>=5'] }, wrapRedis)
+
+function settleQueuedCommand () {
+  pendingQueuedCommands--
+}
 
 /**
  * @param {Record<string, unknown> & { error?: Error }} ctx
