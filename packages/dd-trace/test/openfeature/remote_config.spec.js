@@ -110,6 +110,24 @@ describe('OpenFeature Remote Config', () => {
       )
     })
 
+    it('does not fail applying a configuration without flags when formatting the debug log', () => {
+      enable(rc, getOpenfeatureProxy, true)
+
+      const handler = handlers.get('FFE_FLAGS')
+      for (const flagConfig of [{}, { flags: null }]) {
+        handler('apply', flagConfig, 'config-id')
+        sinon.assert.calledWithExactly(openfeatureProxy.setConfiguration, flagConfig)
+
+        const debugCall = log.debug.getCalls().findLast((call) => typeof call.args[0] === 'function')
+        assert.strictEqual(
+          debugCall.args[0](),
+          'Feature Flags: remote_config configuration apply applied successfully (0 flag(s) received; ' +
+          'per-flag validity is checked at evaluation, ' +
+          'configuration environment=undefined, createdAt=undefined, id=config-id)'
+        )
+      }
+    })
+
     it('should call setConfiguration on modify action when feature is enabled', () => {
       enable(rc, getOpenfeatureProxy, true)
 

@@ -27,10 +27,12 @@ function enable (rc, getOpenfeatureProxy, subscribe) {
       getOpenfeatureProxy().setConfiguration(conf)
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => {
-        const flagCount = Object.keys(conf.flags).length
+        // The payload is not schema-validated and this runs after setConfiguration, so a throw here would
+        // report an already applied configuration as failed only when debug logging is on.
+        const flagCount = Object.keys(conf?.flags ?? {}).length
         return `Feature Flags: remote_config configuration ${action} applied successfully ` +
           `(${flagCount} flag(s) received; per-flag validity is checked at evaluation, ` +
-          `configuration environment=${conf.environment?.name}, createdAt=${conf.createdAt}, id=${id})`
+          `configuration environment=${conf?.environment?.name}, createdAt=${conf?.createdAt}, id=${id})`
       })
     } else if (action === 'unapply') {
       getOpenfeatureProxy().setConfiguration(undefined)
