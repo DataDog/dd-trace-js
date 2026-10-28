@@ -324,7 +324,12 @@ const web = {
       if (req.method === 'OPTIONS' || req.method.toLowerCase() === 'options') {
         const headerIndex = typeof statusMessage === 'string' || headers != null ? 2 : 1
         const updatedHeaders = addAllowHeaders(req, res, arguments[headerIndex])
-        if (updatedHeaders) arguments[headerIndex] = updatedHeaders
+        if (updatedHeaders) {
+          arguments[headerIndex] = updatedHeaders
+          const result = writeHead.apply(this, arguments)
+          if (context.config.headers.length > 0) context.responseHeaders = updatedHeaders
+          return result
+        }
       }
       return writeHead.apply(this, arguments)
     }
@@ -396,9 +401,8 @@ function addAllowHeaders (req, res, headers) {
 
   if (allowHeaders.length > 0) {
     const value = uniq(allowHeaders).join(',')
-    if (Array.isArray(headers)) return setAllowHeaders(headers, allowKey, value)
+    if (headers) return setAllowHeaders(headers, allowKey, value)
     res.setHeader('access-control-allow-headers', value)
-    if (allowKey !== undefined) return setAllowHeaders(headers, allowKey, value)
   }
 }
 
@@ -453,7 +457,7 @@ function setAllowHeaders (headers, key, value) {
     }
     return result
   }
-  return { ...headers, [key]: value }
+  return { ...headers, [key ?? 'access-control-allow-headers']: value }
 }
 
 function splitHeader (str) {
@@ -589,10 +593,14 @@ function addRequestHeaders (context) {
 }
 
 function addResponseHeaders (context) {
-  const { res, config, span, inferredProxySpan } = context
+  const { res, config, span, inferredProxySpan, responseHeaders } = context
 
   for (const [key, tag] of config.headers) {
-    const resHeader = res.getHeader(key)
+    let resHeader = res.getHeader(key)
+    if (resHeader === undefined && responseHeaders) {
+      const headerKey = findHeader(responseHeaders, key)
+      if (headerKey !== undefined) resHeader = getHeaderValue(responseHeaders, headerKey)
+    }
     if (resHeader) {
       const tagName = tag || `${HTTP_RESPONSE_HEADERS}.${key}`
       span.setTag(tagName, resHeader)

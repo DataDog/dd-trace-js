@@ -49,7 +49,7 @@ for (const protocol of ['http', 'http2']) {
             })
           })
         }
-        const config = { client: false, headers: [ALLOW_HEADERS, ALLOW_ORIGIN] }
+        const config = { client: false, headers: [ALLOW_HEADERS, ALLOW_ORIGIN, 'x-test'] }
         await agent.load(plugins, [config, config])
       })
 
@@ -71,11 +71,10 @@ for (const protocol of ['http', 'http2']) {
             const expectedHeaders = structuredClone(headers)
             const traces = agent.assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-              if (shape === 'object' || protocol === 'http2') {
-                assert.strictEqual(traces[0][0].meta[`http.response.headers.${ALLOW_HEADERS}`],
-                  'content-type,baggage,traceparent')
-                assert.strictEqual(traces[0][0].meta[`http.response.headers.${ALLOW_ORIGIN}`], origin)
-              }
+              assert.strictEqual(traces[0][0].meta[`http.response.headers.${ALLOW_HEADERS}`],
+                'content-type,baggage,traceparent')
+              assert.strictEqual(traces[0][0].meta[`http.response.headers.${ALLOW_ORIGIN}`], origin)
+              assert.strictEqual(traces[0][0].meta['http.response.headers.x-test'], 'retained')
             })
             const [response] = await Promise.all([
               exchange(protocol, (req, res) => {
@@ -143,6 +142,59 @@ for (const protocol of ['http', 'http2']) {
       }
 
       if (protocol === 'http') {
+        it('records uncached explicit response headers', async () => {
+          const traces = agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces[0][0].meta['http.response.headers.x-test'], 'retained')
+          })
+          const [response] = await Promise.all([
+            exchange(protocol, (req, res) => {
+              res.writeHead(200, { [ALLOW_ORIGIN]: origin, 'x-test': 'retained' })
+              assert.strictEqual(res.getHeader('x-test'), undefined)
+            }),
+            traces,
+          ])
+          assert.strictEqual(response['x-test'], 'retained')
+        })
+
+        for (const cached of [false, true]) {
+          for (const frozen of [false, true]) {
+            for (const explicitAllow of [false, true]) {
+              it(`preserves ${cached ? 'cached' : 'uncached'} ${frozen ? 'frozen' : 'mutable'} object cookies` +
+                ` with explicit allow ${explicitAllow}`, async () => {
+                const pairs = [
+                  ['Access-Control-Allow-Origin', origin],
+                  ['Set-Cookie', 'first=1'],
+                  ['set-cookie', 'second=2'],
+                  ['x-test', 'retained'],
+                ]
+                if (explicitAllow) pairs.push(['Access-Control-Allow-Headers', 'content-type'])
+                const headers = frozen ? freezeHeaders('object', pairs) : Object.fromEntries(pairs)
+                const expectedHeaders = structuredClone(headers)
+                const expectedAllow = explicitAllow ? 'content-type,baggage,traceparent' : 'baggage,traceparent'
+                const traces = agent.assertSomeTraces(traces => {
+                  const { meta } = traces[0][0]
+                  assert.strictEqual(meta[`http.response.headers.${ALLOW_ORIGIN}`], origin)
+                  assert.strictEqual(meta[`http.response.headers.${ALLOW_HEADERS}`], expectedAllow)
+                  assert.strictEqual(meta['http.response.headers.x-test'], 'retained')
+                })
+                const [response] = await Promise.all([
+                  exchange(protocol, (req, res) => {
+                    if (cached) res.setHeader('x-test', 'retained')
+                    assert.strictEqual(res.writeHead(200, headers), res)
+                    assert.strictEqual(res.getHeader(ALLOW_HEADERS), cached ? expectedAllow : undefined)
+                    assert.strictEqual(res.getHeader('x-test'), cached ? 'retained' : undefined)
+                  }),
+                  traces,
+                ])
+                assert.deepStrictEqual(response['set-cookie'], cached ? ['second=2'] : ['first=1', 'second=2'])
+                assert.strictEqual(response[ALLOW_HEADERS], expectedAllow)
+                assert.strictEqual(response[ALLOW_ORIGIN], origin)
+                assert.deepStrictEqual(headers, expectedHeaders)
+              })
+            }
+          }
+        }
+
         for (const frozen of [false, true]) {
           for (const explicitAllow of [false, true]) {
             it(`preserves ${frozen ? 'frozen' : 'mutable'} cookie arrays with explicit allow ${explicitAllow}`,
@@ -227,6 +279,25 @@ for (const protocol of ['http', 'http2']) {
           }),
           traces,
         ])
+      })
+
+      it('does not record headers from a rejected writeHead call', async () => {
+        const traces = agent.assertSomeTraces(traces => {
+          assert.strictEqual(traces[0][0].meta['http.response.headers.x-test'], undefined)
+        })
+        const [response] = await Promise.all([
+          exchange(protocol, (req, res) => {
+            assert.throws(() => res.writeHead(99, { [ALLOW_ORIGIN]: origin, 'x-test': 'rejected' }), {
+              code: protocol === 'http' ? 'ERR_HTTP_INVALID_STATUS_CODE' : 'ERR_HTTP2_STATUS_INVALID',
+            })
+            res.statusCode = 200
+            res.removeHeader('x-test')
+            res.setHeader(ALLOW_ORIGIN, origin)
+          }),
+          traces,
+        ])
+        assert.strictEqual(response['x-test'], undefined)
+        assert.strictEqual(response[ALLOW_HEADERS], 'baggage,traceparent')
       })
 
       for (const headers of [{}, { origin }]) {
