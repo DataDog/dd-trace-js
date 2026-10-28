@@ -40,7 +40,6 @@ function parseArguments (arguments_) {
 
 /**
  * @param {string} url
- * @returns {string}
  */
 function getGhsaId (url) {
   return url.slice(url.lastIndexOf('/') + 1)

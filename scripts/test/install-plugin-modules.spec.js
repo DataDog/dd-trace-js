@@ -1,7 +1,7 @@
 'use strict'
 
-// `versions/bunfig.toml` pins the isolated linker. The constrained PATH removes yarn from the
-// spawned child's lookup, so a regression that re-introduces it fails to launch.
+// `versions/bunfig.toml` pins the isolated linker. Wrappers reject npm and yarn installs
+// while preserving the native build tools on PATH.
 
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
@@ -127,6 +127,40 @@ describe('scripts/install_plugin_modules.js', function () {
       fs.readFileSync(traceFile, 'utf8').trim().split('\n').map(JSON.parse),
       [['bun', 'install', '--trust']]
     )
+  })
+
+  it('rebuilds a dependency after its postinstall failed in an earlier invocation', () => {
+    const fixture = path.join(wrapperDirectory, 'native', 'package')
+    fs.mkdirSync(fixture, { recursive: true })
+    fs.writeFileSync(path.join(fixture, 'package.json'), JSON.stringify({
+      name: 'q',
+      version: '1.5.1',
+      main: 'index.js',
+      scripts: { postinstall: 'node install.js' },
+    }))
+    fs.writeFileSync(path.join(fixture, 'index.js'),
+      "module.exports = require('node:fs').existsSync(require('node:path').join(__dirname, 'built'))\n")
+    fs.writeFileSync(path.join(fixture, 'install.js'),
+      "if (process.env.DD_TEST_FAIL_NATIVE_INSTALL === 'true') process.exit(1)\n" +
+      "require('node:fs').writeFileSync(require('node:path').join(__dirname, 'built'), '')\n")
+    const archive = path.join(wrapperDirectory, 'native.tgz')
+    const packed = spawnSync('tar', ['-czf', archive, '-C', path.dirname(fixture), 'package'], { encoding: 'utf8' })
+    assert.strictEqual(packed.status, 0, packed.stderr)
+
+    const preload = path.join(wrapperDirectory, 'native-override.js')
+    fs.writeFileSync(preload, `
+const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
+externals.q = [{ name: 'q', overrides: { q: ${JSON.stringify(`file:${archive}`)} } }]
+`)
+    const env = { NODE_OPTIONS: `--require=${preload}`, PACKAGE_VERSION_RANGE: '1.5.1' }
+    const result = spawnInstall('q', { ...env, DD_TEST_FAIL_NATIVE_INSTALL: 'true' })
+    assert.strictEqual(result.status, 1, result.stderr)
+    assert.match(result.stderr, /install script from "q" exited with 1/)
+
+    runInstall('q', undefined, undefined, env)
+
+    const dependency = require(path.join(versionsDir, 'q@1.5.1'))
+    assert.strictEqual(dependency.get(), true, 'the next invocation must run the failed postinstall again')
   })
 
   it('rejects conflicting declarative overrides', () => {
@@ -309,7 +343,7 @@ function readVersionsManifest () {
  */
 function runInstall (plugin, binDirectory, traceFile, env) {
   const result = spawnInstall(plugin, {
-    PATH: `${binDirectory ?? wrapperDirectory}:/usr/bin:/bin`,
+    PATH: `${binDirectory ?? wrapperDirectory}:${process.env.PATH}`,
     ...(traceFile && { DD_TEST_PACKAGE_MANAGER_TRACE_FILE: traceFile }),
     ...env,
   })
@@ -335,15 +369,12 @@ function spawnInstall (plugin, env = {}) {
     env: {
       ...process.env,
       PLUGINS: plugin,
-      PATH: `${wrapperDirectory}:/usr/bin:/bin`,
+      PATH: `${wrapperDirectory}:${process.env.PATH}`,
       ...env,
     },
   })
 }
 
-/**
- * @returns {string}
- */
 function createPackageManagerWrappers () {
   const directory = fs.mkdtempSync(path.join(tmpdir(), 'dd-trace-bun-wrapper-'))
   const bunWrapper = path.join(directory, 'bun')
@@ -370,22 +401,23 @@ process.exit(result.status ?? 1)
 `)
   fs.chmodSync(bunWrapper, 0o755)
 
-  fs.linkSync(process.execPath, path.join(directory, path.basename(process.execPath)))
+  fs.symlinkSync(process.execPath, path.join(directory, path.basename(process.execPath)))
 
-  const npmWrapper = path.join(directory, 'npm')
-  fs.writeFileSync(npmWrapper, String.raw`#!${process.execPath}
+  for (const packageManager of ['npm', 'yarn']) {
+    const wrapper = path.join(directory, packageManager)
+    fs.writeFileSync(wrapper, String.raw`#!${process.execPath}
 'use strict'
 
-const { spawnSync } = require('node:child_process')
 const { appendFileSync } = require('node:fs')
 
-const args = process.argv.slice(2)
 if (process.env.DD_TEST_PACKAGE_MANAGER_TRACE_FILE) {
-  appendFileSync(process.env.DD_TEST_PACKAGE_MANAGER_TRACE_FILE, JSON.stringify(['npm', ...args]) + '\n')
+  appendFileSync(process.env.DD_TEST_PACKAGE_MANAGER_TRACE_FILE,
+    JSON.stringify([${JSON.stringify(packageManager)}, ...process.argv.slice(2)]) + '\n')
 }
 process.exit(1)
 `)
-  fs.chmodSync(npmWrapper, 0o755)
+    fs.chmodSync(wrapper, 0o755)
+  }
   return directory
 }
 
@@ -396,7 +428,6 @@ function resolveBunBinary () {
 
 /**
  * @param {string} name
- * @returns {string}
  */
 function resolveBinary (name) {
   const result = spawnSync('sh', ['-c', `command -v ${name}`], { encoding: 'utf8' })

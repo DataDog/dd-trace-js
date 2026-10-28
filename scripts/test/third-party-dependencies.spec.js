@@ -24,7 +24,7 @@ describe('third-party dependency locks', () => {
 
   it('walks regular, optional, nested, and scoped Bun dependencies', () => {
     const lockPath = writeFixture('bun.lock', `{
-      "lockfileVersion": 1,
+      "lockfileVersion": 2,
       "workspaces": {
         "": {
           "dependencies": {
@@ -217,12 +217,14 @@ describe('third-party dependency locks', () => {
     ])
   })
 
-  it('accepts the current lock version and fails closed on other or incomplete locks', () => {
+  it('accepts supported lock versions and fails closed on other or incomplete locks', () => {
     const empty = { workspaces: { '': {} }, packages: {} }
-    const currentLockPath = writeFixture('version-1.lock', JSON.stringify({ lockfileVersion: 1, ...empty }))
-    assert.deepStrictEqual(listBunLockDependencies(currentLockPath), [])
+    for (const lockfileVersion of [1, 2]) {
+      const lockPath = writeFixture(`version-${lockfileVersion}.lock`, JSON.stringify({ lockfileVersion, ...empty }))
+      assert.deepStrictEqual(listBunLockDependencies(lockPath), [])
+    }
 
-    for (const lockfileVersion of [0, 2, -1, 1.5, '1', undefined]) {
+    for (const lockfileVersion of [0, 3, -1, 1.5, '1', undefined]) {
       const lockPath = writeFixture(`version-${lockfileVersion}.lock`, JSON.stringify({
         lockfileVersion,
         ...empty,

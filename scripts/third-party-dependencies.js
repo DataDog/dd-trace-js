@@ -36,8 +36,6 @@ const { parse: parseJsonc, printParseErrorCode } = require('jsonc-parser')
  * @property {Record<string, LockManifest>} workspaces
  */
 
-const supportedLockfileVersion = 1
-
 /**
  * @param {string[]} packagePaths
  * @returns {Map<string, string>}
@@ -157,7 +155,6 @@ function findEntryManifest (entry) {
 
 /**
  * @param {unknown} value
- * @returns {boolean}
  */
 function isObject (value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -176,7 +173,7 @@ function parseBunLock (lockPath) {
     throw new Error(`Cannot parse ${lockPath}: ${printParseErrorCode(error)} at offset ${offset}`)
   }
   if (!isObject(lock)) throw new Error(`${lockPath} does not contain an object`)
-  if (lock.lockfileVersion !== supportedLockfileVersion) {
+  if (lock.lockfileVersion !== 1 && lock.lockfileVersion !== 2) {
     throw new Error(`Unsupported lockfile version in ${lockPath}: ${lock.lockfileVersion}`)
   }
   if (!isObject(lock.packages)) throw new Error(`${lockPath} does not contain package metadata`)
