@@ -29,7 +29,8 @@ fi
 
 if ! hash bun 2>/dev/null; then
   echo "bun is not installed. Please install bun before running this script."
-  echo "You can install bun by running 'npm install -g bun@1.4.0'."
+  bun_version=$(node -p "require('./package.json').devDependencies.bun")
+  echo "You can install bun by running 'npm install -g bun@$bun_version'."
   exit 1
 fi
 
