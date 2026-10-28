@@ -1306,6 +1306,21 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  for (const runInParallel of [false, true]) {
+    it(`loads the runner without instrumentation errors ${runInParallel ? 'in workers' : 'in band'}`, async () => {
+      const output = await runJestAndCaptureOutput({
+        DD_TRACE_DEBUG: '1',
+        DD_TRACE_LOG_LEVEL: 'info',
+        RUN_IN_PARALLEL: runInParallel ? '1' : '',
+        MAX_WORKERS: '2',
+        TESTS_TO_RUN: 'jest-teardown-timers/passing-.*-test.js$',
+      })
+
+      assert.match(output, /Test Suites: 2 passed/)
+      assert.doesNotMatch(output, /Error during ddtrace instrumentation of application/)
+    })
+  }
+
   context('test runner support warning', () => {
     defaultCircusIt('does not warn for Jest defaulting to jest-circus', async () => {
       const output = await runJestAndCaptureOutput(

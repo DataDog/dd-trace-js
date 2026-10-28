@@ -3508,7 +3508,7 @@ tracingChannel('orchestrion:jest-runner:runTestInternal').end.subscribe((message
   ctx.result = ctx.result.finally(() => finishTestSuiteAfterRun(testSuiteAbsolutePath))
 })
 
-for (const hook of getHooks('jest-runner').values()) addHook(hook)
+for (const hook of getHooks('jest-runner').values()) addHook(hook, moduleExports => moduleExports)
 
 /**
  * @param {Record<string, unknown>} payload
