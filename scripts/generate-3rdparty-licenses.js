@@ -362,7 +362,6 @@ function extractCopyright (data) {
  * input pattern CodeQL flags.
  *
  * @param {string | { name?: string } | undefined} entry
- * @returns {string}
  */
 function extractName (entry) {
   if (typeof entry === 'string') {

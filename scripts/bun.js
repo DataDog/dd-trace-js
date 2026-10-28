@@ -8,9 +8,6 @@ const repoRoot = path.join(__dirname, '..')
 const bunVersion = require('../package.json').devDependencies.bun
 const bunCommand = process.platform === 'win32' ? 'bun.exe' : 'bun'
 
-/**
- * @returns {string}
- */
 function getBunBinary () {
   const installedVersion = spawnSync(bunCommand, ['--version'], { encoding: 'utf8' })
   if (installedVersion.status === 0 && installedVersion.stdout.trim() === bunVersion) {
