@@ -573,8 +573,8 @@
 # Multiple teams
 /devdocs/ @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
 /docs/ @DataDog/apm-idm-js @DataDog/lang-platform-js
-/docs/API.md @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
-/docs/test.ts @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
+/docs/API.md @DataDog/apm-idm-js
+/docs/test.ts @DataDog/apm-idm-js
 /.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
 /eslint-rules/* @DataDog/apm-sdk-capabilities @DataDog/lang-platform-js
 /ext/exporters.* @DataDog/apm-idm-js @DataDog/ci-app-libraries @DataDog/lang-platform-js
