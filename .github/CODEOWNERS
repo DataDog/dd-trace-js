@@ -6,11 +6,7 @@
 /.cursor/ @DataDog/lang-platform-js
 /.gemini/ @DataDog/lang-platform-js
 /.github/ @DataDog/lang-platform-js
-/.github/actions/ @DataDog/lang-platform-js
-/.github/all-green/ @DataDog/lang-platform-js
-/.github/ISSUE_TEMPLATE/ @DataDog/lang-platform-js
 /.gitlab/ @DataDog/lang-platform-js
-/.husky/ @DataDog/lang-platform-js
 /.vscode/ @DataDog/lang-platform-js
 /scripts/ @DataDog/lang-platform-js
 /vendor/ @DataDog/lang-platform-js
@@ -111,7 +107,6 @@
 /integration-tests/pino/ @DataDog/apm-idm-js
 /integration-tests/pino.spec.js @DataDog/apm-idm-js
 
-/versions/bunfig.toml @DataDog/apm-idm-js @DataDog/lang-platform-js
 /packages/datadog-esbuild/ @DataDog/apm-idm-js
 /packages/datadog-turbopack/ @DataDog/apm-idm-js
 /packages/datadog-webpack/ @DataDog/apm-idm-js
@@ -373,21 +368,13 @@
 /packages/dd-trace/test/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 
 # CI
-/.github/ @DataDog/lang-platform-js
 /.github/actions/**/action.yml @DataDog/lang-platform-js @dd-octo-sts
-/.github/ @DataDog/lang-platform-js
 /.github/actions/**/action.yaml @DataDog/lang-platform-js @dd-octo-sts
-/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-coverage-artifact/ @DataDog/ci-app-libraries
-/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-coverage-artifact/action.yml @DataDog/ci-app-libraries @dd-octo-sts
-/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-coverage-artifact/action.yaml @DataDog/ci-app-libraries @dd-octo-sts
-/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-junit-artifacts/ @DataDog/ci-app-libraries
-/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-junit-artifacts/action.yml @DataDog/ci-app-libraries @dd-octo-sts
-/.github/ @DataDog/lang-platform-js
 /.github/actions/upload-junit-artifacts/action.yaml @DataDog/ci-app-libraries @dd-octo-sts
 /.github/editorconfig-checker/ @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/ci-app-libraries
@@ -596,14 +583,14 @@
 /packages/dd-trace/src/plugin_manager.js @DataDog/lang-platform-js @DataDog/apm-idm-js
 
 # Automated dependency updates
+/bunfig.toml @DataDog/lang-platform-js
+/versions/bunfig.toml @DataDog/lang-platform-js
 /package.json @DataDog/lang-platform-js @dd-octo-sts
-/yarn.lock @DataDog/lang-platform-js @dd-octo-sts
+/bun.lock @DataDog/lang-platform-js @dd-octo-sts
 /docs/package.json @DataDog/apm-idm-js @DataDog/lang-platform-js @dd-octo-sts
-/docs/yarn.lock @DataDog/apm-idm-js @DataDog/lang-platform-js @dd-octo-sts
-/.github/ @DataDog/lang-platform-js
+/docs/bun.lock @DataDog/apm-idm-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/actions/datadog-ci/package.json @DataDog/lang-platform-js @dd-octo-sts
-/.github/ @DataDog/lang-platform-js
-/.github/actions/datadog-ci/yarn.lock @DataDog/lang-platform-js @dd-octo-sts
+/.github/actions/datadog-ci/bun.lock @DataDog/lang-platform-js @dd-octo-sts
 /vendor/package.json @DataDog/lang-platform-js @dd-octo-sts
 /vendor/bun.lock @DataDog/lang-platform-js @dd-octo-sts
 /packages/dd-trace/test/plugins/versions/package.json @DataDog/apm-idm-js @dd-octo-sts

@@ -16,7 +16,7 @@ const {
   getInstrumentationNames,
 } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange, resolvePluginVersions } = require('../packages/dd-trace/test/plugins/versions')
-const { dependencies: latests, resolutions } = require('../packages/dd-trace/test/plugins/versions/package.json')
+const { dependencies: latests } = require('../packages/dd-trace/test/plugins/versions/package.json')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const mapWithConcurrency = require('./helpers/concurrency')
@@ -65,25 +65,17 @@ async function run () {
   invalidateCacheOnNodeAbiChange()
   const deferredPackageStages = await assertPrerequisites()
   install()
-  await installPackageStages(deferredPackageStages)
+  for (const stage of deferredPackageStages) {
+    // eslint-disable-next-line no-await-in-loop
+    await mapWithConcurrency(stage, FS_CONCURRENCY, assertPackage)
+    // eslint-disable-next-line no-await-in-loop
+    await assertWorkspaces()
+    install()
+  }
   const changed = await assertPeerDependencies(join(__dirname, '..', 'versions'))
   // The peer-dependency install only does something when patching actually changed a manifest. Targeted
   // installs for plugins without external peer dependencies (the common CI matrix case) skip it entirely.
   if (changed) install()
-}
-
-/**
- * @param {Array<Array<{ name: string, version: string|null, range: string }>>} packageStages
- * @param {number} [index]
- * @returns {Promise<void>}
- */
-async function installPackageStages (packageStages, index = 0) {
-  if (index >= packageStages.length) return
-
-  await mapWithConcurrency(packageStages[index], FS_CONCURRENCY, assertPackage)
-  await assertWorkspaces()
-  install()
-  return installPackageStages(packageStages, index + 1)
 }
 
 /**
@@ -485,7 +477,6 @@ const requirePackageJson = require('${requirePackageJsonPath}')
 
 /**
  * @param {string} id
- * @returns {string}
  */
 function findPkgJsonPath (id) {
   for (const modulePath of module.paths) {
@@ -556,6 +547,8 @@ function install () {
     // dep of the consuming sandbox rather than as a sibling workspace.
     exec('bun install --trust', { cwd: folder() })
   } catch (error) {
+    // Bun can otherwise skip a failed lifecycle script on the next invocation.
+    rmSync(join(folder(), 'node_modules'), { recursive: true, force: true })
     // A failure is most often an unresolvable version: a declared range spans a major version that was never
     // published. Point at the fix instead of leaving a bare bun error.
     throw new Error(
@@ -635,7 +628,6 @@ function collectInstalledMajors (dotBun) {
 /**
  * @param {string} name
  * @param {string} range
- * @returns {string}
  */
 function capKnownRange (name, range) {
   return latests[name] === undefined ? range : getCappedRange(name, range)

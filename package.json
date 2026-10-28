@@ -217,7 +217,7 @@
     "@types/sinon": "^22.0.0",
     "@vercel/nft": "^1.11.0",
     "benchmark": "^2.1.4",
-    "body-parser": "^2.3.0",
+    "body-parser": "^2.4.0",
     "bun": "1.4.3",
     "c8": "^12.0.0",
     "codeowners-audit": "^2.9.0",
