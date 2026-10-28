@@ -2083,6 +2083,53 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('when using off timing imports', () => {
+    for (const definition of ['method', 'field']) {
+      for (const errorMode of ['sync', 'async', 'after-super', 'success']) {
+        // Worker recycling was introduced in Jest 29.
+        const teardownIt = supportsWorkerIdleMemoryLimit ? it : it.skip
+        teardownIt(`flushes suites after custom teardown ${definition}: ${errorMode}`, async () => {
+          childProcess = exec(runTestsCommand, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'jest-teardown-timers/passing-.*-test',
+              CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jest-environment-teardown-error.js',
+              RUN_IN_PARALLEL: 'true',
+              WORKER_IDLE_MEMORY_LIMIT: '1024',
+              JEST_TEARDOWN_DEFINITION: definition,
+              JEST_TEARDOWN_ERROR_MODE: errorMode,
+              SHOULD_CHECK_RESULTS: 'true',
+            },
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 2, testOutput)
+              assert.strictEqual(events.filter(event => event.type === 'test').length, 2, testOutput)
+              for (const type of ['test_module_end', 'test_session_end']) {
+                const event = events.find(event => event.type === type)?.content
+                assert.ok(event, testOutput)
+                assert.strictEqual(event.meta[TEST_STATUS], errorMode === 'success' ? 'pass' : 'fail', testOutput)
+                if (errorMode !== 'success') {
+                  assert.match(event.meta[ERROR_MESSAGE], /expected custom environment teardown failure/)
+                }
+              }
+            }
+          )
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, errorMode === 'success' ? 0 : 1, testOutput)
+          if (errorMode !== 'success') {
+            assert.match(testOutput, /TypeError: expected custom environment teardown failure/)
+          }
+        })
+      }
+    }
+
     for (const workerIdleMemoryLimit of [undefined, '1024']) {
       for (const errorMode of ['sync', 'async']) {
         // workerIdleMemoryLimit was introduced in Jest 29.

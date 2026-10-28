@@ -200,6 +200,7 @@ const testSuiteDatadogEnvironments = new Map()
 const wrappedJestGlobals = new WeakSet()
 const wrappedJestEsmLoaders = new WeakSet()
 const wrappedJestObjects = new WeakSet()
+const wrappedEnvironmentTeardowns = new WeakSet()
 const wrappedWorkerInitializers = new WeakSet()
 const publishedRuntimeReferenceErrors = new WeakMap()
 const jestEsmLoggingModulePathsByRuntime = new WeakMap()
@@ -784,6 +785,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       this[DD_JEST_HANDLE_TEST_EVENT_DATADOG] = DatadogEnvironment.prototype.handleTestEvent
       this.wrapCustomHandleTestEvent(DatadogEnvironment.prototype.handleTestEvent)
+      wrapEnvironmentTeardown(this)
     }
 
     /**
@@ -2653,38 +2655,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
       }
-      const clearActiveTestSuite = () => {
-        realSetTimeout(() => {
-          if (activeTestSuiteAbsolutePath === this.testSuiteAbsolutePath) {
-            activeTestSuiteAbsolutePath = undefined
-          }
-        }, 0)
-      }
-      const finishTestSuite = () => {
-        const payload = deferredTestSuiteFinishes.get(this)
-        deferredTestSuiteFinishes.delete(this)
-        if (payload) {
-          // Close the environment before yielding to late work, then flush before worker recycling.
-          return getChannelPromise(testSuiteFinishCh, { ...payload, waitForFinish: true })
-            .finally(clearActiveTestSuite)
-        }
-        return clearActiveTestSuite()
-      }
-      let result
-      try {
-        result = super.teardown()
-      } catch (error) {
-        if (!deferredTestSuiteFinishes.has(this)) throw error
-        const finish = finishTestSuite()
-        if (finish?.then) {
-          return finish.then(() => { throw error })
-        }
-        throw error
-      }
-      if (result?.then) {
-        return result.finally(finishTestSuite)
-      }
-      return finishTestSuite() ?? result
+      return super.teardown()
     }
   }
 }
@@ -3513,6 +3484,56 @@ function shouldWaitForTestSuiteFinish (environment) {
 }
 
 /**
+ * @param {InstanceType<ReturnType<typeof getWrappedEnvironment>>} environment
+ */
+function wrapEnvironmentTeardown (environment) {
+  if (wrappedEnvironmentTeardowns.has(environment.teardown)) return
+
+  // The actual method may be a user-defined subclass method or instance field, selected only at runtime.
+  shimmer.wrap(
+    /** @type {Record<string | symbol, unknown>} */ (/** @type {unknown} */ (environment)),
+    'teardown', teardown => {
+      const wrapped = function () {
+        const clearActiveTestSuite = () => {
+          realSetTimeout(() => {
+            if (activeTestSuiteAbsolutePath === this.testSuiteAbsolutePath) {
+              activeTestSuiteAbsolutePath = undefined
+            }
+          }, 0)
+        }
+        const finishTestSuite = () => {
+          const payload = deferredTestSuiteFinishes.get(this)
+          deferredTestSuiteFinishes.delete(this)
+          if (payload) {
+            // Wait for the outermost environment teardown before flushing for worker recycling.
+            return getChannelPromise(testSuiteFinishCh, { ...payload, waitForFinish: true })
+              .finally(clearActiveTestSuite)
+          }
+          return clearActiveTestSuite()
+        }
+        let result
+        try {
+          result = teardown.apply(this, arguments)
+        } catch (error) {
+          if (!deferredTestSuiteFinishes.has(this)) throw error
+          const finish = finishTestSuite()
+          if (finish?.then) {
+            return finish.then(() => { throw error })
+          }
+          throw error
+        }
+        if (result?.then) {
+          return result.finally(finishTestSuite)
+        }
+        return finishTestSuite() ?? result
+      }
+      wrappedEnvironmentTeardowns.add(wrapped)
+      return wrapped
+    }
+  )
+}
+
+/**
  * @param {Record<string, unknown>} payload
  * @param {InstanceType<ReturnType<typeof getWrappedEnvironment>>} environment
  */
@@ -3520,6 +3541,8 @@ function publishTestSuiteFinish (payload, environment) {
   if (!testSuiteFinishCh.hasSubscribers) return
 
   if (shouldWaitForTestSuiteFinish(environment)) {
+    // Instance fields and setup may replace the method captured by the base constructor.
+    wrapEnvironmentTeardown(environment)
     deferredTestSuiteFinishes.set(environment, payload)
     return
   }
