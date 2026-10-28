@@ -31,6 +31,7 @@ describe('profiler', () => {
         enabled: false,
         stopping: false,
         isStopping () { return this.stopping },
+        getRunningTypes: sinon.stub().returns([]),
         start: sinon.stub(),
         stop: sinon.stub(),
         setCustomLabelKeys: sinon.spy(),
@@ -371,6 +372,15 @@ describe('profiler', () => {
       sinon.assert.calledOnce(profilingModule.profiler.start)
       sinon.assert.notCalled(FakeSSIHeuristics)
       assert.strictEqual(profiler.isStarted(), false)
+    })
+  })
+
+  describe('running profile types', () => {
+    it('reports the types the profiling layer runs', () => {
+      publishConfig('true')
+      profilingModule.profiler.getRunningTypes.returns(['wall', 'cpu', 'space'])
+
+      assert.deepStrictEqual(profiler.getRunningProfileTypes(), ['wall', 'cpu', 'space'])
     })
   })
 

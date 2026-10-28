@@ -38,6 +38,16 @@ function isStarted () {
   return profilingModule !== undefined && profilingModule.profiler.enabled
 }
 
+/**
+ * Types of the running profilers (see the profiling layer's getRunningTypes()). Like isStarted(),
+ * this doesn't load the profiling engine just to answer.
+ *
+ * @returns {string[]}
+ */
+function getRunningProfileTypes () {
+  return profilingModule?.profiler.getRunningTypes() ?? []
+}
+
 // A stopped profiler still exports one final profile, and until that settles it reports neither
 // the state a decision would be based on nor any willingness to start again.
 function isStopping () {
@@ -182,4 +192,4 @@ configUpdateChannel.subscribe((config) => {
 
 globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(stop)
 
-module.exports = { isStarted, start, stop, setCustomLabelKeys, runWithLabels }
+module.exports = { isStarted, getRunningProfileTypes, start, stop, setCustomLabelKeys, runWithLabels }
