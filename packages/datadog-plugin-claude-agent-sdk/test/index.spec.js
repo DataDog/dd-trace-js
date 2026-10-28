@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { createRequire } = require('node:module')
 const { describe, before, after, it } = require('mocha')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -26,14 +27,12 @@ describe('Plugin', () => {
       let pathToClaudeCodeExecutable
 
       before(async () => {
-        const path = require('node:path')
         await agent.load('claude-agent-sdk')
         const sdkModule = require(`../../../versions/@anthropic-ai/claude-agent-sdk@${version}`)
         client = sdkModule.get()
         zod = sdkModule.get('zod')
-        const anthropicDir = path.dirname(path.dirname(sdkModule.getPath()))
-        pathToClaudeCodeExecutable = path.join(
-          anthropicDir, `claude-agent-sdk-${process.platform}-${process.arch}`, 'claude'
+        pathToClaudeCodeExecutable = createRequire(sdkModule.getPath()).resolve(
+          `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/claude`
         )
       })
 

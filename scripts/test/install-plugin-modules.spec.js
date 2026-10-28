@@ -288,6 +288,13 @@ externals.q = [
     const directGrpcPath = fs.realpathSync(pubsub.getPath('@grpc/grpc-js'))
     const pubsubGrpcPath = fs.realpathSync(createRequire(pubsub.getPath()).resolve('@grpc/grpc-js'))
     assert.strictEqual(pubsubGrpcPath, directGrpcPath)
+
+    const latestPubsub = require(path.join(versionsDir, '@google-cloud', 'pubsub'))
+    const latestRequire = createRequire(latestPubsub.getPath())
+    const gaxRequire = createRequire(latestRequire.resolve('google-gax'))
+    const apiRequire = createRequire(latestRequire.resolve('@google-cloud/pubsub-api'))
+    const apiGaxRequire = createRequire(apiRequire.resolve('google-gax'))
+    assert.strictEqual(gaxRequire.resolve('@grpc/grpc-js'), apiGaxRequire.resolve('@grpc/grpc-js'))
   })
 
   it('makes the Bedrock HTTP handler reachable from its sandbox', () => {

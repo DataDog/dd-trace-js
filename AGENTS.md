@@ -133,7 +133,7 @@ Other settings update only their owning surfaces:
 
 1. Add the default in `packages/dd-trace/src/config/defaults.js`.
 2. Map the environment variable in `packages/dd-trace/src/config/index.js`.
-3. Update both supported public TypeScript surfaces when applicable.
+3. Update public TypeScript definitions in `index.d.ts` and `index.d.vN.ts` when applicable.
 4. Add the telemetry name mapping in `packages/dd-trace/src/telemetry/telemetry.js` when applicable.
 5. Update `packages/dd-trace/src/config/supported-configurations.json`.
 6. Document non-internal, non-experimental options in `docs/API.md` when it owns the public surface.
