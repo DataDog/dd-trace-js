@@ -21,6 +21,7 @@ const {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_SESSION_EMPTY_REASON,
   TEST_SKIP_REASON,
   TEST_SKIPPED_BY_ITR,
@@ -990,6 +991,99 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     ])
     assert.strictEqual(exitCode, 0)
   })
+
+  for (const retryCount of [1, 2, 3]) {
+    for (const passes of [false, true]) {
+      it(`attributes explicit native retries correctly (count=${retryCount}, passes=${passes})`, async () => {
+        receiver.setSettings({
+          itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
+        })
+        childProcess = exec(
+          'node ./node_modules/jest/bin/jest --runInBand --config ci-visibility/jest-native-retry.config.js', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NATIVE_RETRY_COUNT: String(retryCount),
+              NATIVE_RETRY_PASSES: passes ? '1' : '0',
+              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            },
+          })
+        let output = ''
+        childProcess.stdout.on('data', data => { output += data })
+        childProcess.stderr.on('data', data => { output += data })
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, retryCount + 1)
+            const finalStatus = passes ? 'pass' : 'fail'
+            assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_STATUS] === 'fail'))
+            assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+            assert.strictEqual(tests.at(-1).meta[TEST_STATUS], finalStatus)
+            assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], finalStatus)
+            const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, retryCount)
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext))
+          })
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise]).catch(error => {
+          throw new Error(`${output}\n${error.message}`, { cause: error })
+        })
+        assert.strictEqual(exitCode, passes ? 0 : 1)
+      })
+    }
+  }
+
+  // Describe-scoped retries were added in Jest 30.5.
+  const describeRetryIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) > 30 ||
+    (Number(JEST_VERSION.split('.')[0]) === 30 && Number(JEST_VERSION.split('.')[1]) >= 5)
+    ? it
+    : it.skip
+  for (const retryCount of [1, 2]) {
+    describeRetryIt(`isolates describe-scoped native retries from sibling ATR (count=${retryCount})`, async () => {
+      receiver.setSettings({
+        itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
+      })
+      childProcess = exec(
+        'node ./node_modules/jest/bin/jest --runInBand --config ci-visibility/jest-native-retry.config.js ' +
+        '--testMatch "**/test/describe-native-retry-attribution-test.js"', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NATIVE_RETRY_COUNT: String(retryCount),
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          },
+        })
+      let output = ''
+      childProcess.stdout.on('data', data => { output += data })
+      childProcess.stderr.on('data', data => { output += data })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          for (const [name, count, reason] of [
+            ['root ATR', 2, TEST_RETRY_REASON_TYPES.atr],
+            ['sibling ATR fails', 2, TEST_RETRY_REASON_TYPES.atr],
+            ['native describe fails', retryCount + 1, TEST_RETRY_REASON_TYPES.ext],
+            ['native describe passes', retryCount + 1, TEST_RETRY_REASON_TYPES.ext],
+            ['native describe nested fails', retryCount + 1, TEST_RETRY_REASON_TYPES.ext],
+          ]) {
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+            assert.strictEqual(attempts.length, count, name)
+            const status = name.endsWith('passes') ? 'pass' : 'fail'
+            assert.ok(attempts.every(test => test.meta[TEST_STATUS] === status), name)
+            const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, count - 1, name)
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === reason), name)
+          }
+        })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise]).catch(error => {
+        throw new Error(`${output}\n${error.message}`, { cause: error })
+      })
+      assert.strictEqual(exitCode, 1, output)
+    })
+  }
 
   onlyLatestIt('rebinds test.concurrent retry bodies to the current test span', async () => {
     const eventsPromise = receiver

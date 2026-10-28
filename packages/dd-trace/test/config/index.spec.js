@@ -3484,6 +3484,30 @@ describe('Config', () => {
   })
 
   for (const exporter of [
+    exporters.AGENT_PROXY,
+    exporters.DATADOG,
+    exporters.CUCUMBER_WORKER,
+    exporters.JEST_WORKER,
+    exporters.MOCHA_WORKER,
+    exporters.PLAYWRIGHT_WORKER,
+    exporters.VITEST_WORKER,
+  ]) {
+    it(`should disable DogStatsD and runtime metrics for the ${exporter} Test Optimization exporter`, () => {
+      process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        dogstatsd: { hostname: 'metrics.example', port: 8125 },
+        runtimeMetrics: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.dogstatsd, undefined)
+      assert.strictEqual(config.runtimeMetrics.enabled, false)
+    })
+  }
+
+  for (const exporter of [
     exporters.CUCUMBER_WORKER,
     exporters.JEST_WORKER,
     exporters.MOCHA_WORKER,
@@ -5359,6 +5383,24 @@ rules:
   })
 
   describe('setRemoteConfig', () => {
+    it('should preserve remote configuration that overrides a calculated fallback', () => {
+      process.env.OTEL_PROPAGATORS = 'b3'
+      const config = getConfig(undefined, { ddMajor: 5 })
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
+
+      config.setRemoteConfig({ DD_TRACE_PROPAGATION_STYLE_INJECT: 'b3' })
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'remote_config')
+
+      config.setRemoteConfig(null)
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
+    })
+
     it('should resolve deprecated AppSec env configs to canonical Remote Config fields', () => {
       const config = getConfig()
 
