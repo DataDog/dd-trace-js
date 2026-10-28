@@ -237,6 +237,48 @@ describe(`cucumber@${version} commonJS`, () => {
     await receiver.stop()
   })
 
+  for (const dynamic of [false, true]) {
+    for (const parallel of [false, true]) {
+      // Cucumber only exposes native retry attempt boundaries from version 8.
+      const nativeRetryIt = version === '7.0.0' ? it.skip : it
+      const title = `attributes explicit native retries correctly (dynamic=${dynamic}, parallel=${parallel})`
+      nativeRetryIt(title, async () => {
+        receiver.setSettings({
+          itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
+        })
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-native-retries/retry.feature' +
+          ' --require ci-visibility/features-native-retries/steps.js --retry 2' + (parallel ? ' --parallel 2' : ''),
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(dynamic),
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+            },
+          }
+        )
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            const attempts = dynamic ? 2 : 3
+            const reason = dynamic ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
+            assert.strictEqual(tests.length, attempts)
+            assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+            assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, attempts - 1)
+            for (const test of tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')) {
+              assert.strictEqual(test.meta[TEST_RETRY_REASON], reason)
+            }
+            assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+          })
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+    }
+  }
+
   for (const [args, reason] of [
     ['--dry-run', 'all_tests_skipped'],
     ['--dry-run --parallel 2', 'all_tests_skipped'],

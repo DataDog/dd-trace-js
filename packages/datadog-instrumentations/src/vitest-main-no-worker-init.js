@@ -934,6 +934,7 @@ function createMainProcessReporter (reporterState) {
       isDynamicAtrEnabled: state.isDynamicAtrEnabled,
       flakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
       flakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
+      flakyTestRetriesUseRetryMarker: flakyTestRetriesConfiguration.usesRetryMarker,
     }, task)
 
     return {
