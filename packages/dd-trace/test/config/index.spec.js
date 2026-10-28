@@ -5552,6 +5552,101 @@ rules:
     })
   })
 
+  describe('remote config layers', () => {
+    it('replaces each layer without reverting the values of the other layer', () => {
+      const config = getConfig()
+
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      config.setRemoteConfig({ DD_PROFILING_HEAP_ENABLED: 'true' }, 'profiling')
+
+      config.setRemoteConfig({ DD_LOGS_INJECTION: 'false' })
+
+      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_PROFILING_HEAP_ENABLED'), 'remote_config')
+
+      config.setRemoteConfig(null, 'profiling')
+
+      assert.strictEqual(config.DD_PROFILING_HEAP_ENABLED, undefined)
+      assert.strictEqual(config.getOrigin('DD_PROFILING_HEAP_ENABLED'), 'default')
+      assert.strictEqual(config.logInjection, false)
+      assert.strictEqual(config.getOrigin('logInjection'), 'remote_config')
+    })
+
+    it('reverts a profiling setting to its local value when the profiling layer omits it', () => {
+      process.env.DD_PROFILING_ENABLED = 'false'
+      process.env.DD_PROFILING_UPLOAD_PERIOD = '20'
+      const config = getConfig()
+
+      config.setRemoteConfig({ DD_PROFILING_ENABLED: 'true', DD_PROFILING_UPLOAD_PERIOD: '30' }, 'profiling')
+
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+      assert.strictEqual(config.DD_PROFILING_UPLOAD_PERIOD, 30)
+
+      config.setRemoteConfig({ DD_PROFILING_UPLOAD_PERIOD: '30' }, 'profiling')
+
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'false')
+      assert.strictEqual(config.getOrigin('profiling.DD_PROFILING_ENABLED'), 'env_var')
+      assert.strictEqual(config.DD_PROFILING_UPLOAD_PERIOD, 30)
+
+      config.setRemoteConfig(null, 'profiling')
+
+      assert.strictEqual(config.DD_PROFILING_UPLOAD_PERIOD, 20)
+      assert.strictEqual(config.getOrigin('DD_PROFILING_UPLOAD_PERIOD'), 'env_var')
+    })
+
+    it('accepts profiling settings in the tracing layer, including aliases', () => {
+      const config = getConfig()
+
+      config.setRemoteConfig({
+        DD_EXPERIMENTAL_PROFILING_ENABLED: 'true',
+        DD_TRACE_SAMPLE_RATE: '0.5',
+      })
+
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+      assert.strictEqual(config.getOrigin('profiling.DD_PROFILING_ENABLED'), 'remote_config')
+      assert.strictEqual(config.sampleRate, 0.5)
+    })
+
+    it('lets the later layer win for a setting both layers set, and reverts it to the local value', () => {
+      process.env.DD_PROFILING_UPLOAD_PERIOD = '20'
+      const config = getConfig()
+
+      config.setRemoteConfig({ DD_PROFILING_UPLOAD_PERIOD: '40' })
+      config.setRemoteConfig({ DD_PROFILING_UPLOAD_PERIOD: '30' }, 'profiling')
+      assert.strictEqual(config.DD_PROFILING_UPLOAD_PERIOD, 30)
+
+      // Known limitation: the tracing layer's value is not restored while it still sets the setting.
+      config.setRemoteConfig(null, 'profiling')
+      assert.strictEqual(config.DD_PROFILING_UPLOAD_PERIOD, 20)
+      assert.strictEqual(config.getOrigin('DD_PROFILING_UPLOAD_PERIOD'), 'env_var')
+
+      config.setRemoteConfig({ DD_PROFILING_UPLOAD_PERIOD: '40' })
+      assert.strictEqual(config.DD_PROFILING_UPLOAD_PERIOD, 40)
+    })
+
+    it('ignores non-profiling settings in the profiling layer', () => {
+      const config = getConfig()
+
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5', DD_PROFILING_ENABLED: 'true' }, 'profiling')
+
+      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.profiling.DD_PROFILING_ENABLED, 'true')
+    })
+
+    it('reports profiling layer values to telemetry with the remote_config origin', () => {
+      const config = getConfig()
+
+      updateConfig.resetHistory()
+      config.setRemoteConfig({ DD_PROFILING_HEAP_ENABLED: 'true' }, 'profiling')
+
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_PROFILING_HEAP_ENABLED', value: true, origin: 'remote_config' },
+      ])
+    })
+  })
+
   describe('config update channel', () => {
     let subscriber
     let configUpdateChannel
