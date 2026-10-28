@@ -10,7 +10,7 @@ const exporters = require('../../../../ext/exporters')
 const createRfdc = require('../../../../vendor/dist/rfdc')
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
-const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
+const { DD_MAJOR } = require('../../../../version')
 const log = require('../log')
 const { warn } = require('../log/writer')
 const pkg = require('../pkg')
@@ -30,6 +30,7 @@ const { usesOtlpTraceExporter } = require('../exporter')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
 const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
+const { allocationProfilingAvailable, cpuProfilingAvailable } = require('../profiling/runtime-capabilities')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -491,8 +492,9 @@ class Config extends ConfigBase {
         Math.floor(this.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000))
     }
 
-    // Allocation profiling needs a sampling hook only available on Node.js 26+.
-    setAndTrack(this, 'DD_PROFILING_ALLOCATION_ENABLED', NODE_MAJOR >= 26 && this.DD_PROFILING_ALLOCATION_ENABLED)
+    if (!allocationProfilingAvailable) {
+      setAndTrack(this, 'DD_PROFILING_ALLOCATION_ENABLED', false)
+    }
     if (this.telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL) {
       setAndTrack(this, 'telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL',
         Math.floor(this.telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL * 1000))
@@ -872,9 +874,11 @@ class Config extends ConfigBase {
       // depending on those (code hotspots and endpoint collection) need to be disabled on Windows.
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_CODEHOTSPOTS_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ENDPOINT_COLLECTION_ENABLED')
-      deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_CPU_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_TIMELINE_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
+    }
+    if (!cpuProfilingAvailable) {
+      deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_CPU_ENABLED')
     }
 
     const unsupportedRuntime = getUnsupportedRuntime()

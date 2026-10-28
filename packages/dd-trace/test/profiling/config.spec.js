@@ -363,25 +363,25 @@ describe('config', () => {
     assert.strictEqual(config.heapSamplingInterval, 524_288)
   })
 
-  it('should disable allocation profiling on unsupported Node.js versions', () => {
+  it('should disable allocation profiling where it is unavailable', () => {
     process.env = {
       DD_PROFILING_ALLOCATION_ENABLED: 'true',
     }
 
     const { config } = getProfilerConfig(undefined, {
-      '../../../../version': { NODE_MAJOR: 25 },
+      '../profiling/runtime-capabilities': { allocationProfilingAvailable: false },
     })
 
     assert.strictEqual(config.allocationProfilingEnabled, false)
   })
 
-  it('should enable allocation profiling on supported Node.js versions', () => {
+  it('should enable allocation profiling where it is available', () => {
     process.env = {
       DD_PROFILING_ALLOCATION_ENABLED: 'true',
     }
 
     const { config } = getProfilerConfig(undefined, {
-      '../../../../version': { NODE_MAJOR: 26 },
+      '../profiling/runtime-capabilities': { allocationProfilingAvailable: true },
     })
 
     assert.strictEqual(config.allocationProfilingEnabled, true)
