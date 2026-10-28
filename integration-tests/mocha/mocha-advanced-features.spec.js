@@ -173,18 +173,27 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ['inherited', 2],
             ['native override 1', 2], ['native override 1 once', 2],
             ['native override 2', 3], ['native override 2 once', 3],
+            ['stops ATR on retry fail', 2], ['stops ATR on retry pass', 2],
+            ['extends native budget on ATR retry', 4], ['afterEach changes budget fails', 2],
           ]) {
             const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
             assert.strictEqual(attempts.length, count, name)
-            const reason = name === 'inherited' ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
+            const hasAtrAttempts = !name.startsWith('native override')
             const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retries.length, count - 1, name)
-            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === reason), name)
-            assert.strictEqual(attempts.filter(test => test.meta[TEST_FINAL_STATUS] === 'fail').length, 1, name)
+            for (const [index, retry] of retries.entries()) {
+              const isAtr = hasAtrAttempts && (name !== 'extends native budget on ATR retry' || index === 0)
+              const reason = isAtr ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
+              assert.strictEqual(retry.meta[TEST_RETRY_REASON], reason, `${name}, retry ${index + 1}`)
+            }
+            const finalStatus = name === 'stops ATR on retry pass' ? 'pass' : 'fail'
+            assert.strictEqual(attempts.at(-1).meta[TEST_STATUS], finalStatus, name)
+            assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], finalStatus, name)
+            assert.strictEqual(attempts.filter(test => test.meta[TEST_FINAL_STATUS] === finalStatus).length, 1, name)
           }
         })
       const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
-      assert.strictEqual(exitCode, 5)
+      assert.strictEqual(exitCode, 8)
     })
   }
 

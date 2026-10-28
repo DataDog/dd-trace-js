@@ -12,3 +12,27 @@ for (const retries of [1, 2]) {
     })
   }
 }
+
+for (const passes of [false, true]) {
+  it(`stops ATR on retry ${passes ? 'pass' : 'fail'}`, function () {
+    if (this.test.currentRetry() === 1) {
+      this.retries(0)
+      if (passes) return
+    }
+    throw new Error('expected failure')
+  })
+}
+
+it('extends native budget on ATR retry', function () {
+  if (this.test.currentRetry() === 1) this.retries(3)
+  throw new Error('expected failure')
+})
+
+describe('afterEach changes budget', function () {
+  afterEach(function () {
+    this.currentTest.retries(0)
+  })
+  it('fails', function () {
+    throw new Error('expected failure')
+  })
+})

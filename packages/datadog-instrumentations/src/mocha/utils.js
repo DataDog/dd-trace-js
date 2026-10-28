@@ -44,6 +44,7 @@ const originalFns = new WeakMap()
 const originalPendingByTest = new WeakMap()
 const originalRetriesByTest = new WeakMap()
 let automaticRetryTests = new WeakSet()
+let automaticRetryAttempts = new WeakMap()
 let nativeRetryTests = new WeakSet()
 const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
@@ -349,6 +350,7 @@ function resetRunState (rootSuite) {
   efdSlowAbortedTests.clear()
   suiteHookFailureSuites.clear()
   automaticRetryTests = new WeakSet()
+  automaticRetryAttempts = new WeakMap()
   nativeRetryTests = new WeakSet()
   dynamicAtrRetryCountByTest = new WeakMap()
   attemptToFixExecutions.clear()
@@ -427,7 +429,7 @@ function isMochaRetry (test) {
 }
 
 function getIsLastRetry (test) {
-  return test._currentRetry === test._retries
+  return test._currentRetry >= test._retries
 }
 
 function getTestFullName (test) {
@@ -542,8 +544,11 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
   // Intercept the exported prototype to observe setters in both injection modes.
   shimmer.wrap(Runnable.prototype, 'retries', retries => function () {
     if (arguments.length && automaticRetryTests.delete(this)) {
-      // Native clones retain this budget and point back to the original test.
-      nativeRetryTests.add(this._retriedTest || this)
+      const originalTest = this._retriedTest || this
+      // afterEach can change this runnable after Mocha has already copied its budget into a queued clone.
+      if (!automaticRetryAttempts.get(originalTest)?.has(this._currentRetry + 1)) {
+        nativeRetryTests.add(originalTest)
+      }
     }
     return retries.apply(this, arguments)
   })
@@ -848,7 +853,7 @@ function getTestFinishInfo (test, status, config, error) {
 
   const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
   const isAtrRetry = config.isFlakyTestRetriesEnabled &&
-    automaticRetryTests.has(test) &&
+    automaticRetryAttempts.get(test._retriedTest || test)?.has(test._currentRetry) &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry
   const isFinalAttempt = isTerminalHookFailure || status !== 'fail' || test._currentRetry >= test._retries
@@ -1194,6 +1199,16 @@ function getOnFailHandler (isMain, config) {
 
 function getOnTestRetryHandler (config) {
   return function (test, err) {
+    if (automaticRetryTests.has(test)) {
+      // Mocha has already queued the clone; later budget changes cannot change its scheduling owner.
+      const originalTest = test._retriedTest || test
+      let attempts = automaticRetryAttempts.get(originalTest)
+      if (!attempts) {
+        attempts = new Set()
+        automaticRetryAttempts.set(originalTest, attempts)
+      }
+      attempts.add(test._currentRetry + 1)
+    }
     const isFirstAttempt = test._currentRetry === 0
     const isDynamicAtrTest = config.isDynamicAtrEnabled &&
       config.isFlakyTestRetriesEnabled &&
@@ -1234,7 +1249,7 @@ function publishTestRetry (test, err, config) {
     const willBeRetried = test._currentRetry < test._retries
     const isAtrRetry = !isFirstAttempt &&
       config.isFlakyTestRetriesEnabled &&
-      automaticRetryTests.has(test) &&
+      automaticRetryAttempts.get(test._retriedTest || test)?.has(test._currentRetry) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
     const promises = {}
