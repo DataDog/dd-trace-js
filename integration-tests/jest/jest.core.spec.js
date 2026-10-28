@@ -2,9 +2,10 @@
 
 const assert = require('node:assert/strict')
 
+const { exec, fork, spawn } = require('node:child_process')
 const { once } = require('node:events')
-const { fork, exec } = require('child_process')
 const fs = require('node:fs')
+const { createServer } = require('node:http')
 const path = require('path')
 const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
@@ -169,6 +170,74 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     testOutput = ''
     await receiver.stop()
   })
+
+  for (const status of ['pass', 'fail']) {
+    it(`runs ${status}ing tests when agent discovery fails`, async () => {
+      let discoveryRequests = 0
+      const agent = createServer((req, res) => {
+        if (req.url === '/info') {
+          discoveryRequests++
+          req.socket.destroy()
+          return
+        }
+        // Accept uploads so this only tests startup, not the separate final-flush retry deadline.
+        req.once('end', () => res.end('{"rate_by_service":{}}'))
+        req.resume()
+      })
+      agent.listen(0, '127.0.0.1')
+      await once(agent, 'listening')
+
+      try {
+        const { port } = /** @type {import('node:net').AddressInfo} */ (agent.address())
+        const config = JSON.stringify({
+          testRegex: 'jest-agent-discovery-test.js$',
+          testRunner: 'jest-circus/runner',
+          testEnvironment: 'node',
+          watchman: false,
+        })
+        childProcess = spawn(process.execPath, [
+          'node_modules/jest/bin/jest', '--runInBand', '--no-cache', '--config', config,
+        ], {
+          cwd,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 30_000,
+          env: {
+            ...getCiVisEvpProxyConfig(port),
+            DD_AGENTLESS_ENABLED: 'false',
+            DD_CIVISIBILITY_ENABLED: 'true',
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+            DD_CRASHTRACKING_ENABLED: 'false',
+            DD_INJECT_FORCE: 'true',
+            DD_PROFILING_ENABLED: 'false',
+            DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+            DD_RUNTIME_METRICS_ENABLED: 'false',
+            DD_TRACE_AGENT_URL: `http://127.0.0.1:${port}`,
+            DD_TRACE_ENABLED: 'true',
+            JEST_AGENT_DISCOVERY_TEST_FAIL: status === 'fail' ? '1' : '0',
+            JEST_WORKER_ID: undefined,
+            MOCHA_WORKER_ID: undefined,
+          },
+        })
+        childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+        const [[exitCode, signal]] = await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+        ])
+        assert.ok(discoveryRequests > 0, 'The tracer did not attempt agent discovery')
+        assert.strictEqual(signal, null, testOutput)
+        assert.match(testOutput, /^JEST_AGENT_DISCOVERY_TEST_RAN$/m,
+          `Jest exited with code ${exitCode} without executing the test:\n${testOutput}`)
+        assert.match(testOutput, new RegExp(`Tests:\\s+1 ${status}ed, 1 total`))
+        assert.strictEqual(exitCode, status === 'fail' ? 1 : 0, testOutput)
+      } finally {
+        agent.close()
+        await once(agent, 'close')
+      }
+    })
+  }
 
   for (const { mode, args, reason, exitCode: expectedExitCode } of [
     { mode: 'skip-tests', args: '', reason: 'all_tests_skipped', exitCode: 0 },
