@@ -88,12 +88,14 @@ llm validation definitions:
 configure_system_tests:
   variables:
     SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,simple_onboarding_appsec,docker-ssi,lib-injection"
+    # Commit from the system-tests branch under test.
+    SYSTEM_TESTS_REF: fc29f2e90606b165a06cd66f8550912c10b3331b
   rules:
     - if: $SKIP_SHARED_PIPELINE == "true"
       when: never
     - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
       when: never
-    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/
+    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/ || $CI_COMMIT_BRANCH == "robertomonteromiguel/ssi_tests_after_script"
       when: on_success
     - when: never
 
@@ -103,7 +105,7 @@ system_tests:
       when: never
     - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
       when: never
-    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/
+    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/ || $CI_COMMIT_BRANCH == "robertomonteromiguel/ssi_tests_after_script"
       when: on_success
     - when: never
 
