@@ -245,6 +245,16 @@ describe('util', () => {
       assert.strictEqual(loadAsBundled(utilPath, { dirname: bundleDir }).ddBasePath, undefined)
     })
 
+    for (const segments of [['packages', 'service', 'dist'], ['packages', 'dd-trace', 'dist']]) {
+      const bundlePath = path.join('app', ...segments)
+
+      it(`is undefined when bundled into CJS output under ${bundlePath}`, () => {
+        const bundleDir = path.join(path.parse(repoRoot).root, bundlePath)
+
+        assert.strictEqual(loadAsBundled(utilPath, { dirname: bundleDir }).ddBasePath, undefined)
+      })
+    }
+
     it('is undefined when bundled into ESM output, where __dirname is not defined', () => {
       assert.strictEqual(loadAsBundled(utilPath).ddBasePath, undefined)
     })
