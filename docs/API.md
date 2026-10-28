@@ -118,16 +118,6 @@ Set the subject attribute before evaluation. Changes from After or Error hooks a
 Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.
 The option does not change protected/full-data reporting consent or debug logging.
 
-<h3 id="feature-flag-debug-logging">Feature Flag Debug Logging</h3>
-
-Set `DD_FEATURE_FLAGS_ENABLED=true` and `DD_TRACE_DEBUG=true` before initializing the tracer, and keep
-`DD_TRACE_LOG_LEVEL` at its default, `debug`. Debug logging must be active when `tracer.openfeature` is first accessed.
-Logs go to the [tracer logger](#custom-logging); a custom logger must accept debug-level messages.
-
-Each evaluation logs the flag key, type, default, merged evaluation context, value, variant, reason, error code and
-message, and metadata, without truncation. These raw values may contain personal or sensitive data; unset
-`DD_TRACE_DEBUG` afterward.
-
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:

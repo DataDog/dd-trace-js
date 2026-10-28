@@ -110,20 +110,6 @@ describe('OpenFeature Remote Config', () => {
       )
     })
 
-    it('logs and rethrows a configuration that could not be applied', () => {
-      log.warn = sinon.spy()
-      const error = new Error('listener failed')
-      openfeatureProxy.setConfiguration = sinon.stub().throws(error)
-      enable(rc, getOpenfeatureProxy, true)
-
-      const handler = handlers.get('FFE_FLAGS')
-      assert.throws(() => handler('modify', { flags: {} }, 'config-id'), error)
-
-      sinon.assert.calledOnceWithExactly(log.warn,
-        'Feature Flags: remote_config configuration %s could not be applied: %s', 'config-id', 'listener failed')
-      assert.ok(log.debug.getCalls().every((call) => typeof call.args[0] !== 'function'))
-    })
-
     it('should call setConfiguration on modify action when feature is enabled', () => {
       enable(rc, getOpenfeatureProxy, true)
 
@@ -147,44 +133,6 @@ describe('OpenFeature Remote Config', () => {
       sinon.assert.calledWith(log.debug,
         'Feature Flags: remote_config configuration %s removed; flag evaluations will return their default values',
         'config-id')
-    })
-
-    it('applies, modifies, and removes configuration when diagnostic formatting fails', async () => {
-      const realLog = require('../../src/log')
-      const writer = require('../../src/log/writer')
-      const Provider = proxyquire('../../src/openfeature/flagging_provider', { '../log': realLog })
-      const messages = []
-      const capture = message => { messages.push(String(message)) }
-      writer.configure(true, 'debug', { debug: capture, warn: capture, error: capture })
-      const provider = new Provider({}, {
-        debug: true,
-        featureFlags: {
-          DD_FLAGGING_EVALUATION_COUNTS_ENABLED: false,
-          DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 1000,
-        },
-      })
-      try {
-        const realEnable = proxyquire('../../src/openfeature/remote_config', { '../log': realLog }).enable
-        realEnable(rc, () => provider, true)
-        const handler = handlers.get('FFE_FLAGS')
-        const configuration = { flags: {}, createdAt: 'fixture', environment: { name: 'test' } }
-        const initialized = provider.initialize()
-        handler('apply', configuration, 'id')
-        await initialized
-        assert.strictEqual(provider.getConfiguration(), configuration)
-
-        const replacement = { createdAt: 'replacement', environment: { name: 'test' } }
-        Object.defineProperty(replacement, 'flags', { get () { throw new Error('formatter failure') } })
-        handler('modify', replacement, 'id')
-        assert.strictEqual(provider.getConfiguration(), replacement)
-        assert.ok(messages.includes('Feature Flags: configuration applied; diagnostic details unavailable'))
-
-        handler('unapply', undefined, 'id')
-        assert.strictEqual(provider.getConfiguration(), undefined)
-      } finally {
-        provider.onClose()
-        realLog.configure({})
-      }
     })
 
     it('should not call setConfiguration on unknown action', () => {

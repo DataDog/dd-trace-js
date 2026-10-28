@@ -179,11 +179,7 @@ class BaseFFEWriter {
 
     // Keep byte counting behind the debug callback because payloads can be several megabytes.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => {
-      try {
-        return `${this.constructor.name} flushing ${events.length} events (${Buffer.byteLength(payload)} bytes)`
-      } catch { return 'Feature Flags: flushing events; diagnostic details unavailable' }
-    })
+    log.debug(() => `${this.constructor.name} flushing ${events.length} events (${Buffer.byteLength(payload)} bytes)`)
     this._sendPayload(payload, events.length)
   }
 

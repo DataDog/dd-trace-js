@@ -24,23 +24,13 @@ function enable (rc, getOpenfeatureProxy, subscribe) {
    */
   const updateConfiguration = (action, conf, id) => {
     if (action === 'apply' || action === 'modify') {
-      try {
-        getOpenfeatureProxy().setConfiguration(conf)
-      } catch (error) {
-        // Remote Config only records the failure in its apply state, which the application cannot see.
-        log.warn('Feature Flags: remote_config configuration %s could not be applied: %s', id, error?.message)
-        throw error
-      }
+      getOpenfeatureProxy().setConfiguration(conf)
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => {
-        try {
-          const flagCount = Object.keys(conf?.flags ?? {}).length
-          return `Feature Flags: remote_config configuration ${action} applied successfully ` +
-            `(${flagCount} flag(s) received; per-flag validity is checked at evaluation, ` +
-            `configuration environment=${conf?.environment?.name}, createdAt=${conf?.createdAt}, id=${id})`
-        } catch {
-          return 'Feature Flags: configuration applied; diagnostic details unavailable'
-        }
+        const flagCount = Object.keys(conf.flags).length
+        return `Feature Flags: remote_config configuration ${action} applied successfully ` +
+          `(${flagCount} flag(s) received; per-flag validity is checked at evaluation, ` +
+          `configuration environment=${conf.environment?.name}, createdAt=${conf.createdAt}, id=${id})`
       })
     } else if (action === 'unapply') {
       getOpenfeatureProxy().setConfiguration(undefined)

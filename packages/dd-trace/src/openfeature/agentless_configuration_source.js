@@ -249,18 +249,14 @@ class AgentlessConfigurationSource {
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => {
-      try {
-        const flagCount = Object.keys(configuration.flags ?? {}).length
-        // A custom endpoint is requested as configured, so DD_ENV is only sent when the URL carries dd_env.
-        const requestedEnv = this.#config.endpoint.searchParams.get('dd_env')
-        return 'Feature Flags: agentless configuration applied successfully ' +
-          `(${flagCount} flag(s) received; per-flag validity is checked at evaluation, ` +
-          `configuration environment=${configuration.environment.name}, ` +
-          `createdAt=${configuration.createdAt}, etag=${this.#etag ?? 'none'}, ` +
-          `sdk env=${this.#config.env ?? 'unset'}, requested dd_env=${requestedEnv ?? 'not sent'})`
-      } catch {
-        return 'Feature Flags: configuration applied; diagnostic details unavailable'
-      }
+      const flagCount = Object.keys(configuration.flags).length
+      // A custom endpoint is requested as configured, so DD_ENV is only sent when the URL carries dd_env.
+      const requestedEnv = this.#config.endpoint.searchParams.get('dd_env')
+      return 'Feature Flags: agentless configuration applied successfully ' +
+        `(${flagCount} flag(s) received; per-flag validity is checked at evaluation, ` +
+        `configuration environment=${configuration.environment.name}, ` +
+        `createdAt=${configuration.createdAt}, etag=${this.#etag ?? 'none'}, ` +
+        `sdk env=${this.#config.env ?? 'unset'}, requested dd_env=${requestedEnv ?? 'not sent'})`
     })
     this.#logPollRecovery()
   }

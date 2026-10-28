@@ -149,7 +149,6 @@ describe('TracerProxy', () => {
     }
 
     log = {
-      debug: sinon.spy(),
       error: sinon.spy(),
       warn: sinon.spy(),
     }
@@ -667,24 +666,6 @@ describe('TracerProxy', () => {
           RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES,
           true
         )
-      })
-
-      it('logs that Feature Flags are disabled only when they are', () => {
-        const disabledMessage =
-          'Feature Flags: feature flagging is disabled; flag evaluations will return their default values'
-
-        proxy.init()
-
-        sinon.assert.calledOnceWithExactly(log.debug.withArgs(disabledMessage), disabledMessage)
-      })
-
-      it('does not log that Feature Flags are disabled when they are enabled', () => {
-        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
-
-        proxy.init()
-
-        sinon.assert.neverCalledWith(log.debug,
-          'Feature Flags: feature flagging is disabled; flag evaluations will return their default values')
       })
 
       it('should handle FFE_FLAGS modify action', () => {

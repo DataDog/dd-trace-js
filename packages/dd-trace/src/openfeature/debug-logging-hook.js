@@ -42,10 +42,8 @@ class DebugLoggingHook {
    */
   after (hookContext, evaluationDetails) {
     if (!debugChannel.hasSubscribers) return
-    try {
-      // A formatted snapshot preserves primitive fields and nested values before application hooks can mutate them.
-      hookContext?.hookData?.set(PROVIDER_RESOLUTION, inspect(evaluationDetails, INSPECT_OPTIONS))
-    } catch { /* diagnostics must not turn a successful resolution into a fallback */ }
+    // A formatted snapshot preserves primitive fields and nested values before application hooks can mutate them.
+    hookContext?.hookData?.set(PROVIDER_RESOLUTION, inspect(evaluationDetails, INSPECT_OPTIONS))
   }
 
   /**

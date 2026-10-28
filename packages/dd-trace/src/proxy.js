@@ -293,10 +293,6 @@ class Tracer extends NoopProxy {
 
       this.#updateTracing(config)
 
-      if (!config.featureFlags.DD_FEATURE_FLAGS_ENABLED) {
-        log.debug('Feature Flags: feature flagging is disabled; flag evaluations will return their default values')
-      }
-
       if (config.iast.DD_IAST_ENABLED) {
         this._modules.rewriter.enable(config)
       }
