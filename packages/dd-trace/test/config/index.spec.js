@@ -58,6 +58,17 @@ describe('Config', () => {
     }
   }
 
+  /**
+   * Telemetry keeps an entry per origin, and the entry with the highest `seq_id` is the reported value.
+   *
+   * @param {string} name
+   */
+  function getLatestConfigUpdate (name) {
+    return updateConfig.lastCall.args[0]
+      .filter(entry => entry.name === name)
+      .reduce((latest, entry) => entry.seq_id > latest.seq_id ? entry : latest)
+  }
+
   // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
   const getConfig = (options, overrides = {}) => {
     const {
@@ -6039,6 +6050,20 @@ rules:
         sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
       })
 
+      it('should keep reporting Live Debugger/Dynamic Instrumentation as calculated on Remote Config updates', () => {
+        const config = getConfig()
+
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        assert.strictEqual(config.getOrigin('dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED'), 'calculated')
+        assertObjectContains(getLatestConfigUpdate('DD_DYNAMIC_INSTRUMENTATION_ENABLED'), {
+          value: false,
+          origin: 'calculated',
+        })
+      })
+
       it('should explain only once why Live Debugger/Dynamic Instrumentation is disabled', () => {
         process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
 
@@ -6073,6 +6098,16 @@ rules:
         const config = getConfig()
 
         assert.strictEqual(config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED, false)
+        sinon.assert.calledOnceWithExactly(logWriter.warn, failedTestReplayDiagnostic)
+      })
+
+      it('should disable Failed Test Replay enabled by Remote Config', () => {
+        const config = getConfig()
+
+        config.setRemoteConfig({ DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'true' })
+
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED, false)
+        assert.strictEqual(config.getOrigin('testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED'), 'calculated')
         sinon.assert.calledOnceWithExactly(logWriter.warn, failedTestReplayDiagnostic)
       })
     })
