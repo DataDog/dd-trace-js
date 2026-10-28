@@ -2240,11 +2240,12 @@ describe(`cucumber@${version} commonJS`, () => {
             }, 5000)
 
           childProcess = exec(
-            './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
+            './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature',
             {
               cwd,
               env: {
                 ...envVars,
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
                 DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
               },
             }
@@ -2289,10 +2290,13 @@ describe(`cucumber@${version} commonJS`, () => {
             }, 5000)
 
           childProcess = exec(
-            './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
+            './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature',
             {
               cwd,
-              env: envVars,
+              env: {
+                ...envVars,
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              },
             }
           )
 
@@ -2369,11 +2373,12 @@ describe(`cucumber@${version} commonJS`, () => {
             })
 
           childProcess = exec(
-            './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
+            './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature',
             {
               cwd,
               env: {
                 ...envVars,
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
                 DD_TRACE_DEBUG: '1',
                 DD_TRACE_LOG_LEVEL: 'warn',
               },
@@ -2461,11 +2466,13 @@ describe(`cucumber@${version} commonJS`, () => {
             })
 
           childProcess = exec(
-            './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint-multiple-retries.feature ' +
-              '--retry 3',
+            './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint-multiple-retries.feature',
             {
               cwd,
-              env: envVars,
+              env: {
+                ...envVars,
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+              },
             }
           )
 
@@ -2499,10 +2506,13 @@ describe(`cucumber@${version} commonJS`, () => {
 
           const featurePath = 'ci-visibility/features-di-fake-timers/test-hit-breakpoint.feature'
           childProcess = exec(
-            `./node_modules/.bin/cucumber-js ${featurePath} --retry 1`,
+            `./node_modules/.bin/cucumber-js ${featurePath}`,
             {
               cwd,
-              env: envVars,
+              env: {
+                ...envVars,
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              },
             }
           )
 
@@ -2543,10 +2553,13 @@ describe(`cucumber@${version} commonJS`, () => {
             }, 5000)
 
           childProcess = exec(
-            './node_modules/.bin/cucumber-js ci-visibility/features-di/test-not-hit-breakpoint.feature --retry 1',
+            './node_modules/.bin/cucumber-js ci-visibility/features-di/test-not-hit-breakpoint.feature',
             {
               cwd,
-              env: envVars,
+              env: {
+                ...envVars,
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              },
             }
           )
 

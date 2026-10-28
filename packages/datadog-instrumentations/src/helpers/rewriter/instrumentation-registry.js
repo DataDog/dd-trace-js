@@ -39,6 +39,7 @@ const registry = [
   { instrumentations: require('./instrumentations/openai-agents') },
   { instrumentations: require('./instrumentations/playwright') },
   { activate: true, instrumentations: require('./instrumentations/postgres') },
+  { instrumentations: require('./instrumentations/vitest') },
   { instrumentations: require('./instrumentations/webdriverio') },
   {
     activate: { setup: () => require('../../aws-durable-execution-sdk-js') },

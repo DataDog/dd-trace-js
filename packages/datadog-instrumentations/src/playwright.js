@@ -1077,6 +1077,7 @@ function testEndHandler ({
       : undefined
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
+      hasAutomaticRetries(test, projects) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
@@ -1340,6 +1341,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
     }
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
+      hasAutomaticRetries(test, projects) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
