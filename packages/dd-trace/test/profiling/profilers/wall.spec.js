@@ -91,6 +91,11 @@ describe('profilers/native/wall', () => {
     assert.strictEqual(endpointNameFromTags({ 'http.route': '/foo/bar' }), '/foo/bar')
   })
 
+  it('should report whether it collects CPU time', () => {
+    assert.strictEqual(makeWall(NativeWallProfiler, { cpuProfilingEnabled: true }).collectsCpuTime, true)
+    assert.strictEqual(makeWall(NativeWallProfiler, { cpuProfilingEnabled: false }).collectsCpuTime, false)
+  })
+
   it('should start the internal time profiler', () => {
     const profiler = makeWall(NativeWallProfiler)
 

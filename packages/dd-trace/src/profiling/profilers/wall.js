@@ -89,6 +89,8 @@ class NativeWallProfiler {
 
   get type () { return 'wall' }
 
+  get collectsCpuTime () { return this.#cpuProfilingEnabled }
+
   /**
    * @param {TracerConfig} config
    * @param {{ asyncContextFrameEnabled: boolean, flushInterval: number }} runtime
