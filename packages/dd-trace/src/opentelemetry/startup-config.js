@@ -2,6 +2,7 @@
 
 const { isDeepStrictEqual } = require('node:util')
 
+const { DD_MAJOR } = require('../../../../version')
 const { VALID_PROPAGATION_STYLES } = require('../config/parsers')
 const { getLogLevel } = require('../log/writer')
 
@@ -58,7 +59,7 @@ function startupConfig (config, rules, pipelines = {}) {
 
   if (tracing) {
     const { inject, extract } = config.tracePropagationStyle
-    if (config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'continue' &&
+    if (DD_MAJOR >= 6 && config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT === 'continue' &&
         inject.length === extract.length &&
         inject.every((name, i) => name === extract[i] && VALID_PROPAGATION_STYLES.has(name))) {
       const propagators = inject.filter(name => name !== 'none')
@@ -67,7 +68,6 @@ function startupConfig (config, rules, pipelines = {}) {
     }
     const firstRule = rules[0]
     if (config.apmTracingEnabled !== false && firstRule) {
-      // Normalized rules append a global fallback only when its rate is configured.
       const globalRuleCount = config.sampler.sampleRate === undefined ? 0 : 1
       if (rules.length > globalRuleCount) {
         out.OTEL_TRACES_SAMPLER = 'datadog_custom_rules'

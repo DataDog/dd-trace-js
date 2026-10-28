@@ -102,6 +102,7 @@ function configInfo () {
     agent_url: url,
     debug: !!config.debug,
     sample_rate: config.sampler.sampleRate,
+    sample_rate_limit: config.sampler.rateLimit,
     sampling_rules: samplingRules,
     tags: config.tags,
     log_injection_enabled: !!config.logInjection,

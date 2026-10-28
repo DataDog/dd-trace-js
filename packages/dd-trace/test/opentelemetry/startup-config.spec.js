@@ -10,6 +10,7 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 const { fixture, getConfigFresh, runStartup: run } = require('../helpers/config')
+const { DD_MAJOR } = require('../../../../version')
 const startupConfig = require('../../src/opentelemetry/startup-config')
 const { getProtobufTypes } = require('../../src/opentelemetry/otlp/protobuf_loader')
 
@@ -34,7 +35,7 @@ describe('effective OTel startup configuration', () => {
       assert.equal('OTEL_SERVICE_NAME' in output, false)
       assert.deepEqual(output.OTEL_RESOURCE_ATTRIBUTES, {})
     }
-    assert.equal(c.OTEL_PROPAGATORS, 'datadog,tracecontext,baggage')
+    assert.equal(c.OTEL_PROPAGATORS, DD_MAJOR >= 6 ? 'datadog,tracecontext,baggage' : undefined)
     assert.equal('OTEL_TRACES_SAMPLER' in c, false)
     assert.equal(c.OTEL_LOGS_EXPORTER, 'none')
     assert.equal('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT' in c, false)
@@ -125,7 +126,7 @@ describe('effective OTel startup configuration', () => {
       assert.equal(c.otlp_traces_export_enabled, false)
       assert.equal(c[`otlp_${signal.toLowerCase()}_export_enabled`], true)
       assert.equal(c[`OTEL_EXPORTER_OTLP_${signal}_PROTOCOL`], 'http/protobuf')
-      assert.equal(c.OTEL_PROPAGATORS, 'datadog,tracecontext,baggage')
+      assert.equal(c.OTEL_PROPAGATORS, DD_MAJOR >= 6 ? 'datadog,tracecontext,baggage' : undefined)
       assert.ok(Object.keys(carrier).length > 0)
     })
   }
@@ -273,6 +274,32 @@ describe('effective OTel startup configuration', () => {
     })
   }
 
+  for (const rateLimit of [undefined, -1, 0, 1, 100]) {
+    for (const sampleRate of [0.25, 1]) {
+      it(`reports sampler rate ${sampleRate} separately from limit ${rateLimit ?? 'default'}`, () => {
+        const result = run({
+          OTEL_PROPAGATORS: 'tracecontext',
+          OTEL_STARTUP_SAMPLE: 'true',
+        }, { sampleRate, rateLimit })
+        for (const output of [result.configuration, result.flare]) {
+          assert.equal(output.OTEL_TRACES_SAMPLER, sampleRate === 1
+            ? 'parentbased_always_on'
+            : 'parentbased_traceidratio')
+          assert.equal(output.OTEL_TRACES_SAMPLER_ARG, sampleRate === 1 ? undefined : sampleRate)
+          assert.equal(output.sample_rate, sampleRate)
+          assert.equal(output.sample_rate_limit, rateLimit ?? 100)
+        }
+        if (rateLimit === 0) assert.equal(result.carrier.traceparent.split('-')[3], '00')
+      })
+    }
+  }
+
+  it('still reports an always-off root sampler with a finite limit', () => {
+    const result = run({ OTEL_PROPAGATORS: 'tracecontext', OTEL_STARTUP_SAMPLE: 'true' }, { sampleRate: 0 })
+    assert.equal(result.configuration.OTEL_TRACES_SAMPLER, 'parentbased_always_off')
+    assert.equal(result.carrier.traceparent.split('-')[3], '00')
+  })
+
   it('reports effective custom rules rather than the global fallback rate', () => {
     const { configuration: c } = run({}, { sampleRate: 1, samplingRules: [{ service: 'other', sampleRate: 0.2 }] })
     assert.equal(c.OTEL_TRACES_SAMPLER, 'datadog_custom_rules')
@@ -304,7 +331,8 @@ describe('effective OTel startup configuration', () => {
     assert.equal('OTEL_TRACES_SAMPLER_ARG' in c, false)
   })
 
-  it('reports matching propagators and omits asymmetric propagation', () => {
+  it('reports matching propagators and omits asymmetric propagation', function () {
+    if (DD_MAJOR < 6) this.skip()
     const matching = run({ OTEL_PROPAGATORS: 'tracecontext,baggage' }).configuration
     assert.equal(matching.OTEL_PROPAGATORS, 'tracecontext,baggage')
     assert.equal(run({ OTEL_PROPAGATORS: 'none,baggage' }).configuration.OTEL_PROPAGATORS, 'baggage')
