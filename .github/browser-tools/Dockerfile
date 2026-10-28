@@ -1,4 +1,4 @@
-FROM node:24.14.1-bookworm-slim@sha256:e484ae3f1e3c378021c967fd42254f343c302a9263e412280eac32bf5bca7008
+FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -30,6 +30,11 @@ RUN CHROME_VER=$(google-chrome --version | awk '{print $3}' | cut -d. -f1-3) \
     && mv /tmp/chromedriver-dir/chromedriver-linux64/chromedriver /usr/bin/chromedriver \
     && chmod +x /usr/bin/chromedriver \
     && rm -rf /tmp/chrome-versions.json /tmp/chromedriver.zip /tmp/chromedriver-dir
+
+# Install FFmpeg for browser video recording
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && ffmpeg -hide_banner -encoders 2>/dev/null | grep -Eq '[[:space:]]libvpx[[:space:]]' \
+    && rm -rf /var/lib/apt/lists/*
 
 # Remove node since it will be injected at runtime by setup-node
 RUN rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \

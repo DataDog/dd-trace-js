@@ -75,14 +75,12 @@ function validateSettingsResponse (response, options = {}) {
   assertBooleanFields(attributes.test_management, ['enabled'], 'settings test_management')
   assertOptionalBoundedNumber(
     attributes.early_flake_detection.faulty_session_threshold,
-    'settings early_flake_detection faulty_session_threshold',
-    { integer: true }
+    'settings early_flake_detection faulty_session_threshold'
   )
   assertRetryMap(attributes.early_flake_detection.slow_test_retries)
   assertOptionalBoundedNumber(
     attributes.test_management.attempt_to_fix_retries,
-    'settings test_management attempt_to_fix_retries',
-    { integer: true }
+    'settings test_management attempt_to_fix_retries'
   )
 }
 
@@ -214,10 +212,9 @@ function assertBooleanFields (object, keys, endpoint) {
   }
 }
 
-function assertOptionalBoundedNumber (value, endpoint, { integer = false } = {}) {
+function assertOptionalBoundedNumber (value, endpoint) {
   if (value === undefined) return
-  if (!Number.isFinite(value) || (integer && !Number.isInteger(value)) ||
-    value < 0 || value > MAX_RETRIES) {
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0 || value > MAX_RETRIES) {
     throw new TypeError(`Invalid ${endpoint}: value must be between 0 and ${MAX_RETRIES}`)
   }
 }
@@ -230,7 +227,7 @@ function assertRetryMap (retries) {
     if (!RETRY_THRESHOLD_PATTERN.test(threshold)) {
       throw new TypeError('Invalid early flake detection retry threshold: expected a duration such as 5s')
     }
-    assertOptionalBoundedNumber(count, `early flake detection retry count ${threshold}`, { integer: true })
+    assertOptionalBoundedNumber(count, `early flake detection retry count ${threshold}`)
   }
 }
 

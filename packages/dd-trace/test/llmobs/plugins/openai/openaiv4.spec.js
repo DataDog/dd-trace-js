@@ -932,6 +932,58 @@ describe('integrations', () => {
         })
       })
 
+      it('submits a response span with cache write token metrics split by ttl', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        const instructions = 'You are a meticulous API design reviewer '.repeat(200)
+
+        await openai.responses.create({
+          model: 'gpt-5.6-sol',
+          instructions,
+          input: 'What are the best practices for API design?',
+          max_output_tokens: 100,
+          prompt_cache_options: { ttl: '12h' },
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'system', content: instructions },
+            { role: 'user', content: 'What are the best practices for API design?' },
+          ],
+          outputMessages: [
+            { role: 'reasoning', content: MOCK_STRING },
+            { role: 'assistant', content: MOCK_STRING },
+          ],
+          metrics: {
+            input_tokens: 1420,
+            output_tokens: 100,
+            total_tokens: 1520,
+            cache_read_input_tokens: 0,
+            cache_write_input_tokens: 1417,
+            ephemeral_30m_input_tokens: 0,
+            ephemeral_12h_input_tokens: 1417,
+            reasoning_output_tokens: 76,
+          },
+          modelName: 'gpt-5.6-sol',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 100,
+            temperature: 1,
+            top_p: 0.98,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+          },
+          tags: { ml_app: 'test', integration: 'openai' },
+        })
+      })
+
       it('submits a response.parse span', async function () {
         if (semifies(realVersion, '<4.87.0')) {
           this.skip()
@@ -1248,6 +1300,7 @@ describe('integrations', () => {
               output_tokens: 0,
               total_tokens: MOCK_NUMBER,
               cache_read_input_tokens: 0,
+              cache_write_input_tokens: 0,
               reasoning_output_tokens: 0,
             },
             modelName: 'gpt-6-luna',
@@ -1553,6 +1606,108 @@ describe('integrations', () => {
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
             stream: false,
+          },
+          tags: { ml_app: 'test', integration: 'openai' },
+        })
+      })
+
+      it('submits a response span with web search tool usage', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          model: 'gpt-4.1-mini',
+          input: 'What was a positive news story from today? Answer in one sentence.',
+          tools: [{ type: 'web_search' }],
+          max_output_tokens: 200,
+          stream: false,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'What was a positive news story from today? Answer in one sentence.' },
+          ],
+          outputMessages: [
+            { role: 'assistant', content: '' },
+            { role: 'assistant', content: MOCK_STRING },
+          ],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0,
+            cache_write_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            web_search_count: 1,
+          },
+          modelName: 'gpt-4.1-mini-2025-04-14',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 200,
+            temperature: 1,
+            top_p: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            stream: false,
+          },
+          tags: { ml_app: 'test', integration: 'openai' },
+        })
+      })
+
+      it('submits a streamed response span with web search tool usage', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        const stream = await openai.responses.create({
+          model: 'gpt-4.1-mini',
+          input: 'What was a positive news story from today? Answer in one sentence, streamed.',
+          tools: [{ type: 'web_search' }],
+          max_output_tokens: 200,
+          stream: true,
+        })
+
+        for await (const part of stream) {
+          assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
+        }
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'What was a positive news story from today? Answer in one sentence, streamed.' },
+          ],
+          outputMessages: [
+            { role: 'assistant', content: '' },
+            { role: 'assistant', content: MOCK_STRING },
+          ],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0,
+            cache_write_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            web_search_count: 1,
+          },
+          modelName: 'gpt-4.1-mini-2025-04-14',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 200,
+            temperature: 1,
+            top_p: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            stream: true,
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })

@@ -163,15 +163,7 @@ function isRedirectResponse (res) {
  * @param {object} ctx http client instrumentation context (mutated).
  */
 function planResponseBodyCollection (originatingReq, res, ctx) {
-  if (!config) {
-    return
-  }
-
-  if (isRedirectResponse(res)) {
-    return
-  }
-
-  if (!shouldSampleBody(originatingReq)) {
+  if (!config || isRedirectResponse(res) || !shouldSampleBody(originatingReq)) {
     return
   }
 

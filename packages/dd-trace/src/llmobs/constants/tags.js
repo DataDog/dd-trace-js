@@ -7,7 +7,11 @@ const CACHE_READ_INPUT_TOKENS_METRIC_KEY = 'cache_read_input_tokens'
 const CACHE_WRITE_INPUT_TOKENS_METRIC_KEY = 'cache_write_input_tokens'
 const CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY = 'ephemeral_5m_input_tokens'
 const CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY = 'ephemeral_1h_input_tokens'
+const CACHE_WRITE_30M_INPUT_TOKENS_METRIC_KEY = 'ephemeral_30m_input_tokens'
+const CACHE_WRITE_12H_INPUT_TOKENS_METRIC_KEY = 'ephemeral_12h_input_tokens'
 const REASONING_OUTPUT_TOKENS_METRIC_KEY = 'reasoning_output_tokens'
+const WEB_SEARCH_COUNT_METRIC_KEY = 'web_search_count'
+const STORAGE_SEARCH_COUNT_METRIC_KEY = 'storage_search_count'
 
 module.exports = {
   SPAN_KINDS: ['llm', 'agent', 'workflow', 'task', 'tool', 'embedding', 'retrieval', 'experiment'],
@@ -72,7 +76,11 @@ module.exports = {
   CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
   CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
   CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_30M_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_12H_INPUT_TOKENS_METRIC_KEY,
   REASONING_OUTPUT_TOKENS_METRIC_KEY,
+  WEB_SEARCH_COUNT_METRIC_KEY,
+  STORAGE_SEARCH_COUNT_METRIC_KEY,
 
   // integrations build metric objects with these camelCase spellings. Null prototype: a metric
   // named after an `Object.prototype` member must not resolve to an inherited property.
@@ -84,7 +92,11 @@ module.exports = {
     cacheWriteTokens: CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
     cacheWrite5mTokens: CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
     cacheWrite1hTokens: CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
+    cacheWrite30mTokens: CACHE_WRITE_30M_INPUT_TOKENS_METRIC_KEY,
+    cacheWrite12hTokens: CACHE_WRITE_12H_INPUT_TOKENS_METRIC_KEY,
     reasoningOutputTokens: REASONING_OUTPUT_TOKENS_METRIC_KEY,
+    webSearchCount: WEB_SEARCH_COUNT_METRIC_KEY,
+    storageSearchCount: STORAGE_SEARCH_COUNT_METRIC_KEY,
   }),
 
   DROPPED_IO_COLLECTION_ERROR: 'dropped_io',

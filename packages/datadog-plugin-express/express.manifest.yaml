@@ -1,0 +1,12 @@
+_v: 1
+name: express
+display_name: Express
+description: Instruments Express HTTP request handling, routing, middleware execution, and template rendering, with security
+  hooks and code-origin span enrichment.
+packages:
+- name: express
+category:
+- http.server
+- template.render
+systems: []
+creation_date: '2018-03-12'

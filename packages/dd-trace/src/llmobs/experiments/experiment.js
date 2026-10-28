@@ -253,7 +253,7 @@ class Experiment {
     this.#external = options.external === true
     if (!this.#external) {
       if (!options.dataset) throw new Error('Experiment dataset is required')
-      if (typeof options.task !== 'function') throw new Error('Experiment task is required')
+      if (typeof options.task !== 'function') throw new TypeError('Experiment task is required')
     }
 
     this.#client = client

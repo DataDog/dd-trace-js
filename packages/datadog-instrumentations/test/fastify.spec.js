@@ -659,6 +659,63 @@ describe('fastify instrumentation (unit)', () => {
     })
   })
 
+  describe('preHandler body publishing', () => {
+    const subscriptions = []
+
+    afterEach(() => {
+      while (subscriptions.length > 0) {
+        const { channel, listener } = subscriptions.pop()
+        channel.unsubscribe(listener)
+      }
+    })
+
+    function publishedBodies (body) {
+      const listener = sinon.stub()
+      bodyParserReadCh.subscribe(listener)
+      subscriptions.push({ channel: bodyParserReadCh, listener })
+
+      const { internalByName } = buildWrappedAddHook()
+      const [preHandlerFn] = internalByName('preHandler')
+      const done = sinon.stub()
+      preHandlerFn({ body }, { send: sinon.stub() }, done)
+      sinon.assert.calledOnce(done)
+
+      return listener.getCalls().map(call => call.args[0].body)
+    }
+
+    it('publishes non-empty bodies of every supported type', () => {
+      const object = { a: 1 }
+      const array = [1]
+      const buffer = Buffer.from('a')
+      const typedArray = new Uint8Array(1)
+
+      assert.deepStrictEqual(publishedBodies(object), [object])
+      assert.deepStrictEqual(publishedBodies(array), [array])
+      assert.deepStrictEqual(publishedBodies(buffer), [buffer])
+      assert.deepStrictEqual(publishedBodies(typedArray), [typedArray])
+      assert.deepStrictEqual(publishedBodies('a'), ['a'])
+    })
+
+    it('does not publish empty or primitive bodies', () => {
+      for (const body of [undefined, null, '', {}, [], Buffer.alloc(0), new Uint8Array(0), 0, 1, true]) {
+        assert.deepStrictEqual(publishedBodies(body), [], String(body))
+      }
+    })
+
+    it('publishes large string, array and binary bodies without enumerating their elements', () => {
+      const size = 64 * 1024 * 1024
+      const string = 'A'.repeat(size)
+      const buffer = Buffer.alloc(size)
+      const typedArray = new Uint8Array(size)
+      const array = new Array(size)
+
+      assert.strictEqual(publishedBodies(string)[0], string)
+      assert.strictEqual(publishedBodies(buffer)[0], buffer)
+      assert.strictEqual(publishedBodies(typedArray)[0], typedArray)
+      assert.strictEqual(publishedBodies(array)[0], array)
+    })
+  })
+
   describe('wrapSend (reply.send error publishing)', () => {
     const subscriptions = []
 

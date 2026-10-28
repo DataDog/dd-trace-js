@@ -232,9 +232,9 @@ function getMethodParamsRelationByPrefix (prefix) {
   return paramsByMethod
 }
 
-function createWatchWrapFunction (override = '') {
+function createWatchWrapFunction () {
   return function wrapFunction (original) {
-    const name = override || original.name
+    const name = original.name
     const method = name
     const operation = name
     return function (...args) {

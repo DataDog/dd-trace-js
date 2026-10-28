@@ -52,10 +52,7 @@ Cypress.on('command:end', (command) => {
   if (name === 'task' && args && typeof args[0] === 'string' && args[0].startsWith('dd:')) {
     return
   }
-  if (INTERNAL_CYPRESS_COMMANDS.has(name)) {
-    return
-  }
-  if (entry == null) {
+  if (INTERNAL_CYPRESS_COMMANDS.has(name) || entry == null) {
     return
   }
   const err = command.get('err')
@@ -526,6 +523,8 @@ afterEach(function () {
     isEfdRetry: currentTest._ddIsEfdRetry,
     isAttemptToFix: currentTest._ddIsAttemptToFix,
     isModified: currentTest._ddIsModified,
+    hasNativeRetries: !!(currentTest._testConfig && currentTest._testConfig.unverifiedTestConfig &&
+      currentTest._testConfig.unverifiedTestConfig.retries !== undefined),
     duration: currentTest.duration,
     // Mark suppressed tests so the plugin can tag them with the correct test management reason.
     isQuarantined: isTestManagementTestThatFailed && suppressedTestFailure.isQuarantined,

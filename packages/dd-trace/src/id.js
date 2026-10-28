@@ -6,6 +6,8 @@ const UINT_MAX = 4_294_967_296
 
 const data = new Uint8Array(8 * 8192)
 const zeroId = new Uint8Array(8)
+// Reused for hex encoding: toString('hex') copies out, so the bytes need not outlive the call.
+const hexScratch = Buffer.alloc(16)
 
 let batch = 0
 
@@ -35,7 +37,7 @@ class Identifier {
    */
   toString (radix = 16) {
     if (radix === 16) {
-      this.#stringHex ??= Buffer.from(this.#buffer).toString('hex')
+      this.#stringHex ??= toHexString(this.#buffer)
       return this.#stringHex
     }
     if (radix === 10) {
@@ -188,6 +190,17 @@ function toNumberString (buffer, radix) {
   }
 
   return str
+}
+
+// Same string as Buffer.from(buffer).toString('hex'), without allocating a Buffer per call.
+/**
+ * @param {number[] | Uint8Array} buffer
+ */
+function toHexString (buffer) {
+  const length = buffer.length
+  if (length > hexScratch.length) return Buffer.from(buffer).toString('hex')
+  for (let i = 0; i < length; i++) hexScratch[i] = buffer[i]
+  return hexScratch.toString('hex', 0, length)
 }
 
 // Simple pseudo-random 64-bit ID generator.

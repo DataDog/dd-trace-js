@@ -125,6 +125,7 @@ const jestSessionState = (globalThis[JEST_SESSION_STATE] ||= {})
 
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
+const RETRY_TIMES_SETTER = Symbol.for('RETRY_TIMES_SETTER')
 
 let skippableSuites = []
 let skippableSuitesCoverage
@@ -741,9 +742,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
 
+      this.hasAutomaticRetries = false
       if (this.isFlakyTestRetriesEnabled) {
         const currentNumRetries = this.global[RETRY_TIMES]
         if (!currentNumRetries) {
+          this.hasAutomaticRetries = true
           // When dynamic ATR is enabled, use the max bucket value as the initial count.
           // The actual duration-based count is computed per test after the first attempt.
           if (this.isDynamicAtrEnabled) {
@@ -891,8 +894,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      */
     wrapConcurrentTestFunction (target, methodName, state) {
       let concurrentTest = target?.[methodName]
-      if (typeof concurrentTest !== 'function') return
-      if (this.wrappedConcurrentTestFunctions.has(concurrentTest)) return
+      if (typeof concurrentTest !== 'function' || this.wrappedConcurrentTestFunctions.has(concurrentTest)) return
 
       const originalConcurrentTest = getOriginalConcurrentTest(concurrentTest)
       if (originalConcurrentTest !== concurrentTest) {
@@ -2446,7 +2448,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         let isAtrRetry = false
-        if (this.isFlakyTestRetriesEnabled && event.test?.invocations > 1 && !isAttemptToFix && !isEfdRetry) {
+        let hasAutomaticRetries = this.hasAutomaticRetries || dynamicAtrRetryCountByTest.has(event.test)
+        // Describe retries suppress per-test retries throughout the block, including nested describes.
+        for (let block = event.test.parent; block; block = block.parent) {
+          if (state.describeRetryOptions?.has(block)) {
+            hasAutomaticRetries = false
+            break
+          }
+        }
+        if (this.isFlakyTestRetriesEnabled && hasAutomaticRetries &&
+          event.test?.invocations > 1 && !isAttemptToFix && !isEfdRetry) {
           isAtrRetry = true
         }
 
@@ -2675,10 +2686,7 @@ function getTestEnvironment (pkg, jestVersion) {
     const wrappedTestEnvironment = getWrappedEnvironment(pkg.default, jestVersion)
     return new Proxy(pkg, {
       get (target, prop) {
-        if (prop === 'default') {
-          return wrappedTestEnvironment
-        }
-        if (prop === 'TestEnvironment') {
+        if (prop === 'default' || prop === 'TestEnvironment') {
           return wrappedTestEnvironment
         }
         return target[prop]
@@ -3982,12 +3990,11 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver/chromium',
 ])
 
-function recordMockedFile (suiteFilePath, moduleName) {
+function recordMockedFile (suiteFilePath, moduleName, from = suiteFilePath) {
   if (!suiteFilePath || typeof moduleName !== 'string') return
 
   const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
-  const suiteDir = path.dirname(suiteFilePath)
-  const mockPath = path.resolve(suiteDir, moduleName)
+  const mockPath = path.resolve(path.dirname(from), moduleName)
   existingMockedFiles.push(mockPath)
   testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
 }
@@ -4022,14 +4029,24 @@ function getMockedFiles (suiteFilePath) {
   return staticMockedFiles
 }
 
-function wrapJestObject (jestObject, suiteFilePath) {
+function wrapJestObject (jestObject, suiteFilePath, from = suiteFilePath) {
   if (!jestObject || !suiteFilePath || wrappedJestObjects.has(jestObject)) return
 
   testSuiteJestObjects.set(suiteFilePath, jestObject)
   wrappedJestObjects.add(jestObject)
 
+  // retryTimes is created per runtime, so wrap the returned public API object.
+  shimmer.wrap(jestObject, 'retryTimes', retryTimes => function () {
+    const environment = testSuiteDatadogEnvironments.get(suiteFilePath)
+    // Older Jest versions ignore entireDescribe and still replace the global budget.
+    if (environment && !(arguments[1]?.entireDescribe && environment.global[RETRY_TIMES_SETTER])) {
+      environment.hasAutomaticRetries = false
+    }
+    return retryTimes.apply(this, arguments)
+  })
+
   shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
-    recordMockedFile(suiteFilePath, moduleName)
+    recordMockedFile(suiteFilePath, moduleName, from)
     return mock.apply(this, arguments)
   })
 }
@@ -4043,7 +4060,7 @@ function wrapJestGlobalsForRuntime (runtime) {
   wrappedJestGlobals.add(jestGlobals)
   shimmer.wrap(jestGlobals, 'jestObjectFor', jestObjectFor => function (from) {
     const jestObject = jestObjectFor.apply(this, arguments)
-    wrapJestObject(jestObject, from)
+    wrapJestObject(jestObject, runtime._testPath || from, from)
     return jestObject
   })
 }
@@ -4338,9 +4355,9 @@ addHook({
   if (typeof Runtime.prototype._createJestObjectFor === 'function') {
     shimmer.wrap(Runtime.prototype, '_createJestObjectFor', _createJestObjectFor => function (from) {
       const result = _createJestObjectFor.apply(this, arguments)
-      const suiteFilePath = this._testPath || from
+      const suiteFilePath = this._testPath || this._environment?.testSuiteAbsolutePath || from
 
-      wrapJestObject(result, suiteFilePath)
+      wrapJestObject(result, suiteFilePath, from)
       return result
     })
   }
@@ -4495,10 +4512,7 @@ function sendWrapper (send) {
       // In here we modify the `config.testEnvironmentOptions` to include the known tests for the suite.
       // This way the suite only knows about the tests that are part of it.
       const args = request.at(-1)
-      if (args.length > 1) {
-        return send.apply(this, arguments)
-      }
-      if (!args[0]?.config) {
+      if (args.length > 1 || !args[0]?.config) {
         return send.apply(this, arguments)
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args

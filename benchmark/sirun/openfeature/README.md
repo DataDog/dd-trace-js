@@ -48,7 +48,7 @@ The always-on CI matrix contains four scenarios:
 The latter two measure capture near the retained-field limit and the cost of
 discarding excess input. Protected-mode size variants and hostile inputs remain
 available on demand, rather than multiplying the end-to-end CI matrix. This keeps
-the current suite within six 24-core groups.
+the current suite within seven 24-core groups, including the initialization scenarios.
 
 All standard variants use five repetitions. To keep them within the one-minute
 runtime budget, `typical` uses 275,000 measured evaluations on Node 20 and 550,000

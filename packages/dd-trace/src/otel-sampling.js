@@ -11,11 +11,10 @@ const UINT64_MASK = 2n ** 64n - 1n
 /**
  * @param {unknown} value
  * @param {number} minLength
- * @param {number} maxLength
  * @returns {value is string}
  */
-function isLowerHex (value, minLength, maxLength) {
-  if (typeof value !== 'string' || value.length < minLength || value.length > maxLength) return false
+function isLowerHex (value, minLength) {
+  if (typeof value !== 'string' || value.length < minLength || value.length > 14) return false
 
   for (let index = 0; index < value.length; index++) {
     const code = value.charCodeAt(index)
@@ -112,11 +111,11 @@ function sanitizeFields (state) {
   let randomValue = state.get('rv')
   let threshold = state.get('th')
 
-  if (!isLowerHex(randomValue, 14, 14)) {
+  if (!isLowerHex(randomValue, 14)) {
     state.delete('rv')
     randomValue = undefined
   }
-  if (!isLowerHex(threshold, 1, 14)) {
+  if (!isLowerHex(threshold, 1)) {
     state.delete('th')
     threshold = undefined
   }
