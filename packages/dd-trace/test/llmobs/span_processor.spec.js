@@ -17,6 +17,7 @@ describe('span processor', () => {
   let exporter
   let LLMObsExporter
   let log
+  let getEnvironmentVariable
 
   beforeEach(() => {
     writer = {
@@ -35,10 +36,12 @@ describe('span processor', () => {
       debug: sinon.stub(),
     }
 
+    getEnvironmentVariable = sinon.stub()
     LLMObsSpanProcessor = proxyquire('../../src/llmobs/span_processor', {
       '../../../../package.json': { version: 'x.y.z' },
       '../exporters/llmobs': LLMObsExporter,
       '../log': log,
+      '../config/helper': { getEnvironmentVariable },
     })
 
     processor = new LLMObsSpanProcessor({ llmobs: { DD_LLMOBS_ENABLED: true } })
@@ -982,6 +985,44 @@ describe('span processor', () => {
 
       assert.strictEqual(span.meta_struct, undefined)
       sinon.assert.calledOnce(writer.append)
+    })
+
+    for (const origin of ['http://localhost:8126', '', undefined]) {
+      it(`routes kept spans appropriately with override origin ${JSON.stringify(origin)}`, () => {
+        writer.append.returns(true)
+        const { apmTags, span } = createSpan({}, AUTO_KEEP)
+
+        processor.process(span)
+        sinon.assert.notCalled(writer.append)
+        getEnvironmentVariable.withArgs('_DD_LLMOBS_OVERRIDE_ORIGIN').returns(origin)
+        processor.processTrace({ spans: [span], willExport: true })
+        processor.processPending()
+
+        if (origin) {
+          assert.strictEqual(span.meta_struct, undefined)
+          assert.strictEqual(apmTags['_dd.llmobs.submitted'], '1')
+          sinon.assert.calledOnceWithExactly(writer.append, sinon.match({ trace_id: 'llm-trace' }), {
+            apiKey: undefined,
+            site: undefined,
+          })
+        } else {
+          assert.ok(span.meta_struct._llmobs)
+          sinon.assert.notCalled(writer.append)
+        }
+      })
+    }
+
+    it('uses APM intake when the override origin is removed before trace processing', () => {
+      getEnvironmentVariable.withArgs('_DD_LLMOBS_OVERRIDE_ORIGIN').returns('http://localhost:8126')
+      const { span } = createSpan({}, AUTO_KEEP)
+      processor.process(span)
+      sinon.assert.notCalled(writer.append)
+
+      getEnvironmentVariable.withArgs('_DD_LLMOBS_OVERRIDE_ORIGIN').returns(undefined)
+      processor.processTrace({ spans: [span], willExport: true })
+
+      assert.ok(span.meta_struct._llmobs)
+      sinon.assert.notCalled(writer.append)
     })
 
     it('attaches kept events to meta_struct without marking direct submission', () => {

@@ -6,6 +6,7 @@ const { AUTO_REJECT } = require('../../../../ext/priority')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const LLMObsExporter = require('../exporters/llmobs')
+const { getEnvironmentVariable } = require('../config/helper')
 const {
   ERROR_MESSAGE,
   ERROR_TYPE,
@@ -395,6 +396,8 @@ class LLMObsSpanProcessor {
       !predictedDrop &&
       !routing.apiKey &&
       !routing.site &&
+      !getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') &&
+      // TODO(sabrenner): remove below check once upstream ingestion allows array of "k:v" tags
       !this.#hasCollidingTagKeys(event.tags)
   }
 
