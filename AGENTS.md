@@ -136,7 +136,7 @@ When adding configuration:
 
 1. Add the default in `packages/dd-trace/src/config/defaults.js`.
 2. Map the environment variable in `packages/dd-trace/src/config/index.js`.
-3. Update public TypeScript definitions in both supported surfaces when applicable.
+3. Update public TypeScript definitions in `index.d.ts` and `index.d.v5.ts` when applicable.
 4. Add the telemetry name mapping in `packages/dd-trace/src/telemetry/telemetry.js` when applicable.
 5. Update `packages/dd-trace/src/config/supported-configurations.json`.
 6. Document non-internal, non-experimental options in `docs/API.md`.

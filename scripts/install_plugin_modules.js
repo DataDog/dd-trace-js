@@ -366,13 +366,13 @@ async function patchPeerDependencies ({ folder, externalName }) {
   const versionPkgJson = JSON.parse(before)
 
   let pkgJson
+  const requireFromWorkspace = createRequire(join(folder, 'package.json'))
 
-  for (const { dep, name, node, forced, version } of externalDeps.get(externalName)) {
+  for (const { dep, name, node, forced, version, from } of externalDeps.get(externalName)) {
     if (node && !semver.satisfies(process.versions.node, node)) {
       continue
     }
     if (!pkgJson) {
-      const requireFromWorkspace = createRequire(join(folder, 'package.json'))
       const nodeModulesPaths = requireFromWorkspace.resolve.paths(externalName)
       pkgJson = requirePackageJson(externalName, { paths: nodeModulesPaths })
     }
@@ -401,13 +401,19 @@ async function patchPeerDependencies ({ folder, externalName }) {
     }
 
     if (!versionPkgJson.dependencies[name] && forced) {
+      let declaredRange = pkgJson.dependencies?.[name]
+      if (from) {
+        const requireFromPackage = createRequire(requireFromWorkspace.resolve(externalName))
+        const dependency = requirePackageJson(from, { paths: requireFromPackage.resolve.paths(from) })
+        declaredRange = dependency.dependencies?.[name]
+      }
       // An explicit `version` in externals.js wins, then the range the installed package declares for itself, and
       // only then the newest published version. The declared range matters because a forced transitive has to stay
       // in the same generation as the sandbox consuming it: resolving `*` against the registry grafts the newest
       // major onto an old client (a `@smithy/*` v4 handler onto the v2-era `@aws-sdk/client-bedrock-runtime@3.422.0`),
       // and that handler's own transitives then resolve independently of the rest of the sandbox. Which majors
       // collide changes every time the dependency publishes, so the sandbox breaks on an unrelated day.
-      const range = version ?? pkgJson.dependencies?.[name] ?? latests[name]
+      const range = version ?? declaredRange ?? latests[name]
       versionPkgJson.dependencies[name] = capKnownRange(name, range)
     }
   }

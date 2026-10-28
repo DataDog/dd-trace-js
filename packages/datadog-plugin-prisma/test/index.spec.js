@@ -26,24 +26,23 @@ const {
 
 function execPrismaGenerate (config, cwd) {
   if (config.ts) {
-    const outDir = config.v7 ? '../v7/dist' : '../dist'
     execSync([
-      './node_modules/.bin/prisma generate',
+      'npm exec --no -- prisma generate',
       [
-        './node_modules/.bin/tsc ../generated/**/*.ts',
-        `--outDir ${outDir}`,
+        'npm exec --no -- tsc ./generated/**/*.ts',
+        '--outDir ./dist',
         '--target esnext',
-        '--module commonjs',
+        '--module node16',
         '--allowJs true',
         '--skipLibCheck true',
-        '--moduleResolution node',
+        '--moduleResolution node16',
       ].join(' '),
     ].join(' && '), {
       cwd,
       stdio: 'inherit',
     })
   } else {
-    execSync('./node_modules/.bin/prisma generate', {
+    execSync('npm exec --no -- prisma generate', {
       cwd,
       stdio: 'inherit',
     })
@@ -51,13 +50,7 @@ function execPrismaGenerate (config, cwd) {
 }
 
 function loadPrismaModule (config, range) {
-  if (config.file.includes('generated')) {
-    return require(config.file)
-  }
-
-  const file = config.file.replace('range', range)
-  const prismaModule = require(file)
-  return config.ts ? prismaModule : prismaModule.get()
+  return require(`../../../versions/@prisma/client@${range}`).get(config.file)
 }
 
 function clearPrismaEnv () {
@@ -84,10 +77,10 @@ async function copySchemaToVersionDir (schemaPath, range) {
   return cwd
 }
 
-function createPrismaClient (prisma, config) {
+function createPrismaClient (prisma, config, range) {
   // With the introduction of v7 prisma now enforces the use of adapters
   if (config.v7) {
-    const { PrismaPg } = require('@prisma/adapter-pg')
+    const { PrismaPg } = require(`../../../versions/@prisma/client@${range}`).get('@prisma/adapter-pg')
     const adapter = new PrismaPg({ connectionString: process.env[TEST_DATABASE_ENV_NAME] })
     return new prisma.PrismaClient({ adapter })
   }
@@ -314,22 +307,21 @@ describe('Plugin', () => {
   describe('prisma', () => {
     const prismaClients = [{
       schema: `./${SCHEMA_FIXTURES.clientOutputJs}`,
-      file: '../../../versions/@prisma/generated/prisma',
+      file: './generated/prisma',
       usesGeneratedClientOutput: true,
     },
     {
       schema: `./${SCHEMA_FIXTURES.clientJs}`,
-      file: '../../../versions/@prisma/client@range',
     },
     {
       schema: `./${SCHEMA_FIXTURES.tsCjsV6}`,
-      file: '../../../versions/@prisma/dist/client.js',
+      file: './dist/client.js',
       usesGeneratedClientOutput: true,
       ts: true,
     },
     {
       schema: `./${SCHEMA_FIXTURES.tsCjsV7}`,
-      file: '../../../versions/@prisma/v7/dist/client.js',
+      file: './dist/client.js',
       usesGeneratedClientOutput: true,
       ts: true,
       v7: true,
@@ -361,7 +353,7 @@ describe('Plugin', () => {
             await agent.load(['prisma', 'pg'])
             prisma = loadPrismaModule(config, range)
 
-            prismaClient = createPrismaClient(prisma, config)
+            prismaClient = createPrismaClient(prisma, config, range)
 
             tracingHelper = prismaClient._tracingHelper
 
@@ -528,11 +520,11 @@ describe('Plugin', () => {
               const initialDbUrl = process.env[TEST_DATABASE_ENV_NAME]
               process.env[TEST_DATABASE_ENV_NAME] =
                 'postgres://postgres:postgres@primary.db.internal:5432/postgres'
-              const primaryClient = createPrismaClient(prisma, config)
+              const primaryClient = createPrismaClient(prisma, config, range)
 
               process.env[TEST_DATABASE_ENV_NAME] =
                 'postgres://postgres:postgres@replica.db.internal:5433/postgres'
-              const replicaClient = createPrismaClient(prisma, config)
+              const replicaClient = createPrismaClient(prisma, config, range)
 
               if (initialDbUrl === undefined) {
                 delete process.env[TEST_DATABASE_ENV_NAME]
@@ -580,7 +572,7 @@ describe('Plugin', () => {
             require('../../dd-trace')
 
             prisma = loadPrismaModule(config, range)
-            prismaClient = createPrismaClient(prisma, config)
+            prismaClient = createPrismaClient(prisma, config, range)
           })
 
           it('should not break prisma load when dd-trace is loaded but not initialized', async function () {
@@ -603,7 +595,7 @@ describe('Plugin', () => {
 
             beforeEach(() => {
               prisma = loadPrismaModule(config, range)
-              prismaClient = createPrismaClient(prisma, config)
+              prismaClient = createPrismaClient(prisma, config, range)
             })
 
             it('should be configured with the correct values', async () => {

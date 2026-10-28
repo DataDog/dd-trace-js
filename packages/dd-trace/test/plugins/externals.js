@@ -274,16 +274,11 @@ module.exports = {
       versions: ['5.0.7'],
     },
   ],
-  // pubsub@1.2.0's `pubsub.js` source-requires `@grpc/grpc-js` without declaring
-  // it; the parent-walk resolution can land on a different `@grpc/grpc-js`
-  // instance than the one its nested google-gax@1.15.4 uses (`~1.3.6`), and the
-  // credentials produced fail the `instanceof ChannelCredentials` check across
-  // module instances. Force the matching range as a direct dep of every pubsub
-  // sandbox so the workspace root resolves to one consistent copy.
+  // Match each client's Google GAX dependency so gRPC credentials share one class.
   '@google-cloud/pubsub': [
     {
       name: '@grpc/grpc-js',
-      version: '~1.3.6',
+      from: 'google-gax',
       dep: true,
       forced: true,
     },
