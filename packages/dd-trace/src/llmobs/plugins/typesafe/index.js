@@ -4,6 +4,8 @@ const LLMObsPlugin = require('../base')
 
 const TYPESAFE_MODEL_PROVIDER = 'typesafe'
 const OPENROUTER_MODEL_PROVIDER = 'openrouter'
+const DECISION_PROVIDER_TAG = 'decision_provider'
+const DECISION_PROVIDER = 'system_one'
 
 class TypeSafeLLMObsPlugin extends LLMObsPlugin {
   static integration = 'typesafe' // used for llmobs telemetry
@@ -29,6 +31,8 @@ class TypeSafeLLMObsPlugin extends LLMObsPlugin {
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
+
+    this._tagger.tagSpanTags(span, { [DECISION_PROVIDER_TAG]: DECISION_PROVIDER })
 
     const { result, responseText } = ctx
     const inputMessages = [{ role: 'user', content: serializeRequest(ctx) ?? '' }]

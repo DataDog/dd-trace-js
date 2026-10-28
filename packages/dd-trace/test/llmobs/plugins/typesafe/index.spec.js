@@ -114,7 +114,7 @@ describe('Plugin', () => {
         inputMessages: [{ role: 'user', content }],
         outputMessages: [{ role: 'assistant', content: output }],
         metrics,
-        tags: { ml_app: 'test', integration: 'typesafe' },
+        tags: { ml_app: 'test', integration: 'typesafe', decision_provider: 'system_one' },
       })
     }
 
@@ -278,7 +278,7 @@ describe('Plugin', () => {
             message: MOCK_STRING,
             stack: MOCK_STRING,
           },
-          tags: { ml_app: 'test', integration: 'typesafe' },
+          tags: { ml_app: 'test', integration: 'typesafe', decision_provider: 'system_one' },
         })
       })
 
@@ -300,7 +300,7 @@ describe('Plugin', () => {
           inputMessages: [{ role: 'user', content: requestBody(STATE, {}) }],
           outputMessages: [{ content: '', role: '' }],
           error: { type: 'TypeSafeError', message: MOCK_STRING, stack: MOCK_STRING },
-          tags: { ml_app: 'test', integration: 'typesafe' },
+          tags: { ml_app: 'test', integration: 'typesafe', decision_provider: 'system_one' },
         })
       })
 
