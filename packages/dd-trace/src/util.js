@@ -145,8 +145,12 @@ function stripQueryAndFragment (target) {
 }
 
 function calculateDDBasePath (dirname) {
+  // Bundled into ESM output, `__dirname` is not defined. Bundled into CJS output, it is the bundle's directory,
+  // which has no `packages` segment. Neither identifies where dd-trace lives.
+  if (dirname === undefined) return
   const dirSteps = dirname.split(path.sep)
   const packagesIndex = dirSteps.lastIndexOf('packages')
+  if (packagesIndex === -1) return
   return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep
 }
 
@@ -191,7 +195,8 @@ module.exports = {
   globMatch,
   getSegment,
   stripQueryAndFragment,
-  ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
+  ddBasePath: globalThis.__DD_ESBUILD_BASEPATH ||
+    calculateDDBasePath(typeof __dirname === 'string' ? __dirname : undefined),
   normalizePluginEnvName,
   formatKnuthRate,
   truncateString,

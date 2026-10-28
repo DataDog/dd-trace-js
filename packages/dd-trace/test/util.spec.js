@@ -2,11 +2,13 @@
 
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
+const path = require('node:path')
 
-const { describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
 
 require('./setup/core')
 const {
+  ddBasePath,
   isEmpty,
   isTrue,
   isFalse,
@@ -16,6 +18,7 @@ const {
   truncateString,
   typedArrayLength,
 } = require('../src/util')
+const { loadAsBundled } = require('./helpers/load-as-bundled')
 
 const TRUES = [
   1,
@@ -220,6 +223,36 @@ describe('util', () => {
           `stripQueryAndFragment(${JSON.stringify(target)})`
         )
       }
+    })
+  })
+
+  describe('ddBasePath', () => {
+    const utilPath = require.resolve('../src/util')
+    const repoRoot = path.resolve(__dirname, '..', '..', '..') + path.sep
+
+    afterEach(() => {
+      delete globalThis.__DD_ESBUILD_BASEPATH
+    })
+
+    it('is the directory containing the dd-trace packages', () => {
+      assert.strictEqual(ddBasePath, repoRoot)
+      assert.strictEqual(loadAsBundled(utilPath, { dirname: path.dirname(utilPath) }).ddBasePath, repoRoot)
+    })
+
+    it('is undefined when bundled into CJS output, where __dirname is the bundle directory', () => {
+      const bundleDir = path.join(path.parse(repoRoot).root, 'app', 'dist')
+
+      assert.strictEqual(loadAsBundled(utilPath, { dirname: bundleDir }).ddBasePath, undefined)
+    })
+
+    it('is undefined when bundled into ESM output, where __dirname is not defined', () => {
+      assert.strictEqual(loadAsBundled(utilPath).ddBasePath, undefined)
+    })
+
+    it('prefers the base path provided by the esbuild plugin', () => {
+      globalThis.__DD_ESBUILD_BASEPATH = repoRoot
+
+      assert.strictEqual(loadAsBundled(utilPath).ddBasePath, repoRoot)
     })
   })
 })
