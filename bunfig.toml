@@ -7,8 +7,8 @@ linker = "hoisted"
 # registry before it lands in our installs.
 minimumReleaseAge = 259200
 
-# Bun only matches exact package names; our publishing pipeline is the trust
-# boundary for these packages.
+# Our publishing pipeline is the trust boundary for internal packages.
+# Reviewed upstream releases have version-specific exceptions.
 minimumReleaseAgeExcludes = [
   "@datadog/datadog-ci",
   "@datadog/flagging-core",
@@ -20,4 +20,5 @@ minimumReleaseAgeExcludes = [
   "@datadog/pprof",
   "@datadog/sketches-js",
   "@datadog/wasm-js-rewriter",
+  "import-in-the-middle@3.5.3",
 ]

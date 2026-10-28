@@ -6,6 +6,7 @@ const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
 const { arch } = require('os')
 const { join, posix } = require('path')
+const { isDeepStrictEqual } = require('node:util')
 
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
@@ -26,9 +27,6 @@ const requirePackageJson = require(requirePackageJsonPath)
 // Generating the whole versions/ tree is thousands of mkdir/writeFile calls; bound them so we never exhaust file
 // descriptors (EMFILE). Dependency installation dominates the wall-clock, so a moderate cap costs nothing.
 const FS_CONCURRENCY = 50
-
-// A bare package name, optionally scoped, and nothing else: the only override key Bun applies.
-const BARE_PACKAGE_NAME = /^(?:@[^@/]+\/)?[^@/]+$/
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase < 3.2.2
@@ -205,18 +203,11 @@ function applyExternalConfiguration (moduleNames, packages) {
       if (!external.overrides) continue
 
       for (const [dependency, version] of Object.entries(external.overrides)) {
-        // Bun only honours a bare package name. A Yarn-style selective path (`parent@1.0.0/child`) or an
-        // npm-style nested object is accepted into the manifest and then silently ignored, so the range
-        // reads as enforced while resolution stays untouched.
-        if (!BARE_PACKAGE_NAME.test(dependency) || typeof version !== 'string') {
-          throw new Error(
-            `Override '${dependency}' cannot be expressed as a Bun override. Bun only supports a bare package ` +
-            'name mapped to a version range, and applies it to every workspace.'
-          )
-        }
         const configuredVersion = workspaceOverrides[dependency]
-        if (configuredVersion !== undefined && configuredVersion !== version) {
-          throw new Error(`Conflicting overrides for '${dependency}': '${configuredVersion}' and '${version}'`)
+        if (configuredVersion !== undefined && !isDeepStrictEqual(configuredVersion, version)) {
+          throw new Error(`Conflicting overrides for '${dependency}': ` +
+            `${JSON.stringify(configuredVersion)} and ${JSON.stringify(version)}`
+          )
         }
         workspaceOverrides[dependency] = version
       }
@@ -547,8 +538,6 @@ function install () {
     // dep of the consuming sandbox rather than as a sibling workspace.
     exec('bun install --trust', { cwd: folder() })
   } catch (error) {
-    // Bun can otherwise skip a failed lifecycle script on the next invocation.
-    rmSync(join(folder(), 'node_modules'), { recursive: true, force: true })
     // A failure is most often an unresolvable version: a declared range spans a major version that was never
     // published. Point at the fix instead of leaving a bare bun error.
     throw new Error(

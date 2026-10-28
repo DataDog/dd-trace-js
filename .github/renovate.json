@@ -4,17 +4,19 @@
     "config:recommended"
   ],
   "enabledManagers": [
-    "npm"
+    "bun"
   ],
   "includePaths": [
     "package.json",
-    "yarn.lock",
+    "bun.lock",
     "docs/package.json",
-    "docs/yarn.lock",
+    "docs/bun.lock",
     ".github/actions/datadog-ci/package.json",
-    ".github/actions/datadog-ci/yarn.lock",
+    ".github/actions/datadog-ci/bun.lock",
     "vendor/package.json",
-    "vendor/package-lock.json"
+    "vendor/bun.lock",
+    ".github/all-green/package.json",
+    ".github/all-green/bun.lock"
   ],
   "timezone": "UTC",
   "dependencyDashboard": true,
@@ -22,9 +24,6 @@
   "automergeStrategy": "squash",
   "platformAutomerge": true,
   "rebaseWhen": "behind-base-branch",
-  "postUpdateOptions": [
-    "yarnDedupeHighest"
-  ],
   "vulnerabilityAlerts": {
     "enabled": false
   },
@@ -39,7 +38,7 @@
     {
       "description": "Disable regular dependency updates",
       "matchManagers": [
-        "npm"
+        "bun"
       ],
       "matchUpdateTypes": [
         "major",
@@ -57,7 +56,7 @@
     {
       "description": "Automerge Sunday lockfile maintenance",
       "matchManagers": [
-        "npm"
+        "bun"
       ],
       "matchUpdateTypes": [
         "lockFileMaintenance"
@@ -73,7 +72,7 @@
     {
       "description": "Root lockfile maintenance",
       "matchManagers": [
-        "npm"
+        "bun"
       ],
       "matchUpdateTypes": [
         "lockFileMaintenance"
@@ -87,7 +86,7 @@
     {
       "description": "Docs lockfile maintenance",
       "matchManagers": [
-        "npm"
+        "bun"
       ],
       "matchUpdateTypes": [
         "lockFileMaintenance"
@@ -101,7 +100,7 @@
     {
       "description": "datadog-ci action lockfile maintenance",
       "matchManagers": [
-        "npm"
+        "bun"
       ],
       "matchUpdateTypes": [
         "lockFileMaintenance"
@@ -115,7 +114,7 @@
     {
       "description": "Vendor lockfile maintenance",
       "matchManagers": [
-        "npm"
+        "bun"
       ],
       "matchUpdateTypes": [
         "lockFileMaintenance"
@@ -125,6 +124,20 @@
       ],
       "groupName": "vendor lockfile maintenance",
       "groupSlug": "vendor-lockfile-maintenance"
+    },
+    {
+      "description": "All-green lockfile maintenance",
+      "matchManagers": [
+        "bun"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "matchFileNames": [
+        ".github/all-green/package.json"
+      ],
+      "groupName": "all-green lockfile maintenance",
+      "groupSlug": "all-green-lockfile-maintenance"
     }
   ]
 }

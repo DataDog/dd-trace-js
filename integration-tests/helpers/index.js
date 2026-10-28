@@ -562,6 +562,10 @@ function error (...args) {
   DEBUG === 'true' && console.error(...args) // eslint-disable-line no-console
 }
 
+/**
+ * @param {string} command
+ * @param {import('child_process').ExecSyncOptions} [options]
+ */
 function execHelper (command, options) {
   try {
     log('Exec START: ', command)
@@ -569,50 +573,22 @@ function execHelper (command, options) {
     log('Exec SUCCESS: ', command)
   } catch (execError) {
     error('Exec ERROR: ', command, execError)
-    if (command.startsWith(BUN)) {
-      try {
-        log('Exec RETRY BACKOFF: 60 seconds')
-        execSync('sleep 60')
-        log('Exec RETRY START: ', command)
-        execSync(command, options)
-        log('Exec RETRY SUCCESS: ', command)
-      } catch (retryError) {
-        error('Exec RETRY ERROR', command, retryError)
-        throw retryError
-      }
-    } else {
-      throw execError
-    }
+    throw execError
   }
 }
 
 /**
- * Async sibling of {@link execHelper}. Runs in parallel with other awaited operations and
- * preserves the bun-only 60s retry semantics.
- *
- * @param {string} command - Command to run.
- * @param {import('child_process').ExecOptions} [options] - Exec options.
- * @returns {Promise<void>}
+ * @param {string} command
+ * @param {import('child_process').ExecOptions} [options]
  */
 async function execHelperAsync (command, options) {
   try {
     log('Exec START: ', command)
     await execAsync(command, options)
     log('Exec SUCCESS: ', command)
-    return
   } catch (execError) {
     error('Exec ERROR: ', command, execError)
-    if (!command.startsWith(BUN)) throw execError
-  }
-  log('Exec RETRY BACKOFF: 60 seconds')
-  await new Promise(resolve => setTimeout(resolve, 60_000))
-  try {
-    log('Exec RETRY START: ', command)
-    await execAsync(command, options)
-    log('Exec RETRY SUCCESS: ', command)
-  } catch (retryError) {
-    error('Exec RETRY ERROR', command, retryError)
-    throw retryError
+    throw execError
   }
 }
 
@@ -729,11 +705,11 @@ async function createSandbox (
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
-    // yarn-linked into dd-trace and want to run the integration tests against them.
+    // linked into dd-trace and want to run the integration tests against them.
 
     // Link dd-trace to itself, then...
-    execHelper('yarn link')
-    execHelper('yarn link dd-trace')
+    execHelper(`${BUN} link --ignore-scripts`, { env: restOfEnv })
+    execHelper(`${BUN} link --ignore-scripts --no-save dd-trace`, { env: restOfEnv })
     // ... run the tests in the current directory.
     return {
       coverageRoot: resolveCoverageRoot({ cwd: process.cwd() }),

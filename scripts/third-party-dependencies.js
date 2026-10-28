@@ -173,7 +173,7 @@ function parseBunLock (lockPath) {
     throw new Error(`Cannot parse ${lockPath}: ${printParseErrorCode(error)} at offset ${offset}`)
   }
   if (!isObject(lock)) throw new Error(`${lockPath} does not contain an object`)
-  if (lock.lockfileVersion !== 1 && lock.lockfileVersion !== 2) {
+  if (lock.lockfileVersion !== 1 && lock.lockfileVersion !== 2 && lock.lockfileVersion !== 3) {
     throw new Error(`Unsupported lockfile version in ${lockPath}: ${lock.lockfileVersion}`)
   }
   if (!isObject(lock.packages)) throw new Error(`${lockPath} does not contain package metadata`)

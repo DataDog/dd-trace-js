@@ -8,7 +8,7 @@ saveTextLockfile = true
 # in the matrix on the first CI run after publish.
 minimumReleaseAge = 259200
 
-# Keep the internal-package trust boundary aligned with the root install.
+# Keep the release-age exceptions aligned with the root install.
 minimumReleaseAgeExcludes = [
   "@datadog/datadog-ci",
   "@datadog/flagging-core",
@@ -20,4 +20,5 @@ minimumReleaseAgeExcludes = [
   "@datadog/pprof",
   "@datadog/sketches-js",
   "@datadog/wasm-js-rewriter",
+  "import-in-the-middle@3.5.3",
 ]

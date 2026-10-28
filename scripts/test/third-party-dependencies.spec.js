@@ -217,14 +217,34 @@ describe('third-party dependency locks', () => {
     ])
   })
 
+  it('walks a v3 lock with a parent-scoped override', () => {
+    const lockPath = writeFixture('bun.lock', JSON.stringify({
+      lockfileVersion: 3,
+      configVersion: 1,
+      workspaces: { '': { dependencies: { q: '2.0.0', collections: '^2.0.3' } } },
+      overrides: { 'q@^2': { collections: '^5.0.0' } },
+      packages: {
+        q: ['q@2.0.0', '', { dependencies: { collections: '^2.0.0' } }],
+        collections: ['collections@2.0.3', '', {}],
+        'q/collections': ['collections@5.1.13', '', {}],
+      },
+    }))
+
+    assert.deepStrictEqual(listBunLockDependencies(lockPath), [
+      { name: 'collections', version: '2.0.3' },
+      { name: 'collections', version: '5.1.13' },
+      { name: 'q', version: '2.0.0' },
+    ])
+  })
+
   it('accepts supported lock versions and fails closed on other or incomplete locks', () => {
     const empty = { workspaces: { '': {} }, packages: {} }
-    for (const lockfileVersion of [1, 2]) {
+    for (const lockfileVersion of [1, 2, 3]) {
       const lockPath = writeFixture(`version-${lockfileVersion}.lock`, JSON.stringify({ lockfileVersion, ...empty }))
       assert.deepStrictEqual(listBunLockDependencies(lockPath), [])
     }
 
-    for (const lockfileVersion of [0, 3, -1, 1.5, '1', undefined]) {
+    for (const lockfileVersion of [0, 4, -1, 1.5, '1', undefined]) {
       const lockPath = writeFixture(`version-${lockfileVersion}.lock`, JSON.stringify({
         lockfileVersion,
         ...empty,
