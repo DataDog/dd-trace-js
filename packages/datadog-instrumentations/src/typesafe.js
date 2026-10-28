@@ -1,7 +1,6 @@
 'use strict'
 
 const { tracingChannel } = require('dc-polyfill')
-const log = require('../../dd-trace/src/log')
 
 const systemOneChannel = tracingChannel('orchestrion:@typesafe-ai/sdk:TypeSafeClient_systemOne')
 const apiPromiseChannel = tracingChannel('orchestrion:@typesafe-ai/sdk:APIPromise_constructor')
@@ -47,21 +46,14 @@ apiPromiseChannel.start.subscribe(ctx => {
  * @param {Response} response
  */
 function readResponse (ctx, response) {
-  let text
   try {
-    text = response.clone().text()
-  } catch (error) {
-    log.debug('Could not read the TypeSafe response body; the span has no result: %s', error.message)
-    return finish(ctx)
-  }
-
-  text.then(body => {
-    ctx.responseText = body
-    finish(ctx, parseBody(body))
-  }, error => {
-    log.debug('Could not read the TypeSafe response body; the span has no result: %s', error.message)
+    response.clone().text().then(body => {
+      ctx.responseText = body
+      finish(ctx, parseBody(body))
+    }, () => finish(ctx))
+  } catch {
     finish(ctx)
-  })
+  }
 }
 
 /**
