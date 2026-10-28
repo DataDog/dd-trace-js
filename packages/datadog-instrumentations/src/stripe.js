@@ -60,8 +60,11 @@ function wrapConstructEventAsync (constructEventAsync) {
 
 const wrappedMethods = new WeakSet()
 
-// `webhooks` is shared by every Stripe instance, so wrapping it on each
-// construction would stack one wrapper per client until the stack overflows
+// Stripe >=9 <11.10 and >=18 share `webhooks` across clients. Stripe >=11.10 <18
+// creates it per client. checkout.sessions and paymentIntents are separate for each client.
+// Rewrapping shared webhook methods adds one layer per client, causing duplicate
+// publications and eventually a stack overflow. Track installed functions so replacements
+// still get wrapped and restored wrappers are reused.
 /**
  * @param {object|undefined} target
  * @param {string} name
