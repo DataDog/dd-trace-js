@@ -135,6 +135,21 @@ function getAfterEachHooks (testOrHook) {
   return hooks
 }
 
+/**
+ * @param {{ file: string, fullTitle: () => string }} test
+ * @param {object} config
+ * @param {boolean} [config.isTestManagementTestsEnabled]
+ * @param {{ mocha?: { suites?: Record<string, {
+ *   tests?: Record<string, { properties?: Record<string, boolean> }>
+ * }> } }} [config.testManagementTests]
+ */
+function getAssignedProperties (test, config) {
+  return config.isTestManagementTestsEnabled
+    ? config.testManagementTests?.mocha?.suites
+      ?.[getTestSuitePath(test.file, process.cwd())]?.tests?.[test.fullTitle()]?.properties
+    : undefined
+}
+
 function getTestProperties (test, testManagementTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
   const testName = test.fullTitle()
@@ -592,7 +607,8 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
           return onRunnableFinished.apply(this, arguments)
         }
       }
-    } else if (libraryConfig?.isFlakyTestRetriesEnabled && !test._ddTestAnnotations?.noAutoRetry && !nativeRetryTests.has(test._retriedTest || test)) {
+    } else if (libraryConfig?.isFlakyTestRetriesEnabled && !test._ddTestAnnotations?.noAutoRetry &&
+      !nativeRetryTests.has(test._retriedTest || test)) {
       if (!originalRetriesByTest.has(test)) {
         const originalRetries = originalRetriesByTest.get(test._retriedTest) ?? test.retries()
         originalRetriesByTest.set(test, originalRetries)
@@ -648,7 +664,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
   return RunnablePackage
 }
 
-function getOnTestHandler (isMain) {
+function getOnTestHandler (isMain, config = {}) {
   return function (test) {
     if (test._ddSuppressSyntheticTestLifecycle || hasHandledHookFailure(test)) return
 
@@ -661,6 +677,7 @@ function getOnTestHandler (isMain) {
     inheritDatadogPropertiesFromRetriedTest(test)
     // Mocha 5/6 clones lack _retriedTest, but retain the annotated callback.
     test._ddTestAnnotations ||= test._ddDeclaredAnnotations || getTestAnnotations(test.fn)
+    test._ddAssignedProperties ||= getAssignedProperties(test, config)
 
     if (isInFailedSuite(test.parent)) {
       recordRetryTrackedAttempt(test)
@@ -1334,10 +1351,7 @@ function getRunTestsWrapper (runTests, config) {
       test._ddTestAnnotations = test.fn
         ? getTestAnnotations(originalFns.get(test.fn) || test.fn)
         : test._ddDeclaredAnnotations || getTestAnnotations()
-      test._ddAssignedProperties = config.isTestManagementTestsEnabled
-        ? config.testManagementTests?.mocha?.suites
-          ?.[getTestSuitePath(test.file, process.cwd())]?.tests?.[test.fullTitle()]?.properties
-        : undefined
+      test._ddAssignedProperties = getAssignedProperties(test, config)
     }
     if (config.isTestManagementTestsEnabled) {
       suite.tests.forEach((test) => {

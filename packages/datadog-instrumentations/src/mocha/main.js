@@ -1453,7 +1453,7 @@ addHook({
     // instead of suiteA -> suiteB -> testA -> ... -> testB)
     // when the suite has tests that are in the top level
     // (no describe(...))
-    this.prependListener('test', getOnTestHandler(true))
+    this.prependListener('test', getOnTestHandler(true, config))
     // Reporters are registered before Runner#run, so prepend this after the test handler
     // to start the suite first and preserve the test event if a reporter throws.
     this.prependListener('test', startRootSuite)
