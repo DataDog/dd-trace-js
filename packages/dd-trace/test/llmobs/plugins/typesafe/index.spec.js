@@ -345,6 +345,14 @@ describe('Plugin', () => {
         assert.equal(llmobsSpans[0].meta.input.messages[0].content, requestBody({ score: null }))
       })
 
+      it('omits total tokens when a usage count is missing', async () => {
+        const body = JSON.stringify({ ...STUB_RESPONSE, usage: { input_tokens: 10, output_tokens: null } })
+        await createStubbedClient({}, body).systemOne({ state: STATE, questions: questions(), model: MODEL })
+
+        const { llmobsSpans } = await getEvents()
+        assert.deepEqual(llmobsSpans[0].metrics, { input_tokens: 10 })
+      })
+
       it('records a successful response that is not JSON as received', async () => {
         await createStubbedClient({}, 'upstream proxy page')
           .systemOne({ state: STATE, questions: questions(), model: MODEL })

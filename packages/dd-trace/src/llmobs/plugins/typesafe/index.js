@@ -76,7 +76,8 @@ function extractMetrics (result) {
   const metrics = {}
   if (inputTokens != null) metrics.inputTokens = inputTokens
   if (outputTokens != null) metrics.outputTokens = outputTokens
-  if (inputTokens != null || outputTokens != null) metrics.totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0)
+  // A total is only known when both counts are
+  if (inputTokens != null && outputTokens != null) metrics.totalTokens = inputTokens + outputTokens
   return metrics
 }
 
