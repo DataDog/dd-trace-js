@@ -3,8 +3,16 @@
 const dc = require('dc-polyfill')
 
 const log = require('./log')
+const { REMOTELY_CONFIGURABLE_SETTINGS } = require('./profiling/remote-config')
 
 const configUpdateChannel = dc.channel('datadog:config:update')
+
+/**
+ * Snapshot of restart-sensitive settings for the current run.
+ *
+ * @type {unknown[] | undefined}
+ */
+let startedSettings
 
 /** @type {import('./profiling/ssi-heuristics').SSIHeuristics | undefined} */
 let activeSSIHeuristics
@@ -19,6 +27,9 @@ let profilingModule
  * @type {import('./config/config-base') | undefined}
  */
 let deferredConfig
+
+// The profiler is stopping to apply new settings, not to stay disabled.
+let restartPending = false
 
 function getProfilingModule () {
   if (profilingModule === undefined) {
@@ -72,6 +83,7 @@ function disableSSIHeuristics () {
  * @param {import('./config/config-base')} config - Tracer configuration
  */
 function start (config) {
+  startedSettings = getRemotelyConfigurableSettings(config)
   try {
     // Forward the full tracer config to the profiling layer.
     // Profiling code is responsible for deriving the specific options it needs.
@@ -86,9 +98,9 @@ function start (config) {
 }
 
 function stop () {
-  // An explicit stop is the latest desired state, so it retracts a configuration still waiting
-  // for an in-flight shutdown to settle.
+  // Explicit stops cancel deferred config updates and restarts.
   deferredConfig = undefined
+  restartPending = false
 
   // A stop command for a profiler that has never been loaded is already satisfied.
   if (profilingModule === undefined) return
@@ -125,35 +137,70 @@ function runWithLabels (labels, fn) {
   return getProfilingModule().profiler.runWithLabels(labels, fn)
 }
 
+/**
+ * @param {import('./config/config-base')} config - Tracer configuration
+ */
+function getRemotelyConfigurableSettings (config) {
+  return REMOTELY_CONFIGURABLE_SETTINGS.map(name => config[name])
+}
+
+/**
+ * Settings are read at startup, so changes require a restart and may leave a profile gap.
+ *
+ * @param {import('./config/config-base')} config - Tracer configuration
+ */
+function restartIfSettingsChanged (config) {
+  const settings = getRemotelyConfigurableSettings(config)
+  if (settings.every((value, index) => value === startedSettings?.[index])) return
+
+  log.debug('Restarting the profiler to apply changed settings')
+  stop()
+  if (isStopping()) {
+    // The 'stopped' event applies the config after the final export.
+    deferredConfig = config
+    restartPending = true
+  } else {
+    start(config)
+  }
+}
+
 function applyDeferredConfig () {
   const config = deferredConfig
   if (config === undefined) return
   deferredConfig = undefined
-  applyConfig(config)
+  const restarting = restartPending
+  restartPending = false
+  applyConfig(config, restarting)
 }
 
 /**
  * @param {import('./config/config-base')} config - Tracer configuration
+ * @param {boolean} [restarting] - Resume a run stopped for a settings change
  */
-function applyConfig (config) {
+function applyConfig (config, restarting = false) {
   const enabled = config.profiling.DD_PROFILING_ENABLED
   if (enabled === 'true') {
     // A non-auto value means the SSI heuristics no longer get a say; disable them so a trigger that
     // fires after this publish can't start the profiler behind this decision's back.
     disableSSIHeuristics()
-    // Leave an already-running profiler alone; otherwise an unrelated remote-config publish
-    // (e.g. an unrelated sampling-rate change) would restart it on every update.
-    if (!isStarted()) start(config)
+    // Unrelated config updates must not restart the profiler.
+    if (isStarted()) {
+      restartIfSettingsChanged(config)
+    } else {
+      start(config)
+    }
   } else if (enabled === 'false') {
     disableSSIHeuristics()
     stop()
   } else if (enabled === 'auto') {
-    if (!isStarted() && !activeSSIHeuristics) {
-      // 'auto' defers the start decision to SSI heuristics. A running profiler already reflects a
-      // decision that was made (by SSI or a prior unconditional enablement), so leave it alone
-      // rather than stopping and re-enabling it on every subsequent config publication. Also guard
-      // against creating another active instance; each SSIHeuristics instance owns listeners and a
-      // timer until the heuristic makes its decision or is explicitly disabled.
+    // A running or restarting profiler has already passed the start decision; don't
+    // re-run SSI heuristics on config updates.
+    if (isStarted()) {
+      restartIfSettingsChanged(config)
+    } else if (restarting) {
+      start(config)
+    } else if (!activeSSIHeuristics) {
+      // Reuse active heuristics; each instance owns listeners and a timer.
       const { SSIHeuristics } = getSSIHeuristicsModule()
       const heuristics = new SSIHeuristics(config)
       activeSSIHeuristics = heuristics
