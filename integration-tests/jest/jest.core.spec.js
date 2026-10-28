@@ -2,9 +2,10 @@
 
 const assert = require('node:assert/strict')
 
+const { exec, fork, spawn } = require('node:child_process')
 const { once } = require('node:events')
-const { fork, exec } = require('child_process')
 const fs = require('node:fs')
+const { createServer } = require('node:http')
 const path = require('path')
 const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
@@ -169,6 +170,87 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     testOutput = ''
     await receiver.stop()
   })
+
+  for (const { status, recovers } of [
+    { status: 'pass', recovers: false },
+    { status: 'fail', recovers: false },
+    { status: 'pass', recovers: true },
+    { status: 'fail', recovers: true },
+  ]) {
+    const discovery = recovers ? 'recovers after a connection reset' : 'fails'
+    it(`runs ${status}ing tests when agent discovery ${discovery}`, async () => {
+      let discoveryRequests = 0
+      const requestedPaths = new Set()
+      const agent = createServer((req, res) => {
+        requestedPaths.add(req.url)
+        if (req.url === '/info') {
+          discoveryRequests++
+          if (!recovers || discoveryRequests === 1) {
+            req.socket.destroy()
+            return
+          }
+          res.end(JSON.stringify({ endpoints: ['/evp_proxy/v2'] }))
+          return
+        }
+        // Accept uploads so this only tests startup, not the separate final-flush retry deadline.
+        const response = req.url.endsWith('/libraries/tests/services/setting')
+          ? { data: { attributes: { itr_enabled: false, tests_skipping: false, code_coverage: false } } }
+          : { rate_by_service: {} }
+        req.once('end', () => res.end(JSON.stringify(response)))
+        req.resume()
+      })
+      agent.listen(0, '127.0.0.1')
+      await once(agent, 'listening')
+
+      try {
+        const { port } = /** @type {import('node:net').AddressInfo} */ (agent.address())
+        const config = JSON.stringify({
+          testRegex: 'jest-agent-discovery-test.js$',
+          testRunner: 'jest-circus/runner',
+          testEnvironment: 'node',
+          watchman: false,
+        })
+        childProcess = spawn(process.execPath, [
+          'node_modules/jest/bin/jest', '--runInBand', '--no-cache', '--config', config,
+        ], {
+          cwd,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 30_000,
+          env: {
+            ...getCiVisEvpProxyConfig(port),
+            DD_INJECT_FORCE: 'true',
+            JEST_AGENT_DISCOVERY_TEST_FAIL: status === 'fail' ? '1' : '0',
+            JEST_WORKER_ID: undefined,
+            MOCHA_WORKER_ID: undefined,
+          },
+        })
+        childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+        const [[exitCode, signal]] = await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+        ])
+        assert.ok(discoveryRequests > 0, 'The tracer did not attempt agent discovery')
+        assert.strictEqual(signal, null, testOutput)
+        assert.match(testOutput, /^JEST_AGENT_DISCOVERY_TEST_RAN$/m,
+          `Jest exited with code ${exitCode} without executing the test:\n${testOutput}`)
+        assert.match(testOutput, new RegExp(`Tests:\\s+1 ${status}ed, 1 total`))
+        assert.strictEqual(exitCode, status === 'fail' ? 1 : 0, testOutput)
+        if (recovers) {
+          assert.ok(discoveryRequests >= 2, 'Agent discovery did not retry')
+          assert.ok(requestedPaths.has('/evp_proxy/v2/api/v2/libraries/tests/services/setting'),
+            'Test Optimization settings were not requested after recovery')
+          assert.ok(requestedPaths.has('/evp_proxy/v2/api/v2/citestcycle'),
+            'Test events were not uploaded through the discovered endpoint')
+        }
+      } finally {
+        agent.close()
+        await once(agent, 'close')
+      }
+    })
+  }
 
   for (const { mode, args, reason, exitCode: expectedExitCode } of [
     { mode: 'skip-tests', args: '', reason: 'all_tests_skipped', exitCode: 0 },
