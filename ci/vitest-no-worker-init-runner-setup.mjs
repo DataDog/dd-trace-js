@@ -20,7 +20,8 @@ function trackNativeRetryOptions (collector) {
     const length = collector.tasks.length
     const result = original.apply(this, arguments)
     if ((options?.retry !== undefined || collector.options?.retry !== undefined) && collector.tasks.length > length) {
-      collector.tasks.at(-1).meta.__ddTestOptNativeRetry = true
+      const task = collector.tasks.at(-1)
+      task.meta = { ...task.meta, __ddTestOptNativeRetry: true }
     }
     return result
   }

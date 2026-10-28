@@ -7,7 +7,7 @@ const { channel } = require('./helpers/instrument')
 channel('tracing:orchestrion:@vitest/runner:createTestTask:end').subscribe(({ arguments: args, result: task }) => {
   // Suite options have already been merged here, including overrides equal to ATR's count.
   if (args[1]?.retry !== undefined && task?.meta) {
-    task.meta.__ddTestOptNativeRetry = true
+    task.meta = { ...task.meta, __ddTestOptNativeRetry: true }
   }
 })
 

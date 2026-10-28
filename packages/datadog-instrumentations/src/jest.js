@@ -125,6 +125,7 @@ const jestSessionState = (globalThis[JEST_SESSION_STATE] ||= {})
 
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
+const RETRY_TIMES_SETTER = Symbol.for('RETRY_TIMES_SETTER')
 
 let skippableSuites = []
 let skippableSuitesCoverage
@@ -2447,7 +2448,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         let isAtrRetry = false
-        const hasAutomaticRetries = this.hasAutomaticRetries || dynamicAtrRetryCountByTest.has(event.test)
+        let hasAutomaticRetries = this.hasAutomaticRetries || dynamicAtrRetryCountByTest.has(event.test)
+        // Describe retries suppress per-test retries throughout the block, including nested describes.
+        for (let block = event.test.parent; block; block = block.parent) {
+          if (state.describeRetryOptions?.has(block)) {
+            hasAutomaticRetries = false
+            break
+          }
+        }
         if (this.isFlakyTestRetriesEnabled && hasAutomaticRetries &&
           event.test?.invocations > 1 && !isAttemptToFix && !isEfdRetry) {
           isAtrRetry = true
@@ -4030,7 +4038,10 @@ function wrapJestObject (jestObject, suiteFilePath, from = suiteFilePath) {
   // retryTimes is created per runtime, so wrap the returned public API object.
   shimmer.wrap(jestObject, 'retryTimes', retryTimes => function () {
     const environment = testSuiteDatadogEnvironments.get(suiteFilePath)
-    if (environment) environment.hasAutomaticRetries = false
+    // Older Jest versions ignore entireDescribe and still replace the global budget.
+    if (environment && !(arguments[1]?.entireDescribe && environment.global[RETRY_TIMES_SETTER])) {
+      environment.hasAutomaticRetries = false
+    }
     return retryTimes.apply(this, arguments)
   })
 

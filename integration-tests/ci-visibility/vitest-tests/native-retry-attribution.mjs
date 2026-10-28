@@ -11,3 +11,8 @@ test('different override', { retry: 2 }, fail)
 describe('suite override', { retry: 1 }, () => {
   test('fails', fail)
 })
+
+const sharedMeta = { custom: 'shared' }
+test('shared before inherited', { meta: sharedMeta }, fail)
+test('shared override', { meta: sharedMeta, retry: 1 }, fail)
+test('shared after inherited', { meta: sharedMeta }, fail)

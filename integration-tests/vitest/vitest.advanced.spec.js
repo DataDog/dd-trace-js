@@ -97,10 +97,11 @@ versions.forEach((version) => {
             .filter(event => event.type === 'test').map(event => event.content)
           for (const [name, count] of [
             ['inherited', 2], ['equal override', 2], ['different override', 3], ['suite override fails', 2],
+            ['shared before inherited', 2], ['shared override', 2], ['shared after inherited', 2],
           ]) {
             const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
             assert.strictEqual(attempts.length, count, name)
-            const reason = name === 'inherited' ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
+            const reason = name.endsWith('inherited') ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
             assert.ok(attempts.every(test => test.meta[TEST_STATUS] === 'fail'), name)
             const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retries.length, count - 1, name)

@@ -161,10 +161,11 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
       const tests = getEventContents(events, 'test')
       for (const [name, count] of [
         ['inherited', 2], ['equal override', 2], ['different override', 3], ['suite override fails', 2],
+        ['shared before inherited', 2], ['shared override', 2], ['shared after inherited', 2],
       ]) {
         const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
         assert.strictEqual(attempts.length, count, name)
-        const reason = name === 'inherited' ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
+        const reason = name.endsWith('inherited') ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
         const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
         assert.strictEqual(retries.length, count - 1, name)
         assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === reason), name)
