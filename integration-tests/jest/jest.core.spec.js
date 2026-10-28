@@ -171,17 +171,32 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     await receiver.stop()
   })
 
-  for (const status of ['pass', 'fail']) {
-    it(`runs ${status}ing tests when agent discovery fails`, async () => {
+  for (const { status, recovers } of [
+    { status: 'pass', recovers: false },
+    { status: 'fail', recovers: false },
+    { status: 'pass', recovers: true },
+    { status: 'fail', recovers: true },
+  ]) {
+    const discovery = recovers ? 'recovers after a connection reset' : 'fails'
+    it(`runs ${status}ing tests when agent discovery ${discovery}`, async () => {
       let discoveryRequests = 0
+      const requestedPaths = new Set()
       const agent = createServer((req, res) => {
+        requestedPaths.add(req.url)
         if (req.url === '/info') {
           discoveryRequests++
-          req.socket.destroy()
+          if (!recovers || discoveryRequests === 1) {
+            req.socket.destroy()
+            return
+          }
+          res.end(JSON.stringify({ endpoints: ['/evp_proxy/v2'] }))
           return
         }
         // Accept uploads so this only tests startup, not the separate final-flush retry deadline.
-        req.once('end', () => res.end('{"rate_by_service":{}}'))
+        const response = req.url.endsWith('/libraries/tests/services/setting')
+          ? { data: { attributes: { itr_enabled: false, tests_skipping: false, code_coverage: false } } }
+          : { rate_by_service: {} }
+        req.once('end', () => res.end(JSON.stringify(response)))
         req.resume()
       })
       agent.listen(0, '127.0.0.1')
@@ -203,16 +218,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           timeout: 30_000,
           env: {
             ...getCiVisEvpProxyConfig(port),
-            DD_AGENTLESS_ENABLED: 'false',
-            DD_CIVISIBILITY_ENABLED: 'true',
-            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
-            DD_CRASHTRACKING_ENABLED: 'false',
             DD_INJECT_FORCE: 'true',
-            DD_PROFILING_ENABLED: 'false',
-            DD_REMOTE_CONFIGURATION_ENABLED: 'false',
-            DD_RUNTIME_METRICS_ENABLED: 'false',
-            DD_TRACE_AGENT_URL: `http://127.0.0.1:${port}`,
-            DD_TRACE_ENABLED: 'true',
             JEST_AGENT_DISCOVERY_TEST_FAIL: status === 'fail' ? '1' : '0',
             JEST_WORKER_ID: undefined,
             MOCHA_WORKER_ID: undefined,
@@ -232,6 +238,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           `Jest exited with code ${exitCode} without executing the test:\n${testOutput}`)
         assert.match(testOutput, new RegExp(`Tests:\\s+1 ${status}ed, 1 total`))
         assert.strictEqual(exitCode, status === 'fail' ? 1 : 0, testOutput)
+        if (recovers) {
+          assert.ok(discoveryRequests >= 2, 'Agent discovery did not retry')
+          assert.ok(requestedPaths.has('/evp_proxy/v2/api/v2/libraries/tests/services/setting'),
+            'Test Optimization settings were not requested after recovery')
+          assert.ok(requestedPaths.has('/evp_proxy/v2/api/v2/citestcycle'),
+            'Test events were not uploaded through the discovered endpoint')
+        }
       } finally {
         agent.close()
         await once(agent, 'close')
