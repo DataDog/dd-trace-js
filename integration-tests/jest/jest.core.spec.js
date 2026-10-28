@@ -77,6 +77,7 @@ const isJest28OrNewer = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('
 const defaultCircusIt = isJest28OrNewer ? it : it.skip
 const esmIt = isJest28OrNewer ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = isJest28OrNewer
+const supportsWorkerIdleMemoryLimit = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 29
 
 describe(`jest@${JEST_VERSION} commonJS`, () => {
   let receiver
@@ -2082,6 +2083,45 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('when using off timing imports', () => {
+    for (const workerIdleMemoryLimit of [undefined, '1024']) {
+      for (const status of ['pass', 'fail', 'error']) {
+        // workerIdleMemoryLimit was introduced in Jest 29.
+        const timerIt = workerIdleMemoryLimit && !supportsWorkerIdleMemoryLimit ? it.skip : it
+        const mode = workerIdleMemoryLimit ? 'with worker recycling' : 'without a worker memory limit'
+        timerIt(`cancels pending jsdom timers for ${status} suites ${mode}`, async () => {
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const suites = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test_suite_end')
+              assert.strictEqual(suites.length, 3)
+              assert.strictEqual(suites.filter(suite => suite.content.meta[TEST_STATUS] === 'fail').length,
+                status === 'pass' ? 0 : 1)
+            })
+
+          childProcess = exec(runTestsCommand, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'jest-teardown-timers/.*-test',
+              RUN_IN_PARALLEL: 'true',
+              ENABLE_JSDOM: 'true',
+              WORKER_IDLE_MEMORY_LIMIT: workerIdleMemoryLimit,
+              JEST_TIMER_SUITE_STATUS: status,
+              SHOULD_CHECK_RESULTS: 'true',
+            },
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+          assert.strictEqual(exitCode, status === 'pass' ? 0 : 1, testOutput)
+          assert.doesNotMatch(testOutput, /PENDING_JSDOM_TIMER_FIRED/,
+            'A pending window timer ran before environment teardown')
+        })
+      }
+    }
+
     onlyLatestIt('reports test suite errors when waitForUnhandledRejections=true', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
