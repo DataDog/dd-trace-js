@@ -93,6 +93,13 @@ configure_system_tests:
       when: never
     - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
       when: never
+    # Temporary: run one K8s lib-injection scenario against a system-tests branch.
+    - if: $CI_COMMIT_BRANCH == "robertomonteromiguel/test_k8s_lib_injection"
+      variables:
+        SYSTEM_TESTS_REF: robertomonteromiguel/k8s_lib_injection_matrix_names
+        SYSTEM_TESTS_SCENARIOS: K8S_LIB_INJECTION
+        SYSTEM_TESTS_SCENARIOS_GROUPS: ""
+      when: on_success
     - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/
       when: on_success
     - when: never
@@ -103,6 +110,8 @@ system_tests:
       when: never
     - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
       when: never
+    - if: $CI_COMMIT_BRANCH == "robertomonteromiguel/test_k8s_lib_injection"
+      when: on_success
     - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/
       when: on_success
     - when: never
