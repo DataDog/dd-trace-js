@@ -28,7 +28,7 @@ describe('Plugin', () => {
         beforeEach(async () => {
           await agent.load('memcached')
           tracer = require('../../dd-trace')
-          Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+          Memcached = proxyquire(require(`../../../versions/memcached@${version}`).getPath(), {})
         })
 
         withPeerService(
@@ -178,7 +178,7 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         beforeEach(async () => {
           await agent.load('memcached', { service: 'custom' })
-          Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+          Memcached = proxyquire(require(`../../../versions/memcached@${version}`).getPath(), {})
           memcached = new Memcached('localhost:11211', { retries: 0 })
         })
 
@@ -199,7 +199,7 @@ describe('Plugin', () => {
           beforeEach(async () => {
             process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
             await agent.load('memcached', { service: 'custom' })
-            Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+            Memcached = proxyquire(require(`../../../versions/memcached@${version}`).getPath(), {})
             memcached = new Memcached('localhost:11211', { retries: 0 })
           })
 
@@ -225,7 +225,7 @@ describe('Plugin', () => {
           beforeEach(async () => {
             process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'false'
             await agent.load('memcached', { service: 'custom' })
-            Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+            Memcached = proxyquire(require(`../../../versions/memcached@${version}`).getPath(), {})
             memcached = new Memcached('localhost:11211', { retries: 0 })
           })
 

@@ -1,6 +1,6 @@
 'use strict'
 
-// `versions/bunfig.toml` pins the isolated linker. Wrappers reject npm and yarn installs
+// `versions/bunfig.toml` pins the hoisted linker. Wrappers reject npm and yarn installs
 // while preserving the native build tools on PATH.
 
 const assert = require('node:assert/strict')
@@ -93,8 +93,11 @@ describe('scripts/install_plugin_modules.js', function () {
     ])
   })
 
-  it('removes the shared Bun store when the Node ABI changes', () => {
+  it('removes shared and nested native builds when the Node ABI changes', () => {
     const staleMarker = path.join(versionsDir, 'node_modules', 'stale-abi-marker')
+    const staleNested = path.join(versionsDir, 'stale-workspace', 'node_modules', 'stale-abi-marker')
+    fs.mkdirSync(path.dirname(staleNested), { recursive: true })
+    fs.writeFileSync(staleNested, '')
     fs.mkdirSync(path.dirname(staleMarker), { recursive: true })
     fs.writeFileSync(path.join(versionsDir, '.node-abi'), 'stale')
     fs.writeFileSync(staleMarker, '')
@@ -102,6 +105,7 @@ describe('scripts/install_plugin_modules.js', function () {
     runInstall('pino')
 
     assert.strictEqual(fs.existsSync(staleMarker), false)
+    assert.strictEqual(fs.existsSync(staleNested), false)
   })
 
   it('reports guidance when Bun cannot install the generated workspaces', () => {
@@ -159,8 +163,13 @@ externals.q = [{ name: 'q', overrides: { q: ${JSON.stringify(`file:${archive}`)}
 
     runInstall('q', undefined, undefined, env)
 
-    const dependency = require(path.join(versionsDir, 'q@1.5.1'))
-    assert.strictEqual(dependency.get(), true, 'the next invocation must run the failed postinstall again')
+    const rebuilt = spawnSync(process.execPath, ['-e', `
+require('node:assert/strict').strictEqual(
+  require(${JSON.stringify(path.join(versionsDir, 'q@1.5.1'))}).get(), true,
+  'the next invocation must run the failed postinstall again'
+)
+`], { encoding: 'utf8' })
+    assert.strictEqual(rebuilt.status, 0, rebuilt.stderr)
   })
 
   it('rejects conflicting declarative overrides', () => {
@@ -244,15 +253,6 @@ externals.q = [
     runInstall('not-a-plugin')
   })
 
-  it('ignores malformed entries in Bun\'s central store', () => {
-    runInstall('pino')
-    const dotBun = path.join(versionsDir, 'node_modules', '.bun')
-    fs.mkdirSync(path.join(dotBun, 'malformed'), { recursive: true })
-    fs.mkdirSync(path.join(dotBun, 'package@'), { recursive: true })
-
-    runInstall('pino')
-  })
-
   it('does not require latest-version caps for forced transitive dependencies', () => {
     runInstall('google-cloud-vertexai')
 
@@ -262,6 +262,19 @@ externals.q = [
     const directAuthPath = fs.realpathSync(vertexAI.getPath('google-auth-library'))
     const vertexAuthPath = fs.realpathSync(createRequire(vertexAI.getPath()).resolve('google-auth-library'))
     assert.strictEqual(vertexAuthPath, directAuthPath)
+  })
+
+  it('prefers runtime peer ranges over development dependencies', () => {
+    runInstall('graphql-jit')
+
+    const sandboxRequire = createRequire(path.join(versionsDir, 'graphql-jit', 'index.js'))
+    const dependency = JSON.parse(fs.readFileSync(sandboxRequire.resolve('graphql-jit/package.json'), 'utf8'))
+    const graphql = JSON.parse(fs.readFileSync(sandboxRequire.resolve('graphql/package.json'), 'utf8'))
+
+    assert.ok(semver.satisfies(graphql.version, dependency.peerDependencies.graphql))
+    const latest = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies.graphql
+    assert.ok(semver.lte(graphql.version, latest))
+    assert.strictEqual(sandboxRequire('graphql').parse('{ field }').definitions[0].operation, 'query')
   })
 
   it('pins pubsub to a compatible grpc module instance', () => {

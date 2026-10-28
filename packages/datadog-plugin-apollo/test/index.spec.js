@@ -126,8 +126,7 @@ describe('Plugin', () => {
           await setupApollo(gatewayVersion)
           ApolloServer = require('../../../versions/@apollo/server/index.js').get().ApolloServer
           startStandaloneServer =
-            require('../../../versions/@apollo/server@4.0.0/node_modules/@apollo/server/dist/cjs/standalone/index.js')
-              .startStandaloneServer
+            require('../../../versions/@apollo/server@4.0.0').get('@apollo/server/standalone').startStandaloneServer
 
           server = new ApolloServer({
             gateway: setupGateway(),

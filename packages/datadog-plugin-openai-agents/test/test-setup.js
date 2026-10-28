@@ -186,20 +186,15 @@ class OpenaiAgentsTestSetup {
   async setup (clientModule, version) {
     this.module = clientModule
 
-    const agentsOpenaiDir = path.join(__dirname, '..', '..', '..', 'versions', '@openai', `agents-openai@${version}`)
-    const { OpenAIChatCompletionsModel, OpenAIResponsesModel } = require(agentsOpenaiDir).get()
+    const agentsOpenai = require(path.join(__dirname, '../../../versions/@openai', `agents-openai@${version}`))
+    const { OpenAIChatCompletionsModel, OpenAIResponsesModel } = agentsOpenai.get()
     const directModelPath = path.join(
-      agentsOpenaiDir,
-      'node_modules',
-      '@openai',
-      'agents-openai',
-      'dist',
-      'openaiChatCompletionsModel.js'
+      path.dirname(agentsOpenai.pkgJsonPath()), 'dist', 'openaiChatCompletionsModel.js'
     )
     const { OpenAIChatCompletionsModel: DirectOpenAIChatCompletionsModel } = require(directModelPath)
     // Resolve from the loaded package so the client class comes from the `openai` copy this
     // `@openai/agents-openai` build uses, rather than whichever copy the layout happens to hoist.
-    const openaiPath = createRequire(require(agentsOpenaiDir).getPath()).resolve('openai')
+    const openaiPath = createRequire(agentsOpenai.getPath()).resolve('openai')
     const { OpenAI } = require(openaiPath)
 
     this.chatCompletionsModelClass = OpenAIChatCompletionsModel

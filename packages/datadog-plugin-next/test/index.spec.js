@@ -85,7 +85,7 @@ describe('Plugin', function () {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
     withVersions('next', 'next', min, version => {
-      const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
+      const pkg = require(require(`../../../versions/next@${version}`).pkgJsonPath())
 
       before(done => {
         downstreamServer = http.createServer((_req, res) => {

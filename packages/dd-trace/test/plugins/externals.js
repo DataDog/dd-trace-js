@@ -288,15 +288,8 @@ module.exports = {
       forced: true,
     },
   ],
-  // The bedrock-runtime tests reach into `@smithy/node-http-handler` directly
-  // through `versions/@aws-sdk/client-bedrock-runtime@*/index.js.get(...)`.
-  // Under bun's isolated linker that transitive sits only inside aws-sdk's
-  // private store and isn't reachable from the workspace root, so inject it
-  // as a direct dep of every bedrock-runtime sandbox. Deliberately no `version`:
-  // each sandbox then inherits the range its own client declares, so the 3.422.0
-  // sandbox keeps the `@smithy/*` v2 line it was built against instead of pulling
-  // the newest handler, whose `@smithy/core` v3 requirement resolves on its own
-  // and leaves the sandbox unloadable.
+  // Tests load the HTTP handler from each client workspace. Keep its range aligned with the client
+  // so older SDKs do not load a newer handler with an incompatible @smithy/core.
   '@aws-sdk/client-bedrock-runtime': [
     {
       name: '@smithy/node-http-handler',
@@ -304,9 +297,7 @@ module.exports = {
       forced: true,
     },
   ],
-  // The lambda spec reads `@aws-sdk/core`'s version to decide whether the clock-skew guard is
-  // still in place. That transitive is only reachable from the client's own store entry under
-  // bun's isolated linker, so inject it; v3 clients always pair with the v3 line.
+  // The clock-skew tests read the client's @aws-sdk/core version through the workspace.
   '@aws-sdk/client-lambda': [
     {
       name: '@aws-sdk/core',
@@ -315,16 +306,7 @@ module.exports = {
       forced: true,
     },
   ],
-  // The vertex-ai test stubs `GoogleAuth.prototype.getAccessToken` via
-  // `require('versions/@google-cloud/vertexai@<ver>').get('google-auth-library/...')`.
-  // `google-auth-library` is a regular transitive of `@google-cloud/vertexai`,
-  // so under bun's isolated linker it lives in vertexai's private store and
-  // isn't reachable from the workspace root. Inject it as a direct dep of
-  // every vertexai sandbox so the test's `getExport` lookup resolves.
-  // Pin to vertexai's own `^9.0.0` range (every published version still
-  // declares it) so bun dedupes the direct dep and the SDK's transitive to
-  // a single physical `.bun/google-auth-library@9.x.y` entry — the prototype
-  // stub only propagates to the SDK when both resolve to the same realpath.
+  // The GoogleAuth prototype stub must resolve to the same module instance as the SDK.
   '@google-cloud/vertexai': [
     {
       name: 'google-auth-library',
@@ -614,12 +596,7 @@ module.exports = {
   ],
   moleculer: [
     {
-      // bluebird is a runtime fallback in moleculer's transit/util layer; the
-      // package's manifest does not list it, so inject it as a direct dep of
-      // each moleculer sandbox via `dep: true, forced: true`. Under bun's
-      // isolated linker that lands bluebird at
-      // `versions/moleculer@<ver>/node_modules/bluebird`, where moleculer's
-      // require() walk from the central .bun store finds it.
+      // Moleculer loads Bluebird as a runtime fallback without declaring it in its manifest.
       name: 'bluebird',
       versions: ['3.7.2'],
       dep: true,
