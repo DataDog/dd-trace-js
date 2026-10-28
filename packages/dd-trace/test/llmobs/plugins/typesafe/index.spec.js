@@ -221,6 +221,16 @@ describe('Plugin', () => {
         })
       })
 
+      it('traces only systemOne, not other SDK calls', async () => {
+        const client = createStubbedClient()
+        await client.systemOne({ state: STATE, questions: questions(), model: MODEL }).map(result => result.model)
+        await client.models.list().catch(() => {})
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assert.equal(apmSpans.filter(span => span.name === 'typesafe.request').length, 1)
+        assert.equal(llmobsSpans.length, 1)
+      })
+
       it('uses the client default model when the request has none', async () => {
         // The SDK fills in defaultModel before sending, so this replays the same cassette as 'creates a span'
         await createClient(undefined, { defaultModel: MODEL }).systemOne({ state: STATE, questions: questions() })
