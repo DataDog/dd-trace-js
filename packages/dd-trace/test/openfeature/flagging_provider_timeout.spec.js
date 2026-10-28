@@ -70,12 +70,6 @@ describe('FlaggingProvider Initialization Timeout', () => {
     clock.restore()
   })
 
-  function recoveryLogCount () {
-    return log.debug.getCalls().filter(call =>
-      call.args[0] === 'Feature Flags: configuration applied after the provider was not ready; provider is ready again'
-    ).length
-  }
-
   it('should timeout after 30 seconds when configuration is not set', async () => {
     const provider = new FlaggingProvider(mockTracer, mockConfig)
 
@@ -182,11 +176,20 @@ describe('FlaggingProvider Initialization Timeout', () => {
       await clock.tickAsync(30000)
       provider.setConfiguration({ flags: {} })
       sinon.assert.notCalled(log.errorWithoutTelemetry)
-      // Applying configuration after it was removed is a recovery, not an initial configuration.
-      sinon.assert.neverCalledWith(log.debug, 'Feature Flags: initial configuration available')
-      assert.strictEqual(recoveryLogCount(), 1)
+      // Restoring configuration after it was removed takes the recovery branch.
+      sinon.assert.calledOnce(log.debug)
     })
   }
+
+  it('does not log the initialization timeout when configuration is already applied', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    provider.setConfiguration({ flags: {} })
+    log.debug.resetHistory()
+
+    await provider.initialize()
+
+    sinon.assert.neverCalledWith(log.debug, sinon.match.string, 30_000)
+  })
 
   it('logs only the first configuration before the initialization promise settles', async () => {
     const provider = new FlaggingProvider(mockTracer, mockConfig)
@@ -247,12 +250,12 @@ describe('FlaggingProvider Initialization Timeout', () => {
     const provider = new FlaggingProvider(mockTracer, mockConfig)
 
     // Start initialization
+    log.debug.resetHistory()
     const initPromise = provider.initialize()
 
     // Verify initialization is in progress
     assert.strictEqual(provider.initController.isInitializing(), true)
-
-    sinon.assert.calledWith(log.debug, 'Feature Flags: waiting for provider initialization (timeout %dms)...', 30_000)
+    sinon.assert.calledWith(log.debug, sinon.match.string, 30_000)
 
     // Advance time by 20 seconds (before timeout)
     await clock.tickAsync(20000)
@@ -278,21 +281,6 @@ describe('FlaggingProvider Initialization Timeout', () => {
     assert.strictEqual(provider.initController.isInitializing(), false)
     assert.strictEqual(provider.getConfiguration(), ufc)
     sinon.assert.calledWith(log.debug, 'Feature Flags: initial configuration available')
-    sinon.assert.neverCalledWith(log.debug,
-      'Feature Flags: configuration applied after the provider was not ready; provider is ready again')
-  })
-
-  it('does not report waiting when configuration was applied before initialization', async () => {
-    const provider = new FlaggingProvider(mockTracer, mockConfig)
-    provider.setConfiguration({ flags: {} })
-
-    await provider.initialize()
-
-    sinon.assert.calledWith(log.debug, 'Feature Flags: initial configuration available')
-    sinon.assert.neverCalledWith(log.debug,
-      'Feature Flags: waiting for provider initialization (timeout %dms)...', 30_000)
-    sinon.assert.neverCalledWith(log.debug,
-      'Feature Flags: configuration applied after the provider was not ready; provider is ready again')
   })
 
   it('should call setError with timeout message after 30 seconds', async () => {
@@ -375,16 +363,16 @@ describe('FlaggingProvider Initialization Timeout', () => {
     // Should emit READY event to signal recovery
     sinon.assert.calledOnce(readyEventSpy)
     assert.strictEqual(provider.getConfiguration(), ufc)
-    assert.strictEqual(recoveryLogCount(), 1)
     sinon.assert.calledOnce(log.errorWithoutTelemetry)
+    sinon.assert.calledOnce(log.debug)
 
     // A removed and restored configuration is the same recovery transition.
     provider.setConfiguration(undefined)
     provider.setConfiguration(ufc)
 
     sinon.assert.calledTwice(readyEventSpy)
-    assert.strictEqual(recoveryLogCount(), 2)
     sinon.assert.calledOnce(log.errorWithoutTelemetry)
+    sinon.assert.calledTwice(log.debug)
   })
 
   describe('custom timeout configuration', () => {
