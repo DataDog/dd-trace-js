@@ -27,7 +27,6 @@ describe('debugger/index', () => {
   let fetchAgentInfo
   let readFileStub
   let logGenericError
-  let warn
   let messageChannels
 
   beforeEach(() => {
@@ -40,7 +39,6 @@ describe('debugger/index', () => {
 
     readFileStub = sinon.stub()
     logGenericError = sinon.stub()
-    warn = sinon.stub()
     fetchAgentInfo = sinon.stub().callsFake((url, callback) => {
       callback(null, { endpoints: ['/debugger/v2/input'] })
     })
@@ -55,9 +53,6 @@ describe('debugger/index', () => {
       },
       '../startup-log': {
         logGenericError,
-      },
-      '../log/writer': {
-        warn,
       },
       './config': proxyquire('../../src/debugger/config', {
         '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
@@ -328,51 +323,6 @@ describe('debugger/index', () => {
       sinon.assert.notCalled(Worker)
       sinon.assert.notCalled(rc.setProductHandler)
     })
-
-    for (const [runtime, versions] of [
-      ['Bun', { bun: '1.4.3' }],
-      ['Deno', { node: '26.0.0', deno: '2.9.6' }],
-    ]) {
-      describe(`on ${runtime}`, () => {
-        let versionsStub
-
-        beforeEach(() => {
-          versionsStub = sinon.stub(process, 'versions').value({ ...process.versions, ...versions })
-          config.startupLogs = true
-        })
-
-        afterEach(() => {
-          versionsStub.restore()
-        })
-
-        it('should neither start the worker thread nor subscribe to probes', () => {
-          DynamicInstrumentation.start(config, rc)
-
-          assert.strictEqual(DynamicInstrumentation.isStarted(), false)
-          sinon.assert.notCalled(Worker)
-          sinon.assert.notCalled(fetchAgentInfo)
-          sinon.assert.notCalled(rc.setProductHandler)
-        })
-
-        it('should explain only once why Live Debugger/Dynamic Instrumentation is disabled', () => {
-          DynamicInstrumentation.start(config, rc)
-          DynamicInstrumentation.start(config, rc)
-
-          sinon.assert.calledOnceWithExactly(warn,
-            'DATADOG TRACER DIAGNOSTIC - Live Debugger/Dynamic Instrumentation is disabled, ' +
-            `because it is not supported on ${runtime}.`)
-        })
-
-        it('should not explain why Live Debugger/Dynamic Instrumentation is disabled without startup logs', () => {
-          config.startupLogs = false
-
-          DynamicInstrumentation.start(config, rc)
-
-          sinon.assert.notCalled(warn)
-          sinon.assert.notCalled(Worker)
-        })
-      })
-    }
 
     it('should unref all handles to prevent keeping process alive', () => {
       DynamicInstrumentation.start(config, rc)

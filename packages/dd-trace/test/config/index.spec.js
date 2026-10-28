@@ -29,6 +29,7 @@ const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
 
 describe('Config', () => {
   let log
+  let logWriter
   let pkg
   let env
   let fs
@@ -67,6 +68,7 @@ describe('Config', () => {
     sinon.spy(log, 'info')
     sinon.spy(log, 'warn')
     sinon.spy(log, 'error')
+    logWriter = { warn: sinon.stub() }
     const loadParsers = proxyquire.noPreserveCache()
     const parsers = loadParsers('../../src/config/parsers', {})
     const loadSupportedConfigurations = proxyquire.noPreserveCache()
@@ -89,6 +91,7 @@ describe('Config', () => {
     const createConfig = loadConfig('../../src/config', {
       './defaults': configDefaults,
       '../log': log,
+      '../log/writer': logWriter,
       '../telemetry': { updateConfig },
       '../serverless': serverless,
       'node:fs': fs,
@@ -5973,6 +5976,107 @@ rules:
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS, undefined)
     })
   })
+
+  for (const [runtime, versions] of [
+    ['Bun', { bun: '1.4.3' }],
+    ['Deno', { deno: '2.9.6' }],
+  ]) {
+    context(`on ${runtime}`, () => {
+      const debuggerDiagnostic = 'DATADOG TRACER DIAGNOSTIC - Live Debugger/Dynamic Instrumentation is disabled, ' +
+        `because it is not supported on ${runtime}.`
+      const failedTestReplayDiagnostic = 'DATADOG TRACER DIAGNOSTIC - Failed Test Replay is disabled, ' +
+        `because Live Debugger/Dynamic Instrumentation is not supported on ${runtime}.`
+
+      let versionsStub
+
+      beforeEach(() => {
+        versionsStub = sinon.stub(process, 'versions').value({ ...process.versions, ...versions })
+        // Startup logs are disabled by default in v5
+        process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      })
+
+      afterEach(() => {
+        versionsStub.restore()
+      })
+
+      it('should disable Live Debugger/Dynamic Instrumentation enabled by an environment variable', () => {
+        process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        assert.strictEqual(config.getOrigin('dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED'), 'calculated')
+        assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+          { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: false, origin: 'calculated' },
+        ])
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should disable Live Debugger/Dynamic Instrumentation enabled programmatically', () => {
+        const config = getConfig({ dynamicInstrumentation: { enabled: true } })
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should disable Live Debugger/Dynamic Instrumentation enabled by Remote Config', () => {
+        const config = getConfig()
+
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+
+        // The rest of a later update still applies
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true', DD_TRACE_SAMPLE_RATE: '0.5' })
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        assert.strictEqual(config.sampleRate, 0.5)
+
+        config.setRemoteConfig(null)
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should explain only once why Live Debugger/Dynamic Instrumentation is disabled', () => {
+        process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+
+        const config = getConfig()
+        // Recalculates the config, starting from the environment variable again
+        config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should not explain why Live Debugger/Dynamic Instrumentation is disabled without startup logs', () => {
+        process.env.DD_TRACE_STARTUP_LOGS = 'false'
+        process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        sinon.assert.notCalled(logWriter.warn)
+      })
+
+      it('should disable Failed Test Replay without explaining why when it is enabled by default', () => {
+        const config = getConfig()
+
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED, false)
+        sinon.assert.notCalled(logWriter.warn)
+      })
+
+      it('should disable Failed Test Replay enabled by an environment variable', () => {
+        process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED, false)
+        sinon.assert.calledOnceWithExactly(logWriter.warn, failedTestReplayDiagnostic)
+      })
+    })
+  }
 
   context('Feature Flagging configuration source', () => {
     it('enables evaluation counts by default', () => {

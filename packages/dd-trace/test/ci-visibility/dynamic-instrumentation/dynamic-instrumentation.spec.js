@@ -23,7 +23,6 @@ describe('test visibility with dynamic instrumentation', () => {
     if (childProcess) {
       childProcess.kill()
     }
-    sinon.restore()
   })
 
   it('can grab local variables', (done) => {
@@ -520,33 +519,6 @@ describe('test visibility with dynamic instrumentation', () => {
     sinon.assert.calledTwice(session.post.withArgs('Debugger.enable'))
     sinon.assert.notCalled(breakpointSetChannel.postMessage)
   })
-
-  for (const [runtime, versions] of [
-    ['Bun', { bun: '1.4.3' }],
-    ['Deno', { node: '26.0.0', deno: '2.9.6' }],
-  ]) {
-    it(`does not create a client on ${runtime}`, () => {
-      sinon.stub(process, 'versions').value({ ...process.versions, ...versions })
-      const Worker = sinon.stub()
-      const logGenericError = sinon.stub()
-      const createDynamicInstrumentation = proxyquire('../../../src/ci-visibility/dynamic-instrumentation', {
-        worker_threads: {
-          Worker,
-          threadId: 0,
-        },
-        '../../startup-log': {
-          logGenericError,
-        },
-      })
-
-      assert.strictEqual(createDynamicInstrumentation({}), undefined)
-      assert.strictEqual(createDynamicInstrumentation({}), undefined)
-
-      sinon.assert.notCalled(Worker)
-      sinon.assert.calledOnceWithExactly(logGenericError,
-        `Failed Test Replay is disabled, because Live Debugger/Dynamic Instrumentation is not supported on ${runtime}.`)
-    })
-  }
 
   it('serializes probe replacement, cancels queued setup, and releases removed state', async () => {
     const worker = new EventEmitter()

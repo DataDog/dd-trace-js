@@ -45,7 +45,6 @@ describe('CiPlugin', () => {
   let CiPlugin
   let distributionMetric
   let getCodeOwnersFileEntries
-  let getDiClient
   let getRepositoryRoot
   let getTestEnvironmentMetadata
   let incrementCountMetric
@@ -53,13 +52,11 @@ describe('CiPlugin', () => {
   beforeEach(() => {
     distributionMetric = sinon.stub()
     getCodeOwnersFileEntries = sinon.stub()
-    getDiClient = sinon.stub()
     getRepositoryRoot = sinon.stub()
     getTestEnvironmentMetadata = sinon.stub().returns(getTestEnvironmentMetadataPayload())
     incrementCountMetric = sinon.stub()
 
     CiPlugin = proxyquire('../../src/plugins/ci_plugin', {
-      '../ci-visibility/dynamic-instrumentation': getDiClient,
       '../ci-visibility/telemetry': {
         ...require('../../src/ci-visibility/telemetry'),
         distributionMetric,
@@ -667,22 +664,6 @@ describe('CiPlugin', () => {
     plugin.addDiProbe(error)
 
     assert.deepStrictEqual(addLineProbe.firstCall.args[0], { file, line })
-  })
-
-  it('does not add a DI probe on runtimes that cannot run Live Debugger/Dynamic Instrumentation', () => {
-    const plugin = createPlugin('jest_worker')
-    // The client factory returns nothing on runtimes like Bun and Deno
-    getDiClient.returns(undefined)
-    plugin.configure({
-      enabled: false,
-      isTestDynamicInstrumentationEnabled: true,
-      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker' },
-    })
-    const error = { stack: `Error: test failed\n    at test (${plugin.repositoryRoot}/test.js:23:5)` }
-
-    assert.strictEqual(plugin.addDiProbe(error), undefined)
-    sinon.assert.calledOnce(getDiClient)
-    assert.strictEqual(plugin.di, undefined)
   })
 
   it('adds a new DI probe after removing one from the same location', async () => {

@@ -6,7 +6,6 @@ const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
 const dc = require('dc-polyfill')
 const log = require('../log')
-const { warn } = require('../log/writer')
 const { fetchAgentInfo } = require('../agent/info')
 const telemetryMetrics = require('../telemetry/metrics')
 const { logGenericError } = require('../startup-log')
@@ -22,7 +21,6 @@ const {
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
 const { PauseDurationHistogram } = require('./pause-duration-histogram')
 const { configureProbeSampler, installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
-const { getUnsupportedRuntime } = require('./unsupported-runtime')
 
 /**
  * @typedef {ReturnType<import('../config')>} Config
@@ -50,7 +48,6 @@ let guardrailMetrics = null
 /** @type {PauseDurationHistogram | null} */
 let pauseDurations = null
 let metricsFlushTimer = null
-let isUnsupportedRuntimeReported = false
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
@@ -74,30 +71,13 @@ function isStarted () {
  * Start the Debugger worker thread.
  * Creates a worker thread, sets up message channels, and registers
  * the LIVE_DEBUGGING product handler with remote config.
- * Does nothing if the worker is already started, or if the runtime isn't supported.
+ * Does nothing if the worker is already started.
  *
  * @param {Config} config - The tracer configuration object
  * @param {RemoteConfig} rcInstance - The RemoteConfig instance
  */
 function start (config, rcInstance) {
   if (worker !== null) return
-
-  const unsupportedRuntime = getUnsupportedRuntime()
-  if (unsupportedRuntime !== undefined) {
-    if (!isUnsupportedRuntimeReported) {
-      isUnsupportedRuntimeReported = true
-      // `logGenericError` drops messages logged before the tracer is created, which is when
-      // DD_DYNAMIC_INSTRUMENTATION_ENABLED starts Live Debugger/Dynamic Instrumentation.
-      if (config.startupLogs) {
-        warn(
-          'DATADOG TRACER DIAGNOSTIC - Live Debugger/Dynamic Instrumentation is disabled, ' +
-          `because it is not supported on ${unsupportedRuntime}.`
-        )
-      }
-    }
-    return
-  }
-
   if (config.DD_AGENTLESS_ENABLED && getDebuggerConfig(config) === undefined) {
     log.error('[debugger] Invalid DD_SITE for agentless Dynamic Instrumentation: %s', config.site)
     return
