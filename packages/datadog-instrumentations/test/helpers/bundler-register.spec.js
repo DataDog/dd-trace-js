@@ -1,7 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const Module = require('node:module')
+const vm = require('node:vm')
 
 const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
@@ -9,17 +11,155 @@ const sinon = require('sinon')
 const instrumentationUtils = require('../../src/helpers/instrumentation-utils')
 
 const CHANNEL = 'dd-trace:bundler:load'
+const BUNDLER = Symbol.for('dd-trace:bundler')
+const registerSource = fs.readFileSync(require.resolve('../../src/helpers/bundler-register'), 'utf8')
 
 describe('bundler register', () => {
   let originalRequire
+  let originalRecord
 
   beforeEach(() => {
     originalRequire = Module.prototype.require
+    originalRecord = globalThis[BUNDLER]
+    delete globalThis[BUNDLER]
   })
 
   afterEach(() => {
     Module.prototype.require = originalRequire
+    if (originalRecord === undefined) delete globalThis[BUNDLER]
+    else globalThis[BUNDLER] = originalRecord
     sinon.restore()
+  })
+
+  describe('built-in startup protocol', () => {
+    const HOOKED_BUILTINS = [['http'], ['https'], ['dns'], ['dns/promises'], ['fs']]
+    let moduleLoadListDescriptor
+
+    beforeEach(() => {
+      moduleLoadListDescriptor = Object.getOwnPropertyDescriptor(process, 'moduleLoadList')
+    })
+
+    afterEach(() => {
+      Object.defineProperty(process, 'moduleLoadList', moduleLoadListDescriptor)
+    })
+
+    it('patches every loaded hooked built-in when a bundle ran before the tracer, then syncs once', () => {
+      globalThis[BUNDLER] = { bundlers: ['webpack'] }
+      const { requireBuiltin, sync } = loadBuiltinRegister()
+
+      assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
+      sinon.assert.calledOnce(sync)
+      sinon.assert.callOrder(requireBuiltin, sync)
+    })
+
+    it('does not mistake a record without bundles for a bundle that ran before the tracer', () => {
+      globalThis[BUNDLER] = { bundlers: [] }
+      const { requireBuiltin, sync } = loadBuiltinRegister()
+
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
+    })
+
+    it('patches once when the first bundle loads after the tracer', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister()
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
+
+      globalThis[BUNDLER].onBundle('esbuild')
+      globalThis[BUNDLER].onBundle('webpack')
+
+      assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
+      sinon.assert.calledOnce(sync)
+    })
+
+    it('leaves built-ins nobody loaded alone until a later bundle loads them', () => {
+      globalThis[BUNDLER] = { bundlers: ['webpack'] }
+      const { requireBuiltin, sync, moduleLoadList } = loadBuiltinRegister({ loaded: ['http', 'fs'] })
+
+      assert.deepStrictEqual(requireBuiltin.args, [['http'], ['fs']])
+      sinon.assert.calledOnce(sync)
+
+      moduleLoadList.push('NativeModule dns')
+      globalThis[BUNDLER].onBundle('esbuild')
+
+      assert.deepStrictEqual(requireBuiltin.args, [['http'], ['fs'], ['dns']])
+      sinon.assert.calledTwice(sync)
+
+      globalThis[BUNDLER].onBundle('esbuild')
+      assert.equal(requireBuiltin.callCount, 3)
+      sinon.assert.calledTwice(sync)
+    })
+
+    it('patches every hooked built-in when the loaded built-ins are unknown', () => {
+      globalThis[BUNDLER] = { bundlers: ['webpack'] }
+      const { requireBuiltin, sync } = loadBuiltinRegister({ moduleLoadListMissing: true })
+
+      assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
+      sinon.assert.calledOnce(sync)
+    })
+
+    it('does not touch built-ins in an unbundled process', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister()
+
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
+    })
+
+    it('patches every hooked built-in for a tracer bundled without a Datadog plugin', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true })
+
+      assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
+      sinon.assert.calledOnce(sync)
+    })
+
+    it('skips disabled instrumentations and serverless exclusions', () => {
+      globalThis[BUNDLER] = { bundlers: ['webpack'] }
+      const { requireBuiltin } = loadBuiltinRegister({ disabled: new Set(['http', 'dns']), serverless: true })
+
+      assert.deepStrictEqual(requireBuiltin.args, [['https'], ['dns/promises']])
+    })
+
+    it('does not sync when every hooked built-in is disabled', () => {
+      globalThis[BUNDLER] = { bundlers: ['webpack'] }
+      const disabled = new Set(['http', 'https', 'dns', 'dns/promises', 'fs'])
+      const { requireBuiltin, sync } = loadBuiltinRegister({ disabled })
+
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
+    })
+
+    it('contains a failing require, continues with the other built-ins, and does not retry', () => {
+      const error = new Error('builtin unavailable')
+      const { requireBuiltin, sync, log } = loadBuiltinRegister()
+      requireBuiltin.withArgs('http').throws(error)
+
+      globalThis[BUNDLER].onBundle('webpack')
+
+      assert.deepStrictEqual(requireBuiltin.args, HOOKED_BUILTINS)
+      sinon.assert.calledWithExactly(log.error, 'Error instrumenting bundled built-in %s: %s',
+        'http', error.message, error)
+      sinon.assert.calledOnce(sync)
+      globalThis[BUNDLER].onBundle('esbuild')
+      assert.equal(requireBuiltin.callCount, HOOKED_BUILTINS.length)
+    })
+
+    it('does not sync when every require fails', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister()
+      requireBuiltin.throws(new Error('unavailable'))
+
+      globalThis[BUNDLER].onBundle('webpack')
+      sinon.assert.notCalled(sync)
+    })
+
+    it('contains a failing ESM synchronization', () => {
+      const { sync, log } = loadBuiltinRegister()
+      const error = new Error('sync failed')
+      sync.throws(error)
+
+      globalThis[BUNDLER].onBundle('webpack')
+      sinon.assert.calledWithExactly(log.error, 'Error synchronizing bundled built-in ESM exports: %s',
+        error.message, error)
+    })
   })
 
   it('patches modules published by existing bundlers', () => {
@@ -314,6 +454,62 @@ describe('bundler register', () => {
  */
 function throwValue (value) {
   throw value
+}
+
+/**
+ * Execute the real CommonJS entrypoint with the module wrapper supplied by Node or a bundler.
+ * @param {{
+ *   bundled?: boolean,
+ *   disabled?: Set<string>,
+ *   serverless?: boolean,
+ *   loaded?: string[],
+ *   moduleLoadListMissing?: boolean
+ * }} [options]
+ */
+function loadBuiltinRegister ({
+  bundled = false,
+  disabled = new Set(),
+  serverless = false,
+  loaded = ['http', 'https', 'dns', 'dns/promises', 'fs'],
+  moduleLoadListMissing = false,
+} = {}) {
+  const moduleLoadList = loaded.map(name => `NativeModule ${name}`)
+  Object.defineProperty(process, 'moduleLoadList', {
+    value: moduleLoadListMissing ? undefined : moduleLoadList,
+    configurable: true,
+  })
+  const requireBuiltin = sinon.stub(Module.prototype, 'require').returns({})
+  const sync = sinon.stub(Module, 'syncBuiltinESMExports')
+  const log = { error: sinon.stub() }
+  const stubs = {
+    module: Module,
+    'node:module': Module,
+    'dc-polyfill': { subscribe: sinon.stub() },
+    '../../../dd-trace/src/log': log,
+    '../../../dd-trace/src/serverless': { IS_SERVERLESS: serverless },
+    './register.js': {},
+    './instrumentation-utils': { getDisabledInstrumentations: () => disabled },
+    './hooks': {
+      http () {},
+      https () {},
+      dns () {},
+      'dns/promises' () {},
+      fs: { serverless: false, fn () {} },
+      express () {},
+    },
+    './instrumentations': {},
+    './shared-utils': {
+      isNodeBuiltinModuleName: name => Module.builtinModules.includes(name.replace(/^node:/, '')),
+    },
+    './rewriter/targets': {},
+  }
+  const wrapped = vm.runInThisContext(Module.wrap(registerSource))
+  const mod = bundled ? { exports: {} } : new Module(__filename)
+  wrapped(mod.exports, name => {
+    assert.ok(Object.hasOwn(stubs, name), `Unexpected startup dependency: ${name}`)
+    return stubs[name]
+  }, mod, __filename, __dirname)
+  return { requireBuiltin, sync, log, moduleLoadList }
 }
 
 /**
