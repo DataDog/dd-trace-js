@@ -149,6 +149,54 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     testOutput = ''
     await receiver.stop()
   })
+
+  for (const dynamic of [false, true]) {
+    const nativeRetryIt = dynamic ? dynamicAtrIt : retryEventsIt
+    nativeRetryIt(`attributes runtime native retry overrides correctly (dynamic=${dynamic})`, async () => {
+      receiver.setSettings({
+        itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
+      })
+      childProcess = exec('./node_modules/.bin/mocha ci-visibility/mocha-native-retries/retry-test.js', {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(dynamic),
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,5,5,5,5',
+        },
+      })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          for (const [name, count] of [
+            ['inherited', 2],
+            ['native override 1', 2], ['native override 1 once', 2],
+            ['native override 2', 3], ['native override 2 once', 3],
+            ['stops ATR on retry fail', 2], ['stops ATR on retry pass', 2],
+            ['extends native budget on ATR retry', 4], ['afterEach changes budget fails', 2],
+          ]) {
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+            assert.strictEqual(attempts.length, count, name)
+            const hasAtrAttempts = !name.startsWith('native override')
+            const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, count - 1, name)
+            for (const [index, retry] of retries.entries()) {
+              const isAtr = hasAtrAttempts && (name !== 'extends native budget on ATR retry' || index === 0)
+              const reason = isAtr ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
+              assert.strictEqual(retry.meta[TEST_RETRY_REASON], reason, `${name}, retry ${index + 1}`)
+            }
+            const finalStatus = name === 'stops ATR on retry pass' ? 'pass' : 'fail'
+            assert.strictEqual(attempts.at(-1).meta[TEST_STATUS], finalStatus, name)
+            assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], finalStatus, name)
+            assert.strictEqual(attempts.filter(test => test.meta[TEST_FINAL_STATUS] === finalStatus).length, 1, name)
+          }
+        })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 8)
+    })
+  }
+
   context('early flake detection', () => {
     it('retries new tests', (done) => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
