@@ -47,7 +47,8 @@ function wrapRedis (Redis) {
   })
   // The close handler moves in-flight commands to `prevCommandQueue` right before this.
   shimmer.wrap(Redis.prototype, 'setStatus', setStatus => function (status, arg) {
-    const queue = status === 'reconnecting' && this.prevCommandQueue
+    const queue = status === 'reconnecting' && startCh.hasSubscribers &&
+      this.options?.autoResendUnfulfilledCommands && this.prevCommandQueue
     if (queue) {
       for (let i = 0; i < queue.length; i++) {
         const { command } = queue.get(i)
