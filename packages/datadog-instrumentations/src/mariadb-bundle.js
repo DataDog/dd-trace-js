@@ -107,6 +107,49 @@ function normalizeSql (command) {
 }
 
 /**
+ * @param {unknown} original
+ * @param {unknown} injected
+ * @param {unknown} originalSql
+ * @param {boolean} [mirrorOptions]
+ * @returns {unknown}
+ */
+function withInjectedSql (original, injected, originalSql, mirrorOptions) {
+  if (typeof originalSql !== 'string' || !originalSql || typeof injected !== 'string') {
+    return original
+  }
+
+  if (typeof original === 'string') return injected
+
+  const command = { ...original, sql: injected }
+  if (mirrorOptions) {
+    const enumerable = Object.getOwnPropertyDescriptor(original, 'metaAsArray')?.enumerable ?? true
+    Object.defineProperty(command, 'metaAsArray', {
+      configurable: true,
+      enumerable,
+      get () { return original.metaAsArray },
+      /** @param {boolean} value */
+      set (value) { original.metaAsArray = value },
+    })
+  }
+  return command
+}
+
+/**
+ * @param {{ sql: unknown }} ctx
+ * @param {Function} command
+ * @param {ArgumentsLike} args
+ * @param {unknown} originalSql
+ * @param {unknown} [preparedSql]
+ * @param {boolean} [mirrorOptions]
+ */
+function runSqlCommand (ctx, command, args, originalSql, preparedSql, mirrorOptions) {
+  if (preparedSql === undefined && ctx.sql !== originalSql) {
+    args[0] = withInjectedSql(args[0], ctx.sql, originalSql, mirrorOptions)
+  }
+  return command.apply(this, args)
+}
+
+/**
  * Parses connection options without allowing instrumentation to break the factory call.
  *
  * @param {Function} defaultOptions
@@ -584,7 +627,8 @@ function createWrapPromiseCommand (
       if (!startCh.hasSubscribers) return command.apply(this, arguments)
 
       const owner = trackActiveCommands ? (commandOwner ?? this) : undefined
-      const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
+      const originalSql = preparedSql ?? normalizeSql(sql)
+      const ctx = { sql: originalSql, conf: options }
       const acquisition = poolAcquisition === undefined
         ? undefined
         : createPoolAcquisition(this, options, ctx, poolAcquisition)
@@ -594,7 +638,7 @@ function createWrapPromiseCommand (
       let result
       try {
         result = acquisition === undefined
-          ? startCh.runStores(ctx, command, this, ...arguments)
+          ? startCh.runStores(ctx, runSqlCommand, this, ctx, command, arguments, originalSql, preparedSql)
           : runPoolAcquisition(acquisition, command, this, arguments)
       } catch (error) {
         finishPoolCommandAcquisition(acquisition, error)
@@ -624,7 +668,7 @@ function createWrapPromiseCommand (
  * @param {number} [commandArity] Original arity when command is wrapped by a variadic forwarding function.
  * @param {boolean} [trackActiveCommands]
  * @param {'measure' | 'observe'} [poolAcquisition]
- * @returns {(command: Function) => Function}
+ * @returns {(command: Function, method?: string) => Function}
  */
 function createWrapCallbackCommand (
   options,
@@ -634,7 +678,11 @@ function createWrapCallbackCommand (
   trackActiveCommands = true,
   poolAcquisition
 ) {
-  return function wrapCommand (command) {
+  /**
+   * @param {Function} command
+   * @param {string} [method]
+   */
+  return function wrapCommand (command, method) {
     const callbackIndex = (commandArity ?? command.length) - 1
 
     return function (sql) {
@@ -642,7 +690,10 @@ function createWrapCallbackCommand (
 
       const owner = trackActiveCommands ? (commandOwner ?? this) : undefined
       const callback = arguments[arguments.length - 1]
-      const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
+      const mirrorOptions = method === 'execute' ||
+        (method === 'query' && (typeof callback === 'function' || typeof arguments[1] === 'function'))
+      const originalSql = preparedSql ?? normalizeSql(sql)
+      const ctx = { sql: originalSql, conf: options }
       const acquisition = poolAcquisition === undefined
         ? undefined
         : createPoolAcquisition(this, options, ctx, poolAcquisition)
@@ -667,7 +718,9 @@ function createWrapCallbackCommand (
 
       try {
         return acquisition === undefined
-          ? startCh.runStores(ctx, command, this, ...arguments)
+          ? startCh.runStores(
+            ctx, runSqlCommand, this, ctx, command, arguments, originalSql, preparedSql, mirrorOptions
+          )
           : runPoolAcquisition(acquisition, command, this, arguments)
       } catch (error) {
         finishPoolCommandAcquisition(acquisition, error)
@@ -692,12 +745,13 @@ function createWrapStream (options, preparedSql, commandOwner) {
       if (!startCh.hasSubscribers) return streamMethod.apply(this, arguments)
 
       const owner = commandOwner ?? this
-      const ctx = { sql: preparedSql ?? normalizeSql(sql), conf: options }
+      const originalSql = preparedSql ?? normalizeSql(sql)
+      const ctx = { sql: originalSql, conf: options }
       let stream
 
       startCommand(owner)
       try {
-        stream = startCh.runStores(ctx, streamMethod, this, ...arguments)
+        stream = startCh.runStores(ctx, runSqlCommand, this, ctx, streamMethod, arguments, originalSql, preparedSql)
       } catch (error) {
         finishCommand(ctx, owner, error)
         throw error
@@ -732,14 +786,18 @@ function createWrapStream (options, preparedSql, commandOwner) {
  * Wraps command methods exposed by a bundled client.
  *
  * @param {object} client
- * @param {(command: Function) => Function} wrapper
+ * @param {(command: Function, method?: string) => Function} wrapper
  */
 function wrapClientCommands (client, wrapper) {
   if (wrappedClients.has(client)) return
 
   wrappedClients.add(client)
   for (const method of commandMethods) {
-    if (typeof client[method] === 'function') shimmer.wrap(client, method, wrapper)
+    if (typeof client[method] === 'function') {
+      /** @param {Function} command */
+      function wrapMethod (command) { return wrapper(command, method) }
+      shimmer.wrap(client, method, wrapMethod)
+    }
   }
 }
 
@@ -1570,4 +1628,4 @@ function wrapCallbackBundle (mariadb) {
   ])
 }
 
-module.exports = { wrapCallbackBundle, wrapPromiseBundle }
+module.exports = { normalizeSql, runSqlCommand, wrapCallbackBundle, wrapPromiseBundle }

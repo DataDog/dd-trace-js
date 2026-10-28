@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const dc = require('node:diagnostics_channel')
 const net = require('node:net')
-const { inspect } = require('node:util')
+const { inspect, promisify } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const { version: ddpv } = require('mocha/package.json')
@@ -698,6 +698,27 @@ describe('Plugin', () => {
         describe('with service mode using plugin configurations', () => {
           beforeEach(() => connect({ dbmPropagationMode: 'service', service: 'serviced' }))
 
+          /**
+           * @param {(connection: import('mariadb/callback').Connection) => Promise<void>} run
+           */
+          async function withCallbackConnection (run) {
+            const callbackDriver = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+            const callbackConnection = callbackDriver.createConnection({
+              host: 'localhost',
+              user: 'root',
+              database: 'db',
+            })
+            const connect = promisify(callbackConnection.connect).bind(callbackConnection)
+            const end = promisify(callbackConnection.end).bind(callbackConnection)
+
+            await connect()
+            try {
+              await run(callbackConnection)
+            } finally {
+              await end()
+            }
+          }
+
           it('should send the comment to the server in the query text', async () => {
             const marker = `dbm_service_${Date.now()}`
 
@@ -731,13 +752,52 @@ describe('Plugin', () => {
             assert.match(await receivedQuery(marker), /^\/\*dddb='db',dddbs='serviced',/)
           })
 
+          it('should send the comment through the callback API', async () => {
+            await withCallbackConnection(async callbackConnection => {
+              const query = promisify(callbackConnection.query).bind(callbackConnection)
+              for (const object of [false, true]) {
+                const marker = `dbm_callback_${object}_${Date.now()}`
+                const sql = `SELECT ? AS ${marker}`
+                const command = object ? { sql } : sql
+                const rows = await query(command, [42])
+
+                assert.strictEqual(Number(rows[0][marker]), 42)
+                assert.match(await receivedQuery(marker), /^\/\*dddb='db',dddbs='serviced',/)
+                if (object) assert.strictEqual(command.sql, sql)
+              }
+            })
+          })
+
+          it('should preserve native callback errors for invalid SQL', async () => {
+            for (const sql of [undefined, null, 0, false, NaN]) {
+              await withCallbackConnection(async callbackConnection => {
+                assert.throws(() => callbackConnection.query(sql, () => {}), TypeError)
+              })
+            }
+            await withCallbackConnection(async callbackConnection => {
+              const query = promisify(callbackConnection.query).bind(callbackConnection)
+              await assert.rejects(query(''), { errno: 1065 })
+            })
+          })
+
+          it('should preserve native errors for invalid SQL', async () => {
+            assert.throws(() => connection.query(null), TypeError)
+
+            const legacy = semver.intersects(version, '<3')
+            for (const sql of [undefined, 0, false, NaN]) {
+              await assert.rejects(connection.query(sql), legacy ? TypeError : { errno: 45049 })
+            }
+            await assert.rejects(connection.query(''), { errno: legacy ? 1065 : 45049 })
+          })
+
           it('should not change the span resource', async () => {
             const marker = `dbm_resource_${Date.now()}`
-            const assertion = agent.assertFirstTraceSpan({ resource: `SELECT 1 + 1 AS ${marker}` })
-
-            await connection.query(`SELECT 1 + 1 AS ${marker}`)
-
-            await assertion
+            await Promise.all([
+              agent.assertFirstTraceSpan({ resource: `SELECT 1 + 1 AS ${marker}` }, {
+                spanResourceMatch: new RegExp(marker),
+              }),
+              connection.query(`SELECT 1 + 1 AS ${marker}`),
+            ])
           })
         })
 
@@ -765,11 +825,13 @@ describe('Plugin', () => {
           })
 
           it('should tag the span with _dd.dbm_trace_injected', async () => {
-            const assertion = agent.assertFirstTraceSpan({ meta: { '_dd.dbm_trace_injected': 'true' } })
-
-            await connection.query(`SELECT 1 + 1 AS dbm_injected_${Date.now()}`)
-
-            await assertion
+            const marker = `dbm_injected_${Date.now()}`
+            await Promise.all([
+              agent.assertFirstTraceSpan({ meta: { '_dd.dbm_trace_injected': 'true' } }, {
+                spanResourceMatch: new RegExp(marker),
+              }),
+              connection.query(`SELECT 1 + 1 AS ${marker}`),
+            ])
           })
         })
       })
