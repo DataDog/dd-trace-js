@@ -60,7 +60,6 @@ describe('OpenFeature Module', () => {
     it('does not create an exposure writer or subscribe when Datadog exposure logging is disabled', () => {
       config.featureFlags = { DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED: false }
       openfeatureModule.enable(config)
-      openfeatureModule.disable()
 
       sinon.assert.notCalled(ExposuresWriterStub)
       sinon.assert.notCalled(setEventDeliveryStrategyStub)
