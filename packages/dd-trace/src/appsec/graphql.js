@@ -15,6 +15,7 @@ const addresses = require('./addresses')
 const {
   startGraphqlResolver,
   graphqlMiddlewareChannel,
+  wafRunFinished,
   apolloHttpServerChannel,
   apolloChannel,
   apolloServerCoreChannel,
@@ -25,7 +26,9 @@ const graphqlRequestData = new WeakMap()
 
 /**
  * Per request, the blocking action of every field already checked without arguments, `undefined` when the WAF
- * requested none.
+ * requested none. A `{ fieldName: {} }` payload exposes nothing but the field name, so the WAF returns the same
+ * action for every occurrence of that field, as long as the request's WAF context keeps the same persistent
+ * inputs. List queries resolve the same fields once per item.
  *
  * @type {WeakMap<object, Map<string, object | undefined>>}
  */
@@ -53,36 +56,42 @@ function onGraphqlStartResolver (data) {
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
   const fieldName = getFieldNameWithoutArguments(resolverInfo)
-  if (fieldName === undefined) {
-    applyBlockingAction(req, data, runWafOnResolver(resolverInfo, req))
+  const knownActions = fieldName === undefined ? undefined : fieldsWithoutArgumentsActions.get(req)
+  if (knownActions?.has(fieldName)) {
+    applyBlockingAction(req, data, knownActions.get(fieldName))
     return
   }
 
-  // `{ fieldName: {} }` exposes nothing but the field name, so the WAF returns the same action for every
-  // occurrence of that field in the request. List queries resolve the same fields once per item.
-  let blockingActions = fieldsWithoutArgumentsActions.get(req)
-  if (blockingActions === undefined) {
-    blockingActions = new Map()
-    fieldsWithoutArgumentsActions.set(req, blockingActions)
-  } else if (blockingActions.has(fieldName)) {
-    applyBlockingAction(req, data, blockingActions.get(fieldName))
-    return
+  const result = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
+  const blockingAction = getBlockingAction(result?.actions)
+
+  // A run that timed out, failed, or found no rule to evaluate is not an answer about the field, so let the next
+  // occurrence run again instead of reading it back as "allowed".
+  if (fieldName !== undefined && result !== undefined && !result.timeout) {
+    if (knownActions === undefined) {
+      fieldsWithoutArgumentsActions.set(req, new Map([[fieldName, blockingAction]]))
+    } else {
+      knownActions.set(fieldName, blockingAction)
+    }
   }
 
-  const blockingAction = runWafOnResolver(resolverInfo, req)
-  blockingActions.set(fieldName, blockingAction)
   applyBlockingAction(req, data, blockingAction)
 }
 
 /**
- * @param {object} resolverInfo
- * @param {object} req
- * @returns {object | undefined} the blocking action the WAF requested, when it requested one
+ * Persistent inputs stay in the request's WAF context, so they can change the action of a field checked before
+ * they arrived. Forget what we know about the request when a run carries them. Resolver runs send ephemeral
+ * inputs only, so they never invalidate their own answers.
+ *
+ * @param {{ payload?: { persistent?: object } }} data
  */
-function runWafOnResolver (resolverInfo, req) {
-  const result = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
+function onWafRunFinished ({ payload }) {
+  if (!payload?.persistent) return
 
-  return getBlockingAction(result?.actions)
+  const req = getActiveRequest()
+  if (!req) return
+
+  fieldsWithoutArgumentsActions.delete(req)
 }
 
 /**
@@ -225,10 +234,12 @@ function disableApollo () {
 
 function enableGraphql () {
   startGraphqlResolver.subscribe(onGraphqlStartResolver)
+  wafRunFinished.subscribe(onWafRunFinished)
 }
 
 function disableGraphql () {
   if (startGraphqlResolver.hasSubscribers) startGraphqlResolver.unsubscribe(onGraphqlStartResolver)
+  if (wafRunFinished.hasSubscribers) wafRunFinished.unsubscribe(onWafRunFinished)
 }
 
 module.exports = {
