@@ -1600,6 +1600,7 @@ moduleTypes.forEach(({
           ), {
             Cypress: {
               config: name => {
+                if (name === 'retries') return retries
                 assert.strictEqual(name, 'isTextTerminal')
                 return isTextTerminal
               },
