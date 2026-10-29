@@ -58,6 +58,25 @@ Catch `ConfigurationFetchError` to handle loading failures using its `code` and 
 Use `require('dd-trace/openfeature/rules-based')` for CommonJS or named imports from
 `dd-trace/openfeature/rules-based.js` for native Node.js ESM.
 
+<h2 id="feature-flag-exposure-logging">Feature Flag Exposure Logging</h2>
+
+Built-in Datadog exposure logging is enabled by default (`DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED=true`).
+Set `DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED=false` before tracer initialization to disable exposure
+buffering and delivery to Datadog in both agentless and Remote Configuration modes. Local flag evaluation and
+application OpenFeature hooks continue to work.
+Only `false` (case-insensitive) or `0` disables exposure logging. The tracer ignores unrecognized values.
+
+Disabling Datadog exposure delivery prevents experiment results from using those Datadog-collected exposures. If you
+log exposures separately to your data warehouse, warehouse-native analysis can use that source instead.
+
+This switch is independent of [evaluation counts](#feature-flag-evaluation-counts), which remain enabled by default.
+Evaluation events can include targeting keys. By default, valid non-empty keys are sent as unsalted SHA-256 hashes.
+When the flag configuration sets `observeFullEvaluationData` to `true`, events can include raw keys and a bounded
+evaluation-context snapshot. To disable aggregated `flagevaluation` events as well, also set
+`DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false`.
+Span enrichment, OpenTelemetry evaluation metrics, and debug logging retain their own settings; this switch does not
+disable all Feature Flagging telemetry.
+
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 
 The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
