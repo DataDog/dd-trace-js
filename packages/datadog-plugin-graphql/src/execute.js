@@ -1348,15 +1348,7 @@ function createJitDefaultResolverInfo ({ rootCtx, descriptor, argumentFactory })
  * @returns {Record<string, Record<string, unknown>> | null}
  */
 function getResolverInfo (info, args) {
-  // graphql passes `{}` to fields declared without arguments. Only build a payload when there are values, so that
-  // subscribers such as AppSec skip those fields instead of running the WAF once per field on an empty object.
-  let resolverVars
-  if (args) {
-    for (const key of Object.keys(args)) {
-      resolverVars ??= {}
-      resolverVars[key] = args[key]
-    }
-  }
+  let resolverVars = args ? { ...args } : undefined
 
   const directives = info.fieldNodes?.[0]?.directives
   if (Array.isArray(directives)) {

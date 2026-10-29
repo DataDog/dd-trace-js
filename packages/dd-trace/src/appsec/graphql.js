@@ -2,6 +2,7 @@
 
 const log = require('../log')
 const web = require('../plugins/util/web')
+const { isEmpty } = require('../util')
 const { getActiveRequest } = require('./store')
 const {
   addSpecificEndpoint,
@@ -21,6 +22,13 @@ const {
 const { updateBlockFailureMetric } = require('./telemetry')
 
 const graphqlRequestData = new WeakMap()
+
+/**
+ * Per request, the blocking action (or `undefined`) of every field already checked without arguments.
+ *
+ * @type {WeakMap<object, Map<string, object | undefined>>}
+ */
+const fieldsWithoutArgumentsResults = new WeakMap()
 
 function enable () {
   enableApollo()
@@ -43,15 +51,63 @@ function onGraphqlStartResolver (data) {
   const resolverInfo = data.createResolverInfo?.(data)
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
+  // `{ fieldName: {} }` only exposes the field name, so the WAF result is the same for every occurrence of that
+  // field in the request. List queries resolve the same fields once per item.
+  const fieldName = getFieldNameWithoutArguments(resolverInfo)
+  let fieldResults
+  if (fieldName !== undefined) {
+    fieldResults = fieldsWithoutArgumentsResults.get(req)
+    if (fieldResults?.has(fieldName)) {
+      applyBlockingAction(req, data, fieldResults.get(fieldName))
+      return
+    }
+  }
+
   const result = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
   const blockingAction = getBlockingAction(result?.actions)
-  if (blockingAction) {
-    const requestData = graphqlRequestData.get(req)
-    if (requestData?.isInGraphqlRequest) {
-      requestData.blocked = true
-      requestData.wafAction = blockingAction
-      data.abortController?.abort()
+
+  if (fieldName !== undefined) {
+    if (!fieldResults) {
+      fieldResults = new Map()
+      fieldsWithoutArgumentsResults.set(req, fieldResults)
     }
+    fieldResults.set(fieldName, blockingAction)
+  }
+
+  applyBlockingAction(req, data, blockingAction)
+}
+
+/**
+ * @param {object} resolverInfo
+ * @returns {string | undefined} the field name when the payload is `{ fieldName: {} }`
+ */
+function getFieldNameWithoutArguments (resolverInfo) {
+  let fieldName
+  for (const key in resolverInfo) {
+    if (fieldName !== undefined) return
+    fieldName = key
+  }
+  if (fieldName === undefined) return
+
+  const fieldArguments = resolverInfo[fieldName]
+  if (!fieldArguments || typeof fieldArguments !== 'object' || !isEmpty(fieldArguments)) return
+
+  return fieldName
+}
+
+/**
+ * @param {object} req
+ * @param {{ abortController?: AbortController }} data
+ * @param {object | undefined} blockingAction
+ */
+function applyBlockingAction (req, data, blockingAction) {
+  if (!blockingAction) return
+
+  const requestData = graphqlRequestData.get(req)
+  if (requestData?.isInGraphqlRequest) {
+    requestData.blocked = true
+    requestData.wafAction = blockingAction
+    data.abortController?.abort()
   }
 }
 

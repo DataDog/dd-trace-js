@@ -46,17 +46,6 @@ function materializeResolverInfo (message) {
 }
 
 /**
- * Resolver info is `null` for fields without argument or directive values, so tests tracking which resolvers
- * published read the field name from the message instead.
- *
- * @param {{ info?: { fieldName: string }, descriptor?: { fieldName: string } }} message
- * @returns {string | undefined}
- */
-function getResolverFieldName (message) {
-  return message.info?.fieldName ?? message.descriptor?.fieldName
-}
-
-/**
  * @param {WeakRef<object>} reference
  * @returns {Promise<boolean>}
  */
@@ -1666,7 +1655,7 @@ void generatedResolver
         const resolverStartFields = []
         const onResolveStart = () => resolveStartCalls++
         /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
-        const onResolverStart = message => resolverStartFields.push(getResolverFieldName(message))
+        const onResolverStart = message => resolverStartFields.push(...Object.keys(materializeResolverInfo(message)))
 
         resolveStartChannel.subscribe(onResolveStart)
         resolverStartChannel.subscribe(onResolverStart)
@@ -1878,7 +1867,7 @@ void generatedResolver
         const resolverStartFields = []
         const onResolveStart = () => resolveStartCalls++
         /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
-        const onResolverStart = message => resolverStartFields.push(getResolverFieldName(message))
+        const onResolverStart = message => resolverStartFields.push(...Object.keys(materializeResolverInfo(message)))
 
         resolveStartChannel.subscribe(onResolveStart)
         resolverStartChannel.subscribe(onResolverStart)
@@ -2039,7 +2028,7 @@ void generatedResolver
         const resolverStartFields = []
         const onResolveStart = () => resolveStartCalls++
         /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
-        const onResolverStart = message => resolverStartFields.push(getResolverFieldName(message))
+        const onResolverStart = message => resolverStartFields.push(...Object.keys(materializeResolverInfo(message)))
 
         agent.reload('graphql', { depth: 0 })
         resolveStartChannel.subscribe(onResolveStart)
@@ -2080,7 +2069,9 @@ void generatedResolver
           )
           /** @param {Parameters<typeof materializeResolverInfo>[0] & { abortController: AbortController }} message */
           const onResolverStart = (message) => {
-            if (getResolverFieldName(message) === fieldName) message.abortController.abort()
+            const { abortController } = message
+            const resolverInfo = materializeResolverInfo(message)
+            if (resolverInfo[fieldName]) abortController.abort()
           }
 
           resolverStartChannel.subscribe(onResolverStart)
@@ -2123,7 +2114,9 @@ void generatedResolver
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
         /** @param {Parameters<typeof materializeResolverInfo>[0] & { abortController: AbortController }} message */
         const onResolverStart = (message) => {
-          if (getResolverFieldName(message) === 'name') message.abortController.abort()
+          const { abortController } = message
+          const resolverInfo = materializeResolverInfo(message)
+          if (resolverInfo.name) abortController.abort()
         }
 
         resolverStartChannel.subscribe(onResolverStart)
@@ -2261,9 +2254,9 @@ void generatedResolver
         /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
         const onResolverStart = (message) => {
           const resolverInfo = materializeResolverInfo(message)
-          const fieldName = getResolverFieldName(message)
+          const [fieldName] = Object.keys(resolverInfo)
           resolverStartCalls.set(fieldName, (resolverStartCalls.get(fieldName) ?? 0) + 1)
-          if (resolverInfo?.value) resolverArguments.push(resolverInfo.value)
+          if (resolverInfo.value) resolverArguments.push(resolverInfo.value)
         }
         resolveStartChannel.subscribe(onResolveStart)
         resolverStartChannel.subscribe(onResolverStart)
@@ -2411,7 +2404,7 @@ void generatedResolver
         /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
         const onResolverStart = (message) => {
           const resolverInfo = materializeResolverInfo(message)
-          if (resolverInfo?.value) resolverArguments.push(resolverInfo.value)
+          if (resolverInfo.value) resolverArguments.push(resolverInfo.value)
         }
         const cyclic = { name: 'caller-owned' }
         cyclic.self = cyclic
@@ -2531,7 +2524,7 @@ void generatedResolver
         /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
         const onResolverStart = (message) => {
           const resolverInfo = materializeResolverInfo(message)
-          if (resolverInfo?.value) readOnlyArguments.push(resolverInfo.value)
+          if (resolverInfo.value) readOnlyArguments.push(resolverInfo.value)
         }
 
         resolverStartChannel.subscribe(onResolverStart)
@@ -2740,7 +2733,8 @@ void generatedResolver
         /** @param {Parameters<typeof materializeResolverInfo>[0] & { abortController: AbortController }} message */
         const onResolver = (message) => {
           const { abortController } = message
-          resolverControllers.set(getResolverFieldName(message), abortController)
+          const resolverInfo = materializeResolverInfo(message)
+          resolverControllers.set(Object.keys(resolverInfo)[0], abortController)
         }
 
         const serialAssertion = agent.assertSomeTraces(traces => {
@@ -2968,9 +2962,7 @@ void generatedResolver
       const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
       const resolverInfos = []
       /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
-      const onResolverStart = message => {
-        resolverInfos.push([getResolverFieldName(message), materializeResolverInfo(message)])
-      }
+      const onResolverStart = message => resolverInfos.push(materializeResolverInfo(message))
 
       resolverStartChannel.subscribe(onResolverStart)
       try {
@@ -2983,7 +2975,7 @@ void generatedResolver
         resolverStartChannel.unsubscribe(onResolverStart)
       }
 
-      assert.deepStrictEqual(resolverInfos, [['user', null], ['name', null]])
+      assert.deepStrictEqual(resolverInfos, [{ user: {} }, { name: {} }])
     })
   })
 })

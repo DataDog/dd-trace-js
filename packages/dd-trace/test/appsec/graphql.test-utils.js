@@ -57,6 +57,10 @@ const resolvers = {
       })
     },
   },
+  Book: {
+    // An explicit resolver, so every Apollo version publishes this argument-less field to AppSec.
+    author: book => book.author,
+  },
 }
 
 async function makeGraphqlRequest (port, variables, derivativeParam, extraHeaders = {}) {
@@ -177,6 +181,30 @@ function graphqlCommonTests (config) {
         assert.strictEqual(e.response.status, 403)
         assert.deepStrictEqual(e.response.data, JSON.parse(customGraphqlJson))
       }
+    })
+  })
+
+  describe('Block on field name', () => {
+    beforeEach(() => {
+      appsec.enable(getConfigFresh({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'graphql-field-name-rules.json'),
+        },
+      }))
+      setTestBlockingTemplates()
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    it('Should block a request selecting a field without arguments', async () => {
+      const error = await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower').then(() => null, error => error)
+
+      assert.ok(error, 'Request should not return 200')
+      assert.strictEqual(error.response.status, 403)
+      assert.deepStrictEqual(error.response.data, JSON.parse(graphqlJson))
     })
   })
 
