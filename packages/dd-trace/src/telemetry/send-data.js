@@ -1,7 +1,9 @@
 'use strict'
 
 const request = require('../exporters/common/request')
+const { getEnvironmentVariable } = require('../config/helper')
 const log = require('../log')
+const { isTrue } = require('../util')
 const getAgentlessTelemetryUrl = require('./agentless-url')
 
 /**
@@ -138,6 +140,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
 
   const isCiVisibilityAgentlessMode = isCiVisibility && testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED
   const isApmTracingAgentlessMode = config.DD_AGENTLESS_ENABLED ||
+    isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED')) ||
     config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === 'agentless'
   const isAgentlessMode = isCiVisibilityAgentlessMode || isApmTracingAgentlessMode
 
