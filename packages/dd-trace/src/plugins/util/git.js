@@ -64,7 +64,10 @@ function sanitizedExec (
     }
     try {
       const exec = executionOptions?.uncached ? execFileSync : cachedExec
-      let result = exec('git', flags, { stdio: 'pipe' }).toString()
+      /** @type {import('node:child_process').ExecFileSyncOptions} */
+      const options = { stdio: 'pipe' }
+      if (executionOptions?.timeout) options.timeout = executionOptions.timeout
+      let result = exec('git', flags, options).toString()
 
       if (shouldTrim) {
         result = result.replaceAll(/(\r\n|\n|\r)/g, '')
@@ -615,7 +618,7 @@ function fetchHeadCommitSha (headSha, useDepth = true) {
         { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'fetch_head_commit_sha' } },
         { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'fetch_head_commit_sha' } },
         true,
-        { uncached: true, throwOnError: true }
+        { uncached: true, throwOnError: true, timeout: 5000 }
       )
       return shallow
     } catch {

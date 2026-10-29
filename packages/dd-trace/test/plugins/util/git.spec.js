@@ -952,6 +952,25 @@ describe('fetchHeadCommitSha', () => {
     sinon.assert.calledOnce(logErrorSpy)
   })
 
+  for (const missing of [false, true]) {
+    it(`bounds timed-out fetches for a ${missing ? 'missing' : 'local'} commit`, () => {
+      const error = Object.assign(new Error('spawnSync git ETIMEDOUT'), { code: 'ETIMEDOUT' })
+      execFileSyncStub.withArgs('git', sinon.match.array.startsWith(['fetch'])).throws(error)
+      if (missing) {
+        execFileSyncStub.withArgs('git', ['cat-file', '-e', 'abc123']).throws(new Error('Commit is missing'))
+      }
+
+      assert.strictEqual(fetchHeadCommitSha('abc123'), false)
+
+      const fetches = execFileSyncStub.getCalls().filter(call => call.args[1][0] === 'fetch')
+      assert.strictEqual(fetches.length, missing ? 2 : 1)
+      for (const call of fetches) {
+        assert.strictEqual(call.args[2].timeout, 5000)
+      }
+      assert.strictEqual(logErrorSpy.callCount, fetches.length)
+    })
+  }
+
   it('does not retry a failed original fetch for a local head', () => {
     execFileSyncStub.onCall(1).throws(new Error('Remote is unavailable'))
 
@@ -1131,6 +1150,38 @@ done
     assert.ok(fetches[0].args[1].includes('--depth=1'))
     assert.ok(!fetches[1].args[1].includes('--depth=1'))
   })
+
+  for (const operation of ['metadata', 'diff']) {
+    it(`continues after timed-out ${operation} recovery and can retry later`, () => {
+      const fetchOptions = []
+      const execute = (command, flags, options) => {
+        if (flags[0] === 'fetch') {
+          fetchOptions.push(options)
+          throw Object.assign(new Error('spawnSync git ETIMEDOUT'), { code: 'ETIMEDOUT' })
+        }
+        return cachedExecSpy(command, flags, options)
+      }
+      const gitUtils = proxyquire('../../../src/plugins/util/git', {
+        './git-cache': { cachedExec: execute },
+        'node:child_process': { execFileSync: execute },
+      })
+
+      if (operation === 'metadata') {
+        const metadata = gitUtils.getGitMetadata({ headCommitSha: headSha })
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], undefined)
+        assert.strictEqual(metadata[GIT_COMMIT_SHA], git(checkout, ['rev-parse', 'HEAD']))
+        assert.strictEqual(fetchOptions.length, 2)
+        assert.strictEqual(getGitMetadata({ headCommitSha: headSha })[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+      } else {
+        assert.strictEqual(gitUtils.getGitDiff(baseSha, headSha), '')
+        assert.strictEqual(fetchOptions.length, 4)
+        assert.match(getGitDiff(baseSha, headSha), /\+head/)
+      }
+      for (const options of fetchOptions) {
+        assert.strictEqual(options.timeout, 5000)
+      }
+    })
+  }
 
   it('prepares the known diff base before the remote becomes unavailable', () => {
     git(remote, ['config', 'uploadpack.allowFilter', 'false'])
