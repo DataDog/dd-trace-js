@@ -320,6 +320,41 @@ describe('datadog-esbuild plugin', () => {
         }
       })
     }
+
+    it('routes ESM rewrite targets with export hooks through the IITM wrapper', async () => {
+      const esmDir = path.join(projectDir, 'node_modules/@modelcontextprotocol/sdk/dist/esm')
+      const resourcePath = path.join(esmDir, 'server/mcp.js')
+      fs.mkdirSync(path.dirname(resourcePath), { recursive: true })
+      fs.writeFileSync(path.join(esmDir, 'package.json'), JSON.stringify({ type: 'module' }))
+      fs.writeFileSync(resourcePath, 'export class McpServer { async executeToolHandler () { return 1 } }\n')
+      const onResolve = captureOnResolve({ format: 'esm' })
+      const request = '@modelcontextprotocol/sdk/dist/esm/server/mcp.js'
+
+      const wrapper = resolve(request, { format: 'esm' })
+      assert.equal(wrapper.path, `${resourcePath}._dd_esbuild_intercepted`)
+      assert.equal(wrapper.pluginData.isESM, true)
+      assert.equal(wrapper.pluginData.rewriteOnly, false)
+
+      const loadWrapper = captureOnLoad()
+      const wrapperResult = await loadWrapper(wrapper)
+      assert.match(wrapperResult.contents, /import-in-the-middle/)
+      assert.ok(wrapperResult.contents.includes(`import * as namespace from ${JSON.stringify(resourcePath)}`))
+      assert.doesNotMatch(wrapperResult.contents, /orchestrion:/)
+
+      const real = onResolve({
+        path: resourcePath,
+        resolveDir: path.dirname(resourcePath),
+        kind: 'import-statement',
+        namespace: 'file',
+        importer: wrapper.path,
+      })
+      assert.equal(real.path, resourcePath)
+
+      const loadReal = captureOnLoad()
+      const realResult = await loadReal(real)
+      assert.match(realResult.contents, /orchestrion:@modelcontextprotocol\/sdk:McpServer_executeToolHandler/)
+      assert.doesNotMatch(realResult.contents, /dd-trace:bundler:load|import-in-the-middle/)
+    })
   })
 
   describe('ESM wrappers', () => {

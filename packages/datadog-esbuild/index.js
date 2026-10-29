@@ -285,7 +285,10 @@ ${build.initialOptions.banner.js}`
         const packageJson = JSON.parse(fs.readFileSync(/** @type {string} */(pathToPackageJson)).toString())
 
         const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
-        if (isESM && !target && !isInterceptedImporter) {
+        // ESM targets with export hooks still need the IITM wrapper to run those hooks; the wrapper's import of the
+        // real module then resolves without the suffix and is rewritten.
+        const needsExportHook = !target || (isModuleOfInterest && !target.activate)
+        if (isESM && needsExportHook && !isInterceptedImporter) {
           fullPathToModule += ESM_INTERCEPTED_SUFFIX
         }
 
@@ -413,7 +416,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
         contents = fs.readFileSync(args.path, 'utf8')
       }
 
-      // Rewrite-only targets have no export hook. ESM targets must also bypass IITM entirely.
+      // Rewrite-only targets have no export hook. ESM export hooks run through the IITM wrapper instead.
       if (!data.isESM && !data.rewriteOnly && !target?.activate) {
         const fileCode = contents
         // Don't spread `...arguments`: esbuild's minifier can rewrite the surrounding
