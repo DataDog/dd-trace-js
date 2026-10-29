@@ -412,6 +412,8 @@ describe('Cypress sealed retry configuration ownership', () => {
       const observer = observeRetryConfig(config, changed)
       Object[lock](config)
       observer.stop()
+      sinon.assert.calledOnce(changed)
+      changed.resetHistory()
       assert.strictEqual(observer.isWatching(config), false)
       config.retries.runMode = 3
       sinon.assert.notCalled(changed)
