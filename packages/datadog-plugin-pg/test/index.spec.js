@@ -470,6 +470,90 @@ describe('Plugin', () => {
         })
       })
 
+      describe('when pg invokes the query callback itself', () => {
+        const sockets = new Set()
+        let server
+        let port
+
+        before(async () => {
+          await agent.load('pg')
+
+          // Authenticates every client and then never answers a query.
+          server = net.createServer(socket => {
+            sockets.add(socket)
+            socket.on('close', () => sockets.delete(socket))
+            socket.on('error', () => {})
+            socket.on('data', data => {
+              if (data.length > 8 && data.readInt32BE(4) === 196_608) {
+                socket.write(Buffer.from([0x52, 0, 0, 0, 8, 0, 0, 0, 0]))
+                socket.write(Buffer.from([0x5A, 0, 0, 0, 5, 0x49]))
+              }
+            })
+          })
+          server.listen(0, '127.0.0.1')
+          await once(server, 'listening')
+          port = server.address().port
+        })
+
+        after(async () => {
+          for (const socket of sockets) socket.destroy()
+          server.close()
+          await agent.close()
+        })
+
+        beforeEach(async () => {
+          pg = require(`../../../versions/pg@${version}`).get()
+          client = new pg.Client({ host: '127.0.0.1', port, user: 'u', database: 'd', query_timeout: 100 })
+          client.on('error', () => {})
+          await client.connect()
+        })
+
+        afterEach(() => {
+          for (const socket of sockets) socket.destroy()
+        })
+
+        function assertErroredQuerySpan (message) {
+          return agent.assertSomeTraces(traces => {
+            const span = traces[0].find(span => span.name === expectedSchema.outbound.opName)
+            assert.ok(span, 'missing pg.query span')
+            assert.strictEqual(span.error, 1)
+            assert.match(span.meta[ERROR_MESSAGE], message)
+          })
+        }
+
+        it('should run the callback in the parent context and finish the span on query timeout', async () => {
+          const spanFinished = assertErroredQuerySpan(/timeout/i)
+          const parent = tracer.startSpan('test')
+
+          const active = await new Promise(resolve => {
+            tracer.scope().activate(parent, () => {
+              client.query('SELECT 1', () => resolve(tracer.scope().active()))
+            })
+          })
+
+          assert.strictEqual(active, parent)
+          parent.finish()
+          await spanFinished
+        })
+
+        it('should run the callback in the parent context and finish the span on a closed client', async () => {
+          await client.end()
+
+          const spanFinished = assertErroredQuerySpan(/closed/i)
+          const parent = tracer.startSpan('test')
+
+          const active = await new Promise(resolve => {
+            tracer.scope().activate(parent, () => {
+              client.query('SELECT 1', () => resolve(tracer.scope().active()))
+            })
+          })
+
+          assert.strictEqual(active, parent)
+          parent.finish()
+          await spanFinished
+        })
+      })
+
       describe('when using a connection pool', () => {
         let pool
 

@@ -280,6 +280,22 @@ function wrapQuery (query) {
 
       args[0] = pgQuery
 
+      // Wrap the callback before pg sees it, so paths where pg calls it directly (query timeout, closed client)
+      // also finish the span and run the callback in the parent context.
+      const wrapCallback = (callback) => function (err, ...args) {
+        finish(err, ...args)
+        return finishCh.runStores(ctx, callback, this, err, ...args)
+      }
+      const callbackIndex = args.length - 1
+      let callbackWrapped = true
+      if (typeof pgQuery.callback === 'function') {
+        pgQuery.callback = wrapCallback(pgQuery.callback)
+      } else if (typeof args[callbackIndex] === 'function') {
+        args[callbackIndex] = wrapCallback(args[callbackIndex])
+      } else {
+        callbackWrapped = false
+      }
+
       const retval = query.apply(this, args)
 
       const deperecated = Object.hasOwn(this, '_activeQuery')
@@ -292,12 +308,10 @@ function wrapQuery (query) {
         return retval
       }
 
-      if (newQuery.callback) {
-        const originalCallback = newQuery.callback
-        newQuery.callback = function (err, ...args) {
-          finish(err, ...args)
-          return finishCh.runStores(ctx, originalCallback, this, err, ...args)
-        }
+      if (callbackWrapped) {
+        // The callback is already wrapped.
+      } else if (newQuery.callback) {
+        newQuery.callback = wrapCallback(newQuery.callback)
       } else if (newQuery.once) {
         newQuery
           .once(errorMonitor, finish)
