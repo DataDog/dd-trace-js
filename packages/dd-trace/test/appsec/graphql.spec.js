@@ -198,6 +198,18 @@ describe('GraphQL', () => {
 
       sinon.assert.callCount(waf.run, 4)
     })
+
+    it('Should not serve a field with arguments from the argument-less results', () => {
+      // The same field name reaches both shapes when a query aliases it, e.g. `name, upper: name(upper: true)`.
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { upper: true } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+
+      sinon.assert.calledTwice(waf.run)
+      sinon.assert.calledWithExactly(waf.run.secondCall, {
+        ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { name: { upper: true } } },
+      }, {})
+    })
   })
 
   describe('block response', () => {
