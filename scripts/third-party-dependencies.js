@@ -37,38 +37,6 @@ const { parse: parseJsonc, printParseErrorCode } = require('jsonc-parser')
  */
 
 /**
- * @param {string[]} packagePaths
- * @returns {Map<string, string>}
- */
-function collectAliasMap (packagePaths) {
-  const aliases = new Map()
-  for (const packagePath of packagePaths) {
-    if (!existsSync(packagePath)) continue
-
-    const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'))
-    collectAliasesFromDependencies(packageJson.dependencies, aliases)
-    collectAliasesFromDependencies(packageJson.optionalDependencies, aliases)
-  }
-  return aliases
-}
-
-/**
- * @param {Record<string, string> | undefined} dependencies
- * @param {Map<string, string>} aliases
- */
-function collectAliasesFromDependencies (dependencies, aliases) {
-  if (!dependencies) return
-  for (const [alias, spec] of Object.entries(dependencies)) {
-    if (typeof spec !== 'string' || !spec.startsWith('npm:')) continue
-
-    const rawTarget = spec.slice('npm:'.length)
-    const versionStart = rawTarget.lastIndexOf('@')
-    const target = versionStart > 0 ? rawTarget.slice(0, versionStart) : rawTarget
-    if (target) aliases.set(alias, target)
-  }
-}
-
-/**
  * @param {string} lockPath
  * @returns {LockedDependency[]}
  */
@@ -230,7 +198,6 @@ function readVendoredDependencyNames (csvPath) {
 }
 
 module.exports = {
-  collectAliasMap,
   listBunLockDependencies,
   readVendoredDependencyNames,
 }
