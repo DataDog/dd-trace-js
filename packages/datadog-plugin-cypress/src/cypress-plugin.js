@@ -471,6 +471,37 @@ function copyCypressRetries (retries) {
   return retries !== null && typeof retries === 'object' ? JSON.parse(JSON.stringify(retries)) : retries
 }
 
+// Cypress treats omitted/undefined object fields as defaults, while null replaces them.
+function mergeNativeRetries (baseline, supplied) {
+  if (supplied === undefined) return copyCypressRetries(baseline)
+  if (!supplied || typeof supplied !== 'object') return supplied
+  const result = baseline && typeof baseline === 'object' ? copyCypressRetries(baseline) : {}
+  for (const key of Object.keys(supplied)) result[key] = mergeNativeRetries(result[key], supplied[key])
+  return result
+}
+
+function updateNativeRetries (native, baseline, supplied, path) {
+  if (!path.length) return mergeNativeRetries(baseline, supplied)
+  const [key, ...rest] = path
+  const result = native && typeof native === 'object' ? copyCypressRetries(native) : {}
+  result[key] = updateNativeRetries(result[key], baseline && baseline[key], supplied && supplied[key], rest)
+  return result
+}
+
+function reconcileNativeRetries (native, baseline, configured, actual) {
+  if (isDeepStrictEqual(configured, actual)) return native
+  if (!actual || typeof actual !== 'object' || !configured || typeof configured !== 'object') {
+    return mergeNativeRetries(baseline, actual)
+  }
+  const result = native && typeof native === 'object' ? copyCypressRetries(native) : {}
+  for (const key of Object.keys(actual)) {
+    if (!isDeepStrictEqual(configured[key], actual[key])) {
+      result[key] = reconcileNativeRetries(result[key], baseline && baseline[key], configured[key], actual[key])
+    }
+  }
+  return result
+}
+
 class CypressPlugin {
   #pendingTestSuiteSpans = new Map()
 
@@ -867,6 +898,7 @@ class CypressPlugin {
       this.originalCypressRetries = copyCypressRetries(cypressConfig.retries)
       this.hasOriginalCypressRetries = true
     }
+    this.nativeCypressRetriesBaseline = copyCypressRetries(cypressConfig.retries)
     // Keep injected budgets separate from developer-held native configuration objects.
     cypressConfig.retries = copyCypressRetries(cypressConfig.retries)
     this.resetRunState()
@@ -899,6 +931,12 @@ class CypressPlugin {
     this._pendingRequestErrorTags = []
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
+        // Setup can change native retries while backend settings are resolving.
+        // Capture them before the first SDK retry write, including on settings errors.
+        this.cypressConfig.retries = mergeNativeRetries(
+          this.nativeCypressRetriesBaseline, this.cypressConfig.retries
+        )
+        this.originalCypressRetries = copyCypressRetries(this.cypressConfig.retries)
         if (libraryConfigurationResponse.err) {
           log.error('Cypress plugin library config response error', libraryConfigurationResponse.err)
           this._pendingRequestErrorTags.push({
@@ -986,8 +1024,13 @@ class CypressPlugin {
           this.isImpactedTestsEnabled = isImpactedTestsEnabled
         }
         this.configuredCypressRetries = copyCypressRetries(this.cypressConfig.retries)
-        this.retryConfigObserver = observeRetryConfig(this.cypressConfig, retries => {
-          this.originalCypressRetries = copyCypressRetries(retries)
+        this.retryConfigObserver = observeRetryConfig(this.cypressConfig, (retries, path, provenance) => {
+          this.originalCypressRetries = copyCypressRetries(provenance.retries)
+        }, {
+          nativeRetries: copyCypressRetries(this.originalCypressRetries),
+          updateNative: (native, retries, path) => updateNativeRetries(
+            native, this.nativeCypressRetriesBaseline, retries, path
+          ),
         })
         return this.cypressConfig
       })
@@ -1226,12 +1269,14 @@ class CypressPlugin {
   }
 
   async beforeRun (details) {
-    this.retryConfigObserver?.stopIpc()
+    this.retryConfigObserver?.stop()
     // Manual setup can change the developer budget after awaiting init. Capture it
     // before interactive reinitialization can restore the previous native value.
     const finalRetries = copyCypressRetries(details.config?.retries ?? this.cypressConfig?.retries)
     if (!this._isInit && !isDeepStrictEqual(finalRetries, this.configuredCypressRetries)) {
-      this.originalCypressRetries = finalRetries
+      this.originalCypressRetries = reconcileNativeRetries(
+        this.originalCypressRetries, this.nativeCypressRetriesBaseline, this.configuredCypressRetries, finalRetries
+      )
     }
     if (this._isInit) {
       // The user may not have returned the promise from the init function.
@@ -1240,10 +1285,12 @@ class CypressPlugin {
       // Cypress open reuses the same plugin process for every interactive run.
       await this.init(this.tracer, this.cypressConfig)
     }
-    this.retryConfigObserver?.stopIpc()
+    this.retryConfigObserver?.stop()
 
     if (!isDeepStrictEqual(finalRetries, this.configuredCypressRetries)) {
-      this.originalCypressRetries = finalRetries
+      this.originalCypressRetries = reconcileNativeRetries(
+        this.originalCypressRetries, this.nativeCypressRetriesBaseline, this.configuredCypressRetries, finalRetries
+      )
     }
 
     this.command = getCypressCommand(details)
@@ -2168,6 +2215,7 @@ class CypressPlugin {
             this.isEarlyFlakeDetectionEnabled && hasEfdRetries(this.earlyFlakeDetectionRetryPolicy),
           frameworkRetries,
           configuredRetries: this.configuredCypressRetries,
+          originalRetries: this.originalCypressRetries,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
           earlyFlakeDetectionSchedulingRetryCount: this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
           isKnownTestsEnabled: this.isKnownTestsEnabled,

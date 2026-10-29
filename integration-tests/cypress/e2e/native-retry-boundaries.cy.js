@@ -19,6 +19,31 @@ function attempt (name, passAt) {
 }
 
 const mode = getTestEnvironment('EXCLUSIONS_MODE')
+if (mode === 'browser-all-equal') {
+  const state = Cypress.config()
+  const retries = state.retries
+  state.retries = retries
+  retries.runMode = 2
+}
+if (mode === 'browser-all-root') Cypress.config().retries = { runMode: 2, openMode: 0 }
+if (mode === 'browser-all-inactive') Cypress.config().retries.openMode = 1
+if (mode === 'browser-saved-reference') {
+  const saved = Cypress.config('retries')
+  Cypress.config('retries', 1)
+  Cypress.config('retries', saved)
+}
+if (mode === 'browser-same-reference') {
+  const retries = Cypress.config('retries')
+  retries.openMode = 1
+  Cypress.config({ retries })
+}
+if (mode.startsWith('browser-all-')) {
+  const state = Cypress.config()
+  if (state !== Cypress.config()) throw new Error('native config state identity changed')
+}
+if (mode === 'browser-delete-mode') delete Cypress.config('retries').runMode
+if (mode === 'browser-partial-root') Cypress.config('retries', { openMode: 1 })
+if (mode === 'browser-inactive-mode') Cypress.config('retries').openMode = 1
 if (['browser-retries', 'browser-same-budget', 'browser-runtime-global'].includes(mode)) Cypress.config('retries', 2)
 
 const suiteConfig = ['inherited-mode', 'browser-runtime-suite'].includes(mode) ? { retries: { runMode: 2 } } : {}
