@@ -606,6 +606,7 @@ class CypressPlugin {
     this.#pendingTestSuiteSpans.clear()
     this._isInit = false
     this.finishedTestsByFile = {}
+    this.resolvedCypressRetries = undefined
     this.hasTestsReported = false
     this.testSuiteStatuses = new Set()
     this.testStatuses = {}
@@ -1293,6 +1294,7 @@ class CypressPlugin {
       )
     }
 
+    this.resolvedCypressRetries = finalRetries
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
@@ -1884,7 +1886,7 @@ class CypressPlugin {
 
           // Explicit experimental strategies can fail after a passing attempt. Their native
           // aggregate outcome remains authoritative when ATR supplies the retry budget.
-          const finalRetryKind = this.cypressConfig?.retries?.experimentalStrategy && !isDatadogManagedAttempt
+          const finalRetryKind = this.resolvedCypressRetries?.experimentalStrategy && !isDatadogManagedAttempt
             ? FINAL_STATUS_RETRY_KIND.none
             : retryKind
           const finalStatus = getFinalStatus({

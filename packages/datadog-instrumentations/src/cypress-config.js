@@ -25,6 +25,7 @@ const CONFIG_INSTRUMENTATION_NOT_INSTALLED =
   'Cypress configurations that cannot be intercepted through cypress.defineConfig were not auto-instrumented.'
 const generatedFilesForExitCleanup = new Set()
 let exitCleanupRegistered = false
+let stopManualSupportSetup
 
 const setupNodeEventsCh = channel('ci:cypress:setup-node-events')
 
@@ -307,7 +308,14 @@ function createSupportWrapper (directory, originalSupportFile, browserHooksSourc
 
   const generatedFiles = []
   try {
-    writeExclusiveFile(browserHooksFile, browserHooksSource)
+    const guardedSource = `const ddSupportRoot = Cypress.mocha.getRootSuite()
+const ddSupportKey = Symbol.for('dd-trace.cypress.support-installed')
+if (!ddSupportRoot[ddSupportKey]) {
+${browserHooksSource}
+ddSupportRoot[ddSupportKey] = true
+}
+`
+    writeExclusiveFile(browserHooksFile, guardedSource)
     generatedFiles.push(browserHooksFile)
     writeExclusiveFile(wrapperFile, `${wrapperImports.join('\n')}\n`)
     generatedFiles.push(wrapperFile)
@@ -330,16 +338,11 @@ function createSupportWrapper (directory, originalSupportFile, browserHooksSourc
 function injectSupportFile (config) {
   const originalSupportFile = config.supportFile
 
+  if (generatedFilesForExitCleanup.has(originalSupportFile)) return
+
   if (originalSupportFile) {
     try {
-      const content = fs.readFileSync(originalSupportFile, 'utf8')
-      // Naive check: skip lines starting with // or * to avoid matching commented-out imports.
-      const hasActiveDdTraceImport = content.split('\n').some(line => {
-        const trimmed = line.trim()
-        return trimmed.includes('dd-trace/ci/cypress/support') &&
-          !trimmed.startsWith('//') && !trimmed.startsWith('*')
-      })
-      if (hasActiveDdTraceImport) return
+      fs.readFileSync(originalSupportFile, 'utf8')
     } catch (error) {
       logBrowserInstrumentationError(
         'Datadog could not read the Cypress support file %s: %s. %s',
@@ -396,6 +399,77 @@ function injectSupportFile (config) {
       BROWSER_INSTRUMENTATION_NOT_INSTALLED
     )
   }
+}
+
+/**
+ * Installs browser hooks before user support, including manual SDK imports.
+ *
+ * @param {object} config Cypress resolved config object
+ * @returns {string[]|undefined} generated files owned until cleanup or process exit
+ */
+function installSupportFile (config) {
+  const files = injectSupportFile(config)
+  if (files) registerGeneratedFilesForExitCleanup(files)
+  return files
+}
+
+/**
+ * Keeps early browser instrumentation in the actual manual setup return value.
+ *
+ * @param {object} config Cypress resolved config object
+ * @returns {(() => void)|undefined} cleanup for the one-shot setup observer
+ */
+function installManualSupportFile (config) {
+  stopManualSupportSetup?.()
+  installSupportFile(config)
+  const originalSend = process.send
+  if (typeof originalSend !== 'function') return
+
+  let active = true
+  const stop = () => {
+    active = false
+    if (process.send === send) process.send = originalSend
+    if (stopManualSupportSetup === stop) stopManualSupportSetup = undefined
+  }
+  const send = function (message) {
+    let forwarded = message
+    if (active && (message?.event === 'setupTestingType:reply' || message?.event === 'setupTestingType:error')) {
+      try {
+        const reply = message.event === 'setupTestingType:reply' && message.args?.[0]
+        const supplied = reply?.setupConfig
+        if (reply && (supplied == null || (supplied && typeof supplied === 'object' && !Array.isArray(supplied)))) {
+          // Snapshot own enumerable values once, as native IPC serialization would.
+          const returnedConfig = { ...supplied }
+          const projectRoot = returnedConfig.projectRoot ?? config.projectRoot
+          const supportFile = returnedConfig.supportFile === undefined ? config.supportFile : returnedConfig.supportFile
+          // Leave invalid user configuration for Cypress's native validator.
+          if (typeof projectRoot === 'string' &&
+              (supportFile === undefined || supportFile === false || typeof supportFile === 'string')) {
+            const supportConfig = {
+              projectRoot,
+              supportFile: typeof supportFile === 'string' ? path.resolve(projectRoot, supportFile) : supportFile,
+            }
+            installSupportFile(supportConfig)
+            if (generatedFilesForExitCleanup.has(supportConfig.supportFile)) {
+              const args = [...message.args]
+              args[0] = { ...reply, setupConfig: { ...returnedConfig, supportFile: supportConfig.supportFile } }
+              forwarded = { ...message, args }
+            }
+          }
+        }
+      } catch (error) {
+        log.warn('Datadog could not retain the Cypress support wrapper in the setup reply: %s.', error)
+      } finally {
+        stop()
+      }
+    }
+    const args = [...arguments]
+    args[0] = forwarded
+    return originalSend.apply(this, args)
+  }
+  stopManualSupportSetup = stop
+  process.send = send
+  return stop
 }
 
 /**
@@ -517,8 +591,7 @@ function registerDdTraceHooks (
   userAfterScreenshotHandlers,
   manualPlugin
 ) {
-  const generatedSupportFiles = injectSupportFile(config)
-  if (generatedSupportFiles) registerGeneratedFilesForExitCleanup(generatedSupportFiles)
+  const generatedSupportFiles = installSupportFile(config)
 
   const cleanupWrapper = () => {
     // Open mode reuses this support file across runs, including failed setup attempts.
@@ -932,6 +1005,8 @@ function wrapCliConfigFileOptions (options) {
 }
 
 module.exports = {
+  installManualSupportFile,
+  installSupportFile,
   wrapCliConfigFileOptions,
   wrapConfig,
 }

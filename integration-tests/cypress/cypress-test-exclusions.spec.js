@@ -3,7 +3,8 @@
 const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
-const { existsSync, readFileSync, rmSync } = require('node:fs')
+const { existsSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
+const { createServer } = require('node:http')
 const { join } = require('node:path')
 
 const { sandboxCwd, useSandbox, getCiVisEvpProxyConfig, stopCiVisTestEnv, warmCypressBinary } = require('../helpers')
@@ -194,12 +195,21 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'open-only', 'returned-open', 'spread-open', 'returned-open-preloaded', 'returned-object-preloaded',
     'browser-partial-before-support', 'saved-reference', 'saved-reference-changed',
     'after-handoff-equal-preloaded', 'during-init', 'during-init-partial',
+    'returned-experimental', 'returned-experimental-preloaded',
+    'browser-equal-before-support', 'browser-equal-before-support-preloaded',
+    'browser-equal-before-support-reuse-preloaded',
+    'browser-equal-before-support-returned', 'browser-equal-before-support-returned-preloaded',
+    'browser-equal-before-support-returned-alternate', 'browser-equal-before-support-returned-alternate-preloaded',
   ]) {
     for (const atrEnabled of [false, true]) {
-      it(`preserves ${lateMode} native retries after manual plugin initialization (ATR=${atrEnabled})`, async () => {
+      const lateExperimental = lateMode.startsWith('returned-experimental')
+      const lateTest = lateExperimental && !supportsExperimental ? it.skip : it
+      const title = `preserves ${lateMode} native retries after manual plugin initialization (ATR=${atrEnabled})`
+      lateTest(title, async () => {
         const command = './node_modules/.bin/cypress run ' +
           '--config-file ci-visibility/cypress-late-native-retries/config.js'
         const ledger = join(cwd, 'late-native-retry-executions.json')
+        const alternateLedger = join(cwd, 'late-support-alternate-executions.json')
         const noRunOverride = [
           'unchanged', 'open-only', 'returned-open', 'spread-open', 'returned-open-preloaded',
           'browser-partial-before-support', 'saved-reference', 'after-handoff-equal-preloaded',
@@ -208,6 +218,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           'late native excluded': noRunOverride ? 1 : 3,
           'late native control': noRunOverride ? 1 : 3,
           'explicit local excluded': 2,
+          ...(lateMode.includes('-reuse') && { 'support reuse smoke': 1 }),
         }
         childProcess = exec(command, {
           cwd,
@@ -222,20 +233,32 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         childProcess.stdout.on('data', chunk => { output += chunk })
         childProcess.stderr.on('data', chunk => { output += chunk })
         const [nativeExit] = await once(childProcess, 'exit')
-        assert.strictEqual(nativeExit, noRunOverride ? 2 : 0, output)
+        assert.strictEqual(nativeExit, lateExperimental ? 2 : noRunOverride ? 2 : 0, output)
         assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
         rmSync(ledger)
+        if (lateMode.includes('-alternate')) {
+          assert.deepStrictEqual(JSON.parse(readFileSync(alternateLedger, 'utf8')), { executed: 1 })
+          rmSync(alternateLedger)
+        }
         receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
         const nativeOnlyControl = ['returned-open', 'browser-partial-before-support'].includes(lateMode)
         if (noRunOverride && atrEnabled && !nativeOnlyControl) expected['late native control'] = 3
-        const expectedExit = noRunOverride ? atrEnabled && !nativeOnlyControl ? 1 : 2 : 0
+        const expectedExit = lateExperimental ? 2 : noRunOverride ? atrEnabled && !nativeOnlyControl ? 1 : 2 : 0
         await run('late-native', expectedExit, tests => {
           assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
+          if (lateMode.includes('-alternate')) {
+            assert.deepStrictEqual(JSON.parse(readFileSync(alternateLedger, 'utf8')), { executed: 1 })
+          }
           assert.strictEqual(tests.length, Object.values(expected).reduce((sum, count) => sum + count, 0))
           for (const [name, count] of Object.entries(expected)) {
             const attempts = named(tests, name)
             assert.strictEqual(attempts.length, count, name)
-            assert.strictEqual(attempts.at(-1).meta['test.status'], count === 1 ? 'fail' : 'pass', name)
+            assert.strictEqual(attempts.at(-1).meta['test.status'],
+              count === 1 && name !== 'support reuse smoke' ? 'fail' : 'pass', name)
+            if (lateExperimental) {
+              assert.strictEqual(attempts.at(-1).meta['test.final_status'],
+                name === 'explicit local excluded' ? 'pass' : 'fail', name)
+            }
             assert.strictEqual(attempts[0].meta[exclusion], name === 'late native control' ? undefined : 'true')
             for (const retry of attempts.slice(1)) {
               assert.strictEqual(retry.meta['test.retry_reason'],
@@ -518,44 +541,73 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
 
   it('retains annotations inside explicitly pending suites without executing their callbacks', async () => {
     const pendingSuite = 'cypress/e2e/skipped-suite-annotations.js'
-    const browserOption = process.env.CYPRESS_TEST_BROWSER ? ' --browser "$CYPRESS_TEST_BROWSER"' : ''
-    const webkit = process.env.CYPRESS_TEST_BROWSER === 'webkit'
-    const nativeConfig = webkit ? 'supportFile=false,experimentalWebKitSupport=true' : 'supportFile=false'
-    const tracingConfig = webkit ? ' --config experimentalWebKitSupport=true' : ''
-    const nativeCommand = `./node_modules/.bin/cypress run --spec ${pendingSuite}` +
-      ` --config ${nativeConfig}${browserOption}`
-    childProcess = exec(nativeCommand, {
-      cwd,
-      env: {
-        ...cypressEnvironment(),
-        NODE_OPTIONS: '',
-        DD_TRACE_ENABLED: 'false',
-        SPEC_PATTERN: pendingSuite,
-      },
-    })
-    let output = ''
-    childProcess.stdout.on('data', chunk => { output += chunk })
-    childProcess.stderr.on('data', chunk => { output += chunk })
-    const [exitCode] = await once(childProcess, 'exit')
-    assert.strictEqual(exitCode, 0, output)
-    assert.match(output, /1 passing/)
-    assert.match(output, /20 pending/)
-    assert.doesNotMatch(output, /skipped callback executed/)
-
-    await run('pending-suite', 0, tests => {
-      assert.strictEqual(tests.length, 21)
-      const skipped = tests.filter(test => test.meta['test.status'] === 'skip')
-      assert.strictEqual(skipped.length, 20)
-      for (const test of skipped) {
-        const name = test.meta['test.name']
-        const both = name.endsWith('both flags') || name.endsWith('nested skip flags')
-        assert.strictEqual(test.meta[protection], both || name.endsWith('protected flag') ? 'true' : undefined, name)
-        assert.strictEqual(test.meta[exclusion], both || name.endsWith('retry flag') ? 'true' : undefined, name)
+    const pendingLedger = join(cwd, 'pending-suite-executions.json')
+    const collector = createServer((request, response) => {
+      response.setHeader('Access-Control-Allow-Origin', '*')
+      if (request.url !== '/pending-counter' || request.method !== 'POST') {
+        response.writeHead(404).end()
+        return
       }
-      const [executed] = named(tests, 'execution after pending declarations')
-      assert.strictEqual(executed.meta['test.status'], 'pass')
-    }, { SPEC_PATTERN: pendingSuite },
-    `./node_modules/.bin/cypress run --spec ${pendingSuite}${tracingConfig}${browserOption}`)
+      let body = ''
+      request.setEncoding('utf8')
+      request.on('data', chunk => { body += chunk })
+      request.on('end', () => {
+        writeFileSync(pendingLedger, body)
+        response.writeHead(200).end('recorded')
+      })
+    })
+    await new Promise((resolve, reject) => {
+      collector.once('error', reject)
+      collector.listen(0, '127.0.0.1', resolve)
+    })
+    const address = /** @type {import('node:net').AddressInfo} */ (collector.address())
+    const ledgerUrl = `http://127.0.0.1:${address.port}/pending-counter`
+    try {
+      const browserOption = process.env.CYPRESS_TEST_BROWSER ? ' --browser "$CYPRESS_TEST_BROWSER"' : ''
+      const webkit = process.env.CYPRESS_TEST_BROWSER === 'webkit'
+      const nativeConfig = webkit ? 'supportFile=false,experimentalWebKitSupport=true' : 'supportFile=false'
+      const tracingConfig = webkit ? ' --config experimentalWebKitSupport=true' : ''
+      const nativeCommand = `./node_modules/.bin/cypress run --spec ${pendingSuite}` +
+        ` --config ${nativeConfig}${browserOption}`
+      childProcess = exec(nativeCommand, {
+        cwd,
+        env: {
+          ...cypressEnvironment(),
+          NODE_OPTIONS: '',
+          DD_TRACE_ENABLED: 'false',
+          SPEC_PATTERN: pendingSuite,
+          CYPRESS_PENDING_LEDGER_URL: ledgerUrl,
+        },
+      })
+      let output = ''
+      childProcess.stdout.on('data', chunk => { output += chunk })
+      childProcess.stderr.on('data', chunk => { output += chunk })
+      const [exitCode] = await once(childProcess, 'exit')
+      assert.strictEqual(exitCode, 0, output)
+      assert.match(output, /1 passing/)
+      assert.match(output, /28 pending/)
+      assert.doesNotMatch(output, /skipped callback executed/)
+      assert.deepStrictEqual(JSON.parse(readFileSync(pendingLedger, 'utf8')), { skipped: 0, executed: 1 })
+      rmSync(pendingLedger)
+
+      await run('pending-suite', 0, tests => {
+        assert.strictEqual(tests.length, 29)
+        const skipped = tests.filter(test => test.meta['test.status'] === 'skip')
+        assert.strictEqual(skipped.length, 28)
+        assert.deepStrictEqual(JSON.parse(readFileSync(pendingLedger, 'utf8')), { skipped: 0, executed: 1 })
+        for (const test of skipped) {
+          const name = test.meta['test.name']
+          const both = name.endsWith('both flags') || name.endsWith('nested skip flags')
+          assert.strictEqual(test.meta[protection], both || name.endsWith('protected flag') ? 'true' : undefined, name)
+          assert.strictEqual(test.meta[exclusion], both || name.endsWith('retry flag') ? 'true' : undefined, name)
+        }
+        const [executed] = named(tests, 'execution after pending declarations')
+        assert.strictEqual(executed.meta['test.status'], 'pass')
+      }, { SPEC_PATTERN: pendingSuite, CYPRESS_PENDING_LEDGER_URL: ledgerUrl },
+      `./node_modules/.bin/cypress run --spec ${pendingSuite}${tracingConfig}${browserOption}`)
+    } finally {
+      await new Promise(resolve => collector.close(resolve))
+    }
   })
 
   it('reads the public exclusion mode before declaring tests', async () => {
