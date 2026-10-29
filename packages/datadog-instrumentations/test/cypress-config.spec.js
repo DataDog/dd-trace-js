@@ -13,6 +13,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
 const log = require('../../dd-trace/src/log')
+const observeRetryConfig = require('../../datadog-plugin-cypress/src/retry-config-observer')
 const {
   installManualSupportFile,
   installSupportFile,
@@ -401,4 +402,74 @@ describe('Cypress manual setup reply ownership', () => {
       fs.rmSync(project, { recursive: true, force: true })
     }
   })
+})
+
+describe('Cypress sealed retry configuration ownership', () => {
+  for (const lock of ['seal', 'freeze']) {
+    it(`stops observing a configuration after Object.${lock} without changing nested native writes`, () => {
+      const config = { retries: { runMode: 2, openMode: 0 } }
+      const changed = sinon.spy()
+      const observer = observeRetryConfig(config, changed)
+      Object[lock](config)
+      observer.stop()
+      assert.strictEqual(observer.isWatching(config), false)
+      config.retries.runMode = 3
+      sinon.assert.notCalled(changed)
+      assert.deepStrictEqual(JSON.parse(JSON.stringify(config)), { retries: { runMode: 3, openMode: 0 } })
+      observer.stop()
+    })
+  }
+})
+
+describe('Cypress observer and lifecycle phases', () => {
+  for (const mode of ['automatic', 'manual', 'conditional']) {
+    it(`preserves lifecycle registration order for ${mode} support`, () => {
+      const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-support-phase-'))
+      const support = join(project, 'support.js')
+      fs.writeFileSync(support, mode === 'automatic'
+        ? '// user support\n'
+        : `${mode === 'conditional' ? 'if (false) ' : ''}require('dd-trace/ci/cypress/support')\n`)
+      const publicSource = fs.readFileSync(join(__dirname, '../../../ci/cypress/support.js'), 'utf8')
+      const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+      const raw = `globalThis.calls.push('observer')
+let active = false
+const root = Cypress.mocha.getRootSuite()
+root[Symbol.for('dd-trace.cypress.install-lifecycle')] = () => {
+  if (active) return
+  active = true
+  globalThis.calls.push('lifecycle')
+}
+if (!root[Symbol.for('dd-trace.cypress.defer-lifecycle')]) root[Symbol.for('dd-trace.cypress.install-lifecycle')]()
+`
+      const originalRead = fs.readFileSync
+      const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
+        return filename === hooksPath ? raw : originalRead(filename, ...args)
+      })
+      try {
+        const config = { projectRoot: project, supportFile: support }
+        const files = installSupportFile(config)
+        const root = {}
+        const context = createContext({ Cypress: { mocha: { getRootSuite: () => root } }, calls: [], require () {} })
+        const execute = source => runInContext(`(function () {${source}\n})()`, context)
+        execute(fs.readFileSync(files[0], 'utf8'))
+        context.calls.push('user before')
+        if (mode === 'manual') execute(publicSource)
+        context.calls.push('user after')
+        const finalizer = fs.readFileSync(files[1], 'utf8').split('\n')
+          .filter(line => !line.startsWith('import ')).join('\n')
+        execute(finalizer)
+        const expected = mode === 'automatic'
+          ? ['observer', 'lifecycle', 'user before', 'user after']
+          : mode === 'manual'
+            ? ['observer', 'user before', 'lifecycle', 'user after']
+            : ['observer', 'user before', 'user after', 'lifecycle']
+        assert.deepStrictEqual(Array.from(context.calls), expected)
+        execute(finalizer)
+        assert.deepStrictEqual(Array.from(context.calls), expected)
+      } finally {
+        read.restore()
+        fs.rmSync(project, { recursive: true, force: true })
+      }
+    })
+  }
 })

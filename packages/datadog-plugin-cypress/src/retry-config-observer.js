@@ -101,7 +101,10 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   const stop = () => {
     active = false
     stopIpc()
-    if (ownsProperty()) Object.defineProperty(config, 'retries', { ...descriptor, value: current })
+    const currentDescriptor = Object.getOwnPropertyDescriptor(config, 'retries')
+    if (currentDescriptor?.configurable && currentDescriptor.get === getRetries) {
+      Object.defineProperty(config, 'retries', { ...descriptor, value: current })
+    }
   }
   if (typeof originalSend === 'function') {
     sendObserver = function (message) {

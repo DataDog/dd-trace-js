@@ -19,6 +19,13 @@ function attempt (name, passAt) {
 }
 
 const mode = getTestEnvironment('EXCLUSIONS_MODE')
+if (mode.startsWith('experimental-native-detached')) {
+  const retries = Cypress.config('retries')
+  const saved = retries.experimentalOptions
+  retries.experimentalOptions = { maxRetries: 3, stopIfAnyPassed: false }
+  if (mode.endsWith('-delete')) delete saved.maxRetries
+  else saved.maxRetries = 8
+}
 if (mode === 'browser-all-equal') {
   const state = Cypress.config()
   const retries = state.retries

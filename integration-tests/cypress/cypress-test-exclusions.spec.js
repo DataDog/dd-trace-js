@@ -196,6 +196,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'browser-partial-before-support', 'saved-reference', 'saved-reference-changed',
     'after-handoff-equal-preloaded', 'during-init', 'during-init-partial',
     'returned-experimental', 'returned-experimental-preloaded',
+    'browser-queued-native-before-support',
     'browser-equal-before-support', 'browser-equal-before-support-preloaded',
     'browser-equal-before-support-reuse-preloaded',
     'browser-equal-before-support-returned', 'browser-equal-before-support-returned-preloaded',
@@ -280,6 +281,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'browser-all-equal', 'browser-all-inactive', 'browser-all-root',
     'browser-same-reference', 'browser-saved-reference',
     'experimental-native', 'experimental-native-zero',
+    'experimental-native-detached', 'experimental-native-detached-delete',
     'experimental-native-threshold', 'experimental-native-disabled',
     'experimental-native-disabled-zero', 'experimental-native-disabled-one', 'experimental-native-threshold-dynamic',
   ]) {
@@ -302,7 +304,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       boundaryTest(`preserves ${mode} native retry executions (ATR=${atrEnabled})`, async () => {
         const boundarySuite = 'cypress/e2e/native-retry-boundaries.cy.js'
         const ledger = join(cwd, 'native-retry-executions.json')
-        const nativeAttempts = thresholdNative ? 5 : disabledNative ? 1 : 3
+        const nativeAttempts = mode.includes('-detached') ? 4 : thresholdNative ? 5 : disabledNative ? 1 : 3
         const experimentalEnvironment = experimentalMode
           ? {
               CYPRESS_EXPERIMENTAL_RETRIES: thresholdNative
@@ -351,7 +353,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         rmSync(ledger)
         receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
         if (browserZeroNative && atrEnabled) expected['ordinary control'] = 3
-        if (experimentalMode && atrEnabled) {
+        if (experimentalMode && atrEnabled && !mode.includes('-detached')) {
           expected['ordinary control'] = disabledNative
             ? Math.min(atrBudget + 1, 3)
             : Math.max(nativeAttempts, atrBudget + 1)
@@ -693,4 +695,61 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       assert.strictEqual(tests[0].meta['test.is_retry'], undefined)
     }, { CYPRESS_RETRIES: '2' })
   })
+  for (const lock of ['seal', 'freeze']) {
+    for (const atrEnabled of [false, true]) {
+      it(`preserves native callbacks and traces with Object.${lock} (ATR=${atrEnabled})`, async () => {
+        const command = './node_modules/.bin/cypress run ' +
+          '--config-file ci-visibility/cypress-sealed-retry-config/config.js'
+        const ledger = join(cwd, 'late-native-retry-executions.json')
+        const expected = { 'late native excluded': 3, 'late native control': 3, 'explicit local excluded': 2 }
+        const env = {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          DD_CYPRESS_CONFIG_LOCK: lock,
+          CYPRESS_LATE_NATIVE_RETRIES_MODE: 'equal-object',
+        }
+        delete env.CYPRESS_VERSION
+        rmSync(ledger, { force: true })
+        childProcess = exec(command, { cwd, env: { ...env, NODE_OPTIONS: '', DD_TRACE_ENABLED: 'false' } })
+        let output = ''
+        childProcess.stdout.on('data', chunk => { output += chunk })
+        childProcess.stderr.on('data', chunk => { output += chunk })
+        const [nativeExit] = await once(childProcess, 'exit')
+        assert.strictEqual(nativeExit, 0, output)
+        assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
+        rmSync(ledger)
+
+        receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
+        childProcess = exec(command, { cwd, env })
+        output = ''
+        childProcess.stdout.on('data', chunk => { output += chunk })
+        childProcess.stderr.on('data', chunk => { output += chunk })
+        const exitPromise = once(childProcess, 'exit')
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
+            assert.strictEqual(tests.length, 8)
+            for (const [name, count] of Object.entries(expected)) {
+              const attempts = tests.filter(test => test.meta['test.name'] === name)
+              assert.strictEqual(attempts.length, count, name)
+              assert.strictEqual(attempts.at(-1).meta['test.status'], 'pass', name)
+              if (name !== 'late native control') {
+                for (const attempt of attempts) {
+                  assert.strictEqual(attempt.meta['test.test_management.no_auto_retry'], 'true')
+                }
+                for (const attempt of attempts.slice(1)) {
+                  assert.strictEqual(attempt.meta['test.retry_reason'], 'external')
+                }
+              }
+            }
+          }, { hardTimeout: 90000 })
+        const [[exitCode]] = await Promise.all([exitPromise, eventsPromise]).catch(error => {
+          error.message += `\nCypress output:\n${output}`
+          throw error
+        })
+        assert.strictEqual(exitCode, 0, output)
+      })
+    }
+  }
 })

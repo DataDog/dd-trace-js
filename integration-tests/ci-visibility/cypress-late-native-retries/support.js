@@ -8,4 +8,11 @@ if (getTestEnvironment('LATE_MODE') === 'browser-partial-before-support') {
 if (String(getTestEnvironment('LATE_MODE')).startsWith('browser-equal-before-support')) {
   Cypress.config('retries', { runMode: 2, openMode: 0 })
 }
+if (getTestEnvironment('LATE_MODE') === 'browser-queued-native-before-support') {
+  Cypress.config('retries', { runMode: 1, openMode: 0 })
+  const saved = Cypress.config('retries')
+  saved.runMode = 2
+  Cypress.config('retries', 0)
+  Cypress.config('retries', saved)
+}
 require('dd-trace/ci/cypress/support')
