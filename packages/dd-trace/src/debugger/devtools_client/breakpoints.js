@@ -357,9 +357,10 @@ async function reEvaluateProbe (probe) {
 }
 
 async function start () {
-  sessionStarted = true
   log.debug('[debugger:devtools_client] Starting debugger')
   await session.post('Debugger.enable')
+  // Only flag the session as started once enabled, so the next probe retries a failed start and reports its cause
+  sessionStarted = true
 
   // Wait until there's a pause in script-loading to avoid accidentally adding probes to incorrect scripts. This is not
   // a guarantee, but best effort.
