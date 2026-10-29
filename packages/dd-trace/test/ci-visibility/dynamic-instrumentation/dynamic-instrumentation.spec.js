@@ -473,6 +473,53 @@ describe('test visibility with dynamic instrumentation', () => {
     })
   })
 
+  it('retries enabling the debugger for the next probe after enabling it failed', async () => {
+    const breakpointSetChannel = new EventEmitter()
+    const breakpointHitChannel = new EventEmitter()
+    const breakpointRemoveChannel = new EventEmitter()
+    const session = new EventEmitter()
+    const enableError = new Error('Inspector method "Debugger.enable" requires an active inspector')
+    session.post = sinon.stub()
+    session.post.withArgs('Debugger.enable').rejects(enableError)
+    breakpointSetChannel.postMessage = sinon.stub()
+    breakpointHitChannel.postMessage = sinon.stub()
+    breakpointRemoveChannel.postMessage = sinon.stub()
+
+    proxyquire('../../../src/ci-visibility/dynamic-instrumentation/worker', {
+      worker_threads: {
+        workerData: {
+          config: {},
+          breakpointSetChannel,
+          breakpointHitChannel,
+          breakpointRemoveChannel,
+        },
+      },
+      '../../../debugger/devtools_client/session': session,
+      '../../../debugger/devtools_client/source-maps': {
+        getGeneratedPosition: sinon.stub(),
+      },
+      '../../../debugger/devtools_client/snapshot': {
+        getLocalStateForCallFrame: sinon.stub(),
+      },
+      '../../../debugger/devtools_client/state': {
+        // No script is loaded until the debugger has been enabled
+        findScriptFromPartialPath: () => undefined,
+        getStackFromCallFrames: sinon.stub(),
+      },
+      '../../../log': {
+        error: () => {},
+        warn: () => {},
+      },
+    })
+    const [onSetBreakpoint] = breakpointSetChannel.listeners('message')
+
+    await assert.rejects(onSetBreakpoint({ id: 'probe-1', file: 'file.js', line: 10 }), enableError)
+    await assert.rejects(onSetBreakpoint({ id: 'probe-2', file: 'file.js', line: 10 }), enableError)
+
+    sinon.assert.calledTwice(session.post.withArgs('Debugger.enable'))
+    sinon.assert.notCalled(breakpointSetChannel.postMessage)
+  })
+
   it('serializes probe replacement, cancels queued setup, and releases removed state', async () => {
     const worker = new EventEmitter()
     worker.unref = sinon.stub()
