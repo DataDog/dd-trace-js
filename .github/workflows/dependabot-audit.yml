@@ -1,0 +1,28 @@
+name: Dependabot Audit
+
+on:
+  pull_request:
+    paths-ignore:
+      - ".github/actions/datadog-ci/bun.lock"
+      - ".github/actions/datadog-ci/package.json"
+      - ".github/all-green/bun.lock"
+      - ".github/all-green/package.json"
+      - ".github/audit-allowlist.json"
+      - ".github/workflows/audit.yml"
+      - ".github/workflows/dependabot-audit.yml"
+      - "bun.lock"
+      - "docs/bun.lock"
+      - "docs/package.json"
+      - "package.json"
+      - "scripts/audit.js"
+      - "scripts/bun.js"
+      - "vendor/bun.lock"
+      - "vendor/package.json"
+
+permissions:
+  contents: read
+
+jobs:
+  dependabot-audit:
+    if: github.actor == 'dependabot[bot]'
+    uses: ./.github/workflows/audit.yml

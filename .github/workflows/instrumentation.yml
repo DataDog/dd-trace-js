@@ -228,7 +228,6 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn config set ignore-engines true
       - run: npm run test:instrumentations:ci
       - uses: ./.github/actions/coverage
         with:

@@ -130,6 +130,14 @@ module.exports = {
       versions: ['^4.0.0'],
     },
   ],
+  '@anthropic-ai/claude-agent-sdk': [
+    {
+      name: 'zod',
+      version: '^4.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
   'cookie-parser': [
     {
       name: 'express',
@@ -266,6 +274,42 @@ module.exports = {
       versions: ['5.0.7'],
     },
   ],
+  // Match each client's Google GAX dependency so gRPC credentials share one class.
+  '@google-cloud/pubsub': [
+    {
+      name: '@grpc/grpc-js',
+      from: 'google-gax',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // Tests load the HTTP handler from each client workspace. Keep its range aligned with the client
+  // so older SDKs do not load a newer handler with an incompatible @smithy/core.
+  '@aws-sdk/client-bedrock-runtime': [
+    {
+      name: '@smithy/node-http-handler',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // The clock-skew tests read the client's @aws-sdk/core version through the workspace.
+  '@aws-sdk/client-lambda': [
+    {
+      name: '@aws-sdk/core',
+      version: '^3.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
+  // The GoogleAuth prototype stub must resolve to the same module instance as the SDK.
+  '@google-cloud/vertexai': [
+    {
+      name: 'google-auth-library',
+      version: '^9.0.0',
+      dep: true,
+      forced: true,
+    },
+  ],
   genai: [
     {
       name: '@google/genai',
@@ -357,8 +401,8 @@ module.exports = {
   ],
   '@apollo/server': [
     {
-      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which yarn may
-      // hoist over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
+      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which may be
+      // hoisted over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
       // lacks the `.enter`/`.leave` methods the graphql instrumentation calls, so every traced operation throws.
       name: 'graphql',
       dep: true,
@@ -398,9 +442,7 @@ module.exports = {
     },
     {
       // knex 1.x is the only major whose sqlite3 dialect requires the @vscode/sqlite3 fork instead of `sqlite3`
-      // (reverted in 2.x). The instrumentation spec loads knex from `versions/knex@<ver>` and opens a sqlite3
-      // client, so the fork must be installed there. Pin an exact prerelease build so prebuilt binaries exist for
-      // the whole Node CI matrix.
+      // (reverted in 2.x). Pin the fork so the instrumentation spec can open a sqlite3 client.
       name: '@vscode/sqlite3',
       versions: ['5.1.12-vscode'],
     },
@@ -451,6 +493,13 @@ module.exports = {
       name: '@langchain/core',
       versions: ['>=0.1'],
       dep: true,
+    },
+    {
+      // The recorded cassettes match the OpenAI/JS 4.x request shape.
+      name: '@langchain/openai',
+      version: '0.0.34',
+      dep: true,
+      forced: true,
     },
   ],
   langgraph: [
@@ -542,8 +591,11 @@ module.exports = {
   ],
   moleculer: [
     {
+      // Moleculer loads Bluebird as a runtime fallback without declaring it in its manifest.
       name: 'bluebird',
       versions: ['3.7.2'],
+      dep: true,
+      forced: true,
     },
   ],
   'mongodb-core': [
@@ -654,6 +706,7 @@ module.exports = {
     {
       name: 'pg-native',
       versions: ['3.0.0'],
+      trustedDependencies: ['libpq'],
     },
     {
       name: 'express',
@@ -727,6 +780,10 @@ module.exports = {
     {
       name: 'collections',
       versions: ['5'],
+      // q@2 requires collections/shim, which is absent from its declared collections@^2.
+      overrides: {
+        'q@^2>collections': '^5.0.0',
+      },
     },
     {
       name: 'q',

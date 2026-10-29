@@ -116,7 +116,7 @@ describe('plugin fixture discovery', () => {
 })
 
 /**
- * Run the real installer entrypoint against a throwaway `versions/` tree with `yarn` stubbed out.
+ * Run the real installer entrypoint against a throwaway `versions/` tree with package installation stubbed out.
  *
  * @param {Record<string, string>} env
  * @param {(fixtureRoot: string) => void} assertions
@@ -138,6 +138,7 @@ const path = require('node:path')
 const execPath = require.resolve(process.env.DD_INSTALLER_EXEC_PATH)
 require.cache[execPath] = {
   exports (command, options) {
+    fs.mkdirSync(path.join(options.cwd, 'node_modules/.bun/node_modules'), { recursive: true })
     const packagePath = path.join(options.cwd, 'node_modules/bullmq')
     fs.mkdirSync(packagePath, { recursive: true })
     fs.writeFileSync(path.join(packagePath, 'package.json'), '{"name":"bullmq","version":"5.66.0"}\n')

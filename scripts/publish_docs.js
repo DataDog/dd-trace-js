@@ -12,13 +12,13 @@ if (!msg) {
 }
 
 try {
-  exec('yarn install', { cwd: './docs' })
+  exec('bun install --frozen-lockfile', { cwd: './docs' })
 } catch { // retry in case of error from registry
-  exec('yarn install', { cwd: './docs' })
+  exec('bun install --frozen-lockfile', { cwd: './docs' })
 }
 
 exec('rm -rf ./out', { cwd: './docs' })
-exec('yarn type:doc:build') // run first because typedoc requires an empty directory
+exec('npm run type:doc:build') // run first because typedoc requires an empty directory
 exec('git init', { cwd: './docs/out' }) // cloning would overwrite generated docs
 exec('git remote add origin git@github.com:DataDog/dd-trace-js.git', { cwd: './docs/out' })
 exec('git add -A', { cwd: './docs/out' })

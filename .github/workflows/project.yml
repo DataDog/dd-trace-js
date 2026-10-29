@@ -15,7 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: .github
+          sparse-checkout: |
+            .github
+            package.json
       - uses: ./.github/actions/node/latest
       - name: actionlint
         id: actionlint
@@ -90,6 +92,7 @@ jobs:
         with:
           sparse-checkout: |
             .github
+            package.json
             scripts/verify-workflow-job-names.js
       - uses: ./.github/actions/node/latest
       - run: npm install yaml
@@ -104,18 +107,23 @@ jobs:
     permissions:
       id-token: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/node/latest
+      - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv /tmp/"$FILENAME" /tmp/dd-trace.tgz
+      - run: cp bunfig.toml /tmp/dd-trace-bunfig.toml && rm -rf ./*
+      - run: tar -zxf /tmp/dd-trace.tgz -C "$(pwd)" --strip-components=1
+      # `--ignore-scripts` skips the `prepare` script (the frozen vendor install):
+      # the packed tarball ships pre-built `vendor/dist/**` artifacts but not
+      # `vendor/bun.lock`, so a fresh consumer install can't rebuild vendor.
+      - run: bun --config=/tmp/dd-trace-bunfig.toml install --production --omit=optional --ignore-scripts
+      - run: ls -lisa
       - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js
           policy: package-size-report
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/node/latest
-      - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv /tmp/"$FILENAME" /tmp/dd-trace.tgz
-      - run: rm -rf ./*
-      - run: tar -zxf /tmp/dd-trace.tgz -C "$(pwd)" --strip-components=1
-      - run: yarn --prod --ignore-optional
-      - run: ls -lisa
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@1e02edbdda803a45537a808ede97866db47756d3 # Unreleased
         with:

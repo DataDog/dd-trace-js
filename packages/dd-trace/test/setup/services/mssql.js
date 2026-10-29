@@ -2,8 +2,13 @@
 
 const RetryOperation = require('../operation')
 
-function waitForMssql (isSandbox) {
-  const tedious = isSandbox ? require('tedious') : require('../../../../../versions/tedious').get()
+/**
+ * @param {ReturnType<typeof import('node:module').createRequire>} [requireFromSandbox]
+ */
+function waitForMssql (requireFromSandbox) {
+  const tedious = requireFromSandbox
+    ? requireFromSandbox('tedious')
+    : require('../../../../../versions/tedious').get()
 
   return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     const operation = new RetryOperation('mssql')

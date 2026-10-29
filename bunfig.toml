@@ -1,0 +1,24 @@
+[install]
+saveTextLockfile = true
+linker = "hoisted"
+
+# Reject npm package versions younger than three days to widen the window in
+# which a freshly-published compromised release is caught and pulled from the
+# registry before it lands in our installs.
+minimumReleaseAge = 259200
+
+# Our publishing pipeline is the trust boundary for internal packages.
+# Reviewed upstream releases have version-specific exceptions.
+minimumReleaseAgeExcludes = [
+  "@datadog/datadog-ci",
+  "@datadog/flagging-core",
+  "@datadog/libdatadog",
+  "@datadog/native-appsec",
+  "@datadog/native-iast-taint-tracking",
+  "@datadog/native-metrics",
+  "@datadog/openfeature-node-server",
+  "@datadog/pprof",
+  "@datadog/sketches-js",
+  "@datadog/wasm-js-rewriter",
+  "import-in-the-middle@3.5.3",
+]
