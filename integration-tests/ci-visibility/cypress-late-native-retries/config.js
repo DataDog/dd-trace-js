@@ -13,7 +13,9 @@ module.exports = defineConfig({
   video: false,
   screenshotOnRunFailure: false,
   e2e: {
-    specPattern: join(__dirname, 'retries.cy.js'),
+    specPattern: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE?.includes('-reuse')
+      ? [join(__dirname, 'retries.cy.js'), join(__dirname, 'support-reuse.cy.js')]
+      : join(__dirname, 'retries.cy.js'),
     supportFile: join(__dirname, 'support.js'),
     async setupNodeEvents (on, config) {
       const plugin = require('dd-trace/ci/cypress/plugin')
@@ -29,6 +31,20 @@ module.exports = defineConfig({
         result.retries = 1
         if (mode === 'saved-reference-changed') saved.runMode = 2
         result.retries = saved
+      } else if (mode?.startsWith('returned-experimental')) {
+        return {
+          retries: {
+            runMode: true,
+            openMode: false,
+            experimentalStrategy: 'detect-flake-but-always-fail',
+            experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+          },
+        }
+      } else if (mode?.startsWith('browser-equal-before-support-returned')) {
+        return {
+          retries: { openMode: 0 },
+          ...(mode.includes('-alternate') && { supportFile: join(__dirname, 'support-alternate.js') }),
+        }
       } else if (mode?.startsWith('after-handoff')) {
         on('before:run', () => { result.retries.runMode = 2 })
       } else if (mode === 'equal-nested') result.retries.runMode = 2
@@ -38,7 +54,8 @@ module.exports = defineConfig({
         result.retries.openMode = 1
         return { ...result }
       } else if (mode?.startsWith('returned-object')) return { retries: { runMode: 2, openMode: 0 } }
-      else if (!['unchanged', 'during-init', 'during-init-partial'].includes(mode)) result.retries = 2
+      else if (!['unchanged', 'during-init', 'during-init-partial'].includes(mode) &&
+        !mode?.startsWith('browser-equal-before-support')) result.retries = 2
       return result
     },
   },

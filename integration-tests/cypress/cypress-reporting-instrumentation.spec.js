@@ -1048,6 +1048,7 @@ moduleTypes.forEach(({
       hasOriginalCypressRetries: cypressPlugin.hasOriginalCypressRetries,
       originalCypressRetries: cypressPlugin.originalCypressRetries,
       configuredCypressRetries: cypressPlugin.configuredCypressRetries,
+      resolvedCypressRetries: cypressPlugin.resolvedCypressRetries,
       nativeCypressRetriesBaseline: cypressPlugin.nativeCypressRetriesBaseline,
       retryConfigObserver: cypressPlugin.retryConfigObserver,
       tracer: cypressPlugin.tracer,
@@ -1075,6 +1076,7 @@ moduleTypes.forEach(({
       cypressPlugin.hasOriginalCypressRetries = originalState.hasOriginalCypressRetries
       cypressPlugin.originalCypressRetries = originalState.originalCypressRetries
       cypressPlugin.configuredCypressRetries = originalState.configuredCypressRetries
+      cypressPlugin.resolvedCypressRetries = originalState.resolvedCypressRetries
       cypressPlugin.nativeCypressRetriesBaseline = originalState.nativeCypressRetriesBaseline
       cypressPlugin.tracer = originalState.tracer
       cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
@@ -1728,6 +1730,45 @@ moduleTypes.forEach(({
         }
       }
     }
+
+    it('restores declaration capture after a skipped-suite callback throws', () => {
+      const declareTest = (title, callback) => ({ title, fn: callback, stack: new Error().stack })
+      const declareSuite = (title, callback) => callback()
+      declareSuite.skip = (title, callback) => callback()
+      const root = { file: 'test.cy.js', eachTest () {} }
+      const context = {
+        Cypress: {
+          _: { isEqual, cloneDeep },
+          config: name => {
+            if (name === 'retries') return 0
+            assert.strictEqual(name, 'isTextTerminal')
+            return true
+          },
+          on () {},
+          mocha: { getRunner: () => ({ runTests () {}, suite: { ctx: {} } }), getRootSuite: () => root },
+        },
+        cy: { on () {} },
+        before () {},
+        beforeEach () {},
+        afterEach () {},
+        after () {},
+        it: declareTest,
+        specify: declareTest,
+        describe: declareSuite,
+      }
+      runInNewContext(fs.readFileSync(
+        path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+      ), context)
+      const alias = context.it
+      const error = new Error('suite declaration failed')
+      assert.throws(() => context.describe.skip('throws', () => { throw error }), candidate => candidate === error)
+      const callback = () => {}
+      callback[Symbol.for('dd-trace:test-annotations')] = { mustFail: true, noAutoRetry: true }
+      const test = alias('after declaration failure', callback)
+      assert.strictEqual(context.it, alias)
+      assert.strictEqual(test.fn, callback)
+      assert.doesNotMatch(test.stack, /captureTestDeclaration/)
+    })
 
     it('observes equal native retry writes without recording reads or stale replacements', () => {
       const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')

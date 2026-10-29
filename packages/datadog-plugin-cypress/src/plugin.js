@@ -49,6 +49,13 @@ module.exports = function CypressPlugin (on, config) {
     return config
   }
 
+  // Browser retry intent must be observed before any user support code executes.
+  // Cypress 6's plugin process uses Node 12 and retains its existing manual path.
+  if (satisfies(config.version, '>=12.0.0')) {
+    const { installManualSupportFile } = require('../../datadog-instrumentations/src/cypress-config')
+    installManualSupportFile(config)
+  }
+
   on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
   on('after:screenshot', cypressPlugin.getAfterScreenshotHandler())
   const afterSpecHandler = cypressPlugin.afterSpec.bind(cypressPlugin)

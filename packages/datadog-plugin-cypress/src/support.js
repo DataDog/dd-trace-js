@@ -221,50 +221,72 @@ function getTestDeclarations () {
   return testAnnotations
 }
 
-/** @param {Function} declaration */
-function wrapTestDeclaration (declaration) {
-  return function () {
-    const callback = arguments[arguments.length - 1]
-    const test = declaration.apply(this, arguments)
-    if (test && typeof callback === 'function' && callback[annotationsKey]) {
-      const { mustFail, noAutoRetry } = callback[annotationsKey]
-      test._ddTestAnnotations = { mustFail, noAutoRetry }
-    }
-    return test
+let pendingSuiteDeclarationDepth = 0
+const testDeclarationProxies = new WeakMap()
+
+function captureTestDeclaration (target, receiver, args) {
+  // Cypress 6 uses a browser without Array.prototype.at.
+  // eslint-disable-next-line unicorn/prefer-at
+  const callback = args[args.length - 1]
+  const test = Reflect.apply(target, receiver, args)
+  if (test && typeof callback === 'function' && callback[annotationsKey]) {
+    const { mustFail, noAutoRetry } = callback[annotationsKey]
+    test._ddTestAnnotations = { mustFail, noAutoRetry }
   }
+  return test
 }
 
-// Mocha discards the callback of skipped declarations. Leave executable declarations untouched
-// so Cypress captures their original callsite, including in WebKit's untrimmed stacks.
+/**
+ * @param {Function} declaration
+ * @param {boolean} [alwaysCapture]
+ */
+function wrapTestDeclaration (declaration, alwaysCapture = false) {
+  if (testDeclarationProxies.has(declaration)) {
+    const existing = testDeclarationProxies.get(declaration)
+    if (alwaysCapture) existing.alwaysCapture = true
+    return existing.proxy
+  }
+  const state = { alwaysCapture }
+  state.proxy = new Proxy(declaration, {
+    // Outside pending declarations, the intrinsic handler contributes no JavaScript
+    // wrapper frame to Cypress's native callsite stack. Aliases retain this same proxy.
+    get apply () {
+      return state.alwaysCapture || pendingSuiteDeclarationDepth > 0 ? captureTestDeclaration : Reflect.apply
+    },
+    get (target, key, receiver) {
+      const value = Reflect.get(target, key, receiver)
+      const property = Object.getOwnPropertyDescriptor(target, key)
+      if (property && !property.configurable && !property.writable && 'value' in property) return value
+      return (key === 'skip' || key === 'only') && typeof value === 'function'
+        ? wrapTestDeclaration(value, key === 'skip' || state.alwaysCapture)
+        : value
+    },
+  })
+  testDeclarationProxies.set(declaration, state)
+  return state.proxy
+}
+
+// Observe every executable declaration identity, including aliases captured before
+// entering a pending suite, while preserving native callsites during normal execution.
 for (const name of ['it', 'specify', 'xit', 'xspecify']) {
-  const declareTest = globalThis[name]
-  if (typeof declareTest !== 'function') continue
-  if (name === 'xit' || name === 'xspecify') {
-    globalThis[name] = Object.assign(wrapTestDeclaration(declareTest), declareTest)
-  } else if (typeof declareTest.skip === 'function') {
-    declareTest.skip = wrapTestDeclaration(declareTest.skip)
+  const declaration = globalThis[name]
+  if (typeof declaration === 'function') {
+    globalThis[name] = wrapTestDeclaration(declaration, name === 'xit' || name === 'xspecify')
   }
 }
 
 /** @param {Function} declaration */
 function wrapSkippedSuiteDeclaration (declaration) {
   return function () {
-    const declarations = ['it', 'specify'].map(name => [name, globalThis[name]])
+    pendingSuiteDeclarationDepth++
     try {
-      for (const [name, declareTest] of declarations) {
-        if (typeof declareTest !== 'function') continue
-        const wrapped = Object.assign(wrapTestDeclaration(declareTest), declareTest)
-        if (typeof declareTest.only === 'function') wrapped.only = wrapTestDeclaration(declareTest.only)
-        globalThis[name] = wrapped
-      }
       return declaration.apply(this, arguments)
     } finally {
-      for (const [name, declareTest] of declarations) globalThis[name] = declareTest
+      pendingSuiteDeclarationDepth--
     }
   }
 }
 
-// Pending suites discard even plain it() callbacks. Capture them only during their synchronous declaration.
 for (const name of ['describe', 'context', 'xdescribe', 'xcontext']) {
   const declareSuite = globalThis[name]
   if (typeof declareSuite !== 'function') continue

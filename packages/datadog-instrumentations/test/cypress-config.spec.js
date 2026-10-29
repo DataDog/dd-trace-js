@@ -5,13 +5,20 @@ const fs = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
+const { createContext, runInContext } = require('node:vm')
 
 const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
+const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
 const log = require('../../dd-trace/src/log')
-const { wrapCliConfigFileOptions, wrapConfig } = require('../src/cypress-config')
+const {
+  installManualSupportFile,
+  installSupportFile,
+  wrapCliConfigFileOptions,
+  wrapConfig,
+} = require('../src/cypress-config')
 
 describe('Cypress before:run handlers', () => {
   const setupChannel = channel('ci:cypress:setup-node-events')
@@ -232,6 +239,165 @@ describe('Cypress config', () => {
     } finally {
       openSync.restore()
       warn.restore()
+      fs.rmSync(project, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('Cypress support initialization ownership', () => {
+  for (const manualFirst of [false, true]) {
+    it(`loads support once per Mocha root across automatic and manual entries (manual first=${manualFirst})`, () => {
+      const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-support-owner-'))
+      const originalSupport = join(project, 'support.js')
+      const manualSource = fs.readFileSync(join(__dirname, '../../../ci/cypress/support.js'), 'utf8')
+      const browserSupport = require.resolve('../../datadog-plugin-cypress/src/support')
+      const originalRead = fs.readFileSync
+      fs.writeFileSync(originalSupport, "require('dd-trace/ci/cypress/support')\n")
+      const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
+        return filename === browserSupport ? 'globalThis.installations++' : originalRead(filename, ...args)
+      })
+      try {
+        const config = { projectRoot: project, supportFile: originalSupport }
+        const files = installSupportFile(config)
+        assert.strictEqual(files.length, 2)
+        assert.notStrictEqual(config.supportFile, originalSupport)
+        assert.strictEqual(installSupportFile(config), undefined)
+        assert.strictEqual(fs.readdirSync(project).length, 3)
+        const generatedSource = fs.readFileSync(files[0], 'utf8')
+        let root = {}
+        const context = createContext({
+          Cypress: { mocha: { getRootSuite: () => root } },
+          installations: 0,
+          require: () => { context.installations++ },
+        })
+        const automatic = () => runInContext(`(function () {${generatedSource}\n})()`, context)
+        const manual = () => runInContext(`(function () {${manualSource}\n})()`, context)
+        for (let run = 1; run <= 2; run++) {
+          root = {}
+          for (const entry of manualFirst ? [manual, automatic, manual] : [automatic, manual, automatic]) entry()
+          assert.strictEqual(context.installations, run)
+        }
+        assert.strictEqual(fs.readFileSync(originalSupport, 'utf8'), "require('dd-trace/ci/cypress/support')\n")
+      } finally {
+        read.restore()
+        fs.rmSync(project, { recursive: true, force: true })
+      }
+    })
+  }
+
+  for (const { version, preload } of [
+    { version: '6.7.0', preload: false },
+    { version: '10.2.0', preload: false },
+    { version: '12.0.0', preload: true },
+    { version: '16.2.0', preload: true },
+  ]) {
+    it(`preloads manual support only with the required Cypress capability (${version})`, () => {
+      const install = sinon.spy()
+      const config = { version }
+      const plugin = proxyquire('../../datadog-plugin-cypress/src/plugin', {
+        '../../../version': { DD_MAJOR: 5 },
+        '../../dd-trace': { _tracer: {} },
+        '../../datadog-instrumentations/src/cypress-config': { installManualSupportFile: install },
+        './cypress-plugin': {
+          beforeRun () {},
+          afterSpec () {},
+          afterRun () {},
+          getAfterScreenshotHandler () {},
+          getTasks () { return {} },
+          init (_tracer, resolved) { return resolved },
+        },
+      })
+      assert.strictEqual(plugin(() => {}, config), config)
+      assert.strictEqual(install.callCount, Number(preload))
+      if (install.called) sinon.assert.calledWithExactly(install, config)
+    })
+  }
+})
+
+describe('Cypress manual setup reply ownership', () => {
+  for (const alternate of [false, true]) {
+    it(`preserves a frozen partial setup reply and native send arguments (alternate=${alternate})`, () => {
+      const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-support-reply-'))
+      const originalSupport = join(project, 'support.js')
+      const alternateSupport = join(project, 'alternate.js')
+      fs.writeFileSync(originalSupport, '')
+      fs.writeFileSync(alternateSupport, '')
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+      const returned = {}
+      const originalSend = sinon.spy(function () { return returned })
+      process.send = originalSend
+      let stop
+      try {
+        const config = { projectRoot: project, supportFile: originalSupport }
+        stop = installManualSupportFile(config)
+        const supportSend = process.send
+        let observed
+        const outer = function (message) {
+          observed = message.args[0].setupConfig
+          return supportSend.apply(this, arguments)
+        }
+        process.send = outer
+        let supportReads = 0
+        const supplied = { retries: Object.freeze({ openMode: 0 }) }
+        if (alternate) {
+          Object.defineProperty(supplied, 'supportFile', {
+            enumerable: true,
+            get () { supportReads++; return 'alternate.js' },
+          })
+        }
+        Object.freeze(supplied)
+        JSON.stringify(supplied)
+        assert.strictEqual(supportReads, Number(alternate))
+        supportReads = 0
+        const reply = Object.freeze({ setupConfig: supplied, registrations: [] })
+        const message = Object.freeze({ event: 'setupTestingType:reply', args: Object.freeze([reply]), marker: 'keep' })
+        const receiver = {}
+        const handle = {}
+        const options = {}
+        const callback = () => {}
+        assert.strictEqual(process.send.call(receiver, message, handle, options, callback), returned)
+        assert.strictEqual(observed, supplied)
+        assert.strictEqual(supportReads, Number(alternate))
+        const sent = originalSend.firstCall.args[0]
+        assert.notStrictEqual(sent, message)
+        assert.strictEqual(sent.marker, 'keep')
+        assert.strictEqual(sent.args[0].registrations, reply.registrations)
+        assert.strictEqual(sent.args[0].setupConfig.retries, supplied.retries)
+        assert.strictEqual(originalSend.firstCall.thisValue, receiver)
+        assert.deepStrictEqual(originalSend.firstCall.args.slice(1), [handle, options, callback])
+        const installedSupport = sent.args[0].setupConfig.supportFile
+        assert.ok(fs.existsSync(installedSupport))
+        if (alternate) assert.match(fs.readFileSync(installedSupport, 'utf8'), /alternate\.js/)
+        else assert.strictEqual(installedSupport, config.supportFile)
+        assert.strictEqual(supplied.supportFile, alternate ? 'alternate.js' : undefined)
+        assert.strictEqual(process.send, outer)
+        process.send(message)
+        assert.strictEqual(originalSend.lastCall.args[0], message)
+      } finally {
+        stop?.()
+        if (descriptor) Object.defineProperty(process, 'send', descriptor)
+        else delete process.send
+        fs.rmSync(project, { recursive: true, force: true })
+      }
+    })
+  }
+
+  it('forwards setup errors unchanged and restores only its own send wrapper', () => {
+    const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-support-error-'))
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+    const originalSend = sinon.spy()
+    process.send = originalSend
+    let stop
+    try {
+      stop = installManualSupportFile({ projectRoot: project, supportFile: false })
+      const message = Object.freeze({ event: 'setupTestingType:error', args: Object.freeze(['setup failed']) })
+      process.send(message)
+      sinon.assert.calledOnceWithExactly(originalSend, message)
+      assert.strictEqual(process.send, originalSend)
+    } finally {
+      stop?.()
+      if (descriptor) Object.defineProperty(process, 'send', descriptor)
+      else delete process.send
       fs.rmSync(project, { recursive: true, force: true })
     }
   })
