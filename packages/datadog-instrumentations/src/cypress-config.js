@@ -258,6 +258,7 @@ function mergeReturnedConfig (config, updatedConfig) {
       : value
   }
 
+  Object.defineProperty(mergedConfig, Symbol.for('dd-trace.cypress.returned-config'), { value: updatedConfig })
   return mergedConfig
 }
 

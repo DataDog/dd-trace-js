@@ -11,36 +11,188 @@ let hasBrowserRetries = false
 let browserRetries
 let hasGlobalBrowserRetries = false
 let globalBrowserRetries
-const initialBrowserRetries = Cypress.config('retries')
+const initialBrowserRetries = Cypress._.cloneDeep(Cypress.config('retries'))
+let originalRetries
+let configuredRetries
+let browserRetrySelection
+let globalBrowserRetrySelection
+const browserRetryObjects = new WeakMap()
+const browserRetryTargets = new WeakMap()
+const browserConfigStates = new WeakMap()
+const unwrapBrowserRetries = value => browserRetryTargets.get(value) || value
 const cypressConfig = Cypress.config
 
-// Browser support/spec files can explicitly replace the Node plugin's injected ATR budget,
-// including with the same numeric value. Preserve that intent separately from the value.
+// Getter values are mutable native objects. Track the written path, rather than
+// mistaking untouched injected fields for developer configuration.
+function overlayBrowserRetries (native, configured, actual) {
+  if (Cypress._.isEqual(configured, actual)) return Cypress._.cloneDeep(native)
+  if (!actual || typeof actual !== 'object' || !configured || typeof configured !== 'object') {
+    return Cypress._.cloneDeep(actual)
+  }
+  const result = native && typeof native === 'object' ? Cypress._.cloneDeep(native) : {}
+  for (const key of Object.keys(actual)) {
+    if (!Cypress._.isEqual(configured[key], actual[key])) {
+      result[key] = overlayBrowserRetries(result[key], configured[key], actual[key])
+    }
+  }
+  for (const key of Object.keys(configured)) {
+    // Cypress 6 predates Object.hasOwn.
+    // eslint-disable-next-line prefer-object-has-own
+    if (!Object.prototype.hasOwnProperty.call(actual, key)) delete result[key]
+  }
+  return result
+}
+
+function initializeBrowserRetryMetadata (metadata) {
+  if (!hasSuiteConfig || metadata.nativeReady) return
+  metadata.native = overlayBrowserRetries(originalRetries, configuredRetries, metadata.initial)
+  metadata.nativeReady = true
+  const writes = metadata.writes.splice(0)
+  for (const write of writes) recordBrowserRetryPath(metadata, write.path, write.value, write.deleted)
+}
+
+function recordBrowserRetryPath (metadata, path, value, deleted) {
+  if (!hasSuiteConfig) {
+    metadata.writes.push({ path, value: Cypress._.cloneDeep(value), deleted })
+    return
+  }
+  initializeBrowserRetryMetadata(metadata)
+  let native = metadata.native
+  if (!native || typeof native !== 'object') native = metadata.native = {}
+  for (let i = 0; i < path.length - 1; i++) {
+    const key = path[i]
+    if (!native[key] || typeof native[key] !== 'object') native[key] = {}
+    native = native[key]
+  }
+  // Cypress 6 uses an older browser without Array.prototype.at.
+  // eslint-disable-next-line unicorn/prefer-at
+  const key = path[path.length - 1]
+  if (deleted) delete native[key]
+  else native[key] = Cypress._.cloneDeep(value)
+  if (metadata.raw === unwrapBrowserRetries(cypressConfig.call(Cypress, 'retries'))) {
+    browserRetries = metadata.native
+    browserRetrySelection = metadata
+    hasBrowserRetries = true
+    const test = Cypress.state('test')
+    const config = test && test._testConfig
+    const overrides = config && (config.unverifiedTestConfig || config)
+    if (!overrides || overrides.retries === undefined) {
+      globalBrowserRetries = metadata.native
+      globalBrowserRetrySelection = metadata
+      hasGlobalBrowserRetries = true
+    }
+  }
+}
+
+function observeBrowserRetries (raw) {
+  raw = unwrapBrowserRetries(raw)
+  if (!raw || typeof raw !== 'object') return raw
+  if (browserRetryObjects.has(raw)) return browserRetryObjects.get(raw).proxy
+  const metadata = {
+    raw,
+    initial: Cypress._.cloneDeep(raw),
+    native: Cypress._.cloneDeep(hasBrowserRetries ? browserRetries : originalRetries),
+    nativeReady: hasSuiteConfig || hasBrowserRetries,
+    writes: [],
+  }
+  const proxies = new WeakMap()
+  function wrap (value, path) {
+    if (!value || typeof value !== 'object') return value
+    if (proxies.has(value)) return proxies.get(value)
+    const proxy = new Proxy(value, {
+      get (target, key, receiver) {
+        const result = Reflect.get(target, key, receiver)
+        const property = Object.getOwnPropertyDescriptor(target, key)
+        return property && !property.configurable && !property.writable && 'value' in property
+          ? result
+          : wrap(result, [...path, key])
+      },
+      set (target, key, value) {
+        const result = Reflect.set(target, key, value)
+        if (result) recordBrowserRetryPath(metadata, [...path, key], value, false)
+        return result
+      },
+      deleteProperty (target, key) {
+        const result = Reflect.deleteProperty(target, key)
+        if (result) recordBrowserRetryPath(metadata, [...path, key], undefined, true)
+        return result
+      },
+    })
+    proxies.set(value, proxy)
+    browserRetryTargets.set(proxy, value)
+    return proxy
+  }
+  metadata.proxy = wrap(raw, [])
+  browserRetryObjects.set(raw, metadata)
+  browserRetryObjects.set(metadata.proxy, metadata)
+  return metadata.proxy
+}
+
+// New root values are explicit native configuration. Reusing the same observed
+// object preserves its field provenance, including through Cypress restoration.
+function recordBrowserRetryReplacement (retries, previous) {
+  retries = unwrapBrowserRetries(retries)
+  const test = Cypress.state('test')
+  const applied = test && test._testConfig && test._testConfig.applied
+  if (applied === 'restoring') {
+    browserRetries = globalBrowserRetries
+    browserRetrySelection = globalBrowserRetrySelection
+    hasBrowserRetries = hasGlobalBrowserRetries
+  } else if (!applied || applied === 'complete' || Cypress.state('duringUserTestExecution')) {
+    if (retries && typeof retries === 'object' && retries === unwrapBrowserRetries(previous)) return
+    const metadata = retries && typeof retries === 'object' && browserRetryObjects.get(retries)
+    if (metadata) initializeBrowserRetryMetadata(metadata)
+    browserRetrySelection = metadata || undefined
+    browserRetries = metadata ? metadata.native : retries
+    hasBrowserRetries = true
+    const config = test && test._testConfig
+    const overrides = config && (config.unverifiedTestConfig || config)
+    if (!overrides || overrides.retries === undefined) {
+      globalBrowserRetries = browserRetries
+      globalBrowserRetrySelection = browserRetrySelection
+      hasGlobalBrowserRetries = true
+    }
+  }
+}
+
+function observeBrowserConfig (state) {
+  if (browserConfigStates.has(state)) return browserConfigStates.get(state)
+  const proxy = new Proxy(state, {
+    get (target, key, receiver) {
+      const value = Reflect.get(target, key, receiver)
+      return key === 'retries' ? observeBrowserRetries(value) : value
+    },
+    set (target, key, value) {
+      const previous = target[key]
+      const result = Reflect.set(target, key, key === 'retries' ? unwrapBrowserRetries(value) : value)
+      if (result && key === 'retries') recordBrowserRetryReplacement(value, previous)
+      return result
+    },
+    deleteProperty (target, key) {
+      const previous = target[key]
+      const result = Reflect.deleteProperty(target, key)
+      if (result && key === 'retries') recordBrowserRetryReplacement(undefined, previous)
+      return result
+    },
+  })
+  browserConfigStates.set(state, proxy)
+  return proxy
+}
+
 Cypress.config = Object.assign(function (key, value) {
-  const result = cypressConfig.apply(this, arguments)
   const retries = typeof key === 'object' && key !== null
     ? key.retries
     : key === 'retries' && arguments.length > 1 ? value : undefined
-  if (retries !== undefined) {
-    const test = Cypress.state('test')
-    const applied = test && test._testConfig && test._testConfig.applied
-    // Cypress restores its global configuration after a test with local overrides.
-    if (applied === 'restoring') {
-      browserRetries = globalBrowserRetries
-      hasBrowserRetries = hasGlobalBrowserRetries
-    } else if (!applied || applied === 'complete' || Cypress.state('duringUserTestExecution')) {
-      browserRetries = retries
-      hasBrowserRetries = true
-      const config = test && test._testConfig
-      const overrides = config && (config.unverifiedTestConfig || config)
-      if (!overrides || overrides.retries === undefined) {
-        // Without a native retries override, Cypress keeps a runtime write globally.
-        globalBrowserRetries = retries
-        hasGlobalBrowserRetries = true
-      }
-    }
+  const previous = retries === undefined ? undefined : cypressConfig.call(this, 'retries')
+  const args = [...arguments]
+  if (retries !== undefined && unwrapBrowserRetries(retries) !== retries) {
+    if (key !== null && typeof key === 'object') args[0] = { ...key, retries: unwrapBrowserRetries(retries) }
+    else args[1] = unwrapBrowserRetries(retries)
   }
-  return result
+  const result = cypressConfig.apply(this, args)
+  if (retries !== undefined) recordBrowserRetryReplacement(retries, previous)
+  if (arguments.length === 0) return observeBrowserConfig(result)
+  return key === 'retries' && arguments.length === 1 ? observeBrowserRetries(result) : result
 }, cypressConfig)
 
 /** @param {number|object|undefined} configured */
@@ -497,7 +649,9 @@ function getDynamicAtrTestKey (test) {
 
 /** @param {object} test */
 function getNativeRetryBudget (test) {
-  let retries = hasBrowserRetries ? nativeRetryCount(browserRetries) : frameworkRetries
+  let retries = hasBrowserRetries
+    ? nativeRetryCount(browserRetrySelection ? browserRetrySelection.native : browserRetries)
+    : frameworkRetries
   for (let current = test; current; current = current.parent) {
     const config = current._testConfig
     const overrides = config && (config.unverifiedTestConfig || config)
@@ -607,10 +761,17 @@ before(function () {
     if (suiteConfig) {
       hasSuiteConfig = true
       frameworkRetries = suiteConfig.frameworkRetries
+      originalRetries = suiteConfig.originalRetries
+      configuredRetries = suiteConfig.configuredRetries
+      const rawRetries = cypressConfig.call(Cypress, 'retries')
+      const metadata = rawRetries && typeof rawRetries === 'object' && browserRetryObjects.get(rawRetries)
+      if (metadata) initializeBrowserRetryMetadata(metadata)
       if (!hasBrowserRetries &&
           !Cypress._.isEqual(initialBrowserRetries, suiteConfig.configuredRetries)) {
         // Manual support can load after a browser configuration override already happened.
-        browserRetries = globalBrowserRetries = initialBrowserRetries
+        browserRetries = globalBrowserRetries = overlayBrowserRetries(
+          originalRetries, suiteConfig.configuredRetries, initialBrowserRetries
+        )
         hasBrowserRetries = hasGlobalBrowserRetries = true
       }
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled

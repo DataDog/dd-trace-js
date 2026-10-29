@@ -5,8 +5,11 @@ const { defineConfig } = require('cypress')
 const getCypressTestEnvironment = require('../../cypress-test-environment')
 
 module.exports = defineConfig({
-  ...getCypressTestEnvironment(),
-  retries: { runMode: 0, openMode: 0 },
+  ...getCypressTestEnvironment({ LATE_MODE: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE }),
+  retries: {
+    runMode: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE === 'during-init-partial' ? 2 : 0,
+    openMode: 0,
+  },
   video: false,
   screenshotOnRunFailure: false,
   e2e: {
@@ -14,12 +17,28 @@ module.exports = defineConfig({
     supportFile: join(__dirname, 'support.js'),
     async setupNodeEvents (on, config) {
       const plugin = require('dd-trace/ci/cypress/plugin')
-      const result = await plugin(on, config)
       const mode = process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE
-      if (mode === 'equal-object') result.retries = { runMode: 2, openMode: 0 }
-      else if (mode === 'equal-nested') result.retries.runMode = 2
-      else if (mode === 'returned-object') return { retries: { runMode: 2, openMode: 0 } }
-      else if (mode !== 'unchanged') result.retries = 2
+      const pending = plugin(on, config)
+      if (mode === 'during-init') config.retries.runMode = 2
+      if (mode === 'during-init-partial') config.retries = { openMode: 1 }
+      const result = await pending
+      if (mode === 'equal-object' || mode === 'browser-partial-before-support') {
+        result.retries = { runMode: 2, openMode: 0 }
+      } else if (mode === 'saved-reference' || mode === 'saved-reference-changed') {
+        const saved = result.retries
+        result.retries = 1
+        if (mode === 'saved-reference-changed') saved.runMode = 2
+        result.retries = saved
+      } else if (mode?.startsWith('after-handoff')) {
+        on('before:run', () => { result.retries.runMode = 2 })
+      } else if (mode === 'equal-nested') result.retries.runMode = 2
+      else if (mode === 'open-only') result.retries.openMode = 1
+      else if (mode?.startsWith('returned-open')) return { retries: { openMode: 1 } }
+      else if (mode === 'spread-open') {
+        result.retries.openMode = 1
+        return { ...result }
+      } else if (mode?.startsWith('returned-object')) return { retries: { runMode: 2, openMode: 0 } }
+      else if (!['unchanged', 'during-init', 'during-init-partial'].includes(mode)) result.retries = 2
       return result
     },
   },
