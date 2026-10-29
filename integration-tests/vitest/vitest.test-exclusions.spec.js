@@ -1,12 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { exec, execFileSync } = require('node:child_process')
+const { exec, execFileSync, spawnSync } = require('node:child_process')
 const { once } = require('node:events')
 
 const { sandboxCwd, useSandbox, getCiVisAgentlessConfig, stopCiVisTestEnv } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
+const { expectedExecutions, prepareExecutionLedger, readExecutions } = require('./exclusion-executions')
 const protection = 'test.test_management.prevent_failure_suppression'
 const exclusion = 'test.test_management.no_auto_retry'
 const suite = 'ci-visibility/vitest-tests/test-exclusions.mjs'
@@ -29,14 +30,19 @@ for (const version of versions) {
     const properties = assignments => {
       receiver.setTestManagementTests({ vitest: { suites: { [suite]: { tests: assignments } } } })
     }
-    const run = async (mode, expectedExit, check, env = {}) => {
-      childProcess = exec('./node_modules/.bin/vitest run', {
+    const run = async (mode, expectedExit, check, env = {}, executions = expectedExecutions[mode]) => {
+      const ledger = prepareExecutionLedger(cwd)
+      const command = mode === 'reuse'
+        ? process.execPath + ' ci-visibility/vitest-tests-programmatic-api/run-exclusions-reuse.mjs'
+        : './node_modules/.bin/vitest run'
+      childProcess = exec(command, {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
           TEST_DIR: suite,
           EXCLUSIONS_MODE: mode,
+          EXCLUSIONS_LEDGER: ledger,
           DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
           ...env,
         },
@@ -49,10 +55,10 @@ for (const version of versions) {
         childProcess,
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         payloads => {
-          const tests = payloads.flatMap(({ payload }) => payload.events)
-            .filter(event => event.type === 'test').map(event => event.content)
-          assert.ok(tests.length, output)
-          check(tests)
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.ok(tests.length || mode === 'tia', output)
+          check(tests, events)
         },
         { hardTimeout: 90000 }
       )
@@ -61,8 +67,149 @@ for (const version of versions) {
         throw error
       })
       assert.strictEqual(exitCode, expectedExit, output)
+      assert.deepStrictEqual(readExecutions(ledger), executions, output)
     }
     const named = (tests, name) => tests.filter(test => test.meta['test.name'] === name)
+
+    it('keeps a protection-only failure blocking without implying retry exclusion', async () => {
+      receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: false })
+      properties({ sole: { properties: { disabled: true, quarantined: true } } })
+      await run('protection-only', 1, tests => {
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(tests[0].meta['test.status'], 'fail')
+        assert.strictEqual(tests[0].meta['test.final_status'], 'fail')
+        assert.strictEqual(tests[0].meta[protection], 'true')
+        assert.strictEqual(tests[0].meta[exclusion], undefined)
+        assert.strictEqual(tests[0].meta['test.test_management.is_test_disabled'], 'true')
+        assert.strictEqual(tests[0].meta['test.test_management.is_quarantined'], 'true')
+      })
+    })
+
+    it('keeps concurrent same-name declarations with a shared callback independent under ATR', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      await run('collision', 1, tests => {
+        assert.strictEqual(tests.length, 4)
+        const excluded = tests.filter(test => test.meta[exclusion] === 'true')
+        const controls = tests.filter(test => test.meta[exclusion] === undefined)
+        assert.strictEqual(excluded.length, 1)
+        assert.strictEqual(excluded[0].meta['test.is_retry'], undefined)
+        assert.strictEqual(controls.length, 3)
+        assert.strictEqual(controls.filter(test => test.meta['test.is_retry'] === 'true').length, 2)
+      })
+    })
+
+    it('keeps concurrent same-name suppression decisions independent with a shared callback', async () => {
+      receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: false })
+      properties({ collision: { properties: { quarantined: true } } })
+      await run('collision-protection', 1, tests => {
+        assert.strictEqual(tests.length, 2)
+        const protectedTest = tests.find(test => test.meta[protection] === 'true')
+        const control = tests.find(test => test.meta[protection] === undefined)
+        assert.ok(protectedTest)
+        assert.ok(control)
+        assert.strictEqual(protectedTest.meta['test.final_status'], 'fail')
+        assert.strictEqual(control.meta['test.final_status'], 'skip')
+        for (const test of tests) {
+          assert.strictEqual(test.meta[exclusion], undefined)
+          assert.strictEqual(test.meta['test.test_management.is_quarantined'], 'true')
+        }
+      })
+    })
+
+    for (const quarantined of [false, true]) {
+      it(`preserves exhausted native retry budgets without Datadog fallback (quarantine=${quarantined})`, async () => {
+        const ledger = prepareExecutionLedger(cwd)
+        const native = spawnSync(process.execPath, ['./node_modules/vitest/vitest.mjs', 'run'], {
+          cwd,
+          env: {
+            ...process.env,
+            NODE_OPTIONS: '',
+            TEST_DIR: suite,
+            EXCLUSIONS_MODE: 'native-persistent',
+            EXCLUSIONS_NATIVE_QUARANTINED: quarantined ? '1' : '0',
+            EXCLUSIONS_LEDGER: ledger,
+          },
+          encoding: 'utf8',
+        })
+        assert.strictEqual(native.signal, null, native.stderr)
+        assert.strictEqual(native.status, 1, native.stdout + native.stderr)
+        assert.deepStrictEqual(readExecutions(ledger), quarantined
+          ? { direct: 2, inherited: 2 }
+          : { direct: 2, inherited: 2, control: 1 })
+        receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
+        const nativeNames = ['direct native failure', 'inherited budget inherited native failure']
+        properties(Object.fromEntries(nativeNames.map(name => [
+          name, { properties: { quarantined } },
+        ])))
+        await run('native-persistent', quarantined ? 0 : 1, tests => {
+          assert.strictEqual(tests.length, quarantined ? 4 : 7)
+          const excluded = tests.filter(test => test.meta[exclusion] === 'true')
+          assert.strictEqual(excluded.length, 4)
+          assert.ok(excluded.every(test => test.meta['test.status'] === 'fail'))
+          assert.strictEqual(excluded.filter(test => test.meta['test.retry_reason'] === 'external').length, 2)
+          assert.ok(excluded.every(test => !['auto_test_retry', 'early_flake_detection', 'attempt_to_fix']
+            .includes(test.meta['test.retry_reason'])))
+          assert.strictEqual(named(tests, 'control').length, quarantined ? 0 : 3)
+          for (const name of nativeNames) {
+            assert.strictEqual(named(tests, name).at(-1).meta['test.final_status'], quarantined ? 'skip' : 'fail')
+          }
+        }, { EXCLUSIONS_NATIVE_QUARANTINED: quarantined ? '1' : '0' },
+        quarantined ? { direct: 2, inherited: 2 } : expectedExecutions['native-persistent'])
+      })
+    }
+
+    it('recollects changed annotations and native budgets through the same runner instance', async () => {
+      const reusedSuite = 'ci-visibility/vitest-tests/annotation-reuse.mjs'
+      receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            [reusedSuite]: {
+              tests: {
+                reused: { properties: { quarantined: true } },
+              },
+            },
+          },
+        },
+      })
+      await run('reuse', 1, tests => {
+        assert.strictEqual(tests.length, 6)
+        assert.strictEqual(tests[0].meta[protection], 'true')
+        assert.strictEqual(tests[0].meta[exclusion], 'true')
+        assert.strictEqual(tests[0].meta['test.final_status'], 'fail')
+        for (const test of tests.slice(1, 4)) {
+          assert.strictEqual(test.meta[protection], undefined)
+          assert.strictEqual(test.meta[exclusion], undefined)
+        }
+        assert.strictEqual(tests.slice(1, 4).filter(test =>
+          test.meta['test.retry_reason'] === 'auto_test_retry').length, 2)
+        assert.strictEqual(tests[3].meta['test.final_status'], 'skip')
+        for (const test of tests.slice(4)) {
+          assert.strictEqual(test.meta[protection], 'true')
+          assert.strictEqual(test.meta[exclusion], 'true')
+          assert.strictEqual(test.meta['test.status'], 'fail')
+        }
+        // Native intermediate attempts do not have a terminal status.
+        assert.strictEqual(tests[5].meta['test.final_status'], 'fail')
+        assert.strictEqual(tests[5].meta['test.retry_reason'], 'external')
+      }, { TEST_DIR: reusedSuite })
+    })
+
+    it('preserves TIA selection before annotated declarations are collected', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        tests_skipping: true,
+        code_coverage: false,
+        flaky_test_retries_enabled: false,
+      })
+      receiver.setSuitesToSkip([{ type: 'suite', attributes: { suite } }])
+      await run('tia', 0, (tests, events) => {
+        assert.strictEqual(tests.length, 0)
+        const skipped = events.find(event => event.type === 'test_suite_end').content
+        assert.strictEqual(skipped.meta['test.status'], 'skip')
+        assert.strictEqual(skipped.meta['test.skipped_by_itr'], 'true')
+      }, { EXCLUSIONS_MODE: 'sole' })
+    })
 
     it('protects failures and retains assignments, parameterized declarations and skipped annotations', async () => {
       receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: false })
