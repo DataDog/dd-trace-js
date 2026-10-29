@@ -1,10 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { execSync } = require('node:child_process')
+const { execFileSync } = require('node:child_process')
 const fs = require('node:fs/promises')
+const { createRequire } = require('node:module')
 const path = require('node:path')
 
+const { globSync } = require('glob')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const semifies = require('semifies')
@@ -25,27 +27,23 @@ const {
 } = require('./prisma-fixtures')
 
 function execPrismaGenerate (config, cwd) {
+  const requireFromWorkspace = createRequire(path.join(cwd, 'package.json'))
+  const options = { cwd, stdio: 'inherit' }
+  execFileSync(process.execPath, [requireFromWorkspace.resolve('prisma/build/index.js'), 'generate'], options)
+
   if (config.ts) {
-    execSync([
-      'npm exec --no -- prisma generate',
-      [
-        'npm exec --no -- tsc ./generated/**/*.ts',
-        '--outDir ./dist',
-        '--target esnext',
-        '--module node16',
-        '--allowJs true',
-        '--skipLibCheck true',
-        '--moduleResolution node16',
-      ].join(' '),
-    ].join(' && '), {
-      cwd,
-      stdio: 'inherit',
-    })
-  } else {
-    execSync('npm exec --no -- prisma generate', {
-      cwd,
-      stdio: 'inherit',
-    })
+    const typescriptPackagePath = requireFromWorkspace.resolve('typescript/package.json')
+    const { bin } = requireFromWorkspace(typescriptPackagePath)
+    execFileSync(process.execPath, [
+      path.resolve(path.dirname(typescriptPackagePath), bin.tsc),
+      ...globSync('generated/**/*.ts', { cwd }),
+      '--outDir', './dist',
+      '--target', 'esnext',
+      '--module', 'node16',
+      '--allowJs', 'true',
+      '--skipLibCheck', 'true',
+      '--moduleResolution', 'node16',
+    ], options)
   }
 }
 
