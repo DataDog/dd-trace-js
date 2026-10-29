@@ -7,6 +7,50 @@ const annotationsKey = Symbol.for('dd-trace:test-annotations')
 const emptyAnnotations = { mustFail: false, noAutoRetry: false }
 let frameworkRetries = 0
 let hasSuiteConfig = false
+let hasBrowserRetries = false
+let browserRetries
+let hasGlobalBrowserRetries = false
+let globalBrowserRetries
+const initialBrowserRetries = Cypress.config('retries')
+const cypressConfig = Cypress.config
+
+// Browser support/spec files can explicitly replace the Node plugin's injected ATR budget,
+// including with the same numeric value. Preserve that intent separately from the value.
+Cypress.config = Object.assign(function (key, value) {
+  const result = cypressConfig.apply(this, arguments)
+  const retries = typeof key === 'object' && key !== null
+    ? key.retries
+    : key === 'retries' && arguments.length > 1 ? value : undefined
+  if (retries !== undefined) {
+    const test = Cypress.state('test')
+    const applied = test && test._testConfig && test._testConfig.applied
+    // Cypress restores its global configuration after a test with local overrides.
+    if (applied === 'restoring') {
+      browserRetries = globalBrowserRetries
+      hasBrowserRetries = hasGlobalBrowserRetries
+    } else if (!applied || applied === 'complete' || Cypress.state('duringUserTestExecution')) {
+      browserRetries = retries
+      hasBrowserRetries = true
+      const config = test && test._testConfig
+      const overrides = config && (config.unverifiedTestConfig || config)
+      if (!overrides || overrides.retries === undefined) {
+        // Without a native retries override, Cypress keeps a runtime write globally.
+        globalBrowserRetries = retries
+        hasGlobalBrowserRetries = true
+      }
+    }
+  }
+  return result
+}, cypressConfig)
+
+/** @param {number|object|undefined} configured */
+function nativeRetryCount (configured) {
+  if (typeof configured === 'number' || configured == null) return configured
+  const retries = configured[isTextTerminal ? 'runMode' : 'openMode']
+  return retries === true
+    ? configured.experimentalOptions && configured.experimentalOptions.maxRetries
+    : retries === false ? 0 : retries
+}
 
 /** @param {object} test */
 function getTestAnnotations (test) {
@@ -458,13 +502,12 @@ function configureTestRetries (test) {
   if (hasSuiteConfig && getTestAnnotations(test).noAutoRetry) {
     // Restore developer configuration after the plugin's global ATR configuration.
     // Read the nearest test/suite override before or after Cypress resolves it.
-    let retries = frameworkRetries
+    let retries = hasBrowserRetries ? nativeRetryCount(browserRetries) : frameworkRetries
     for (let current = test; current; current = current.parent) {
       const config = current._testConfig
       const overrides = config && (config.unverifiedTestConfig || config)
       if (overrides && overrides.retries !== undefined) {
-        const configured = overrides.retries
-        retries = typeof configured === 'number' ? configured : configured[isTextTerminal ? 'runMode' : 'openMode']
+        retries = nativeRetryCount(overrides.retries)
         break
       }
     }
@@ -559,6 +602,12 @@ before(function () {
     if (suiteConfig) {
       hasSuiteConfig = true
       frameworkRetries = suiteConfig.frameworkRetries
+      if (!hasBrowserRetries &&
+          JSON.stringify(initialBrowserRetries) !== JSON.stringify(suiteConfig.configuredRetries)) {
+        // Manual support can load after a browser configuration override already happened.
+        browserRetries = globalBrowserRetries = initialBrowserRetries
+        hasBrowserRetries = hasGlobalBrowserRetries = true
+      }
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
       isKnownTestsEnabled = suiteConfig.isKnownTestsEnabled
       knownTestsForSuite = suiteConfig.knownTestsForSuite

@@ -2129,6 +2129,7 @@ class CypressPlugin {
           isEarlyFlakeDetectionEnabled:
             this.isEarlyFlakeDetectionEnabled && hasEfdRetries(this.earlyFlakeDetectionRetryPolicy),
           frameworkRetries,
+          configuredRetries: this.configuredCypressRetries,
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
           earlyFlakeDetectionSchedulingRetryCount: this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
           isKnownTestsEnabled: this.isKnownTestsEnabled,

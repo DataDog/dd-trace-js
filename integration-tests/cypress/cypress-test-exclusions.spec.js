@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
+const { existsSync, readFileSync, rmSync } = require('node:fs')
+const { join } = require('node:path')
 
 const { sandboxCwd, useSandbox, getCiVisEvpProxyConfig, stopCiVisTestEnv, warmCypressBinary } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -194,6 +196,125 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         }
       }, { NODE_OPTIONS: '' },
       './node_modules/.bin/cypress run --config-file ci-visibility/cypress-late-native-retries/config.js')
+    })
+  }
+
+  for (const mode of [
+    'browser-retries', 'browser-same-budget', 'inherited-mode', 'browser-runtime',
+    'browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite',
+  ]) {
+    for (const atrEnabled of [false, true]) {
+      it(`preserves ${mode} native retry executions (ATR=${atrEnabled})`, async () => {
+        const boundarySuite = 'cypress/e2e/native-retry-boundaries.cy.js'
+        const ledger = join(cwd, 'native-retry-executions.json')
+        const expected = {
+          'excluded recovery': mode === 'inherited-mode' || mode === 'browser-runtime' ? 1 : 3,
+          'excluded persistent': mode === 'inherited-mode' || mode === 'browser-runtime' ? 1 : 3,
+          'excluded explicit zero': 1,
+          'ordinary control': mode === 'browser-runtime' ? 1 : 3,
+          ...(mode.startsWith('browser-runtime') && { 'changes runtime retries': 1 }),
+          ...(['browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite'].includes(mode) &&
+            { 'excluded after zero': 3 }),
+        }
+        const command = `./node_modules/.bin/cypress run --spec ${boundarySuite}`
+        childProcess = exec(`${command} --config supportFile=false`, {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            NODE_OPTIONS: '',
+            DD_TRACE_ENABLED: 'false',
+            SPEC_PATTERN: boundarySuite,
+            CYPRESS_EXCLUSIONS_MODE: mode,
+          },
+        })
+        let output = ''
+        childProcess.stdout.on('data', chunk => { output += chunk })
+        childProcess.stderr.on('data', chunk => { output += chunk })
+        const [nativeExit] = await once(childProcess, 'exit')
+        const expectedExit = mode === 'browser-runtime' ? 4 : mode === 'inherited-mode' ? 3 : 2
+        assert.strictEqual(nativeExit, expectedExit, output)
+        assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
+        rmSync(ledger)
+        receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
+        if (mode === 'browser-runtime' && atrEnabled) expected['ordinary control'] = 3
+        const instrumentedExit = mode === 'browser-runtime' && atrEnabled ? 3 : expectedExit
+        await run(mode, instrumentedExit, tests => {
+          assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
+          assert.strictEqual(tests.length, Object.values(expected).reduce((sum, count) => sum + count, 0))
+          for (const name of Object.keys(expected)) {
+            const attempts = named(tests, `native retry boundaries ${name}`)
+            assert.strictEqual(attempts.length, expected[name], name)
+            const annotated = name.startsWith('excluded')
+            assert.strictEqual(attempts.at(-1).meta['test.status'],
+              name.endsWith('persistent') || name === 'excluded explicit zero' ||
+                ((mode === 'inherited-mode' || mode === 'browser-runtime') && name === 'excluded recovery') ||
+                (mode === 'browser-runtime' && !atrEnabled && name === 'ordinary control')
+                ? 'fail'
+                : 'pass', name)
+            for (const test of attempts) assert.strictEqual(test.meta[exclusion], annotated ? 'true' : undefined, name)
+            for (const retry of attempts.slice(1)) {
+              assert.strictEqual(retry.meta['test.retry_reason'],
+                atrEnabled && !annotated && !['inherited-mode', 'browser-runtime-suite'].includes(mode)
+                  ? 'auto_test_retry'
+                  : 'external', name)
+            }
+          }
+        }, {
+          SPEC_PATTERN: boundarySuite,
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: mode === 'browser-same-budget' ? '2' : '4',
+        }, command)
+      })
+    }
+  }
+
+  for (const mode of ['protection', 'protection-pass', 'quarantine', 'excluded-quarantine', 'excluded-disabled']) {
+    it(`verifies independent ${mode} policy with a sole callback ledger`, async () => {
+      const independentSuite = 'cypress/e2e/independent-exclusions.cy.js'
+      const ledger = join(cwd, 'independent-exclusion-executions.json')
+      rmSync(ledger, { force: true })
+      const protectedTest = mode.startsWith('protection')
+      const excluded = mode.startsWith('excluded')
+      const disabled = mode === 'excluded-disabled'
+      const passing = mode === 'protection-pass'
+      receiver.setSettings({
+        flaky_test_retries_enabled: false,
+        known_tests_enabled: true,
+        test_management: { enabled: true, attempt_to_fix_retries: 2 },
+      })
+      receiver.setKnownTests({ cypress: { [independentSuite]: ['sole'] } })
+      receiver.setTestManagementTests({
+        cypress: {
+          suites: {
+            [independentSuite]: {
+              tests: {
+                sole: {
+                  properties: {
+                    quarantined: true,
+                    ...(protectedTest || disabled ? { disabled: true } : {}),
+                    ...(excluded ? { attempt_to_fix: true } : {}),
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+      await run(mode, mode === 'protection' ? 1 : 0, tests => {
+        const executions = existsSync(ledger) ? JSON.parse(readFileSync(ledger, 'utf8')).executions : 0
+        assert.strictEqual(executions, disabled ? 0 : 1)
+        assert.strictEqual(tests.length, 1)
+        const [test] = tests
+        assert.strictEqual(test.meta['test.status'], disabled ? 'skip' : passing ? 'pass' : 'fail')
+        assert.strictEqual(test.meta['test.final_status'], protectedTest ? passing ? 'pass' : 'fail' : 'skip')
+        assert.strictEqual(test.meta[protection], protectedTest ? 'true' : undefined)
+        assert.strictEqual(test.meta[exclusion], excluded ? 'true' : undefined)
+        assert.strictEqual(test.meta['test.test_management.is_quarantined'], 'true')
+        assert.strictEqual(test.meta['test.test_management.is_test_disabled'],
+          protectedTest || disabled ? 'true' : undefined)
+        assert.strictEqual(test.meta['test.test_management.is_attempt_to_fix'], excluded ? 'true' : undefined)
+        assert.strictEqual(test.meta['test.test_management.attempt_to_fix_passed'], undefined)
+        assert.strictEqual(test.meta['test.is_retry'], undefined)
+      }, { SPEC_PATTERN: independentSuite }, `./node_modules/.bin/cypress run --spec ${independentSuite}`)
     })
   }
 
