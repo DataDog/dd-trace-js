@@ -14,6 +14,8 @@ const FIRST_RETRY_MAX_MS = 10_000
 const SECOND_RETRY_MIN_MS = 5000
 const SECOND_RETRY_MAX_MS = 30_000
 const RETRY_JITTER = 0.2
+const FEATURE_FLAGS_CAPABILITIES_HEADER = 'X-DD-FEATURE-FLAGS-CAPABILITIES'
+const DEPENDENT_FLAG_CAPABILITY = 'dependent-flag-variant-key-v1'
 
 /**
  * @typedef {object} AgentlessSourceConfig
@@ -147,6 +149,7 @@ class AgentlessConfigurationSource {
   #request (signal) {
     const headers = getClientLibraryHeaders()
     headers['Accept-Encoding'] = 'gzip'
+    headers[FEATURE_FLAGS_CAPABILITIES_HEADER] = DEPENDENT_FLAG_CAPABILITY
     if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
     if (this.#etag) headers['If-None-Match'] = this.#etag
 

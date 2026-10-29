@@ -159,6 +159,10 @@ describe('AgentlessConfigurationSource', () => {
     assert.strictEqual(requests[0].options.headers['Accept-Encoding'], 'gzip')
     assert.strictEqual(requests[0].options.headers['DD-Client-Library-Language'], 'nodejs')
     assert.strictEqual(requests[0].options.headers['DD-Client-Library-Version'], VERSION)
+    assert.strictEqual(
+      requests[0].options.headers['X-DD-FEATURE-FLAGS-CAPABILITIES'],
+      'dependent-flag-variant-key-v1'
+    )
     assert.strictEqual(requests[0].options.headers['If-None-Match'], undefined)
 
     await tick(30_000)
