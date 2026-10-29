@@ -308,6 +308,8 @@ for (const version of versions) {
       expectedExitCode = 0,
       workingDirectory = cwd
     ) {
+      const exclusionLedger = path.join(cwd, 'exclusion-executions.jsonl')
+      if (scenario.startsWith('jasmineExclusions')) fs.rmSync(exclusionLedger, { force: true })
       const initialWebDriverSessionCount = webDriver.getSessionCount()
       const initialWebDriverRequestCount = webDriver.getRequests().length
       const executable = path.join(cwd, 'node_modules', '.bin', 'wdio')
@@ -321,6 +323,7 @@ for (const version of versions) {
           GITHUB_BASE_REF: '',
           WEBDRIVERIO_FRAMEWORK: framework,
           WEBDRIVERIO_SCENARIO: scenario,
+          ...(scenario.startsWith('jasmineExclusions') && { WEBDRIVERIO_EXCLUSIONS_LEDGER: exclusionLedger }),
           WEBDRIVER_PORT: String(webDriver.port),
           ...extraEnvironment,
         },
@@ -407,7 +410,20 @@ for (const version of versions) {
 
             /** @param {object[]} payloads */
             function getTests (payloads) {
-              return getEvents(payloads).filter(event => event.type === 'test').map(event => event.content)
+              const tests = getEvents(payloads).filter(event => event.type === 'test').map(event => event.content)
+              const ledgerFile = path.join(cwd, 'exclusion-executions.jsonl')
+              const ledger = fs.existsSync(ledgerFile) ? fs.readFileSync(ledgerFile, 'utf8').trim().split('\n') : []
+              const expected = {}
+              for (const test of tests) {
+                if (test.meta[TEST_STATUS] !== 'skip') {
+                  expected[test.meta[TEST_NAME]] = (expected[test.meta[TEST_NAME]] || 0) + 1
+                }
+              }
+              const actual = {}
+              for (const name of ledger) actual[name] = (actual[name] || 0) + 1
+              assert.deepStrictEqual(actual, expected,
+                'native callback ledger must match the separately asserted events')
+              return tests
             }
 
             /** @param {Record<string, Record<string, {properties: object}>>} suites */
@@ -530,8 +546,9 @@ for (const version of versions) {
               })
             })
 
-            for (const passing of [false, true]) {
-              it(`protects a sole ${passing ? 'passing' : 'failing'} test from disabling and quarantine`, async () => {
+            for (const [passing, retryExcluded] of [[false, false], [true, false], [false, true], [true, true]]) {
+              const outcome = passing ? 'passing' : 'failing'
+              it(`protects a sole ${outcome} test (retryExcluded=${retryExcluded})`, async () => {
                 receiver.setSettings({ known_tests_enabled: true, test_management: { enabled: true } })
                 receiver.setKnownTests({ webdriverio: { [protectedFile]: [protectedName] } })
                 setProperties({
@@ -550,8 +567,11 @@ for (const version of versions) {
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION], 'true')
-                  assert.strictEqual(test.meta[TEST_MANAGEMENT_NO_AUTO_RETRY], 'true')
-                }, { WEBDRIVERIO_EXCLUSIONS_PASS: String(passing) }, passing ? 0 : 1)
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_NO_AUTO_RETRY], retryExcluded ? 'true' : undefined)
+                }, {
+                  WEBDRIVERIO_EXCLUSIONS_PASS: String(passing),
+                  WEBDRIVERIO_EXCLUSIONS_ALLOW_RETRIES: String(!retryExcluded),
+                }, passing ? 0 : 1)
               })
             }
 
