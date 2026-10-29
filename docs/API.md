@@ -194,28 +194,8 @@ tracer.use('openai', {
 <h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-sdk"></h5>
 
-Amazon Nova 2 Sonic LLM Observability supports `InvokeModelWithBidirectionalStreamCommand` in
-`@aws-sdk/client-bedrock-runtime >=3.785.0` with model `amazon.nova-2-sonic-v1:0`, supplied as a model ID
-or a foundation-model ARN such as `arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-2-sonic-v1:0`.
-Spans use the canonical model ID; the identifier sent to AWS is unchanged. Inference-profile identifiers,
-cross-region prefixes, other model versions (including Nova 2.5 Sonic), and malformed ARNs pass through
-without Nova capture. The integration does not perform model-resolution API calls.
-Initialize the tracer with LLM Observability enabled before loading the AWS SDK. Each logical response
-creates a `nova sonic audio turn` workflow with a `nova sonic response` LLM child and, when timing is
-available, `user speech` and `agent speech` workflow children. Turns inherit the invocation's application
-workflow, if present, and share a conversation session ID.
-
-The LLM child contains transcripts, tool calls/results, token usage, and bounded inline WAV audio.
-Invalid or oversized audio falls back to text without dropping independently valid speech timing.
-Audio-token counts are subsets of the input/output token totals. Input speech offsets select the audio
-clip; time to first audio uses local receipt of `userSpeechEnd` and the first output audio. Output speech
-timing projects PCM playback, including queueing, underrun silence, and interruption cuts; it does not
-measure sound heard at a device. Input is observed as the SDK consumes it, which may precede transmission.
-
-Original Nova Sonic and restarting a different prompt on the same connection are unsupported. On a prompt
-restart, the integration flushes the first prompt and stops capturing that connection. Set
-`tracer.use('aws-sdk', { llmobs: false })` to disable Nova audio/turn capture. Standard Bedrock APM tracing
-for other operations is unaffected.
+For Amazon Bedrock LLM Observability integrations, see the
+[automatic instrumentation documentation](https://docs.datadoghq.com/llm_observability/instrument/auto_instrumentation/#amazon-bedrock).
 
 <h5 id="azure-cosmos"></h5>
 <h5 id="azure-event-hubs"></h5>
