@@ -1,6 +1,6 @@
 'use strict'
 
-const { HTTP_CLIENT_IP, HTTP_USERAGENT, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
+const { HTTP_CLIENT_IP, HTTP_USERAGENT, NETWORK_CLIENT_IP, SERVICE_NAME } = require('../../../../ext/tags')
 const createRfdc = require('../../../../vendor/dist/rfdc')
 const clone = createRfdc({ proto: false, circles: false })
 const { USER_ID, USER_SESSION_ID } = require('../appsec/addresses')
@@ -92,6 +92,8 @@ function isPlainObject (value) {
  * which could otherwise smuggle reserved ai_guard.* keys in through a non-reserved parent key.
  * Entries above the agent meta limits are dropped rather than truncated. The limits are checked in
  * characters (UTF-16 code units), so the agent may still truncate values with multi-byte characters.
+ * A non-string service.name is dropped because the span formatter calls string methods on it when
+ * the trace is exported, after this function can catch the error.
  *
  * @param {string} key
  * @param {unknown} value
@@ -99,6 +101,7 @@ function isPlainObject (value) {
 function isValidCustomTag (key, value) {
   if (key.length === 0 || key.length > MAX_META_KEY_LENGTH) return false
   if (key === TAGS.RESERVED_TAG_KEY || key.startsWith(TAGS.RESERVED_TAG_PREFIX)) return false
+  if (key === SERVICE_NAME && typeof value !== 'string') return false
 
   switch (typeof value) {
     case 'string':

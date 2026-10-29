@@ -1045,6 +1045,30 @@ describe('AIGuard SDK', () => {
       })
     })
 
+    for (const value of [2, true]) {
+      it(`drops a non-string service.name (${value}) so the span can still be exported`, async () => {
+        mockAllow()
+
+        const evaluation = await aiguard.evaluate(prompt, { tags: { 'service.name': value, kept: 'yes' } })
+
+        assert.strictEqual(evaluation.action, 'ALLOW')
+        await assertGuardSpan(span => {
+          assert.strictEqual(span.service, 'ai_guard_demo')
+          assertObjectContains(span.meta, { kept: 'yes', 'ai_guard.action': 'ALLOW' })
+        })
+      })
+    }
+
+    it('keeps a string service.name override', async () => {
+      mockAllow()
+
+      await aiguard.evaluate(prompt, { tags: { 'service.name': 'custom-service' } })
+
+      await assertGuardSpan(span => {
+        assert.strictEqual(span.service, 'custom-service')
+      })
+    })
+
     it('drops invalid and oversized entries and keeps boundary values', async () => {
       mockAllow()
       const maxKey = 'k'.repeat(200)
