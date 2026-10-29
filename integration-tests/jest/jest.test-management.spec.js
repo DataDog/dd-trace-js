@@ -3024,9 +3024,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(1 + 2, 4)
           })
           const slowIt = process.env.RUN_SLOW_IMPACTED_TEST ? it : it.skip
+          // Runs past the 5s bucket, so the timeout has to exceed Jest's 5s default.
           slowIt('use their duration retry budget', (done) => {
             setTimeout(done, 5_100)
-          })
+          }, 20_000)
         })
 
         if (process.env.RUN_ROOT_LEVEL_IMPACTED_TEST) {
@@ -3363,6 +3364,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                 )
 
               assert.strictEqual(tests.length, 1)
+              assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
               assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
               assert.strictEqual(tests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
               assert.ok(!(TEST_IS_RETRY in tests[0].meta))
