@@ -165,6 +165,39 @@ describe('GraphQL', () => {
         },
       }, {})
     })
+
+    it('Should call waf once per request for repeated fields without arguments', () => {
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+      startGraphqlResolver.publish(createResolverMessage({ title: {} }))
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+
+      sinon.assert.calledTwice(waf.run)
+      sinon.assert.calledWithExactly(waf.run.firstCall, {
+        ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { name: {} } },
+      }, {})
+      sinon.assert.calledWithExactly(waf.run.secondCall, {
+        ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { title: {} } },
+      }, {})
+    })
+
+    it('Should call waf again for fields without arguments in a different request', () => {
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+
+      storage('legacy').getStore.returns(withRequest(undefined, {}))
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+
+      sinon.assert.calledTwice(waf.run)
+    })
+
+    it('Should call waf for every field with arguments or directives', () => {
+      startGraphqlResolver.publish(createResolverMessage({ user: { id: '1234' } }))
+      startGraphqlResolver.publish(createResolverMessage({ user: { id: '1234' } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
+      startGraphqlResolver.publish(createResolverMessage({ name: { include: { if: true } } }))
+
+      sinon.assert.callCount(waf.run, 4)
+    })
   })
 
   describe('block response', () => {
@@ -248,6 +281,32 @@ describe('GraphQL', () => {
 
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
+    })
+
+    it('Should abort every occurrence of a blocked field without arguments', () => {
+      const firstAbortController = { abort: sinon.stub() }
+      const secondAbortController = { abort: sinon.stub() }
+
+      sinon.stub(waf, 'run').returns({
+        actions: {
+          block_request: blockParameters,
+        },
+      })
+
+      sinon.stub(web, 'root').returns(rootSpan)
+
+      startGraphqlResolver.publish(createResolverMessage({ __schema: {} }, firstAbortController))
+      startGraphqlResolver.publish(createResolverMessage({ __schema: {} }, secondAbortController))
+
+      sinon.assert.calledOnce(waf.run)
+      sinon.assert.calledOnce(firstAbortController.abort)
+      sinon.assert.calledOnce(secondAbortController.abort)
+
+      const abortData = {}
+      apolloChannel.asyncEnd.publish({ abortController: firstAbortController, abortData })
+
+      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphqlJson', blockParameters)
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
     })
 
     it('Should catch error when block fails', () => {
