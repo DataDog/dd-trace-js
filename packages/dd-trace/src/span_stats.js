@@ -208,6 +208,7 @@ class SpanStatsProcessor {
       env,
       tags,
       version: appVersion,
+      reportHostname,
       _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
     } = config
     if (!otlpExporter) {
@@ -217,7 +218,9 @@ class SpanStatsProcessor {
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
     this.buckets = new TimeBuckets(Boolean(otlpExporter))
-    this.hostname = os.hostname()
+    // A non-empty client hostname takes precedence over the agent's own hostname for the resulting
+    // metrics, so only send it when explicitly requested.
+    this.hostname = reportHostname ? os.hostname() : ''
     this.enabled = enabled
     this.otlpExporter = otlpExporter || null
     this.env = env
