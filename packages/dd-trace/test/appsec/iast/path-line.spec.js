@@ -297,6 +297,34 @@ describe('path-line', function () {
           assert.strictEqual(results[3].column, 71)
         })
       })
+
+      describe('without a bundler plugin', () => {
+        beforeEach(() => {
+          previousDDBasePath = pathLine.ddBasePath
+          pathLine.ddBasePath = undefined
+          mockProcess.cwd = () => PROJECT_PATH
+        })
+
+        afterEach(() => {
+          pathLine.ddBasePath = previousDDBasePath
+        })
+
+        it('should return all entries, including paths containing "undefined"', () => {
+          const bundleOutFile = 'out.js'
+          const undefinedDirFile = path.join('undefined', 'app.js')
+          const callsites = [
+            new CallSiteMock(path.join(PROJECT_PATH, bundleOutFile), 11),
+            new CallSiteMock(path.join(PROJECT_PATH, undefinedDirFile), 3, 14),
+          ]
+
+          const results = pathLine.getCallSiteFramesForLocation(callsites)
+
+          assert.deepStrictEqual(results.map(({ path, line, column }) => ({ path, line, column })), [
+            { path: bundleOutFile, line: 11, column: 0 },
+            { path: undefinedDirFile, line: 3, column: 14 },
+          ])
+        })
+      })
     })
   })
 
