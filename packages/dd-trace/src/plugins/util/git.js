@@ -505,7 +505,7 @@ function getGitMetadata (ciMetadata) {
   }
 
   if (headCommitSha) {
-    const shallow = isShallowRepository()
+    const shallow = isShallowRepository(true)
     const fetchedAtDepthOne = shallow && fetchHeadCommitSha(headCommitSha)
     const headFlags = [
       'show',

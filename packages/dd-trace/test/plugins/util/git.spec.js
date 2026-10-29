@@ -1276,6 +1276,63 @@ done
     assert.match(getGitDiff(knownBase, headSha), /\+head/)
   })
 
+  for (const cachedShallow of [true, false]) {
+    it(`uses the current shallow state for metadata when the Git cache contains ${cachedShallow}`, () => {
+      const diffBase = git(remote, ['rev-parse', 'refs/heads/juan-fernandez/merge^1'])
+      const repo = path.resolve(__dirname, '../../../../..')
+      const script = `
+        const fs = require('node:fs')
+        const path = require('node:path')
+        const { execFileSync } = require('node:child_process')
+        const [repo, checkout, remoteUrl, headSha, diffBase, cacheDir, cachedShallow] = process.argv.slice(1)
+        const options = { cwd: checkout, stdio: 'pipe' }
+        if (cachedShallow === 'false') execFileSync('git', ['fetch', '--unshallow', 'origin'], options)
+        const config = require(path.join(repo, 'packages/dd-trace/src/config'))()
+        config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = true
+        config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = cacheDir
+        const { cachedExec } = require(path.join(repo, 'packages/dd-trace/src/plugins/util/git-cache'))
+        const cachedState = cachedExec('git', ['rev-parse', '--is-shallow-repository'], options).toString().trim()
+        process.chdir(path.dirname(checkout))
+        fs.rmSync(checkout, { recursive: true, force: true })
+        const shallow = cachedShallow === 'false'
+        execFileSync('git', [
+          'clone', '--no-checkout', '--single-branch', ...(shallow ? ['--depth=1'] : []),
+          '--branch', shallow ? 'juan-fernandez/merge' : 'juan-fernandez/head', remoteUrl, checkout,
+        ], { stdio: 'pipe' })
+        process.chdir(checkout)
+        const originalHead = execFileSync('git', ['rev-parse', 'HEAD'], options).toString()
+        const originalRefs = execFileSync('git', ['show-ref'], options).toString()
+        const { getGitMetadata, getGitDiff } = require(path.join(repo, 'packages/dd-trace/src/plugins/util/git'))
+        const metadata = getGitMetadata({ headCommitSha: headSha, pullRequestBaseBranchSha: diffBase })
+        const metadataShallowState = execFileSync('git', ['rev-parse', '--is-shallow-repository'], options)
+          .toString().trim()
+        const diff = getGitDiff(diffBase, headSha)
+        process.stdout.write(JSON.stringify({
+          cachedState, metadata, metadataShallowState, diff,
+          finalShallowState: execFileSync('git', ['rev-parse', '--is-shallow-repository'], options).toString().trim(),
+          headCount: execFileSync('git', ['rev-list', '--count', headSha], options).toString().trim(),
+          originalHead, originalRefs,
+          finalHead: execFileSync('git', ['rev-parse', 'HEAD'], options).toString(),
+          finalRefs: execFileSync('git', ['show-ref'], options).toString(),
+        }))
+      `
+      const result = JSON.parse(execFileSync(process.execPath, [
+        '-e', script, repo, checkout, pathToFileURL(remote).href, headSha, diffBase,
+        path.join(directory, 'git-cache'), String(cachedShallow),
+      ], { cwd: checkout, stdio: 'pipe' }))
+
+      assert.strictEqual(result.cachedState, String(cachedShallow))
+      assert.strictEqual(result.metadataShallowState, String(!cachedShallow))
+      assert.strictEqual(result.finalShallowState, String(!cachedShallow))
+      assert.strictEqual(result.metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+      assert.strictEqual(result.headCount, cachedShallow ? '2' : '1')
+      assert.match(result.diff, /-root/)
+      assert.match(result.diff, /\+head/)
+      assert.strictEqual(result.finalHead, result.originalHead)
+      assert.strictEqual(result.finalRefs, result.originalRefs)
+    })
+  }
+
   it('does not use a cached missing-object probe to shorten subsequently fetched head history', () => {
     const repo = path.resolve(__dirname, '../../../../..')
     const script = `
