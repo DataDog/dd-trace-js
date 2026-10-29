@@ -24,11 +24,12 @@ const { updateBlockFailureMetric } = require('./telemetry')
 const graphqlRequestData = new WeakMap()
 
 /**
- * Per request, the blocking action (or `undefined`) of every field already checked without arguments.
+ * Per request, the blocking action of every field already checked without arguments, `undefined` when the WAF
+ * requested none.
  *
  * @type {WeakMap<object, Map<string, object | undefined>>}
  */
-const fieldsWithoutArgumentsResults = new WeakMap()
+const fieldsWithoutArgumentsActions = new WeakMap()
 
 function enable () {
   enableApollo()
@@ -51,30 +52,37 @@ function onGraphqlStartResolver (data) {
   const resolverInfo = data.createResolverInfo?.(data)
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
-  // `{ fieldName: {} }` only exposes the field name, so the WAF result is the same for every occurrence of that
-  // field in the request. List queries resolve the same fields once per item.
   const fieldName = getFieldNameWithoutArguments(resolverInfo)
-  let fieldResults
-  if (fieldName !== undefined) {
-    fieldResults = fieldsWithoutArgumentsResults.get(req)
-    if (fieldResults?.has(fieldName)) {
-      applyBlockingAction(req, data, fieldResults.get(fieldName))
-      return
-    }
+  if (fieldName === undefined) {
+    applyBlockingAction(req, data, runWafOnResolver(resolverInfo, req))
+    return
   }
 
-  const result = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
-  const blockingAction = getBlockingAction(result?.actions)
-
-  if (fieldName !== undefined) {
-    if (!fieldResults) {
-      fieldResults = new Map()
-      fieldsWithoutArgumentsResults.set(req, fieldResults)
-    }
-    fieldResults.set(fieldName, blockingAction)
+  // `{ fieldName: {} }` exposes nothing but the field name, so the WAF returns the same action for every
+  // occurrence of that field in the request. List queries resolve the same fields once per item.
+  let blockingActions = fieldsWithoutArgumentsActions.get(req)
+  if (blockingActions === undefined) {
+    blockingActions = new Map()
+    fieldsWithoutArgumentsActions.set(req, blockingActions)
+  } else if (blockingActions.has(fieldName)) {
+    applyBlockingAction(req, data, blockingActions.get(fieldName))
+    return
   }
 
+  const blockingAction = runWafOnResolver(resolverInfo, req)
+  blockingActions.set(fieldName, blockingAction)
   applyBlockingAction(req, data, blockingAction)
+}
+
+/**
+ * @param {object} resolverInfo
+ * @param {object} req
+ * @returns {object | undefined} the blocking action the WAF requested, when it requested one
+ */
+function runWafOnResolver (resolverInfo, req) {
+  const result = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
+
+  return getBlockingAction(result?.actions)
 }
 
 /**
