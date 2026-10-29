@@ -200,7 +200,7 @@ describe('OpenFeature event delivery strategy', () => {
     const secondStop = setEventDeliveryStrategy(agentlessConfig(), setWriterEnabledValue)
 
     sinon.assert.calledOnce(log.warn)
-    assert.match(log.warn.firstCall.args[0], /direct intake credentials/)
+    assert.match(log.warn.firstCall.args[0], /^Feature Flags event delivery is disabled .*direct intake credentials/)
     firstStop()
     secondStop()
   })
