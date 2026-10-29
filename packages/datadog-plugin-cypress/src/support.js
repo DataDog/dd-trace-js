@@ -603,7 +603,7 @@ before(function () {
       hasSuiteConfig = true
       frameworkRetries = suiteConfig.frameworkRetries
       if (!hasBrowserRetries &&
-          JSON.stringify(initialBrowserRetries) !== JSON.stringify(suiteConfig.configuredRetries)) {
+          !Cypress._.isEqual(initialBrowserRetries, suiteConfig.configuredRetries)) {
         // Manual support can load after a browser configuration override already happened.
         browserRetries = globalBrowserRetries = initialBrowserRetries
         hasBrowserRetries = hasGlobalBrowserRetries = true

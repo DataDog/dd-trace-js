@@ -5,10 +5,15 @@ const { defineConfig } = require('cypress')
 const getCypressTestEnvironment = require('./cypress-test-environment')
 
 const retries = Number(process.env.CYPRESS_RETRIES || 0)
-const experimentalRetries = process.env.CYPRESS_EXPERIMENTAL_RETRIES === 'true' && {
-  experimentalStrategy: 'detect-flake-but-always-fail',
-  experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
-  runMode: true,
+const experimentalMode = process.env.CYPRESS_EXPERIMENTAL_RETRIES
+const experimentalRetries = ['true', 'threshold', 'disabled'].includes(experimentalMode) && {
+  experimentalStrategy: experimentalMode === 'threshold'
+    ? 'detect-flake-and-pass-on-threshold'
+    : 'detect-flake-but-always-fail',
+  experimentalOptions: experimentalMode === 'threshold'
+    ? { maxRetries: 4, passesRequired: 3 }
+    : { maxRetries: 2, stopIfAnyPassed: false },
+  runMode: experimentalMode !== 'disabled',
   openMode: false,
 }
 

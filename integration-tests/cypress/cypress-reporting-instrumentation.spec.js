@@ -11,6 +11,7 @@ const { runInNewContext } = require('node:vm')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
+const { isEqual } = require('lodash')
 const {
   sandboxCwd,
   useSandbox,
@@ -1599,6 +1600,7 @@ moduleTypes.forEach(({
             path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
           ), {
             Cypress: {
+              _: { isEqual },
               config: name => {
                 if (name === 'retries') return retries
                 assert.strictEqual(name, 'isTextTerminal')

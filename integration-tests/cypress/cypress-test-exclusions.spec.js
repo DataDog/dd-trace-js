@@ -14,6 +14,9 @@ const { getCypressDependencies } = require('./dependencies')
 
 const version = process.env.CYPRESS_VERSION || '14.5.4'
 const moduleType = process.env.CYPRESS_MODULE_TYPE || 'commonJS'
+const [cypressMajor, cypressMinor] = version.split('.').map(Number)
+const supportsExperimental = version === 'latest' || cypressMajor > 13 ||
+  (cypressMajor === 13 && cypressMinor >= 4)
 // These exclusion scenarios require Cypress 12's test isolation, which makes Datadog retries available.
 // Cypress 6 is only exercised on v5/Node 16 and does not provide that capability.
 const isSupported = version !== '6.7.0' && NODE_MAJOR > 16 &&
@@ -209,16 +212,29 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
   for (const mode of [
     'browser-retries', 'browser-same-budget', 'inherited-mode', 'browser-runtime',
     'browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite',
+    'experimental-native', 'experimental-native-threshold', 'experimental-native-disabled',
   ]) {
     for (const atrEnabled of [false, true]) {
-      it(`preserves ${mode} native retry executions (ATR=${atrEnabled})`, async () => {
+      const experimentalMode = mode.startsWith('experimental-native')
+      const boundaryTest = experimentalMode && !supportsExperimental ? it.skip : it
+      boundaryTest(`preserves ${mode} native retry executions (ATR=${atrEnabled})`, async () => {
         const boundarySuite = 'cypress/e2e/native-retry-boundaries.cy.js'
         const ledger = join(cwd, 'native-retry-executions.json')
+        const nativeAttempts = mode.endsWith('-threshold') ? 5 : mode.endsWith('-disabled') ? 1 : 3
+        const experimentalEnvironment = experimentalMode
+          ? {
+              CYPRESS_EXPERIMENTAL_RETRIES: mode.endsWith('-threshold')
+                ? 'threshold'
+                : mode.endsWith('-disabled') ? 'disabled' : 'true',
+            }
+          : {}
         const expected = {
-          'excluded recovery': mode === 'inherited-mode' || mode === 'browser-runtime' ? 1 : 3,
-          'excluded persistent': mode === 'inherited-mode' || mode === 'browser-runtime' ? 1 : 3,
+          'excluded recovery': mode === 'inherited-mode' || mode === 'browser-runtime' ? 1 : nativeAttempts,
+          'excluded persistent': mode === 'inherited-mode' || mode === 'browser-runtime'
+            ? 1
+            : mode.endsWith('-threshold') ? 3 : nativeAttempts,
           'excluded explicit zero': 1,
-          'ordinary control': mode === 'browser-runtime' ? 1 : 3,
+          'ordinary control': mode === 'browser-runtime' ? 1 : nativeAttempts,
           ...(mode.startsWith('browser-runtime') && { 'changes runtime retries': 1 }),
           ...(['browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite'].includes(mode) &&
             { 'excluded after zero': 3 }),
@@ -232,18 +248,24 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
             DD_TRACE_ENABLED: 'false',
             SPEC_PATTERN: boundarySuite,
             CYPRESS_EXCLUSIONS_MODE: mode,
+            ...experimentalEnvironment,
           },
         })
         let output = ''
         childProcess.stdout.on('data', chunk => { output += chunk })
         childProcess.stderr.on('data', chunk => { output += chunk })
         const [nativeExit] = await once(childProcess, 'exit')
-        const expectedExit = mode === 'browser-runtime' ? 4 : mode === 'inherited-mode' ? 3 : 2
+        const expectedExit = mode.endsWith('-threshold')
+          ? 2
+          : mode === 'browser-runtime' || experimentalMode
+            ? 4
+            : mode === 'inherited-mode' ? 3 : 2
         assert.strictEqual(nativeExit, expectedExit, output)
         assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
         rmSync(ledger)
         receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
         if (mode === 'browser-runtime' && atrEnabled) expected['ordinary control'] = 3
+        if (experimentalMode && atrEnabled) expected['ordinary control'] = 5
         const instrumentedExit = mode === 'browser-runtime' && atrEnabled ? 3 : expectedExit
         await run(mode, instrumentedExit, tests => {
           assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
@@ -254,21 +276,31 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
             const annotated = name.startsWith('excluded')
             assert.strictEqual(attempts.at(-1).meta['test.status'],
               name.endsWith('persistent') || name === 'excluded explicit zero' ||
-                ((mode === 'inherited-mode' || mode === 'browser-runtime') && name === 'excluded recovery') ||
+                ((mode === 'inherited-mode' || mode === 'browser-runtime' || mode.endsWith('-disabled')) &&
+                  name === 'excluded recovery') ||
+                (mode.endsWith('-disabled') && !atrEnabled && name === 'ordinary control') ||
                 (mode === 'browser-runtime' && !atrEnabled && name === 'ordinary control')
                 ? 'fail'
                 : 'pass', name)
+            if (experimentalMode) {
+              assert.strictEqual(attempts.at(-1).meta['test.final_status'],
+                mode.endsWith('-threshold') && !name.endsWith('persistent') && name !== 'excluded explicit zero'
+                  ? 'pass'
+                  : 'fail', name)
+            }
             for (const test of attempts) assert.strictEqual(test.meta[exclusion], annotated ? 'true' : undefined, name)
             for (const retry of attempts.slice(1)) {
               assert.strictEqual(retry.meta['test.retry_reason'],
-                atrEnabled && !annotated && !['inherited-mode', 'browser-runtime-suite'].includes(mode)
+                atrEnabled && !annotated &&
+                  !['inherited-mode', 'browser-runtime-suite'].includes(mode)
                   ? 'auto_test_retry'
                   : 'external', name)
             }
           }
         }, {
           SPEC_PATTERN: boundarySuite,
-          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: mode === 'browser-same-budget' ? '2' : '4',
+          ...experimentalEnvironment,
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: mode === 'browser-same-budget' || mode.endsWith('-threshold') ? '2' : '4',
         }, command)
       })
     }
@@ -359,8 +391,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
   })
 
   // Experimental strategy configuration was added in Cypress13.4.
-  const [major, minor] = version.split('.').map(Number)
-  const experimental = version === 'latest' || major > 13 || (major === 13 && minor >= 4) ? it : it.skip
+  const experimental = supportsExperimental ? it : it.skip
   experimental('preserves experimental native retry budgets and explicit zero overrides', async () => {
     receiver.setSettings({ flaky_test_retries_enabled: false })
     await run('experimental', 3, tests => {
