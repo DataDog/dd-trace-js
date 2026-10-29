@@ -30,6 +30,7 @@ const stream = query({
   options: {
     model: 'claude-sonnet-4-6',
     title: 'Claude Agent SDK test',
+    permissionMode: 'default',
     mcpServers: { local: localToolsServer },
     tools: ['Agent'],
     allowedTools: ['mcp__local__fetch_weather'],
@@ -52,6 +53,7 @@ const stream = query({
     env: {
       ANTHROPIC_BASE_URL: 'http://127.0.0.1:9126/vcr/claude-agent-sdk',
       CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: true,
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     },
   },
