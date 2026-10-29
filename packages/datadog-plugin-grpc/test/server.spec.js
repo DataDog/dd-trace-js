@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const Readable = require('node:stream').Readable
 const path = require('node:path')
 
+const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const satisfies = require('semifies')
 
@@ -197,6 +198,28 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 1)
             })
+        })
+
+        it('should finish a `unary` call once when the handler replies after the deadline', async () => {
+          const finishChannel = channel('apm:grpc:server:request:finish')
+          let finishes = 0
+          const onFinish = () => { finishes++ }
+          finishChannel.subscribe(onFinish)
+
+          try {
+            const client = await buildClient({
+              getUnary: (_, callback) => setTimeout(() => callback(null, {}), 200),
+            })
+
+            await new Promise(resolve => {
+              client.getUnary({ first: 'foobar' }, { deadline: Date.now() + 50 }, resolve)
+            })
+            await new Promise(resolve => setTimeout(resolve, 300))
+
+            assert.strictEqual(finishes, 1)
+          } finally {
+            finishChannel.unsubscribe(onFinish)
+          }
         })
 
         it('should handle cancelled `stream` calls', async () => {
