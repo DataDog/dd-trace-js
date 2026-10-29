@@ -5,7 +5,7 @@ const LLMObsPlugin = require('../base')
 const TYPESAFE_MODEL_PROVIDER = 'typesafe'
 const OPENROUTER_MODEL_PROVIDER = 'openrouter'
 const DECISION_PROVIDER_TAG = 'decision_provider'
-const DECISION_PROVIDER = 'system_one'
+const DECISION_PROVIDER = 'typesafe'
 
 class TypeSafeLLMObsPlugin extends LLMObsPlugin {
   static integration = 'typesafe' // used for llmobs telemetry
