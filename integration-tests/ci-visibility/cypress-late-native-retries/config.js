@@ -6,7 +6,7 @@ const getCypressTestEnvironment = require('../../cypress-test-environment')
 
 module.exports = defineConfig({
   ...getCypressTestEnvironment(),
-  retries: 0,
+  retries: { runMode: 0, openMode: 0 },
   video: false,
   screenshotOnRunFailure: false,
   e2e: {
@@ -15,7 +15,11 @@ module.exports = defineConfig({
     async setupNodeEvents (on, config) {
       const plugin = require('dd-trace/ci/cypress/plugin')
       const result = await plugin(on, config)
-      result.retries = 2
+      const mode = process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE
+      if (mode === 'equal-object') result.retries = { runMode: 2, openMode: 0 }
+      else if (mode === 'equal-nested') result.retries.runMode = 2
+      else if (mode === 'returned-object') return { retries: { runMode: 2, openMode: 0 } }
+      else if (mode !== 'unchanged') result.retries = 2
       return result
     },
   },

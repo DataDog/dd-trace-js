@@ -1048,6 +1048,7 @@ moduleTypes.forEach(({
       hasOriginalCypressRetries: cypressPlugin.hasOriginalCypressRetries,
       originalCypressRetries: cypressPlugin.originalCypressRetries,
       configuredCypressRetries: cypressPlugin.configuredCypressRetries,
+      retryConfigObserver: cypressPlugin.retryConfigObserver,
       tracer: cypressPlugin.tracer,
       finishedTestsByFile: cypressPlugin.finishedTestsByFile,
       hasTestsReported: cypressPlugin.hasTestsReported,
@@ -1063,6 +1064,10 @@ moduleTypes.forEach(({
     }
 
     afterEach(() => {
+      if (cypressPlugin.retryConfigObserver !== originalState.retryConfigObserver) {
+        cypressPlugin.retryConfigObserver?.stop()
+      }
+      cypressPlugin.retryConfigObserver = originalState.retryConfigObserver
       cypressPlugin.cypressConfig = originalState.cypressConfig
       cypressPlugin._isInit = originalState.isInit
       cypressPlugin.libraryConfigurationPromise = originalState.libraryConfigurationPromise
@@ -1718,6 +1723,118 @@ moduleTypes.forEach(({
         }
       }
     }
+
+    it('observes equal native retry writes without recording reads or stale replacements', () => {
+      const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+      const config = { retries: { runMode: 2, openMode: 0 } }
+      const changes = []
+      const observer = observeRetryConfig(config, value => changes.push(JSON.parse(JSON.stringify(value))))
+      assert.strictEqual(JSON.stringify(config), '{"retries":{"runMode":2,"openMode":0}}')
+      assert.strictEqual(changes.length, 0)
+      const stale = config.retries
+      config.retries = { runMode: 2, openMode: 0 }
+      assert.strictEqual(changes.length, 1)
+      stale.runMode = 8
+      assert.strictEqual(changes.length, 1)
+      config.retries.runMode = 2
+      assert.strictEqual(changes.length, 2)
+      const current = config.retries
+      observer.stop()
+      assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').get, undefined)
+      assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').enumerable, true)
+      current.runMode = 3
+      assert.strictEqual(changes.length, 2)
+      assert.strictEqual(config.retries.runMode, 3)
+    })
+
+    it('preserves frozen retry objects and does not replace nonconfigurable descriptors', () => {
+      const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+      const config = { retries: 0 }
+      const changes = []
+      const observer = observeRetryConfig(config, value => changes.push(value))
+      const frozen = Object.freeze({ runMode: true, experimentalOptions: Object.freeze({ maxRetries: 2 }) })
+      config.retries = frozen
+      assert.deepStrictEqual(JSON.parse(JSON.stringify(config.retries)), frozen)
+      assert.strictEqual(changes.length, 1)
+      observer.stop()
+      assert.strictEqual(config.retries, frozen)
+      Object.defineProperty(config, 'retries', { configurable: false })
+      assert.strictEqual(observeRetryConfig(config, () => assert.fail('must not observe')), undefined)
+      assert.strictEqual(config.retries, frozen)
+    })
+
+    it('observes only the native setup reply and restores IPC identity without changing the message', () => {
+      const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+      const calls = []
+      const originalSend = function (...args) { calls.push({ receiver: this, args }); return 17 }
+      Object.defineProperty(process, 'send', { configurable: true, writable: true, value: originalSend })
+      let observer
+      try {
+        const config = { retries: { runMode: 2, openMode: 0 } }
+        const changes = []
+        observer = observeRetryConfig(config, value => changes.push(value))
+        const receiver = {}
+        const unrelated = { event: 'other:reply', args: [{ setupConfig: { retries: 9 } }] }
+        assert.strictEqual(process.send.call(receiver, unrelated, 'handle', 'options'), 17)
+        assert.strictEqual(changes.length, 0)
+        assert.notStrictEqual(process.send, originalSend)
+        assert.strictEqual(calls[0].receiver, receiver)
+        assert.deepStrictEqual(calls[0].args, [unrelated, 'handle', 'options'])
+        const returnedConfig = { retries: { runMode: 2, openMode: 0 } }
+        const reply = { event: 'setupTestingType:reply', args: [{ setupConfig: returnedConfig }] }
+        assert.strictEqual(process.send(reply), 17)
+        assert.strictEqual(changes.length, 1)
+        assert.strictEqual(changes[0], returnedConfig.retries)
+        assert.strictEqual(calls[1].args[0], reply)
+        assert.strictEqual(process.send, originalSend)
+        observer.stop()
+        observer = observeRetryConfig(config, value => changes.push(value))
+        process.send({ event: 'setupTestingType:error', args: [{ error: 'setup failed' }] })
+        assert.strictEqual(changes.length, 1)
+        assert.strictEqual(process.send, originalSend)
+        observer.stop()
+        observer = observeRetryConfig(config, value => changes.push(value))
+        observer.stopIpc()
+        assert.strictEqual(process.send, originalSend)
+        observer.stop()
+        observer = observeRetryConfig(config, value => changes.push(value))
+        const retained = process.send
+        const outer = function (...args) { return retained.apply(this, args) }
+        process.send = outer
+        observer.stopIpc()
+        const laterReply = { event: 'setupTestingType:reply', args: [{ setupConfig: { retries: 9 } }] }
+        assert.strictEqual(process.send.call(receiver, laterReply, 'handle'), 17)
+        assert.strictEqual(changes.length, 1)
+        assert.strictEqual(process.send, outer)
+        assert.strictEqual(calls.at(-1).receiver, receiver)
+        assert.deepStrictEqual(calls.at(-1).args, [laterReply, 'handle'])
+        config.retries.runMode = 2
+        assert.strictEqual(changes.length, 2)
+      } finally {
+        observer?.stop()
+        if (descriptor) Object.defineProperty(process, 'send', descriptor)
+        else delete process.send
+      }
+    })
+
+    it('rearms retry observation on the same config without mutating developer-held native data', async () => {
+      const nativeRetries = { openMode: 0, runMode: 0 }
+      const config = { retries: nativeRetries, version: '12.0.0' }
+      const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
+      assert.strictEqual(await cypressPlugin.init(tracer, config), config)
+      const prior = config.retries
+      config.retries.runMode = 2
+      assert.deepStrictEqual(nativeRetries, { openMode: 0, runMode: 0 })
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { openMode: 0, runMode: 2 })
+      assert.strictEqual(await cypressPlugin.init(tracer, config), config)
+      prior.runMode = 7
+      assert.strictEqual(config.retries.runMode, 2)
+      assert.strictEqual(cypressPlugin.originalCypressRetries.runMode, 2)
+      config.retries.runMode = 2
+      assert.deepStrictEqual(JSON.parse(JSON.stringify(config.retries)), { openMode: 0, runMode: 2 })
+      assert.strictEqual(cypressPlugin.retryConfigObserver.isWatching(config), true)
+    })
 
     it('restores user retries before requesting configuration for a subsequent run', async () => {
       const cypressConfig = { retries: { openMode: 1, runMode: 2 }, version: '12.0.0' }

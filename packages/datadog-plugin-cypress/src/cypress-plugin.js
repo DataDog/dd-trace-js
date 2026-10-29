@@ -150,6 +150,7 @@ const {
   RUNTIME_VERSION,
 } = require('../../dd-trace/src/plugins/util/env')
 const { DD_MAJOR } = require('../../../version')
+const observeRetryConfig = require('./retry-config-observer')
 const {
   resolveOriginalSourceFile,
   resolveSourceLineForTest,
@@ -858,12 +859,16 @@ class CypressPlugin {
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
+    this.retryConfigObserver?.stop()
+    this.retryConfigObserver = undefined
     if (this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries) {
       cypressConfig.retries = copyCypressRetries(this.originalCypressRetries)
     } else {
       this.originalCypressRetries = copyCypressRetries(cypressConfig.retries)
       this.hasOriginalCypressRetries = true
     }
+    // Keep injected budgets separate from developer-held native configuration objects.
+    cypressConfig.retries = copyCypressRetries(cypressConfig.retries)
     this.resetRunState()
     this._isInit = true
     this.tracer = tracer
@@ -951,12 +956,24 @@ class CypressPlugin {
               )
               : this.flakyTestRetriesCount
             if (this.cypressConfig.retries.experimentalStrategy) {
-              // Experimental modes require boolean enablement. Preserve the developer's
-              // strategy while excluded tests restore their original per-test budget.
-              this.cypressConfig.retries.runMode = true
-              this.cypressConfig.retries.experimentalOptions = {
-                ...this.cypressConfig.retries.experimentalOptions,
-                maxRetries: Math.max(this.cypressConfig.retries.experimentalOptions?.maxRetries ?? 0, retryCount),
+              if (this.cypressConfig.isTextTerminal !== false) {
+                if (this.cypressConfig.retries.runMode === true) {
+                  // Keep an active native strategy and its budget floor.
+                  this.cypressConfig.retries.experimentalOptions = {
+                    ...this.cypressConfig.retries.experimentalOptions,
+                    maxRetries: Math.max(this.cypressConfig.retries.experimentalOptions?.maxRetries ?? 0, retryCount),
+                  }
+                } else if (retryCount > 0) {
+                  // An inactive experimental strategy must not change ordinary ATR policy.
+                  const { openMode, experimentalOptions } = this.cypressConfig.retries
+                  this.cypressConfig.retries = {
+                    // Explicit nulls prevent Cypress's config merge from retaining inactive options.
+                    experimentalStrategy: null,
+                    experimentalOptions: null,
+                    openMode: openMode === true ? experimentalOptions?.maxRetries ?? 0 : 0,
+                    runMode: retryCount,
+                  }
+                }
               }
             } else {
               this.cypressConfig.retries.runMode = retryCount
@@ -969,6 +986,9 @@ class CypressPlugin {
           this.isImpactedTestsEnabled = isImpactedTestsEnabled
         }
         this.configuredCypressRetries = copyCypressRetries(this.cypressConfig.retries)
+        this.retryConfigObserver = observeRetryConfig(this.cypressConfig, retries => {
+          this.originalCypressRetries = copyCypressRetries(retries)
+        })
         return this.cypressConfig
       })
     return this.libraryConfigurationPromise
@@ -1025,8 +1045,9 @@ class CypressPlugin {
    * @param {string} testSuite
    * @param {string} testId
    * @param {number | undefined} duration
+   * @param {number} [nativeRetryFloor]
    */
-  setDynamicAtrRetryCountForTest (testSuite, testId, duration) {
+  setDynamicAtrRetryCountForTest (testSuite, testId, duration, nativeRetryFloor = 0) {
     if (!this.dynamicAtrRetryCountByTest) {
       this.dynamicAtrRetryCountByTest = new Map()
     }
@@ -1035,11 +1056,11 @@ class CypressPlugin {
       retryCountByTestId = new Map()
       this.dynamicAtrRetryCountByTest.set(testSuite, retryCountByTestId)
     }
-    const retryCount = getDynamicAtrRetryCount(
+    const retryCount = Math.max(nativeRetryFloor, getDynamicAtrRetryCount(
       duration ?? 0,
       this.earlyFlakeDetectionRetryPolicy,
       this.dynamicAtrBuckets
-    )
+    ))
     retryCountByTestId.set(testId, retryCount)
     return retryCount
   }
@@ -1205,6 +1226,7 @@ class CypressPlugin {
   }
 
   async beforeRun (details) {
+    this.retryConfigObserver?.stopIpc()
     // Manual setup can change the developer budget after awaiting init. Capture it
     // before interactive reinitialization can restore the previous native value.
     const finalRetries = copyCypressRetries(details.config?.retries ?? this.cypressConfig?.retries)
@@ -1218,6 +1240,7 @@ class CypressPlugin {
       // Cypress open reuses the same plugin process for every interactive run.
       await this.init(this.tracer, this.cypressConfig)
     }
+    this.retryConfigObserver?.stopIpc()
 
     if (!isDeepStrictEqual(finalRetries, this.configuredCypressRetries)) {
       this.originalCypressRetries = finalRetries
@@ -1711,6 +1734,7 @@ class CypressPlugin {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
           const isAtrRetry = attemptIndex > 0 &&
             this.isFlakyTestRetriesEnabled &&
+            (this.isDynamicAtrEnabled || this.flakyTestRetriesCount > 0) &&
             (!finishedTest.hasNativeRetries || this.isDynamicAtrEnabled) &&
             !finishedTest.noAutoRetry &&
             !finishedTest.isAttemptToFix &&
@@ -2245,6 +2269,7 @@ class CypressPlugin {
           annotations,
           isModified,
           hasNativeRetries,
+          nativeRetryFloor,
           duration,
           isQuarantined: isQuarantinedFromSupport,
           isDisabled: isDisabledFromSupport,
@@ -2297,7 +2322,7 @@ class CypressPlugin {
           !isEfdManagedTest &&
           this.getDynamicAtrRetryCountForTest(testSuite, testId) === undefined
         ) {
-          this.setDynamicAtrRetryCountForTest(testSuite, testId, duration)
+          this.setDynamicAtrRetryCountForTest(testSuite, testId, duration, nativeRetryFloor)
         }
         if (didAbortSlowEfdRetries && testStatus === 'skip' && !error && duration > 0) {
           testStatus = 'pass'
