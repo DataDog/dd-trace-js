@@ -942,15 +942,24 @@ class CypressPlugin {
             }
             // Dynamic ATR starts at the maximum budget, then narrows each test
             // after its initial duration is known.
-            if (this.isDynamicAtrEnabled) {
-              this.cypressConfig.retries.runMode = Math.max(
+            const retryCount = this.isDynamicAtrEnabled
+              ? Math.max(
                 1,
                 this.dynamicAtrBuckets
                   ? Math.max(...this.dynamicAtrBuckets)
                   : this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
               )
+              : this.flakyTestRetriesCount
+            if (this.cypressConfig.retries.experimentalStrategy) {
+              // Experimental modes require boolean enablement. Preserve the developer's
+              // strategy while excluded tests restore their original per-test budget.
+              this.cypressConfig.retries.runMode = true
+              this.cypressConfig.retries.experimentalOptions = {
+                ...this.cypressConfig.retries.experimentalOptions,
+                maxRetries: Math.max(this.cypressConfig.retries.experimentalOptions?.maxRetries ?? 0, retryCount),
+              }
             } else {
-              this.cypressConfig.retries.runMode = this.flakyTestRetriesCount
+              this.cypressConfig.retries.runMode = retryCount
             }
           } else {
             this.flakyTestRetriesCount = 0
@@ -1802,12 +1811,17 @@ class CypressPlugin {
           const isQuarantined = testSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
           const isDisabled = testSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
 
+          // Explicit experimental strategies can fail after a passing attempt. Their native
+          // aggregate outcome remains authoritative when ATR supplies the retry budget.
+          const finalRetryKind = this.cypressConfig?.retries?.experimentalStrategy && !isDatadogManagedAttempt
+            ? FINAL_STATUS_RETRY_KIND.none
+            : retryKind
           const finalStatus = getFinalStatus({
             // Native retries use Cypress's aggregate outcome; managed attempts retain their own policy.
-            status: retryKind === FINAL_STATUS_RETRY_KIND.none && !isDatadogManagedAttempt
+            status: finalRetryKind === FINAL_STATUS_RETRY_KIND.none && !isDatadogManagedAttempt
               ? CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
               : cypressTestStatus,
-            retryKind,
+            retryKind: finalRetryKind,
             hasFailedAllAttempts,
             hasPassedAllAtfRetries,
             isQuarantined: isQuarantined && !finishedTest.mustFail,
