@@ -58,19 +58,27 @@ function wrapConstructEventAsync (constructEventAsync) {
   }
 }
 
+const wrappedMethods = new WeakSet()
+
+// `webhooks` is shared by every Stripe instance, so wrapping it on each
+// construction would stack one wrapper per client until the stack overflows
+/**
+ * @param {object|undefined} target
+ * @param {string} name
+ * @param {Function} wrapper
+ */
+function wrapOnce (target, name, wrapper) {
+  if (typeof target?.[name] !== 'function' || wrappedMethods.has(target[name])) return
+
+  shimmer.wrap(target, name, wrapper)
+  wrappedMethods.add(target[name])
+}
+
 function instrumentStripeInstance (stripe) {
-  if (typeof stripe.checkout?.sessions?.create === 'function') {
-    shimmer.wrap(stripe.checkout.sessions, 'create', wrapSessionCreate)
-  }
-  if (typeof stripe.paymentIntents?.create === 'function') {
-    shimmer.wrap(stripe.paymentIntents, 'create', wrapPaymentIntentCreate)
-  }
-  if (typeof stripe.webhooks?.constructEvent === 'function') {
-    shimmer.wrap(stripe.webhooks, 'constructEvent', wrapConstructEvent)
-  }
-  if (typeof stripe.webhooks?.constructEventAsync === 'function') {
-    shimmer.wrap(stripe.webhooks, 'constructEventAsync', wrapConstructEventAsync)
-  }
+  wrapOnce(stripe.checkout?.sessions, 'create', wrapSessionCreate)
+  wrapOnce(stripe.paymentIntents, 'create', wrapPaymentIntentCreate)
+  wrapOnce(stripe.webhooks, 'constructEvent', wrapConstructEvent)
+  wrapOnce(stripe.webhooks, 'constructEventAsync', wrapConstructEventAsync)
 }
 
 // stripe <22: the constructor mutates this (when invoked with 'new') and
