@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
-const { inspect } = require('node:util')
+const { inspect, stripVTControlCharacters } = require('node:util')
 
 const {
   getCiVisAgentlessConfig,
@@ -1020,6 +1020,86 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
     await Promise.all([runPromise, eventsPromise])
   })
 
+  function readBrowserExecutions () {
+    const counts = {}
+    const output = stripVTControlCharacters(testOutput)
+    for (const [, value] of output.matchAll(/^__DD_EXCLUSION_EXECUTION__ (".*")\r?$/gm)) {
+      const name = JSON.parse(value)
+      counts[name] = (counts[name] || 0) + 1
+    }
+    return counts
+  }
+
+  for (const tags of [false, true]) {
+    const nativeRetryIt = tags && isLegacyBrowserProvider ? it.skip : it
+    nativeRetryIt(`preserves exhausted browser native retries (configured tags=${tags})`, async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      const file = tags ? 'browser-exclusions-native-tags.mjs' : 'browser-exclusions-native.mjs'
+      const nativeRun = runVitest(file, {
+        NODE_OPTIONS: '',
+        EXCLUSIONS_MODE: tags ? 'native-tags' : undefined,
+      }, 1)
+      await Promise.all([nativeRun, once(childProcess, 'close')])
+      assert.deepStrictEqual(readBrowserExecutions(), tags
+        ? { tagged: 3, inherited: 3, control: 1 }
+        : { direct: 2, inherited: 2, control: 1 })
+      testOutput = ''
+      const runPromise = runVitest(file, {
+        DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '4',
+        EXCLUSIONS_MODE: tags ? 'native-tags' : undefined,
+      }, 1)
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = getEventContents(getEvents(payloads), 'test')
+          const excluded = tests.filter(test => test.meta['test.test_management.no_auto_retry'] === 'true')
+          assert.strictEqual(excluded.length, tags ? 6 : 4, testOutput)
+          assert.strictEqual(excluded.filter(test => test.meta[TEST_RETRY_REASON] === 'external').length, tags ? 4 : 2)
+          assert.ok(excluded.every(test => !['auto_test_retry', 'early_flake_detection', 'attempt_to_fix']
+            .includes(test.meta[TEST_RETRY_REASON])))
+          assert.strictEqual(tests.filter(test => test.meta[TEST_NAME] === 'control').length, 5)
+        })
+      await Promise.all([runPromise, eventsPromise])
+      assert.deepStrictEqual(readBrowserExecutions(), tags
+        ? { tagged: 3, inherited: 3, control: 5 }
+        : { direct: 2, inherited: 2, control: 5 })
+    })
+  }
+
+  it('excludes browser Attempt to Fix with a passing automatic retry control', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-exclusions-atf.mjs'
+    receiver.setSettings({
+      flaky_test_retries_enabled: false,
+      test_management: { enabled: true, attempt_to_fix_retries: 2 },
+    })
+    receiver.setTestManagementTests({
+      vitest: {
+        suites: {
+          [testSuite]: {
+            tests: {
+              excluded: { properties: { attempt_to_fix: true } },
+              control: { properties: { attempt_to_fix: true } },
+            },
+          },
+        },
+      },
+    })
+    const runPromise = runVitest('browser-exclusions-atf.mjs')
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const tests = getEventContents(getEvents(payloads), 'test')
+        assert.strictEqual(tests.length, 4, testOutput)
+        const excluded = tests.filter(test => test.meta[TEST_NAME] === 'excluded')
+        assert.strictEqual(excluded.length, 1)
+        assert.strictEqual(excluded[0].meta['test.test_management.no_auto_retry'], 'true')
+        assert.strictEqual(excluded[0].meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+        assert.strictEqual(excluded[0].meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], undefined)
+        assert.strictEqual(excluded[0].meta[TEST_IS_RETRY], undefined)
+        assert.strictEqual(tests.filter(test => test.meta[TEST_NAME] === 'control').length, 3)
+      })
+    await Promise.all([runPromise, eventsPromise])
+    assert.deepStrictEqual(readBrowserExecutions(), { excluded: 1, control: 3 })
+  })
+
   it('keeps a sole browser test automation exclusions failure blocking', async () => {
     const testSuite = 'ci-visibility/vitest-browser-tests/browser-exclusions-sole.mjs'
     receiver.setSettings({
@@ -1054,6 +1134,7 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
         assert.strictEqual(test.meta[TEST_IS_RETRY], undefined)
       })
     await Promise.all([runPromise, eventsPromise])
+    assert.deepStrictEqual(readBrowserExecutions(), { sole: 1 })
   })
 
   for (const mode of ['atr', 'efd']) {
@@ -1124,6 +1205,14 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
         runPromise,
         payloadsPromise,
       ])
+      assert.deepStrictEqual(readBrowserExecutions(), {
+        combined: 2,
+        'quarantined exclusion': 1,
+        'protected retries': 3,
+        'protected passing': 1,
+        'native retry': 2,
+        'ordinary control': 3,
+      })
     })
   }
 
