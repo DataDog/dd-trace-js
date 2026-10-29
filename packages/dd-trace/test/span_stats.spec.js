@@ -446,7 +446,7 @@ describe('SpanStatsProcessor', () => {
     })
     assert.strictEqual(processor.interval, config.stats.interval)
     assert.ok(processor.buckets instanceof TimeBuckets)
-    assert.strictEqual(processor.hostname, hostname())
+    assert.strictEqual(processor.hostname, '')
     assert.strictEqual(processor.enabled, config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED)
     assert.strictEqual(processor.env, config.env)
     assert.strictEqual(processor.version, config.version)
@@ -533,7 +533,7 @@ describe('SpanStatsProcessor', () => {
     processor.onInterval()
 
     assert.deepStrictEqual(exporter.export.lastCall.args[0], {
-      Hostname: hostname(),
+      Hostname: '',
       Env: config.env,
       Version: config.version,
       Stats: [{
@@ -593,7 +593,7 @@ describe('SpanStatsProcessor', () => {
     processor.onInterval()
 
     assert.deepStrictEqual(exporter.export.lastCall.args[0], {
-      Hostname: hostname(),
+      Hostname: '',
       Env: config.env,
       Version: version,
       Stats: [],
@@ -603,6 +603,24 @@ describe('SpanStatsProcessor', () => {
       Sequence: processor.sequence,
       ProcessTags: processTags.serialized,
     })
+  })
+
+  it('should export an empty hostname when reportHostname is disabled', () => {
+    const config = getConfigFresh({ stats: true })
+    assert.strictEqual(config.reportHostname, false)
+    const processor = new SpanStatsProcessor(config)
+    clearTimeout(processor.timer)
+    processor.onInterval()
+
+    assert.strictEqual(exporter.export.lastCall.args[0].Hostname, '')
+  })
+
+  it('should export the system hostname when reportHostname is enabled', () => {
+    const processor = new SpanStatsProcessor(getConfigFresh({ stats: true, reportHostname: true }))
+    clearTimeout(processor.timer)
+    processor.onInterval()
+
+    assert.strictEqual(exporter.export.lastCall.args[0].Hostname, hostname())
   })
 
   it('should clear buckets after each interval flush', () => {
