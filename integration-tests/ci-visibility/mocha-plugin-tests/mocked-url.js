@@ -9,7 +9,7 @@ describe('mocked global URL', () => {
     globalThis.URL = originalUrl
   })
 
-  it('continues reporting while DogStatsD telemetry is flushed', () => {
+  it('continues reporting while DogStatsD is disabled', () => {
     globalThis.URL = () => {}
 
     tracer.dogstatsd.flush(true)
