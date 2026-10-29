@@ -155,6 +155,29 @@ describe('vitest main instrumentation', () => {
             assert.strictEqual(overrides.plugins.length, active ? 1 : 0)
             if (active) assert.strictEqual(overrides.plugins[0].name, 'datadog:vitest-browser-setup-file')
           }
+          for (const descriptor of [
+            { get: () => undefined },
+            { value: undefined, writable: false },
+            { value: null, writable: false },
+          ]) {
+            for (const inherited of [false, true]) {
+              const readOnly = Object.defineProperty({}, 'plugins', { ...descriptor, enumerable: true })
+              const overrides = inherited ? Object.create(readOnly) : readOnly
+              const args = legacy ? ['test', {}] : [{}]
+              if (method === 'startVitest') args.splice(legacy ? 1 : 0, 0, [])
+              args.push(overrides)
+              const result = api[method](...args)
+              const supplied = result[result.length - 1]
+              if (active) {
+                assert.notStrictEqual(supplied, overrides)
+                assert.strictEqual(supplied.plugins.length, 1)
+                assert.strictEqual(supplied.plugins[0].name, 'datadog:vitest-browser-setup-file')
+              } else {
+                assert.strictEqual(supplied, overrides)
+              }
+              assert.strictEqual(overrides.plugins, 'value' in descriptor ? descriptor.value : undefined)
+            }
+          }
           assert.strictEqual(starts.length, active ? 1 : 0)
         })
       }
