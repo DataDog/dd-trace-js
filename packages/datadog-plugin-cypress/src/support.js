@@ -495,6 +495,20 @@ function getDynamicAtrTestKey (test) {
   return `${Cypress.mocha.getRootSuite().file}\0${test.id}`
 }
 
+/** @param {object} test */
+function getNativeRetryBudget (test) {
+  let retries = hasBrowserRetries ? nativeRetryCount(browserRetries) : frameworkRetries
+  for (let current = test; current; current = current.parent) {
+    const config = current._testConfig
+    const overrides = config && (config.unverifiedTestConfig || config)
+    if (overrides && overrides.retries !== undefined) {
+      retries = nativeRetryCount(overrides.retries)
+      break
+    }
+  }
+  return Number.isSafeInteger(retries) ? retries : 0
+}
+
 /**
  * @param {{ id: string, _retries: number }} test
  */
@@ -502,16 +516,7 @@ function configureTestRetries (test) {
   if (hasSuiteConfig && getTestAnnotations(test).noAutoRetry) {
     // Restore developer configuration after the plugin's global ATR configuration.
     // Read the nearest test/suite override before or after Cypress resolves it.
-    let retries = hasBrowserRetries ? nativeRetryCount(browserRetries) : frameworkRetries
-    for (let current = test; current; current = current.parent) {
-      const config = current._testConfig
-      const overrides = config && (config.unverifiedTestConfig || config)
-      if (overrides && overrides.retries !== undefined) {
-        retries = nativeRetryCount(overrides.retries)
-        break
-      }
-    }
-    test._retries = Number.isSafeInteger(retries) ? retries : 0
+    test._retries = getNativeRetryBudget(test)
     // Cypress resolves local retries after this event; the support hook reapplies this value.
     return
   }
@@ -668,7 +673,10 @@ afterEach(function () {
     ? { message: suppressedError.message, stack: suppressedError.stack }
     : currentTest.err
 
+  const activeRetries = Cypress.config('retries')
+  const nativeRetryFloor = activeRetries && activeRetries.experimentalStrategy ? getNativeRetryBudget(currentTest) : 0
   const testInfo = {
+    nativeRetryFloor,
     testId: currentTest.id,
     testName,
     testItTitle: currentTest.title,

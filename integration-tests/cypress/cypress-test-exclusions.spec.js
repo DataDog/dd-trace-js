@@ -189,50 +189,84 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     })
   }
 
-  for (const atrEnabled of [false, true]) {
-    it(`preserves native retries assigned after manual plugin initialization (ATR=${atrEnabled})`, async () => {
-      receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
-      await run('late-native', 0, tests => {
-        for (const [name, count] of [
-          ['late native excluded', 3], ['late native control', 3], ['explicit local excluded', 2],
-        ]) {
-          const attempts = named(tests, name)
-          assert.strictEqual(attempts.length, count, name)
-          assert.strictEqual(attempts.at(-1).meta['test.status'], 'pass', name)
-          for (const retry of attempts.slice(1)) {
-            assert.strictEqual(retry.meta['test.retry_reason'],
-              atrEnabled && name === 'late native control' ? 'auto_test_retry' : 'external', name)
-          }
+  for (const lateMode of ['numeric', 'equal-object', 'equal-nested', 'returned-object', 'unchanged']) {
+    for (const atrEnabled of [false, true]) {
+      it(`preserves ${lateMode} native retries after manual plugin initialization (ATR=${atrEnabled})`, async () => {
+        const command = './node_modules/.bin/cypress run ' +
+          '--config-file ci-visibility/cypress-late-native-retries/config.js'
+        const ledger = join(cwd, 'late-native-retry-executions.json')
+        const expected = {
+          'late native excluded': lateMode === 'unchanged' ? 1 : 3,
+          'late native control': lateMode === 'unchanged' ? 1 : 3,
+          'explicit local excluded': 2,
         }
-      }, { NODE_OPTIONS: '' },
-      './node_modules/.bin/cypress run --config-file ci-visibility/cypress-late-native-retries/config.js')
-    })
+        childProcess = exec(command, {
+          cwd,
+          env: {
+            ...cypressEnvironment(),
+            NODE_OPTIONS: '',
+            DD_TRACE_ENABLED: 'false',
+            CYPRESS_LATE_NATIVE_RETRIES_MODE: lateMode,
+          },
+        })
+        let output = ''
+        childProcess.stdout.on('data', chunk => { output += chunk })
+        childProcess.stderr.on('data', chunk => { output += chunk })
+        const [nativeExit] = await once(childProcess, 'exit')
+        assert.strictEqual(nativeExit, lateMode === 'unchanged' ? 2 : 0, output)
+        assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
+        rmSync(ledger)
+        receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
+        if (lateMode === 'unchanged' && atrEnabled) expected['late native control'] = 3
+        const expectedExit = lateMode === 'unchanged' ? atrEnabled ? 1 : 2 : 0
+        await run('late-native', expectedExit, tests => {
+          assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
+          assert.strictEqual(tests.length, Object.values(expected).reduce((sum, count) => sum + count, 0))
+          for (const [name, count] of Object.entries(expected)) {
+            const attempts = named(tests, name)
+            assert.strictEqual(attempts.length, count, name)
+            assert.strictEqual(attempts.at(-1).meta['test.status'], count === 1 ? 'fail' : 'pass', name)
+            assert.strictEqual(attempts[0].meta[exclusion], name === 'late native control' ? undefined : 'true')
+            for (const retry of attempts.slice(1)) {
+              assert.strictEqual(retry.meta['test.retry_reason'],
+                atrEnabled && name === 'late native control' ? 'auto_test_retry' : 'external', name)
+            }
+          }
+        }, { NODE_OPTIONS: '', CYPRESS_LATE_NATIVE_RETRIES_MODE: lateMode }, command)
+      })
+    }
   }
 
   for (const mode of [
     'browser-retries', 'browser-same-budget', 'inherited-mode', 'browser-runtime',
     'browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite',
-    'experimental-native', 'experimental-native-threshold', 'experimental-native-disabled',
+    'experimental-native', 'experimental-native-zero',
+    'experimental-native-threshold', 'experimental-native-disabled',
+    'experimental-native-disabled-zero', 'experimental-native-disabled-one', 'experimental-native-threshold-dynamic',
   ]) {
     for (const atrEnabled of [false, true]) {
       const experimentalMode = mode.startsWith('experimental-native')
+      const disabledNative = mode.includes('-disabled')
+      const thresholdNative = mode.includes('-threshold')
+      const dynamicRetries = mode.endsWith('-dynamic')
+      const atrBudget = mode.endsWith('-zero') ? 0 : mode.endsWith('-one') ? 1 : thresholdNative ? 2 : 4
       const boundaryTest = experimentalMode && !supportsExperimental ? it.skip : it
       boundaryTest(`preserves ${mode} native retry executions (ATR=${atrEnabled})`, async () => {
         const boundarySuite = 'cypress/e2e/native-retry-boundaries.cy.js'
         const ledger = join(cwd, 'native-retry-executions.json')
-        const nativeAttempts = mode.endsWith('-threshold') ? 5 : mode.endsWith('-disabled') ? 1 : 3
+        const nativeAttempts = thresholdNative ? 5 : disabledNative ? 1 : 3
         const experimentalEnvironment = experimentalMode
           ? {
-              CYPRESS_EXPERIMENTAL_RETRIES: mode.endsWith('-threshold')
+              CYPRESS_EXPERIMENTAL_RETRIES: thresholdNative
                 ? 'threshold'
-                : mode.endsWith('-disabled') ? 'disabled' : 'true',
+                : disabledNative ? 'disabled' : 'true',
             }
           : {}
         const expected = {
           'excluded recovery': mode === 'inherited-mode' || mode === 'browser-runtime' ? 1 : nativeAttempts,
           'excluded persistent': mode === 'inherited-mode' || mode === 'browser-runtime'
             ? 1
-            : mode.endsWith('-threshold') ? 3 : nativeAttempts,
+            : thresholdNative ? 3 : nativeAttempts,
           'excluded explicit zero': 1,
           'ordinary control': mode === 'browser-runtime' ? 1 : nativeAttempts,
           ...(mode.startsWith('browser-runtime') && { 'changes runtime retries': 1 }),
@@ -255,7 +289,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         childProcess.stdout.on('data', chunk => { output += chunk })
         childProcess.stderr.on('data', chunk => { output += chunk })
         const [nativeExit] = await once(childProcess, 'exit')
-        const expectedExit = mode.endsWith('-threshold')
+        const expectedExit = thresholdNative
           ? 2
           : mode === 'browser-runtime' || experimentalMode
             ? 4
@@ -265,8 +299,14 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         rmSync(ledger)
         receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
         if (mode === 'browser-runtime' && atrEnabled) expected['ordinary control'] = 3
-        if (experimentalMode && atrEnabled) expected['ordinary control'] = 5
-        const instrumentedExit = mode === 'browser-runtime' && atrEnabled ? 3 : expectedExit
+        if (experimentalMode && atrEnabled) {
+          expected['ordinary control'] = disabledNative
+            ? Math.min(atrBudget + 1, 3)
+            : Math.max(nativeAttempts, atrBudget + 1)
+        }
+        const instrumentedExit = atrEnabled && (mode === 'browser-runtime' || (disabledNative && atrBudget >= 2))
+          ? 3
+          : expectedExit
         await run(mode, instrumentedExit, tests => {
           assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
           assert.strictEqual(tests.length, Object.values(expected).reduce((sum, count) => sum + count, 0))
@@ -276,22 +316,23 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
             const annotated = name.startsWith('excluded')
             assert.strictEqual(attempts.at(-1).meta['test.status'],
               name.endsWith('persistent') || name === 'excluded explicit zero' ||
-                ((mode === 'inherited-mode' || mode === 'browser-runtime' || mode.endsWith('-disabled')) &&
+                ((mode === 'inherited-mode' || mode === 'browser-runtime' || disabledNative) &&
                   name === 'excluded recovery') ||
-                (mode.endsWith('-disabled') && !atrEnabled && name === 'ordinary control') ||
+                (disabledNative && expected['ordinary control'] < 3 && name === 'ordinary control') ||
                 (mode === 'browser-runtime' && !atrEnabled && name === 'ordinary control')
                 ? 'fail'
                 : 'pass', name)
             if (experimentalMode) {
               assert.strictEqual(attempts.at(-1).meta['test.final_status'],
-                mode.endsWith('-threshold') && !name.endsWith('persistent') && name !== 'excluded explicit zero'
+                ((thresholdNative && name === 'excluded recovery') ||
+                  ((thresholdNative || disabledNative) && name === 'ordinary control' && expected[name] >= 3))
                   ? 'pass'
                   : 'fail', name)
             }
             for (const test of attempts) assert.strictEqual(test.meta[exclusion], annotated ? 'true' : undefined, name)
             for (const retry of attempts.slice(1)) {
               assert.strictEqual(retry.meta['test.retry_reason'],
-                atrEnabled && !annotated &&
+                atrEnabled && (atrBudget > 0 || dynamicRetries) && !annotated &&
                   !['inherited-mode', 'browser-runtime-suite'].includes(mode)
                   ? 'auto_test_retry'
                   : 'external', name)
@@ -300,7 +341,11 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         }, {
           SPEC_PATTERN: boundarySuite,
           ...experimentalEnvironment,
-          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: mode === 'browser-same-budget' || mode.endsWith('-threshold') ? '2' : '4',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: mode === 'browser-same-budget' ? '2' : String(atrBudget),
+          ...(dynamicRetries && {
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+            DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+          }),
         }, command)
       })
     }
