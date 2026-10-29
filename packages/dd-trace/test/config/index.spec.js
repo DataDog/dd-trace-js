@@ -5222,6 +5222,21 @@ rules:
       assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
       assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'env_var')
     })
+
+    it('should remain false when appsec is enabled on Vercel', () => {
+      process.env.VERCEL = '1'
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+    })
+
+    it('should be enabled on Vercel when DD_TRACE_OTEL_CTX_ENABLED is true', () => {
+      process.env.VERCEL = '1'
+      process.env.DD_TRACE_OTEL_CTX_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'env_var')
+    })
   })
 
   context('NX auto-detection', () => {

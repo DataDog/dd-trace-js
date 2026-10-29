@@ -18,6 +18,7 @@ const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
+  getServerlessPlatform,
   getServerlessPlatformTags,
   IS_SERVERLESS,
   getIsGCPFunction,
@@ -454,9 +455,10 @@ class Config extends ConfigBase {
     // Enable the thread context writer when appsec is enabled and only
     // if DD_TRACE_OTEL_CTX_ENABLED is not explicitly set. The writer is started once
     // at init, so appsec enabled later through remote config does not start it.
-    // Serverless functions are left out: the eBPF reader cannot run there.
+    // Serverless functions and Vercel are left out: the eBPF reader cannot run there.
     if (!trackedConfigOrigins.has('DD_TRACE_OTEL_CTX_ENABLED')) {
-      setAndTrack(this, 'DD_TRACE_OTEL_CTX_ENABLED', !IS_SERVERLESS && (this.appsec.DD_APPSEC_ENABLED ?? false))
+      setAndTrack(this, 'DD_TRACE_OTEL_CTX_ENABLED',
+        !IS_SERVERLESS && !getServerlessPlatform().isVercel && (this.appsec.DD_APPSEC_ENABLED ?? false))
     }
 
     if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
