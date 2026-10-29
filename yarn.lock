@@ -273,10 +273,10 @@
     hashery "^1.5.1"
     keyv "^5.6.0"
 
-"@datadog/flagging-core@3.2.0":
-  version "3.2.0"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-3.2.0.tgz#cc6354b7c8c57ac7ce7570b780d8956519c95a29"
-  integrity sha512-DMu+j8Q/RFI3GzGkPGuLBXeQ5KdszZTsvUtunSwAlMX9ylxXs7PwayUW62p9/XP3UCoKipuyRzfnRePAVS85Aw==
+"@datadog/flagging-core@3.3.0":
+  version "3.3.0"
+  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-3.3.0.tgz#a3b4b8ec8de2b8c14a0e343a1d573b79339c9fee"
+  integrity sha512-M/GwafVes97/5Q7kMD9zuoreOlVAj7qB1JfrtNi1/rf5gENxVR1a2FsZvwVEfm6k1Or9nUkQVoT8JaOrZNW/jg==
   dependencies:
     "@bufbuild/protobuf" "^2.13.0"
     spark-md5 "^3.0.2"
@@ -320,12 +320,12 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@2.5.0":
-  version "2.5.0"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.5.0.tgz#cad5d8e2821eb86b3d4a169bbec2072a5bb916bb"
-  integrity sha512-VWAWdZhvC2LQSAkpxbqnofWAj/1yu+cAaSS41JOIFqiY5JiS7oKabLy5cjKDg0TRYnw43W6DOD1r4sqkyqBK6w==
+"@datadog/openfeature-node-server@2.6.0":
+  version "2.6.0"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.6.0.tgz#aefdb4e72fde557acfbfc1270ecbe13afc13a424"
+  integrity sha512-MgU5QiKjGXXfojUYbbgJgGGbvBloLqCfJKMsFLPaHTdEuSpIeuTosWqxbqRfoRvR0kuhn/VN2mf2WORuZ+PNgA==
   dependencies:
-    "@datadog/flagging-core" "3.2.0"
+    "@datadog/flagging-core" "3.3.0"
 
 "@datadog/pprof@5.20.0":
   version "5.20.0"
