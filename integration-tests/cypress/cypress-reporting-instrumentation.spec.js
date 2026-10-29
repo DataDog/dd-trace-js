@@ -1773,6 +1773,70 @@ moduleTypes.forEach(({
       assert.strictEqual(context.Cypress.config('retries'), observedRetries)
     })
 
+    for (const mode of ['known-root', 'fresh-root', 'known-options', 'configurable-options']) {
+      it(`preserves locked browser retry descriptor identity (${mode})`, () => {
+        for (const instrumented of [false, true]) {
+          const state = { retries: { runMode: 2, openMode: 0, experimentalOptions: { maxRetries: 2 } } }
+          const root = { [Symbol.for('dd-trace.cypress.defer-lifecycle')]: true }
+          const context = {
+            Cypress: {
+              _: { isEqual, cloneDeep },
+              config: name => name === undefined ? state : state[name],
+              state () {},
+              mocha: { getRootSuite: () => root },
+            },
+          }
+          if (instrumented) {
+            runInNewContext(fs.readFileSync(
+              path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+            ), context)
+          }
+          const config = context.Cypress.config()
+          const retries = config.retries
+          const isOptions = mode.endsWith('options')
+          const target = isOptions ? retries : config
+          const key = isOptions ? 'experimentalOptions' : 'retries'
+          const value = isOptions
+            ? retries.experimentalOptions
+            : mode === 'known-root' ? retries : { runMode: 2, openMode: 0 }
+          const configurable = mode === 'configurable-options'
+          Object.defineProperty(target, key, { value, writable: false, configurable })
+          assert.strictEqual(target[key], value)
+          const descriptor = Object.getOwnPropertyDescriptor(target, key)
+          assert.strictEqual(descriptor.value, value)
+          assert.strictEqual(descriptor.writable, false)
+          assert.strictEqual(descriptor.configurable, configurable)
+        }
+      })
+    }
+
+    it('does not read browser config getters for flags-only descriptor changes', () => {
+      for (const instrumented of [false, true]) {
+        const state = { retries: { runMode: 0, openMode: 0 } }
+        let reads = 0
+        Object.defineProperty(state, 'custom', {
+          configurable: true,
+          get () { reads++; return 1 },
+        })
+        const root = { [Symbol.for('dd-trace.cypress.defer-lifecycle')]: true }
+        const context = {
+          Cypress: {
+            _: { isEqual, cloneDeep },
+            config: name => name === undefined ? state : state[name],
+            state () {},
+            mocha: { getRootSuite: () => root },
+          },
+        }
+        if (instrumented) {
+          runInNewContext(fs.readFileSync(
+            path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+          ), context)
+        }
+        Object.defineProperty(context.Cypress.config(), 'custom', { configurable: false })
+        assert.strictEqual(reads, 0)
+      }
+    })
+
     it('restores declaration capture after a skipped-suite callback throws', () => {
       const declareTest = (title, callback) => ({ title, fn: callback, stack: new Error().stack })
       const declareSuite = (title, callback) => callback()
@@ -1981,6 +2045,39 @@ moduleTypes.forEach(({
         assert.strictEqual(cypressPlugin.retryConfigObserver.isWatching(config), false)
       })
     }
+
+    it('preserves numeric native mode budgets after an observed inactive-mode write', async () => {
+      const config = { retries: 2, version: '16.2.0' }
+      const tracer = {
+        _tracer: {
+          _config: { isServiceUserProvided: false },
+          _exporter: {
+            getLibraryConfiguration: (config, callback) => callback(null, {
+              isFlakyTestRetriesEnabled: true,
+              flakyTestRetriesCount: 4,
+            }),
+          },
+        },
+      }
+      await cypressPlugin.init(tracer, config)
+      assert.deepStrictEqual(JSON.parse(JSON.stringify(config.retries)), { openMode: 2, runMode: 4 })
+      config.retries.openMode = 1
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 1 })
+    })
+
+    it('preserves numeric native mode budgets when reconciling resolved retry objects', async () => {
+      cypressPlugin._isInit = false
+      cypressPlugin.retryConfigObserver = undefined
+      cypressPlugin.cypressConfig = { version: '16.2.0', retries: { runMode: 4, openMode: 2 } }
+      cypressPlugin.originalCypressRetries = 2
+      cypressPlugin.nativeCypressRetriesBaseline = 2
+      cypressPlugin.configuredCypressRetries = { runMode: 4, openMode: 2 }
+      const afterReconcile = new Error('stop after resolving native modes')
+      sinon.stub(cypressPlugin, 'init').rejects(afterReconcile)
+      await assert.rejects(cypressPlugin.beforeRun({ config: { retries: { runMode: 4, openMode: 1 } } }),
+        error => error === afterReconcile)
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 1 })
+    })
 
     it('reinitializes a reused frozen configuration without changing its native root', async () => {
       const config = { retries: { runMode: 0, openMode: 0 }, version: '12.0.0' }

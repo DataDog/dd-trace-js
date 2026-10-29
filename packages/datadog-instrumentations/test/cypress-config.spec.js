@@ -331,6 +331,8 @@ describe('Cypress manual setup reply ownership', () => {
       try {
         const config = { projectRoot: project, supportFile: originalSupport }
         stop = installManualSupportFile(config)
+        const supportOwner = Symbol.for('dd-trace.cypress.support-owner')
+        assert.deepStrictEqual(config[supportOwner], { path: config.supportFile, deferLifecycle: true })
         const supportSend = process.send
         let observed
         const outer = function (message) {
@@ -367,6 +369,8 @@ describe('Cypress manual setup reply ownership', () => {
         assert.strictEqual(originalSend.firstCall.thisValue, receiver)
         assert.deepStrictEqual(originalSend.firstCall.args.slice(1), [handle, options, callback])
         const installedSupport = sent.args[0].setupConfig.supportFile
+        assert.deepStrictEqual(sent.args[0].setupConfig[supportOwner],
+          { path: installedSupport, deferLifecycle: true })
         assert.ok(fs.existsSync(installedSupport))
         if (alternate) assert.match(fs.readFileSync(installedSupport, 'utf8'), /alternate\.js/)
         else assert.strictEqual(installedSupport, config.supportFile)
@@ -424,11 +428,12 @@ describe('Cypress sealed retry configuration ownership', () => {
 })
 
 describe('Cypress observer and lifecycle phases', () => {
-  for (const mode of ['automatic', 'manual', 'conditional']) {
+  for (const mode of ['automatic', 'manual', 'conditional', 'indirect-manual', 'manual-fallback', 'manual-upgrade']) {
     it(`preserves lifecycle registration order for ${mode} support`, () => {
       const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-support-phase-'))
       const support = join(project, 'support.js')
-      fs.writeFileSync(support, mode === 'automatic'
+      const explicitManual = mode === 'indirect-manual' || mode === 'manual-fallback' || mode === 'manual-upgrade'
+      fs.writeFileSync(support, mode === 'automatic' || explicitManual
         ? '// user support\n'
         : `${mode === 'conditional' ? 'if (false) ' : ''}require('dd-trace/ci/cypress/support')\n`)
       const publicSource = fs.readFileSync(join(__dirname, '../../../ci/cypress/support.js'), 'utf8')
@@ -449,20 +454,21 @@ if (!root[Symbol.for('dd-trace.cypress.defer-lifecycle')]) root[Symbol.for('dd-t
       })
       try {
         const config = { projectRoot: project, supportFile: support }
-        const files = installSupportFile(config)
+        if (mode === 'manual-upgrade') installSupportFile(config)
+        const files = installSupportFile(config, explicitManual)
         const root = {}
         const context = createContext({ Cypress: { mocha: { getRootSuite: () => root } }, calls: [], require () {} })
         const execute = source => runInContext(`(function () {${source}\n})()`, context)
         execute(fs.readFileSync(files[0], 'utf8'))
         context.calls.push('user before')
-        if (mode === 'manual') execute(publicSource)
+        if (mode === 'manual' || mode === 'indirect-manual' || mode === 'manual-upgrade') execute(publicSource)
         context.calls.push('user after')
         const finalizer = fs.readFileSync(files[1], 'utf8').split('\n')
           .filter(line => !line.startsWith('import ')).join('\n')
         execute(finalizer)
         const expected = mode === 'automatic'
           ? ['observer', 'lifecycle', 'user before', 'user after']
-          : mode === 'manual'
+          : mode === 'manual' || mode === 'indirect-manual' || mode === 'manual-upgrade'
             ? ['observer', 'user before', 'lifecycle', 'user after']
             : ['observer', 'user before', 'user after', 'lifecycle']
         assert.deepStrictEqual(Array.from(context.calls), expected)
