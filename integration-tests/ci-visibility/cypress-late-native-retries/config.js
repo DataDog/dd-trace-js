@@ -55,7 +55,8 @@ module.exports = defineConfig({
         return { ...result }
       } else if (mode?.startsWith('returned-object')) return { retries: { runMode: 2, openMode: 0 } }
       else if (!['unchanged', 'during-init', 'during-init-partial'].includes(mode) &&
-        !mode?.startsWith('browser-equal-before-support')) result.retries = 2
+        !mode?.startsWith('browser-equal-before-support') &&
+        mode !== 'browser-queued-native-before-support') result.retries = 2
       return result
     },
   },

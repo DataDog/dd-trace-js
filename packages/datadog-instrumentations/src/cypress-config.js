@@ -15,6 +15,7 @@ const {
 const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol.for('dd-trace.cypress.config.wrapped')
+const DD_SUPPORT_OWNER = Symbol.for('dd-trace.cypress.support-owner')
 const DD_CYPRESS_AFTER_SPEC_HANDLER = Symbol.for('dd-trace.cypress.after-spec.handler')
 const DD_CYPRESS_AFTER_RUN_HANDLER = Symbol.for('dd-trace.cypress.after-run.handler')
 const DD_CYPRESS_TASK_HANDLER = Symbol.for('dd-trace.cypress.task.handler')
@@ -292,9 +293,10 @@ function getRelativeImportPath (fromDirectory, importedFile) {
  * @param {string} directory writable directory inside the Cypress project
  * @param {string|false|undefined} originalSupportFile user's support file
  * @param {string} browserHooksSource Datadog browser-side support hooks
+ * @param {boolean} deferLifecycle whether manual support owns lifecycle registration
  * @returns {string[]} generated files
  */
-function createSupportWrapper (directory, originalSupportFile, browserHooksSource) {
+function createSupportWrapper (directory, originalSupportFile, browserHooksSource, deferLifecycle) {
   const suffix = `${process.pid}-${randomUUID()}`
   const browserHooksFile = path.join(directory, `dd-cypress-support-hooks-${suffix}.mjs`)
   const wrapperFile = path.join(directory, `dd-cypress-support-${suffix}.mjs`)
@@ -311,13 +313,17 @@ function createSupportWrapper (directory, originalSupportFile, browserHooksSourc
     const guardedSource = `const ddSupportRoot = Cypress.mocha.getRootSuite()
 const ddSupportKey = Symbol.for('dd-trace.cypress.support-installed')
 if (!ddSupportRoot[ddSupportKey]) {
+ddSupportRoot[Symbol.for('dd-trace.cypress.defer-lifecycle')] = ${deferLifecycle}
 ${browserHooksSource}
 ddSupportRoot[ddSupportKey] = true
 }
 `
     writeExclusiveFile(browserHooksFile, guardedSource)
     generatedFiles.push(browserHooksFile)
-    writeExclusiveFile(wrapperFile, `${wrapperImports.join('\n')}\n`)
+    const finalize = `const install = Cypress.mocha.getRootSuite()[Symbol.for('dd-trace.cypress.install-lifecycle')]
+if (typeof install === 'function') install()
+`
+    writeExclusiveFile(wrapperFile, `${wrapperImports.join('\n')}\n${finalize}`)
     generatedFiles.push(wrapperFile)
   } catch (error) {
     for (const generatedFile of generatedFiles) removeGeneratedFile(generatedFile)
@@ -339,10 +345,17 @@ function injectSupportFile (config) {
   const originalSupportFile = config.supportFile
 
   if (generatedFilesForExitCleanup.has(originalSupportFile)) return
+  const supportOwner = config[DD_SUPPORT_OWNER]
+  let deferLifecycle = supportOwner && supportOwner.path === originalSupportFile && supportOwner.deferLifecycle
 
   if (originalSupportFile) {
     try {
-      fs.readFileSync(originalSupportFile, 'utf8')
+      const content = fs.readFileSync(originalSupportFile, 'utf8')
+      deferLifecycle ||= content.split('\n').some(line => {
+        const trimmed = line.trim()
+        return trimmed.includes('dd-trace/ci/cypress/support') &&
+          !trimmed.startsWith('//') && !trimmed.startsWith('*')
+      })
     } catch (error) {
       logBrowserInstrumentationError(
         'Datadog could not read the Cypress support file %s: %s. %s',
@@ -377,8 +390,10 @@ function injectSupportFile (config) {
   for (const directory of new Set(candidateDirectories)) {
     if (projectRoot && !isPathInside(projectRoot, directory)) continue
     try {
-      const generatedFiles = createSupportWrapper(directory, originalSupportFile, browserHooksSource)
+      const generatedFiles = createSupportWrapper(directory, originalSupportFile, browserHooksSource, !!deferLifecycle)
       config.supportFile = generatedFiles[1]
+      // Shared across SDK copies, but scoped to this exact generated support path.
+      config[DD_SUPPORT_OWNER] = { path: config.supportFile, deferLifecycle: !!deferLifecycle }
       return generatedFiles
     } catch (error) {
       failures.push({ directory, error })
@@ -448,6 +463,7 @@ function installManualSupportFile (config) {
             const supportConfig = {
               projectRoot,
               supportFile: typeof supportFile === 'string' ? path.resolve(projectRoot, supportFile) : supportFile,
+              [DD_SUPPORT_OWNER]: returnedConfig[DD_SUPPORT_OWNER] ?? config[DD_SUPPORT_OWNER],
             }
             installSupportFile(supportConfig)
             if (generatedFilesForExitCleanup.has(supportConfig.supportFile)) {

@@ -1731,6 +1731,48 @@ moduleTypes.forEach(({
       }
     }
 
+    it('observes retry writes before installing manual lifecycle hooks once', () => {
+      const root = { [Symbol.for('dd-trace.cypress.defer-lifecycle')]: true }
+      const retryConfig = { runMode: 2, openMode: 0 }
+      const hooks = []
+      const runner = { runTests () {}, suite: { ctx: {} } }
+      const originalRunTests = runner.runTests
+      const context = {
+        Cypress: {
+          _: { isEqual, cloneDeep },
+          config: name => {
+            if (name === 'retries') return retryConfig
+            assert.strictEqual(name, 'isTextTerminal')
+            return true
+          },
+          state () {},
+          on: name => hooks.push(name),
+          mocha: { getRunner: () => runner, getRootSuite: () => root },
+        },
+        cy: { on: name => hooks.push(name) },
+        before: () => hooks.push('before'),
+        beforeEach: () => hooks.push('beforeEach'),
+        afterEach: () => hooks.push('afterEach'),
+        after: () => hooks.push('after'),
+      }
+      runInNewContext(fs.readFileSync(
+        path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+      ), context)
+      assert.deepStrictEqual(hooks, [])
+      assert.strictEqual(runner.runTests, originalRunTests)
+      const observedRetries = context.Cypress.config('retries')
+      assert.notStrictEqual(observedRetries, retryConfig)
+      observedRetries.runMode = 2
+      const install = root[Symbol.for('dd-trace.cypress.install-lifecycle')]
+      install()
+      const registered = hooks.slice()
+      assert.strictEqual(registered.filter(name => name === 'afterEach').length, 1)
+      assert.notStrictEqual(runner.runTests, originalRunTests)
+      install()
+      assert.deepStrictEqual(hooks, registered)
+      assert.strictEqual(context.Cypress.config('retries'), observedRetries)
+    })
+
     it('restores declaration capture after a skipped-suite callback throws', () => {
       const declareTest = (title, callback) => ({ title, fn: callback, stack: new Error().stack })
       const declareSuite = (title, callback) => callback()
