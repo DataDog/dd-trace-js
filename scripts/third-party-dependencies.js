@@ -133,9 +133,7 @@ function addDependencyPatterns (patterns, manifest, context, includePeers = fals
   if (manifest.optionalDependencies) {
     for (const name of Object.keys(manifest.optionalDependencies)) patterns.push({ name, context })
   }
-  if (!includePeers) return
-
-  if (!manifest.peerDependencies) return
+  if (!includePeers || !manifest.peerDependencies) return
   for (const name of Object.keys(manifest.peerDependencies)) {
     const pattern = { name, context }
     if (manifest.optionalPeers?.includes(name)) pattern.allowMissing = true
