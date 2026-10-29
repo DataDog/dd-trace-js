@@ -1183,6 +1183,47 @@ done
     })
   }
 
+  for (const missingObject of ['head', 'parent']) {
+    for (const legacyGit of [false, true]) {
+      const suffix = legacyGit ? ' without GIT_NO_LAZY_FETCH support' : ''
+      it(`does not lazily fetch a missing ${missingObject} after timed-out metadata recovery${suffix}`, () => {
+        // Even failed filtered fetches configure the remote as a promisor.
+        git(checkout, ['config', 'remote.origin.promisor', 'true'])
+        git(checkout, ['config', 'remote.origin.partialclonefilter', 'blob:none'])
+        let fetches = 0
+        const execute = (command, flags, options) => {
+          if (flags[0] === 'fetch') {
+            fetches++
+            if (missingObject === 'parent' && fetches === 1) {
+              const object = execFileSync('git', ['cat-file', 'commit', headSha], { cwd: remote, stdio: 'pipe' })
+              git(checkout, ['hash-object', '-t', 'commit', '-w', '--stdin'], { input: object })
+              return ''
+            }
+            throw Object.assign(new Error('spawnSync git ETIMEDOUT'), { code: 'ETIMEDOUT' })
+          }
+          if (legacyGit) {
+            options = { ...options, env: { ...process.env, ...options?.env, GIT_NO_LAZY_FETCH: '0' } }
+          }
+          return cachedExecSpy(command, flags, options)
+        }
+        const gitUtils = proxyquire('../../../src/plugins/util/git', {
+          './git-cache': { cachedExec: execute },
+          'node:child_process': { execFileSync: execute },
+        })
+
+        const metadata = gitUtils.getGitMetadata({ headCommitSha: headSha })
+
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], undefined)
+        assert.strictEqual(metadata[GIT_COMMIT_SHA], git(checkout, ['rev-parse', 'HEAD']))
+        assert.strictEqual(fetches, 2)
+        const commits = git(checkout, ['cat-file', '--batch-all-objects', '--batch-check=%(objecttype)'])
+          .split('\n').filter(type => type === 'commit')
+        assert.strictEqual(commits.length, missingObject === 'head' ? 1 : 2)
+        assert.strictEqual(getGitMetadata({ headCommitSha: headSha })[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+      })
+    }
+  }
+
   it('prepares the known diff base before the remote becomes unavailable', () => {
     git(remote, ['config', 'uploadpack.allowFilter', 'false'])
 

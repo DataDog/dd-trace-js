@@ -67,6 +67,9 @@ function sanitizedExec (
       /** @type {import('node:child_process').ExecFileSyncOptions} */
       const options = { stdio: 'pipe' }
       if (executionOptions?.timeout) options.timeout = executionOptions.timeout
+      if (executionOptions?.localOnly) {
+        options.env = { ...getEnvironmentVariables(), GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' }
+      }
       let result = exec('git', flags, options).toString()
 
       if (shouldTrim) {
@@ -513,10 +516,12 @@ function getGitMetadata (ciMetadata) {
       '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'',
       headCommitSha,
     ]
-    let headInfo = sanitizedExec(headFlags, null, null, null, false, { uncached: true })
+    // Only explicit, bounded fetches may contact the remote during head metadata recovery.
+    const headOptions = { uncached: true, localOnly: true }
+    let headInfo = sanitizedExec(headFlags, null, null, null, false, headOptions)
     if (!headInfo && fetchedAtDepthOne) {
       fetchHeadCommitSha(headCommitSha, false)
-      headInfo = sanitizedExec(headFlags, null, null, null, false, { uncached: true })
+      headInfo = sanitizedExec(headFlags, null, null, null, false, headOptions)
     }
 
     // Prepare a known diff base while the remote is available, including when Git upload is disabled.
