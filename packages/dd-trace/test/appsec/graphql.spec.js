@@ -16,6 +16,7 @@ const {
   graphqlMiddlewareChannel,
   apolloChannel,
   apolloServerCoreChannel,
+  wafRunFinished,
 } = require('../../src/appsec/channels')
 
 /**
@@ -77,6 +78,7 @@ describe('GraphQL', () => {
       assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, false)
       assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, false)
       assert.strictEqual(startGraphqlResolver.hasSubscribers, false)
+      assert.strictEqual(wafRunFinished.hasSubscribers, false)
 
       graphql.enable()
 
@@ -86,6 +88,7 @@ describe('GraphQL', () => {
       assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, true)
       assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, true)
       assert.strictEqual(startGraphqlResolver.hasSubscribers, true)
+      assert.strictEqual(wafRunFinished.hasSubscribers, true)
     })
   })
 
@@ -99,6 +102,7 @@ describe('GraphQL', () => {
       assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, true)
       assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, true)
       assert.strictEqual(startGraphqlResolver.hasSubscribers, true)
+      assert.strictEqual(wafRunFinished.hasSubscribers, true)
 
       graphql.disable()
 
@@ -108,6 +112,7 @@ describe('GraphQL', () => {
       assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, false)
       assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, false)
       assert.strictEqual(startGraphqlResolver.hasSubscribers, false)
+      assert.strictEqual(wafRunFinished.hasSubscribers, false)
     })
   })
 
@@ -209,6 +214,48 @@ describe('GraphQL', () => {
       sinon.assert.calledWithExactly(waf.run.secondCall, {
         ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { name: { upper: true } } },
       }, {})
+    })
+
+    it('Should not keep the result of a timed out run', () => {
+      waf.run.returns({ timeout: true })
+
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+
+      sinon.assert.calledTwice(waf.run)
+    })
+
+    it('Should not keep the result of a run that returned nothing', () => {
+      waf.run.returns(undefined)
+
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+
+      sinon.assert.calledTwice(waf.run)
+    })
+
+    it('Should forget fields without arguments when a run carries persistent inputs', () => {
+      // setUser can add `usr.id` mid-request, and a rule can require both that and the resolver field.
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+      sinon.assert.calledOnce(waf.run)
+
+      wafRunFinished.publish({ payload: { persistent: { [addresses.USER_ID]: 'user' } } })
+
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+
+      sinon.assert.calledTwice(waf.run)
+    })
+
+    it('Should keep fields without arguments when a run carries only ephemeral inputs', () => {
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+
+      wafRunFinished.publish({
+        payload: { ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { name: {} } } },
+      })
+
+      startGraphqlResolver.publish(createResolverMessage({ name: {} }))
+
+      sinon.assert.calledOnce(waf.run)
     })
   })
 
