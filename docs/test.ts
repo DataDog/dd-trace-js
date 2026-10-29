@@ -1012,3 +1012,6 @@ aiguard.evaluate([
   const replacements: ddTrace.aiguard.RedactionReplacement[] = result.redactionReplacements
   replacements.map(({ path, replacement }) => `${path}=${replacement}`)
 })
+
+tracer.use('elevenlabs');
+tracer.use('elevenlabs', { llmobs: false });

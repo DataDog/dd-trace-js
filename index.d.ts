@@ -312,6 +312,7 @@ interface Plugins {
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
   "electron": tracer.plugins.electron;
+  "elevenlabs": tracer.plugins.elevenlabs;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
@@ -2082,6 +2083,9 @@ declare namespace tracer {
   }
 
   export namespace plugins {
+    /** Node.js ElevenLabs Agents WebSocket conversations. */
+    interface elevenlabs extends Instrumentation, LLMObsIntegration {}
+
     /** @hidden */
     interface Integration {
       /**

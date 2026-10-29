@@ -303,6 +303,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 * [dns](./interfaces/plugins.dns.html)
 * [elasticsearch](./interfaces/plugins.elasticsearch.html)
 * [electron](./interfaces/plugins.electron.html)
+* [elevenlabs](#elevenlabs)
 * [express](./interfaces/plugins.express.html)
 * [fastify](./interfaces/plugins.fastify.html)
 * [fetch](./interfaces/plugins.fetch.html)
@@ -361,6 +362,33 @@ For Amazon Bedrock LLM Observability integrations, see the
 * [web](./interfaces/plugins.web.html)
 * [winston](./interfaces/plugins.winston.html)
 * [ws](./interfaces/plugins.ws.html)
+
+<h5 id="elevenlabs"></h5>
+
+#### ElevenLabs
+
+Automatically instruments Node.js Agents WebSocket conversations from `@elevenlabs/elevenlabs-js` 2.75.0 and later
+2.x versions. Initialize `dd-trace` before importing the SDK and enable LLM Observability to record conversation
+turns, transcripts, client tools, and input/output audio. Both the default and custom SDK audio interfaces are supported.
+The SDK exposes `Conversation` and `ClientTools` at
+`@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation`.
+Browser/WebRTC conversations (`@elevenlabs/client`), telephony, and standalone speech APIs are outside this integration.
+
+Negotiated PCM16 input and output are exported as WAV using their respective sample rates. Audio shares one bounded
+budget per LLM span; unsupported or oversized clips fall back to text with omission metadata. Phase timing and playback
+are estimated, and these spans explicitly opt out of time-to-first-audio metrics.
+
+For optional speaker activity colors, open the ElevenLabs agent's **Advanced → Client Events** settings and enable
+**VAD score (`vad_score`)**, preserving the other events your application uses. The tracer observes this event without
+changing your agent configuration or subscriptions. Without VAD events, audio playback and phase-based colors continue
+to work. VAD estimates change activity metadata only, never the captured audio or interruption cuts.
+
+The tested SDK version filters agent audio whose event ID is less than or equal to its last interruption ID.
+If the service reuses that boundary ID for a new response, the SDK drops its audio. The tracer observes the SDK's
+behavior and cannot restore audio that the application did not receive. Full playback after barge-in depends on
+resolving this SDK limitation.
+
+Configure the integration with `tracer.use('elevenlabs', { llmobs: false })` to disable LLM Observability for it.
 
 <h2 id="manual-instrumentation">Manual Instrumentation</h2>
 

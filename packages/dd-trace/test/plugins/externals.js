@@ -3,6 +3,7 @@
 const { DD_MAJOR } = require('../../../../version')
 
 module.exports = {
+  elevenlabs: [{ name: '@elevenlabs/elevenlabs-js', versions: ['>=2.75.0 <3'] }],
   '@aws/durable-execution-sdk-js': [
     {
       name: '@aws/durable-execution-sdk-js-testing',

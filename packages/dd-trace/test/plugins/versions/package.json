@@ -41,6 +41,7 @@
     "@elastic/elasticsearch": "9.5.1",
     "@elastic/transport": "9.4.1",
     "@electron/packager": "20.3.0",
+    "@elevenlabs/elevenlabs-js": "2.75.0",
     "@fastify/cookie": "11.1.3",
     "@fastify/multipart": "10.1.6",
     "@google-cloud/pubsub": "6.3.1",
