@@ -6,7 +6,7 @@ const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/
 const log = require('../log')
 const { debugChannel } = require('../log/channels')
 const configurationSource = require('./configuration_source')
-const { EXPOSURE_CHANNEL } = require('./constants/constants')
+const { DEPENDENCY_EVALUATION_CHANNEL, EXPOSURE_CHANNEL } = require('./constants/constants')
 const DebugLoggingHook = require('./debug-logging-hook')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
@@ -33,6 +33,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   constructor (tracer, config) {
     super({
       exposureChannel: channel(EXPOSURE_CHANNEL),
+      dependencyEvaluationChannel: channel(DEPENDENCY_EVALUATION_CHANNEL),
       initializationTimeoutMs: config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
     })
 
