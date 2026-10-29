@@ -893,7 +893,14 @@ class CypressPlugin {
   init (tracer, cypressConfig) {
     this.retryConfigObserver?.stop()
     this.retryConfigObserver = undefined
-    if (this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries) {
+    const isReusedConfig = this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries
+    const retryDescriptor = isReusedConfig && Object.getOwnPropertyDescriptor(cypressConfig, 'retries')
+    if (retryDescriptor && 'value' in retryDescriptor && !retryDescriptor.writable) {
+      // Interactive runs may reuse the user's frozen setup result. Work on a
+      // private copy while keeping that external data property read-only.
+      cypressConfig = { ...cypressConfig }
+    }
+    if (isReusedConfig) {
       cypressConfig.retries = copyCypressRetries(this.originalCypressRetries)
     } else {
       this.originalCypressRetries = copyCypressRetries(cypressConfig.retries)

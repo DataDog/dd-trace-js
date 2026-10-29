@@ -699,9 +699,13 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       assert.strictEqual(tests[0].meta['test.is_retry'], undefined)
     }, { CYPRESS_RETRIES: '2' })
   })
-  for (const lock of ['seal', 'freeze']) {
+  for (const { lock, writeMode } of [
+    { lock: 'seal' }, { lock: 'freeze' },
+    ...['strict', 'sloppy', 'nested'].map(writeMode => ({ lock: 'freeze', writeMode })),
+  ]) {
     for (const atrEnabled of [false, true]) {
-      it(`preserves native callbacks and traces with Object.${lock} (ATR=${atrEnabled})`, async () => {
+      const frozenWrite = writeMode ? ` ${writeMode} writes` : ''
+      it(`preserves native callbacks and traces with Object.${lock}${frozenWrite} (ATR=${atrEnabled})`, async () => {
         const command = './node_modules/.bin/cypress run ' +
           '--config-file ci-visibility/cypress-sealed-retry-config/config.js'
         const ledger = join(cwd, 'late-native-retry-executions.json')
@@ -709,6 +713,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         const env = {
           ...getCiVisEvpProxyConfig(receiver.port),
           DD_CYPRESS_CONFIG_LOCK: lock,
+          ...(writeMode && { DD_CYPRESS_FROZEN_WRITE: writeMode }),
           CYPRESS_LATE_NATIVE_RETRIES_MODE: 'equal-object',
         }
         delete env.CYPRESS_VERSION

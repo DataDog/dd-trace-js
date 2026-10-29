@@ -9,13 +9,12 @@
  */
 module.exports = function observeRetryConfig (config, onChange, options) {
   const descriptor = Object.getOwnPropertyDescriptor(config, 'retries')
-  if (!descriptor?.configurable || !descriptor.writable) return
+  if (!descriptor?.writable || !('value' in descriptor)) return
 
-  let current = config.retries
+  const initial = config.retries
   let active = true
   const roots = new WeakMap()
   const targets = new WeakMap()
-  const ownsProperty = () => Object.getOwnPropertyDescriptor(config, 'retries')?.get === getRetries
   const unwrap = value => targets.get(value) || value
   const notify = (value, path, metadata) => {
     const provenance = options && {
@@ -30,12 +29,12 @@ module.exports = function observeRetryConfig (config, onChange, options) {
     roots.set(raw, metadata)
     return metadata
   }
-  getRoot(current, options?.nativeRetries)
+  getRoot(initial, options?.nativeRetries)
   const record = (metadata, path) => {
     if (!active) return
     if (options) metadata.native = options.updateNative(metadata.native, metadata.raw, path)
     // A detached alias updates only its own provenance until that root is selected again.
-    if (ownsProperty() && metadata.raw === current) notify(current, path, metadata)
+    if (metadata.raw === unwrap(config.retries)) notify(metadata.raw, path, metadata)
   }
   const wrap = (value, metadata, path = []) => {
     if (value === null || typeof value !== 'object') return value
@@ -71,21 +70,10 @@ module.exports = function observeRetryConfig (config, onChange, options) {
     targets.set(proxy, value)
     return proxy
   }
-  function getRetries () {
-    return wrap(current, getRoot(current))
-  }
-  Object.defineProperty(config, 'retries', {
-    configurable: descriptor.configurable,
-    enumerable: descriptor.enumerable,
-    get: getRetries,
-    set (value) {
-      const next = unwrap(value)
-      if (next && typeof next === 'object' && next === current) return
-      current = next
-      const metadata = getRoot(current, options && options.updateNative(undefined, current, []))
-      if (active && ownsProperty()) notify(current, [], metadata)
-    },
-  })
+  // Keep the native data descriptor: freeze/seal must retain JavaScript's own
+  // strict/sloppy write semantics. Fresh root replacements are reconciled by
+  // identity at the setup handoff; only injected objects need nested proxies.
+  config.retries = wrap(initial, getRoot(initial))
 
   // Cypress serializes the actual setupNodeEvents return value through this reply.
   // Observing it before serialization also handles a fresh partial return when the
@@ -99,15 +87,15 @@ module.exports = function observeRetryConfig (config, onChange, options) {
     sendObserver = undefined
   }
   const stop = (reconcileCurrent = true) => {
-    if (active && reconcileCurrent && !ownsProperty()) {
+    if (active && reconcileCurrent) {
       const retries = unwrap(config.retries)
       notify(retries, [], retries && typeof retries === 'object' && roots.get(retries))
     }
     active = false
     stopIpc()
     const currentDescriptor = Object.getOwnPropertyDescriptor(config, 'retries')
-    if (currentDescriptor?.configurable && currentDescriptor.get === getRetries) {
-      Object.defineProperty(config, 'retries', { ...descriptor, value: current })
+    if (currentDescriptor?.writable && targets.has(currentDescriptor.value)) {
+      config.retries = unwrap(currentDescriptor.value)
     }
   }
   if (typeof originalSend === 'function') {
@@ -117,9 +105,7 @@ module.exports = function observeRetryConfig (config, onChange, options) {
         try {
           const wireConfig = message.event === 'setupTestingType:reply' && message.args?.[0]?.setupConfig
           const returnedConfig = wireConfig?.[Symbol.for('dd-trace.cypress.returned-config')] ?? wireConfig
-          if (active && message.event === 'setupTestingType:reply' &&
-            (!ownsProperty() || (returnedConfig && Object.hasOwn(returnedConfig, 'retries') &&
-              returnedConfig.retries !== config.retries))) {
+          if (active && message.event === 'setupTestingType:reply') {
             const retries = unwrap(returnedConfig?.retries)
             notify(retries, [], retries && typeof retries === 'object' && roots.get(retries))
           }
@@ -134,7 +120,7 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   }
 
   return {
-    isWatching: candidate => active && candidate === config && ownsProperty(),
+    isWatching: candidate => active && candidate === config,
     stopIpc,
     stop,
   }
