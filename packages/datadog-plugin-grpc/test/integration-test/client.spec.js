@@ -20,8 +20,8 @@ describe('esm', () => {
 
   withVersions('grpc', '@grpc/grpc-js', NODE_MAJOR >= 25 ? '>=1.3.0' : '*', version => {
     useSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [
-      './packages/datadog-plugin-grpc/test/integration-test/*',
-      './packages/datadog-plugin-grpc/test/*'])
+      './packages/datadog-plugin-grpc/test/integration-test/server.mjs',
+      './packages/datadog-plugin-grpc/test/test.proto'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
