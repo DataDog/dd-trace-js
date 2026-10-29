@@ -35,6 +35,12 @@ const ALLOW = 'ALLOW'
 /** @typedef {import('../opentracing/span')} Span */
 
 /**
+ * @typedef {object} ExtraEntry
+ * @property {string} key
+ * @property {unknown} value
+ */
+
+/**
  * @typedef {object} EvaluationResponse
  * @property {string} action
  * @property {string|undefined} reason
@@ -44,8 +50,8 @@ const ALLOW = 'ALLOW'
  * @property {boolean} hasTagProbabilities
  * @property {boolean} blockingEnabled
  * @property {unknown} redactionReplacements
- * @property {unknown} extraTags
- * @property {unknown} extraMetastruct
+ * @property {ExtraEntry[]} extraTags
+ * @property {ExtraEntry[]} extraMetastruct
  */
 
 /**
@@ -56,8 +62,8 @@ const ALLOW = 'ALLOW'
  * @property {boolean} shouldBlock
  * @property {boolean} hasTagProbabilities
  * @property {{ enabled: boolean, applied: boolean, failures: number }} redaction
- * @property {unknown} extraTags
- * @property {unknown} extraMetastruct
+ * @property {ExtraEntry[]} extraTags
+ * @property {ExtraEntry[]} extraMetastruct
  */
 
 /**
@@ -86,6 +92,38 @@ function isRecord (value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+// Shared by every evaluation without extra entries, so the common case allocates nothing.
+const NO_EXTRA_ENTRIES = /** @type {ExtraEntry[]} */ (/** @type {unknown} */ (Object.freeze([])))
+
+/**
+ * Normalizes a backend extra field into well-formed key/value entries. The backend sends lists of
+ * entries rather than objects because the dotted keys are not valid JSON:API member names. Values
+ * are kept as-is: which of them reach the span is decided when they are applied.
+ *
+ * @param {string} field
+ * @param {unknown} entries
+ * @returns {ExtraEntry[]}
+ */
+function normalizeExtraEntries (field, entries) {
+  if (entries === undefined) return NO_EXTRA_ENTRIES
+  if (!Array.isArray(entries)) {
+    log.debug('AI Guard: ignoring %s of type %s', field, entries === null ? 'null' : typeof entries)
+    return NO_EXTRA_ENTRIES
+  }
+
+  const normalized = []
+  for (const entry of entries) {
+    const key = isRecord(entry) ? entry.key : undefined
+    // A __proto__ key is never valid: it cannot become an own property on the span tags or the meta-struct.
+    if (typeof key === 'string' && key.length > 0 && key !== '__proto__') {
+      normalized.push({ key, value: entry.value })
+    } else {
+      log.debug('AI Guard: ignoring malformed %s entry', field)
+    }
+  }
+  return normalized.length === 0 ? NO_EXTRA_ENTRIES : normalized
+}
+
 /**
  * Parses the backend evaluation response into the tracer's internal contract.
  *
@@ -107,9 +145,9 @@ function parseEvaluationResponse (body) {
     hasTagProbabilities: isRecord(attributes.tag_probs),
     blockingEnabled: attributes.is_blocking_enabled === true,
     redactionReplacements: attributes.redaction_replacements,
-    // Validated when applied to the span: a malformed value must not turn into a bad_response.
-    extraTags: attributes.extra_tags,
-    extraMetastruct: attributes.extra_metastruct,
+    // Malformed extra entries are dropped here instead of turning the response into a bad_response.
+    extraTags: normalizeExtraEntries('extra_tags', attributes.extra_tags),
+    extraMetastruct: normalizeExtraEntries('extra_metastruct', attributes.extra_metastruct),
   }
 }
 
@@ -218,76 +256,34 @@ function isReservedExtraTag (key) {
 const RESERVED_EXTRA_META_STRUCT_KEYS = new Set(['messages', 'attack_categories', 'sds', 'tag_probs'])
 
 /**
- * Returns whether a backend extra field is a list of entries, logging when it is malformed.
- *
- * @param {string} field
- * @param {unknown} entries
- * @returns {entries is unknown[]}
- */
-function isEntryList (field, entries) {
-  if (entries === undefined) return false
-  if (Array.isArray(entries)) return true
-
-  log.debug('AI Guard: ignoring %s of type %s', field, entries === null ? 'null' : typeof entries)
-  return false
-}
-
-/**
- * Returns the key of a backend extra field entry, or undefined when the entry is malformed.
- *
- * @param {string} field
- * @param {unknown} entry
- */
-function getEntryKey (field, entry) {
-  const key = isRecord(entry) ? entry.key : undefined
-  // A __proto__ key cannot be stored as an own entry on the span tags or the meta-struct.
-  const isValid = typeof key === 'string' && key.length > 0 && key !== '__proto__'
-  if (!isValid) log.debug('AI Guard: ignoring malformed %s entry', field)
-  return isValid ? key : undefined
-}
-
-/**
- * Copies backend-provided extra_tags to the span and extra_metastruct to the AI Guard meta-struct.
- * Both are lists of key/value entries because their dotted keys are not valid JSON:API member
- * names. Keys are used verbatim, a repeated key keeps its last value, and malformed input is
- * skipped without throwing.
+ * Copies backend-provided extra_tags to the span and extra_metastruct to the AI Guard meta-struct,
+ * skipping values and keys the span must not receive. Keys are used verbatim and entries are
+ * applied in order, so a repeated key keeps its last value.
  *
  * @param {Span} span
  * @param {EvaluationMetaStruct} metaStruct
- * @param {unknown} extraTags
- * @param {unknown} extraMetastruct
+ * @param {ExtraEntry[]} extraTags
+ * @param {ExtraEntry[]} extraMetastruct
  */
 function applyExtraSpanData (span, metaStruct, extraTags, extraMetastruct) {
-  // The client decodes the payload with JSON.parse, so values are JSON types.
-  if (isEntryList('extra_tags', extraTags)) {
-    for (const entry of extraTags) {
-      const key = getEntryKey('extra_tags', entry)
-      if (key === undefined) continue
-
-      const { value } = /** @type {{ value?: unknown }} */ (entry)
-      if (typeof value !== 'string') {
-        log.debug('AI Guard: ignoring extra_tags entry %s with non-string value', key)
-      } else if (isReservedExtraTag(key)) {
-        log.debug('AI Guard: ignoring reserved extra tag %s', key)
-      } else {
-        span.setTag(key, value)
-      }
+  // The client decodes values with JSON.parse, so a string check and a null check cover every JSON type.
+  for (const { key, value } of extraTags) {
+    if (typeof value !== 'string') {
+      log.debug('AI Guard: ignoring extra_tags entry %s with non-string value', key)
+    } else if (isReservedExtraTag(key)) {
+      log.debug('AI Guard: ignoring reserved extra tag %s', key)
+    } else {
+      span.setTag(key, value)
     }
   }
 
-  if (isEntryList('extra_metastruct', extraMetastruct)) {
-    for (const entry of extraMetastruct) {
-      const key = getEntryKey('extra_metastruct', entry)
-      if (key === undefined) continue
-
-      const { value } = /** @type {{ value?: unknown }} */ (entry)
-      if (value === undefined || value === null) {
-        log.debug('AI Guard: ignoring extra_metastruct entry %s with null value', key)
-      } else if (RESERVED_EXTRA_META_STRUCT_KEYS.has(key)) {
-        log.debug('AI Guard: ignoring reserved extra_metastruct key %s', key)
-      } else {
-        metaStruct[key] = value
-      }
+  for (const { key, value } of extraMetastruct) {
+    if (value === undefined || value === null) {
+      log.debug('AI Guard: ignoring extra_metastruct entry %s with null value', key)
+    } else if (RESERVED_EXTRA_META_STRUCT_KEYS.has(key)) {
+      log.debug('AI Guard: ignoring reserved extra_metastruct key %s', key)
+    } else {
+      metaStruct[key] = value
     }
   }
 }

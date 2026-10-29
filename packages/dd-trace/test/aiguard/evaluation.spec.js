@@ -38,29 +38,101 @@ describe('AI Guard evaluation response', () => {
       hasTagProbabilities: true,
       blockingEnabled: true,
       redactionReplacements,
-      extraTags: undefined,
-      extraMetastruct: undefined,
+      extraTags: [],
+      extraMetastruct: [],
     })
   })
 
-  it('passes extra_tags and extra_metastruct through unvalidated so a malformed value is not a bad response', () => {
-    for (const payload of [
-      [{ key: 'ai_guard.evaluate_id', value: 'id' }],
-      { 'ai_guard.policy': 'default' },
-      'not-a-list',
-      null,
-      42,
-    ]) {
+  describe('extra entries', () => {
+    const fields = [['extra_tags', 'extraTags'], ['extra_metastruct', 'extraMetastruct']]
+
+    const parseField = (field, payload) => {
+      const evaluation = parseEvaluationResponse({ data: { attributes: { action: 'ALLOW', [field]: payload } } })
+      assert.ok(evaluation)
+      return evaluation
+    }
+
+    it('shares one frozen empty list when the backend omits both fields', () => {
+      const first = parseEvaluationResponse({ data: { attributes: { action: 'ALLOW' } } })
+      const second = parseEvaluationResponse({ data: { attributes: { action: 'DENY' } } })
+      assert.ok(first && second)
+
+      assert.deepStrictEqual(first.extraTags, [])
+      assert.ok(Object.isFrozen(first.extraTags))
+      assert.strictEqual(first.extraMetastruct, first.extraTags)
+      assert.strictEqual(second.extraTags, first.extraTags)
+      assert.strictEqual(second.extraMetastruct, first.extraTags)
+    })
+
+    for (const [field, property] of fields) {
+      it(`keeps well-formed ${field} entries in order with their values as-is`, () => {
+        const entries = [
+          { key: 'ai_guard.evaluate_id', value: 'id' },
+          { key: 'policy', value: { rule: 'credit_card', categories: ['pii'] } },
+          { key: 'score', value: 0.75 },
+          { key: 'flagged', value: true },
+          { key: 'empty', value: null },
+          { key: 'missing' },
+          { key: 'policy', value: 'last' },
+        ]
+
+        const evaluation = parseField(field, entries)
+
+        assert.deepStrictEqual(evaluation[property], [
+          { key: 'ai_guard.evaluate_id', value: 'id' },
+          { key: 'policy', value: { rule: 'credit_card', categories: ['pii'] } },
+          { key: 'score', value: 0.75 },
+          { key: 'flagged', value: true },
+          { key: 'empty', value: null },
+          { key: 'missing', value: undefined },
+          { key: 'policy', value: 'last' },
+        ])
+        assert.strictEqual(evaluation[property][1].value, entries[1].value)
+      })
+
+      for (const payload of [{ 'ai_guard.policy': 'default' }, 'not-a-list', 42, null, true, []]) {
+        it(`normalizes ${field} ${JSON.stringify(payload)} to an empty list instead of a bad response`, () => {
+          const evaluation = parseField(field, payload)
+
+          assert.deepStrictEqual(evaluation[property], [])
+          assert.ok(Object.isFrozen(evaluation[property]))
+        })
+      }
+
+      it(`drops malformed ${field} entries and keeps the valid siblings`, () => {
+        const evaluation = parseField(field, [
+          'ai_guard.policy_name',
+          42,
+          null,
+          ['ai_guard.policy_name', 'forged'],
+          { value: 'missing key' },
+          { key: '', value: 'empty key' },
+          { key: 1, value: 'number key' },
+          { key: '__proto__', value: { polluted: 'true' } },
+          { key: 'valid', value: 'kept' },
+        ])
+
+        assert.deepStrictEqual(evaluation[property], [{ key: 'valid', value: 'kept' }])
+      })
+    }
+
+    it('passes the normalized entries to the outcome', () => {
       const evaluation = parseEvaluationResponse({
-        data: { attributes: { action: 'ALLOW', extra_tags: payload, extra_metastruct: payload } },
+        data: {
+          attributes: {
+            action: 'ALLOW',
+            extra_tags: [{ key: 'ai_guard.evaluate_id', value: 'id' }],
+            extra_metastruct: [{ key: 'policy_version', value: 'v3' }],
+          },
+        },
       })
       assert.ok(evaluation)
-      assert.strictEqual(evaluation.extraTags, payload)
-      assert.strictEqual(evaluation.extraMetastruct, payload)
+
       const outcome = createEvaluationOutcome([], evaluation, { block: true, redactionEnabled: true })
-      assert.strictEqual(outcome.extraTags, payload)
-      assert.strictEqual(outcome.extraMetastruct, payload)
-    }
+
+      assert.strictEqual(outcome.extraTags, evaluation.extraTags)
+      assert.strictEqual(outcome.extraMetastruct, evaluation.extraMetastruct)
+    })
   })
 
   it('uses safe defaults for optional backend fields', () => {
@@ -73,8 +145,8 @@ describe('AI Guard evaluation response', () => {
       hasTagProbabilities: false,
       blockingEnabled: false,
       redactionReplacements: undefined,
-      extraTags: undefined,
-      extraMetastruct: undefined,
+      extraTags: [],
+      extraMetastruct: [],
     })
   })
 
@@ -129,8 +201,8 @@ describe('AI Guard evaluation response', () => {
         applied: true,
         failures: 0,
       },
-      extraTags: undefined,
-      extraMetastruct: undefined,
+      extraTags: [],
+      extraMetastruct: [],
     })
     assert.strictEqual(outcome.result.messages, privateSnapshot)
     assert.strictEqual(privateSnapshot[0].content, 'My SSN is <REDACTED>')
