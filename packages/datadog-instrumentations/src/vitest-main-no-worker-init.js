@@ -521,8 +521,8 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
  * @param {{ plugins?: object[] }|undefined} viteOverrides
  */
 function addBrowserAnnotationPlugin (viteOverrides = {}) {
-  if (!Object.isExtensible(viteOverrides) ||
-    (viteOverrides.plugins && !Object.isExtensible(viteOverrides.plugins))) {
+  if (!viteOverrides.plugins || !Object.isExtensible(viteOverrides) ||
+    !Object.isExtensible(viteOverrides.plugins)) {
     viteOverrides = { ...viteOverrides, plugins: [...(viteOverrides.plugins || [])] }
   }
   viteOverrides.plugins ||= []
