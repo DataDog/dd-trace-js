@@ -6,7 +6,6 @@ const { tmpdir } = require('node:os')
 const path = require('node:path')
 
 const {
-  collectAliasMap,
   listBunLockDependencies,
   readVendoredDependencyNames,
 } = require('../third-party-dependencies')
@@ -22,21 +21,21 @@ describe('third-party dependency locks', () => {
     fs.rmSync(fixtureDirectory, { recursive: true, force: true })
   })
 
-  it('walks regular, optional, nested, and scoped Bun dependencies', () => {
+  it('walks regular, optional, nested, and scoped Bun dependencies through aliases', () => {
     const lockPath = writeFixture('bun.lock', `{
       "lockfileVersion": 2,
       "workspaces": {
         "": {
           "dependencies": {
-            "foo": "1.0.0"
+            "foo-alias": "npm:foo@1.0.0"
           },
           "optionalDependencies": {
-            "@scope/optional": "2.0.0"
+            "@scope/optional-alias": "npm:@scope/optional@2.0.0"
           }
         }
       },
       "packages": {
-        "foo": ["foo@1.0.0", "", {
+        "foo-alias": ["foo@1.0.0", "", {
           "dependencies": {
             "nested": "3.0.0"
           },
@@ -44,9 +43,9 @@ describe('third-party dependency locks', () => {
             "local": "file:../local"
           }
         }],
-        "foo/nested": ["nested@3.0.0", "", {}],
-        "foo/local": ["local@file:../local", "", {}],
-        "@scope/optional": ["@scope/optional@2.0.0", "", {}],
+        "foo-alias/nested": ["nested@3.0.0", "", {}],
+        "foo-alias/local": ["local@file:../local", "", {}],
+        "@scope/optional-alias": ["@scope/optional@2.0.0", "", {}],
       },
     }`)
 
@@ -99,40 +98,18 @@ describe('third-party dependency locks', () => {
     ])
   })
 
-  it('reads aliases and vendored names', () => {
-    const rootPackagePath = writeFixture('package.json', JSON.stringify({
-      dependencies: {
-        alias: 'npm:upstream@1.0.0',
-      },
-    }))
-    const vendorPackagePath = writeFixture('vendor-package.json', JSON.stringify({
-      optionalDependencies: {
-        '@scope/alias': 'npm:@scope/upstream@2.0.0',
-      },
-    }))
+  it('reads vendored names', () => {
     const vendoredPath = writeFixture('vendored.csv', [
       '"vendored-one","https://example.com","[\'MIT\']","[\'One\']"',
       '"vendored-two","https://example.com","[\'ISC\']","[\'Two\']"',
       '',
     ].join('\n'))
 
-    assert.deepStrictEqual(collectAliasMap([rootPackagePath, vendorPackagePath]), new Map([
-      ['alias', 'upstream'],
-      ['@scope/alias', '@scope/upstream'],
-    ]))
     assert.deepStrictEqual(readVendoredDependencyNames(vendoredPath), ['vendored-one', 'vendored-two'])
   })
 
-  it('handles missing manifests, empty locks, and duplicate package names', () => {
+  it('handles missing vendored names, empty locks, and duplicate package names', () => {
     const missingPath = path.join(fixtureDirectory, 'missing')
-    const packagePath = writeFixture('edge-package.json', JSON.stringify({
-      dependencies: {
-        emptyAlias: 'npm:',
-        local: 'file:../local',
-        number: 1,
-        unversionedAlias: 'npm:upstream',
-      },
-    }))
     const emptyLockPath = writeFixture(
       'empty-bun.lock',
       '{"lockfileVersion": 1, "workspaces": {"": {}}, "packages": {}}'
@@ -175,9 +152,6 @@ describe('third-party dependency locks', () => {
         optional: ['optional@1.0.0', '', {}],
       },
     }))
-    assert.deepStrictEqual(collectAliasMap([missingPath, packagePath]), new Map([
-      ['unversionedAlias', 'upstream'],
-    ]))
     assert.deepStrictEqual(listBunLockDependencies(emptyLockPath), [])
     assert.deepStrictEqual(listBunLockDependencies(lockPath), [
       { name: 'foo', version: '1.0.0' },

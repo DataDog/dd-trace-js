@@ -21,20 +21,13 @@ const { request } = require('node:https')
 
 const rootPackageJson = require('../package.json')
 const mapWithConcurrency = require('./helpers/concurrency')
-const {
-  collectAliasMap,
-  listBunLockDependencies,
-} = require('./third-party-dependencies')
+const { listBunLockDependencies } = require('./third-party-dependencies')
 
 const repoRoot = join(__dirname, '..')
 const csvPath = join(repoRoot, 'LICENSE-3rdparty.csv')
 const bunLockPath = join(repoRoot, 'bun.lock')
 const vendorLockPath = join(repoRoot, 'vendor', 'bun.lock')
 const vendoredCsvPath = join(repoRoot, '.github', 'vendored-dependencies.csv')
-const aliasMap = collectAliasMap([
-  join(repoRoot, 'package.json'),
-  join(repoRoot, 'vendor', 'package.json'),
-])
 const REGISTRY = 'https://registry.npmjs.org'
 const FETCH_CONCURRENCY = 16
 
@@ -83,11 +76,6 @@ async function run () {
 }
 
 /**
- * Walk `bun.lock` (root + transitives, regular and optional) and the vendor
- * `vendor/bun.lock` and return a map of `<component> -> { name, version }`,
- * normalized via `npm:` aliases declared in `package.json` so e.g. an aliased
- * `@datadog/source-map -> source-map` is recorded under the upstream name.
- *
  * @returns {Map<string, WantedComponent>}
  */
 function collectWantedComponents () {
@@ -114,11 +102,10 @@ function collectWantedComponents () {
  * @param {string} version
  */
 function addWantedVersion (wanted, name, version) {
-  const normalized = aliasMap.get(name) ?? name
-  let component = wanted.get(normalized)
+  let component = wanted.get(name)
   if (!component) {
-    component = { name: normalized, versions: new Set() }
-    wanted.set(normalized, component)
+    component = { name, versions: new Set() }
+    wanted.set(name, component)
   }
   component.versions ??= new Set()
   component.versions.add(version)

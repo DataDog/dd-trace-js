@@ -32,7 +32,7 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
       author: 'Fixture author',
       repository: 'https://github.com/DataDog/dd-fixture.git',
       dependencies: {
-        foo: '2.0.0',
+        'foo-alias': 'npm:foo@2.0.0',
       },
     }))
     fs.writeFileSync(path.join(fixtureDirectory, 'bun.lock'), `{
@@ -40,20 +40,19 @@ describe('scripts/generate-3rdparty-licenses.js', () => {
       "workspaces": {
         "": {
           "dependencies": {
-            "foo": "2.0.0"
+            "foo-alias": "npm:foo@2.0.0"
           }
         }
       },
       "packages": {
-        "foo": ["foo@2.0.0", "", {
+        "foo-alias": ["foo@2.0.0", "", {
           "dependencies": {
             "foo-old": "1.0.0"
           }
         }],
-        "foo/foo-old": ["foo@1.0.0", "", {}],
+        "foo-alias/foo-old": ["foo@1.0.0", "", {}],
       },
     }`)
-    fs.writeFileSync(path.join(fixtureDirectory, 'vendor', 'package.json'), '{}')
     fs.writeFileSync(path.join(fixtureDirectory, 'vendor', 'bun.lock'), JSON.stringify({
       lockfileVersion: 1,
       workspaces: {

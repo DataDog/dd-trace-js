@@ -7,16 +7,11 @@ const readline = require('node:readline')
 
 const { name: rootPackageName } = require('../package.json')
 const {
-  collectAliasMap,
   listBunLockDependencies,
   readVendoredDependencyNames,
 } = require('./third-party-dependencies')
 
 const filePath = join(__dirname, '..', 'LICENSE-3rdparty.csv')
-const aliasMap = collectAliasMap([
-  join(__dirname, '..', 'package.json'),
-  join(__dirname, '..', 'vendor', 'package.json'),
-])
 const deps = getProdDeps()
 const licenses = new Set()
 let isHeader = true
@@ -47,23 +42,19 @@ lineReader.on('close', () => {
 })
 
 function getProdDeps () {
-  const deps = new Set([normalizeDepName(rootPackageName)])
+  const deps = new Set([rootPackageName])
 
   for (const { name } of listBunLockDependencies(join(__dirname, '..', 'bun.lock'))) {
-    deps.add(normalizeDepName(name))
+    deps.add(name)
   }
   for (const { name } of listBunLockDependencies(join(__dirname, '..', 'vendor', 'bun.lock'))) {
-    deps.add(normalizeDepName(name))
+    deps.add(name)
   }
   for (const name of readVendoredDependencyNames(join(__dirname, '..', '.github', 'vendored-dependencies.csv'))) {
-    deps.add(normalizeDepName(name))
+    deps.add(name)
   }
 
   return deps
-}
-
-function normalizeDepName (name) {
-  return aliasMap.get(name) ?? name
 }
 
 function checkLicenses (typeDeps) {
