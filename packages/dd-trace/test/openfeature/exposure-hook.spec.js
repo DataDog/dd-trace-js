@@ -76,11 +76,15 @@ describe('ExposureHook', () => {
     const client = OpenFeature.getClient()
     client.addHooks(clientHook)
 
-    await client.getBooleanDetails('holdout-flag', true, { targetingKey: 'subject-1' })
+    const result = await client.getBooleanDetails('holdout-flag', true, { targetingKey: 'subject-1' })
     await client.getBooleanDetails('holdout-flag', true, { targetingKey: 'subject-1' })
 
     assert.strictEqual(evaluations.length, 2)
     const [first, repeat] = evaluations
+    assert.strictEqual(first.details.flagKey, 'holdout-flag')
+    assert.strictEqual(first.details.value, result.value)
+    assert.strictEqual(first.details.variant, 'control')
+    assert.strictEqual(first.details.flagMetadata.allocationKey, 'holdout-allocation')
     assert.strictEqual(first.flagKey, 'holdout-flag')
     assert.strictEqual(first.variant, 'control')
     assert.strictEqual(first.allocation, 'holdout-allocation')
