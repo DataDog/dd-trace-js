@@ -192,6 +192,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
 
   for (const lateMode of [
     'numeric', 'equal-object', 'equal-nested', 'returned-object', 'unchanged',
+    'root-deleted', 'root-redefined', 'root-deleted-returned', 'root-deleted-partial', 'root-deleted-alias',
     'open-only', 'returned-open', 'spread-open', 'returned-open-preloaded', 'returned-object-preloaded',
     'browser-partial-before-support', 'saved-reference', 'saved-reference-changed',
     'after-handoff-equal-preloaded', 'during-init', 'during-init-partial',
@@ -212,7 +213,8 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         const ledger = join(cwd, 'late-native-retry-executions.json')
         const alternateLedger = join(cwd, 'late-support-alternate-executions.json')
         const noRunOverride = [
-          'unchanged', 'open-only', 'returned-open', 'spread-open', 'returned-open-preloaded',
+          'unchanged', 'root-deleted', 'root-deleted-partial',
+          'open-only', 'returned-open', 'spread-open', 'returned-open-preloaded',
           'browser-partial-before-support', 'saved-reference', 'after-handoff-equal-preloaded',
         ].includes(lateMode)
         const expected = {
@@ -242,7 +244,9 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           rmSync(alternateLedger)
         }
         receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
-        const nativeOnlyControl = ['returned-open', 'browser-partial-before-support'].includes(lateMode)
+        const nativeOnlyControl = [
+          'returned-open', 'browser-partial-before-support', 'root-deleted', 'root-deleted-partial',
+        ].includes(lateMode)
         if (noRunOverride && atrEnabled && !nativeOnlyControl) expected['late native control'] = 3
         const expectedExit = lateExperimental ? 2 : noRunOverride ? atrEnabled && !nativeOnlyControl ? 1 : 2 : 0
         await run('late-native', expectedExit, tests => {

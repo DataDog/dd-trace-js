@@ -32,10 +32,10 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   }
   getRoot(current, options?.nativeRetries)
   const record = (metadata, path) => {
-    if (!active || !ownsProperty()) return
+    if (!active) return
     if (options) metadata.native = options.updateNative(metadata.native, metadata.raw, path)
     // A detached alias updates only its own provenance until that root is selected again.
-    if (metadata.raw === current) notify(current, path, metadata)
+    if (ownsProperty() && metadata.raw === current) notify(current, path, metadata)
   }
   const wrap = (value, metadata, path = []) => {
     if (value === null || typeof value !== 'object') return value
@@ -98,7 +98,11 @@ module.exports = function observeRetryConfig (config, onChange, options) {
     if (sendObserver && process.send === sendObserver) process.send = originalSend
     sendObserver = undefined
   }
-  const stop = () => {
+  const stop = (reconcileCurrent = true) => {
+    if (active && reconcileCurrent && !ownsProperty()) {
+      const retries = unwrap(config.retries)
+      notify(retries, [], retries && typeof retries === 'object' && roots.get(retries))
+    }
     active = false
     stopIpc()
     const currentDescriptor = Object.getOwnPropertyDescriptor(config, 'retries')
@@ -113,14 +117,15 @@ module.exports = function observeRetryConfig (config, onChange, options) {
         try {
           const wireConfig = message.event === 'setupTestingType:reply' && message.args?.[0]?.setupConfig
           const returnedConfig = wireConfig?.[Symbol.for('dd-trace.cypress.returned-config')] ?? wireConfig
-          if (active && ownsProperty() && returnedConfig &&
-            Object.hasOwn(returnedConfig, 'retries') && returnedConfig.retries !== config.retries) {
-            const retries = unwrap(returnedConfig.retries)
+          if (active && message.event === 'setupTestingType:reply' &&
+            (!ownsProperty() || (returnedConfig && Object.hasOwn(returnedConfig, 'retries') &&
+              returnedConfig.retries !== config.retries))) {
+            const retries = unwrap(returnedConfig?.retries)
             notify(retries, [], retries && typeof retries === 'object' && roots.get(retries))
           }
         } finally {
           // Later child-local writes cannot change the parent's serialized config.
-          stop()
+          stop(false)
         }
       }
       return originalSend.apply(this, arguments)

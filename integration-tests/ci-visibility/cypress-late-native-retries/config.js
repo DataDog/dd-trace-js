@@ -26,6 +26,19 @@ module.exports = defineConfig({
       const result = await pending
       if (mode === 'equal-object' || mode === 'browser-partial-before-support') {
         result.retries = { runMode: 2, openMode: 0 }
+      } else if (mode === 'root-deleted-alias') {
+        const saved = result.retries
+        delete result.retries
+        result.retries = saved
+        saved.runMode = 2
+      } else if (mode?.startsWith('root-deleted') || mode === 'root-redefined') {
+        result.retries = 2
+        delete result.retries
+        if (mode === 'root-deleted-returned') return { retries: 2 }
+        if (mode === 'root-deleted-partial') return { retries: { openMode: 1 } }
+        if (mode === 'root-redefined') {
+          Object.defineProperty(result, 'retries', { value: 2, writable: true, configurable: true, enumerable: true })
+        }
       } else if (mode === 'saved-reference' || mode === 'saved-reference-changed') {
         const saved = result.retries
         result.retries = 1

@@ -1948,6 +1948,31 @@ moduleTypes.forEach(({
       assert.strictEqual(cypressPlugin.retryConfigObserver.isWatching(config), true)
     })
 
+    for (const mode of ['deleted', 'redefined', 'intact']) {
+      it(`reconciles ${mode} root retries at the beforeRun fallback without an IPC handoff`, async () => {
+        const config = { retries: { runMode: 0, openMode: 0 }, version: '12.0.0' }
+        const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
+        await cypressPlugin.init(tracer, config)
+        config.retries = 2
+        if (mode !== 'intact') delete config.retries
+        if (mode === 'redefined') {
+          Object.defineProperty(config, 'retries', { value: 2, configurable: true, writable: true, enumerable: true })
+        }
+        const afterObservation = new Error('stop after observing the run-start configuration')
+        cypressPlugin.libraryConfigurationPromise = Promise.reject(afterObservation)
+        await assert.rejects(cypressPlugin.beforeRun({ config: { retries: mode === 'deleted' ? 0 : 2 } }),
+          error => error === afterObservation)
+        if (mode === 'deleted') {
+          assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 0, openMode: 0 })
+          assert.strictEqual(Object.hasOwn(config, 'retries'), false)
+        } else {
+          assert.strictEqual(cypressPlugin.originalCypressRetries, 2)
+          assert.strictEqual(config.retries, 2)
+        }
+        assert.strictEqual(cypressPlugin.retryConfigObserver.isWatching(config), false)
+      })
+    }
+
     it('captures native retries written during initialization while retaining config-load defaults', async () => {
       const config = { retries: { runMode: 0, openMode: 0 }, version: '12.0.0' }
       const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
