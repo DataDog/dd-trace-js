@@ -6,17 +6,21 @@ const getCypressTestEnvironment = require('../../cypress-test-environment')
 
 module.exports = defineConfig({
   ...getCypressTestEnvironment({ LATE_MODE: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE }),
-  retries: {
-    runMode: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE === 'during-init-partial' ? 2 : 0,
-    openMode: 0,
-  },
+  retries: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE === 'numeric-open'
+    ? 2
+    : {
+        runMode: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE === 'during-init-partial' ? 2 : 0,
+        openMode: 0,
+      },
   video: false,
   screenshotOnRunFailure: false,
   e2e: {
     specPattern: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE?.includes('-reuse')
       ? [join(__dirname, 'retries.cy.js'), join(__dirname, 'support-reuse.cy.js')]
       : join(__dirname, 'retries.cy.js'),
-    supportFile: join(__dirname, 'support.js'),
+    supportFile: join(__dirname, process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE?.includes('indirect')
+      ? 'support-indirect.js'
+      : 'support.js'),
     async setupNodeEvents (on, config) {
       const plugin = require('dd-trace/ci/cypress/plugin')
       const mode = process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE
@@ -24,7 +28,17 @@ module.exports = defineConfig({
       if (mode === 'during-init') config.retries.runMode = 2
       if (mode === 'during-init-partial') config.retries = { openMode: 1 }
       const result = await pending
-      if (mode === 'equal-object' || mode === 'browser-partial-before-support') {
+      if (mode === 'indirect-returned-support') return { retries: 2 }
+      if (mode === 'numeric-open') {
+        if (typeof result.retries === 'number') {
+          result.retries = { runMode: result.retries, openMode: result.retries }
+        }
+        result.retries.openMode = 1
+      } else if (mode === 'raw-reference') {
+        const raw = { runMode: 1, openMode: 0 }
+        result.retries = raw
+        raw.runMode = 2
+      } else if (mode === 'equal-object' || mode === 'browser-partial-before-support') {
         result.retries = { runMode: 2, openMode: 0 }
       } else if (mode === 'root-deleted-alias') {
         const saved = result.retries

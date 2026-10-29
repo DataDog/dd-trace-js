@@ -339,14 +339,17 @@ if (typeof install === 'function') install()
  * generated paths for cleanup, or undefined if injection was skipped.
  *
  * @param {object} config Cypress resolved config object
+ * @param {boolean} [manualLifecycle] whether the manual entry point owns lifecycle registration
  * @returns {string[]|undefined} generated file paths, or undefined if skipped
  */
-function injectSupportFile (config) {
+function injectSupportFile (config, manualLifecycle = false) {
   const originalSupportFile = config.supportFile
 
-  if (generatedFilesForExitCleanup.has(originalSupportFile)) return
   const supportOwner = config[DD_SUPPORT_OWNER]
-  let deferLifecycle = supportOwner && supportOwner.path === originalSupportFile && supportOwner.deferLifecycle
+  if (generatedFilesForExitCleanup.has(originalSupportFile) &&
+      (!manualLifecycle || (supportOwner?.path === originalSupportFile && supportOwner.deferLifecycle))) return
+  let deferLifecycle = manualLifecycle ||
+    (supportOwner && supportOwner.path === originalSupportFile && supportOwner.deferLifecycle)
 
   if (originalSupportFile) {
     try {
@@ -420,10 +423,11 @@ function injectSupportFile (config) {
  * Installs browser hooks before user support, including manual SDK imports.
  *
  * @param {object} config Cypress resolved config object
+ * @param {boolean} [manualLifecycle] whether the manual entry point owns lifecycle registration
  * @returns {string[]|undefined} generated files owned until cleanup or process exit
  */
-function installSupportFile (config) {
-  const files = injectSupportFile(config)
+function installSupportFile (config, manualLifecycle = false) {
+  const files = injectSupportFile(config, manualLifecycle)
   if (files) registerGeneratedFilesForExitCleanup(files)
   return files
 }
@@ -436,7 +440,7 @@ function installSupportFile (config) {
  */
 function installManualSupportFile (config) {
   stopManualSupportSetup?.()
-  installSupportFile(config)
+  installSupportFile(config, true)
   const originalSend = process.send
   if (typeof originalSend !== 'function') return
 
@@ -465,10 +469,17 @@ function installManualSupportFile (config) {
               supportFile: typeof supportFile === 'string' ? path.resolve(projectRoot, supportFile) : supportFile,
               [DD_SUPPORT_OWNER]: returnedConfig[DD_SUPPORT_OWNER] ?? config[DD_SUPPORT_OWNER],
             }
-            installSupportFile(supportConfig)
+            installSupportFile(supportConfig, true)
             if (generatedFilesForExitCleanup.has(supportConfig.supportFile)) {
               const args = [...message.args]
-              args[0] = { ...reply, setupConfig: { ...returnedConfig, supportFile: supportConfig.supportFile } }
+              args[0] = {
+                ...reply,
+                setupConfig: {
+                  ...returnedConfig,
+                  supportFile: supportConfig.supportFile,
+                  [DD_SUPPORT_OWNER]: supportConfig[DD_SUPPORT_OWNER],
+                },
+              }
               forwarded = { ...message, args }
             }
           }

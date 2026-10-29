@@ -482,6 +482,8 @@ function mergeNativeRetries (baseline, supplied) {
 
 function updateNativeRetries (native, baseline, supplied, path) {
   if (!path.length) return mergeNativeRetries(baseline, supplied)
+  if (typeof native === 'number') native = { runMode: native, openMode: native }
+  if (typeof baseline === 'number') baseline = { runMode: baseline, openMode: baseline }
   const [key, ...rest] = path
   const result = native && typeof native === 'object' ? copyCypressRetries(native) : {}
   result[key] = updateNativeRetries(result[key], baseline && baseline[key], supplied && supplied[key], rest)
@@ -493,6 +495,8 @@ function reconcileNativeRetries (native, baseline, configured, actual) {
   if (!actual || typeof actual !== 'object' || !configured || typeof configured !== 'object') {
     return mergeNativeRetries(baseline, actual)
   }
+  if (typeof native === 'number') native = { runMode: native, openMode: native }
+  if (typeof baseline === 'number') baseline = { runMode: baseline, openMode: baseline }
   const result = native && typeof native === 'object' ? copyCypressRetries(native) : {}
   for (const key of Object.keys(actual)) {
     if (!isDeepStrictEqual(configured[key], actual[key])) {

@@ -30,6 +30,7 @@ function overlayBrowserRetries (native, configured, actual) {
   if (!actual || typeof actual !== 'object' || !configured || typeof configured !== 'object') {
     return Cypress._.cloneDeep(actual)
   }
+  if (typeof native === 'number') native = { runMode: native, openMode: native }
   const result = native && typeof native === 'object' ? Cypress._.cloneDeep(native) : {}
   for (const key of Object.keys(actual)) {
     if (!Cypress._.isEqual(configured[key], actual[key])) {
@@ -60,6 +61,9 @@ function recordBrowserRetryPath (metadata, path, value, deleted) {
     return
   }
   initializeBrowserRetryMetadata(metadata)
+  if (typeof metadata.native === 'number') {
+    metadata.native = { runMode: metadata.native, openMode: metadata.native }
+  }
   let native = metadata.native
   if (!native || typeof native !== 'object') native = metadata.native = {}
   for (let i = 0; i < path.length - 1; i++) {
@@ -109,6 +113,7 @@ function observeBrowserRetries (raw) {
   }
   const proxies = new WeakMap()
   function wrap (value, path) {
+    value = unwrapBrowserRetries(value)
     if (!value || typeof value !== 'object') return value
     if (proxies.has(value)) return proxies.get(value)
     const proxy = new Proxy(value, {
@@ -123,6 +128,14 @@ function observeBrowserRetries (raw) {
         const result = Reflect.set(target, key, unwrapBrowserRetries(value))
         if (result && ownsNestedPath(metadata.raw, path, target)) {
           recordBrowserRetryPath(metadata, [...path, key], value, false)
+        }
+        return result
+      },
+      defineProperty (target, key, descriptor) {
+        const hasValue = 'value' in descriptor
+        const result = Reflect.defineProperty(target, key, descriptor)
+        if (result && hasValue && ownsNestedPath(metadata.raw, path, target)) {
+          recordBrowserRetryPath(metadata, [...path, key], descriptor.value, false)
         }
         return result
       },
@@ -176,12 +189,21 @@ function observeBrowserConfig (state) {
   const proxy = new Proxy(state, {
     get (target, key, receiver) {
       const value = Reflect.get(target, key, receiver)
+      const property = Object.getOwnPropertyDescriptor(target, key)
+      if (property && !property.configurable && !property.writable && 'value' in property) return value
       return key === 'retries' ? observeBrowserRetries(value) : value
     },
     set (target, key, value) {
       const previous = target[key]
       const result = Reflect.set(target, key, key === 'retries' ? unwrapBrowserRetries(value) : value)
       if (result && key === 'retries') recordBrowserRetryReplacement(value, previous)
+      return result
+    },
+    defineProperty (target, key, descriptor) {
+      const hasValue = 'value' in descriptor
+      const previous = key === 'retries' && hasValue ? target[key] : undefined
+      const result = Reflect.defineProperty(target, key, descriptor)
+      if (result && key === 'retries' && hasValue) recordBrowserRetryReplacement(descriptor.value, previous)
       return result
     },
     deleteProperty (target, key) {

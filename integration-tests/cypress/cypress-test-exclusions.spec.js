@@ -191,7 +191,8 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
   }
 
   for (const lateMode of [
-    'numeric', 'equal-object', 'equal-nested', 'returned-object', 'unchanged',
+    'numeric', 'numeric-open', 'raw-reference', 'indirect-support', 'indirect-returned-support',
+    'equal-object', 'equal-nested', 'returned-object', 'unchanged',
     'root-deleted', 'root-redefined', 'root-deleted-returned', 'root-deleted-partial', 'root-deleted-alias',
     'open-only', 'returned-open', 'spread-open', 'returned-open-preloaded', 'returned-object-preloaded',
     'browser-partial-before-support', 'saved-reference', 'saved-reference-changed',
@@ -265,6 +266,9 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
                 name === 'explicit local excluded' ? 'pass' : 'fail', name)
             }
             assert.strictEqual(attempts[0].meta[exclusion], name === 'late native control' ? undefined : 'true')
+            if (lateMode.includes('indirect')) {
+              for (const attempt of attempts) assert.strictEqual(attempt.meta['manual.early_teardown'], 'preserved')
+            }
             for (const retry of attempts.slice(1)) {
               assert.strictEqual(retry.meta['test.retry_reason'],
                 atrEnabled && name === 'late native control' ? 'auto_test_retry' : 'external', name)
@@ -273,12 +277,15 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         }, {
           ...(lateMode.endsWith('-preloaded') ? {} : { NODE_OPTIONS: '' }),
           CYPRESS_LATE_NATIVE_RETRIES_MODE: lateMode,
+          ...(lateMode === 'numeric-open' && { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '4' }),
         }, command)
       })
     }
   }
 
   for (const mode of [
+    'browser-numeric-open', 'browser-all-numeric-open',
+    'browser-descriptor', 'browser-all-descriptor-root', 'browser-all-descriptor-same',
     'browser-retries', 'browser-same-budget', 'inherited-mode', 'browser-runtime', 'browser-inactive-mode',
     'browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite',
     'browser-delete-mode', 'browser-partial-root',
@@ -290,13 +297,15 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'experimental-native-disabled-zero', 'experimental-native-disabled-one', 'experimental-native-threshold-dynamic',
   ]) {
     for (const atrEnabled of [false, true]) {
+      const numericNative = mode.includes('numeric-open')
+      const descriptorNative = ['browser-descriptor', 'browser-all-descriptor-root'].includes(mode)
       const zeroNative = [
         'inherited-mode', 'browser-runtime', 'browser-inactive-mode', 'browser-delete-mode', 'browser-partial-root',
-        'browser-all-inactive', 'browser-same-reference', 'browser-saved-reference',
+        'browser-all-inactive', 'browser-same-reference', 'browser-saved-reference', 'browser-all-descriptor-same',
       ].includes(mode)
       const browserZeroNative = [
         'browser-runtime', 'browser-inactive-mode', 'browser-all-inactive',
-        'browser-same-reference', 'browser-saved-reference',
+        'browser-same-reference', 'browser-saved-reference', 'browser-all-descriptor-same',
       ].includes(mode)
       const zeroControl = ['browser-delete-mode', 'browser-partial-root'].includes(mode)
       const experimentalMode = mode.startsWith('experimental-native')
@@ -308,7 +317,9 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       boundaryTest(`preserves ${mode} native retry executions (ATR=${atrEnabled})`, async () => {
         const boundarySuite = 'cypress/e2e/native-retry-boundaries.cy.js'
         const ledger = join(cwd, 'native-retry-executions.json')
-        const nativeAttempts = mode.includes('-detached') ? 4 : thresholdNative ? 5 : disabledNative ? 1 : 3
+        const nativeAttempts = descriptorNative || mode.includes('-detached')
+          ? 4
+          : thresholdNative ? 5 : disabledNative ? 1 : 3
         const experimentalEnvironment = experimentalMode
           ? {
               CYPRESS_EXPERIMENTAL_RETRIES: thresholdNative
@@ -316,17 +327,18 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
                 : disabledNative ? 'disabled' : 'true',
             }
           : {}
+        if (numericNative) experimentalEnvironment.CYPRESS_RETRIES_AS_NUMBER = '2'
         const expected = {
           'excluded recovery': zeroNative
             ? 1
-            : nativeAttempts,
+            : descriptorNative ? 3 : nativeAttempts,
           'excluded persistent': zeroNative
             ? 1
             : thresholdNative ? 3 : nativeAttempts,
           'excluded explicit zero': 1,
           'ordinary control': zeroControl || browserZeroNative
             ? 1
-            : nativeAttempts,
+            : descriptorNative ? 3 : nativeAttempts,
           ...(mode.startsWith('browser-runtime') && { 'changes runtime retries': 1 }),
           ...(['browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite'].includes(mode) &&
             { 'excluded after zero': 3 }),

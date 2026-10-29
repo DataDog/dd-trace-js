@@ -19,6 +19,28 @@ function attempt (name, passAt) {
 }
 
 const mode = getTestEnvironment('EXCLUSIONS_MODE')
+if (['browser-numeric-open', 'browser-all-numeric-open'].includes(mode)) {
+  const state = mode === 'browser-all-numeric-open' ? Cypress.config() : null
+  let retries = state ? state.retries : Cypress.config('retries')
+  if (typeof retries === 'number') {
+    retries = { runMode: retries, openMode: retries }
+    if (state) state.retries = retries
+    else Cypress.config('retries', retries)
+  }
+  retries.openMode = 1
+}
+if (mode === 'browser-descriptor') {
+  Object.defineProperty(Cypress.config('retries'), 'runMode', { value: 3 })
+}
+if (mode === 'browser-all-descriptor-root') {
+  Object.defineProperty(Cypress.config(), 'retries', { value: { runMode: 3, openMode: 0 } })
+}
+if (mode === 'browser-all-descriptor-same') {
+  const state = Cypress.config()
+  const retries = state.retries
+  Object.defineProperty(state, 'retries', { value: retries })
+  retries.openMode = 1
+}
 if (mode.startsWith('experimental-native-detached')) {
   const retries = Cypress.config('retries')
   const saved = retries.experimentalOptions
