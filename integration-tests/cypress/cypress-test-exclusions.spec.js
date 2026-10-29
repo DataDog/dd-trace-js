@@ -46,13 +46,20 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
   const properties = assignments => {
     receiver.setTestManagementTests({ cypress: { suites: { [suite]: { tests: assignments } } } })
   }
+  const cypressEnvironment = () => {
+    const env = getCiVisEvpProxyConfig(receiver.port)
+    // This is the matrix selector, not Cypress configuration. Forwarding "latest"
+    // overwrites Cypress.version and breaks native version-dependent fixture APIs.
+    delete env.CYPRESS_VERSION
+    return env
+  }
   const run = async (mode, expectedExit, check, env = {}, command) => {
     childProcess = exec(command || (moduleType === 'esm'
       ? 'node ./cypress-esm-config.mjs'
       : `./node_modules/.bin/cypress run --spec ${suite}`), {
       cwd,
       env: {
-        ...getCiVisEvpProxyConfig(receiver.port),
+        ...cypressEnvironment(),
         SPEC_PATTERN: suite,
         CYPRESS_BASE_URL: webApp.baseUrl,
         CYPRESS_EXCLUSIONS_MODE: mode,
@@ -220,7 +227,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         childProcess = exec(`${command} --config supportFile=false`, {
           cwd,
           env: {
-            ...getCiVisEvpProxyConfig(receiver.port),
+            ...cypressEnvironment(),
             NODE_OPTIONS: '',
             DD_TRACE_ENABLED: 'false',
             SPEC_PATTERN: boundarySuite,
@@ -411,7 +418,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     childProcess = exec(nativeCommand, {
       cwd,
       env: {
-        ...getCiVisEvpProxyConfig(receiver.port),
+        ...cypressEnvironment(),
         NODE_OPTIONS: '',
         DD_TRACE_ENABLED: 'false',
         SPEC_PATTERN: pendingSuite,
@@ -456,7 +463,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       './node_modules/.bin/cypress run --config-file ci-visibility/cypress-exclusions-manual/config.js', {
         cwd,
         env: {
-          ...getCiVisEvpProxyConfig(receiver.port),
+          ...cypressEnvironment(),
           NODE_OPTIONS: '',
           DD_TRACE_ENABLED: 'false',
           CYPRESS_ROOT_SETUP_MODE: 'skip',
