@@ -32,6 +32,17 @@ function materializeResolverInfo (message) {
 }
 
 /**
+ * Resolver info is `null` for fields without argument or directive values, so tests tracking which resolvers
+ * published read the field name from the message instead.
+ *
+ * @param {{ info?: { fieldName: string }, descriptor?: { fieldName: string } }} message
+ * @returns {string | undefined}
+ */
+function getResolverFieldName (message) {
+  return message.info?.fieldName ?? message.descriptor?.fieldName
+}
+
+/**
  * @param {WeakRef<object>} reference
  * @returns {Promise<boolean>}
  */
@@ -2226,13 +2237,15 @@ describe('Plugin', () => {
           assert.deepStrictEqual(resolverInfo, [{ hello: { name: 'world', title: null } }])
         })
 
-        it('should publish empty resolver args with subscription to datadog:graphql:resolver:start', async () => {
+        it('should publish null resolver info for fields without arguments', async () => {
           const source = 'query MyQuery { human { name } }'
           const document = graphql.parse(source)
           const resolverInfo = []
 
           /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
-          const handler = message => resolverInfo.push(materializeResolverInfo(message))
+          const handler = message => {
+            resolverInfo.push([getResolverFieldName(message), materializeResolverInfo(message)])
+          }
           dc.channel('datadog:graphql:resolver:start').subscribe(handler)
 
           try {
@@ -2241,10 +2254,27 @@ describe('Plugin', () => {
             dc.channel('datadog:graphql:resolver:start').unsubscribe(handler)
           }
 
-          const humanResolverInfo = resolverInfo.find(info => info?.human)
-          assert.deepStrictEqual(humanResolverInfo, { human: {} },
-            `Expected empty human resolver args. Got ${inspect(resolverInfo)}`)
+          assert.deepStrictEqual(resolverInfo, [['human', null], ['name', null]])
         })
+
+        it('should publish directive arguments of fields without arguments to datadog:graphql:resolver:start',
+          async () => {
+            const source = 'query MyQuery { human { name @include(if: true) } }'
+            const document = graphql.parse(source)
+            const resolverInfo = []
+
+            /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+            const handler = message => resolverInfo.push(materializeResolverInfo(message))
+            dc.channel('datadog:graphql:resolver:start').subscribe(handler)
+
+            try {
+              await graphql.execute({ schema, document })
+            } finally {
+              dc.channel('datadog:graphql:resolver:start').unsubscribe(handler)
+            }
+
+            assert.deepStrictEqual(resolverInfo, [null, { name: { include: { if: true } } }])
+          })
 
         it('should support multiple validations on a pre-parsed document', () => {
           const source = 'query MyQuery { hello(name: "world") }'
@@ -2801,7 +2831,7 @@ describe('Plugin', () => {
           const startCh = dc.channel('datadog:graphql:resolver:start')
           const fields = []
           /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
-          const handler = message => fields.push(...Object.keys(materializeResolverInfo(message)))
+          const handler = message => fields.push(getResolverFieldName(message))
 
           startCh.subscribe(handler)
 
@@ -2947,11 +2977,9 @@ describe('Plugin', () => {
         it('should honor resolver abort for fields gated by depth', async () => {
           let streetResolverRan = false
           const startCh = dc.channel('datadog:graphql:resolver:start')
-          /** @param {Parameters<typeof materializeResolverInfo>[0] & { abortController: AbortController }} message */
+          /** @param {Parameters<typeof getResolverFieldName>[0] & { abortController: AbortController }} message */
           const handler = (message) => {
-            const { abortController } = message
-            const resolverInfo = materializeResolverInfo(message)
-            if (resolverInfo?.street) abortController.abort()
+            if (getResolverFieldName(message) === 'street') message.abortController.abort()
           }
 
           const Address = new graphql.GraphQLObjectType({
