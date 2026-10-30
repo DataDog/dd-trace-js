@@ -861,6 +861,18 @@ which exposes the worker `runTestCase` lifecycle; serial scenarios support Cucum
 Cucumber's normal tag selection and dry runs still apply.
 The annotation and assigned Test Management span tags follow the callback API below.
 
+## Playwright test automation exclusions
+
+Playwright 1.38 and later support the `preventFailureSuppression` and `noAutoRetry`
+callback annotations from `dd-trace/test-optimization`. Apply them to individual
+`test` callbacks, including generated cases, `test.only`, and `test.skip`. Callback
+fixture parameters remain available. Exclusions are resolved in the coordinator
+before disabling and retries; worker spans retain both annotation and backend
+assignment tags. Explicit project and suite retry settings remain available.
+Playwright retries serial groups together, so a group containing `noAutoRetry` also
+excludes Datadog automatic retries for its other members. Explicit native group
+and project retries remain available.
+
 ## Jest test automation exclusions
 
 With the `jest-circus` runner, annotate test callbacks using `dd-trace/test-optimization`:
@@ -886,7 +898,7 @@ To protect a failure from both quarantine/disable and automatic retries, combine
 
 Each helper returns an annotated callback without modifying the original. Callback arguments, return values,
 errors, `this`, and arity are preserved. Apply the helper to the callback passed to `test.each` to protect every case.
-The helpers can be imported without initializing the tracer; enforcement requires the corresponding Jest or Mocha instrumentation.
+The helpers can be imported without initializing the tracer; enforcement requires the corresponding Jest, Mocha, or Playwright instrumentation.
 
 Test events report `test.test_management.prevent_failure_suppression` and `test.test_management.no_auto_retry`
 as `true` when the corresponding annotation is present; absent annotations omit the tag.
@@ -894,4 +906,4 @@ These describe annotations observed on that execution, on any branch. Management
 assignments even when annotations override their runtime behavior. Default-branch synchronization and UI restrictions require backend support;
 these helpers do not update remote test properties. Files skipped by Test Impact Analysis produce no new observation.
 
-These helpers currently target Jest Circus and Mocha. The legacy Jest Jasmine runner does not enforce them.
+Framework support is described in the framework-specific sections. The legacy Jest Jasmine runner does not enforce these helpers.

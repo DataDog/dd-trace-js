@@ -19,6 +19,20 @@ describe('Test Optimization callback annotations', () => {
     assert.doesNotMatch(exclusions, /Other test frameworks[^.]*do not enforce (?:these helpers|them)\b/)
   })
 
+  it('includes Playwright in the shared enforcement statement', () => {
+    const api = readFileSync(resolve(__dirname, '../../../../docs/API.md'), 'utf8')
+    const [, statement] = api.match(/enforcement requires ([^.]+) instrumentation/) || []
+    assert.ok(statement, 'Shared callback annotation enforcement must be documented')
+    assert.match(statement, /\b(?:Playwright|test framework)\b/)
+  })
+
+  it('does not exclude Playwright from the shared helper support summary', () => {
+    const api = readFileSync(resolve(__dirname, '../../../../docs/API.md'), 'utf8')
+    const [, supported] = api.match(/These helpers currently target ([^.]+)\./) || []
+    if (supported) assert.match(supported, /\b(?:Playwright|test framework)\b/)
+    assert.match(api, /The legacy Jest Jasmine runner does not enforce (?:them|these helpers)\./)
+  })
+
   for (const helper of [preventFailureSuppression, noAutoRetry, fn => preventFailureSuppression(noAutoRetry(fn))]) {
     it('preserves parameters, this, return values, and callback arity', () => {
       const callback = Object.freeze(function callback (a, b) { return this.offset + a + b })
@@ -73,6 +87,15 @@ describe('Test Optimization callback annotations', () => {
       const error = new Error('original')
       const rejects = helper(async () => { throw error })
       await assert.rejects(rejects(), actual => actual === error)
+    })
+
+    it('preserves the callback source for framework fixture discovery', () => {
+      function callback ({ value }) { return value }
+      const annotated = helper(helper(callback))
+      assert.strictEqual(annotated.toString(), callback.toString())
+      assert.strictEqual(annotated.name, callback.name)
+      assert.strictEqual(annotated.length, callback.length)
+      assert.strictEqual(annotated({ value: 42 }), 42)
     })
 
     it('preserves done callbacks', done => {

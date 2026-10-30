@@ -25,6 +25,11 @@ async function main () {
 
   if (process.env.PLAYWRIGHT_DISABLE_PLUGIN_BETWEEN_RUNS === '1') {
     tracer.use('playwright', false)
+    if (process.env.PLAYWRIGHT_NATIVE_RETRIES_AFTER_DISABLE) {
+      for (const project of config.projects) {
+        project.project.retries = Number(process.env.PLAYWRIGHT_NATIVE_RETRIES_AFTER_DISABLE)
+      }
+    }
     process.stdout.write('PLAYWRIGHT_PLUGIN_DISABLED\n')
   }
 
