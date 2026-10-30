@@ -5,41 +5,36 @@ const { tracingChannel } = require('dc-polyfill')
 const systemOneChannel = tracingChannel('orchestrion:@typesafe-ai/sdk:TypeSafeClient_systemOne')
 const apiPromiseChannel = tracingChannel('orchestrion:@typesafe-ai/sdk:APIPromise_constructor')
 
-// `systemOne` builds its one `APIPromise` synchronously, between its start and end events. The plugins subscribe to
-// `asyncEnd`, which only this file publishes, so it tells whether they are enabled.
-let pendingCtx
+const systemOneContexts = new WeakMap()
 
-systemOneChannel.start.subscribe(ctx => {
-  if (systemOneChannel.asyncEnd.hasSubscribers) pendingCtx = ctx
-})
-
+// `systemOne` returns its `APIPromise` without awaiting it, so the span finishes once the response arrives
 systemOneChannel.end.subscribe(ctx => {
-  if (pendingCtx === ctx) pendingCtx = undefined
-  if (!systemOneChannel.asyncEnd.hasSubscribers) return
+  if (!systemOneChannel.start.hasSubscribers) return
 
   // Copied like the SDK copies it, since the caller may change the object for its next call before this one finishes
   const request = ctx.arguments[0]
   if (request && typeof request === 'object') ctx.request = { ...request }
 
-  // No `APIPromise` was built (e.g. `systemOne` threw), so no response will finish the span
-  if (!ctx.observed) finish(ctx)
+  if (!ctx.error && ctx.result && typeof ctx.result === 'object') {
+    systemOneContexts.set(ctx.result, ctx)
+  } else {
+    finish(ctx)
+  }
 })
 
 // Every `APIPromise` method (awaiting, `asResponse()`, `withResponse()`, `map()`) reads the response promise passed to
-// the constructor, so observing it covers each of them, and calls that are never awaited. Promises built outside
-// `systemOne`, such as the one `map()` returns, are left alone.
+// the constructor, so observing it covers each of them, and calls that are never awaited.
 apiPromiseChannel.start.subscribe(ctx => {
-  const systemOneCtx = pendingCtx
   const responsePromise = ctx.arguments[0]
-  if (!systemOneCtx || typeof responsePromise?.then !== 'function') return
-  pendingCtx = undefined
-  systemOneCtx.observed = true
+  if (!systemOneChannel.start.hasSubscribers || typeof responsePromise?.then !== 'function') return
 
   ctx.arguments[0] = responsePromise.then(response => {
-    readResponse(systemOneCtx, response)
+    const systemOneCtx = systemOneContexts.get(ctx.self)
+    if (systemOneCtx) readResponse(systemOneCtx, response)
     return response
   }, error => {
-    finish(systemOneCtx, undefined, error)
+    const systemOneCtx = systemOneContexts.get(ctx.self)
+    if (systemOneCtx) finish(systemOneCtx, undefined, error)
     throw error
   })
 })
