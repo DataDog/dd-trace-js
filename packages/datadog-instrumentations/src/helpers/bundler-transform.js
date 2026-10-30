@@ -22,6 +22,7 @@ const REQUIRE_BINDING = 4
 const COMMONJS_BINDINGS = MODULE_BINDING | REQUIRE_BINDING
 const targetPackages = new Set(Object.keys(hooks))
 for (const name of getRewriteTargetNames()) targetPackages.add(name)
+const packagePathPattern = createPackagePathPattern()
 const entrypoints = new Map()
 const loadedHooks = new Set()
 const packageCache = new Map()
@@ -522,6 +523,29 @@ import ddTraceTurbopackDc from ${JSON.stringify(dcModule)}
 }
 
 /**
+ * Matches paths containing a directory named after a target package. Bundlers use it as a cheap
+ * prefilter; the instrumentation still resolves the real package before changing a file.
+ *
+ * @returns {RegExp}
+ */
+function createPackagePathPattern () {
+  const builtins = new Set(Module.builtinModules)
+  const names = []
+  for (const name of targetPackages) {
+    if (!name.startsWith('.') && !builtins.has(name)) names.push(escapeRegExp(name))
+  }
+  names.sort()
+  return new RegExp(`(?:^|/)(?:${names.join('|')})(?:/|$)`)
+}
+
+/**
+ * @param {string} value
+ */
+function escapeRegExp (value) {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
+}
+
+/**
  * @param {string} nativeResourcePath
  */
 function getDcModule (nativeResourcePath) {
@@ -533,4 +557,4 @@ function getDcModule (nativeResourcePath) {
   return value
 }
 
-module.exports = { classify, instrument }
+module.exports = { classify, instrument, packagePathPattern }
