@@ -273,10 +273,9 @@
     hashery "^1.5.1"
     keyv "^5.6.0"
 
-"@datadog/flagging-core@3.3.0":
-  version "3.3.0"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-3.3.0.tgz#a3b4b8ec8de2b8c14a0e343a1d573b79339c9fee"
-  integrity sha512-M/GwafVes97/5Q7kMD9zuoreOlVAj7qB1JfrtNi1/rf5gENxVR1a2FsZvwVEfm6k1Or9nUkQVoT8JaOrZNW/jg==
+"@datadog/flagging-core@3.4.0", "@datadog/flagging-core@file:vendor/packages/datadog-flagging-core-3.4.0.tgz":
+  version "3.4.0"
+  resolved "file:vendor/packages/datadog-flagging-core-3.4.0.tgz#eae9ac0587c39b5c9eed2d8eaa44b22e91e97d07"
   dependencies:
     "@bufbuild/protobuf" "^2.13.0"
     spark-md5 "^3.0.2"
@@ -320,12 +319,11 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@2.6.0":
-  version "2.6.0"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.6.0.tgz#aefdb4e72fde557acfbfc1270ecbe13afc13a424"
-  integrity sha512-MgU5QiKjGXXfojUYbbgJgGGbvBloLqCfJKMsFLPaHTdEuSpIeuTosWqxbqRfoRvR0kuhn/VN2mf2WORuZ+PNgA==
+"@datadog/openfeature-node-server@file:vendor/packages/datadog-openfeature-node-server-2.7.0.tgz":
+  version "2.7.0"
+  resolved "file:vendor/packages/datadog-openfeature-node-server-2.7.0.tgz#695800621d9e8d9b39d5915d65e67af8dbc04813"
   dependencies:
-    "@datadog/flagging-core" "3.3.0"
+    "@datadog/flagging-core" "3.4.0"
 
 "@datadog/pprof@5.20.0":
   version "5.20.0"
