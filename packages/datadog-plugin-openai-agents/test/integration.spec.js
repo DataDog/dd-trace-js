@@ -13,14 +13,16 @@ const { DDOpenAIAgentsProcessor } = require('../src/processor')
 const legacyStorage = storage('legacy')
 
 function makeFakeSpan (spanId = 'dd-span-id') {
+  const tags = {}
   const context = {
+    getTag: key => tags[key],
     _trace: { tags: {} },
     toSpanId: () => spanId,
     toTraceId: () => '00000000000000001111111111111111',
   }
 
   return {
-    setTag: sinon.stub(),
+    setTag: sinon.stub().callsFake((key, value) => { tags[key] = value }),
     setOperationName: sinon.stub(),
     finish: sinon.stub(),
     context: () => context,
@@ -136,6 +138,27 @@ describe('OpenAIAgentsIntegration', () => {
       })
 
       assert.strictEqual(LLMObsTagger.tagMap.get(workflowSpan)[PARENT_ID_KEY], ROOT_PARENT_ID)
+      assert.strictEqual(workflowSpan.context().getTag('span.type'), 'llm')
+    })
+
+    it('preserves an existing APM type when registering an LLMObs workflow', () => {
+      const workflowSpan = makeFakeSpan('workflow')
+      workflowSpan.setTag('span.type', 'custom')
+      const { integration } = build({
+        tracerSpans: [workflowSpan],
+        config: {
+          llmobs: {
+            DD_LLMOBS_ENABLED: true,
+            DD_LLMOBS_ML_APP: 'test',
+            DD_LLMOBS_SAMPLE_RATE: 1,
+          },
+        },
+      })
+
+      integration.startTrace({ traceId: 't1' })
+
+      assert.strictEqual(LLMObsTagger.getSpanKind(workflowSpan), 'workflow')
+      assert.strictEqual(workflowSpan.context().getTag('span.type'), 'custom')
     })
 
     it('uses and restores the active LLMObs parent independently of the APM parent', () => {
