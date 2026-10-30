@@ -464,6 +464,42 @@ describe('datadogVite', () => {
     })
   })
 
+  describe('require in ES module output', () => {
+    const code = 'const optional = require("@datadog/native-metrics");\nexport { optional };\n'
+
+    it('binds require in Rollup ES module chunks that use it, keeping a hashbang first', async () => {
+      const plugin = datadogVite()
+
+      const { code: output, map } = plugin.renderChunk.call(ROLLUP, code, {}, { format: 'es' })
+      assert.equal(map, null)
+      assert.equal(output.split('\n').length, code.split('\n').length)
+
+      const directory = createProject()
+      const file = write(directory, 'chunk.mjs', output.replace('@datadog/native-metrics', 'node:path'))
+      const { optional } = await import(pathToFileURL(file).href)
+      assert.equal(optional, require('node:path'))
+
+      const hashbang = plugin.renderChunk.call(ROLLUP, `#!/usr/bin/env node\n${code}`, {}, { format: 'es' }).code
+      assert.equal(hashbang.startsWith('#!/usr/bin/env node\nimport { createRequire'), true)
+    })
+
+    it('leaves Rolldown, CommonJS, require-free and require-declaring chunks untouched', () => {
+      const plugin = datadogVite()
+
+      assert.equal(plugin.renderChunk.call(ROLLDOWN, code, {}, { format: 'es' }), null)
+      assert.equal(plugin.renderChunk.call(ROLLUP, code, {}, { format: 'cjs' }), null)
+      for (const chunk of [
+        'export const value = requireValue() + this.require(1);\n',
+        `import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);\n${code}`,
+        `function require (id) { return id }\n${code}`,
+        `import require from "./require.js";\n${code}`,
+        `import { load as require } from "./require.js";\n${code}`,
+      ]) {
+        assert.equal(plugin.renderChunk.call(ROLLUP, chunk, {}, { format: 'es' }), null, chunk)
+      }
+    })
+  })
+
   describe('git metadata', () => {
     it('sets the git metadata banner once per entry chunk', () => {
       const banner = 'process.env.DD_GIT_COMMIT_SHA = "abc123";\n'

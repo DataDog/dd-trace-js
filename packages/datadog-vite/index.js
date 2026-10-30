@@ -24,6 +24,11 @@ const TRACER_DIRECTORY = `${fs.realpathSync(path.join(__dirname, '..', '..')).re
 // any of them may be missing at runtime.
 const OPTIONAL_DEPENDENCY_PATTERN =
   /^(?:@datadog\/(?:libdatadog(?:-extras)?|native-appsec|native-iast-taint-tracking|native-metrics|pprof|wasm-js-rewriter)|@opentelemetry\/api(?:-logs)?|oxc-parser)(?:\/|$)/
+const FREE_REQUIRE_PATTERN = /(?<![\w$.])require\s*[(.]/
+const REQUIRE_DECLARATION_PATTERN =
+  /(?<![\w$.])(?:(?:const|let|var|function|class)\s+require|import\s+require|as\s+require)(?![\w$])/
+const REQUIRE_BINDING = 'import { createRequire as __ddCreateRequire } from "node:module"; ' +
+  'const require = __ddCreateRequire(import.meta.url);'
 const mergedFunctions = new WeakSet()
 
 /**
@@ -152,6 +157,25 @@ function datadogVite () {
       if (!injectGitMetadata || !chunk.isEntry) return ''
       gitIntro ??= getGitMetadataBanner(log)
       return gitIntro
+    },
+
+    /**
+     * Rollup leaves the `require` calls it cannot resolve, and the ignored ones of optional tracer dependencies, as
+     * they are. ES module output has no `require`, so bind it, as Rolldown does for Node.js output.
+     *
+     * @this {HookContext}
+     * @param {string} code
+     * @param {unknown} chunk
+     * @param {{ format: string }} outputOptions
+     */
+    renderChunk (code, chunk, outputOptions) {
+      if (isRolldown(this) || outputOptions.format !== 'es' || !FREE_REQUIRE_PATTERN.test(code) ||
+        REQUIRE_DECLARATION_PATTERN.test(code)) {
+        return null
+      }
+      // Inserted without a line break, so the existing source map only shifts the columns of a single line.
+      const start = code.startsWith('#!') ? code.indexOf('\n') + 1 : 0
+      return { code: code.slice(0, start) + REQUIRE_BINDING + code.slice(start), map: null }
     },
   }
 }
