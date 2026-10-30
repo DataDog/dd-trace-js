@@ -862,6 +862,51 @@ describe('OpenTelemetry Traces', () => {
         'Exporter should not be the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp')
     })
 
+    it('exports HTTP spans over OTLP when only OTel semantics is enabled', () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      const DatadogTracer = require('../../src/opentracing/tracer')
+      const tracer = new DatadogTracer(getConfigFresh({ flushMinSpans: 1, sampleRate: 1 }))
+      assert.ok(tracer._exporter instanceof OtlpHttpTraceExporter)
+      const sendPayload = sinon.stub(tracer._exporter, 'sendPayload')
+
+      tracer.startSpan('http.request', {
+        tags: {
+          'resource.name': 'GET /wire',
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.status_code': 200,
+        },
+      }).finish()
+
+      sinon.assert.calledOnce(sendPayload)
+      const payload = JSON.parse(sendPayload.firstCall.args[0])
+      const [span] = payload.resourceSpans[0].scopeSpans[0].spans
+      assert.strictEqual(span.name, 'GET /wire')
+      assert.deepStrictEqual(span.attributes.find(attribute => attribute.key === 'http.request.method').value,
+        { stringValue: 'GET' })
+      assert.deepStrictEqual(span.attributes.find(attribute => attribute.key === 'http.response.status_code').value,
+        { intValue: 200 })
+      assert.ok(!span.attributes.some(attribute => attribute.key === '_dd.sdk.otlp_export'))
+    })
+
+    it('marks agentless spans as native when agentless overrides OTLP and OTel semantics', () => {
+      process.env.DD_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      sinon.stub(globalThis[Symbol.for('dd-trace')].beforeExitHandlers, 'add')
+      const DatadogTracer = require('../../src/opentracing/tracer')
+      const AgentlessExporter = require('../../src/exporters/agentless')
+      const tracer = new DatadogTracer(getConfigFresh({ flushMinSpans: 1, sampleRate: 1 }))
+      assert.ok(tracer._exporter instanceof AgentlessExporter)
+      const exportSpans = sinon.stub(tracer._exporter, 'export')
+
+      tracer.startSpan('native.request').finish()
+
+      sinon.assert.calledOnce(exportSpans)
+      const [span] = exportSpans.firstCall.args[0]
+      assert.strictEqual(span.meta['_dd.sdk.otlp_export'], 'false')
+    })
+
     it('DatadogTracer prefers the Electron exporter over OTLP when OTEL_TRACES_EXPORTER=otlp', () => {
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
       const loadTracer = proxyquire.noPreserveCache()

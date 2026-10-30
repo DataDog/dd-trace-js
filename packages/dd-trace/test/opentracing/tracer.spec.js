@@ -148,6 +148,16 @@ describe('Tracer', () => {
     sinon.assert.calledWithExactly(SpanProcessor, otlpExporter, prioritySampler, config, undefined, true)
   })
 
+  it('should preserve the agentless exporter when the OTLP exporter is enabled', () => {
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agentless'
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledWith(exporter, 'agentless')
+    sinon.assert.calledWithExactly(SpanProcessor, agentExporter, prioritySampler, config, undefined, false)
+  })
+
   it('should allow to configure an alternative prioritySampler', () => {
     const sampler = {}
     tracer = new Tracer(config, sampler)
