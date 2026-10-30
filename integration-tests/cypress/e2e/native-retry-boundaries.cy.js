@@ -52,6 +52,13 @@ if (['experimental-native-same-options', 'experimental-native-locked-options',
     Object.defineProperty(retries, 'experimentalOptions', { value: saved, writable: !locked, configurable: !locked })
   }
 }
+if (mode.startsWith('experimental-native-saved-options')) {
+  const retries = Cypress.config('retries')
+  const saved = retries.experimentalOptions
+  retries.experimentalOptions = { maxRetries: 1, stopIfAnyPassed: false }
+  if (mode.endsWith('-descriptor')) Object.defineProperty(retries, 'experimentalOptions', { value: saved })
+  else retries.experimentalOptions = saved
+}
 if (mode === 'experimental-native-checkpoint') {
   const retries = Cypress.config('retries')
   const proxied = retries.experimentalOptions

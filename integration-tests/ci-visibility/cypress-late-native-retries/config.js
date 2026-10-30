@@ -6,15 +6,25 @@ const getCypressTestEnvironment = require('../../cypress-test-environment')
 
 module.exports = defineConfig({
   ...getCypressTestEnvironment({ LATE_MODE: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE }),
-  retries: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE === 'numeric-open'
-    ? 2
-    : {
-        runMode: ['during-init-partial', 'freeze-during-init', 'readonly-before-init']
-          .includes(process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE)
-          ? 2
-          : 0,
-        openMode: 0,
-      },
+  retries: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE?.startsWith('node-saved-options')
+    ? {
+        runMode: true,
+        openMode: false,
+        experimentalStrategy: 'detect-flake-but-always-fail',
+        experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+      }
+    : process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE === 'numeric-open'
+      ? 2
+      : {
+          runMode: [
+            'during-init-partial', 'freeze-during-init', 'readonly-before-init',
+            'getter-before-init', 'getter-during-init',
+          ]
+            .includes(process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE)
+            ? 2
+            : 0,
+          openMode: 0,
+        },
   video: false,
   screenshotOnRunFailure: false,
   e2e: {
@@ -30,15 +40,30 @@ module.exports = defineConfig({
       if (mode === 'readonly-before-init') {
         Object.defineProperty(config, 'retries', { writable: false, configurable: false })
       }
+      if (mode === 'getter-before-init') {
+        const native = config.retries
+        Object.defineProperty(config, 'retries', { get: () => native, enumerable: true, configurable: false })
+      }
       const pending = plugin(on, config)
+      if (mode === 'getter-during-init') {
+        const native = config.retries
+        Object.defineProperty(config, 'retries', { get: () => native, enumerable: true, configurable: false })
+      }
       if (mode === 'during-init') config.retries.runMode = 2
       if (mode === 'during-init-partial') config.retries = { openMode: 1 }
       if (mode === 'freeze-during-init') Object.freeze(config)
       const result = await pending
-      if (mode === 'freeze-during-init' || mode === 'readonly-before-init') return result
+      if (mode === 'freeze-during-init' || mode === 'readonly-before-init' || mode?.startsWith('getter-')) return result
       if (mode === 'freeze-retries' || mode === 'seal-retries') {
         if (mode === 'freeze-retries') Object.freeze(result.retries)
         else Object.seal(result.retries)
+        return result
+      }
+      if (mode?.startsWith('node-saved-options')) {
+        const saved = result.retries.experimentalOptions
+        result.retries.experimentalOptions = { maxRetries: 1, stopIfAnyPassed: false }
+        if (mode.endsWith('-descriptor')) Object.defineProperty(result.retries, 'experimentalOptions', { value: saved })
+        else result.retries.experimentalOptions = saved
         return result
       }
       if (mode?.startsWith('returned-getter')) {

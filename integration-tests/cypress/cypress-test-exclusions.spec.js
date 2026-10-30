@@ -199,6 +199,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'after-handoff-equal-preloaded', 'during-init', 'during-init-partial', 'freeze-during-init', 'readonly-before-init',
     'freeze-retries', 'seal-retries',
     'returned-experimental', 'returned-experimental-preloaded', 'returned-getter', 'returned-getter-preloaded',
+    'node-saved-options', 'node-saved-options-descriptor', 'getter-before-init', 'getter-during-init',
     'browser-queued-native-before-support',
     'browser-equal-before-support', 'browser-equal-before-support-preloaded',
     'browser-equal-before-support-reuse-preloaded',
@@ -206,7 +207,8 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'browser-equal-before-support-returned-alternate', 'browser-equal-before-support-returned-alternate-preloaded',
   ]) {
     for (const atrEnabled of [false, true]) {
-      const lateExperimental = lateMode.startsWith('returned-experimental')
+      const savedNodeOptions = lateMode.startsWith('node-saved-options')
+      const lateExperimental = lateMode.startsWith('returned-experimental') || savedNodeOptions
       const returnedGetter = lateMode.startsWith('returned-getter')
       const lateTest = lateExperimental && !supportsExperimental ? it.skip : it
       const title = `preserves ${lateMode} native retries after manual plugin initialization (ATR=${atrEnabled})`
@@ -255,6 +257,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           'returned-open', 'browser-partial-before-support', 'root-deleted', 'root-deleted-partial',
         ].includes(lateMode)
         if (noRunOverride && atrEnabled && !nativeOnlyControl) expected['late native control'] = 3
+        if (savedNodeOptions && atrEnabled) expected['late native control'] = 5
         const expectedExit = lateExperimental || returnedGetter
           ? 2
           : noRunOverride ? atrEnabled && !nativeOnlyControl ? 1 : 2 : 0
@@ -271,9 +274,11 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           for (const [name, count] of Object.entries(expected)) {
             const attempts = named(tests, name)
             assert.strictEqual(attempts.length, count, name)
+            // The fixture passes only at retry2; later experimental control attempts fail again.
             assert.strictEqual(attempts.at(-1).meta['test.status'],
               (count === 1 && name !== 'support reuse smoke') ||
-                (returnedGetter && name !== 'explicit local excluded' && count < 3)
+                (returnedGetter && name !== 'explicit local excluded' && count < 3) ||
+                (savedNodeOptions && atrEnabled && name === 'late native control')
                 ? 'fail'
                 : 'pass', name)
             if (lateExperimental) {
@@ -292,7 +297,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         }, {
           ...(lateMode.endsWith('-preloaded') ? {} : { NODE_OPTIONS: '' }),
           CYPRESS_LATE_NATIVE_RETRIES_MODE: lateMode,
-          ...(lateMode === 'numeric-open' && { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '4' }),
+          ...((lateMode === 'numeric-open' || savedNodeOptions) && { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '4' }),
         }, command)
       })
     }
@@ -310,6 +315,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'experimental-native', 'experimental-native-zero',
     'experimental-native-same-options', 'experimental-native-locked-options', 'experimental-native-assigned-options',
     'experimental-native-locked-detached', 'experimental-native-checkpoint',
+    'experimental-native-saved-options', 'experimental-native-saved-options-descriptor',
     'experimental-native-detached', 'experimental-native-detached-delete',
     'experimental-native-threshold', 'experimental-native-disabled',
     'experimental-native-disabled-zero', 'experimental-native-disabled-one', 'experimental-native-threshold-dynamic',

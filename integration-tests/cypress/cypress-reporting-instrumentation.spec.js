@@ -1904,6 +1904,9 @@ moduleTypes.forEach(({
       'suite-owner', 'suite-root-owner', 'framework-known-root', 'framework-scalar',
       'same-options', 'locked-options', 'assigned-options', 'raw-locked-options',
       'pre-suite-options', 'queued-detached-options', 'descriptor-root', 'descriptor-options',
+      'saved-options', 'saved-descriptor-options', 'saved-detached-options', 'saved-checkpoint-options',
+      'saved-equal-options',
+      'saved-queued-options', 'saved-initial-options',
     ]) {
       it(`reconciles observed browser retry snapshots for ${mode}`, async () => {
         const scalar = mode === 'framework-scalar'
@@ -1957,6 +1960,17 @@ moduleTypes.forEach(({
         runInNewContext(fs.readFileSync(
           path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
         ), context)
+        if (['saved-queued-options', 'saved-initial-options'].includes(mode)) {
+          const retries = context.Cypress.config('retries')
+          const saved = retries.experimentalOptions
+          retries.experimentalOptions = { maxRetries: 1, stopIfAnyPassed: false }
+          if (mode === 'saved-queued-options') saved.maxRetries = 3
+          retries.experimentalOptions = saved
+          await hooks.before()
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, mode === 'saved-queued-options' ? 3 : 2)
+          return
+        }
         if (mode === 'queued-detached-options') {
           const config = context.Cypress.config
           const retries = config('retries')
@@ -1990,6 +2004,28 @@ moduleTypes.forEach(({
         if (experimental) {
           const retries = config('retries')
           const saved = retries.experimentalOptions
+          if (mode.startsWith('saved-')) {
+            const raw = Object.getOwnPropertyDescriptor(retries, 'experimentalOptions').value
+            retries.experimentalOptions = { maxRetries: 1, stopIfAnyPassed: false }
+            if (mode === 'saved-detached-options') saved.maxRetries = 3
+            if (mode === 'saved-equal-options') saved.maxRetries = 4
+            if (mode === 'saved-checkpoint-options') {
+              raw.maxRetries = 3
+              Object.defineProperty(saved, 'stopIfAnyPassed', { configurable: false })
+              raw.maxRetries = 4
+            }
+            events['test:before:run']({}, currentTest)
+            assert.strictEqual(currentTest._retries, 1)
+            if (mode === 'saved-descriptor-options') {
+              Object.defineProperty(retries, 'experimentalOptions', { value: saved })
+            } else retries.experimentalOptions = saved
+            assert.strictEqual(retries.experimentalOptions, saved)
+            events['test:before:run']({}, currentTest)
+            assert.strictEqual(currentTest._retries, mode === 'saved-detached-options'
+              ? 3
+              : ['saved-checkpoint-options', 'saved-equal-options'].includes(mode) ? 4 : 2)
+            return
+          }
           if (mode === 'descriptor-options') {
             const descriptor = Object.getOwnPropertyDescriptor(retries, 'experimentalOptions')
             assert.strictEqual(descriptor.value, state.retries.experimentalOptions)
