@@ -51,6 +51,7 @@ const browserConfigStates = new WeakMap()
 const nativeAccessorBudgets = new WeakMap()
 let computingNativeRetries = false
 let nativeRetryValue
+let nativeRetryExperimental
 const unwrapBrowserRetries = value => browserRetryTargets.get(value) || value
 const cypressConfig = Cypress.config
 
@@ -313,6 +314,9 @@ function observeBrowserRetries (raw) {
       },
       get (target, key, receiver) {
         const result = Reflect.get(target, key, receiver)
+        if (computingNativeRetries && !path.length && key === 'experimentalStrategy') {
+          nativeRetryExperimental = Boolean(result)
+        }
         const property = Object.getOwnPropertyDescriptor(target, key)
         if (property && !property.configurable && !property.writable && 'value' in property) {
           if (result && typeof result === 'object' && ownsNestedPath(metadata.raw, path, target)) {
@@ -523,6 +527,7 @@ if (typeof Cypress.getTestRetries === 'function') {
   Cypress.getTestRetries = Object.assign(function () {
     const accessor = hasNativeRetryAccessor()
     nativeRetryValue = undefined
+    nativeRetryExperimental = undefined
     computingNativeRetries = true
     let retries
     try {
@@ -536,7 +541,9 @@ if (typeof Cypress.getTestRetries === 'function') {
     const interactive = browserRetryDescriptor(state, 'isInteractive')
     const knownRoot = metadata && !hasNativeRetryValueAccessor(value, interactive && interactive.value)
     const strategy = value && typeof value === 'object' && browserRetryDescriptor(value, 'experimentalStrategy')
-    const experimental = Boolean(strategy && 'value' in strategy && strategy.value)
+    const experimental = nativeRetryExperimental === undefined
+      ? Boolean(strategy && 'value' in strategy && strategy.value)
+      : nativeRetryExperimental
     const test = Cypress.state('test')
     if (test && typeof test === 'object') {
       nativeAccessorBudgets.set(test, { accessor, retries, metadata: knownRoot && metadata, experimental })
@@ -1265,13 +1272,16 @@ function installLifecycleHooks () {
       ? { message: suppressedError.message, stack: suppressedError.stack }
       : currentTest.err
 
+    const retries = peekBrowserRetries()
+    const strategy = retries && typeof retries === 'object' && browserRetryDescriptor(retries, 'experimentalStrategy')
     const computed = nativeAccessorBudgets.get(currentTest)
-    const experimental = computed
-      ? computed.experimental
-      : initialBrowserRetries && initialBrowserRetries.experimentalStrategy
-    const nativeRetryFloor = isDynamicAtrEnabled && experimental ? getNativeRetryBudget(currentTest) : 0
+    const hasNativeExperimentalRetries = strategy && !('value' in strategy)
+      ? Boolean(computed && computed.experimental)
+      : Boolean(strategy && strategy.value)
+    const nativeRetryFloor = isDynamicAtrEnabled && hasNativeExperimentalRetries ? getNativeRetryBudget(currentTest) : 0
     const testInfo = {
       nativeRetryFloor,
+      hasNativeExperimentalRetries,
       testId: currentTest.id,
       testName,
       testItTitle: currentTest.title,

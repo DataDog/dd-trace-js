@@ -81,6 +81,27 @@ if (mode === 'experimental-native-detached-accessor') {
   saved.maxRetries = 3
   ready = true
 }
+if (mode === 'browser-undefined-root') {
+  const saved = Cypress.config('retries')
+  let rejection
+  try {
+    Cypress.config('retries', undefined)
+  } catch (error) {
+    rejection = error
+  }
+  if (!rejection || !/retries/i.test(String(rejection))) {
+    throw new Error(`expected native retry validation rejection, received ${String(rejection)}`)
+  }
+  if (Cypress.config('retries') !== saved) throw new Error('rejected retry assignment changed native config')
+}
+if (mode === 'browser-experimental-strategy') {
+  Cypress.config().retries = {
+    runMode: true,
+    openMode: false,
+    experimentalStrategy: 'detect-flake-but-always-fail',
+    experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+  }
+}
 if (mode === 'browser-object-config-getter') {
   Cypress.config({ get retries () { return ++configGetterReads } })
 }

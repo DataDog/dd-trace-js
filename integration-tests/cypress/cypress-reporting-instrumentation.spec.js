@@ -1808,6 +1808,55 @@ moduleTypes.forEach(({
       assert.strictEqual(reads, 0)
     })
 
+    for (const experimental of [false, true]) {
+      it(`reports the active browser retry strategy without extra getter reads (experimental=${experimental})`, () => {
+        const state = { retries: 2, isTextTerminal: true }
+        const hooks = {}
+        let reported
+        let reads = 0
+        const test = { id: 'policy', title: 'policy', state: 'passed', fullTitle: () => 'policy' }
+        const root = { file: 'test.cy.js', eachTest () {} }
+        const context = {
+          Cypress: {
+            _: { isEqual, cloneDeep },
+            config: name => name === undefined ? state : state[name],
+            getTestRetries () {
+              const retries = this.config('retries')
+              const strategy = retries.experimentalStrategy
+              return strategy && retries.runMode === true ? retries.experimentalOptions.maxRetries : retries.runMode
+            },
+            state: name => name === 'test' ? test : false,
+            on () {},
+            mocha: {
+              getRunner: () => ({ runTests () {}, suite: { ctx: { currentTest: test } } }),
+              getRootSuite: () => root,
+            },
+          },
+          cy: { on () {}, task: (_name, args) => { reported = args.test; return Promise.resolve() } },
+          before () {},
+          beforeEach () {},
+          after () {},
+          afterEach: callback => { hooks.afterEach = callback },
+        }
+        runInNewContext(fs.readFileSync(
+          path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+        ), context)
+        const retries = { runMode: experimental ? true : 2, experimentalOptions: { maxRetries: 2 } }
+        Object.defineProperty(retries, 'experimentalStrategy', {
+          configurable: true,
+          enumerable: true,
+          get () { reads++; return experimental ? 'detect-flake-but-always-fail' : undefined },
+        })
+        Object.defineProperty(context.Cypress.config(), 'retries', { value: retries })
+        assert.strictEqual(reads, 0)
+        assert.strictEqual(context.Cypress.getTestRetries(), 2)
+        assert.strictEqual(reads, 1)
+        hooks.afterEach()
+        assert.strictEqual(reported.hasNativeExperimentalRetries, experimental)
+        assert.strictEqual(reads, 1)
+      })
+    }
+
     for (const mode of ['known-root', 'fresh-root', 'known-options', 'configurable-options']) {
       it(`preserves locked browser retry descriptor identity (${mode})`, () => {
         for (const instrumented of [false, true]) {

@@ -630,10 +630,37 @@ describe('Cypress native final status after late hooks', () => {
     { name: 'native aggregate failure', state: 'failed', attempts: ['failed', 'passed'], final: 'fail' },
     { name: 'native aggregate pass', state: 'passed', attempts: ['passed', 'failed'], final: 'pass' },
     { name: 'ordinary pass', state: 'passed', attempts: ['passed'], final: 'pass' },
+    {
+      name: 'browser enables experimental strategy',
+      state: 'failed',
+      attempts: ['failed', 'passed'],
+      final: 'fail',
+      atr: true,
+      browserStrategy: true,
+    },
+    {
+      name: 'legacy browser uses Node experimental strategy',
+      state: 'failed',
+      attempts: ['failed', 'passed'],
+      final: 'fail',
+      atr: true,
+      nodeStrategy: 'detect-flake-but-always-fail',
+    },
+    {
+      name: 'browser clears stale Node experimental strategy',
+      state: 'failed',
+      attempts: ['failed', 'passed'],
+      final: 'pass',
+      atr: true,
+      nodeStrategy: 'detect-flake-but-always-fail',
+      browserStrategy: false,
+    },
   ]) {
     it(`keeps duplicate declarations independent (${scenario.name})`, async () => {
       const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
       const plugin = new CypressPlugin()
+      if (scenario.atr) plugin.flakyTestRetriesCount = 2
+      plugin.resolvedCypressRetries = { experimentalStrategy: scenario.nodeStrategy }
       const createSpan = status => {
         const tags = { 'test.status': status }
         return {
@@ -664,6 +691,7 @@ describe('Cypress native final status after late hooks', () => {
           testSpan,
           finishTime: index + 2,
           hasNativeRetries: attempts.length > 1,
+          ...(scenario.browserStrategy !== undefined && { hasNativeExperimentalRetries: scenario.browserStrategy }),
         })),
       ]
       await plugin.afterSpec(spec, {
@@ -1127,4 +1155,127 @@ describe('Cypress lifecycle ownership documentation controls', () => {
     }
     assert.strictEqual(hasCypressLifecycle(root), false)
   })
+})
+
+describe('Cypress deferred automatic lifecycle positions', () => {
+  for (const manualEntry of [false, true]) {
+    it(`preserves automatic fallback and actual manual positions (manual entry=${manualEntry})`, () => {
+      const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-fallback-position-'))
+      const support = join(project, 'support.js')
+      fs.writeFileSync(support, '// user support without a direct SDK import\n')
+      const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+      const raw = `const root = Cypress.mocha.getRootSuite()
+let active = false
+root[Symbol.for('dd-trace.cypress.install-lifecycle')] = () => {
+  if (active) return
+  active = true
+  before(function datadogBeforeAll () { cy.task('dd:testSuiteStart', {}) })
+  beforeEach(function datadogBeforeEach () {})
+  after(function datadogAfterAll () {})
+  afterEach(function datadogAfterEach () { cy.task('dd:afterEach', {}) })
+}
+if (!root[Symbol.for('dd-trace.cypress.defer-lifecycle')]) root[Symbol.for('dd-trace.cypress.install-lifecycle')]()
+`
+      const originalRead = fs.readFileSync
+      const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
+        return filename === hooksPath ? raw : originalRead(filename, ...args)
+      })
+      try {
+        const files = installSupportFile({ projectRoot: project, supportFile: support }, true)
+        const root = {}
+        const phases = ['_beforeAll', '_beforeEach', '_afterAll', '_afterEach']
+        const prefix = { fn: function frameworkPrefix () {} }
+        const userBefore = { fn: function userBefore () {} }
+        const userAfter = { fn: function userAfter () {} }
+        for (const phase of phases) root[phase] = [prefix]
+        const arrays = Object.fromEntries(phases.map(phase => [phase, root[phase]]))
+        const context = createContext({
+          Cypress: { mocha: { getRootSuite: () => root } },
+          before: fn => root._beforeAll.push({ fn }),
+          beforeEach: fn => root._beforeEach.push({ fn }),
+          after: fn => root._afterAll.push({ fn }),
+          afterEach: fn => root._afterEach.push({ fn }),
+          require: name => {
+            if (name.endsWith('/lifecycle-owner')) return require('../../datadog-plugin-cypress/src/lifecycle-owner')
+            throw new Error(`unexpected module ${name}`)
+          },
+        })
+        const execute = source => runInContext(`(function () {${source}\n})()`, context)
+        execute(fs.readFileSync(files[0], 'utf8'))
+        for (const phase of phases) root[phase].push(userBefore)
+        if (manualEntry) execute(fs.readFileSync(join(__dirname, '../../../ci/cypress/support.js'), 'utf8'))
+        for (const phase of phases) root[phase].push(userAfter)
+        const finalize = fs.readFileSync(files[1], 'utf8').split('\n')
+          .filter(line => !line.startsWith('import ')).join('\n')
+        execute(finalize)
+        execute(finalize)
+        for (const phase of phases) {
+          const hooks = root[phase]
+          assert.strictEqual(hooks, arrays[phase])
+          assert.strictEqual(hooks.length, 4)
+          assert.strictEqual(hooks[0], prefix)
+          assert.strictEqual(hooks[manualEntry ? 1 : 2], userBefore)
+          assert.strictEqual(hooks[3], userAfter)
+          assert.match(hooks[manualEntry ? 2 : 1].fn.name, /^datadog/)
+        }
+      } finally {
+        read.restore()
+        fs.rmSync(project, { recursive: true, force: true })
+      }
+    })
+  }
+})
+
+describe('Cypress manual setup JSON symbol semantics', () => {
+  for (const kind of ['mutating symbol', 'throwing symbol', 'owner accessor', 'hidden owner data']) {
+    it(`retains support without evaluating ignored symbols (${kind})`, () => {
+      const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-manual-symbol-'))
+      const ownerKey = Symbol.for('dd-trace.cypress.support-owner')
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+      let forwarded
+      let wire
+      let reads = 0
+      process.send = message => {
+        forwarded = message
+        wire = JSON.parse(JSON.stringify(message)).args[0].setupConfig
+      }
+      let stop
+      try {
+        const config = { projectRoot: project, supportFile: false }
+        stop = installManualSupportFile(config)
+        const supplied = { projectRoot: project, supportFile: false, retries: { runMode: 2 } }
+        let expectedSupport
+        if (kind === 'hidden owner data') {
+          const other = { projectRoot: project, supportFile: false }
+          installSupportFile(other, true)
+          supplied.supportFile = expectedSupport = other.supportFile
+          Object.defineProperty(supplied, ownerKey, { value: other[ownerKey] })
+        } else {
+          Object.defineProperty(supplied, kind === 'owner accessor' ? ownerKey : Symbol('ignored'), {
+            enumerable: true,
+            get () {
+              reads++
+              if (kind === 'mutating symbol') supplied.retries.runMode = 0
+              else throw new Error('Native JSON ignores this symbol getter')
+              return null
+            },
+          })
+        }
+        const native = JSON.parse(JSON.stringify(supplied))
+        assert.strictEqual(reads, 0)
+        process.send({ event: 'setupTestingType:reply', args: [{ setupConfig: supplied }] })
+        assert.strictEqual(reads, 0)
+        assert.deepStrictEqual(wire.retries, native.retries)
+        assert.strictEqual(typeof wire.supportFile, 'string')
+        if (expectedSupport) assert.strictEqual(wire.supportFile, expectedSupport)
+        assert.strictEqual(forwarded.args[0].setupConfig[ownerKey].path, wire.supportFile)
+        assert.strictEqual(supplied.retries.runMode, 2)
+      } finally {
+        stop?.()
+        if (descriptor) Object.defineProperty(process, 'send', descriptor)
+        else delete process.send
+        fs.rmSync(project, { recursive: true, force: true })
+      }
+    })
+  }
 })

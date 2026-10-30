@@ -1943,7 +1943,10 @@ class CypressPlugin {
 
           // Explicit experimental strategies can fail after a passing attempt. Their native
           // aggregate outcome remains authoritative when ATR supplies the retry budget.
-          const finalRetryKind = this.resolvedCypressRetries?.experimentalStrategy && !isDatadogManagedAttempt
+          const hasNativeExperimentalRetries = typeof finishedTest.hasNativeExperimentalRetries === 'boolean'
+            ? finishedTest.hasNativeExperimentalRetries
+            : Boolean(this.resolvedCypressRetries?.experimentalStrategy)
+          const finalRetryKind = hasNativeExperimentalRetries && !isDatadogManagedAttempt
             ? FINAL_STATUS_RETRY_KIND.none
             : retryKind
           const finalStatus = getFinalStatus({
@@ -2376,6 +2379,7 @@ class CypressPlugin {
           annotations,
           isModified,
           hasNativeRetries,
+          hasNativeExperimentalRetries,
           nativeRetryFloor,
           duration,
           isQuarantined: isQuarantinedFromSupport,
@@ -2579,6 +2583,7 @@ class CypressPlugin {
           isEfdManagedTest,
           isAttemptToFix,
           hasNativeRetries,
+          hasNativeExperimentalRetries,
           mustFail: annotations?.mustFail,
           noAutoRetry: annotations?.noAutoRetry,
         }

@@ -328,6 +328,11 @@ return module.exports
 })()
 ddSupportRoot[Symbol.for('dd-trace.cypress.has-lifecycle')] = ddHasLifecycle
 if (!ddSupportRoot[ddSupportKey] && !ddHasLifecycle(ddSupportRoot)) {
+const positions = {}
+for (const key of ['_beforeAll', '_beforeEach', '_afterAll', '_afterEach']) {
+  positions[key] = Array.isArray(ddSupportRoot[key]) ? ddSupportRoot[key].length : 0
+}
+ddSupportRoot[Symbol.for('dd-trace.cypress.lifecycle-positions')] = positions
 ddSupportRoot[Symbol.for('dd-trace.cypress.defer-lifecycle')] = ${deferLifecycle}
 ${browserHooksSource}
 ddSupportRoot[ddSupportKey] = true
@@ -338,7 +343,21 @@ ddSupportRoot[ddSupportKey] = true
     const finalize = `const root = Cypress.mocha.getRootSuite()
 const install = root[Symbol.for('dd-trace.cypress.install-lifecycle')]
 const hasLifecycle = root[Symbol.for('dd-trace.cypress.has-lifecycle')]
-if (typeof install === 'function' && (!hasLifecycle || !hasLifecycle(root))) install()
+if (typeof install === 'function' && (!hasLifecycle || !hasLifecycle(root))) {
+  const phases = ['_beforeAll', '_beforeEach', '_afterAll', '_afterEach']
+  const lengths = {}
+  for (const key of phases) lengths[key] = Array.isArray(root[key]) ? root[key].length : 0
+  install()
+  // A Node-only manual plugin needs automatic browser hooks before user hooks.
+  // Move only the hooks just installed; an actual manual owner never enters here.
+  const positions = root[Symbol.for('dd-trace.cypress.lifecycle-positions')]
+  for (const key of phases) {
+    if (positions && Array.isArray(root[key])) {
+      const added = root[key].splice(lengths[key])
+      root[key].splice(positions[key], 0, ...added)
+    }
+  }
+}
 `
     writeExclusiveFile(wrapperFile, `${wrapperImports.join('\n')}\n${finalize}`)
     generatedFiles.push(wrapperFile)
@@ -479,7 +498,11 @@ function installManualSupportFile (config) {
         const supplied = reply?.setupConfig
         if (reply && (supplied == null || (supplied && typeof supplied === 'object' && !Array.isArray(supplied)))) {
           // Snapshot own enumerable values once, as native IPC serialization would.
-          const returnedConfig = { ...supplied }
+          const returnedConfig = Object.fromEntries(Object.entries(supplied ?? {}))
+          const supportOwner = supplied && Object.getOwnPropertyDescriptor(supplied, DD_SUPPORT_OWNER)
+          if (supportOwner && 'value' in supportOwner) {
+            Object.defineProperty(returnedConfig, DD_SUPPORT_OWNER, supportOwner)
+          }
           const projectRoot = returnedConfig.projectRoot ?? config.projectRoot
           const supportFile = returnedConfig.supportFile === undefined ? config.supportFile : returnedConfig.supportFile
           // Leave invalid user configuration for Cypress's native validator.
