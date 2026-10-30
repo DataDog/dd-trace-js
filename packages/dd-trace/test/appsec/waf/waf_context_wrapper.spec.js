@@ -27,6 +27,42 @@ describe('WAFContextWrapper', () => {
     sinon.restore()
   })
 
+  describe('empty GraphQL resolver policy', () => {
+    for (const skipEmptyResolvers of [false, true]) {
+      it(`should preserve the constructor policy ${skipEmptyResolvers}`, () => {
+        const context = new WAFContextWrapper({}, 1000, '1.14.0', '1.8.0', knownAddresses, skipEmptyResolvers)
+
+        assert.strictEqual(context.canSkipEmptyGraphqlResolvers(), skipEmptyResolvers)
+      })
+    }
+
+    it('should preserve empty resolvers while schema extraction is enabled', () => {
+      const ddwafContext = { run: sinon.stub().returns({}) }
+      const addressesWithSchema = new Set(knownAddresses)
+      addressesWithSchema.add(addresses.WAF_CONTEXT_PROCESSOR)
+      const context = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', addressesWithSchema, true)
+
+      context.run({ persistent: { [addresses.WAF_CONTEXT_PROCESSOR]: { 'extract-schema': true } } })
+
+      assert.strictEqual(context.canSkipEmptyGraphqlResolvers(), false)
+
+      context.run({ persistent: { [addresses.WAF_CONTEXT_PROCESSOR]: { 'extract-schema': false } } })
+
+      assert.strictEqual(context.canSkipEmptyGraphqlResolvers(), true)
+    })
+
+    it('should retain the schema policy when the native run fails', () => {
+      const ddwafContext = { run: sinon.stub().returns({ errorCode: -1 }) }
+      const addressesWithSchema = new Set(knownAddresses)
+      addressesWithSchema.add(addresses.WAF_CONTEXT_PROCESSOR)
+      const context = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', addressesWithSchema, true)
+
+      context.run({ persistent: { [addresses.WAF_CONTEXT_PROCESSOR]: { 'extract-schema': true } } })
+
+      assert.strictEqual(context.canSkipEmptyGraphqlResolvers(), true)
+    })
+  })
+
   it('Should send HTTP_INCOMING_QUERY only once', () => {
     const ddwafContext = {
       run: sinon.stub().returns({

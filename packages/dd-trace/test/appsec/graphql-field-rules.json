@@ -1,0 +1,21 @@
+{
+  "version": "2.2",
+  "rules": [
+    {
+      "id": "block-graphql-author",
+      "name": "Block the author field",
+      "tags": { "type": "security_scanner", "category": "attack_attempt" },
+      "conditions": [
+        {
+          "operator": "phrase_match",
+          "parameters": {
+            "inputs": [{ "address": "graphql.server.resolver" }],
+            "list": ["author"]
+          }
+        }
+      ],
+      "transformers": ["keys_only"],
+      "on_match": ["block"]
+    }
+  ]
+}
