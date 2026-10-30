@@ -12,6 +12,7 @@ const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to 
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const log = require('../log')
+const { warn } = require('../log/writer')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
@@ -25,6 +26,7 @@ const {
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
+const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -124,6 +126,8 @@ const changeTracker = {
  */
 function undo (config, source) {
   for (const name of changeTracker[source]) {
+    if (trackedConfigOrigins.get(name) !== source) continue
+
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
@@ -199,6 +203,12 @@ class Config extends ConfigBase {
   #parsedDdTags
 
   /**
+   * Options already explained as deactivated, so recalculating the config doesn't repeat the explanation
+   * @type {Set<ConfigPath>}
+   */
+  #explainedDeactivations = new Set()
+
+  /**
    * @type {Record<string, string>}
    */
   get parsedDdTags () {
@@ -248,9 +258,9 @@ class Config extends ConfigBase {
     const { experimental, ...rest } = options
     if (experimental) {
       // @ts-expect-error - Difficult to type this correctly.
-      this.#applyOptions(experimental, 'code', 'experimental')
+      this.#applyOptions(experimental, 'experimental')
     }
-    this.#applyOptions(rest, 'code')
+    this.#applyOptions(rest)
     this.#applyCalculated()
 
     warnWrongOtelSettings()
@@ -280,10 +290,9 @@ class Config extends ConfigBase {
 
   /**
    * @param {TracerOptions} options
-   * @param {'code'} source
    * @param {string} [root]
    */
-  #applyOptions (options, source, root = '') {
+  #applyOptions (options, root = '') {
     for (const [name, value] of Object.entries(options)) {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
@@ -300,7 +309,7 @@ class Config extends ConfigBase {
             // Defining an option that receives an object as value may not contain a property that is also
             // potentially a nested property!
             if (Object.hasOwn(value, nestedProperty)) {
-              this.#applyOptions(value, source, fullName)
+              this.#applyOptions(value, fullName)
               matched = true
               break
             }
@@ -316,7 +325,7 @@ class Config extends ConfigBase {
             // TracePropagationStyle is special. It is a single option that is used to set both inject and extract.
             // TODO: Consider what to do with this later
             // @ts-expect-error - Difficult to type this correctly.
-            this.#applyOptions({ inject: value, extract: value }, source, 'tracePropagationStyle')
+            this.#applyOptions({ inject: value, extract: value }, 'tracePropagationStyle')
           } else {
             log.warn('Unknown option %s with value %o', fullName, value)
           }
@@ -325,12 +334,12 @@ class Config extends ConfigBase {
       }
       const coerced = programmaticTypeCoercions[entry.type](value)
       if (coerced === undefined && value !== undefined) {
-        warnInvalidValue(value, fullName, source, `Invalid ${entry.type} input`)
+        warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
       }
       const transformed = coerced !== undefined && entry.transformer
-        ? entry.transformer(coerced, fullName, source)
+        ? entry.transformer(coerced, fullName, 'code')
         : coerced
-      setAndTrack(this, entry.property ?? name, transformed, value, source)
+      setAndTrack(this, entry.property ?? name, transformed, value, 'code')
     }
   }
 
@@ -638,6 +647,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
+    if (this.isCiVisibility) {
+      // Test Optimization reports its metrics through instrumentation telemetry, not DogStatsD.
+      set(this, 'dogstatsd', undefined)
+      setAndTrack(this, 'runtimeMetrics.enabled', false)
+    }
+
     const isTestOptimizationWorker = this.isCiVisibility &&
       TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (isTestOptimizationWorker) {
@@ -749,10 +764,41 @@ class Config extends ConfigBase {
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
     }
 
+    const unsupportedRuntime = getUnsupportedRuntime()
+    if (unsupportedRuntime !== undefined) {
+      this.#deactivateOnUnsupportedRuntime(
+        'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED',
+        `Live Debugger/Dynamic Instrumentation is disabled, because it is not supported on ${unsupportedRuntime}.`
+      )
+      this.#deactivateOnUnsupportedRuntime(
+        'testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED',
+        'Failed Test Replay is disabled, ' +
+          `because Live Debugger/Dynamic Instrumentation is not supported on ${unsupportedRuntime}.`
+      )
+    }
+
     // Single tags update is tracked as a calculated value.
     setAndTrack(this, 'tags', this.tags)
 
     telemetry.updateConfig([...configWithOrigin.values()], this)
+  }
+
+  /**
+   * Only explains the deactivation of an option that was explicitly set, since Failed Test Replay is enabled by
+   * default.
+   *
+   * @param {ConfigPath} name
+   * @param {string} reason
+   */
+  #deactivateOnUnsupportedRuntime (name, reason) {
+    if (!get(this, name)) return
+
+    if (this.startupLogs && trackedConfigOrigins.has(name) && !this.#explainedDeactivations.has(name)) {
+      this.#explainedDeactivations.add(name)
+      // `log.warn` only prints with debug logging enabled, so write the diagnostic like the startup logs do
+      warn(`DATADOG TRACER DIAGNOSTIC - ${reason}`)
+    }
+    setAndTrack(this, name, false)
   }
 }
 

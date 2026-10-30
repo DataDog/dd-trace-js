@@ -2,14 +2,18 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 
-const { describe, it } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const msgpack = require('@msgpack/msgpack')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
+const { AgentlessCiVisibilityEncoder } = require('../../../src/encode/agentless-ci-visibility')
+const id = require('../../../src/id')
 
 const cachedExecStub = sinon.stub().returns('')
 
@@ -18,6 +22,7 @@ const {
   CI_ENV_VARS,
   CI_NODE_LABELS,
   GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
   GIT_COMMIT_HEAD_SHA,
   PR_NUMBER,
@@ -30,6 +35,7 @@ const freshConfig = () => {
 }
 
 const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
+  'node:child_process': { execFileSync: cachedExecStub },
   './git-cache': {
     cachedExec: cachedExecStub,
   },
@@ -41,7 +47,7 @@ const { getCIMetadata } = ciModule
 const userProvidedGit = proxyquire('../../../src/plugins/util/user-provided-git', {
   '../../config': freshConfig,
 })
-const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
+const { getTestEnvironmentMetadata, getTestLevelsMetadataTags } = proxyquire('../../../src/plugins/util/test', {
   './ci': ciModule,
   './git': {
     getGitMetadata,
@@ -49,7 +55,344 @@ const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/tes
   './user-provided-git': userProvidedGit,
 })
 
+describe('Test Parallelization environment metadata', () => {
+  let originalEnv, directory, metadataPath, cwdStub, readFileStub
+  const planTags = {
+    'test.parallelization.plan.provider.name': 'plan-provider_name',
+    'test.parallelization.plan.pipeline.id': 'plan-pipeline_id',
+    'test.parallelization.plan.pipeline.name': 'plan-pipeline_name',
+    'test.parallelization.plan.pipeline.display_name': 'plan-pipeline_display_name',
+    'test.parallelization.plan.pipeline.number': 'plan-pipeline_number',
+    'test.parallelization.plan.pipeline.url': 'https://gitlab.com/plan/pipeline_url',
+    'test.parallelization.plan.job.id': 'plan-job_id',
+    'test.parallelization.plan.job.name': 'plan-job_name',
+    'test.parallelization.plan.job.url': 'https://gitlab.com/plan/job_url',
+    'test.parallelization.plan.stage.name': 'plan-stage_name',
+    'test.parallelization.plan.custom': 'planner-defined-value',
+  }
+
+  beforeEach(() => {
+    originalEnv = process.env
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ddtest-plan-metadata-'))
+    process.env = {
+      GITLAB_CI: 'true',
+      CI_JOB_ID: 'run-job-789',
+      CI_JOB_NAME: 'tests',
+      CI_JOB_URL: 'https://gitlab.com/project/-/jobs/789',
+      CI_PIPELINE_ID: 'run-pipeline-456',
+      CI_PIPELINE_URL: 'https://gitlab.com/project/-/pipelines/456',
+    }
+    const planDirectory = path.join(directory, '.testoptimization')
+    fs.mkdirSync(planDirectory)
+    metadataPath = path.join(planDirectory, 'plan-metadata.json')
+    fs.writeFileSync(metadataPath, JSON.stringify({ tags: planTags }))
+    cwdStub = sinon.stub(process, 'cwd').returns(directory)
+  })
+
+  afterEach(() => {
+    readFileStub?.restore()
+    readFileStub = undefined
+    cwdStub.restore()
+    process.env = originalEnv
+    fs.rmSync(directory, { recursive: true, force: true })
+  })
+
+  it('keeps the planning and execution jobs distinct on every test level without an HTTP cache', () => {
+    process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    const expectedPlanTags = {
+      'test.parallelization.enabled': 'true',
+      'test.parallelization.plan.provider.name': 'plan-provider_name',
+      'test.parallelization.plan.pipeline.id': 'plan-pipeline_id',
+      'test.parallelization.plan.pipeline.name': 'plan-pipeline_name',
+      'test.parallelization.plan.pipeline.display_name': 'plan-pipeline_display_name',
+      'test.parallelization.plan.pipeline.number': 'plan-pipeline_number',
+      'test.parallelization.plan.pipeline.url': 'https://gitlab.com/plan/pipeline_url',
+      'test.parallelization.plan.job.id': 'plan-job_id',
+      'test.parallelization.plan.job.name': 'plan-job_name',
+      'test.parallelization.plan.job.url': 'https://gitlab.com/plan/job_url',
+      'test.parallelization.plan.stage.name': 'plan-stage_name',
+      'test.parallelization.plan.custom': 'planner-defined-value',
+    }
+    assertObjectContains(metadata, {
+      ...expectedPlanTags,
+      'ci.job.id': 'run-job-789',
+      'ci.job.name': 'tests',
+      'ci.job.url': 'https://gitlab.com/project/-/jobs/789',
+      'ci.pipeline.id': 'run-pipeline-456',
+    })
+    const testLevelsTags = getTestLevelsMetadataTags(metadata)
+    assertObjectContains(testLevelsTags, expectedPlanTags)
+
+    const encoder = new AgentlessCiVisibilityEncoder({ flush () {} }, { tags: {} })
+    encoder.addMetadataTags({ test_levels: testLevelsTags })
+    const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
+    for (const type of eventTypes) {
+      encoder.encode([{
+        trace_id: id('1234abcd1234abcd'),
+        span_id: id('1234abcd1234abcd'),
+        parent_id: id('1234abcd1234abcd'),
+        type,
+        name: 'mocha.test',
+        resource: 'example',
+        service: 'example',
+        error: 0,
+        start: 0,
+        duration: 1,
+        meta: { ...metadata },
+        metrics: {},
+      }])
+    }
+    const payload = msgpack.decode(encoder.makePayload(), { useBigInt64: true })
+    assert.deepStrictEqual(payload.events.map(({ type }) => type), eventTypes)
+    for (const event of payload.events) {
+      assertObjectContains({ ...payload.metadata.test_levels, ...event.content.meta }, {
+        ...expectedPlanTags,
+        'ci.job.id': 'run-job-789',
+      })
+    }
+  })
+
+  for (const enabled of [undefined, '', 'false', '0', 'invalid']) {
+    it(`does not read the artifact when parallelization is ${String(enabled)}`, () => {
+      if (enabled !== undefined) process.env._DD_TEST_PARALLELIZATION_ENABLED = enabled
+      process.env._DD_TEST_PARALLELIZATION_METADATA_FILE = metadataPath
+      readFileStub = sinon.stub(fs, 'readFileSync').callThrough()
+      const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+      assert.deepStrictEqual(Object.keys(metadata).filter(key => key.startsWith('test.parallelization.')), [])
+      sinon.assert.neverCalledWith(readFileStub, metadataPath)
+    })
+  }
+
+  it('does not enable parallelization from the former public marker', () => {
+    process.env.DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    assert.deepStrictEqual(Object.keys(metadata).filter(key => key.startsWith('test.parallelization.')), [])
+  })
+
+  for (const enabled of ['true', 'TRUE', '1']) {
+    it(`supports ${enabled} when the file is missing`, () => {
+      fs.unlinkSync(metadataPath)
+      process.env._DD_TEST_PARALLELIZATION_ENABLED = enabled
+      const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+      assert.deepStrictEqual(getTestLevelsMetadataTags(metadata), {
+        'test.parallelization.enabled': 'true',
+        'ci.job.id': 'run-job-789',
+        'ci.job.name': 'tests',
+        'ci.job.url': 'https://gitlab.com/project/-/jobs/789',
+        'ci.pipeline.id': 'run-pipeline-456',
+        'ci.pipeline.url': 'https://gitlab.com/project/-/pipelines/456',
+        'ci.provider.name': 'gitlab',
+      })
+    })
+  }
+
+  for (const content of [
+    '{invalid json', 'null', '[]', '{}', '{"tags":null}', '{"tags":[]}', '{"tags":"invalid"}',
+    '{"tags":{"test.parallelization.plan.job.id":"plan-123","test.parallelization.plan.job.name":42}}',
+    '{"ciTags":{"ci.job.id":"old-schema"}}',
+  ]) {
+    it(`keeps only the enabled tag for malformed metadata: ${content}`, () => {
+      process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+      fs.writeFileSync(metadataPath, content)
+      const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+      assert.deepStrictEqual(
+        Object.fromEntries(Object.entries(metadata).filter(([key]) => key.startsWith('test.parallelization.'))),
+        { 'test.parallelization.enabled': 'true' }
+      )
+      assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
+    })
+  }
+
+  it('keeps the enabled tag when the file cannot be read', () => {
+    process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    readFileStub = sinon.stub(fs, 'readFileSync').callThrough()
+    readFileStub.withArgs(metadataPath).throws(Object.assign(new Error('access denied'), { code: 'EACCES' }))
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    assert.strictEqual(metadata['test.parallelization.enabled'], 'true')
+    assert.strictEqual(metadata['test.parallelization.plan.job.id'], undefined)
+    assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
+  })
+
+  for (const locator of ['TEST_OPTIMIZATION_MANIFEST_FILE', 'DD_TEST_OPTIMIZATION_MANIFEST_FILE']) {
+    it(`finds the planning file through ${locator} from a different working directory`, () => {
+      process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+      process.env[locator] = path.join(path.dirname(metadataPath), 'manifest.txt')
+      cwdStub.returns(path.join(directory, 'test-worker'))
+      const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+      assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'plan-job_id')
+    })
+  }
+
+  for (const locator of ['TEST_OPTIMIZATION_MANIFEST_FILE', 'DD_TEST_OPTIMIZATION_MANIFEST_FILE']) {
+    it(`reads the explicit metadata file independently of a custom ${locator} and working directory`, () => {
+      process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+      process.env._DD_TEST_PARALLELIZATION_METADATA_FILE = metadataPath
+      process.env[locator] = path.join(directory, 'custom-cache', 'manifest.txt')
+      cwdStub.returns(path.join(directory, 'test-worker'))
+      const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+      assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'plan-job_id')
+      assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
+    })
+  }
+
+  it('uses the explicit metadata file instead of another plan beside a custom manifest', () => {
+    process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    process.env._DD_TEST_PARALLELIZATION_METADATA_FILE = metadataPath
+    const otherPlan = path.join(directory, 'other-plan')
+    fs.mkdirSync(otherPlan)
+    fs.writeFileSync(path.join(otherPlan, 'plan-metadata.json'), JSON.stringify({
+      tags: { 'test.parallelization.plan.job.id': 'wrong-plan' },
+    }))
+    process.env.TEST_OPTIMIZATION_MANIFEST_FILE = path.join(otherPlan, 'manifest.txt')
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'plan-job_id')
+  })
+
+  for (const failure of ['missing', 'corrupt']) {
+    it(`keeps only the enabled tag when the explicit file is ${failure}, despite another readable artifact`, () => {
+      process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+      const explicitMetadata = path.join(directory, 'explicit-plan-metadata.json')
+      process.env._DD_TEST_PARALLELIZATION_METADATA_FILE = explicitMetadata
+      if (failure === 'corrupt') fs.writeFileSync(explicitMetadata, '{invalid json')
+      const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+      assert.strictEqual(metadata['test.parallelization.enabled'], 'true')
+      assert.strictEqual(metadata['test.parallelization.plan.job.id'], undefined)
+      assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
+    })
+  }
+
+  for (const locator of ['TEST_OPTIMIZATION_MANIFEST_FILE', 'DD_TEST_OPTIMIZATION_MANIFEST_FILE']) {
+    for (const runfilesSource of ['RUNFILES_DIR', 'RUNFILES_MANIFEST_FILE', 'TEST_SRCDIR']) {
+      it(`resolves a Bazel runfile through ${runfilesSource} and ${locator}`, () => {
+        process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+        const logicalManifest = 'workspace/.testoptimization/manifest.txt'
+        const runfilesRoot = path.join(directory, 'runfiles with spaces')
+        const artifactDirectory = path.join(runfilesRoot, 'workspace', '.testoptimization')
+        fs.mkdirSync(artifactDirectory, { recursive: true })
+        fs.writeFileSync(path.join(artifactDirectory, 'manifest.txt'), '1\n')
+        fs.copyFileSync(metadataPath, path.join(artifactDirectory, 'plan-metadata.json'))
+        process.env[locator] = logicalManifest
+        if (runfilesSource === 'RUNFILES_MANIFEST_FILE') {
+          const runfilesManifest = path.join(directory, 'RUNFILES_MANIFEST')
+          fs.writeFileSync(runfilesManifest, [
+            'malformed',
+            ' unmatched-entry',
+            'other-workspace/file.txt ignored',
+            `${logicalManifest} `,
+            `${logicalManifest} ${path.join(artifactDirectory, 'manifest.txt')}`,
+            '',
+          ].join('\n'))
+          process.env.RUNFILES_MANIFEST_FILE = runfilesManifest
+        } else {
+          process.env[runfilesSource] = runfilesRoot
+        }
+        cwdStub.returns(path.join(directory, 'test-worker'))
+        const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+        assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'plan-job_id')
+        assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
+      })
+    }
+  }
+
+  it('falls back to TEST_SRCDIR when the runfiles manifest cannot be read', () => {
+    process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    const artifactDirectory = path.join(directory, 'workspace', '.testoptimization')
+    fs.mkdirSync(artifactDirectory, { recursive: true })
+    fs.writeFileSync(path.join(artifactDirectory, 'manifest.txt'), '1\n')
+    fs.copyFileSync(metadataPath, path.join(artifactDirectory, 'plan-metadata.json'))
+    const runfilesManifest = path.join(directory, 'RUNFILES_MANIFEST')
+    fs.writeFileSync(runfilesManifest, '')
+    process.env.TEST_OPTIMIZATION_MANIFEST_FILE = 'workspace/.testoptimization/manifest.txt'
+    process.env.RUNFILES_DIR = path.join(directory, 'missing-runfiles')
+    process.env.RUNFILES_MANIFEST_FILE = runfilesManifest
+    process.env.TEST_SRCDIR = directory
+    readFileStub = sinon.stub(fs, 'readFileSync').callThrough()
+    readFileStub.withArgs(runfilesManifest).throws(Object.assign(new Error('access denied'), { code: 'EACCES' }))
+    cwdStub.returns(path.join(directory, 'test-worker'))
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'plan-job_id')
+  })
+
+  it('keeps only the enabled tag when a logical runfile cannot be resolved', () => {
+    process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    process.env.TEST_OPTIMIZATION_MANIFEST_FILE = 'missing-workspace/.testoptimization/manifest.txt'
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    assert.strictEqual(metadata['test.parallelization.enabled'], 'true')
+    assert.strictEqual(metadata['test.parallelization.plan.job.id'], undefined)
+    assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
+  })
+
+  it('prefers the explicit manifest location over an unrelated local artifact', () => {
+    process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    const otherPlan = path.join(directory, 'other-plan')
+    fs.mkdirSync(otherPlan)
+    fs.writeFileSync(path.join(otherPlan, 'plan-metadata.json'), JSON.stringify({
+      tags: { 'test.parallelization.plan.job.id': 'other-plan' },
+    }))
+    process.env.TEST_OPTIMIZATION_MANIFEST_FILE = path.join(otherPlan, 'manifest.txt')
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    assert.strictEqual(metadata['test.parallelization.plan.job.id'], 'other-plan')
+  })
+
+  it('omits empty and out-of-namespace tags, and ignores former metadata environment variables', () => {
+    process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+    process.env._DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'stale-plan'
+    process.env.DD_TEST_PARALLELIZATION_PLAN_JOB_ID = 'stale-public-plan'
+    fs.writeFileSync(metadataPath, JSON.stringify({
+      tags: {
+        'test.parallelization.plan.job.name': 'plan',
+        'test.parallelization.plan.job.id': '',
+        'test.parallelization.plan.': 'bare-prefix',
+        'test.parallelization.plans.job.id': 'incorrect-prefix',
+        'test.parallelization.enabled': 'false',
+        'ci.job.id': 'must-not-override-worker',
+        'ci.workspace_path': '/private/workspace',
+        DD_API_KEY: 'must-not-be-a-tag',
+      },
+    }))
+    const metadata = getTestEnvironmentMetadata('mocha', undefined, true)
+    const parallelization = Object.fromEntries(
+      Object.entries(metadata).filter(([key]) => key.startsWith('test.parallelization.'))
+    )
+    assert.deepStrictEqual(parallelization, {
+      'test.parallelization.enabled': 'true',
+      'test.parallelization.plan.job.name': 'plan',
+    })
+    assert.strictEqual(metadata['ci.job.id'], 'run-job-789')
+    assert.strictEqual(metadata.DD_API_KEY, undefined)
+    assert.strictEqual(metadata['ci.workspace_path'], undefined)
+  })
+})
+
 describe('test environment data', () => {
+  for (const userProvidedBase of [undefined, 'user-base']) {
+    it(`prepares the effective PR diff base from ${userProvidedBase ? 'user metadata' : 'CI metadata'}`, () => {
+      const getGitMetadata = sinon.stub().returns({})
+      const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
+        './ci': {
+          getCIMetadata: () => ({
+            [GIT_COMMIT_HEAD_SHA]: 'head-sha',
+            [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: 'ci-base',
+          }),
+        },
+        './git': { getGitMetadata, getGitInformationDiscrepancy: () => ({}) },
+        './user-provided-git': {
+          getUserProviderGitMetadata: () => userProvidedBase
+            ? { [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: userProvidedBase }
+            : {},
+        },
+      })
+
+      getTestEnvironmentMetadata()
+
+      sinon.assert.calledOnceWithMatch(getGitMetadata, {
+        headCommitSha: 'head-sha',
+        pullRequestBaseBranchSha: userProvidedBase || 'ci-base',
+      })
+    })
+  }
+
   it('getTestEnvironmentMetadata can include service name', () => {
     const tags = getTestEnvironmentMetadata('jest', { service: 'service-name' })
     assertObjectContains(tags, { 'service.name': 'service-name' })

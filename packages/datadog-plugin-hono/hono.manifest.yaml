@@ -1,0 +1,10 @@
+_v: 1
+name: hono
+display_name: Hono
+description: Instruments Hono HTTP request handling, routing, middleware execution, and error reporting on Node.js.
+packages:
+- name: hono
+category:
+- http.server
+systems: []
+creation_date: '2025-07-09'

@@ -10,6 +10,7 @@ const proxyquire = require('proxyquire')
 const { channel } = require('dc-polyfill')
 
 require('../setup/core')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { HTTP_STATUS_CODE } = require('../../../../ext/tags')
 const { getConfigFresh } = require('../helpers/config')
 const id = require('../../src/id')
@@ -515,6 +516,65 @@ describe('OpenTelemetry Traces', () => {
         [otlpSpans[0].name, otlpSpans[1].name],
         ['/api/first', '/api/second']
       )
+    })
+
+    describe('resource attribute deduplication', () => {
+      it('omits span tags the resource carries with the same value', () => {
+        const transformer = new OtlpTraceTransformer({ team: 'core', region: 'us1' })
+        const span = createMockSpan({
+          meta: { 'span.kind': 'server', 'http.method': 'GET', team: 'core', region: 'us1' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const { resource, scopeSpans } = decoded.resourceSpans[0]
+        const spanAttrs = extractAttrs(scopeSpans[0].spans[0].attributes)
+
+        assertObjectContains(extractAttrs(resource.attributes), { team: 'core', region: 'us1' })
+        assert.strictEqual(spanAttrs['http.method'], 'GET')
+        assert.ok(!('team' in spanAttrs))
+        assert.ok(!('region' in spanAttrs))
+      })
+
+      it('keeps span tags whose value differs from the resource', () => {
+        const transformer = new OtlpTraceTransformer({ team: 'core', region: 'us1' })
+        const span = createMockSpan({ meta: { team: 'core', region: 'eu1' } })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const spanAttrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
+
+        assert.strictEqual(spanAttrs.region, 'eu1')
+        assert.ok(!('team' in spanAttrs))
+      })
+
+      it('keeps env and version span tags, which the resource carries under OTel keys', () => {
+        const transformer = new OtlpTraceTransformer({
+          'deployment.environment.name': 'prod',
+          'service.version': '1.0.0',
+        })
+        const span = createMockSpan({ meta: { env: 'prod', version: '1.0.0' } })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const spanAttrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
+
+        assertObjectContains(spanAttrs, { env: 'prod', version: '1.0.0' })
+      })
+
+      it('compares against the resource attributes after an update', () => {
+        const transformer = new OtlpTraceTransformer({ 'runtime-id': 'initial-id' })
+        transformer.updateResourceAttributes({ 'runtime-id': 'refreshed-id' })
+
+        const spans = [
+          createMockSpan({ meta: { 'runtime-id': 'refreshed-id' } }),
+          createMockSpan({ meta: { 'runtime-id': 'initial-id' }, span_id: id('bbbbbbbbbbbbbbbb') }),
+        ]
+
+        const decoded = decodePayload(transformer.transformSpans(spans))
+        const [refreshedAttrs, staleAttrs] = decoded.resourceSpans[0].scopeSpans[0].spans
+          .map(span => extractAttrs(span.attributes))
+
+        assert.ok(!('runtime-id' in refreshedAttrs))
+        assert.strictEqual(staleAttrs['runtime-id'], 'initial-id')
+      })
     })
 
     describe('128-bit trace ID handling', () => {

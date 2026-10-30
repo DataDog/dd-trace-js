@@ -1,10 +1,23 @@
 'use strict'
 
-const { HTTP_CLIENT_IP, HTTP_USERAGENT, NETWORK_CLIENT_IP, SERVICE_NAME } = require('../../../../ext/tags')
+const {
+  ERROR,
+  HTTP_CLIENT_IP,
+  HTTP_USERAGENT,
+  MANUAL_DROP,
+  MANUAL_KEEP,
+  NETWORK_CLIENT_IP,
+  RESOURCE_NAME,
+  SAMPLING_PRIORITY,
+  SERVICE_NAME,
+  SPAN_KIND,
+  SPAN_TYPE,
+} = require('../../../../ext/tags')
 const createRfdc = require('../../../../vendor/dist/rfdc')
 const clone = createRfdc({ proto: false, circles: false })
 const { USER_ID, USER_SESSION_ID } = require('../appsec/addresses')
 const { getActiveRequest } = require('../appsec/store')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, PROCESS_ID, SAMPLING_PRIORITY_KEY } = require('../constants')
 const { MAX_META_KEY_LENGTH, MAX_META_VALUE_LENGTH } = require('../encode/tags-processors')
 const log = require('../log')
 const { keepTrace } = require('../priority_sampler')
@@ -23,6 +36,12 @@ const ALLOW = 'ALLOW'
 /** @typedef {import('../opentracing/span')} Span */
 
 /**
+ * @typedef {object} ExtraEntry
+ * @property {string} key
+ * @property {unknown} value
+ */
+
+/**
  * @typedef {object} EvaluationResponse
  * @property {string} action
  * @property {string|undefined} reason
@@ -32,6 +51,8 @@ const ALLOW = 'ALLOW'
  * @property {boolean} hasTagProbabilities
  * @property {boolean} blockingEnabled
  * @property {unknown} redactionReplacements
+ * @property {ExtraEntry[]} extraTags
+ * @property {ExtraEntry[]} extraMetastruct
  */
 
 /**
@@ -42,6 +63,8 @@ const ALLOW = 'ALLOW'
  * @property {boolean} shouldBlock
  * @property {boolean} hasTagProbabilities
  * @property {{ enabled: boolean, applied: boolean, failures: number }} redaction
+ * @property {ExtraEntry[]} extraTags
+ * @property {ExtraEntry[]} extraMetastruct
  */
 
 /**
@@ -70,6 +93,38 @@ const ALLOW = 'ALLOW'
  */
 function isRecord (value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+// Shared by every evaluation without extra entries, so the common case allocates nothing.
+const NO_EXTRA_ENTRIES = /** @type {ExtraEntry[]} */ (/** @type {unknown} */ (Object.freeze([])))
+
+/**
+ * Normalizes a backend extra field into well-formed key/value entries. The backend sends lists of
+ * entries rather than objects because the dotted keys are not valid JSON:API member names. Values
+ * are kept as-is: which of them reach the span is decided when they are applied.
+ *
+ * @param {string} field
+ * @param {unknown} entries
+ * @returns {ExtraEntry[]}
+ */
+function normalizeExtraEntries (field, entries) {
+  if (entries === undefined) return NO_EXTRA_ENTRIES
+  if (!Array.isArray(entries)) {
+    log.debug('AI Guard: ignoring %s of type %s', field, entries === null ? 'null' : typeof entries)
+    return NO_EXTRA_ENTRIES
+  }
+
+  const normalized = []
+  for (const entry of entries) {
+    const key = isRecord(entry) ? entry.key : undefined
+    // A __proto__ key is never valid: it cannot become an own property on the span tags or the meta-struct.
+    if (typeof key === 'string' && key.length > 0 && key !== '__proto__') {
+      normalized.push({ key, value: entry.value })
+    } else {
+      log.debug('AI Guard: ignoring malformed %s entry', field)
+    }
+  }
+  return normalized.length === 0 ? NO_EXTRA_ENTRIES : normalized
 }
 
 /**
@@ -171,6 +226,9 @@ function parseEvaluationResponse (body) {
     hasTagProbabilities: isRecord(attributes.tag_probs),
     blockingEnabled: attributes.is_blocking_enabled === true,
     redactionReplacements: attributes.redaction_replacements,
+    // Malformed extra entries are dropped here instead of turning the response into a bad_response.
+    extraTags: normalizeExtraEntries('extra_tags', attributes.extra_tags),
+    extraMetastruct: normalizeExtraEntries('extra_metastruct', attributes.extra_metastruct),
   }
 }
 
@@ -214,6 +272,8 @@ function createEvaluationOutcome (messages, evaluation, options) {
       applied: redaction.redacted,
       failures: redaction.failures,
     },
+    extraTags: evaluation.extraTags,
+    extraMetastruct: evaluation.extraMetastruct,
   }
 }
 
@@ -228,6 +288,86 @@ const SERVICE_ENTRY_TAG_MAPPINGS = [
   [USER_ID, TAGS.USR_ID_TAG_KEY],
   [USER_SESSION_ID, TAGS.USR_SESSION_ID_TAG_KEY],
 ]
+
+// Backend extra tags never override what the tracer computes itself, nor keys that control the
+// span or its trace (sampling, service, resource, error state). Internal _dd keys are covered by
+// isReservedExtraTag instead of being listed here.
+const RESERVED_EXTRA_TAGS = new Set([
+  TAGS.ACTION_TAG_KEY,
+  TAGS.REASON_TAG_KEY,
+  TAGS.TARGET_TAG_KEY,
+  TAGS.TOOL_NAME_TAG_KEY,
+  TAGS.BLOCKED_TAG_KEY,
+  TAGS.REDACTED_TAG_KEY,
+  TAGS.EVENT_TAG_KEY,
+  ...SERVICE_ENTRY_TAG_MAPPINGS.map(([, destinationTag]) => destinationTag),
+  MANUAL_KEEP,
+  MANUAL_DROP,
+  SAMPLING_PRIORITY,
+  SERVICE_NAME,
+  RESOURCE_NAME,
+  SPAN_TYPE,
+  SPAN_KIND,
+  ERROR,
+  ERROR_TYPE,
+  ERROR_MESSAGE,
+  ERROR_STACK,
+  SAMPLING_PRIORITY_KEY,
+  PROCESS_ID,
+  'analytics.event',
+  'language',
+  'runtime-id',
+  'service.version',
+  'version',
+  'env',
+])
+
+/**
+ * Returns whether a backend extra tag key must not be set on the span.
+ *
+ * @param {string} key
+ */
+function isReservedExtraTag (key) {
+  // _dd is the tracer's internal namespace (_dd.*, _dd1.*): the span formatter writes sampling,
+  // top-level and propagation keys there and a span tag with the same key would overwrite them.
+  // This is not an AI Guard namespace filter; the backend owns ai_guard.* keys.
+  return key.startsWith('_dd') || RESERVED_EXTRA_TAGS.has(key)
+}
+
+const RESERVED_EXTRA_META_STRUCT_KEYS = new Set(['messages', 'attack_categories', 'sds', 'tag_probs'])
+
+/**
+ * Copies backend-provided extra_tags to the span and extra_metastruct to the AI Guard meta-struct,
+ * skipping values and keys the span must not receive. Keys are used verbatim and entries are
+ * applied in order, so a repeated key keeps its last value.
+ *
+ * @param {Span} span
+ * @param {EvaluationMetaStruct} metaStruct
+ * @param {ExtraEntry[]} extraTags
+ * @param {ExtraEntry[]} extraMetastruct
+ */
+function applyExtraSpanData (span, metaStruct, extraTags, extraMetastruct) {
+  // The client decodes values with JSON.parse, so a string check and a null check cover every JSON type.
+  for (const { key, value } of extraTags) {
+    if (typeof value !== 'string') {
+      log.debug('AI Guard: ignoring extra_tags entry %s with non-string value', key)
+    } else if (isReservedExtraTag(key)) {
+      log.debug('AI Guard: ignoring reserved extra tag %s', key)
+    } else {
+      span.setTag(key, value)
+    }
+  }
+
+  for (const { key, value } of extraMetastruct) {
+    if (value === undefined || value === null) {
+      log.debug('AI Guard: ignoring extra_metastruct entry %s with null value', key)
+    } else if (RESERVED_EXTRA_META_STRUCT_KEYS.has(key)) {
+      log.debug('AI Guard: ignoring reserved extra_metastruct key %s', key)
+    } else {
+      metaStruct[key] = value
+    }
+  }
+}
 
 class EvaluationReporter {
   #config
@@ -314,6 +454,7 @@ class EvaluationReporter {
     if (result.tags.length > 0) report.metaStruct.attack_categories = result.tags
     if (result.sds.length > 0) report.metaStruct.sds = result.sds
     if (outcome.hasTagProbabilities) report.metaStruct.tag_probs = result.tagProbabilities
+    applyExtraSpanData(report.span, report.metaStruct, outcome.extraTags, outcome.extraMetastruct)
 
     if (redaction.enabled) {
       report.span.setTag(TAGS.REDACTED_TAG_KEY, redaction.applied ? 'true' : 'false')

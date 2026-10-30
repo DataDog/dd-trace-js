@@ -23,13 +23,12 @@ class LLMObsBuffer {
   /**
    * @param {{
    *   events: Record<string, unknown>[],
-   *   size: number,
    *   routing?: { apiKey?: string, site?: string }
    * }} options
    */
-  constructor ({ events, size, routing = {} }) {
+  constructor ({ events, routing = {} }) {
     this.events = events
-    this.size = size
+    this.size = 0
     this.routing = routing
   }
 
@@ -53,7 +52,7 @@ class BaseLLMObsWriter {
     this._eventType = eventType
 
     /** @type {LLMObsBuffer} */
-    this._buffer = new LLMObsBuffer({ events: [], size: 0 })
+    this._buffer = new LLMObsBuffer({ events: [] })
 
     /** @type {import('../../config/config-base')} */
     this._config = config
@@ -92,7 +91,7 @@ class BaseLLMObsWriter {
     const apiKey = routing.apiKey
     let buffer = this.#multiTenantBuffers.get(apiKey)
     if (!buffer) {
-      buffer = new LLMObsBuffer({ events: [], size: 0, routing })
+      buffer = new LLMObsBuffer({ events: [], routing })
       this.#multiTenantBuffers.set(apiKey, buffer)
     }
     return buffer

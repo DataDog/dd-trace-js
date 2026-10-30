@@ -8,7 +8,7 @@ const rootSpan = tracer.startSpan('web.request', {
 
 const childSpan = tracer.startSpan('db.query', {
   childOf: rootSpan,
-  tags: { 'span.kind': 'client', 'db.type': 'postgres' },
+  tags: { 'span.kind': 'client', 'db.type': 'postgres', region: 'eu1' },
 })
 childSpan.finish()
 

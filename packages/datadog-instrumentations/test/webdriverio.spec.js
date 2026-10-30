@@ -249,6 +249,11 @@ describe('webdriverio instrumentation', () => {
     const runOrder = []
     let resolveReplay
     class Runnable {
+      retries (count) {
+        if (arguments.length) this._retries = count
+        return this._retries
+      }
+
       run () {
         runOrder.push('run')
         return 'done'
@@ -1499,6 +1504,27 @@ describe('webdriverio instrumentation', () => {
     assert.notStrictEqual(rewrittenSource, source)
     assert.match(rewrittenSource, /orchestrion:jasmine-core:Spec_execute/)
     assert.match(rewrittenSource, /orchestrion:jasmine-core:Spec_attemptDone/)
+  })
+
+  it('exposes the legacy Jasmine spec when its execution starts', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-jasmine-core-'))
+    const outputPath = path.join(directory, 'jasmine.js')
+    const source = fs.readFileSync(jasmineCoreFixturePath, 'utf8')
+    fs.writeFileSync(outputPath, rewriter.rewrite(source, jasmineCoreFixtureModulePath))
+    const executeCh = tracingChannel('orchestrion:jasmine-core:Spec_execute')
+    let startSelf
+    const onStart = context => { startSelf = context.self }
+    executeCh.start.subscribe(onStart)
+    try {
+      const { Spec } = require(outputPath)
+      const spec = new Spec()
+      spec.execute(onComplete => onComplete(), () => {})
+      // The WebdriverIO Jasmine lifecycle reads the spec here to install retries and test management.
+      assert.strictEqual(startSelf, spec)
+    } finally {
+      executeCh.start.unsubscribe(onStart)
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
   })
 
   for (const [version, fixturePath, modulePath, target] of [

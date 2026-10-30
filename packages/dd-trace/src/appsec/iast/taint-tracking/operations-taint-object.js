@@ -3,9 +3,11 @@
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
 const log = require('../../../log')
+const { typedArrayLength } = require('../../../util')
 const { HTTP_REQUEST_PARAMETER } = require('./source-types')
 
-const SEPARATOR = '\u0000' // Unit Separator (cannot be in URL keys)
+const SEPARATOR = '\0' // Unit Separator (cannot be in URL keys)
+const MAX_TRAVERSED_BINARY_VIEW_LENGTH = 1024
 
 function taintObject (iastContext, object, type) {
   let result = object
@@ -30,6 +32,10 @@ function taintObject (iastContext, object, type) {
           }
         } else if (typeof value === 'object' && !visited.has(value)) {
           visited.add(value)
+
+          // Binary view elements are numbers, but named properties may hold strings. Their keys cannot be listed
+          // without also materializing one key per element, so only small views are walked.
+          if (ArrayBuffer.isView(value) && typedArrayLength(value) > MAX_TRAVERSED_BINARY_VIEW_LENGTH) continue
 
           for (const key of Object.keys(value)) {
             queue.push({ parent: value, property: property ? `${property}.${key}` : key, value: value[key], key })
