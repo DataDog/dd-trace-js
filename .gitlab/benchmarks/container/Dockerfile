@@ -2,7 +2,7 @@
 # sirun publishes no arm64 binary and CPython is pinned to the x86_64 build, so the
 # build-benchmark-ci-images job pins BASE_CI_IMAGE_PLATFORM=linux/amd64 (see
 # .gitlab/benchmarks/gitlab-ci.yml). Pinned to the 24.04 manifest-list digest.
-FROM ubuntu:24.04@sha256:786a8b558f7be160c6c8c4a54f9a57274f3b4fb1491cf65146521ae77ff1dc54
+FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
 
 ARG CI_JOB_TOKEN
 
@@ -42,8 +42,8 @@ RUN if [ -s /tmp/.sirun-version ]; then \
 
 # Node.js majors the benchmark matrix runs (skip 18/22); exact patch from the manifest.
 RUN mkdir -p /usr/local/nvm \
-  && wget -q -O /tmp/nvm-install.sh https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh \
-  && echo "4b7412c49960c7d31e8df72da90c1fb5b8cccb419ac99537b737028d497aba4f  /tmp/nvm-install.sh" | sha256sum -c - \
+  && wget -q -O /tmp/nvm-install.sh https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh \
+  && echo "48a0eee9a60e07422dce0eb5774754c83889570ca1ee2566c516acbe8af03a9e  /tmp/nvm-install.sh" | sha256sum -c - \
   && bash /tmp/nvm-install.sh \
   && rm /tmp/nvm-install.sh \
   && . $NVM_DIR/nvm.sh \
@@ -69,4 +69,6 @@ RUN . $NVM_DIR/nvm.sh \
 WORKDIR /app
 
 # Benchmarking Platform tooling (bp-runner, analyzer, github-tools).
+ENV PATH="/etc/poetry/bin:$PATH"
 RUN --mount=type=ssh bp-install bp-runner benchmark-analyzer github-tools
+RUN python3 -m pip check
