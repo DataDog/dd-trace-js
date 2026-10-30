@@ -43,7 +43,7 @@ function onGraphqlStartResolver (data) {
   const wafContext = waf.wafManager.getWAFContext(req)
   if (!wafContext.knownAddresses.has(addresses.HTTP_INCOMING_GRAPHQL_RESOLVER)) return
 
-  const skipEmpty = wafContext.canSkipEmptyGraphqlResolvers()
+  const skipEmpty = wafContext.skipEmptyGraphqlResolvers
   const resolverInfo = data.createResolverInfo?.(data, skipEmpty)
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 

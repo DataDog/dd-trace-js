@@ -1358,6 +1358,9 @@ function getResolverInfo (info, args, skipEmpty) {
   if (Array.isArray(directives)) {
     for (const directive of directives) {
       if (!directive.arguments?.length) continue
+      if (skipEmpty && directive.arguments.length === 1 &&
+          (directive.name.value === 'include' || directive.name.value === 'skip') &&
+          directive.arguments[0].name.value === 'if' && directive.arguments[0].value.kind === 'BooleanValue') continue
 
       const argList = {}
       for (const argument of directive.arguments) {
