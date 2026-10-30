@@ -66,7 +66,8 @@ function getCallSiteFramesForLocation (callSiteFrames, externallyExcludedPaths) 
 
       if (
         !isExcluded(callsite, externallyExcludedPaths) &&
-        (!filepath.includes(pathLine.ddBasePath) || globalThis.__DD_ESBUILD_IAST_WITH_NO_SM)
+        (pathLine.ddBasePath === undefined || !filepath.includes(pathLine.ddBasePath) ||
+          globalThis.__DD_ESBUILD_IAST_WITH_NO_SM)
       ) {
         clientFrames.push(callsite)
       }
