@@ -1903,7 +1903,7 @@ moduleTypes.forEach(({
       'raw-after', 'raw-before', 'raw-saved', 'raw-detached', 'locked-root', 'locked-root-unchanged',
       'suite-owner', 'suite-root-owner', 'framework-known-root', 'framework-scalar',
       'same-options', 'locked-options', 'assigned-options', 'raw-locked-options',
-      'pre-suite-options', 'queued-detached-options',
+      'pre-suite-options', 'queued-detached-options', 'descriptor-root', 'descriptor-options',
     ]) {
       it(`reconciles observed browser retry snapshots for ${mode}`, async () => {
         const scalar = mode === 'framework-scalar'
@@ -1990,7 +1990,11 @@ moduleTypes.forEach(({
         if (experimental) {
           const retries = config('retries')
           const saved = retries.experimentalOptions
-          if (mode === 'assigned-options') retries.experimentalOptions = saved
+          if (mode === 'descriptor-options') {
+            const descriptor = Object.getOwnPropertyDescriptor(retries, 'experimentalOptions')
+            assert.strictEqual(descriptor.value, state.retries.experimentalOptions)
+            descriptor.value.maxRetries = 3
+          } else if (mode === 'assigned-options') retries.experimentalOptions = saved
           else if (mode === 'raw-locked-options') {
             Object.defineProperty(retries, 'experimentalOptions', { writable: false, configurable: false })
             retries.experimentalOptions.maxRetries = 3
@@ -2002,7 +2006,7 @@ moduleTypes.forEach(({
           }
           if (mode !== 'raw-locked-options') assert.strictEqual(retries.experimentalOptions, saved)
           events['test:before:run']({}, currentTest)
-          assert.strictEqual(currentTest._retries, mode === 'raw-locked-options' ? 3 : 2)
+          assert.strictEqual(currentTest._retries, ['raw-locked-options', 'descriptor-options'].includes(mode) ? 3 : 2)
           return
         }
         if (mode.startsWith('framework-')) {
@@ -2035,7 +2039,13 @@ moduleTypes.forEach(({
           assert.strictEqual(currentTest._retries, 0)
           return
         }
-        if (mode.startsWith('locked-root')) {
+        if (mode === 'descriptor-root') {
+          const descriptor = Object.getOwnPropertyDescriptor(config(), 'retries')
+          assert.strictEqual(descriptor.value, state.retries)
+          assert.strictEqual(descriptor.writable, true)
+          assert.strictEqual(descriptor.configurable, true)
+          descriptor.value.runMode = 3
+        } else if (mode.startsWith('locked-root')) {
           Object.defineProperty(config(), 'retries', { writable: false, configurable: false })
           if (mode === 'locked-root') config().retries.runMode = 3
         } else {
@@ -2158,6 +2168,52 @@ moduleTypes.forEach(({
       Object.defineProperty(config, 'retries', { configurable: false, writable: false })
       assert.strictEqual(observeRetryConfig(config, () => assert.fail('must not observe')), undefined)
       assert.strictEqual(config.retries, frozen)
+    })
+
+    it('serializes returned retry getter values once while retaining IPC arguments', () => {
+      const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+      const calls = []
+      const originalSend = function (...args) {
+        calls.push({ receiver: this, args, wire: JSON.parse(JSON.stringify(args[0])) })
+        return 17
+      }
+      Object.defineProperty(process, 'send', { configurable: true, writable: true, value: originalSend })
+      const config = { retries: 0 }
+      const changes = []
+      const observer = observeRetryConfig(config, value => changes.push(value))
+      try {
+        let reads = 0
+        const getter = () => ++reads
+        const returned = Object.freeze(Object.defineProperty({}, 'retries', { enumerable: true, get: getter }))
+        const extra = { preserved: true }
+        const message = Object.freeze({
+          event: 'setupTestingType:reply',
+          args: Object.freeze([Object.freeze({ setupConfig: returned, extra }), extra]),
+        })
+        const receiver = {}
+        const handle = {}
+        const options = {}
+        const callback = () => {}
+        assert.strictEqual(process.send.call(receiver, message, handle, options, callback), 17)
+        assert.strictEqual(reads, 1)
+        assert.deepStrictEqual(changes, [1])
+        assert.strictEqual(calls.length, 1)
+        assert.strictEqual(calls[0].receiver, receiver)
+        assert.strictEqual(calls[0].args[1], handle)
+        assert.strictEqual(calls[0].args[2], options)
+        assert.strictEqual(calls[0].args[3], callback)
+        assert.strictEqual(calls[0].args[0].args[1], extra)
+        assert.strictEqual(calls[0].args[0].args[0].extra, extra)
+        assert.strictEqual(calls[0].wire.args[0].setupConfig.retries, 1)
+        assert.strictEqual(message.args[0].setupConfig, returned)
+        assert.strictEqual(Object.getOwnPropertyDescriptor(returned, 'retries').get, getter)
+        assert.strictEqual(process.send, originalSend)
+      } finally {
+        observer.stop(false)
+        if (descriptor) Object.defineProperty(process, 'send', descriptor)
+        else delete process.send
+      }
     })
 
     it('observes only the native setup reply and restores IPC identity without changing the message', () => {
@@ -2295,6 +2351,34 @@ moduleTypes.forEach(({
         error => error === afterReconcile)
       assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 1 })
     })
+
+    for (const atrEnabled of [false, true]) {
+      it(`preserves a readonly retry root on first initialization (ATR=${atrEnabled})`, async () => {
+        const native = { runMode: 2, openMode: 0 }
+        const config = { retries: native, version: '16.2.0' }
+        Object.defineProperty(config, 'retries', { writable: false, configurable: false })
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: {
+              getLibraryConfiguration: (config, callback) => callback(null, {
+                isFlakyTestRetriesEnabled: atrEnabled,
+                flakyTestRetriesCount: 4,
+              }),
+            },
+          },
+        }
+        const result = await cypressPlugin.init(tracer, config)
+        assert.notStrictEqual(result, config)
+        assert.strictEqual(config.retries, native)
+        assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').writable, false)
+        assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').configurable, false)
+        assert.deepStrictEqual(native, { runMode: 2, openMode: 0 })
+        assert.deepStrictEqual(JSON.parse(JSON.stringify(result.retries)),
+          { runMode: atrEnabled ? 4 : 2, openMode: 0 })
+        assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 0 })
+      })
+    }
 
     it('reinitializes a reused frozen configuration without changing its native root', async () => {
       const config = { retries: { runMode: 0, openMode: 0 }, version: '12.0.0' }

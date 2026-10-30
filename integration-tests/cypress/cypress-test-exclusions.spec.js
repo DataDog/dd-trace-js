@@ -196,9 +196,9 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'root-deleted', 'root-redefined', 'root-deleted-returned', 'root-deleted-partial', 'root-deleted-alias',
     'open-only', 'returned-open', 'spread-open', 'returned-open-preloaded', 'returned-object-preloaded',
     'browser-partial-before-support', 'saved-reference', 'saved-reference-changed',
-    'after-handoff-equal-preloaded', 'during-init', 'during-init-partial', 'freeze-during-init',
+    'after-handoff-equal-preloaded', 'during-init', 'during-init-partial', 'freeze-during-init', 'readonly-before-init',
     'freeze-retries', 'seal-retries',
-    'returned-experimental', 'returned-experimental-preloaded',
+    'returned-experimental', 'returned-experimental-preloaded', 'returned-getter', 'returned-getter-preloaded',
     'browser-queued-native-before-support',
     'browser-equal-before-support', 'browser-equal-before-support-preloaded',
     'browser-equal-before-support-reuse-preloaded',
@@ -207,6 +207,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
   ]) {
     for (const atrEnabled of [false, true]) {
       const lateExperimental = lateMode.startsWith('returned-experimental')
+      const returnedGetter = lateMode.startsWith('returned-getter')
       const lateTest = lateExperimental && !supportsExperimental ? it.skip : it
       const title = `preserves ${lateMode} native retries after manual plugin initialization (ATR=${atrEnabled})`
       lateTest(title, async () => {
@@ -220,8 +221,8 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           'browser-partial-before-support', 'saved-reference', 'after-handoff-equal-preloaded',
         ].includes(lateMode)
         const expected = {
-          'late native excluded': noRunOverride ? 1 : 3,
-          'late native control': noRunOverride ? 1 : 3,
+          'late native excluded': returnedGetter ? 2 : noRunOverride ? 1 : 3,
+          'late native control': returnedGetter ? 2 : noRunOverride ? 1 : 3,
           'explicit local excluded': 2,
           ...(lateMode.includes('-reuse') && { 'support reuse smoke': 1 }),
         }
@@ -238,7 +239,11 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         childProcess.stdout.on('data', chunk => { output += chunk })
         childProcess.stderr.on('data', chunk => { output += chunk })
         const [nativeExit] = await once(childProcess, 'exit')
-        assert.strictEqual(nativeExit, lateExperimental ? 2 : noRunOverride ? 2 : 0, output)
+        assert.strictEqual(nativeExit, lateExperimental || returnedGetter ? 2 : noRunOverride ? 2 : 0, output)
+        if (returnedGetter) {
+          assert.deepStrictEqual(JSON.parse(readFileSync(join(cwd, 'returned-retry-getter-reads.json'), 'utf8')),
+            { reads: 1 }, output)
+        }
         assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
         rmSync(ledger)
         if (lateMode.includes('-alternate')) {
@@ -250,8 +255,14 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           'returned-open', 'browser-partial-before-support', 'root-deleted', 'root-deleted-partial',
         ].includes(lateMode)
         if (noRunOverride && atrEnabled && !nativeOnlyControl) expected['late native control'] = 3
-        const expectedExit = lateExperimental ? 2 : noRunOverride ? atrEnabled && !nativeOnlyControl ? 1 : 2 : 0
+        const expectedExit = lateExperimental || returnedGetter
+          ? 2
+          : noRunOverride ? atrEnabled && !nativeOnlyControl ? 1 : 2 : 0
         await run('late-native', expectedExit, tests => {
+          if (returnedGetter) {
+            assert.deepStrictEqual(JSON.parse(readFileSync(join(cwd, 'returned-retry-getter-reads.json'), 'utf8')),
+              { reads: 1 })
+          }
           assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
           if (lateMode.includes('-alternate')) {
             assert.deepStrictEqual(JSON.parse(readFileSync(alternateLedger, 'utf8')), { executed: 1 })
@@ -261,7 +272,10 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
             const attempts = named(tests, name)
             assert.strictEqual(attempts.length, count, name)
             assert.strictEqual(attempts.at(-1).meta['test.status'],
-              count === 1 && name !== 'support reuse smoke' ? 'fail' : 'pass', name)
+              (count === 1 && name !== 'support reuse smoke') ||
+                (returnedGetter && name !== 'explicit local excluded' && count < 3)
+                ? 'fail'
+                : 'pass', name)
             if (lateExperimental) {
               assert.strictEqual(attempts.at(-1).meta['test.final_status'],
                 name === 'explicit local excluded' ? 'pass' : 'fail', name)
@@ -435,7 +449,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     }
   }
 
-  for (const mode of ['raw-after', 'raw-before', 'raw-saved', 'raw-detached',
+  for (const mode of ['descriptor-root', 'raw-after', 'raw-before', 'raw-saved', 'raw-detached',
     'locked-root', 'locked-root-reset', 'locked-root-unchanged']) {
     for (const atrEnabled of [false, true]) {
       it(`reconciles ${mode} browser retry object writes (ATR=${atrEnabled})`, async () => {

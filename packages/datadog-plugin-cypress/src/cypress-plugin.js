@@ -905,10 +905,10 @@ class CypressPlugin {
     this.retryConfigObserver?.stop()
     this.retryConfigObserver = undefined
     const isReusedConfig = this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries
-    const retryDescriptor = isReusedConfig && Object.getOwnPropertyDescriptor(cypressConfig, 'retries')
+    const retryDescriptor = Object.getOwnPropertyDescriptor(cypressConfig, 'retries')
     if (retryDescriptor && 'value' in retryDescriptor && !retryDescriptor.writable) {
-      // Interactive runs may reuse the user's frozen setup result. Work on a
-      // private copy while keeping that external data property read-only.
+      // Setup may make the retry root read-only before initial or repeated use.
+      // Work on a private copy without changing the external data property.
       cypressConfig = { ...cypressConfig }
     }
     if (isReusedConfig) {

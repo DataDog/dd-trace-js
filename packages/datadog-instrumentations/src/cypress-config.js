@@ -253,14 +253,16 @@ function mergeReturnedConfig (config, updatedConfig) {
   }
 
   const mergedConfig = { ...config }
+  // Retain the values already read for the reply, rather than invoking user getters again at IPC.
+  const returnedConfig = { ...updatedConfig }
 
-  for (const [key, value] of Object.entries(updatedConfig)) {
+  for (const [key, value] of Object.entries(returnedConfig)) {
     mergedConfig[key] = isPlainObject(value) && isPlainObject(mergedConfig[key])
       ? mergeReturnedConfig(mergedConfig[key], value)
       : value
   }
 
-  Object.defineProperty(mergedConfig, Symbol.for('dd-trace.cypress.returned-config'), { value: updatedConfig })
+  Object.defineProperty(mergedConfig, Symbol.for('dd-trace.cypress.returned-config'), { value: returnedConfig })
   return mergedConfig
 }
 

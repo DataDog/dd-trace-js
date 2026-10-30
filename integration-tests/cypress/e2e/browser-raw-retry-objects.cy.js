@@ -6,12 +6,15 @@ const { noAutoRetry } = require('dd-trace/test-optimization')
 const { getTestEnvironment } = require('../support/test-environment')
 const mode = getTestEnvironment('EXCLUSIONS_MODE')
 const modes = [
-  'raw-after', 'raw-before', 'raw-saved', 'raw-detached', 'locked-root', 'locked-root-reset', 'locked-root-unchanged',
+  'descriptor-root', 'raw-after', 'raw-before', 'raw-saved', 'raw-detached',
+  'locked-root', 'locked-root-reset', 'locked-root-unchanged',
 ]
 if (!modes.includes(mode)) throw new Error(`unknown raw retry mode: ${mode}`)
 const executions = {}
 
-if (mode.startsWith('locked-root')) {
+if (mode === 'descriptor-root') {
+  Object.getOwnPropertyDescriptor(Cypress.config(), 'retries').value.runMode = 3
+} else if (mode.startsWith('locked-root')) {
   Object.defineProperty(Cypress.config(), 'retries', { writable: false, configurable: false })
   if (mode !== 'locked-root-unchanged') Cypress.config().retries.runMode = 3
   if (mode === 'locked-root-reset') {
