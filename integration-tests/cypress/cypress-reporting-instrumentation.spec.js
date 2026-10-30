@@ -4185,3 +4185,87 @@ moduleTypes.forEach(({
     })
   })
 }
+
+describe('Cypress exclusions CI partitioning', () => {
+  const createExclusionsShard = require('./exclusions-shard')
+
+  it('retains the original unsharded declaration interface', () => {
+    const original = () => {}
+    const previous = process.env.CYPRESS_EXCLUSIONS_SHARD
+    delete process.env.CYPRESS_EXCLUSIONS_SHARD
+    try {
+      for (const selection of [undefined, '', '1/1']) {
+        assert.strictEqual(createExclusionsShard(original, selection), original)
+      }
+    } finally {
+      if (previous === undefined) delete process.env.CYPRESS_EXCLUSIONS_SHARD
+      else process.env.CYPRESS_EXCLUSIONS_SHARD = previous
+    }
+  })
+
+  it('uses the dedicated CI selection when no explicit selection is supplied', () => {
+    const original = sinon.stub()
+    const previous = process.env.CYPRESS_EXCLUSIONS_SHARD
+    process.env.CYPRESS_EXCLUSIONS_SHARD = '2/2'
+    try {
+      const declaration = createExclusionsShard(original)
+      declaration('first', () => {})
+      declaration('second', () => {})
+      sinon.assert.calledOnce(original)
+      assert.strictEqual(original.firstCall.args[0], 'second')
+    } finally {
+      if (previous === undefined) delete process.env.CYPRESS_EXCLUSIONS_SHARD
+      else process.env.CYPRESS_EXCLUSIONS_SHARD = previous
+    }
+  })
+
+  it('declares every case once across eight shards, retaining explicit pending cases', () => {
+    const all = []
+    const callbacks = Array.from({ length: 37 }, () => () => {})
+    for (let shard = 1; shard <= 8; shard++) {
+      const declarations = []
+      const nativeIt = (title, callback) => declarations.push({ title, callback, pending: false })
+      nativeIt.skip = (title, callback) => declarations.push({ title, callback, pending: true })
+      const declaration = createExclusionsShard(nativeIt, `${shard}/8`)
+      for (let index = 0; index < callbacks.length; index++) {
+        const method = [2, 9, 16, 28].includes(index) ? declaration.skip : declaration
+        method(`case-${index}`, callbacks[index])
+      }
+      assert.ok(declarations.length > 0)
+      for (const entry of declarations) {
+        const index = Number(entry.title.slice(5))
+        assert.strictEqual(entry.callback, callbacks[index])
+        assert.strictEqual(entry.pending, [2, 9, 16, 28].includes(index))
+      }
+      all.push(...declarations.map(entry => entry.title))
+    }
+    assert.strictEqual(new Set(all).size, callbacks.length)
+    assert.strictEqual(all.length, callbacks.length)
+    assert.deepStrictEqual(all.sort(), callbacks.map((_callback, index) => `case-${index}`).sort())
+  })
+
+  it('preserves selected declaration receivers, arguments and return values', () => {
+    const receiver = {}
+    const callback = () => {}
+    const normalResult = {}
+    const pendingResult = {}
+    const nativeIt = sinon.stub().returns(normalResult)
+    nativeIt.skip = sinon.stub().returns(pendingResult)
+    const declaration = createExclusionsShard(nativeIt, '1/2')
+    assert.strictEqual(declaration.call(receiver, 'selected', callback), normalResult)
+    assert.strictEqual(declaration('not selected', callback), undefined)
+    assert.strictEqual(declaration.skip.call(receiver, 'pending', callback), pendingResult)
+    sinon.assert.calledOnceWithExactly(nativeIt, 'selected', callback)
+    sinon.assert.calledOn(nativeIt, receiver)
+    sinon.assert.calledOnceWithExactly(nativeIt.skip, 'pending', callback)
+    sinon.assert.calledOn(nativeIt.skip, receiver)
+  })
+
+  for (const invalid of [
+    '0/8', '9/8', '1/0', '1', '2/a', '-1/2', '1.5/2', '1/2 ', '9007199254740992/9007199254740992',
+  ]) {
+    it(`rejects an invalid shard selection (${invalid})`, () => {
+      assert.throws(() => createExclusionsShard(() => {}, invalid), /Invalid Cypress exclusions shard/)
+    })
+  }
+})
