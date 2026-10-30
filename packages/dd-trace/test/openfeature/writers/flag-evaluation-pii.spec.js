@@ -7,6 +7,7 @@ const { ErrorCode } = require('@openfeature/server-sdk')
 const { describe, it } = require('mocha')
 
 const {
+  flagEvaluationFeatures,
   normalizeTargetingKey,
   optionalKey,
   prefixedTargetingKeyDigest,
@@ -152,5 +153,15 @@ describe('flag evaluation privacy policy', () => {
       })
       assert.strictEqual(protectedErrorCode(hostile), 'GENERAL')
     })
+  })
+})
+
+describe('flag evaluation features', () => {
+  it('keeps a feature named __proto__ and sorts the keys', () => {
+    const features = flagEvaluationFeatures(JSON.parse('{"holdout.key":"06ad","__proto__":"proto-value"}'))
+    assert.ok(features)
+
+    assert.deepStrictEqual(Object.keys(features), ['__proto__', 'holdout.key'])
+    assert.strictEqual(Object.getOwnPropertyDescriptor(features, '__proto__')?.value, 'proto-value')
   })
 })
