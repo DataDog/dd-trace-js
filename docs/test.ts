@@ -1009,6 +1009,10 @@ aiguard.evaluate([
 })
 
 aiguard.evaluate([
+  { role: 'user', content: 'What is 2 + 2' },
+], { block: false, tags: { 'app.flow': 'checkout', 'app.attempt': 2, 'app.retry': false } })
+
+aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
   result.action && result.reason && result.tags && result.tagProbabilities && result.sds
