@@ -128,6 +128,44 @@ describe('OpenFeature Remote Config', () => {
       }
     })
 
+    describe('with malformed configuration metadata', () => {
+      // Objects whose toString is not callable throw when interpolated into a template literal.
+      const malformedConfigs = [
+        { flags: {}, createdAt: { toString: null }, environment: { name: 'Production' } },
+        { flags: {}, createdAt: '2026-01-01T00:00:00.000Z', environment: { name: { toString: null } } },
+        { flags: {}, createdAt: Symbol('createdAt'), environment: { name: Symbol('name') } },
+      ]
+
+      for (const action of ['apply', 'modify']) {
+        it(`does not fail ${action} when formatting the debug log`, () => {
+          enable(rc, getOpenfeatureProxy, true)
+
+          const handler = handlers.get('FFE_FLAGS')
+          for (const flagConfig of malformedConfigs) {
+            handler(action, flagConfig, 'config-id')
+            sinon.assert.calledWithExactly(openfeatureProxy.setConfiguration, flagConfig)
+
+            const debugCall = log.debug.getCalls().findLast((call) => typeof call.args[0] === 'function')
+            const message = debugCall.args[0]()
+            assert.match(message, /\(0 flag\(s\) received;/)
+            assert.match(message, /id=config-id\)$/)
+            assert.doesNotMatch(message, /\[object Object\]|Symbol\(/)
+          }
+        })
+      }
+
+      it('applies the configuration without evaluating the debug log when debug logging is disabled', () => {
+        log.debug = sinon.spy()
+        enable(rc, getOpenfeatureProxy, true)
+
+        const handler = handlers.get('FFE_FLAGS')
+        for (const flagConfig of malformedConfigs) {
+          handler('apply', flagConfig, 'config-id')
+          sinon.assert.calledWithExactly(openfeatureProxy.setConfiguration, flagConfig)
+        }
+      })
+    })
+
     it('should call setConfiguration on modify action when feature is enabled', () => {
       enable(rc, getOpenfeatureProxy, true)
 

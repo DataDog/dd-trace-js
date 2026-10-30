@@ -4,6 +4,13 @@ const log = require('../log')
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
 
 /**
+ * @param {unknown} value
+ */
+function stringOrUndefined (value) {
+  return typeof value === 'string' ? value : undefined
+}
+
+/**
  * Configures remote config handlers for openfeature feature flagging
  *
  * @param {import('../remote_config')} rc - RemoteConfig instance
@@ -28,11 +35,13 @@ function enable (rc, getOpenfeatureProxy, subscribe) {
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => {
         // The payload is not schema-validated and this runs after setConfiguration, so a throw here would
-        // report an already applied configuration as failed only when debug logging is on.
+        // report an already applied configuration as failed only when debug logging is on. Interpolating a
+        // non-string (e.g. an object with a non-callable toString) can throw, so only strings are included.
         const flagCount = Object.keys(conf?.flags ?? {}).length
         return `Feature Flags: remote_config configuration ${action} applied successfully ` +
           `(${flagCount} flag(s) received; per-flag validity is checked at evaluation, ` +
-          `configuration environment=${conf?.environment?.name}, createdAt=${conf?.createdAt}, id=${id})`
+          `configuration environment=${stringOrUndefined(conf?.environment?.name)}, ` +
+          `createdAt=${stringOrUndefined(conf?.createdAt)}, id=${stringOrUndefined(id)})`
       })
     } else if (action === 'unapply') {
       getOpenfeatureProxy().setConfiguration(undefined)
