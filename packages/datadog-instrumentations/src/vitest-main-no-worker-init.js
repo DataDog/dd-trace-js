@@ -100,8 +100,7 @@ const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
  */
 function transformBrowserTestDeclarations (code, id) {
   if (!/(?:@vitest\/runner\/dist\/(?:index|chunk[^/]*)|vitest\/dist\/chunks\/run[^/]*|\.vite\/.*\/deps\/[^/]+)\.js$/
-    .test(id.split('?')[0])) return
-  if (!code.includes('function getCurrentSuite(')) return
+    .test(id.split('?')[0]) || !code.includes('function getCurrentSuite(')) return
   const bindings = new Set()
   const transformed = code.replaceAll(/export\s*\{([^}]+)\}/g, (statement, specifiers) => {
     const replacements = specifiers.split(',').map(specifier => {
