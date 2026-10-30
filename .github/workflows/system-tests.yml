@@ -22,7 +22,12 @@ jobs:
         with:
           path: dd-trace-js
       - name: Pack dd-trace-js
-        run: mkdir -p ./binaries && echo "/binaries/$(npm pack --silent --pack-destination ./binaries ./dd-trace-js)" > ./binaries/nodejs-load-from-npm
+        run: |
+          mkdir -p ./binaries
+          npm pack --pack-destination ./binaries ./dd-trace-js
+          packages=(./binaries/*.tgz)
+          test "${#packages[@]}" -eq 1
+          printf '/binaries/%s\n' "$(basename "${packages[0]}")" > ./binaries/nodejs-load-from-npm
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -32,7 +37,7 @@ jobs:
   main:
     needs:
       - build-artifacts
-    uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
+    uses: DataDog/system-tests/.github/workflows/system-tests.yml@dependent-flags-variant-key-node-activation
     permissions:
       contents: read
       id-token: write
