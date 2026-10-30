@@ -1,7 +1,7 @@
 import http from 'node:http'
 
-// Both packages are ESM-only ("type": "module") and have no dd-trace instrumentation,
-// so the loader never wraps them.
+// nanoid is ESM-only; axios also ships a CommonJS build, so keep it as an import:
+// require('axios') is already reported.
 import axios from 'axios'
 import { nanoid } from 'nanoid'
 

@@ -42,7 +42,7 @@ describe('telemetry', () => {
     })
 
     for (const { execArgv, app, exits } of setups) {
-      it(`reports non-instrumented ESM-only packages with ${execArgv.join(' ')} (${app})`, async () => {
+      it(`reports non-instrumented packages loaded as ESM with ${execArgv.join(' ')} (${app})`, async () => {
         proc = undefined
         agent = await new FakeAgent().start()
 
