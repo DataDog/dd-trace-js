@@ -9,7 +9,8 @@ module.exports = defineConfig({
   retries: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE === 'numeric-open'
     ? 2
     : {
-        runMode: ['during-init-partial', 'freeze-during-init'].includes(process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE)
+        runMode: ['during-init-partial', 'freeze-during-init', 'readonly-before-init']
+          .includes(process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE)
           ? 2
           : 0,
         openMode: 0,
@@ -26,16 +27,27 @@ module.exports = defineConfig({
     async setupNodeEvents (on, config) {
       const plugin = require('dd-trace/ci/cypress/plugin')
       const mode = process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE
+      if (mode === 'readonly-before-init') {
+        Object.defineProperty(config, 'retries', { writable: false, configurable: false })
+      }
       const pending = plugin(on, config)
       if (mode === 'during-init') config.retries.runMode = 2
       if (mode === 'during-init-partial') config.retries = { openMode: 1 }
       if (mode === 'freeze-during-init') Object.freeze(config)
       const result = await pending
-      if (mode === 'freeze-during-init') return result
+      if (mode === 'freeze-during-init' || mode === 'readonly-before-init') return result
       if (mode === 'freeze-retries' || mode === 'seal-retries') {
         if (mode === 'freeze-retries') Object.freeze(result.retries)
         else Object.seal(result.retries)
         return result
+      }
+      if (mode?.startsWith('returned-getter')) {
+        let reads = 0
+        on('before:run', () => {
+          require('node:fs').writeFileSync(join(config.projectRoot, 'returned-retry-getter-reads.json'),
+            JSON.stringify({ reads }))
+        })
+        return { get retries () { return ++reads } }
       }
       if (mode === 'indirect-returned-support') return { retries: 2 }
       if (mode === 'numeric-open') {

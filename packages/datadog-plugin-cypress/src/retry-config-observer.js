@@ -135,10 +135,22 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   }
   if (typeof originalSend === 'function') {
     sendObserver = function (message) {
+      let forwardedArguments = arguments
       if (ipcActive &&
         (message?.event === 'setupTestingType:reply' || message?.event === 'setupTestingType:error')) {
         try {
-          const wireConfig = message.event === 'setupTestingType:reply' && message.args?.[0]?.setupConfig
+          let wireConfig = message.event === 'setupTestingType:reply' && message.args?.[0]?.setupConfig
+          const retriesDescriptor = wireConfig && typeof wireConfig === 'object' &&
+            Object.getOwnPropertyDescriptor(wireConfig, 'retries')
+          if (retriesDescriptor?.enumerable && retriesDescriptor.get) {
+            // Match the single native wire read, then inspect and serialize those same values.
+            wireConfig = { ...wireConfig }
+            forwardedArguments = [...arguments]
+            forwardedArguments[0] = {
+              ...message,
+              args: [{ ...message.args[0], setupConfig: wireConfig }, ...message.args.slice(1)],
+            }
+          }
           const returnedConfig = wireConfig?.[Symbol.for('dd-trace.cypress.returned-config')] ?? wireConfig
           if (active && message.event === 'setupTestingType:reply') {
             const retries = unwrap(returnedConfig?.retries)
@@ -149,7 +161,7 @@ module.exports = function observeRetryConfig (config, onChange, options) {
           stop(false)
         }
       }
-      return originalSend.apply(this, arguments)
+      return originalSend.apply(this, forwardedArguments)
     }
     process.send = sendObserver
   }

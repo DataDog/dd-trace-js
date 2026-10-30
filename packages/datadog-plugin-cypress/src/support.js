@@ -168,6 +168,12 @@ function observeBrowserRetries (raw) {
     if (!value || typeof value !== 'object') return value
     if (proxies.has(value)) return proxies.get(value)
     const proxy = new Proxy(value, {
+      getOwnPropertyDescriptor (target, key) {
+        const property = Reflect.getOwnPropertyDescriptor(target, key)
+        if (property && 'value' in property && property.value && typeof property.value === 'object' &&
+          ownsNestedPath(metadata.raw, path, target)) metadata.reconcileOnRead = true
+        return property
+      },
       get (target, key, receiver) {
         const result = Reflect.get(target, key, receiver)
         const property = Object.getOwnPropertyDescriptor(target, key)
@@ -253,6 +259,11 @@ function observeLockedBrowserRetries (value) {
 function observeBrowserConfig (state) {
   if (browserConfigStates.has(state)) return browserConfigStates.get(state)
   const proxy = new Proxy(state, {
+    getOwnPropertyDescriptor (target, key) {
+      const property = Reflect.getOwnPropertyDescriptor(target, key)
+      if (key === 'retries' && property && 'value' in property) observeLockedBrowserRetries(property.value)
+      return property
+    },
     get (target, key, receiver) {
       const value = Reflect.get(target, key, receiver)
       const property = Object.getOwnPropertyDescriptor(target, key)

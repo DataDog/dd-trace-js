@@ -144,6 +144,41 @@ describe('Cypress before:run handlers', () => {
   }
 })
 
+describe('Cypress returned retry getters', () => {
+  for (const asynchronous of [false, true]) {
+    it(`uses the once-materialized retry value at IPC (async=${asynchronous})`, async () => {
+      const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-returned-getter-'))
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+      const changes = []
+      const sent = []
+      process.send = message => sent.push(JSON.parse(JSON.stringify(message)))
+      const resolved = { projectRoot: project, supportFile: false, retries: 0 }
+      const observer = observeRetryConfig(resolved, retries => changes.push(retries))
+      const handlers = {}
+      let reads = 0
+      const returned = { get retries () { return ++reads } }
+      const wrapped = wrapConfig({
+        e2e: {
+          setupNodeEvents: () => asynchronous ? Promise.resolve(returned) : returned,
+        },
+      })
+      try {
+        const result = await wrapped.e2e.setupNodeEvents((event, handler) => { handlers[event] = handler }, resolved)
+        process.send({ event: 'setupTestingType:reply', args: [{ setupConfig: result }] })
+        assert.strictEqual(reads, 1)
+        assert.deepStrictEqual(changes, [1])
+        assert.strictEqual(sent[0].args[0].setupConfig.retries, 1)
+      } finally {
+        observer.stop()
+        if (descriptor) Object.defineProperty(process, 'send', descriptor)
+        else delete process.send
+        await handlers['after:run']?.({})
+        fs.rmSync(project, { recursive: true, force: true })
+      }
+    })
+  }
+})
+
 describe('Cypress config', () => {
   for (const testingType of ['e2e', 'component']) {
     for (const hasSubscriber of [false, true]) {
