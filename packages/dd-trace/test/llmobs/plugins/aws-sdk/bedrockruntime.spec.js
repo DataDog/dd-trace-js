@@ -19,6 +19,23 @@ const { useEnv } = require('../../../../../../integration-tests/helpers')
 
 const serviceName = 'bedrock-service-name-test'
 
+function expectedMetrics (response, includeCache = false) {
+  const metrics = {
+    input_tokens: response.inputTokens,
+    output_tokens: response.outputTokens,
+    total_tokens: typeof response.inputTokens === 'number' && typeof response.outputTokens === 'number'
+      ? response.inputTokens + response.outputTokens
+      : MOCK_NUMBER,
+  }
+  if (includeCache && response.cacheReadTokens != null) {
+    metrics.cache_read_input_tokens = response.cacheReadTokens
+  }
+  if (includeCache && response.cacheWriteTokens != null) {
+    metrics.cache_write_input_tokens = response.cacheWriteTokens
+  }
+  return metrics
+}
+
 describe('Plugin', () => {
   describe('aws-sdk (bedrockruntime)', function () {
     useEnv({
@@ -66,7 +83,10 @@ describe('Plugin', () => {
             const command = new AWS.InvokeModelCommand(request)
             await bedrockRuntimeClient.send(command)
 
-            const expectedOutput = { content: model.response.text, role: model.outputRole ?? '' }
+            const expectedOutput = {
+              content: model.response.text,
+              role: model.outputRole ?? (Array.isArray(model.requestBody.messages) ? 'assistant' : ''),
+            }
 
             const { apmSpans, llmobsSpans } = await getEvents()
             assertLlmObsSpanEvent(llmobsSpans[0], {
@@ -79,16 +99,15 @@ describe('Plugin', () => {
                     { content: model.userPrompt, role: 'user' },
                   ]
                 : [
-                    { content: model.userPrompt, role: '' },
+                    {
+                      content: model.userPrompt,
+                      role: model.modelId.startsWith('anthropic.') && Array.isArray(model.requestBody.messages)
+                        ? 'user'
+                        : '',
+                    },
                   ],
               outputMessages: [expectedOutput],
-              metrics: {
-                input_tokens: model.response.inputTokens,
-                output_tokens: model.response.outputTokens,
-                total_tokens: model.response.inputTokens + model.response.outputTokens,
-                cache_read_input_tokens: model.response.cacheReadTokens,
-                cache_write_input_tokens: model.response.cacheWriteTokens,
-              },
+              metrics: expectedMetrics(model.response, model.modelId.includes('nova')),
               modelName: model.modelId.toLowerCase(),
               modelProvider: 'amazon_bedrock',
               metadata: {
@@ -128,16 +147,19 @@ describe('Plugin', () => {
                     { content: model.userPrompt, role: 'user' },
                   ]
                 : [
-                    { content: model.userPrompt, role: '' },
+                    {
+                      content: model.userPrompt,
+                      role: model.modelId.startsWith('anthropic.') && Array.isArray(model.requestBody.messages)
+                        ? 'user'
+                        : '',
+                    },
                   ],
               outputMessages: [{ content: expectedResponseObject.text, role: 'assistant' }],
-              metrics: {
-                input_tokens: expectedResponseObject.inputTokens,
-                output_tokens: expectedResponseObject.outputTokens,
-                total_tokens: expectedResponseObject.inputTokens + expectedResponseObject.outputTokens,
-                cache_read_input_tokens: model.response.cacheReadTokens,
-                cache_write_input_tokens: model.response.cacheWriteTokens,
-              },
+              metrics: expectedMetrics({
+                ...expectedResponseObject,
+                cacheReadTokens: model.response.cacheReadTokens,
+                cacheWriteTokens: model.response.cacheWriteTokens,
+              }, model.modelId.includes('nova')),
               modelName: model.modelId.toLowerCase(),
               modelProvider: 'amazon_bedrock',
               metadata: {
@@ -175,16 +197,10 @@ describe('Plugin', () => {
             spanKind: 'llm',
             name: 'bedrock-runtime.command',
             inputMessages: [
-              { content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt, role: '' },
+              { content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt, role: 'user' },
             ],
             outputMessages: [expectedOutput],
-            metrics: {
-              input_tokens: cacheWriteRequest.response.inputTokens,
-              output_tokens: cacheWriteRequest.response.outputTokens,
-              total_tokens: cacheWriteRequest.response.inputTokens + cacheWriteRequest.response.outputTokens,
-              cache_read_input_tokens: cacheWriteRequest.response.cacheReadTokens,
-              cache_write_input_tokens: cacheWriteRequest.response.cacheWriteTokens,
-            },
+            metrics: expectedMetrics(cacheWriteRequest.response, true),
             modelName: cacheWriteRequest.modelId.toLowerCase(),
             modelProvider: 'amazon_bedrock',
             metadata: {
@@ -220,16 +236,10 @@ describe('Plugin', () => {
             spanKind: 'llm',
             name: 'bedrock-runtime.command',
             inputMessages: [
-              { content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt, role: '' },
+              { content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt, role: 'user' },
             ],
             outputMessages: [expectedOutput],
-            metrics: {
-              input_tokens: cacheWriteRequest.response.inputTokens,
-              output_tokens: cacheWriteRequest.response.outputTokens,
-              total_tokens: cacheWriteRequest.response.inputTokens + cacheWriteRequest.response.outputTokens,
-              cache_read_input_tokens: cacheWriteRequest.response.cacheReadTokens,
-              cache_write_input_tokens: cacheWriteRequest.response.cacheWriteTokens,
-            },
+            metrics: expectedMetrics(cacheWriteRequest.response, true),
             modelName: cacheWriteRequest.modelId.toLowerCase(),
             modelProvider: 'amazon_bedrock',
             metadata: {
@@ -309,13 +319,7 @@ describe('Plugin', () => {
             description: toolSpec.description,
             schema: toolSpec.inputSchema,
           })),
-          metrics: {
-            input_tokens: tokens.inputTokens,
-            output_tokens: tokens.outputTokens,
-            total_tokens: tokens.inputTokens + tokens.outputTokens,
-            cache_read_input_tokens: 0,
-            cache_write_input_tokens: 0,
-          },
+          metrics: expectedMetrics(tokens),
           modelName: converseRequest.modelId.toLowerCase(),
           modelProvider: 'amazon_bedrock',
           metadata: {
@@ -385,9 +389,18 @@ describe('Plugin', () => {
                 role: 'user',
                 tool_results: [{
                   name: '',
-                  result: converseToolResultRequest.toolResultText,
+                  result: 'Distributed tracing tracks requests across services.',
                   tool_id: converseToolResultRequest.toolUseId,
-                  type: 'tool_result',
+                  type: 'toolResult',
+                }],
+              },
+              {
+                role: 'user',
+                tool_results: [{
+                  name: '',
+                  result: '{"source":"docs"}',
+                  tool_id: converseToolResultRequest.toolUseId,
+                  type: 'toolResult',
                 }],
               },
             ],
@@ -397,13 +410,7 @@ describe('Plugin', () => {
               description: toolSpec.description,
               schema: toolSpec.inputSchema,
             })),
-            metrics: {
-              input_tokens: MOCK_NUMBER,
-              output_tokens: MOCK_NUMBER,
-              total_tokens: MOCK_NUMBER,
-              cache_read_input_tokens: 0,
-              cache_write_input_tokens: 0,
-            },
+            metrics: expectedMetrics({ inputTokens: MOCK_NUMBER, outputTokens: MOCK_NUMBER }),
             modelName: converseToolResultRequest.modelId.toLowerCase(),
             modelProvider: 'amazon_bedrock',
             metadata: {
@@ -433,20 +440,16 @@ describe('Plugin', () => {
             outputMessages: [{
               role: 'assistant',
               content: response.unsupportedContent,
+            }, {
+              role: 'user',
               tool_results: [{
                 name: '',
                 result: response.unsupportedToolResult,
                 tool_id: response.toolResultId,
-                type: 'tool_result',
+                type: 'toolResult',
               }],
             }],
-            metrics: {
-              input_tokens: response.inputTokens,
-              output_tokens: response.outputTokens,
-              total_tokens: response.inputTokens + response.outputTokens,
-              cache_read_input_tokens: 0,
-              cache_write_input_tokens: 0,
-            },
+            metrics: expectedMetrics(response),
             modelName: converseUnsupportedBlocksRequest.modelId.toLowerCase(),
             modelProvider: 'amazon_bedrock',
             metadata: {
@@ -483,16 +486,10 @@ describe('Plugin', () => {
             spanKind: 'llm',
             name: 'bedrock-runtime.command',
             inputMessages: [
-              { content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt, role: '' },
+              { content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt, role: 'user' },
             ],
             outputMessages: [expectedOutput],
-            metrics: {
-              input_tokens: cacheReadRequest.response.inputTokens,
-              output_tokens: cacheReadRequest.response.outputTokens,
-              total_tokens: cacheReadRequest.response.inputTokens + cacheReadRequest.response.outputTokens,
-              cache_read_input_tokens: cacheReadRequest.response.cacheReadTokens,
-              cache_write_input_tokens: cacheReadRequest.response.cacheWriteTokens,
-            },
+            metrics: expectedMetrics(cacheReadRequest.response, true),
             modelName: cacheReadRequest.modelId.toLowerCase(),
             modelProvider: 'amazon_bedrock',
             metadata: {

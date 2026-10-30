@@ -16,7 +16,10 @@ const {
   extractTextAndResponseReasonConverse,
   extractTextAndResponseReasonConverseFromStream,
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
+const { appendMessage } = require('./anthropic/util')
 const BaseLLMObsPlugin = require('./base')
+
+/** @typedef {import('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils').Generation} Generation */
 
 const llmobsStore = storage('llmobs')
 
@@ -103,20 +106,20 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       // No request id means no way to correlate with the :complete: event.
       if (!requestId) return
 
-      const inputTokenCount = headers['x-amzn-bedrock-input-token-count']
-      const outputTokenCount = headers['x-amzn-bedrock-output-token-count']
-      const cacheReadTokenCount = headers['x-amzn-bedrock-cache-read-input-token-count']
-      const cacheWriteTokenCount = headers['x-amzn-bedrock-cache-write-input-token-count']
+      const inputTokenCount = getHeader(headers, 'x-amzn-bedrock-input-token-count')
+      const outputTokenCount = getHeader(headers, 'x-amzn-bedrock-output-token-count')
+      const cacheReadTokenCount = getHeader(headers, 'x-amzn-bedrock-cache-read-input-token-count')
+      const cacheWriteTokenCount = getHeader(headers, 'x-amzn-bedrock-cache-write-input-token-count')
 
       // Responses that report no counts at all, error responses included, would otherwise cache a
       // record of undefined fields that reads as a measurement of zero.
       if (!inputTokenCount && !outputTokenCount && !cacheReadTokenCount && !cacheWriteTokenCount) return
 
       pendingTokenHeaders.set(requestId, {
-        inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount, 10),
-        outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount, 10),
-        cacheReadTokensFromHeaders: cacheReadTokenCount && Number.parseInt(cacheReadTokenCount, 10),
-        cacheWriteTokensFromHeaders: cacheWriteTokenCount && Number.parseInt(cacheWriteTokenCount, 10),
+        inputTokensFromHeaders: parseHeaderCount(inputTokenCount),
+        outputTokensFromHeaders: parseHeaderCount(outputTokenCount),
+        cacheReadTokensFromHeaders: parseHeaderCount(cacheReadTokenCount),
+        cacheWriteTokensFromHeaders: parseHeaderCount(cacheWriteTokenCount),
       })
     })
 
@@ -170,29 +173,63 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     if (textAndResponseReason.finishReason) {
       this._tagger.tagMetadata(span, { stop_reason: textAndResponseReason.finishReason })
     }
-    this.#tagCommon({ span, requestParams, textAndResponseReason, tokensFromHeaders })
+    this.#tagCommon({
+      span,
+      requestParams,
+      inputMessages: requestParams.prompt,
+      outputMessages: textAndResponseReason.messages,
+      usage: textAndResponseReason.usage,
+      tokensFromHeaders,
+    })
   }
 
   #tagInvokeModelSpan ({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders, isStream }) {
     const requestParams = extractRequestParams(request.params, modelProvider)
     // for streamed responses, we'll use the coerced response object we formed in the stream handler
-    const textAndResponseReason = isStream
+    // a stream of an unsupported model yields an empty record rather than a Generation
+    const textAndResponseReason = /** @type {Partial<Generation>} */ (isStream
       ? extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
-      : extractTextAndResponseReason(response, modelProvider, modelName)
+      : extractTextAndResponseReason(response, modelProvider, modelName))
 
-    this.#tagCommon({ span, requestParams, textAndResponseReason, tokensFromHeaders })
+    const { tools } = requestParams
+    if (Array.isArray(tools) && tools.length > 0) {
+      this._tagger.tagToolDefinitions(span, tools.map(tool => ({
+        name: tool.name,
+        description: tool.description ?? '',
+        schema: tool.input_schema ?? {},
+      })))
+    }
+
+    // Only the Anthropic Messages API request shape yields an array prompt / block-array output content.
+    const inputMessages = Array.isArray(requestParams.prompt)
+      ? formatAnthropicInputMessages(requestParams)
+      : requestParams.prompt
+    const outputMessages = textAndResponseReason.content === undefined
+      ? textAndResponseReason.messages
+      : formatAnthropicMessages('assistant', textAndResponseReason.content)
+
+    this.#tagCommon({
+      span,
+      requestParams,
+      inputMessages,
+      outputMessages,
+      usage: textAndResponseReason.usage,
+      tokensFromHeaders,
+    })
   }
 
-  #tagCommon ({ span, requestParams, textAndResponseReason, tokensFromHeaders }) {
-    this._tagger.tagMetadata(span, {
-      temperature: Number.parseFloat(requestParams.temperature) || 0,
-      max_tokens: Number.parseInt(requestParams.maxTokens, 10) || 0,
-    })
-    this._tagger.tagLLMIO(span, requestParams.prompt, textAndResponseReason.messages)
-    this._tagger.tagMetrics(span, zeroFilled(extractTokens({
-      tokensFromHeaders,
-      usage: textAndResponseReason.usage,
-    })))
+  #tagCommon ({ span, requestParams, inputMessages, outputMessages, usage, tokensFromHeaders }) {
+    const metadata = {}
+    if (requestParams.temperature !== undefined && requestParams.temperature !== null) {
+      metadata.temperature = Number.parseFloat(requestParams.temperature)
+    }
+    if (requestParams.maxTokens !== undefined && requestParams.maxTokens !== null) {
+      metadata.max_tokens = Number.parseInt(requestParams.maxTokens, 10)
+    }
+    this._tagger.tagMetadata(span, metadata)
+
+    this._tagger.tagLLMIO(span, inputMessages, outputMessages)
+    this._tagger.tagMetrics(span, definedCounts(extractTokens({ tokensFromHeaders, usage })))
   }
 }
 
@@ -204,6 +241,34 @@ function consumeTokenHeaders (requestId) {
   const tokens = pendingTokenHeaders.get(requestId)
   pendingTokenHeaders.delete(requestId)
   return tokens
+}
+
+function getHeader (headers, name) {
+  const key = Object.keys(headers).find(header => header.toLowerCase() === name)
+  return key === undefined ? undefined : headers[key]
+}
+
+function parseHeaderCount (value) {
+  if (value == null) return
+  const count = Number.parseInt(value, 10)
+  return Number.isNaN(count) ? undefined : count
+}
+
+function formatAnthropicInputMessages (requestParams) {
+  const messages = []
+  if (requestParams.system !== undefined) {
+    appendMessage(messages, { role: 'system', content: requestParams.system })
+  }
+  for (const message of requestParams.prompt) {
+    appendMessage(messages, message)
+  }
+  return messages
+}
+
+function formatAnthropicMessages (role, content) {
+  const messages = []
+  appendMessage(messages, { role, content })
+  return messages
 }
 
 /**
@@ -324,20 +389,19 @@ function resolveCount (fromBody, fromHeaders) {
 }
 
 /**
- * The LLMObs metrics contract reports an unmeasured count as zero, where the `gen_ai.*` APM
- * attributes leave it off the span entirely.
+ * LLMObs metrics carry only the counts a source reported, like the Python integration: an
+ * unmeasured count is left off rather than reported as zero, and a measured zero is kept.
  *
  * @param {Record<string, number | undefined>} tokens
  * @returns {Record<string, number>}
  */
-function zeroFilled (tokens) {
-  return {
-    inputTokens: tokens.inputTokens ?? 0,
-    outputTokens: tokens.outputTokens ?? 0,
-    totalTokens: tokens.totalTokens ?? 0,
-    cacheReadTokens: tokens.cacheReadTokens ?? 0,
-    cacheWriteTokens: tokens.cacheWriteTokens ?? 0,
+function definedCounts (tokens) {
+  /** @type {Record<string, number>} */
+  const metrics = {}
+  for (const key of Object.keys(tokens)) {
+    if (tokens[key] !== undefined) metrics[key] = tokens[key]
   }
+  return metrics
 }
 
 module.exports = BedrockRuntimeLLMObsPlugin
