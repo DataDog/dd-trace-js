@@ -4229,6 +4229,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_TYPESAFE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_UNDICI_ENABLED": [
       {
         "implementation": "A",
