@@ -112,6 +112,7 @@
 
 /packages/datadog-esbuild/ @DataDog/apm-idm-js
 /packages/datadog-turbopack/ @DataDog/apm-idm-js
+/packages/datadog-vite/ @DataDog/apm-idm-js
 /packages/datadog-webpack/ @DataDog/apm-idm-js
 /packages/datadog-plugin-*/ @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/apm-idm-js
