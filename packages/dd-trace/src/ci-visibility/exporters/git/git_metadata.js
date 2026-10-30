@@ -4,6 +4,8 @@ const fs = require('fs')
 const path = require('path')
 
 const getConfig = require('../../../config')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../../evp_proxy/path')
 const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
 
@@ -68,7 +70,6 @@ function getCommonRequestOptions (url) {
  *
  * @param {GitUploadTarget & { latestCommits: string[] }} options
  * @param {(error: Error | null, commitsToUpload?: string[]) => void} callback
- * @returns {void}
  */
 function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix }, callback) {
   const commonOptions = getCommonRequestOptions(url)
@@ -83,8 +84,8 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
   }
 
   if (isEvpProxy) {
-    options.path = `${evpProxyPrefix}/api/v2/git/repository/search_commits`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/git/repository/search_commits')
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
     delete options.headers['dd-api-key']
   }
 
@@ -137,7 +138,6 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
  *
  * @param {GitUploadTarget & { packFileToUpload: string, headCommit: string }} options
  * @param {(error: Error | null, uploadSize?: number) => void} callback
- * @returns {void}
  */
 function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, repositoryUrl, headCommit }, callback) {
   const form = new FormData()
@@ -179,8 +179,8 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
   }
 
   if (isEvpProxy) {
-    options.path = `${evpProxyPrefix}/api/v2/git/repository/packfile`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/git/repository/packfile')
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
     delete options.headers['dd-api-key']
   }
 
@@ -261,7 +261,6 @@ function generateAndUploadPackFiles ({
  * @param {EvpProxyConfiguration} evpProxyConfiguration
  * @param {string | undefined} configRepositoryUrl repository URL from the configuration, if set
  * @param {(error?: Error | null) => void} callback
- * @returns {void}
  */
 function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
   if (!isGitAvailable()) {

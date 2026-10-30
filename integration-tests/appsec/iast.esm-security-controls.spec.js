@@ -4,10 +4,18 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, spawnProc, FakeAgent, stopProc } = require('../helpers')
 describe('ESM Security controls', () => {
-  let axios, cwd, appFile, agent, proc
+  let cwd, appFile, agent, proc
+
+  /**
+   * @param {string} url
+   */
+  async function request (url) {
+    const response = await fetch(new URL(url, proc.url))
+    assert.strictEqual(response.status, 200)
+    await response.arrayBuffer()
+  }
 
   ['4', '5'].forEach(version => {
     describe(`With express v${version}`, () => {
@@ -37,8 +45,6 @@ describe('ESM Security controls', () => {
             NODE_OPTIONS: nodeOptions,
           },
         })
-
-        axios = Axios.create({ baseURL: proc.url })
       })
 
       afterEach(async () => {
@@ -47,7 +53,7 @@ describe('ESM Security controls', () => {
       })
 
       it('test endpoint with iv not configured does have COMMAND_INJECTION vulnerability', async function () {
-        await axios.get('/cmdi-iv-insecure?command=ls -la')
+        await request('/cmdi-iv-insecure?command=ls -la')
 
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
@@ -59,7 +65,7 @@ describe('ESM Security controls', () => {
       })
 
       it('test endpoint sanitizer does not have COMMAND_INJECTION vulnerability', async () => {
-        await axios.get('/cmdi-s-secure?command=ls -la')
+        await request('/cmdi-s-secure?command=ls -la')
 
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
@@ -74,7 +80,7 @@ describe('ESM Security controls', () => {
       })
 
       it('test endpoint with default sanitizer does not have COMMAND_INJECTION vulnerability', async () => {
-        await axios.get('/cmdi-s-secure-default?command=ls -la')
+        await request('/cmdi-s-secure-default?command=ls -la')
 
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
@@ -89,7 +95,7 @@ describe('ESM Security controls', () => {
       })
 
       it('test endpoint with default sanitizer does have COMMAND_INJECTION with original tainted', async () => {
-        await axios.get('/cmdi-s-secure-comparison?command=ls -la')
+        await request('/cmdi-s-secure-comparison?command=ls -la')
 
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
@@ -101,7 +107,7 @@ describe('ESM Security controls', () => {
       })
 
       it('test endpoint with default sanitizer does have COMMAND_INJECTION vulnerability', async () => {
-        await axios.get('/cmdi-s-secure-default?command=ls -la')
+        await request('/cmdi-s-secure-default?command=ls -la')
 
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
@@ -116,7 +122,7 @@ describe('ESM Security controls', () => {
       })
 
       it('test endpoint with iv does not have COMMAND_INJECTION vulnerability', async () => {
-        await axios.get('/cmdi-iv-secure?command=ls -la')
+        await request('/cmdi-iv-secure?command=ls -la')
 
         await agent.assertMessageReceived(({ payload }) => {
           const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))

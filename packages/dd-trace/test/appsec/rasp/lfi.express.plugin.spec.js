@@ -1,13 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const os = require('node:os')
 const fs = require('node:fs')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
-const Axios = require('axios')
 const semver = require('semver')
 
 const { NODE_MAJOR } = require('../../../../../version')
@@ -15,14 +15,15 @@ const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { withVersions } = require('../../setup/mocha')
 const { getConfigFresh } = require('../../helpers/config')
+const HttpRequest = require('../../setup/helpers/http-client')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - lfi', () => {
-  let axios
+  let httpRequest
 
   async function testBlockingRequest (url = '/?file=/test.file', config = undefined, ruleEvalCount = 1) {
     try {
-      await axios.get(url, config)
+      await httpRequest.get(url, config)
     } catch (e) {
       if (!e.response) {
         throw e
@@ -38,19 +39,18 @@ describe('RASP - lfi', () => {
 
   withVersions('express', 'express', expressVersion => {
     if (semver.intersects(expressVersion, '<=4.10.5') && NODE_MAJOR >= 24) {
-      // eslint-disable-next-line mocha/no-pending-tests
-      describe.skip(`refusing to run tests as express@${expressVersion} is incompatible with Node.js ${NODE_MAJOR}`)
+      it(`refusing to run tests as express@${expressVersion} is incompatible with Node.js ${NODE_MAJOR}`, function () {
+        // Express 4.10.5 and older cannot start on Node.js 24.
+        this.skip()
+      })
       return
     }
 
     withVersions('express', 'ejs', ejsVersion => {
       let app, server
 
-      before(() => {
-        return agent.load(['http', 'express'], { client: false })
-      })
-
-      before((done) => {
+      before(async () => {
+        await agent.load(['http', 'express'], { client: false })
         const express = require(`../../../../../versions/express@${expressVersion}`).get()
         // const ejs = require(`../../../../../versions/ejs@${ejsVersion}`).get()
         const expressApp = express()
@@ -70,12 +70,11 @@ describe('RASP - lfi', () => {
           },
         }))
 
-        server = expressApp.listen(0, () => {
-          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          axios = Axios.create({
-            baseURL: `http://localhost:${port}`,
-          })
-          done()
+        server = expressApp.listen(0)
+        await once(server, 'listening')
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+        httpRequest = HttpRequest.create({
+          baseURL: `http://localhost:${port}`,
         })
       })
 
@@ -133,7 +132,7 @@ describe('RASP - lfi', () => {
             it('should not block if param not found in the request', async () => {
               app = getAppFn(fn, args, options)
 
-              await axios.get(`/?file=${secureFile}`)
+              await httpRequest.get(`/?file=${secureFile}`)
 
               return checkRaspExecutedAndNotThreat(agent, false)
             })
@@ -460,11 +459,8 @@ describe('RASP - lfi', () => {
   describe('without express', () => {
     let app, server
 
-    before(() => {
-      return agent.load(['http'], { client: false })
-    })
-
-    before((done) => {
+    before(async () => {
+      await agent.load(['http'], { client: false })
       const http = require('http')
       server = http.createServer((req, res) => {
         if (app) {
@@ -482,13 +478,11 @@ describe('RASP - lfi', () => {
         },
       }))
 
-      server.listen(0, () => {
-        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({
-          baseURL: `http://localhost:${port}`,
-        })
-
-        done()
+      server.listen(0)
+      await once(server, 'listening')
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      httpRequest = HttpRequest.create({
+        baseURL: `http://localhost:${port}`,
       })
     })
 

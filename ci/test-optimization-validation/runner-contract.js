@@ -241,7 +241,6 @@ function getRunnerSearchRoots (framework, command, projectRoot, repositoryRoot) 
  * @param {string} projectRoot detected project root
  * @param {string} repositoryRoot repository root
  * @param {boolean} directory whether the option explicitly requires a directory
- * @returns {void}
  */
 function addRunnerSearchRoot (roots, value, projectRoot, repositoryRoot, directory) {
   if (typeof value !== 'string' || !value) return
@@ -451,8 +450,7 @@ function getRunnerInputError (args, environment, projectRoot, repositoryRoot, co
  * @returns {{error?: string, runnerIndex: number, tokens: string[]}|undefined} parsed invocation
  */
 function getFrameworkInvocation (command, framework) {
-  if (CONTROL_PATTERN.test(String(command || ''))) return
-  if (command === `direct ${framework} binary`) return
+  if (CONTROL_PATTERN.test(String(command || '')) || command === `direct ${framework} binary`) return
   const tokens = tokenizeCommand(command)
   const executable = getRunnerExecutableName(framework)
   const runnerIndex = tokens.findIndex(token => {
@@ -523,7 +521,6 @@ function getRunnerArgs (framework, invocation) {
  * Normalizes executable shims and supported JavaScript runner entrypoints.
  *
  * @param {string} token command token
- * @returns {string} normalized executable basename
  */
 function normalizeRunnerBasename (token) {
   return path.basename(token)
@@ -670,7 +667,6 @@ function tokenizeCommand (command) {
  * Returns the executable name for a framework.
  *
  * @param {string} framework framework name
- * @returns {string} executable name
  */
 function getRunnerExecutableName (framework) {
   if (framework === 'cucumber') return 'cucumber-js'
@@ -682,7 +678,6 @@ function getRunnerExecutableName (framework) {
  *
  * @param {string} root root path
  * @param {string} filename candidate path
- * @returns {boolean} whether the candidate is contained
  */
 function isPathInside (root, filename) {
   const relative = path.relative(path.resolve(root), path.resolve(filename))

@@ -2,15 +2,17 @@
 
 const { defineConfig } = require('cypress')
 
+const getCypressTestEnvironment = require('./cypress-test-environment')
+
 module.exports = defineConfig({
   defaultCommandTimeout: 1000,
   e2e: {
     async setupNodeEvents () {
       await new Promise((resolve) => setTimeout(resolve, 50))
       return {
-        env: {
+        ...getCypressTestEnvironment({
           RETURNED_CONFIG_FLAG: 'true',
-        },
+        }),
         specPattern: 'cypress/e2e/returned-config.cy.js',
       }
     },

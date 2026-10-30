@@ -26,12 +26,12 @@ const COVERAGE_ACTIONS = new Set([
 ])
 const COVERAGE_COLLECTORS = new Set([
   'integration-tests/coverage/run-suite.js',
+  'integration-tests/vitest/run-with-coverage.js',
   'scripts/c8-ci.js',
 ])
 
 /**
  * @param {string} s
- * @returns {string}
  */
 function stripOuterQuotes (s) {
   if (s.length < 2) return s
@@ -98,7 +98,6 @@ function shellSplit (s) {
 
 /**
  * @param {string} token
- * @returns {boolean}
  */
 function looksLikeFileGlob (token) {
   // We only care about globs that can match paths in the repo.
@@ -115,7 +114,6 @@ function looksLikeFileGlob (token) {
  * Converts some shell-specific patterns in scripts into a conservative file glob.
  * @param {string} raw
  * @param {{ preserveEnv?: boolean }} [opts]
- * @returns {string}
  */
 function normalizeScriptGlob (raw, opts = {}) {
   const preserveEnv = Boolean(opts.preserveEnv)
@@ -127,6 +125,7 @@ function normalizeScriptGlob (raw, opts = {}) {
   // Convert bash extglob + command substitution patterns used in this repo into plain env vars.
   // Example: @($(echo $PLUGINS)) -> $PLUGINS
   // Example: @($(echo ${SPEC:-'*'})) -> ${SPEC:-*}
+  // eslint-disable-next-line regexp/no-super-linear-backtracking -- Parses bounded repository package scripts.
   p = p.replaceAll(/@\(\$\(\s*echo\s+([^)]+?)\s*\)\)/g, '$1')
 
   // For global analysis we treat env vars as wildcards, but when evaluating a specific CI run
@@ -162,7 +161,6 @@ function normalizeScriptGlob (raw, opts = {}) {
 /**
  * @param {string} s
  * @param {Record<string, string|undefined>} env
- * @returns {string}
  */
 function expandEnvInString (s, env) {
   // ${NAME} / ${NAME:-default}
@@ -182,13 +180,11 @@ function expandEnvInString (s, env) {
 /**
  * @param {string} name
  * @param {string|undefined} value
- * @returns {string}
  */
 function formatEnvValue (name, value) {
   const val = typeof value === 'string' && value.length ? value : ''
-  if (!val) return '*'
   // GitHub Actions expressions are not resolvable here; treat them as unknown.
-  if (val.includes('${{')) return '*'
+  if (!val || val.includes('${{')) return '*'
 
   if (name === 'PLUGINS') {
     const items = val.split(/[,\s|]+/g).map(x => x.trim()).filter(Boolean)
@@ -205,8 +201,7 @@ function formatEnvValue (name, value) {
  */
 function unwrapLiteralEnvValue (maybe) {
   const s = String(maybe ?? '').trim()
-  if (!s) return null
-  if (s.includes('${{')) return null
+  if (!s || s.includes('${{')) return null
   return stripOuterQuotes(s)
 }
 
@@ -311,7 +306,7 @@ function parseExportAssignments (run) {
   const out = {}
   const lines = String(run).split('\n')
   for (const line of lines) {
-    const m = line.match(/^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)\s*$/)
+    const m = line.match(/^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$/)
     if (!m) continue
     out[m[1]] = stripOuterQuotes(m[2].trim())
   }
@@ -525,8 +520,7 @@ const localActionFileCache = new Map()
  * @returns {string|null}
  */
 function resolveLocalActionFile (repoRoot, uses) {
-  if (typeof uses !== 'string') return null
-  if (!uses.startsWith('./')) return null
+  if (typeof uses !== 'string' || !uses.startsWith('./')) return null
 
   const cached = localActionFileCache.get(uses)
   if (cached !== undefined) return cached
@@ -634,7 +628,6 @@ function collectStepEvents (stepValue, repoRoot, env, visiting) {
 
 /**
  * @param {string} command
- * @returns {boolean}
  */
 function invokesCoverageCollector (command) {
   const tokens = shellSplit(command)
@@ -676,7 +669,6 @@ function findCoverageScripts (scripts, knownScripts) {
  * @param {string} command
  * @param {Set<string>} knownScripts
  * @param {Set<string>} coverageScripts
- * @returns {boolean}
  */
 function commandProducesCoverage (command, knownScripts, coverageScripts) {
   if (invokesCoverageCollector(command)) return true
@@ -714,7 +706,6 @@ function getMatrixCombinations (matrix) {
  * Expands `${{ matrix.X }}` expressions in a string using the given matrix values.
  * @param {string} s
  * @param {Record<string, string>} matrixValues
- * @returns {string}
  */
 function expandMatrixExpressions (s, matrixValues) {
   return s.replaceAll(/\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (_m, name) => {
@@ -981,7 +972,6 @@ function listDdTraceCategorySpecFiles (index, category) {
 /**
  * @param {Set<string>} scriptPrefixes
  * @param {string} category
- * @returns {boolean}
  */
 function isCategoryCoveredByOtherScript (scriptPrefixes, category) {
   const aliases = {
@@ -994,9 +984,13 @@ function isCategoryCoveredByOtherScript (scriptPrefixes, category) {
   if (Array.isArray(extra)) keys.push(...extra)
 
   for (const key of keys) {
-    if (scriptPrefixes.has(`test:${key}`)) return true
-    if (scriptPrefixes.has(`test:trace:${key}`)) return true
-    if (scriptPrefixes.has(`test:integration:${key}`)) return true
+    if (
+      scriptPrefixes.has(`test:${key}`) ||
+      scriptPrefixes.has(`test:trace:${key}`) ||
+      scriptPrefixes.has(`test:integration:${key}`)
+    ) {
+      return true
+    }
   }
 
   return false
@@ -1172,7 +1166,6 @@ function main (repoRootArg) {
    * coverage/non-coverage definitions from each forcing their own CI step.
    *
    * @param {string} scriptName
-   * @returns {boolean}
    */
   const isInvokedOrCoverageSibling = (scriptName) => {
     if (invokedScripts.has(scriptName)) return true
@@ -1200,11 +1193,16 @@ function main (repoRootArg) {
 
   // All test:integration* scripts should be referenced by CI (except test:integration:plugins).
   for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
-    if (!name.startsWith('test:integration')) continue
     // Skip test:integration:plugins (and its coverage sibling) - it's a convenience script for
     // running only plugin integration tests locally, but in CI these are already covered by
     // test:plugins:ci (which runs all plugin tests including integration tests).
-    if (name === 'test:integration:plugins' || name === 'test:integration:plugins:coverage') continue
+    if (
+      !name.startsWith('test:integration') ||
+      name === 'test:integration:plugins' ||
+      name === 'test:integration:plugins:coverage'
+    ) {
+      continue
+    }
     if (!isInvokedOrCoverageSibling(name)) {
       pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
     }

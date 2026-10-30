@@ -32,11 +32,15 @@ function disable () {
   disableGraphql()
 }
 
-function onGraphqlStartResolver ({ abortController, resolverInfo }) {
+/**
+ * @param {{ createResolverInfo?: (data: object) => object | null }} data
+ */
+function onGraphqlStartResolver (data) {
   const req = getActiveRequest()
 
   if (!req) return
 
+  const resolverInfo = data.createResolverInfo?.(data)
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
   const result = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
@@ -46,7 +50,7 @@ function onGraphqlStartResolver ({ abortController, resolverInfo }) {
     if (requestData?.isInGraphqlRequest) {
       requestData.blocked = true
       requestData.wafAction = blockingAction
-      abortController?.abort()
+      data.abortController?.abort()
     }
   }
 }

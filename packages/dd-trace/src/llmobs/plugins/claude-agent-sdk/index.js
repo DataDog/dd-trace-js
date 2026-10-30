@@ -5,6 +5,7 @@ const { storage: llmobsStorage } = require('../../storage')
 const { NAME, SESSION_ID } = require('../../constants/tags')
 const { splitModel } = require('../../../../../datadog-plugin-claude-agent-sdk/src/util')
 
+const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 const subagentToolIds = new Set()
 
 function normalizeToolOutputString (raw) {
@@ -18,12 +19,15 @@ function getToolOutputText (raw) {
   if (raw == null) return
 
   if (Array.isArray(raw)) {
-    const output = []
+    let output = ''
+    let separator = ''
     for (const block of raw) {
       const text = getToolOutputText(block)
-      if (text) output.push(text)
+      if (!text) continue
+      output += separator + text
+      separator = '\n'
     }
-    return output.join('\n') || undefined
+    return output
   }
 
   if (raw.type === 'tool_result') return getToolOutputText(raw.content)
@@ -34,6 +38,27 @@ function getToolOutputText (raw) {
   if (typeof raw === 'string') return normalizeToolOutputString(raw)
 
   return JSON.stringify(raw)
+}
+
+/**
+ * @param {object} [usage]
+ * @returns {Record<string, number> | undefined}
+ */
+function extractUsageMetrics (usage) {
+  if (!usage) return
+
+  const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0
+  const cacheReadTokens = usage.cache_read_input_tokens ?? 0
+  const inputTokens = (usage.input_tokens ?? 0) + cacheWriteTokens + cacheReadTokens
+  const outputTokens = usage.output_tokens ?? 0
+
+  return {
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cache_read_input_tokens: cacheReadTokens,
+    cache_write_input_tokens: cacheWriteTokens,
+    total_tokens: inputTokens + outputTokens,
+  }
 }
 
 function buildOutputMessages (chunks, llmStartIdx, llmEndIdx) {
@@ -82,6 +107,13 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
     super.asyncEnd(ctx)
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return { sessionId: ctx.session_id }
+  }
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
@@ -96,6 +128,11 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
 
     if (cwd) metadata.cwd = cwd
     if (permissionMode) metadata.permissionMode = permissionMode
+    const systemPrompt = ctx.arguments?.[0]?.options?.systemPrompt
+    if (systemPrompt?.type === 'preset') {
+      if (typeof systemPrompt.preset === 'string') metadata.systemPromptPreset = systemPrompt.preset
+      if (typeof systemPrompt.append === 'string') metadata.systemPromptAppend = systemPrompt.append
+    }
 
     this._tagger.tagMetadata(span, metadata)
   }
@@ -146,6 +183,13 @@ class LlmLlmObsPlugin extends LLMObsPlugin {
     return { kind: 'llm', name: ctx.model, modelName, modelProvider, sessionId: ctx.sessionId }
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return { metrics: extractUsageMetrics(ctx.usage) }
+  }
+
   end (ctx) {
     super.end(ctx)
     super.asyncEnd(ctx)
@@ -155,31 +199,32 @@ class LlmLlmObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const { chunks, llmStartIdx, llmEndIdx, parentToolUseId, initialPrompt, usage } = ctx
+    const { chunks, llmStartIdx, llmEndIdx, parentToolUseId, initialPrompt, systemPrompt, usage } = ctx
 
     if (chunks) {
-      const inputMessages = this.#buildInputMessages(chunks, llmStartIdx, parentToolUseId, initialPrompt)
+      const inputMessages = this.#buildInputMessages(chunks, llmStartIdx, parentToolUseId, initialPrompt, systemPrompt)
       const outputMessages = buildOutputMessages(chunks, llmStartIdx, llmEndIdx)
       this._tagger.tagLLMIO(span, inputMessages, outputMessages)
     }
 
-    if (usage) {
-      const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0
-      const cacheReadTokens = usage.cache_read_input_tokens ?? 0
-      const inputTokens = (usage.input_tokens ?? 0) + cacheWriteTokens + cacheReadTokens
-      const outputTokens = usage.output_tokens ?? 0
-      this._tagger.tagMetrics(span, {
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        cache_read_input_tokens: cacheReadTokens,
-        cache_write_input_tokens: cacheWriteTokens,
-        total_tokens: inputTokens + outputTokens,
-      })
-    }
+    const metrics = extractUsageMetrics(usage)
+    if (metrics) this._tagger.tagMetrics(span, metrics)
   }
 
-  #buildInputMessages (chunks, llmStartIdx, parentToolUseId, initialPrompt) {
+  #buildInputMessages (chunks, llmStartIdx, parentToolUseId, initialPrompt, systemPrompt) {
     const messages = []
+    let configuredPrompt = systemPrompt
+    if (systemPrompt?.type === 'custom') configuredPrompt = systemPrompt.prompt
+    else if (systemPrompt?.type === 'preset') configuredPrompt = systemPrompt.append
+    if (typeof configuredPrompt === 'string') {
+      if (configuredPrompt) messages.push({ role: 'system', content: configuredPrompt })
+    } else if (Array.isArray(configuredPrompt)) {
+      for (const part of configuredPrompt) {
+        if (typeof part === 'string' && part && part !== SYSTEM_PROMPT_DYNAMIC_BOUNDARY) {
+          messages.push({ role: 'system', content: part })
+        }
+      }
+    }
     if (initialPrompt) messages.push({ role: 'user', content: initialPrompt })
     const seenIds = new Set()
 
@@ -240,6 +285,13 @@ class ToolLlmObsPlugin extends LLMObsPlugin {
   end (ctx) {
     super.end(ctx)
     super.asyncEnd(ctx)
+  }
+
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return subagentToolIds.delete(ctx.id) ? { spanKind: 'agent' } : {}
   }
 
   setLLMObsTags (ctx) {

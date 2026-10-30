@@ -2,7 +2,9 @@
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
+const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { VERSION } = require('../../../../../version')
+const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
 
@@ -52,6 +54,7 @@ const TRACE_ID_128 = '_dd.p.tid'
  * @property {number} start - Start time in nanoseconds since epoch
  * @property {number} duration - Duration in nanoseconds
  * @property {DDSpanEvent[]} [span_events] - Span events
+ * @property {string} [trace_state] - W3C tracestate for OTLP export
  */
 
 // Map DD span.kind string values to OTLP SpanKind numeric values
@@ -81,7 +84,7 @@ const DD_ERROR_META_KEYS = new Set(['error.message'])
  * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
  *
  * This implementation follows the OTLP trace data model:
- * https://opentelemetry.io/docs/specs/otlp/#trace-data-model
+ * https://github.com/open-telemetry/opentelemetry-proto/blob/v1.7.0/opentelemetry/proto/trace/v1/trace.proto
  *
  * It receives DD-formatted spans (from span_format.js) and produces
  * an ExportTraceServiceRequest serialized as JSON (http/json protocol only).
@@ -92,6 +95,11 @@ const DD_ERROR_META_KEYS = new Set(['error.message'])
 class OtlpTraceTransformer extends OtlpTransformerBase {
   #otelTraceSemanticsEnabled
 
+  // Span meta entries with the same key and value as a resource attribute are already carried by
+  // the resource (e.g. DD_TAGS), so they are not repeated as span attributes.
+  /** @type {import('@opentelemetry/api').Attributes} */
+  #resourceAttributes
+
   /**
    * Creates a new OtlpTraceTransformer instance.
    *
@@ -101,6 +109,16 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   constructor (resourceAttributes, otelTraceSemanticsEnabled) {
     super(resourceAttributes, 'http/json', 'traces')
     this.#otelTraceSemanticsEnabled = otelTraceSemanticsEnabled
+    this.#resourceAttributes = resourceAttributes
+  }
+
+  /**
+   * @override
+   * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
+   */
+  updateResourceAttributes (resourceAttributes) {
+    super.updateResourceAttributes(resourceAttributes)
+    this.#resourceAttributes = resourceAttributes
   }
 
   /**
@@ -161,11 +179,13 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   #transformSpan (span, traceIdHigh) {
     const parentId = span.parent_id
     const links = this.#extractLinks(span.meta?.['_dd.span_links'])
+    const samplingPriority = span.metrics?.[SAMPLING_PRIORITY_KEY]
 
     return {
       traceId: span.trace_id.toTraceIdHex(traceIdHigh).padStart(32, '0'),
-      spanId: this.#idToBytes(span.span_id, 8),
-      parentSpanId: (parentId && !parentId.equals(ZERO_ID)) ? this.#idToBytes(parentId, 8) : undefined,
+      spanId: this.#spanIdToHex(span.span_id),
+      parentSpanId: parentId && !parentId.equals(ZERO_ID) ? this.#spanIdToHex(parentId) : undefined,
+      traceState: span.trace_state,
       name: span.resource,
       kind: this.#mapSpanKind(span.meta?.['span.kind']),
       startTimeUnixNano: span.start,
@@ -177,6 +197,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       links: links.length ? links : undefined,
       droppedLinksCount: 0,
       status: this.#mapStatus(span),
+      flags: typeof samplingPriority === 'number' ? (samplingPriority >= AUTO_KEEP ? 1 : 0) : undefined,
     }
   }
 
@@ -210,11 +231,13 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       }
     }
 
-    // Add meta string tags, skipping keys that map to dedicated OTLP fields
+    // Add meta string tags, skipping keys that map to dedicated OTLP fields and tags the
+    // resource already carries with the same value (e.g. global tags from DD_TAGS)
     if (span.meta) {
       for (const [key, value] of Object.entries(span.meta)) {
         if (EXCLUDED_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && DD_ERROR_META_KEYS.has(key)) continue
+        if (this.#resourceAttributes[key] === value) continue
         attributes.push({ key, value: { stringValue: value } })
       }
     }
@@ -248,7 +271,6 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * Maps a DD span.kind string to an OTLP SpanKind enum value.
    *
    * @param {string | undefined} kind - DD span kind string
-   * @returns {number} OTLP SpanKind enum value
    */
   #mapSpanKind (kind) {
     if (!kind) return SPAN_KIND_UNSPECIFIED
@@ -333,27 +355,9 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     }
   }
 
-  /**
-   * Converts a DD Identifier object to a hex-encoded string of the specified byte length.
-   * Pads with leading zeros if the identifier buffer is shorter than the target.
-   * Per the OTLP http/json spec, trace-ids and span-ids must be hex-encoded strings.
-   *
-   * @param {Identifier} identifier - DD Identifier
-   * @param {number} targetLength - Target byte length (16 for trace ID, 8 for span ID)
-   * @returns {string} Hex-encoded string of the specified length
-   */
-  #idToBytes (identifier, targetLength) {
-    const buffer = identifier.toBuffer()
-    if (buffer.length === targetLength) {
-      return Buffer.from(buffer).toString('hex')
-    }
-    if (buffer.length > targetLength) {
-      return Buffer.from(buffer.slice(buffer.length - targetLength)).toString('hex')
-    }
-    // Pad with leading zeros to reach target length.
-    const result = Buffer.alloc(targetLength)
-    Buffer.from(buffer).copy(result, targetLength - buffer.length)
-    return result.toString('hex')
+  /** @param {Identifier} identifier */
+  #spanIdToHex (identifier) {
+    return identifier.toString(16).slice(-16)
   }
 
   /**
@@ -363,7 +367,6 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    *
    * @param {string | undefined} hexString - Hex string to normalize
    * @param {number} targetLength - Target byte length
-   * @returns {string} Hex-encoded string of the specified length
    */
   #hexToBytes (hexString, targetLength) {
     if (!hexString) return '0'.repeat(targetLength * 2)

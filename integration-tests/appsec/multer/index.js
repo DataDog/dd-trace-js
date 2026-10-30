@@ -35,7 +35,8 @@ app.post('/', uploadToMemory.single('file'), (req, res) => {
 })
 
 app.post('/no-middleware', (req, res) => {
-  uploadToMemory.none()(req, res, () => {
+  const upload = uploadToMemory.none()
+  upload(req, res, () => {
     res.end('DONE')
   })
 })
@@ -47,7 +48,8 @@ app.post('/cmd', uploadToMemory.single('file'), (req, res) => {
 })
 
 app.post('/cmd-no-middleware', (req, res) => {
-  uploadToMemory.none()(req, res, () => {
+  const upload = uploadToMemory.none()
+  upload(req, res, () => {
     childProcess.exec(req.body.command, () => {
       res.end('DONE')
     })

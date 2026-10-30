@@ -14,7 +14,7 @@ The channel prefix is determined by the instrumentation type. Node.js `tracingCh
 
 When using shimmer, prefer `tracingChannel` over manual channels — it provides `start/end/asyncStart/asyncEnd/error` events automatically, consistent with how orchestrion works internally.
 
-This means the plugin only needs to define static properties and implement `bindStart`:
+This asynchronous Orchestrion example creates the span in `bindStart` and finishes it in `asyncEnd`:
 
 ### Orchestrion Plugin (preferred)
 ```javascript
@@ -28,6 +28,10 @@ class MyPlugin extends TracingPlugin {
       meta: { component: '<name>' }
     }, ctx)
     return ctx.currentStore
+  }
+
+  asyncEnd (ctx) {
+    this.finish(ctx)
   }
 }
 ```

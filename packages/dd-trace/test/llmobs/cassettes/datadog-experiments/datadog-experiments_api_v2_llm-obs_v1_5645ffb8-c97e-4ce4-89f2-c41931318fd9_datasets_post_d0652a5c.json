@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/5645ffb8-c97e-4ce4-89f2-c41931318fd9/datasets",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "171"
+    },
+    "body": "{\"data\":{\"type\":\"datasets\",\"attributes\":{\"name\":\"dd-trace-js-experiments-vcr-rich-experiment-dataset\",\"description\":\"created by a dd-trace-js experiments rich VCR test\"}}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/vnd.api+json",
+      "vary": "Accept-Encoding",
+      "x-frame-options": "SAMEORIGIN",
+      "content-length": "434",
+      "date": "Fri, 31 Jul 2026 21:35:35 GMT",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "body": "{\"data\":{\"id\":\"78a7925a-6924-4bd4-9b6e-0e2fcc61a747\",\"type\":\"datasets\",\"attributes\":{\"author\":{\"id\":\"cc589400-1367-11ed-aee5-da7ad0900002\"},\"created_at\":\"2026-07-31T21:35:35.589615805Z\",\"current_version\":0,\"description\":\"created by a dd-trace-js experiments rich VCR test\",\"name\":\"dd-trace-js-experiments-vcr-rich-experiment-dataset\",\"project_id\":\"5645ffb8-c97e-4ce4-89f2-c41931318fd9\",\"updated_at\":\"2026-07-31T21:35:35.589615805Z\"}}}"
+  }
+}

@@ -124,13 +124,13 @@ class GCDecorator {
     }
     let reasonLabel = this.reasonLabels[flags]
     if (!reasonLabel) {
-      const reasons = []
+      let reasonStr = ''
       for (const [key, value] of Object.entries(this.flagObj)) {
         if (value & flags) {
-          reasons.push(key)
+          if (reasonStr) reasonStr += ','
+          reasonStr += key
         }
       }
-      const reasonStr = reasons.join(',')
       reasonLabel = labelFromStr(this.stringTable, this.reasonLabelKey, reasonStr)
       this.reasonLabels[flags] = reasonLabel
     }

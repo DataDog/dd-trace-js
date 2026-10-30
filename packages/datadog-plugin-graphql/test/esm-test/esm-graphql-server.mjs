@@ -2,6 +2,20 @@ import 'dd-trace/init.js'
 import { createServer } from 'node:http'
 import graphql from 'graphql'
 
+const Item = new graphql.GraphQLObjectType({
+  name: 'Item',
+  fields: {
+    value: {
+      type: graphql.GraphQLString,
+      /** @param {{ error?: Error, value?: string }} source */
+      resolve (source) {
+        if (source.error) throw source.error
+        return source.value
+      },
+    },
+  },
+})
+
 const schema = new graphql.GraphQLSchema({
   query: new graphql.GraphQLObjectType({
     name: 'Query',
@@ -14,6 +28,10 @@ const schema = new graphql.GraphQLSchema({
         resolve (obj, args) {
           return `Hello, ${args.name || 'world'}!`
         },
+      },
+      items: {
+        type: new graphql.GraphQLList(Item),
+        resolve: () => [{ value: 'first' }, { error: new Error('ESM resolver failed') }],
       },
     },
   }),

@@ -5,10 +5,10 @@ const net = require('node:net')
 const tls = require('node:tls')
 const { URL } = require('node:url')
 
-const axios = require('axios')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 module.exports = http.createServer((req, res) => {
-  axios({
+  httpRequest({
     url: req.url,
     method: req.method,
     headers: req.headers,

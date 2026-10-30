@@ -78,7 +78,7 @@ function configInfo () {
   const url = config.url
   const profilingEnabled = config.profiling.DD_PROFILING_ENABLED
 
-  return {
+  const startupLog = {
     [inspect.custom] () {
       return String(this)
     },
@@ -102,16 +102,17 @@ function configInfo () {
     sample_rate: config.sampler.sampleRate,
     sampling_rules: samplingRules,
     tags: config.tags,
-    ...(config.tags && config.tags.version && { dd_version: config.tags.version }),
     log_injection_enabled: !!config.logInjection,
     runtime_metrics_enabled: !!config.runtimeMetrics,
     profiling_enabled: profilingEnabled === 'true' || profilingEnabled === 'auto',
-    appsec_enabled: config.appsec.enabled,
+    appsec_enabled: config.appsec.DD_APPSEC_ENABLED,
     data_streams_enabled: !!config.dsmEnabled,
     otlp_traces_export_enabled: config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility,
     otlp_metrics_export_enabled: !!config.DD_METRICS_OTEL_ENABLED,
     otlp_logs_export_enabled: !!config.DD_LOGS_OTEL_ENABLED,
   }
+  if (config.tags?.version) startupLog.dd_version = config.tags.version
+  return startupLog
 }
 
 /**

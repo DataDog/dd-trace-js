@@ -21,8 +21,8 @@ variables:
   # would build an arm64 leg with amd64 binaries (exec format error). Pin amd64.
   BASE_CI_IMAGE_PLATFORM: linux/amd64
 
-  SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
   SLS_CI_BRANCH: main
+  SLS_PR_BENCHMARK_CI_BRANCH: main
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
   UNCONFIDENCE_THRESHOLD: "2.0"
@@ -33,6 +33,9 @@ variables:
   needs: [ ]
   tags: ["runner:apm-k8s-m7i-metal"]
   image: $MICROBENCHMARKS_CI_IMAGE
+  variables:
+    # See https://datadoghq.atlassian.net/wiki/spaces/APMINT/pages/7223313012/Flaky+Benchmarks+Monitoring for more details.
+    FLAKY_BENCHMARKS_REGEX: ""
   rules:
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
@@ -102,6 +105,8 @@ benchmark:
         GROUP: 5
       - MAJOR_VERSION: 20
         GROUP: 6
+      - MAJOR_VERSION: 20
+        GROUP: 7
       - MAJOR_VERSION: 24
         GROUP: 1
       - MAJOR_VERSION: 24
@@ -114,6 +119,8 @@ benchmark:
         GROUP: 5
       - MAJOR_VERSION: 24
         GROUP: 6
+      - MAJOR_VERSION: 24
+        GROUP: 7
       - MAJOR_VERSION: 26
         GROUP: 1
       - MAJOR_VERSION: 26
@@ -126,45 +133,28 @@ benchmark:
         GROUP: 5
       - MAJOR_VERSION: 26
         GROUP: 6
+      - MAJOR_VERSION: 26
+        GROUP: 7
   variables:
-    SPLITS: 6
+    SPLITS: 7
 
 benchmark-serverless:
   stage: benchmarks
-  image: $SLS_CI_IMAGE
-  tags: ["arch:amd64"]
-  when: on_success
-  rules:
-    - if: $CI_COMMIT_BRANCH == 'master'
-      interruptible: false
-    - interruptible: true
-  needs:
-    - benchmark-serverless-trigger
-  script:
-    - curl -OL "https://binaries.ddbuild.io/dd-source/authanywhere/LATEST/authanywhere-linux-amd64"
-    - mv "authanywhere-linux-amd64" /bin/authanywhere
-    - chmod +x /bin/authanywhere
-    - BTI_CI_API_TOKEN=$(authanywhere --audience rapid-devex-ci)
-    - >-
-      BTI_RESPONSE=$(curl --silent --request GET \
-        --header "$BTI_CI_API_TOKEN" \  --header "Content-Type: application/vnd.api+json" \
-        "https://bti-ci-api.us1.ddbuild.io/internal/ci/gitlab/token?owner=DataDog&repository=serverless-tools")
-    - GITLAB_TOKEN=$(echo "$BTI_RESPONSE" | jq -r '.token // empty')
-    - git clone https://serverless-tools:${GITLAB_TOKEN}@gitlab.ddbuild.io/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
-    - ./ci/check_trigger_status.sh
-
-benchmark-serverless-trigger:
-  stage: benchmarks
   needs: []
-  rules:
-    - if: $CI_COMMIT_BRANCH == 'master'
-      interruptible: false
-    - interruptible: true
   trigger:
     project: DataDog/serverless-tools
     branch: $SLS_CI_BRANCH
     strategy: depend
-  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
+    - if: $RELEASE_ALLOW_BENCHMARK_FAILURES == "true"
+      allow_failure: true
+    - if: $CI_COMMIT_BRANCH == 'master'
+      interruptible: false
+      allow_failure: false
+    - interruptible: true
+      allow_failure: false
   variables:
     UPSTREAM_PIPELINE_ID: $CI_PIPELINE_ID
     UPSTREAM_PROJECT_URL: $CI_PROJECT_URL
@@ -178,3 +168,31 @@ benchmark-serverless-trigger:
     # only available on Merge Requests
     UPSTREAM_MERGE_TARGET_BRANCH: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
     DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"
+
+# Launch queued Lambda measurements without waiting for builds or AWS runs.
+benchmark-serverless-pr-performance:
+  stage: benchmarks
+  needs: []
+  allow_failure: true
+  interruptible: false
+  trigger:
+    project: DataDog/serverless-tools
+    branch: $SLS_PR_BENCHMARK_CI_BRANCH
+  variables:
+    PR_BENCHMARK_ENABLED: "true"
+    PR_BENCHMARK_ONLY: "true"
+    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
+    UPSTREAM_PROJECT_URL: $CI_PROJECT_URL
+    UPSTREAM_GITHUB_SOURCE_REPOSITORY: DataDog/dd-trace-js
+    UPSTREAM_PIPELINE_ID: $CI_PIPELINE_ID
+    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
+    UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
+    UPSTREAM_DEFAULT_BRANCH: $CI_DEFAULT_BRANCH
+  rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
+    # Codesync creates push pipelines; serverless-tools resolves the open GitHub PR.
+    - if: >-
+        $CI_PIPELINE_SOURCE == "push" &&
+        $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+    - when: never

@@ -155,4 +155,93 @@ describe('id', () => {
     assert.strictEqual(spanId.toString(16), '000000000000abcd')
     assert.strictEqual(spanId.toString(10), '43981')
   })
+
+  it('should render hex ids up to and beyond 128 bits', () => {
+    assert.strictEqual(id('f'.repeat(32)).toString(16), 'f'.repeat(32))
+    assert.strictEqual(id('1'.repeat(33)).toString(16), '1'.repeat(33).padStart(48, '0'))
+  })
+
+  it('should not carry bytes over between hex renders of different lengths', () => {
+    assert.strictEqual(id('12293a8527e70a7f27c8d624ace0f559').toString(16), '12293a8527e70a7f27c8d624ace0f559')
+    assert.strictEqual(id('abcd').toString(16), '000000000000abcd')
+    assert.strictEqual(id('e'.repeat(48)).toString(16), 'e'.repeat(48))
+    assert.strictEqual(id('1').toString(16), '0000000000000001')
+  })
+
+  it('should render out-of-range bytes as their low 8 bits in hex', () => {
+    // A hex value like '-1' parses to a -1 byte, which Buffer.from() has always rendered as 'ff'.
+    assert.strictEqual(id('-1').toString(16), '00000000000000ff')
+  })
+
+  describe('reseed()', () => {
+    let freshId
+    let randomFillSyncStub
+
+    beforeEach(() => {
+      // Fill with a value that increments per call, so IDs drawn from different
+      // randomFillSync() fills are distinguishable instead of all looking alike.
+      let fillByte = 0
+      randomFillSyncStub = sinon.stub().callsFake(buf => {
+        fillByte++
+        buf.fill(fillByte)
+      })
+
+      freshId = proxyquire('../src/id', {
+        crypto: { randomFillSync: randomFillSyncStub },
+      })
+    })
+
+    it('should generate a different id after reseed', () => {
+      const before = freshId().toString()
+
+      freshId.reseed()
+      const after = freshId().toString()
+
+      assert.notStrictEqual(after, before)
+    })
+
+    it('should reset the batch cursor to 0', () => {
+      // Call id() several times to advance the batch counter
+      freshId()
+      freshId()
+      freshId()
+      randomFillSyncStub.resetHistory()
+
+      freshId.reseed()
+      // After reseed, batch = 0, so the next call must refill from randomFillSync
+      freshId()
+
+      sinon.assert.called(randomFillSyncStub)
+    })
+
+    it('should force a fresh randomFillSync() call on the very next id() after reseed', () => {
+      freshId.reseed()
+      randomFillSyncStub.resetHistory()
+
+      freshId()
+
+      sinon.assert.calledOnce(randomFillSyncStub)
+    })
+
+    it('should be safe to call repeatedly', () => {
+      freshId.reseed()
+      freshId.reseed()
+      randomFillSyncStub.resetHistory()
+
+      freshId()
+
+      sinon.assert.calledOnce(randomFillSyncStub)
+    })
+
+    it('should preserve existing identifiers after reseeding', () => {
+      const existing = freshId()
+      const before = existing.toString()
+
+      freshId.reseed()
+      freshId()
+
+      assert.strictEqual(existing.toString(), before)
+      assert.strictEqual(Buffer.from(existing.toBuffer()).toString('hex'), before)
+    })
+  })
 })

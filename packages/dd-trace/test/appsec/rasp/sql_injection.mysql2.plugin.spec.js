@@ -1,13 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const path = require('path')
-const Axios = require('axios')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const getConfig = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
+const HttpRequest = require('../../setup/helpers/http-client')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {
@@ -19,13 +20,10 @@ describe('RASP - sql_injection', () => {
           user: 'root',
           database: 'db',
         }
-        let server, axios, app, mysql2
+        let server, httpRequest, app, mysql2
 
-        before(() => {
-          return agent.load(['express', 'http', 'mysql2'], { client: false })
-        })
-
-        before(done => {
+        before(async () => {
+          await agent.load(['express', 'http', 'mysql2'], { client: false })
           const express = require(`../../../../../versions/express@${expressVersion}`).get()
           mysql2 = require(`../../../../../versions/mysql2@${mysql2Version}`).get()
           const expressApp = express()
@@ -42,12 +40,11 @@ describe('RASP - sql_injection', () => {
             },
           }))
 
-          server = expressApp.listen(0, () => {
-            const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-            axios = Axios.create({
-              baseURL: `http://localhost:${port}`,
-            })
-            done()
+          server = expressApp.listen(0)
+          await once(server, 'listening')
+          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+          httpRequest = HttpRequest.create({
+            baseURL: `http://localhost:${port}`,
           })
         })
 
@@ -81,7 +78,7 @@ describe('RASP - sql_injection', () => {
                 })
               }
 
-              axios.get('/?param=1')
+              httpRequest.get('/?param=1')
 
               await checkRaspExecutedAndNotThreat(agent)
             })
@@ -97,7 +94,7 @@ describe('RASP - sql_injection', () => {
               }
 
               try {
-                await axios.get('/?param=\' OR 1 = 1 --')
+                await httpRequest.get('/?param=\' OR 1 = 1 --')
               } catch {
                 return await checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
               }
@@ -118,7 +115,7 @@ describe('RASP - sql_injection', () => {
                 })
               }
 
-              axios.get('/?param=1')
+              httpRequest.get('/?param=1')
 
               await checkRaspExecutedAndNotThreat(agent)
             })
@@ -134,7 +131,7 @@ describe('RASP - sql_injection', () => {
               }
 
               try {
-                await axios.get('/?param=\' OR 1 = 1 --')
+                await httpRequest.get('/?param=\' OR 1 = 1 --')
               } catch {
                 return await checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
               }
@@ -163,7 +160,7 @@ describe('RASP - sql_injection', () => {
                 })
               }
 
-              axios.get('/?param=1')
+              httpRequest.get('/?param=1')
 
               await checkRaspExecutedAndNotThreat(agent)
             })
@@ -179,7 +176,7 @@ describe('RASP - sql_injection', () => {
               }
 
               try {
-                await axios.get('/?param=\' OR 1 = 1 --')
+                await httpRequest.get('/?param=\' OR 1 = 1 --')
               } catch {
                 return await checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
               }
@@ -200,7 +197,7 @@ describe('RASP - sql_injection', () => {
                 })
               }
 
-              axios.get('/?param=1')
+              httpRequest.get('/?param=1')
 
               await checkRaspExecutedAndNotThreat(agent)
             })
@@ -216,7 +213,7 @@ describe('RASP - sql_injection', () => {
               }
 
               try {
-                await axios.get('/?param=\' OR 1 = 1 --')
+                await httpRequest.get('/?param=\' OR 1 = 1 --')
               } catch {
                 return await checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
               }

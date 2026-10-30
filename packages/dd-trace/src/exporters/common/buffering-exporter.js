@@ -25,10 +25,10 @@ class BufferingExporter {
   }
 
   _export (payload, writer = this._writer, timerKey = '_timer', deferImmediateFlush = false) {
-    if (this._config.isCiVisibility) {
+    const appended = writer.append(payload)
+    if (this._config.isCiVisibility && appended !== false) {
       incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION, {}, payload.length)
     }
-    const appended = writer.append(payload)
 
     const { flushInterval } = this._config
 

@@ -5,7 +5,9 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/'],
   cache: false,
   testMatch: [
-    '**/ci-visibility/automatic-log-submission/automatic-log-submission-*',
+    process.env.TEST_MODULE_TYPE === 'esm'
+      ? '**/ci-visibility/automatic-log-submission/automatic-log-submission-esm-test.mjs'
+      : '**/ci-visibility/automatic-log-submission/automatic-log-submission-test.js',
   ],
   testRunner: 'jest-circus/runner',
   testEnvironment: 'node',

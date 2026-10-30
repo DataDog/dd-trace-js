@@ -3,8 +3,10 @@
 const os = require('os')
 const path = require('path')
 const fs = require('fs')
+const { execFileSync } = require('node:child_process')
 
 const log = require('../../log')
+const { getEnvironmentVariables } = require('../../config/helper')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -45,12 +47,12 @@ const legacyStorage = storage('legacy')
 const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB
 
 function sanitizedExec (
-  cmd,
   flags,
   operationMetric,
   durationMetric,
   errorMetric,
-  shouldTrim = true
+  shouldTrim = true,
+  executionOptions
 ) {
   return legacyStorage.run({ noop: true }, () => {
     let startTime
@@ -61,7 +63,14 @@ function sanitizedExec (
       startTime = Date.now()
     }
     try {
-      let result = cachedExec(cmd, flags, { stdio: 'pipe' }).toString()
+      const exec = executionOptions?.uncached ? execFileSync : cachedExec
+      /** @type {import('node:child_process').ExecFileSyncOptions} */
+      const options = { stdio: 'pipe' }
+      if (executionOptions?.timeout) options.timeout = executionOptions.timeout
+      if (executionOptions?.localOnly) {
+        options.env = { ...getEnvironmentVariables(), GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' }
+      }
+      let result = exec('git', flags, options).toString()
 
       if (shouldTrim) {
         result = result.replaceAll(/(\r\n|\n|\r)/g, '')
@@ -80,6 +89,7 @@ function sanitizedExec (
         })
       }
       log.error('Git plugin error executing command', err)
+      if (executionOptions?.throwOnError) throw err
       return ''
     }
   })
@@ -95,10 +105,8 @@ function isDirectory (path) {
 }
 
 function isGitAvailable () {
-  const isWindows = os.platform() === 'win32'
-  const command = isWindows ? 'where' : 'which'
   try {
-    cachedExec(command, ['git'])
+    cachedExec('git', ['--version'])
     return true
   } catch {
     incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'check_git', exitCode: 'missing' })
@@ -106,18 +114,19 @@ function isGitAvailable () {
   }
 }
 
-function isShallowRepository () {
+function isShallowRepository (uncached = false) {
   return sanitizedExec(
-    'git',
     ['rev-parse', '--is-shallow-repository'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'check_shallow' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'check_shallow' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'check_shallow' } }
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'check_shallow' } },
+    true,
+    { uncached }
   ) === 'true'
 }
 
 function getGitVersion () {
-  const gitVersionString = sanitizedExec('git', ['version'])
+  const gitVersionString = sanitizedExec(['version'])
   const gitVersionMatches = /** @type {RegExpMatch} */ (gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/))
   try {
     return {
@@ -140,8 +149,8 @@ function unshallowRepository (parentOnly = false) {
     log.warn('Git version is <2.27, so git unshallow will not proceed')
     return
   }
-  const defaultRemoteName = sanitizedExec('git', ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
-  const revParseHead = sanitizedExec('git', ['rev-parse', 'HEAD'])
+  const defaultRemoteName = sanitizedExec(['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
+  const revParseHead = sanitizedExec(['rev-parse', 'HEAD'])
 
   const baseGitOptions = [
     'fetch',
@@ -169,7 +178,6 @@ function unshallowRepository (parentOnly = false) {
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
     )
     const upstreamRemote = sanitizedExec(
-      'git',
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']
     )
     flags = [
@@ -188,7 +196,6 @@ function unshallowRepository (parentOnly = false) {
       )
       // We use sanitizedExec here because if this last option fails, we'll give up.
       sanitizedExec(
-        'git',
         baseGitOptions,
         null,
         null,
@@ -201,7 +208,6 @@ function unshallowRepository (parentOnly = false) {
 
 function getRepositoryUrl () {
   return sanitizedExec(
-    'git',
     ['config', '--get', 'remote.origin.url'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_repository' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_repository' } },
@@ -230,23 +236,29 @@ function getLatestCommits () {
 }
 
 function getGitDiff (baseCommit, targetCommit) {
+  // Fetch the required snapshots explicitly; a depth-1 metadata fetch does not provide their ancestry.
+  for (const commit of targetCommit ? [baseCommit, targetCommit] : [baseCommit]) {
+    if (!hasLocalGitObject(commit)) {
+      // Use the current checkout state so a stale cache cannot shorten a complete clone.
+      fetchHeadCommitSha(commit, isShallowRepository(true))
+    }
+  }
   const flags = ['diff', '-U0', '--word-diff=porcelain', baseCommit]
   if (targetCommit) {
     flags.push(targetCommit)
   }
   return sanitizedExec(
-    'git',
     flags,
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'diff' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'diff' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'diff' } },
-    false // important not to trim or we'll lose the line breaks which we need to detect impacted tests
+    false, // important not to trim or we'll lose the line breaks which we need to detect impacted tests
+    { uncached: true }
   )
 }
 
 function getGitRemoteName () {
   const upstreamRemote = sanitizedExec(
-    'git',
     ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
@@ -258,7 +270,6 @@ function getGitRemoteName () {
   }
 
   const remotes = sanitizedExec(
-    'git',
     ['remote'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
@@ -271,7 +282,6 @@ function getGitRemoteName () {
 
 function getSourceBranch () {
   return sanitizedExec(
-    'git',
     ['rev-parse', '--abbrev-ref', 'HEAD'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_source_branch' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_source_branch' } },
@@ -317,7 +327,6 @@ function checkAndFetchBranch (branch, remoteName) {
 
 function getLocalBranches (remoteName) {
   const localBranches = sanitizedExec(
-    'git',
     ['for-each-ref', '--format=%(refname:short)', `refs/remotes/${remoteName}`],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_local_branches' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_local_branches' } },
@@ -333,7 +342,6 @@ function getLocalBranches (remoteName) {
 
 function getMergeBase (baseBranch, sourceBranch) {
   return sanitizedExec(
-    'git',
     ['merge-base', baseBranch, sourceBranch],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
@@ -343,7 +351,6 @@ function getMergeBase (baseBranch, sourceBranch) {
 
 function getCounts (sourceBranch, candidateBranch) {
   const counts = sanitizedExec(
-    'git',
     ['rev-list', '--left-right', '--count', `${candidateBranch}...${sourceBranch}`],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_counts' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_counts' } },
@@ -462,7 +469,6 @@ function generatePackFilesForCommits (commitsToUpload) {
 
 function getRepositoryRoot () {
   return sanitizedExec(
-    'git',
     ['rev-parse', '--show-toplevel']
   )
 }
@@ -479,6 +485,7 @@ function getGitMetadata (ciMetadata) {
     authorEmail: ciAuthorEmail,
     ciWorkspacePath,
     headCommitSha,
+    pullRequestBaseBranchSha,
   } = ciMetadata
 
   // With stdio: 'pipe', errors in this command will not be output to the parent process,
@@ -490,19 +497,36 @@ function getGitMetadata (ciMetadata) {
     committerName,
     committerEmail,
     committerDate,
-  ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
+  ] = sanitizedExec(['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
 
   const tags = {
     [GIT_COMMIT_MESSAGE]:
-      commitMessage || sanitizedExec('git', ['show', '-s', '--format=%B'], null, null, null, false),
-    [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
-    [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
+      commitMessage || sanitizedExec(['show', '-s', '--format=%B'], null, null, null, false),
+    [GIT_BRANCH]: branch || sanitizedExec(['rev-parse', '--abbrev-ref', 'HEAD']),
+    [GIT_COMMIT_SHA]: commitSHA || sanitizedExec(['rev-parse', 'HEAD']),
     [CI_WORKSPACE_PATH]: ciWorkspacePath || getRepositoryRoot(),
   }
 
   if (headCommitSha) {
-    if (isShallowRepository()) {
-      fetchHeadCommitSha(headCommitSha)
+    const shallow = isShallowRepository(true)
+    const fetchedAtDepthOne = shallow && fetchHeadCommitSha(headCommitSha)
+    const headFlags = [
+      'show',
+      '-s',
+      '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'',
+      headCommitSha,
+    ]
+    // Only explicit, bounded fetches may contact the remote during head metadata recovery.
+    const headOptions = { uncached: true, localOnly: true }
+    let headInfo = sanitizedExec(headFlags, null, null, null, false, headOptions)
+    if (!headInfo && (fetchedAtDepthOne || !shallow)) {
+      fetchHeadCommitSha(headCommitSha, false)
+      headInfo = sanitizedExec(headFlags, null, null, null, false, headOptions)
+    }
+
+    // Prepare a known diff base while the remote is available, including when Git upload is disabled.
+    if (shallow && pullRequestBaseBranchSha && !hasLocalGitObject(pullRequestBaseBranchSha)) {
+      fetchHeadCommitSha(pullRequestBaseBranchSha)
     }
 
     const [
@@ -514,19 +538,7 @@ function getGitMetadata (ciMetadata) {
       headCommitterName,
       headCommitterEmail,
       headCommitMessage,
-    ] = sanitizedExec(
-      'git',
-      [
-        'show',
-        '-s',
-        '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'',
-        headCommitSha,
-      ],
-      null,
-      null,
-      null,
-      false
-    ).split('","')
+    ] = headInfo.split('","')
 
     if (gitHeadCommitSha) {
       tags[GIT_COMMIT_HEAD_AUTHOR_DATE] = headAuthorDate
@@ -541,7 +553,7 @@ function getGitMetadata (ciMetadata) {
 
   const entries = [
     GIT_REPOSITORY_URL,
-    filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
+    filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec(['ls-remote', '--get-url'])),
     GIT_COMMIT_AUTHOR_DATE, authorDate,
     GIT_COMMIT_AUTHOR_NAME, ciAuthorName || authorName,
     GIT_COMMIT_AUTHOR_EMAIL, ciAuthorEmail || authorEmail,
@@ -565,7 +577,6 @@ function getGitInformationDiscrepancy () {
   const gitRepositoryUrl = getRepositoryUrl()
 
   const gitCommitSHA = sanitizedExec(
-    'git',
     ['rev-parse', 'HEAD'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_sha' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_sha' } },
@@ -575,24 +586,51 @@ function getGitInformationDiscrepancy () {
   return { gitRepositoryUrl, gitCommitSHA }
 }
 
-function fetchHeadCommitSha (headSha) {
-  const remoteName = getGitRemoteName()
+/** @param {string} sha */
+function hasLocalGitObject (sha) {
+  return legacyStorage.run({ noop: true }, () => {
+    try {
+      execFileSync('git', ['cat-file', '-e', sha], {
+        stdio: 'pipe',
+        // Older Git versions ignore GIT_NO_LAZY_FETCH, so also disallow transports for this local-only probe.
+        env: { ...getEnvironmentVariables(), GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
+      })
+      return true
+    } catch {
+      return false
+    }
+  })
+}
 
-  sanitizedExec(
-    'git',
-    [
-      'fetch',
-      '--update-shallow',
-      '--filter=blob:none',
-      '--recurse-submodules=no',
-      '--no-write-fetch-head',
-      remoteName,
-      headSha,
-    ],
-    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'fetch_head_commit_sha' } },
-    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'fetch_head_commit_sha' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'fetch_head_commit_sha' } }
-  )
+function fetchHeadCommitSha (headSha, useDepth = true) {
+  const remoteName = getGitRemoteName()
+  // Existing heads retain the original repair/history behavior; a failed bounded fetch also retries that path.
+  const depths = useDepth && !hasLocalGitObject(headSha) ? [true, false] : [false]
+  for (const shallow of depths) {
+    try {
+      sanitizedExec(
+        [
+          'fetch',
+          ...(shallow ? ['--depth=1'] : []),
+          '--update-shallow',
+          '--filter=blob:none',
+          '--recurse-submodules=no',
+          '--no-write-fetch-head',
+          remoteName,
+          headSha,
+        ],
+        { name: TELEMETRY_GIT_COMMAND, tags: { command: 'fetch_head_commit_sha' } },
+        { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'fetch_head_commit_sha' } },
+        { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'fetch_head_commit_sha' } },
+        true,
+        { uncached: true, throwOnError: true, timeout: 5000 }
+      )
+      return shallow
+    } catch {
+      // sanitizedExec records the failure; retry without a depth limit if the bounded fetch failed.
+    }
+  }
+  return false
 }
 
 module.exports = {

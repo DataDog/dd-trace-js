@@ -22,9 +22,10 @@ describe('jest-imported-globals-concurrent-http', () => {
     expect(statusCode).toBe(200)
   })
 
-  test.concurrent.each([
+  const parameterizedTest = test.concurrent.each([
     ['imported each row'],
-  ])('%s http is linked to test span', async () => {
+  ])
+  parameterizedTest('%s http is linked to test span', async () => {
     const statusCode = await httpRequest('/info')
     expect(statusCode).toBe(200)
   })

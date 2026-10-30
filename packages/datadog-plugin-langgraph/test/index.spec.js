@@ -8,12 +8,15 @@ const TestSetup = require('./test-setup')
 const testSetup = new TestSetup()
 
 createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
+  additionalPlugins: ['langchain'],
   category: 'llm',
 }, (meta) => {
   const { agent } = meta
 
   before(async () => {
-    await testSetup.setup(meta.mod)
+    const { tool } = meta.versionMod.get('@langchain/core/tools')
+    const { z } = meta.versionMod.get('zod')
+    await testSetup.setup(meta.mod, tool, z)
   })
 
   after(async () => {
@@ -21,7 +24,7 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
   })
 
   beforeEach(async () => {
-    await agent.load('langgraph')
+    await agent.load(['langgraph', 'langchain'])
   })
 
   afterEach(async () => {
@@ -73,6 +76,25 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
 
       await testSetup.pregelStreamError().catch(() => {})
 
+      return traceAssertion
+    })
+
+    it('should not mark graph interrupts as errors', async () => {
+      const traceAssertion = agent.assertSomeTraces((traces) => {
+        const allSpans = traces.flat()
+        const toolSpan = allSpans.find(span => span.resource?.endsWith('.ask_for_approval'))
+
+        assert.ok(toolSpan)
+        assert.strictEqual(toolSpan.error, 0)
+        assert.strictEqual(Object.hasOwn(toolSpan.meta, 'error.type'), false)
+        assert.strictEqual(Object.hasOwn(toolSpan.meta, 'error.message'), false)
+        assert.strictEqual(Object.hasOwn(toolSpan.meta, 'error.stack'), false)
+      })
+
+      const { resumed, suspended } = await testSetup.graphInterrupt()
+
+      assert.strictEqual(suspended.__interrupt__.length, 1)
+      assert.strictEqual(resumed.result, 'The action was approved.')
       return traceAssertion
     })
   })

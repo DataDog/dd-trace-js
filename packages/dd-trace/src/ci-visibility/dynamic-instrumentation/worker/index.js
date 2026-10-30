@@ -52,7 +52,6 @@ const limits = {
 
 /**
  * @param {object} value - Snapshot object or sub-object.
- * @returns {boolean}
  */
 function isCapturedValue (value) {
   return typeof value.type === 'string'
@@ -62,7 +61,6 @@ function isCapturedValue (value) {
  * Remove empty capture containers before sending snapshots through the Test Optimization logs path.
  *
  * @param {object} value - Snapshot object or sub-object.
- * @returns {void}
  */
 function removeEmptyCaptureProperties (value) {
   const stack = [value]
@@ -230,9 +228,10 @@ async function addBreakpoint (probe) {
   }
 }
 
-function start () {
+async function start () {
+  await session.post('Debugger.enable')
+  // Only flag the session as started once enabled, so the next probe retries a failed start and reports its cause
   sessionStarted = true
-  return session.post('Debugger.enable') // return instead of await to reduce number of promises created
 }
 
 function drainBreakpointHitRequests () {

@@ -5,12 +5,11 @@ process.env.K_SERVICE = 'test-service'
 
 const assert = require('node:assert/strict')
 const { setTimeout: wait } = require('node:timers/promises')
-const { inspect } = require('node:util')
 
-const axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 if (typeof global.gc !== 'function') {
   throw new Error('requires --expose-gc flag')
@@ -67,7 +66,7 @@ describe('Push Subscription Plugin', () => {
       'x-goog-pubsub-publish-time': new Date().toISOString(),
     }
 
-    return axios.post(`http://localhost:${port}/push-endpoint`, {
+    return httpRequest.post(`http://localhost:${port}/push-endpoint`, {
       message: { data: 'dGVzdA==', messageId: 'test-message-id' },
     }, {
       headers: { ...defaultHeaders, ...headers },
@@ -130,12 +129,7 @@ describe('Push Subscription Plugin', () => {
           .assertSomeTraces(traces => {
             const pubsubSpan = findPubSubSpan(traces)
 
-            if (pubsubSpan.meta['_dd.span_links']) {
-              const spanLinks = JSON.parse(pubsubSpan.meta['_dd.span_links'])
-              assert.ok(Array.isArray(spanLinks), `Expected array, got ${inspect(spanLinks)}`)
-              const hasProducerLink = spanLinks.some(link => link.trace_id && link.span_id)
-              assert.strictEqual(hasProducerLink, true)
-            }
+            assert.strictEqual(pubsubSpan.meta['_dd.span_links'], undefined)
           })
           .then(done)
           .catch(done)
@@ -149,8 +143,9 @@ describe('Push Subscription Plugin', () => {
     })
 
     it('should add batch metadata to receive span', (done) => {
-      const batchTraceId = 'abc123def456'
-      const batchSpanId = '789012345678'
+      const batchTraceId = 'abc123def4567890'
+      const batchSpanId = '789012345678abcd'
+      const batchTraceIdUpper = 'abcdef1234567890'
 
       appListener = createServer().listen(0, 'localhost', () => {
         const port = appListener.address().port
@@ -167,6 +162,10 @@ describe('Push Subscription Plugin', () => {
               'pubsub.batch.message_count': 3,
               'pubsub.batch.message_index': 0,
             })
+            assert.deepStrictEqual(JSON.parse(pubsubSpan.meta['_dd.span_links']), [{
+              trace_id: batchTraceIdUpper + batchTraceId,
+              span_id: batchSpanId,
+            }])
           })
           .then(done)
           .catch(done)
@@ -176,6 +175,7 @@ describe('Push Subscription Plugin', () => {
           '_dd.batch.index': '0',
           '_dd.pubsub_request.trace_id': batchTraceId,
           '_dd.pubsub_request.span_id': batchSpanId,
+          '_dd.pubsub_request.p.tid': batchTraceIdUpper,
         }).catch(done)
       })
     })
@@ -216,7 +216,7 @@ describe('Push Subscription Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios.post(`http://localhost:${port}/push-endpoint`, { data: 'regular' }, {
+        httpRequest.post(`http://localhost:${port}/push-endpoint`, { data: 'regular' }, {
           headers: {
             'Content-Type': 'application/json',
             'User-Agent': 'Mozilla/5.0', // Not Google user agent
@@ -240,7 +240,7 @@ describe('Push Subscription Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios.post(`http://localhost:${port}/push-endpoint`, { message: { data: 'dGVzdA==' } }, {
+        httpRequest.post(`http://localhost:${port}/push-endpoint`, { message: { data: 'dGVzdA==' } }, {
           headers: {
             'Content-Type': 'application/json',
             'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',

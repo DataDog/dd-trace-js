@@ -1,6 +1,14 @@
 'use strict'
 
 const path = require('path')
+const { types: { isTypedArray } } = require('node:util')
+
+/**
+ * @typedef {Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array | Int32Array | Uint32Array |
+ *   Float32Array | Float64Array | BigInt64Array | BigUint64Array | DataView} BinaryView
+ */
+
+const getTypedArrayLength = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), 'length').get
 
 /**
  * `for-in` with an early return is the only allocation-free shape for
@@ -10,12 +18,31 @@ const path = require('path')
  * and AppSec reporter promote it.
  *
  * @param {object | undefined} obj
- * @returns {boolean}
  */
 function isEmpty (obj) {
+  if (Array.isArray(obj) || ArrayBuffer.isView(obj)) {
+    // `for-in` materializes every index key up front, which exhausts memory on large bodies, so return as soon as
+    // there are elements. Empty ones have no index keys to materialize, so check their own keys, which still detects
+    // named properties without walking a Buffer's enumerable prototype methods.
+    const length = Array.isArray(obj) ? obj.length : typedArrayLength(obj)
+    // eslint-disable-next-line no-restricted-syntax
+    return length === 0 && Object.keys(obj).length === 0
+  }
+  // `for-in` over a string also materializes every index key, so large raw string bodies need the same shortcut.
+  if (typeof obj === 'string') return obj.length === 0
   // eslint-disable-next-line no-unreachable-loop
   for (const _ in obj) return false
   return true
+}
+
+/**
+ * Reads the element count through the intrinsic getter, which, unlike `view.length`, an instance or subclass cannot
+ * shadow with application code. A `DataView` exposes no indexed elements, so it counts as zero.
+ *
+ * @param {BinaryView} view
+ */
+function typedArrayLength (view) {
+  return isTypedArray(view) ? getTypedArrayLength.call(view) : 0
 }
 
 function isTrue (str) {
@@ -118,9 +145,12 @@ function stripQueryAndFragment (target) {
 }
 
 function calculateDDBasePath (dirname) {
-  const dirSteps = dirname.split(path.sep)
-  const packagesIndex = dirSteps.lastIndexOf('packages')
-  return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep
+  // Bundled into ESM output, `__dirname` is not defined. Bundled into CJS output, it is the bundle's directory,
+  // which may contain an unrelated `packages` segment (e.g. a monorepo). Only this file's own directory identifies
+  // where dd-trace lives.
+  const suffix = path.sep + path.join('packages', 'dd-trace', 'src')
+  if (dirname === undefined || !dirname.endsWith(suffix)) return
+  return dirname.slice(0, -suffix.length) + path.sep
 }
 
 function normalizePluginEnvName (envPluginName, makeLowercase = false) {
@@ -144,6 +174,18 @@ function formatKnuthRate (rate) {
   }
 }
 
+/**
+ * Truncates an oversized string without retaining its original backing store.
+ *
+ * @param {string} value
+ * @param {number} maxLength
+ * @param {string} [suffix]
+ */
+function truncateString (value, maxLength, suffix = '') {
+  // V8 flattens this bounded concatenation before creating the slice.
+  return (' ' + value.slice(0, maxLength - suffix.length)).slice(1) + suffix
+}
+
 module.exports = {
   isEmpty,
   isTrue,
@@ -152,7 +194,10 @@ module.exports = {
   globMatch,
   getSegment,
   stripQueryAndFragment,
-  ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
+  ddBasePath: globalThis.__DD_ESBUILD_BASEPATH ||
+    calculateDDBasePath(typeof __dirname === 'string' ? __dirname : undefined),
   normalizePluginEnvName,
   formatKnuthRate,
+  truncateString,
+  typedArrayLength,
 }

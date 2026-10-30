@@ -3,16 +3,41 @@
 const api = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
+const { AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const tracer = require('../../')
 
 const id = require('../id')
 const log = require('../log')
-const TextMapPropagator = require('../opentracing/propagation/text_map')
+const { normalizeOtelTraceState } = require('../otel-sampling')
 const TraceState = require('../opentracing/propagation/tracestate')
 const SpanContext = require('./span_context')
 const Span = require('./span')
 const Sampler = require('./sampler')
 const { normalizeLinkContext } = require('./span-helpers')
+
+/**
+ * @param {number} traceparentSampled
+ * @param {number | undefined} tracestateSamplingPriority
+ * @param {string | null} origin
+ * @returns {import('../priority_sampler').SamplingPriority}
+ */
+function getSamplingPriority (traceparentSampled, tracestateSamplingPriority, origin) {
+  const fromRumWithoutPriority = tracestateSamplingPriority === undefined && origin === 'rum'
+
+  let samplingPriority =
+    /** @type {import('../priority_sampler').SamplingPriority} */ (tracestateSamplingPriority ?? AUTO_KEEP)
+  if (!fromRumWithoutPriority) {
+    if (traceparentSampled === 0 &&
+        (!tracestateSamplingPriority || tracestateSamplingPriority >= 0)) {
+      samplingPriority = AUTO_REJECT
+    } else if (traceparentSampled === 1 &&
+              (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
+      samplingPriority = AUTO_KEEP
+    }
+  }
+
+  return samplingPriority
+}
 
 class Tracer {
   constructor (library, config, tracerProvider) {
@@ -50,12 +75,12 @@ class Tracer {
   _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
     let origin = null
     let samplingPriority = traceFlag
+    let samplingMechanism
+    const traceStateValue = typeof ts?.serialize === 'function' ? ts.serialize() : ts?.traceparent
+    const traceState = TraceState.fromString(traceStateValue)
+    normalizeOtelTraceState(traceState)
 
-    ts = ts?.traceparent
-
-    if (ts) {
-      // Use TraceState.fromString to parse the tracestate header
-      const traceState = TraceState.fromString(ts)
+    if (traceStateValue) {
       let ddTraceStateData = null
 
       // Extract Datadog specific trace state data
@@ -65,29 +90,26 @@ class Tracer {
       })
 
       if (ddTraceStateData) {
-        // Assuming ddTraceStateData is now a Map or similar structure containing Datadog trace state data
-        // Extract values as needed, similar to the original logic
-        const samplingPriorityTs = ddTraceStateData.get('s')
-        origin = ddTraceStateData.get('o') ?? null
-        // Convert Map to object for meta
-        const otherPropagatedTags = Object.fromEntries(ddTraceStateData.entries())
+        const priority = Number.parseInt(ddTraceStateData.get('s'), 10)
+        const tracestateSamplingPriority = Number.isInteger(priority) ? priority : undefined
+        origin = ddTraceStateData.get('o')?.replaceAll('~', '=') ?? null
 
-        // Update meta and samplingPriority based on extracted values
-        Object.assign(meta, otherPropagatedTags)
-        // Guard against an undefined/empty `s:` field that would result in NaN.
-        const tracestateSamplingPriority = samplingPriorityTs ? Math.trunc(samplingPriorityTs) : undefined
-        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, tracestateSamplingPriority, origin)
+        const mechanism = Math.abs(Number.parseInt(ddTraceStateData.get('t.dm'), 10))
+        if (Number.isInteger(mechanism)) samplingMechanism = mechanism
+
+        samplingPriority = getSamplingPriority(traceFlag, tracestateSamplingPriority, origin)
       } else {
-        log.debug('No dd list member in tracestate from incoming request:', ts)
+        log.debug('No dd list member in tracestate from incoming request:', traceStateValue)
       }
     }
 
     const spanContext = new SpanContext({
-      traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16),
+      traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16), tracestate: traceState,
     })
 
     spanContext._ddContext._sampling = { priority: samplingPriority }
     spanContext._ddContext._trace = { ...spanContext._ddContext._trace, origin }
+    if (samplingMechanism !== undefined) spanContext._ddContext._sampling.mechanism = samplingMechanism
     return spanContext
   }
 

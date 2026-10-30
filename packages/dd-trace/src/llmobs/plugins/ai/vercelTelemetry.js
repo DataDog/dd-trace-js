@@ -38,11 +38,15 @@ function formatLanguageModelInputMessages (instructions, messages) {
   const inputMessages = []
 
   if (instructions) {
-    const systemPrompt = typeof instructions === 'string'
-      ? instructions
-      : Array.isArray(instructions)
-        ? instructions.map(instruction => instruction.content).join('')
-        : instructions.content
+    let systemPrompt = instructions
+    if (typeof instructions !== 'string') {
+      if (Array.isArray(instructions)) {
+        systemPrompt = ''
+        for (const instruction of instructions) systemPrompt += instruction.content
+      } else {
+        systemPrompt = instructions.content
+      }
+    }
 
     inputMessages.push({ role: 'system', content: systemPrompt })
   }
@@ -53,13 +57,13 @@ function formatLanguageModelInputMessages (instructions, messages) {
     if (role === 'system') {
       inputMessages.push({ role, content })
     } else if (role === 'user') {
-      const userMessageContent =
-      typeof content === 'string'
-        ? content
-        : content
-          .filter(part => part.type === 'text')
-          .map(part => part.text)
-          .join('')
+      let userMessageContent = content
+      if (typeof content !== 'string') {
+        userMessageContent = ''
+        for (const part of content) {
+          if (part.type === 'text') userMessageContent += part.text
+        }
+      }
 
       inputMessages.push({ role, content: userMessageContent })
     } else if (role === 'assistant') {
@@ -136,6 +140,20 @@ function formatLanguageModelOutputMessages (content) {
   return outputMessages
 }
 
+/**
+ * @param {object} [usage] AI SDK usage, from the result or the stream's `finish` chunk
+ * @returns {Record<string, number | undefined>}
+ */
+function extractUsageMetrics (usage) {
+  return {
+    inputTokens: usage?.inputTokens?.total,
+    cacheWriteTokens: usage?.inputTokens?.cacheWrite ?? 0,
+    cacheReadTokens: usage?.inputTokens?.cacheRead ?? 0,
+    outputTokens: usage?.outputTokens?.total,
+    reasoningOutputTokens: usage?.outputTokens?.reasoning ?? 0,
+  }
+}
+
 class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
   static id = 'ai_llmobs_vercel_telemetry'
   static integration = 'ai'
@@ -148,6 +166,13 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     super(...arguments)
 
     this.addSub('dd-trace:vercel-ai:chunk', ({ ctx, chunk, done }) => {
+      if (!this._llmobsEnabledFor(ctx)) {
+        // only the token usage is needed, for the `gen_ai.usage.*` metrics; the message bodies and
+        // `ctx.result` are left to the LLMObs path
+        if (chunk?.type === 'finish') ctx.streamedUsage = chunk.usage
+        return
+      }
+
       ctx.chunks ??= []
       const chunks = ctx.chunks
       if (chunk) chunks.push(chunk)
@@ -196,6 +221,17 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     if (ctx.isStream && ctx.result?.stream && !ctx.streamConsumed) return
 
     super.asyncEnd(ctx)
+  }
+
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx, spanKind) {
+    const usage = ctx.result?.usage ?? ctx.streamedUsage
+    if (!usage) return {}
+
+    // `embed` reports a single token count, the generation operations a structured breakdown
+    return { metrics: spanKind === 'embedding' ? { inputTokens: usage.tokens } : extractUsageMetrics(usage) }
   }
 
   /**
@@ -292,7 +328,13 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     const { event, result } = ctx
 
     const lastUserPrompt = event.messages.findLast(message => message.role === 'user')?.content
-    const input = Array.isArray(lastUserPrompt) ? lastUserPrompt.map(part => part.text ?? '').join('') : lastUserPrompt
+    let input = lastUserPrompt
+    if (Array.isArray(lastUserPrompt)) {
+      input = ''
+      for (const part of lastUserPrompt) {
+        if (part.type === 'text') input += part.text
+      }
+    }
 
     const output =
       ctx.isStream
@@ -357,14 +399,7 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     if (!result) return
 
     // metrics
-    const { usage } = result
-    this._tagger.tagMetrics(span, {
-      inputTokens: usage?.inputTokens?.total,
-      cacheWriteTokens: usage?.inputTokens?.cacheWrite ?? 0,
-      cacheReadTokens: usage?.inputTokens?.cacheRead ?? 0,
-      outputTokens: usage?.outputTokens?.total,
-      reasoningOutputTokens: usage?.outputTokens?.reasoning ?? 0,
-    })
+    this._tagger.tagMetrics(span, extractUsageMetrics(result.usage))
   }
 
   setToolTags (span, ctx) {

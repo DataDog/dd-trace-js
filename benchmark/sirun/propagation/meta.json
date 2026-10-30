@@ -13,15 +13,33 @@
       }
     },
     "inject": {
+      "run": "node --predictable-gc-schedule index.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule index.js\"",
+      "iterations": 6,
       "env": {
         "VARIANT": "inject",
-        "OPERATIONS": "300000"
+        "OPERATIONS": "3000000"
+      }
+    },
+    "inject-replacements": {
+      "run": "node --predictable-gc-schedule index.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule index.js\"",
+      "iterations": 5,
+      "env": {
+        "VARIANT": "inject-replacements",
+        "OPERATIONS": "1500000"
       }
     },
     "extract-baggage-percent": {
       "env": {
         "VARIANT": "extract-baggage-percent",
         "OPERATIONS": "300000"
+      }
+    },
+    "extract-datadog": {
+      "env": {
+        "VARIANT": "extract-datadog",
+        "OPERATIONS": "1200000"
       }
     }
   }

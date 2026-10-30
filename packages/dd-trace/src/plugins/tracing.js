@@ -29,6 +29,7 @@ class TracingPlugin extends Plugin {
    * @param {string} [opts.type]
    * @param {string} [opts.id]
    * @param {string} [opts.kind]
+   * @param {object} [opts.pluginConfig]
    * @returns {{ name: string, source: string | undefined }}
    */
   serviceName (opts = {}) {
@@ -46,7 +47,6 @@ class TracingPlugin extends Plugin {
    * @param {string} [opts.type]
    * @param {string} [opts.id]
    * @param {string} [opts.kind]
-   * @returns {string}
    */
   operationName (opts = {}) {
     const {
@@ -243,19 +243,21 @@ class TracingPlugin extends Plugin {
       serviceSource = undefined
     }
 
+    const tags = {
+      [COMPONENT]: component,
+      'service.name': serviceName || tracer._service,
+      'resource.name': resource,
+      'span.kind': kind,
+      'span.type': type,
+      ...meta,
+      ...metrics,
+    }
+    if (serviceSource !== undefined && !Object.hasOwn(tags, SVC_SRC_KEY)) tags[SVC_SRC_KEY] = serviceSource
+
     const span = tracer.startSpan(name, {
       startTime,
       childOf,
-      tags: {
-        [COMPONENT]: component,
-        'service.name': serviceName || tracer._service,
-        'resource.name': resource,
-        'span.kind': kind,
-        'span.type': type,
-        ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
-        ...meta,
-        ...metrics,
-      },
+      tags,
       integrationName: integrationName || component,
       links: childOf?._links,
     })
@@ -265,7 +267,6 @@ class TracingPlugin extends Plugin {
     analyticsSampler.sample(span, config.measured)
 
     // TODO: Remove this after migration to TracingChannel is done.
-    // eslint-disable-next-line unicorn/no-unnecessary-boolean-comparison -- Context objects use the other branch.
     if (enterOrCtx === true) {
       legacyStorage.enterWith({ ...store, span })
     } else if (enterOrCtx) {

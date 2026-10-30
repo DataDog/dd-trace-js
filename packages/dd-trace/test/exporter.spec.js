@@ -25,7 +25,8 @@ describe('exporter', () => {
   })
 
   it('should create an AgentExporter by default', () => {
-    const Exporter = require('../src/exporter')()
+    const createExporter = require('../src/exporter')
+    const Exporter = createExporter()
 
     assert.strictEqual(Exporter, AgentExporter)
   })
@@ -33,7 +34,8 @@ describe('exporter', () => {
   it('should create an LogExporter when in Lambda environment', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
 
-    const Exporter = require('../src/exporter')()
+    const createExporter = require('../src/exporter')
+    const Exporter = createExporter()
 
     assert.strictEqual(Exporter, LogExporter)
   })
@@ -43,7 +45,8 @@ describe('exporter', () => {
     const stub = sinon.stub(fs, 'existsSync')
     stub.withArgs('/opt/extensions/datadog-agent').returns(true)
 
-    const Exporter = require('../src/exporter')()
+    const createExporter = require('../src/exporter')
+    const Exporter = createExporter()
 
     assert.strictEqual(Exporter, AgentExporter)
     stub.restore()
@@ -54,20 +57,23 @@ describe('exporter', () => {
     const stub = sinon.stub(fs, 'existsSync')
     stub.withArgs(DATADOG_MINI_AGENT_PATH).returns(true)
 
-    const Exporter = require('../src/exporter')()
+    const createExporter = require('../src/exporter')
+    const Exporter = createExporter()
 
     assert.strictEqual(Exporter, AgentExporter)
     stub.restore()
   })
 
   it('should allow configuring the exporter', () => {
-    const Exporter = require('../src/exporter')('log')
+    const createExporter = require('../src/exporter')
+    const Exporter = createExporter('log')
 
     assert.strictEqual(Exporter, LogExporter)
   })
 
   it('should create an ElectronExporter when configured', () => {
-    const Exporter = require('../src/exporter')('electron')
+    const createExporter = require('../src/exporter')
+    const Exporter = createExporter('electron')
 
     assert.strictEqual(Exporter, ElectronExporter)
   })

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { METHODS } = require('node:http')
 const { inspect } = require('node:util')
 
 const semver = require('semver')
@@ -14,6 +15,7 @@ const {
   stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../../dd-trace/test/setup/helpers/http-client')
 
 describe('esm', () => {
   withVersions('express', 'express', version => {
@@ -40,6 +42,33 @@ describe('esm', () => {
     })
     for (const variant of Object.keys(variants)) {
       describe('with DD_TRACE_MIDDLEWARE_TRACING_ENABLED unset', () => {
+        it(`traces QUERY with a body loaded with ${variant}`, async function () {
+          if (!METHODS.includes('QUERY') || !semver.intersects(version, '>=4.16.0')) {
+            // QUERY needs runtime support, and the fixture uses Express's built-in JSON parser.
+            this.skip()
+          }
+          proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+          const traces = agent.assertMessageReceived(({ payload }) => {
+            const spans = payload.flat()
+            const requests = spans.filter(span => span.name === 'express.request')
+            assert.strictEqual(requests.length, 1)
+            assert.strictEqual(requests[0].resource, 'QUERY /api/reports/:id')
+            assert.strictEqual(requests[0].meta['http.method'], 'QUERY')
+            assert.strictEqual(requests[0].meta['http.route'], '/api/reports/:id')
+            assert.strictEqual(requests[0].meta['http.status_code'], '200')
+            assert.strictEqual(spans.filter(span => span.resource === 'handleQuery').length, 1)
+          })
+          const [, response] = await Promise.all([
+            traces,
+            httpRequest({
+              url: new URL('/api/reports/42', proc.url).href,
+              method: 'QUERY',
+              data: { filter: 'books' },
+            }),
+          ])
+          assert.deepStrictEqual(response.data, { id: '42', filter: 'books' })
+        }).timeout(50000)
+
         it(`is instrumented loaded with ${variant}`, async () => {
           proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
           const numberOfSpans = semver.intersects(version, '<5.0.0') ? 4 : 2

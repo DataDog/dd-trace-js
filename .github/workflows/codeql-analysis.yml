@@ -32,7 +32,7 @@ jobs:
         language: ["javascript"]
 
     steps:
-      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+      - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js
@@ -45,7 +45,7 @@ jobs:
 
       - name: Initialize CodeQL
         id: init-codeql
-        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: ${{ matrix.language }}
           config-file: .github/codeql_config.yml
@@ -57,7 +57,7 @@ jobs:
 
       - name: Perform CodeQL Analysis
         id: analyze
-        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           token: ${{ github.token }}
           wait-for-processing: false
@@ -70,7 +70,7 @@ jobs:
           # Poll every 10s (30x = 5 min total), matching the official action's
           # timeout but halving the API calls vs its default 5s interval.
           for _ in $(seq 1 30); do
-            RESULT=$(curl -sf \
+            RESULT=$(curl -sf --retry 5 --retry-delay 2 --retry-connrefused \
               -H "Authorization: Bearer $TOKEN" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \

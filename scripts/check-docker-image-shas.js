@@ -9,7 +9,7 @@ const path = require('node:path')
 const CHECKED_EXTENSIONS = new Set(['.yml', '.yaml'])
 
 // Matches `image: <value>` where the value is on the same line (not a bare `image:` key)
-const IMAGE_LINE_RE = /^\s*image:\s+(\S+)\s*(?:#.*)?$/
+const IMAGE_LINE_RE = /^\s*image:\s+([^\s#]+)\s*(?:#.*)?$/
 
 /**
  * @returns {string[]}
@@ -33,10 +33,8 @@ for (const file of listFilesFromGit()) {
     const ref = m[1]
 
     // Skip environment variables ($VAR) and GitHub Actions expressions (${{ ... }})
-    if (ref.startsWith('$')) continue
-
     // Skip already-pinned references
-    if (ref.includes('@sha256:')) continue
+    if (ref.startsWith('$') || ref.includes('@sha256:')) continue
 
     violations.push({ file: file.replaceAll('\\', '/'), line: i + 1, text: lines[i].trim() })
   }

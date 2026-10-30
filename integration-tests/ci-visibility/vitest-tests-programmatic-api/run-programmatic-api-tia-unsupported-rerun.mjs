@@ -1,4 +1,5 @@
 import { startVitest } from 'vitest/node'
+import { getVitestOptions, usesModeArgument } from './options.mjs'
 
 const keepServerOpenReporter = {
   onInit (vitest) {
@@ -9,13 +10,16 @@ const keepServerOpenReporter = {
 async function runProgrammaticTests () {
   let vitest
   try {
-    vitest = await startVitest('test', ['./tia-programmatic-first.mjs'], {
+    const options = getVitestOptions({
       test: {
         environment: 'node',
       },
       reporters: [keepServerOpenReporter],
       watch: false,
     })
+    vitest = usesModeArgument
+      ? await startVitest('test', ['./tia-programmatic-first.mjs'], options)
+      : await startVitest(['./tia-programmatic-first.mjs'], options)
 
     vitest.config.watch = true
     const globTestSpecifications = vitest.globTestSpecifications || vitest.globTestFiles

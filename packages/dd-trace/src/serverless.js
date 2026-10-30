@@ -2,6 +2,13 @@
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
+const IS_AWS_LAMBDA_MICROVM = getEnvironmentVariable('AWS_LAMBDA_MICROVM_IMAGE_ARN') !== undefined
+// Standard Lambda, whose sandbox freezes between invocations. Excludes Lambda Lite (native-http),
+// Managed Instances (lambda-managed-instances) and MicroVMs.
+const IS_STANDARD_AWS_LAMBDA = !IS_AWS_LAMBDA_MICROVM && ['on-demand', 'provisioned-concurrency', 'snap-start']
+  .includes(getEnvironmentVariable('AWS_LAMBDA_INITIALIZATION_TYPE'))
+const isVercelAtStartup = getEnvironmentVariable('VERCEL') === '1'
+
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
     getEnvironmentVariable('FUNCTION_NAME') !== undefined &&
@@ -25,6 +32,10 @@ function enableGCPPubSubPushSubscription () {
     getValueFromEnvSources('DD_TRACE_GCP_PUBSUB_PUSH_ENABLED')
 }
 
+function getIsAzureContainerApp () {
+  return getEnvironmentVariable('CONTAINER_APP_NAME') !== undefined
+}
+
 function getIsAzureFunction () {
   return getEnvironmentVariable('FUNCTIONS_EXTENSION_VERSION') !== undefined &&
     getEnvironmentVariable('FUNCTIONS_WORKER_RUNTIME') !== undefined
@@ -39,50 +50,72 @@ function isInServerlessEnvironment () {
   const isGCPFunction = getIsGCPFunction()
   const isAzureFunction = getIsAzureFunction()
 
-  return inAWSLambda || isGCPFunction || isAzureFunction
+  return IS_AWS_LAMBDA_MICROVM || inAWSLambda || isGCPFunction || isAzureFunction
 }
 
 /**
  * Gets tags describing the serverless platform where the tracer is running.
  *
+ * @param {{ isVercel: boolean }} [platform] Detected serverless platform.
  * @returns {string[]|undefined}
  */
-function getServerlessPlatformTags () {
-  if (getEnvironmentVariable('VERCEL') === '1') {
-    return getVercelPlatformTags()
+function getServerlessPlatformTags (platform = getServerlessPlatform()) {
+  if (platform.isVercel) {
+    return require('./serverless/vercel').getVercelPlatformTags()
   }
 }
 
 /**
- * @returns {string[]|undefined}
+ * Detects the serverless platform once while configuration is built.
+ * @returns {{ isVercel: boolean }}
  */
-function getVercelPlatformTags () {
-  let tags
-  const projectId = getEnvironmentVariable('VERCEL_PROJECT_ID')
-  if (projectId) {
-    tags = ['vercel.project_id', projectId]
-  }
+function getServerlessPlatform () {
+  return { isVercel: supportsServerlessTelemetryRetention() }
+}
 
-  const environment = getEnvironmentVariable('VERCEL_ENV')
-  if (environment) {
-    tags ??= []
-    tags.push('vercel.environment', environment)
-  }
+/**
+ * Whether the current platform can retain an invocation for telemetry delivery.
+ *
+ * Add future serverless platforms here as they gain an equivalent retention hook.
+ */
+function supportsServerlessTelemetryRetention () {
+  return isVercelAtStartup
+}
 
-  const region = getEnvironmentVariable('VERCEL_REGION')
-  if (region) {
-    tags ??= []
-    tags.push('vercel.region', region)
+/**
+ * Creates delivery tracking for platforms with an invocation retention hook.
+ */
+function createServerlessDeliveryTracker () {
+  if (supportsServerlessTelemetryRetention()) {
+    return new (require('./serverless/telemetry-delivery-tracker'))()
   }
+}
 
-  return tags
+/**
+ * Registers the lifecycle adapter selected by the detected serverless platform.
+ * @param {{ flushAll?: (done: () => void) => void }} tracer
+ */
+function initializeServerlessTelemetry (tracer) {
+  if (supportsServerlessTelemetryRetention()) {
+    return require('./serverless/vercel').registerVercelTelemetryRetention(tracer)
+  }
 }
 
 module.exports = {
   getServerlessPlatformTags,
+  getServerlessPlatform,
+  supportsServerlessTelemetryRetention,
+  createServerlessDeliveryTracker,
   getIsGCPFunction,
+  getIsAzureContainerApp,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  initializeServerlessTelemetry,
+  IS_AWS_LAMBDA_MICROVM,
+  IS_STANDARD_AWS_LAMBDA,
+  // true only for a Node that bundles its own OpenSSL, whose CSPRNG keeps the snapshot's DRBG
+  // state across a MicroVM clone resume
+  NODE_BUNDLES_OPENSSL: process.config.variables.node_shared_openssl === false,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

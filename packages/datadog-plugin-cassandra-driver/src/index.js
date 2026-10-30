@@ -33,9 +33,14 @@ class CassandraDriverPlugin extends DatabasePlugin {
 }
 
 function combine (queries) {
-  return queries
-    .map(query => (query.query || query).replace(/;?$/, ';'))
-    .join(' ')
+  let combined = ''
+  let isFirstQuery = true
+  for (const query of queries) {
+    if (!isFirstQuery) combined += ' '
+    combined += (query.query || query).replace(/;?$/, ';')
+    isFirstQuery = false
+  }
+  return combined
 }
 
 function trim (str, size) {

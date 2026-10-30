@@ -18,7 +18,7 @@ require('../../src/mocha/worker')
 
 const runnerHook = instrumentations.mocha
   .slice(existingMochaHookCount)
-  .find(({ file }) => file === 'lib/runner.js')
+  .find(({ filePattern }) => filePattern === String.raw`lib/runner\.(?:c?js)$`)
 
 assert.ok(runnerHook)
 

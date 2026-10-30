@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
 
 const { describe, it, beforeEach } = require('mocha')
 
@@ -10,6 +11,42 @@ const Span = require('../src/noop/span')
 describe('NoopTracer', () => {
   let NoopTracer
   let tracer
+
+  for (const [name, setup] of [
+    ['a Jest worker', 'globalThis.jest = {}'],
+    ['DD_TRACE_ENABLED=false', "process.env.DD_TRACE_ENABLED = 'false'"],
+    ['OTEL_TRACES_EXPORTER=none', "process.env.OTEL_TRACES_EXPORTER = 'none'"],
+  ]) {
+    it(`should not subscribe to identity updates with ${name}`, () => {
+      const script = `
+        const assert = require('node:assert/strict')
+        const { channel } = require('dc-polyfill')
+        delete process.env.DD_TRACE_ENABLED
+        delete process.env.DD_AGENTLESS_ENABLED
+        delete process.env._DD_APM_TRACING_AGENTLESS_ENABLED
+        delete process.env.OTEL_TRACES_EXPORTER
+        ${setup}
+        const identity = channel('datadog:identity:update')
+        assert.strictEqual(identity.hasSubscribers, false)
+        const tracer = require(${JSON.stringify(require.resolve('../../..'))})
+        assert.strictEqual(identity.hasSubscribers, false)
+        tracer.init()
+        tracer.trace('test', span => {
+          assert.match(span.context().toTraceId(), /^\\d+$/)
+          span.finish()
+        })
+        assert.strictEqual(identity.hasSubscribers, false)
+      `
+      const result = spawnSync(process.execPath, ['--eval', script], {
+        encoding: 'utf8',
+        timeout: 5000,
+        env: { ...process.env, NODE_OPTIONS: '' },
+      })
+
+      assert.ifError(result.error)
+      assert.strictEqual(result.status, 0, result.stderr)
+    })
+  }
 
   beforeEach(() => {
     NoopTracer = require('../src/noop/tracer')
@@ -29,6 +66,13 @@ describe('NoopTracer', () => {
       const result = tracer.trace('test', {}, () => 'test')
 
       assert.strictEqual(result, 'test')
+    })
+
+    it('should provide recordException as a no-op', () => {
+      tracer.trace('test', {}, span => {
+        assert.strictEqual(typeof span.recordException, 'function')
+        span.recordException(new Error('test'))
+      })
     })
   })
 

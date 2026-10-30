@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const Module = require('node:module')
 
 const { before, describe, it } = require('mocha')
 
@@ -80,12 +81,74 @@ describe('noop', () => {
     llmobs.deregisterProcessor()
   })
 
+  it('exposes the no-op experiments facade', () => {
+    assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
+  })
+
+  it('loads experiments-scoped evaluator constructors lazily', () => {
+    const noopPath = require.resolve('../../../dd-trace/src/llmobs/noop')
+    const noopExperimentsPath = require.resolve('../../../dd-trace/src/llmobs/experiments/noop')
+    const cachedNoop = require.cache[noopPath]
+    const cachedNoopExperiments = require.cache[noopExperimentsPath]
+    const originalLoad = Module._load
+    const loaded = []
+
+    try {
+      delete require.cache[noopPath]
+      delete require.cache[noopExperimentsPath]
+      Module._load = function (request, parent, isMain) {
+        if (parent?.filename === noopPath || parent?.filename === noopExperimentsPath) loaded.push(request)
+        return originalLoad.call(this, request, parent, isMain)
+      }
+
+      const FreshNoopLLMObs = require(noopPath)
+      const freshLLMObs = new FreshNoopLLMObs(null)
+
+      assert.equal(freshLLMObs.BaseEvaluator, undefined)
+      assert.equal(loaded.includes('./evaluator'), false)
+      assert.equal(loaded.includes('./remote-evaluator'), false)
+
+      const freshExperiments = freshLLMObs.experiments
+      assert.equal(typeof freshExperiments.BaseEvaluator, 'function')
+      assert.equal(loaded.includes('./evaluator'), true)
+      assert.equal(loaded.includes('./remote-evaluator'), false)
+
+      assert.equal(typeof freshExperiments.RemoteEvaluator, 'function')
+      assert.equal(loaded.includes('./remote-evaluator'), true)
+    } finally {
+      Module._load = originalLoad
+      delete require.cache[noopPath]
+      delete require.cache[noopExperimentsPath]
+      if (cachedNoop !== undefined) require.cache[noopPath] = cachedNoop
+      if (cachedNoopExperiments !== undefined) require.cache[noopExperimentsPath] = cachedNoopExperiments
+    }
+  })
+
   it('using "annotationContext" should not throw', () => {
     const result = llmobs.annotationContext({}, () => {
       return 5
     })
 
     assert.equal(result, 5)
+  })
+
+  it('fails clearly for Prompt Management network operations before initialization', async () => {
+    const operations = [
+      () => llmobs.prompts.getPrompt('p'),
+      () => llmobs.prompts.refreshPrompt('p'),
+      () => llmobs.prompts.createPrompt('p', []),
+      () => llmobs.prompts.createPromptVersion('p', []),
+      () => llmobs.prompts.updatePrompt('p', {}),
+      () => llmobs.prompts.updatePromptVersion('p', 1, {}),
+      () => llmobs.prompts.deletePrompt('p'),
+      () => llmobs.prompts.listPrompts(),
+      () => llmobs.prompts.listPromptVersions('p'),
+    ]
+
+    for (const operation of operations) {
+      await assert.rejects(operation(), /Prompt Management requires tracer\.init\(\)/)
+    }
+    llmobs.prompts.clearPromptCache()
   })
 
   describe('trace', () => {

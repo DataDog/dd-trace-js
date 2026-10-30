@@ -1,0 +1,492 @@
+'use strict'
+
+const { randomUUID } = require('node:crypto')
+
+const log = require('../../../dd-trace/src/log')
+const { InputAudio, OutputAudio } = require('./audio')
+
+const MAX_TEXT = 65_536
+// Replayed history can exceed 16 messages after only eight exchanges. Allow longer resumed
+// conversations while bounding tiny/empty message overhead independently of the total text budget.
+const MAX_HISTORY_MESSAGES = 128
+const MAX_BLOCKS = 256
+const MAX_TOOLS = 16
+const MAX_TOOL_TEXT = 4096
+
+class Turn {
+  windows = []
+  userText = ''
+  finalText = ''
+  speculativeText = ''
+  tools = []
+  toolResults = []
+  inputPcm
+  inputRate = 0
+  inputStart
+  inputEnd
+  inputAudioObserved = false
+  outputAudioObserved = false
+  audioStarted = false
+  output = new OutputAudio()
+  started
+  generationEnd
+  textEnd
+  completionId
+  metrics = { input_tokens: 0, output_tokens: 0, total_tokens: 0 }
+  missingModalityMetrics = new Set()
+  emitted = false
+}
+
+/** @param {Turn} turn */
+function hasInput (turn) {
+  return turn.windows.length || turn.userText || turn.toolResults.length
+}
+
+/** @param {Turn} turn */
+function completionTime (turn) {
+  // Text can finish before audio starts. Keep its boundary as a fallback, without completing
+  // an unfinished or interrupted audio response when its final transcript arrives.
+  return turn.generationEnd ?? (!turn.audioStarted && turn.output.interrupted === undefined ? turn.textEnd : undefined)
+}
+
+/** @param {unknown} value */
+function object (value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * @param {string} text
+ */
+function parse (text) {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Nova's completion ID can cover the entire connection. Local response ownership is driven by
+ * pending input and new generation, with FINAL text staying on the preceding response.
+ */
+class SonicSession {
+  #emit
+  #audio = new InputAudio()
+  #pending = new Turn()
+  #current
+  #outbound = new Map()
+  #blocks = new Map()
+  #completed = new Set()
+  #prompt
+  #configuration = {}
+  #outputConfiguration = {}
+  #history = []
+  #closed = false
+  #turnIndex = 0
+  #sessionId = randomUUID()
+  #providerSessionId
+  #totals = { input_tokens: 0, output_tokens: 0 }
+  #modalityTotals = {
+    input_audio_tokens: 0, output_audio_tokens: 0, input_text_tokens: 0, output_text_tokens: 0,
+  }
+
+  /** @param {(descriptor: object) => void} emit */
+  constructor (emit) {
+    this.#emit = emit
+  }
+
+  /**
+   * Observe decoded SDK union members without consuming either iterable ahead of its owner.
+   * @param {{ chunk?: { bytes?: Uint8Array } }} event
+   * @param {boolean} outbound
+   * @param {number} [now]
+   */
+  observe (event, outbound, now = Date.now()) {
+    if (this.#closed) return
+    try {
+      const bytes = event?.chunk?.bytes
+      if (!ArrayBuffer.isView(bytes)) return
+      const payload = parse(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('utf8'))
+      if (!object(payload?.event)) return
+      for (const [name, data] of Object.entries(payload.event)) {
+        if (!object(data)) continue
+        if (outbound) {
+          this.#sent(name, data, now)
+        } else {
+          this.#received(name, data, now)
+        }
+        if (this.#closed) break
+      }
+    } catch {
+      // Malformed telemetry never changes transport behavior or logs captured conversation data.
+      log.debug('Cannot process Nova Sonic telemetry')
+    }
+  }
+
+  /**
+   * @param {string} name
+   * @param {object} data
+   * @param {number} now
+   */
+  #sent (name, data, now) {
+    const key = data.contentName ?? ''
+    switch (name) {
+      case 'sessionStart':
+        for (const name of ['inferenceConfiguration', 'turnDetectionConfiguration']) {
+          const config = this.#configuration[name] = {}
+          if (!object(data[name])) continue
+          for (const key of ['maxTokens', 'topP', 'temperature', 'endpointingSensitivity']) {
+            const value = data[name][key]
+            if ((typeof value === 'number' || typeof value === 'string') && String(value).length < 128) {
+              config[key] = value
+            }
+          }
+        }
+        break
+      case 'promptStart':
+        if (this.#prompt !== undefined && this.#prompt !== data.promptName) {
+          this.finish(undefined, now)
+          return
+        }
+        this.#prompt = data.promptName
+        this.#outputConfiguration = data.audioOutputConfiguration ?? {}
+        break
+      case 'contentStart':
+        this.#outbound.set(key, { ...data, text: '' })
+        if (data.type === 'AUDIO' && data.role === 'USER') this.#audio.configure(data.audioInputConfiguration)
+        this.#bound(this.#outbound)
+        break
+      case 'audioInput': {
+        const block = this.#outbound.get(key)
+        if (block?.type === 'AUDIO' && block.role === 'USER') {
+          if (typeof data.content === 'string' && data.content.length) this.#pending.inputAudioObserved = true
+          this.#audio.append(data.content, now)
+        }
+        break
+      }
+      case 'textInput': {
+        const block = this.#outbound.get(key)
+        if (block && typeof data.content === 'string') block.text = (block.text + data.content).slice(0, MAX_TEXT)
+        break
+      }
+      case 'toolResult': {
+        const block = this.#outbound.get(key)
+        const target = this.#current ?? this.#pending
+        if (target.toolResults.length < MAX_TOOLS && typeof data.content === 'string') {
+          target.toolResults.push({
+            role: 'tool',
+            content: '',
+            toolResults: [{
+              result: data.content.slice(0, MAX_TOOL_TEXT),
+              toolId: block?.toolResultInputConfiguration?.toolUseId ?? '',
+              type: 'tool_result',
+            }],
+          })
+        }
+        break
+      }
+      case 'contentEnd': {
+        const block = this.#outbound.get(key)
+        this.#outbound.delete(key)
+        if (block?.type !== 'TEXT') break
+        if (block.role === 'USER' && block.interactive) {
+          this.#pending.userText = (this.#pending.userText + block.text).slice(0, MAX_TEXT)
+        } else if (this.#history.length < MAX_HISTORY_MESSAGES) {
+          const remaining = MAX_TEXT - this.#history.reduce((n, message) => n + message.content.length, 0)
+          this.#history.push({
+            role: String(block.role ?? 'USER').toLowerCase(), content: block.text.slice(0, remaining),
+          })
+        }
+        break
+      }
+    }
+  }
+
+  /**
+   * @param {Map<string, object>} map
+   */
+  #bound (map) {
+    while (map.size > MAX_BLOCKS) map.delete(map.keys().next().value)
+  }
+
+  #hasPendingInput () {
+    if (hasInput(this.#pending)) return true
+    // ASR text may precede contentEnd, even when speech boundary events are absent.
+    for (const block of this.#blocks.values()) {
+      if (block.turn === this.#pending && block.data.role === 'USER' && block.text) return true
+    }
+    return false
+  }
+
+  /**
+   * @param {object} data
+   * @param {number} now
+   */
+  #startResponse (data, now) {
+    if (!this.#current || this.#hasPendingInput()) {
+      if (this.#current) {
+        // A new response can arrive before the previous response's text blocks close.
+        for (const block of this.#blocks.values()) {
+          if (block.turn === this.#current) this.#text(block)
+        }
+        this.#emitTurn(this.#current, now)
+      }
+      const turn = this.#pending
+      this.#pending = new Turn()
+      turn.started = now
+      turn.completionId = data.completionId
+      this.#snapshotInput(turn)
+      this.#current = turn
+      for (const [key, block] of this.#blocks) {
+        if (block.turn !== turn) this.#blocks.delete(key)
+      }
+    }
+    return this.#current
+  }
+
+  /** @param {Turn} turn */
+  #snapshotInput (turn) {
+    if (turn.windows.length && !turn.inputPcm) {
+      turn.inputRate = this.#audio.rate
+      turn.inputPcm = this.#audio.clip(turn.windows[0].start_ms, turn.windows.at(-1).end_ms)
+    }
+  }
+
+  /**
+   * @param {string} name
+   * @param {object} data
+   * @param {number} now
+   */
+  #received (name, data, now) {
+    // Once any turn has been emitted, its conversation identity must never change.
+    if (!this.#providerSessionId && typeof data.sessionId === 'string' && data.sessionId) {
+      this.#providerSessionId = data.sessionId
+      if (!this.#turnIndex) this.#sessionId = data.sessionId
+    }
+    switch (name) {
+      case 'userSpeechStart': {
+        const offset = data.inputAudioOffsetMs
+        if (!Number.isFinite(offset) || offset < 0 || this.#pending.windows.length >= MAX_BLOCKS) return
+        this.#pending.windows.push({ start_ms: offset })
+        this.#pending.inputAudioObserved = true
+        this.#pending.inputEnd = undefined
+        this.#pending.inputStart ??= this.#audio.anchor === undefined
+          ? now
+          : Math.min(now, this.#audio.anchor + offset)
+        break
+      }
+      case 'userSpeechEnd': {
+        const window = this.#pending.windows.at(-1)
+        const end = data.inputAudioOffsetMs
+        if (!window || !Number.isFinite(end) || end <= window.start_ms) return
+        window.end_ms = end
+        if (Number.isFinite(data.inputAudioDetectionOffsetMs)) window.detection_ms = data.inputAudioDetectionOffsetMs
+        this.#pending.inputEnd = now
+        break
+      }
+      case 'contentStart': {
+        const key = data.contentId ?? ''
+        if (this.#blocks.has(key) || this.#completed.has(key)) return
+        const fields = object(data.additionalModelFields)
+          ? data.additionalModelFields
+          : parse(data.additionalModelFields)
+        const stage = object(fields) ? fields.generationStage : undefined
+        let turn
+        if (data.role === 'ASSISTANT' || data.type === 'TOOL') {
+          const newTextResponse = this.#current && !this.#current.audioStarted &&
+            completionTime(this.#current) !== undefined && this.#hasPendingInput()
+          turn = stage === 'FINAL' && this.#current && !newTextResponse
+            ? this.#current
+            : this.#startResponse(data, now)
+        } else {
+          turn = this.#hasPendingInput() || !this.#current || completionTime(this.#current) !== undefined
+            ? this.#pending
+            : this.#current
+        }
+        if (data.role === 'ASSISTANT' && data.type === 'AUDIO') turn.audioStarted = true
+        this.#blocks.set(key, { data, stage, turn, text: '', control: false })
+        this.#bound(this.#blocks)
+        break
+      }
+      case 'textOutput':
+      case 'audioOutput':
+      case 'toolUse':
+      case 'contentEnd':
+        this.#content(name, data, now)
+        break
+      case 'usageEvent':
+        this.#usage(data)
+        break
+      case 'completionEnd':
+        this.finish(undefined, now)
+        break
+    }
+  }
+
+  /**
+   * @param {string} name
+   * @param {object} data
+   * @param {number} now
+   */
+  #content (name, data, now) {
+    const key = data.contentId ?? ''
+    const block = this.#blocks.get(key)
+    if (!block) return
+    const { turn } = block
+    if (name === 'textOutput' && typeof data.content === 'string') {
+      block.text = (block.text + data.content).slice(0, MAX_TEXT)
+      if (block.data.role === 'ASSISTANT' && parse(block.text)?.interrupted === true) {
+        // Keep literal JSON until contentEnd confirms protocol control. Retain its
+        // receipt time so confirmation does not move the projected playback cut.
+        block.interruptionTime ??= now
+      } else {
+        block.interruptionTime = undefined
+      }
+    } else if (name === 'audioOutput' && block.data.role === 'ASSISTANT') {
+      if (typeof data.content === 'string' && data.content.length) turn.outputAudioObserved = true
+      turn.output.append(data.content, block.data.audioOutputConfiguration ?? this.#outputConfiguration, now)
+    } else if (name === 'toolUse' && turn.tools.length < MAX_TOOLS) {
+      const args = typeof data.content === 'string' && data.content.length <= MAX_TOOL_TEXT ? parse(data.content) : {}
+      turn.tools.push({
+        name: data.toolName ?? '',
+        arguments: object(args) ? args : {},
+        toolId: data.toolUseId ?? '',
+        type: 'function',
+      })
+    } else if (name === 'contentEnd') {
+      if (block.data.role === 'ASSISTANT' && data.stopReason === 'INTERRUPTED') {
+        block.control = block.interruptionTime !== undefined
+        turn.output.interrupt(block.interruptionTime ?? now)
+      }
+      this.#text(block)
+      if (block.data.type === 'AUDIO' && data.stopReason === 'END_TURN') turn.generationEnd = now
+      if (block.data.role === 'ASSISTANT' && block.data.type === 'TEXT' &&
+          !block.control && data.stopReason === 'END_TURN') turn.textEnd = now
+      this.#blocks.delete(key)
+      this.#completed.add(key)
+      if (this.#completed.size > MAX_BLOCKS) this.#completed.delete(this.#completed.values().next().value)
+    }
+  }
+
+  /** @param {{ control: boolean, data: object, stage?: string, text: string, turn: object }} block */
+  #text (block) {
+    if (block.control) return
+    const field = block.data.role === 'USER'
+      ? 'userText'
+      : block.stage === 'FINAL' ? 'finalText' : 'speculativeText'
+    block.turn[field] = (block.turn[field] + block.text).slice(0, MAX_TEXT)
+  }
+
+  /** @param {object} data */
+  #usage (data) {
+    for (const direction of ['input', 'output']) {
+      const key = `${direction}_tokens`
+      const total = data[direction === 'input' ? 'totalInputTokens' : 'totalOutputTokens']
+      if (!Number.isSafeInteger(total) || total < this.#totals[key]) continue
+      const delta = total - this.#totals[key]
+      this.#totals[key] = total
+      const target = !this.#current || (direction === 'input' && this.#hasPendingInput())
+        ? this.#pending
+        : this.#current
+      target.metrics[key] += delta
+      target.metrics.total_tokens += delta
+
+      // Each modality is a subset of the aggregate and has its own cumulative baseline.
+      // Missing text must not discard valid speech or charge a previous turn's gap.
+      let remaining = delta
+      for (const [modality, field] of [['audio', 'speechTokens'], ['text', 'textTokens']]) {
+        const modalityKey = `${direction}_${modality}_tokens`
+        const modalityTotal = data.details?.total?.[direction]?.[field]
+        const previous = this.#modalityTotals[modalityKey]
+        const valid = Number.isSafeInteger(modalityTotal) && modalityTotal >= 0 && modalityTotal <= total &&
+          (previous === undefined || modalityTotal >= previous)
+        const modalityDelta = valid && previous !== undefined ? modalityTotal - previous : undefined
+        this.#modalityTotals[modalityKey] = valid ? modalityTotal : delta ? undefined : previous
+        if (modalityDelta === undefined || modalityDelta > remaining) {
+          if (delta || modalityDelta > remaining) {
+            target.missingModalityMetrics.add(modalityKey)
+            delete target.metrics[modalityKey]
+          }
+        } else {
+          remaining -= modalityDelta
+          if (!target.missingModalityMetrics.has(modalityKey)) {
+            target.metrics[modalityKey] = (target.metrics[modalityKey] ?? 0) + modalityDelta
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * @param {Turn} turn
+   * @param {number} now
+   * @param {Error} [error]
+   */
+  #emitTurn (turn, now, error) {
+    if (turn.emitted) return
+    turn.emitted = true
+    this.#turnIndex++
+    try {
+      this.#snapshotInput(turn)
+      const start = turn.inputStart ?? turn.started ?? now
+      const llmStart = turn.inputEnd ?? turn.started ?? start
+      const completed = completionTime(turn)
+      const responseEnd = Math.max(llmStart, completed ?? turn.output.interrupted ?? now)
+      this.#emit({
+        turn,
+        error,
+        sessionId: this.#sessionId,
+        history: this.#history,
+        startTime: start,
+        finishTime: Math.max(responseEnd, turn.output.end ?? 0, turn.inputEnd ?? 0),
+        llmStart,
+        responseEnd,
+        metadata: {
+          turn_index: this.#turnIndex,
+          completion_id: turn.completionId,
+          speech_windows: turn.windows,
+          ttfa_boundary: 'speech_end_event_receipt',
+          output_timing: 'projected_playback',
+          interrupted: turn.output.interrupted !== undefined,
+          partial: completed === undefined,
+          transcript_stage: turn.finalText ? 'FINAL' : 'SPECULATIVE',
+          usage_attribution: 'event_receipt',
+          generated_output_bytes: turn.output.generatedBytes,
+          session_configuration: this.#configuration,
+        },
+      })
+    } catch {
+      log.debug('Cannot emit Nova Sonic turn')
+    }
+  }
+
+  /**
+   * Input EOF is deliberately not a finish. Only output completion, cancellation or failure flushes.
+   * @param {Error} [error]
+   * @param {number} [now]
+   */
+  finish (error, now = Date.now()) {
+    if (this.#closed) return
+    this.#closed = true
+    for (const block of this.#blocks.values()) this.#text(block)
+    if (this.#current) {
+      // A failure before the next response starts belongs to its pending utterance,
+      // not to the response that has already completed.
+      const laterTurnFailed = completionTime(this.#current) !== undefined && this.#hasPendingInput()
+      this.#emitTurn(this.#current, now, laterTurnFailed ? undefined : error)
+    }
+    if (hasInput(this.#pending) || this.#pending.metrics.total_tokens || (error && !this.#current)) {
+      this.#emitTurn(this.#pending, now, error)
+    }
+    this.#current = undefined
+    this.#pending = new Turn()
+    this.#blocks.clear()
+    this.#outbound.clear()
+    this.#completed.clear()
+    this.#history = []
+    this.#audio.clear()
+    this.#emit = undefined
+  }
+}
+
+module.exports = SonicSession

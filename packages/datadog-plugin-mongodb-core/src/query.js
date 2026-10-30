@@ -98,7 +98,13 @@ class MongodbCoreQueryPlugin extends DatabasePlugin {
 const MAX_DEPTH = 10
 const MAX_QUERY_LENGTH = 10_000
 
+/** @param {{ q?: Record<string, unknown> }[] | { documents?: { q?: Record<string, unknown> }[] }} statements */
 function extractQuery (statements) {
+  if (!Array.isArray(statements)) {
+    const { documents } = statements
+    statements = Array.isArray(documents) ? documents : []
+  }
+
   if (statements.length === 1 && statements[0].q) return statements[0].q
 
   const extractedQueries = []
@@ -175,10 +181,9 @@ function canStringifyDirectWalk (value, depth) {
         child._bsontype !== undefined ||
         isRegExp(child) ||
         isMap(child) ||
-        typeof child.toJSON === 'function') {
+        typeof child.toJSON === 'function' || !canStringifyDirectWalk(child, depth + 1)) {
       return false
     }
-    if (!canStringifyDirectWalk(child, depth + 1)) return false
   }
   return true
 }
@@ -200,7 +205,6 @@ const REDACT_LEAF = '"?"'
 
 /**
  * @param {RegExp} value
- * @returns {string}
  */
 function stringifyRegExp (value) {
   return `{"$regex":${JSON.stringify(value.source)},"$options":${JSON.stringify(value.flags)}}`
@@ -317,9 +321,13 @@ function buildRedact (value, ancestors) {
   // `value === original` short-circuit.
   if (typeof value.toJSON === 'function') {
     const json = value.toJSON()
-    if (typeof json !== 'object' || json === null || json === value) return REDACT_LEAF
-    // Re-screen: toJSON can return a TypedArray or Binary BSON wrapper.
-    if (ArrayBuffer.isView(json) || json._bsontype === 'Binary') return REDACT_LEAF
+    if (
+      typeof json !== 'object' || json === null || json === value ||
+      // Re-screen: toJSON can return a TypedArray or Binary BSON wrapper.
+      ArrayBuffer.isView(json) || json._bsontype === 'Binary'
+    ) {
+      return REDACT_LEAF
+    }
     value = json
   } else if (bsontype !== undefined) {
     return REDACT_LEAF

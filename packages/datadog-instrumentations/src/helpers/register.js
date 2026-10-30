@@ -1,20 +1,22 @@
 'use strict'
 
-const { builtinModules } = require('module')
 const path = require('path')
 const { channel } = require('dc-polyfill')
-const satisfies = require('../../../../vendor/dist/semifies')
 const log = require('../../../dd-trace/src/log')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { IS_SERVERLESS } = require('../../../dd-trace/src/serverless')
 const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
 const checkRequireCache = require('./check-require-cache')
 const Hook = require('./hook')
-const { isRelativeRequire } = require('./shared-utils')
+const {
+  filename,
+  getDisabledInstrumentations,
+  matchesInstrumentation,
+} = require('./instrumentation-utils')
 const rewriter = require('./rewriter')
+const { getActivationSetup } = require('./rewriter/instrumentation-registry')
+const { isNodeBuiltinModuleName } = require('./shared-utils')
 
-const DD_TRACE_DISABLED_INSTRUMENTATIONS =
-  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
 const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG')
 
 const hooks = require('./hooks')
@@ -22,11 +24,10 @@ const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
-const disabledInstrumentations = new Set(
-  DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',')
-)
+const disabledInstrumentations = getDisabledInstrumentations()
 
 const loadChannel = channel('dd-trace:instrumentation:load')
+const orchestrionLoadChannel = channel('dd-trace:instrumentation:load:orchestrion')
 
 // Globals
 if (!disabledInstrumentations.has('fetch')) {
@@ -35,6 +36,10 @@ if (!disabledInstrumentations.has('fetch')) {
 
 if (!disabledInstrumentations.has('process')) {
   require('../process')
+}
+
+if (!disabledInstrumentations.has('console')) {
+  require('../console')
 }
 
 const debugEnabled = DD_TRACE_DEBUG
@@ -53,29 +58,63 @@ const instrumentedNodeModules = new Map()
 const instrumentedIntegrationsSuccess = new Map()
 /** @type {Set<string>} */
 const alreadyLoggedIncompatibleIntegrations = new Set()
+/** @type {Set<string>} */
+const compatibleOrchestrionTargets = new Set()
+/** @type {Set<(activation: import('./rewriter/instrumentation-registry').Activation) => void>} */
+const blockedActivationSetups = new Set()
+/**
+ * Node.js built-ins that passed the disabled and serverless checks and received a hook.
+ * @type {string[]}
+ */
+const registeredBuiltinNames = []
 
-// Always disable prefixed and unprefixed node modules if one is disabled.
-if (disabledInstrumentations.size) {
-  const builtinsSet = new Set(builtinModules)
-  const disabledBuiltinCounterparts = []
-  for (const name of disabledInstrumentations) {
-    const hasPrefix = name.startsWith('node:')
-    if (hasPrefix || builtinsSet.has(name)) {
-      if (hasPrefix) {
-        const unprefixedName = name.slice(5)
-        if (!disabledInstrumentations.has(unprefixedName)) {
-          disabledBuiltinCounterparts.push(unprefixedName)
-        }
-      } else if (!disabledInstrumentations.has(`node:${name}`)) {
-        disabledBuiltinCounterparts.push(`node:${name}`)
-      }
+/**
+ * @param {string} moduleName
+ * @param {string} [version]
+ */
+function activate (moduleName, version) {
+  const setup = getActivationSetup(moduleName)
+  if (setup) {
+    if (blockedActivationSetups.has(setup)) return
+    // Block re-entrant activation until setup completes, and never retry a failed setup.
+    blockedActivationSetups.add(setup)
+    try {
+      setup({ moduleName, version })
+      blockedActivationSetups.delete(setup)
+    } catch (error) {
+      const message = String(error?.message ?? error)
+      log.error('Error during activation setup of %s: %s', moduleName, message, error)
+      telemetry('error', [
+        `error_type:${error?.constructor?.name ?? typeof error}`,
+        `integration:${moduleName}`,
+        `integration_version:${version ?? 'unknown'}`,
+      ], {
+        result: 'error',
+        result_class: 'internal_error',
+        result_reason: `Error during activation of ${moduleName}: ${message}`,
+      })
+      return
     }
   }
-  for (const name of disabledBuiltinCounterparts) {
-    disabledInstrumentations.add(name)
-  }
-  builtinsSet.clear()
+  loadChannel.publish({ name: moduleName })
 }
+
+orchestrionLoadChannel.subscribe(({ moduleName, version, result }) => {
+  const nameVersion = `${moduleName}@${version}`
+
+  if (result === 'unsupported') {
+    if (!compatibleOrchestrionTargets.has(nameVersion) && !instrumentedIntegrationsSuccess.has(nameVersion)) {
+      instrumentedIntegrationsSuccess.set(nameVersion, false)
+    }
+    return
+  }
+
+  if (result === 'matched' || result === 'rewritten') {
+    compatibleOrchestrionTargets.add(nameVersion)
+    instrumentedIntegrationsSuccess.set(nameVersion, true)
+    if (result === 'rewritten') activate(moduleName, version)
+  }
+})
 
 for (const name of names) {
   if (disabledInstrumentations.has(name)) continue
@@ -90,6 +129,8 @@ for (const name of names) {
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
   }
+
+  if (isNodeBuiltinModuleName(name)) registeredBuiltinNames.push(name)
 
   Hook([name], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     // All loaded versions are first expected to fail instrumentation.
@@ -111,21 +152,9 @@ for (const name of names) {
       instrumentedNodeModules.set(name, moduleExports)
     }
 
-    for (const { file, versions, hook, filePattern, patchDefault } of instrumentations[name]) {
-      const fullFilename = filename(name, file)
-
-      let matchesFile = moduleName === fullFilename
-
-      if (!matchesFile && isRelativeRequire(name)) matchesFile = true
-
-      const fullFilePattern = filePattern && filename(name, filePattern)
-      if (fullFilePattern) {
-        // Some libraries include a hash in their filenames when installed,
-        // so our instrumentation has to include a '.*' to match them for more than a single version.
-        matchesFile ||= new RegExp(fullFilePattern).test(moduleName)
-      }
-
-      if (matchesFile && matchVersion(moduleVersion, versions)) {
+    for (const instrumentation of instrumentations[name]) {
+      if (matchesInstrumentation(name, moduleVersion, moduleName, instrumentation)) {
+        const { hook, patchDefault } = instrumentation
         // IITM invokes this callback for every module in the package. Only unwrap the namespace after its file and
         // version match, otherwise a default export from an unrelated internal module can replace that module.
         if (isIitm && patchDefault === !!moduleExports.default) {
@@ -188,26 +217,10 @@ function logAbortedIntegrations () {
   instrumentedIntegrationsSuccess.clear()
 }
 
-/**
- * @param {string|undefined} version
- * @param {string[]|undefined} ranges
- */
-function matchVersion (version, ranges) {
-  return !version || !ranges || ranges.some(range => satisfies(version, range))
-}
-
-/**
- * @param {string} name
- * @param {string} [file]
- * @returns {string}
- */
-function filename (name, file) {
-  return file ? `${name}/${file}` : name
-}
-
 module.exports = {
+  activate,
   filename,
   pathSepExpr,
   loadChannel,
-  matchVersion,
+  registeredBuiltinNames,
 }

@@ -78,6 +78,40 @@ versions.forEach((version) => {
       await receiver.stop()
     })
 
+    it('attributes explicit test and suite native retries correctly with flat ATR', async () => {
+      receiver.setSettings({
+        itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
+      })
+      childProcess = exec('./node_modules/.bin/vitest run', {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+          TEST_DIR: 'ci-visibility/vitest-tests/native-retry-attribution.mjs',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+        },
+      })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          for (const [name, count] of [
+            ['inherited', 2], ['equal override', 2], ['different override', 3], ['suite override fails', 2],
+            ['shared before inherited', 2], ['shared override', 2], ['shared after inherited', 2],
+          ]) {
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+            assert.strictEqual(attempts.length, count, name)
+            const reason = name.endsWith('inherited') ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
+            assert.ok(attempts.every(test => test.meta[TEST_STATUS] === 'fail'), name)
+            const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, count - 1, name)
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === reason), name)
+          }
+        })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 1)
+    })
+
     context('libraries capabilities', () => {
       it('adds capabilities to tests', (done) => {
         const eventsPromise = receiver
@@ -740,8 +774,10 @@ versions.forEach((version) => {
 
     // Coverage report upload only works for >=2.0.0 (when vitest has proper coverage support)
     // v4 dropped support for Node 18
-    if (version === 'latest' && NODE_MAJOR >= 20) {
-      context('coverage report upload', () => {
+    {
+      const coverageReportUploadContext = version === 'latest' && NODE_MAJOR >= 20 ? context : context.skip
+
+      coverageReportUploadContext('coverage report upload', () => {
         const gitCommitSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
         const gitRepositoryUrl = 'https://github.com/datadog/test-repo.git'
 
@@ -1376,8 +1412,10 @@ versions.forEach((version) => {
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })
 
-      if (version === 'latest') {
-        it('sets final_status tag to skip for disabled tests', async () => {
+      {
+        const latestVersionTest = version === 'latest' ? it : it.skip
+
+        latestVersionTest('sets final_status tag to skip for disabled tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
           receiver.setTestManagementTests({
             vitest: {
@@ -1437,7 +1475,7 @@ versions.forEach((version) => {
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })
 
-        it('sets final_status tag to skip for quarantined tests', async () => {
+        latestVersionTest('sets final_status tag to skip for quarantined tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
           receiver.setTestManagementTests({
             vitest: {

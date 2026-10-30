@@ -9,7 +9,8 @@ function getAddress (link) {
 function getShortName (link) {
   if (!link || !link.name) return null
 
-  return link.name.split('_').slice(0, -1).join('_')
+  const lastUnderscorePosition = link.name.lastIndexOf('_')
+  return lastUnderscorePosition === -1 ? link.name : link.name.slice(0, lastUnderscorePosition)
 }
 
 module.exports = { getAddress, getShortName }

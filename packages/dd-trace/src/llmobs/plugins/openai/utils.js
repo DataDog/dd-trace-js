@@ -1,13 +1,13 @@
 'use strict'
 
+const { audioMimeTypeFromFormat, formatAudioPart } = require('../../audio-utils')
+const { AUDIO_FALLBACK } = require('../../constants/audio')
 const { UNKNOWN_MODEL_PROVIDER } = require('../../constants/tags')
-const { audioMimeTypeFromFormat, formatAudioPart } = require('../../util')
 const {
   INPUT_TYPE_IMAGE,
   INPUT_TYPE_FILE,
   IMAGE_FALLBACK,
   FILE_FALLBACK,
-  AUDIO_FALLBACK,
   AUDIO_MIME_TYPES,
 } = require('./constants')
 
@@ -134,15 +134,17 @@ function hasMultimodalInputs (variables) {
  * @returns {{ content: string, audioParts: Array<{ mimeType: string, content: string }> }}
  */
 function extractContentParts (parts) {
-  const extracted = []
+  let content = ''
+  let hasContent = false
   const audioParts = []
 
   for (const part of parts) {
     const partType = part?.type ?? ''
+    let extracted
     if (partType === 'text') {
-      extracted.push(part.text ?? '')
+      extracted = part.text ?? ''
     } else if (partType === 'image_url') {
-      extracted.push(IMAGE_FALLBACK)
+      extracted = IMAGE_FALLBACK
     } else if (partType === 'input_audio') {
       const inputAudio = part.input_audio ?? {}
       const data = inputAudio.data
@@ -151,14 +153,19 @@ function extractContentParts (parts) {
         // is needed. Only fall back to "[audio]" when there's no audio to capture.
         audioParts.push(formatAudioPart(data, audioMimeTypeFromFormat(inputAudio.format, AUDIO_MIME_TYPES)))
       } else {
-        extracted.push(AUDIO_FALLBACK)
+        extracted = AUDIO_FALLBACK
       }
     } else {
-      extracted.push(`[${partType}]`)
+      extracted = `[${partType}]`
     }
+
+    if (extracted === undefined) continue
+    if (hasContent) content += '\n'
+    content += extracted
+    hasContent = true
   }
 
-  return { content: extracted.join('\n'), audioParts }
+  return { content, audioParts }
 }
 
 /**
@@ -170,7 +177,6 @@ function extractContentParts (parts) {
  * client baseURL convention.
  *
  * @param {string} baseUrl
- * @returns {string}
  */
 function getOpenAIModelProvider (baseUrl = '') {
   if (baseUrl.includes('azure')) return 'azure_openai'
@@ -179,11 +185,63 @@ function getOpenAIModelProvider (baseUrl = '') {
   return UNKNOWN_MODEL_PROVIDER
 }
 
+/**
+ * Pair an OpenAI-compatible base URL's model provider with the client label used in span names.
+ *
+ * @param {string} [baseUrl]
+ * @returns {{ modelProvider: string, client: string }}
+ */
+function getModelProviderAndClient (baseUrl = '') {
+  const modelProvider = getOpenAIModelProvider(baseUrl)
+  if (modelProvider === 'azure_openai') return { modelProvider, client: 'AzureOpenAI' }
+  if (modelProvider === 'deepseek') return { modelProvider, client: 'DeepSeek' }
+  return { modelProvider, client: 'OpenAI' }
+}
+
+/**
+ * Count the billable server-side tool calls in an OpenAI Responses response.
+ *
+ * Web searches are read from the undocumented `tool_usage.web_search.num_requests` when present, otherwise
+ * counted from completed `web_search_call` items whose action is `search` (`open_page` / `find_in_page` steps are
+ * not billed). File searches have no usage counter, so each completed `file_search_call` item counts once.
+ * Zero counts are omitted.
+ *
+ * @param {Record<string, unknown>} [response] - Any OpenAI response; only Responses API fields are read
+ * @returns {{ webSearchCount?: number, storageSearchCount?: number }}
+ */
+function getServerToolUsageMetrics (response) {
+  const metrics = {}
+  const reportedWebSearches = response?.tool_usage?.web_search?.num_requests
+  const hasReportedWebSearches = typeof reportedWebSearches === 'number'
+  if (hasReportedWebSearches && reportedWebSearches > 0) metrics.webSearchCount = reportedWebSearches
+
+  const output = response?.output
+  if (!Array.isArray(output)) return metrics
+
+  for (const item of output) {
+    if (item?.status !== 'completed') continue
+
+    if (item.type === 'web_search_call') {
+      if (hasReportedWebSearches) continue
+      // Items without an action (older payloads) are assumed to be searches.
+      const actionType = item.action?.type
+      if (actionType !== undefined && actionType !== 'search') continue
+      metrics.webSearchCount = (metrics.webSearchCount ?? 0) + 1
+    } else if (item.type === 'file_search_call') {
+      metrics.storageSearchCount = (metrics.storageSearchCount ?? 0) + 1
+    }
+  }
+
+  return metrics
+}
+
 module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
   extractContentParts,
   hasMultimodalInputs,
+  getModelProviderAndClient,
   getOpenAIModelProvider,
+  getServerToolUsageMetrics,
 }

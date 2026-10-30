@@ -2,8 +2,10 @@
 
 const assert = require('node:assert/strict')
 
+const latestVersions = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const {
   getLatestPlaywrightSpecifier,
+  latest,
   latestSupportedByNode18,
 } = require('./versions')
 
@@ -14,5 +16,10 @@ describe('getLatestPlaywrightSpecifier', () => {
 
   it('uses latest Playwright on supported Node.js versions', () => {
     assert.strictEqual(getLatestPlaywrightSpecifier(20), 'latest')
+  })
+
+  it('keeps Playwright packages aligned for the shared browser image', () => {
+    assert.strictEqual(latestVersions.playwright, latest)
+    assert.strictEqual(latestVersions['playwright-core'], latest)
   })
 })

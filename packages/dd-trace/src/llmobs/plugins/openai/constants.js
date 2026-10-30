@@ -6,12 +6,14 @@ const INPUT_TYPE_TEXT = 'input_text'
 
 const IMAGE_FALLBACK = '[image]'
 const FILE_FALLBACK = '[file]'
-const AUDIO_FALLBACK = '[audio]'
 
 // OpenAI audio `format` values that don't map cleanly to `audio/<format>`.
 const AUDIO_MIME_TYPES = {
   mp3: 'audio/mpeg',
 }
+
+const DECISION_PROVIDER_TAG = 'decision_provider'
+const DECISION_PROVIDER = 'openai'
 
 module.exports = {
   INPUT_TYPE_IMAGE,
@@ -19,6 +21,7 @@ module.exports = {
   INPUT_TYPE_TEXT,
   IMAGE_FALLBACK,
   FILE_FALLBACK,
-  AUDIO_FALLBACK,
   AUDIO_MIME_TYPES,
+  DECISION_PROVIDER_TAG,
+  DECISION_PROVIDER,
 }

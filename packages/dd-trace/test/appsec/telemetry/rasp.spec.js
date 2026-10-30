@@ -15,7 +15,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
   const wafVersion = '0.0.1'
   const rulesVersion = '0.0.2'
 
-  let count, inc, req
+  let count, inc, distribution, track, req
 
   beforeEach(() => {
     req = {}
@@ -24,8 +24,13 @@ describe('Appsec Rasp Telemetry metrics', () => {
     count = sinon.stub(appsecNamespace, 'count').returns({
       inc,
     })
+    track = sinon.spy()
+    distribution = sinon.stub(appsecNamespace, 'distribution').returns({
+      track,
+    })
 
     appsecNamespace.metrics.clear()
+    appsecNamespace.distributions.clear()
   })
 
   afterEach(sinon.restore)
@@ -266,6 +271,49 @@ describe('Appsec Rasp Telemetry metrics', () => {
         })
       })
     })
+
+    describe('incrementRequestDurationMetrics', () => {
+      it('should report rasp.duration and rasp.duration_ext once per request with the accumulated total', () => {
+        appsecTelemetry.updateRaspRequestsMetricTags({
+          duration: 42,
+          durationExt: 52,
+          wafVersion,
+          rulesVersion,
+        }, req, { type: 'rule-type' })
+
+        appsecTelemetry.updateRaspRequestsMetricTags({
+          duration: 24,
+          durationExt: 25,
+          wafVersion,
+          rulesVersion,
+        }, req, { type: 'rule-type' })
+
+        appsecTelemetry.incrementRequestDurationMetrics(req)
+
+        sinon.assert.calledWithExactly(distribution, 'rasp.duration', {
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion,
+        })
+        sinon.assert.calledWithExactly(distribution, 'rasp.duration_ext', {
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion,
+        })
+        sinon.assert.calledWith(track, 66)
+        sinon.assert.calledWith(track, 77)
+      })
+
+      it('should not report rasp.duration/rasp.duration_ext when there is no accumulated duration', () => {
+        appsecTelemetry.incrementRequestDurationMetrics(req)
+
+        sinon.assert.notCalled(distribution)
+      })
+
+      it('should not report anything if no request is provided', () => {
+        appsecTelemetry.incrementRequestDurationMetrics()
+
+        sinon.assert.notCalled(distribution)
+      })
+    })
   })
 
   describe('if disabled', () => {
@@ -348,6 +396,20 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
         sinon.assert.notCalled(count)
         sinon.assert.notCalled(inc)
+      })
+
+      it('should not report rasp.duration/rasp.duration_ext if telemetry is disabled', () => {
+        const config = getConfig()
+        config.telemetry.DD_TELEMETRY_METRICS_ENABLED = false
+        appsecTelemetry.enable(config)
+
+        appsecTelemetry.updateRaspRequestsMetricTags({
+          duration: 42,
+          durationExt: 52,
+        }, req, { type: 'rule-type' })
+        appsecTelemetry.incrementRequestDurationMetrics(req)
+
+        sinon.assert.notCalled(distribution)
       })
     })
   })

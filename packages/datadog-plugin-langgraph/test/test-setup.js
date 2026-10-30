@@ -11,9 +11,11 @@
  */
 
 class LanggraphTestSetup {
-  async setup (module) {
+  async setup (module, tool, zod) {
     this.app = null
     this.module = module
+    this.tool = tool
+    this.zod = zod
     // Destructure required symbols from the langgraph module
     const { Annotation, StateGraph, START, END } = module
     // Define state annotation with messages array
@@ -124,6 +126,42 @@ class LanggraphTestSetup {
     } else {
       throw new Error('Intentional test error')
     }
+  }
+
+  /**
+   * Runs a tool-backed graph through interrupt and resume.
+   * @returns {Promise<{resumed: {result: string}, suspended: {__interrupt__: object[]}}>} Graph results.
+   */
+  async graphInterrupt () {
+    const { Annotation, Command, END, interrupt, MemorySaver, START, StateGraph } = this.module
+    const StateAnnotation = Annotation.Root({
+      result: Annotation(),
+    })
+    const askForApproval = this.tool(
+      ({ action }) => {
+        const approved = interrupt({ question: `Approve this action: ${action}?` })
+        return approved ? 'The action was approved.' : 'The action was rejected.'
+      },
+      {
+        name: 'ask_for_approval',
+        description: 'Ask a human to approve an action',
+        schema: this.zod.object({ action: this.zod.string() }),
+      }
+    )
+
+    const graph = new StateGraph(StateAnnotation)
+      .addNode('approval', async () => ({
+        result: await askForApproval.invoke({ action: 'deploy to production' }),
+      }))
+      .addEdge(START, 'approval')
+      .addEdge('approval', END)
+
+    const app = graph.compile({ checkpointer: new MemorySaver(), name: 'interruptGraph' })
+    const config = { configurable: { thread_id: 'graph-interrupt-test' } }
+    const suspended = await app.invoke({}, config)
+    const resumed = await app.invoke(new Command({ resume: true }), config)
+
+    return { resumed, suspended }
   }
 }
 

@@ -136,7 +136,6 @@ function formatSpanWithLegacyEvents (span) {
  * replacer hooks).
  *
  * @param {Array<{ name: unknown, startTime: number, attributes?: object }>} spanEvents
- * @returns {string}
  */
 function stringifySpanEvents (spanEvents) {
   let result = '['
@@ -200,7 +199,6 @@ function stringifyAttributeValue (value) {
  * conversion (which is what `JSON.stringify` calls internally).
  *
  * @param {number} value
- * @returns {string}
  */
 function jsonNumber (value) {
   if (Number.isFinite(value)) return String(value)
@@ -215,7 +213,6 @@ function jsonNumber (value) {
  * lone surrogates, etc.).
  *
  * @param {string} value
- * @returns {string}
  */
 function escapeJsonString (value) {
   for (let index = 0; index < value.length; index++) {
@@ -339,11 +336,11 @@ class AgentEncoder {
       // Replaces up to ten separate `bytes.reserve` calls per span with one.
       let typeEntry
       if (span.type) {
-        typeEntry = stringMap[span.type] ?? this._cacheString(span.type)
+        typeEntry = stringMap[span.type] ?? this._cacheString(span.type, true)
       }
-      const nameEntry = stringMap[span.name] ?? this._cacheString(span.name)
-      const resourceEntry = stringMap[span.resource] ?? this._cacheString(span.resource)
-      const serviceEntry = stringMap[span.service] ?? this._cacheString(span.service)
+      const nameEntry = stringMap[span.name] ?? this._cacheString(span.name, true)
+      const resourceEntry = stringMap[span.resource] ?? this._cacheString(span.resource, true)
+      const serviceEntry = stringMap[span.service] ?? this._cacheString(span.service, true)
       const nameLen = nameEntry.length
       const resourceLen = resourceEntry.length
       const serviceLen = serviceEntry.length
@@ -589,7 +586,7 @@ class AgentEncoder {
       const entryValue = value[key]
       if (typeof entryValue !== 'string' && typeof entryValue !== 'number') continue
 
-      const keyEntry = stringMap[key] ?? this._cacheString(key)
+      const keyEntry = stringMap[key] ?? this._cacheString(key, true)
       const keyEntryLen = keyEntry.length
       const writeOffset = bytes.length
 
@@ -649,7 +646,6 @@ class AgentEncoder {
    * @param {number} offset
    * @param {Buffer} keyPrefix Precomputed `[key, 0xCF]`.
    * @param {{ toBuffer: () => Uint8Array | number[] }} identifier
-   * @returns {number}
    */
   #writeIdAt (target, offset, keyPrefix, identifier) {
     target.set(keyPrefix, offset)
@@ -871,7 +867,6 @@ class AgentEncoder {
    * @param {MsgpackChunk} bytes
    * @param {string} key
    * @param {unknown} value
-   * @returns {boolean}
    */
   #emitAttribute (bytes, key, value) {
     if (typeof value === 'string') {
@@ -911,7 +906,6 @@ class AgentEncoder {
    * @param {MsgpackChunk} bytes
    * @param {string} key
    * @param {Array<unknown>} array
-   * @returns {boolean}
    */
   #emitArrayAttribute (bytes, key, array) {
     const sectionStart = bytes.length
@@ -946,7 +940,6 @@ class AgentEncoder {
    * @param {MsgpackChunk} bytes
    * @param {string} key
    * @param {unknown} value
-   * @returns {boolean}
    */
   #emitArrayItem (bytes, key, value) {
     if (typeof value === 'string') {

@@ -20,6 +20,8 @@ const BaseFFEWriter = require('./base')
  * @property {object} [headers] - Route-specific headers
  * @property {import('node:https').Agent} [agent] - Optional HTTPS proxy agent
  * @property {ExposureRoute} [fallback] - Optional direct fallback route
+ * @property {Function} [onFallback] - Called after direct fallback becomes active
+ * @property {Function} [onUnavailable] - Called after the local route becomes unavailable
  */
 
 /**
@@ -31,6 +33,7 @@ const BaseFFEWriter = require('./base')
  * @property {string} flag.key - Flag key
  * @property {object} variant - Variant information
  * @property {string} variant.key - Variant key
+ * @property {number} [serial_id] - Serial id of the split the subject landed in
  * @property {object} subject - Subject (user/entity) information
  * @property {string} subject.id - Subject identifier
  * @property {string} [subject.type] - Subject type
@@ -141,12 +144,17 @@ class ExposuresWriter extends BaseFFEWriter {
       endpoint: joinEVPProxyPath(route.basePath, EXPOSURES_ENDPOINT),
       headers,
       agent: route.agent,
+      onFallback: route.onFallback,
+      onUnavailable: route.onUnavailable,
     }, fallbackRoute)
+  }
+
+  get droppedEventCount () {
+    return this._droppedEvents
   }
 
   /**
    * Flushes buffered exposure events through the selected route.
-   *
    */
   flush () {
     if (!this.#enabled) return
@@ -186,7 +194,7 @@ class ExposuresWriter extends BaseFFEWriter {
   makePayload (events) {
     const formattedEvents = events.map(event => {
       /** @type {ExposureEvent} */
-      return {
+      const formatted = {
         timestamp: event.timestamp || Date.now(),
         allocation: {
           key: event.allocation?.key || event['allocation.key'],
@@ -203,6 +211,12 @@ class ExposuresWriter extends BaseFFEWriter {
           attributes: event.subject?.attributes,
         },
       }
+
+      if (typeof event.serial_id === 'number') {
+        formatted.serial_id = event.serial_id
+      }
+
+      return formatted
     })
 
     return {

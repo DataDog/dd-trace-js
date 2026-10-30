@@ -3,17 +3,17 @@
 const { channel } = require('dc-polyfill')
 const log = require('../log')
 const ExposuresWriter = require('./writers/exposures')
-const { setExposureDeliveryStrategy } = require('./writers/util')
+const { setEventDeliveryStrategy } = require('./writers/util')
 
 const exposureSubmitCh = channel('ffe:exposure:submit')
 const flushCh = channel('ffe:writers:flush')
 
 let exposuresWriter = null
+let stopEventDeliveryStrategy
 
 /**
  * @private
  * @param {object | Array<object>} exposureEvents - Exposure events channel subscriber
- * @returns {void}
  */
 function _handleExposureSubmit (exposureEvents) {
   if (!exposuresWriter) return
@@ -23,7 +23,6 @@ function _handleExposureSubmit (exposureEvents) {
 /**
  * Channel subscriber for manually flushing the exposures writer
  * @private
- * @returns {void}
  */
 function _handleFlush () {
   exposuresWriter?.flush()
@@ -32,9 +31,14 @@ function _handleFlush () {
 /**
  * Enables the OpenFeature module and sets up FF&E writer and channel subscribers
  * @param {import('../config')} config - Tracer configuration object
- * @returns {void}
  */
 function enable (config) {
+  if (config.featureFlags?.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED === false) {
+    log.debug('Feature Flags: Datadog exposure logging disabled; set %s=true to enable',
+      'DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED')
+    return
+  }
+
   if (exposuresWriter) {
     log.warn('%s already enabled', exposuresWriter.constructor.name)
     return
@@ -45,7 +49,7 @@ function enable (config) {
   exposureSubmitCh.subscribe(_handleExposureSubmit)
   flushCh.subscribe(_handleFlush)
 
-  setExposureDeliveryStrategy(config, (enabled, route) => {
+  stopEventDeliveryStrategy = setEventDeliveryStrategy(config, (enabled, route) => {
     if (exposuresWriter !== writer) return
 
     writer.setEnabled(enabled, route)
@@ -54,10 +58,12 @@ function enable (config) {
 
 /**
  * Disables the OpenFeature module and cleans up resources
- * @returns {void}
  */
 function disable () {
   if (!exposuresWriter) return
+
+  stopEventDeliveryStrategy?.()
+  stopEventDeliveryStrategy = undefined
 
   if (exposureSubmitCh.hasSubscribers) {
     exposureSubmitCh.unsubscribe(_handleExposureSubmit)

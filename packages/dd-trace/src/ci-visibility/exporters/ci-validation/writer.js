@@ -11,9 +11,8 @@ class CiValidationWriter {
    * @param {object} options.tags tracer tags
    */
   constructor ({ sink, tags }) {
-    const { 'runtime-id': runtimeId, env, service } = tags
     this._sink = sink
-    this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
+    this._encoder = new AgentlessCiVisibilityEncoder(this, { tags })
   }
 
   /**

@@ -1,6 +1,8 @@
 /* eslint-disable */
+const { getTestEnvironment } = require('../support/test-environment')
+
 describe('returned config', () => {
   it('uses env from setupNodeEvents return value', () => {
-    expect(Cypress.env('RETURNED_CONFIG_FLAG')).to.equal('true')
+    expect(getTestEnvironment('RETURNED_CONFIG_FLAG')).to.equal('true')
   })
 })

@@ -1,31 +1,38 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('./setup/core')
 
+const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../ext/priority')
+const id = require('../src/id')
+const SpanContext = require('../src/opentracing/span_context')
+const TextMapPropagator = require('../src/opentracing/propagation/text_map')
+const { getConfigFresh } = require('./helpers/config')
+
 const TRACE_ID_HEX = '0102030405060708090a0b0c0d0e0f10'
 const SPAN_ID_HEX = '1112131415161718'
 const TRACE_ID_BYTES = Uint8Array.from(Buffer.from(TRACE_ID_HEX, 'hex'))
 const SPAN_ID_BYTES = Uint8Array.from(Buffer.from(SPAN_ID_HEX, 'hex'))
 
-function makeSpan ({ traceId = TRACE_ID_HEX, spanId = SPAN_ID_HEX, parentId, tags = {} } = {}) {
-  return {
-    context () {
-      return {
-        _spanId: spanId,
-        _parentId: parentId,
-        _trace: { started: [] },
-        toTraceId: () => traceId.padStart(32, '0'),
-        toSpanId: () => spanId.padStart(16, '0'),
-        getTags: () => tags,
-      }
-    },
-  }
+// Spans carry a real DatadogSpanContext with real Identifiers, so the writer reads
+// the trace and span ids the way it does from tracer-created spans.
+function makeSpan ({
+  traceId = TRACE_ID_HEX, spanId = SPAN_ID_HEX, parentId, tags = {}, priority, started = [], traceTags = {},
+} = {}) {
+  const spanContext = new SpanContext({
+    traceId: typeof traceId === 'string' ? id(traceId) : traceId,
+    spanId: typeof spanId === 'string' ? id(spanId) : spanId,
+    parentId: parentId === undefined ? undefined : id(parentId),
+    sampling: { priority },
+    tags,
+    trace: { started, finished: [], tags: traceTags },
+  })
+  return { context: () => spanContext }
 }
 
 // A web-server span plus a child that resolves to it through the shared cache,
@@ -51,7 +58,7 @@ describe('otel-thread-ctx', () => {
   let activeSpan
   // Test double for the native ThreadContext class. Captures the constructor
   // arguments and exposes the same surface (appendAttributes, invalidate,
-  // isTruncated, debugBytes).
+  // setTraceFlags, isTruncated, debugBytes).
   let StubThreadContext
   let constructedContexts
   // Tracks every activation of a context (or detach via clearContext).
@@ -63,7 +70,8 @@ describe('otel-thread-ctx', () => {
   let setActive
 
   function loadModule (overrides = {}) {
-    return proxyquire.noPreserveCache()('../src/otel-thread-ctx', {
+    const loadOtelThreadCtx = proxyquire.noPreserveCache()
+    return loadOtelThreadCtx('../src/otel-thread-ctx', {
       '@datadog/pprof': overrides.pprof || pprofStub,
       '../../datadog-core/src/storage': overrides.storage || storageStub,
       './storage-channels': overrides.storageChannels || storageChannelsStub,
@@ -95,21 +103,41 @@ describe('otel-thread-ctx', () => {
     setActive = sinon.stub().callsFake(c => { activeContext = c })
 
     StubThreadContext = class StubThreadContext {
-      constructor (traceId, spanId, attributes) {
-        this.traceId = traceId
-        this.spanId = spanId
+      constructor (traceId, spanId, traceFlags, attributes) {
+        // Same id checks as the native constructor, which throws on any other shape.
+        if (!(traceId instanceof Uint8Array) || traceId.length !== 16) {
+          throw new Error('traceId must be a 16-byte Uint8Array')
+        }
+        if (!(spanId instanceof Uint8Array) || spanId.length !== 8) {
+          throw new Error('spanId must be an 8-byte Uint8Array')
+        }
+        // The native constructor copies the id bytes into its record, so the
+        // caller may reuse its buffers; capture copies the same way.
+        this.traceId = Uint8Array.from(traceId)
+        this.spanId = Uint8Array.from(spanId)
+        this.traceFlags = traceFlags
         this.attributes = attributes
         // Spied per instance so tests can assert call history on the context,
         // while the methods themselves stay on the prototype where start()'s
         // compatibility check looks for them, as they are on the native class.
         sinon.spy(this, 'appendAttributes')
         sinon.spy(this, 'invalidate')
+        sinon.spy(this, 'setTraceFlags')
         constructedContexts.push(this)
       }
 
-      appendAttributes () {}
+      // Applied to `attributes` with the record's last-wins handling of duplicate
+      // keys, so a test can assert the endpoint an out-of-process reader would
+      // read out of the record, not merely the calls the writer made.
+      appendAttributes (appended) {
+        for (const [index, value] of appended.entries()) {
+          if (value !== undefined) this.attributes[index] = value
+        }
+      }
 
       invalidate () {}
+
+      setTraceFlags (traceFlags) { this.traceFlags = traceFlags }
 
       isTruncated () { return false }
 
@@ -137,7 +165,7 @@ describe('otel-thread-ctx', () => {
       tagsUpdateCh,
       beforeCh: dc.channel('dd-trace:storage:before'),
       getActiveSpan: () => activeSpan,
-      ensureChannelsActivated: sinon.stub(),
+      acquireChannels: sinon.stub(),
     }
 
     webTagsCacheStub = {
@@ -205,7 +233,7 @@ describe('otel-thread-ctx', () => {
       // failure to a diagnostic-channel subscriber: a missing invalidate() would
       // throw out of the span-finish path and up through DatadogSpan#finish()
       // into application code.
-      for (const method of ['appendAttributes', 'enter', 'invalidate']) {
+      for (const method of ['appendAttributes', 'enter', 'invalidate', 'setTraceFlags']) {
         const Incomplete = class extends StubThreadContext {}
         Incomplete.prototype[method] = undefined
         const m = loadModule({
@@ -285,10 +313,23 @@ describe('otel-thread-ctx', () => {
       pprofStub.otelThreadCtx.clearContext.resetHistory()
     })
 
-    it('clearContext when no active span', () => {
+    it('clearContext when no active span and a context is installed', () => {
+      activeSpan = makeSpan()
+      enterCh.publish()
+      setActive.resetHistory()
+      activeSpan = null
       enterCh.publish()
       sinon.assert.calledOnce(pprofStub.otelThreadCtx.clearContext)
       sinon.assert.calledOnceWithExactly(setActive)
+      assert.equal(activeContext, undefined)
+      assert.equal(constructedContexts.length, 1)
+    })
+
+    it('does not clearContext when no active span and nothing is installed', () => {
+      enterCh.publish()
+      sinon.assert.notCalled(pprofStub.otelThreadCtx.clearContext)
+      sinon.assert.notCalled(setActive)
+      assert.equal(activeContext, undefined)
       assert.equal(constructedContexts.length, 0)
     })
 
@@ -314,6 +355,105 @@ describe('otel-thread-ctx', () => {
       sinon.assert.calledOnceWithExactly(setActive, context)
     })
 
+    it('writes the ids and local root id of every identifier shape the tracer produces as toTraceId/toSpanId', () => {
+      // Local root with the 128-bit high half in _dd.p.tid (lower and upper case
+      // hex), 64-bit without _dd.p.tid (high half zero), a 128-bit
+      // identifier that wins over _dd.p.tid, Datadog decimal ids, and a short or
+      // empty _dd.p.tid the byte path declines but toTraceId still resolves.
+      const cases = [
+        { traceId: 'aabbccddeeff0011', traceTags: { '_dd.p.tid': '640cfd8d00000000' } },
+        { traceId: 'aabbccddeeff0012', traceTags: { '_dd.p.tid': '640cfd8e00000000' } },
+        { traceId: 'aabbccddeeff0013', traceTags: { '_dd.p.tid': '640CFD8E000000AA' } },
+        { traceId: 'aabbccddeeff0014' },
+        { traceId: '0af7651916cd43dd8448eb211c80319c', traceTags: { '_dd.p.tid': '1111111111111111' } },
+        { traceId: id('123', 10), spanId: id('-456', 10) },
+        { traceId: 'aabbccddeeff0016', traceTags: { '_dd.p.tid': '640cfd8d' } },
+        { traceId: 'aabbccddeeff0017', traceTags: { '_dd.p.tid': '' } },
+        { traceId: 'aabbccddeeff0018', traceTags: { '_dd.p.tid': '640cfd8d00000000' } },
+        { traceId: 'aabbccddeeff0019', spanId: id() },
+        { traceId: 'aabbccddeeff001a', spanId: '0' },
+        { traceId: 'aabbccddeeff001b', spanId: 'f' },
+        { traceId: 'aabbccddeeff001c', spanId: 'ffffffffffffffff' },
+        { traceId: 'aabbccddeeff001d', spanId: id('-1') },
+      ]
+      for (const fields of cases) {
+        constructedContexts = []
+        activeSpan = makeSpan(fields)
+        enterCh.publish()
+        const spanContext = activeSpan.context()
+        const label = spanContext.toTraceId(true)
+        assert.deepEqual(constructedContexts[0].traceId,
+          Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex')), `trace id ${label}`)
+        assert.deepEqual(constructedContexts[0].spanId,
+          Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex')), `span id ${label}`)
+        assert.equal(constructedContexts[0].attributes[0], spanContext.toSpanId(true), `local root id ${label}`)
+      }
+    })
+
+    it('builds no record and clears the frame for ids the native constructor rejects', () => {
+      activeSpan = makeSpan()
+      enterCh.publish()
+      assert.equal(constructedContexts.length, 1)
+      const rejected = [
+        { traceId: 'aabbccddeeff0015', traceTags: { '_dd.p.tid': 'not-hex-16chars!' } },
+        { traceId: 'aabbccddeeff001e', traceTags: { '_dd.p.tid': '640cfd8d0000000g' } },
+        { traceId: '0102030405060708090a0b0c0d0e0f1011' },
+        { traceId: 'aabbccddeeff001f', spanId: '0102030405060708090a' },
+      ]
+      for (const fields of rejected) {
+        constructedContexts = []
+        activeSpan = makeSpan(fields)
+        enterCh.publish()
+        assert.equal(constructedContexts.length, 0)
+        assert.equal(activeContext, undefined)
+      }
+      sinon.assert.calledOnce(pprofStub.otelThreadCtx.clearContext)
+    })
+
+    it('writes the ids and local root id of propagated contexts as toTraceId/toSpanId', () => {
+      const propagator = new TextMapPropagator(getConfigFresh())
+      const carriers = [
+        { 'x-datadog-trace-id': '123', 'x-datadog-parent-id': '456' },
+        { 'x-datadog-trace-id': '123', 'x-datadog-parent-id': '456', 'x-datadog-tags': '_dd.p.tid=640cfd8d00000000' },
+        { traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01' },
+        { traceparent: '00-00000000000000000000000000000001-0000000000000001-00' },
+      ]
+      for (const carrier of carriers) {
+        const spanContext = propagator.extract(carrier)
+        constructedContexts = []
+        activeSpan = { context: () => spanContext }
+        enterCh.publish()
+        const label = JSON.stringify(carrier)
+        assert.deepEqual(constructedContexts[0].traceId,
+          Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex')), `trace id ${label}`)
+        assert.deepEqual(constructedContexts[0].spanId,
+          Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex')), `span id ${label}`)
+        assert.equal(constructedContexts[0].attributes[0], spanContext.toSpanId(true), `local root id ${label}`)
+      }
+    })
+
+    it('sets the W3C sampled flag when the priority is AUTO_KEEP or above', () => {
+      for (const priority of [AUTO_KEEP, USER_KEEP]) {
+        constructedContexts = []
+        activeSpan = makeSpan({ priority })
+        enterCh.publish()
+        assert.equal(constructedContexts[0].traceFlags, 1, `priority ${priority}`)
+      }
+    })
+
+    it('leaves the trace-flags byte at zero when the trace is not sampled', () => {
+      // An undefined priority is a decision the tracer has not taken yet. The
+      // writer deliberately does not force it (that would move every trace's
+      // sampling decision onto the first span activation), so it reads as not
+      // sampled until something pushes the flags in with setTraceFlags.
+      for (const priority of [undefined, AUTO_REJECT, USER_REJECT]) {
+        constructedContexts = []
+        activeSpan = makeSpan({ priority })
+        enterCh.publish()
+        assert.equal(constructedContexts[0].traceFlags, 0, `priority ${priority}`)
+      }
+    })
+
     it('builds a ThreadContext with the endpoint attribute for a web-server span', () => {
       const webTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/x' }
       activeSpan = makeSpan({ tags: webTags })
@@ -327,18 +467,8 @@ describe('otel-thread-ctx', () => {
     it('encodes the local-root-span id from the first started-spans entry', () => {
       const rootHex = '99aabbccddeeff00'
       const rootSpan = makeSpan({ spanId: rootHex })
-      activeSpan = makeSpan({ parentId: rootHex })
       // Plant the root in the started-spans list of the active span's trace.
-      activeSpan.context = function () {
-        return {
-          _spanId: SPAN_ID_HEX,
-          _parentId: rootHex,
-          _trace: { started: [rootSpan] },
-          toTraceId: () => TRACE_ID_HEX.padStart(32, '0'),
-          toSpanId: () => SPAN_ID_HEX.padStart(16, '0'),
-          getTags: () => ({}),
-        }
-      }
+      activeSpan = makeSpan({ parentId: rootHex, started: [rootSpan] })
       enterCh.publish()
       assert.equal(constructedContexts[0].attributes[0], rootHex)
     })
@@ -483,6 +613,51 @@ describe('otel-thread-ctx', () => {
       assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
     })
 
+    it('does not append to the request span record when the span finished before the endpoint settled', () => {
+      const webTags = { 'span.type': 'web', 'http.method': 'GET' }
+      activeSpan = makeSpan({ tags: webTags })
+      cachedWebTags.set(activeSpan, webTags)
+      enterCh.publish()
+      const context = constructedContexts[0]
+      spanFinishCh.publish(activeSpan)
+
+      webTags['http.route'] = '/x'
+      endpointResolvedCh.publish(activeSpan)
+      sinon.assert.notCalled(context.appendAttributes)
+    })
+
+    it('appends the endpoint to the fresh record of a request span re-entered after finishing', () => {
+      const webTags = { 'span.type': 'web', 'http.method': 'GET' }
+      activeSpan = makeSpan({ tags: webTags })
+      cachedWebTags.set(activeSpan, webTags)
+      enterCh.publish()
+      spanFinishCh.publish(activeSpan)
+      enterCh.publish()
+      const [finished, reentered] = constructedContexts
+
+      webTags['http.route'] = '/x'
+      endpointResolvedCh.publish(activeSpan)
+      sinon.assert.notCalled(finished.appendAttributes)
+      sinon.assert.calledOnce(reentered.appendAttributes)
+      assert.equal(reentered.attributes[1], 'GET /x')
+    })
+
+    it('keeps the request span record waiting across a placeholder announcement', () => {
+      const webTags = { 'span.type': 'web', 'http.method': 'GET', 'resource.name': 'GET' }
+      activeSpan = makeSpan({ tags: webTags })
+      cachedWebTags.set(activeSpan, webTags)
+      enterCh.publish()
+      const context = constructedContexts[0]
+
+      endpointResolvedCh.publish(activeSpan)
+      sinon.assert.notCalled(context.appendAttributes)
+      webTags['resource.name'] = 'GET /x'
+      endpointResolvedCh.publish(activeSpan)
+      endpointResolvedCh.publish(activeSpan)
+      sinon.assert.calledOnce(context.appendAttributes)
+      assert.equal(context.attributes[1], 'GET /x')
+    })
+
     it('appends the endpoint to records of descendants built before it settled', () => {
       // The routing tags land on the request span, so the announcement names
       // that span — but each descendant has its own record with its own
@@ -596,6 +771,119 @@ describe('otel-thread-ctx', () => {
       assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
     })
 
+    it('appends the endpoint to a descendant record built before the ancestry existed', () => {
+      // The record was built while the span had no web-server ancestry at all, so
+      // it never enlisted for a request. webTagsCache announces the descendant
+      // too when the promotion changes its answer, which is what fills the hole —
+      // a span in the middle of synchronous work never re-enters storage.
+      const webTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/x' }
+      activeSpan = makeSpan({ spanId: '2122232425262728', parentId: SPAN_ID_HEX, tags: {} })
+      enterCh.publish()
+      const context = constructedContexts[0]
+      assert.strictEqual(context.attributes[1], undefined)
+
+      cachedWebTags.set(activeSpan, webTags)
+      webTagsResolvedCh.publish(activeSpan)
+      sinon.assert.calledOnce(context.appendAttributes)
+      assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
+      assert.equal(constructedContexts.length, 1)
+    })
+
+    it('waits for the endpoint when a descendant gains an ancestry before the route', () => {
+      // The announcement finds an ancestor but no settled endpoint yet, so the
+      // record has to join the request's waiting list — the endpoint announcement
+      // then names the ancestor, whose tag bag is the key it is waiting under.
+      const { parent, child, webTags } = makeWebSpanWithChild({ 'span.type': 'web', 'http.method': 'GET' })
+      activeSpan = child
+      enterCh.publish()
+      const context = constructedContexts[0]
+      assert.strictEqual(context.attributes[1], undefined)
+
+      cachedWebTags.set(child, webTags)
+      webTagsResolvedCh.publish(child)
+      sinon.assert.notCalled(context.appendAttributes)
+
+      webTags['http.route'] = '/x'
+      endpointResolvedCh.publish(parent)
+      sinon.assert.calledOnce(context.appendAttributes)
+      assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
+    })
+
+    it('appends once when the same web-tags resolution is announced twice', () => {
+      const webTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/x' }
+      activeSpan = makeSpan({ tags: {} })
+      enterCh.publish()
+      const context = constructedContexts[0]
+
+      cachedWebTags.set(activeSpan, webTags)
+      webTagsResolvedCh.publish(activeSpan)
+      webTagsResolvedCh.publish(activeSpan)
+      sinon.assert.calledOnce(context.appendAttributes)
+      assert.equal(context.appendAttributes.firstCall.args[0][1], 'GET /x')
+    })
+
+    it('repoints a record at a nearer web-server span', () => {
+      // Nested request handling: the record was attributed to the outer request,
+      // then an intermediate span became a web-server span of its own. The inner
+      // endpoint is the one this span's work belongs to from now on, and the outer
+      // request's own announcement no longer applies to this record.
+      const outerTags = { 'span.type': 'web', 'http.method': 'GET' }
+      const outerSpan = makeSpan({ tags: outerTags })
+      const innerTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/inner' }
+      activeSpan = makeSpan({ spanId: '2122232425262728', parentId: SPAN_ID_HEX, tags: {} })
+      cachedWebTags.set(activeSpan, outerTags)
+      enterCh.publish()
+      const context = constructedContexts[0]
+      assert.strictEqual(context.attributes[1], undefined)
+
+      cachedWebTags.set(activeSpan, innerTags)
+      webTagsResolvedCh.publish(activeSpan)
+      assert.equal(context.attributes[1], 'GET /inner')
+
+      outerTags['http.route'] = '/outer'
+      endpointResolvedCh.publish(outerSpan)
+      sinon.assert.calledOnce(context.appendAttributes)
+      assert.equal(context.attributes[1], 'GET /inner')
+    })
+
+    it('keeps showing the outer endpoint until a nearer request settles its own', () => {
+      // The unavoidable window: the record already carries the outer request's
+      // settled endpoint, and the nearer web-server span that supersedes it has
+      // no route yet. The record buffer is append-only — there is no way to take
+      // an attribute back — and rebuilding the ThreadContext would strand every
+      // async-context frame already holding this one. So the outer endpoint, the
+      // request this work is still nested in, stands until the inner one settles.
+      const outerTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/outer' }
+      const innerTags = { 'span.type': 'web', 'http.method': 'GET' }
+      activeSpan = makeSpan({ spanId: '2122232425262728', parentId: SPAN_ID_HEX, tags: {} })
+      cachedWebTags.set(activeSpan, outerTags)
+      enterCh.publish()
+      const context = constructedContexts[0]
+      assert.equal(context.attributes[1], 'GET /outer')
+
+      cachedWebTags.set(activeSpan, innerTags)
+      webTagsResolvedCh.publish(activeSpan)
+      assert.equal(context.attributes[1], 'GET /outer')
+
+      innerTags['http.route'] = '/inner'
+      endpointResolvedCh.publish(makeSpan({ tags: innerTags }))
+      assert.equal(context.attributes[1], 'GET /inner')
+    })
+
+    it('does not query the cache again on re-entry', () => {
+      // Every answer change is announced, so a record that already has its
+      // ancestry never asks again — re-entry is the hottest path there is.
+      const webTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/x' }
+      activeSpan = makeSpan({ tags: {} })
+      enterCh.publish()
+      cachedWebTags.set(activeSpan, webTags)
+      webTagsResolvedCh.publish(activeSpan)
+      const lookups = sinon.spy(webTagsCacheStub, 'getCachedWebTags')
+      enterCh.publish()
+      enterCh.publish()
+      sinon.assert.notCalled(lookups)
+    })
+
     it('endpoint announcements are a no-op for a span that has not been entered', () => {
       const { parent, webTags } = makeWebSpanWithChild(
         { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/x' })
@@ -603,6 +891,35 @@ describe('otel-thread-ctx', () => {
       endpointResolvedCh.publish(parent)
       webTagsResolvedCh.publish(parent)
       assert.equal(constructedContexts.length, 0)
+    })
+  })
+
+  describe('native ThreadContext contract', () => {
+    // The stub mirrors the native constructor's id checks; pin them to the real
+    // addon wherever it loads, so the two can't drift apart unnoticed.
+    let NativeThreadContext
+
+    before(function () {
+      if (process.platform !== 'linux') return this.skip()
+      try {
+        NativeThreadContext = require('@datadog/pprof').otelThreadCtx?.ThreadContext
+      } catch {}
+      if (typeof NativeThreadContext !== 'function') this.skip()
+    })
+
+    it('accepts and rejects the same id shapes as the stub', () => {
+      const shapes = [[16, 8], [17, 8], [15, 8], [0, 8], [16, 9], [16, 7], [16, 0]]
+      for (const [traceIdLength, spanIdLength] of shapes) {
+        const ids = [new Uint8Array(traceIdLength), new Uint8Array(spanIdLength)]
+        const label = `${traceIdLength}/${spanIdLength} bytes`
+        if (traceIdLength === 16 && spanIdLength === 8) {
+          assert.ok(new NativeThreadContext(...ids) instanceof NativeThreadContext, label)
+          assert.ok(new StubThreadContext(...ids) instanceof StubThreadContext, label)
+        } else {
+          assert.throws(() => new NativeThreadContext(...ids), { message: /must be an? \d+-byte Uint8Array/ }, label)
+          assert.throws(() => new StubThreadContext(...ids), { message: /must be an? \d+-byte Uint8Array/ }, label)
+        }
+      }
     })
   })
 

@@ -36,7 +36,6 @@ function isFastSlash (layer, matchers) {
  * @param {{ handle: Function, name?: string, path?: string,
  *   regexp?: { fast_star?: boolean, fast_slash?: boolean } }} layer
  * @param {Array<{ path?: string, regex?: RegExp }> & { hasStarPath?: boolean, hasSlashPath?: boolean }} matchers
- * @returns {void}
  */
 function annotateLayer (layer, matchers) {
   const handle = layer.handle
@@ -90,6 +89,28 @@ function resolveLayerRouteOrForwardError (meta, layer, next) {
     next(error)
     return ROUTE_RESOLUTION_FAILED
   }
+}
+
+// Wrapped `next` -> the host continuation it calls.
+const hostNexts = new WeakMap()
+
+/**
+ * Routers store their continuation on `req.next` once per `handle()`, and host
+ * APIs call it directly (express `res.format`, `res.sendFile` and `res.render`
+ * errors). Point it at the wrapper the current handler receives when that
+ * wrapper wraps the same continuation: `req.next` is the host continuation
+ * itself, or an earlier layer's wrapper of it. Route handlers receive a
+ * route-local continuation from `Route.dispatch`, so `req.next` keeps the
+ * router-level one there. A nested router restores its parent's `req.next`
+ * when it finishes.
+ *
+ * @param {import('node:http').IncomingMessage | undefined} req
+ * @param {Function} hostNext
+ * @param {Function} wrappedNext
+ */
+function adoptRequestNext (req, hostNext, wrappedNext) {
+  hostNexts.set(wrappedNext, hostNext)
+  if (req && (req.next === hostNext || hostNexts.get(req.next) === hostNext)) req.next = wrappedNext
 }
 
 /**
@@ -172,6 +193,7 @@ function createLayerDispatchWrappers (name) {
       }
 
       const wrappedNext = typeof next === 'function' ? wrapNext(req, meta.name, next) : next
+      if (wrappedNext !== next) adoptRequestNext(req, next, wrappedNext)
       enterChannel.publish({ name: meta.name, req, route, layer: this })
 
       try {
@@ -200,6 +222,7 @@ function createLayerDispatchWrappers (name) {
       }
 
       const wrappedNext = typeof next === 'function' ? wrapNext(req, meta.name, next) : next
+      if (wrappedNext !== next) adoptRequestNext(req, next, wrappedNext)
       enterChannel.publish({ name: meta.name, req, route, layer: this })
 
       try {
@@ -224,6 +247,7 @@ function createLayerDispatchWrappers (name) {
 
       let calls = 0
       if (typeof next === 'function') {
+        const hostNext = next
         next = shimmer.wrapCallback(next, originalNext => function next (error) {
           calls++
           if (calls === 1) {
@@ -239,6 +263,7 @@ function createLayerDispatchWrappers (name) {
 
           originalNext.apply(this, arguments)
         })
+        adoptRequestNext(req, hostNext, next)
       }
 
       const route = needMultiMatch ? resolveLayerRoute(meta, layer) : captureRoute
@@ -274,6 +299,7 @@ function createLayerDispatchWrappers (name) {
 
       let calls = 0
       if (typeof next === 'function') {
+        const hostNext = next
         next = shimmer.wrapCallback(next, originalNext => function next (nextError) {
           calls++
           if (calls === 1) {
@@ -289,6 +315,7 @@ function createLayerDispatchWrappers (name) {
 
           originalNext.apply(this, arguments)
         })
+        adoptRequestNext(req, hostNext, next)
       }
 
       const route = needMultiMatch ? resolveLayerRoute(meta, layer) : captureRoute
@@ -337,6 +364,7 @@ function createLayerDispatchWrappers (name) {
       const nextIndex = isErrorHandler ? 3 : 2
       let calls = 0
       if (typeof args[nextIndex] === 'function') {
+        const hostNext = args[nextIndex]
         args[nextIndex] = shimmer.wrapCallback(args[nextIndex], originalNext => function next (error) {
           calls++
           if (calls === 1) {
@@ -352,6 +380,7 @@ function createLayerDispatchWrappers (name) {
 
           originalNext.apply(this, arguments)
         })
+        adoptRequestNext(req, hostNext, args[nextIndex])
       }
 
       const route = needMultiMatch ? resolveLayerRoute(meta, layer) : captureRoute
@@ -382,7 +411,6 @@ function createLayerDispatchWrappers (name) {
 
 /**
  * @param {{ handle_request?: unknown, handleRequest?: unknown }} layer
- * @returns {boolean}
  */
 function hasLayerDispatch (layer) {
   return typeof layer.handle_request === 'function' || typeof layer.handleRequest === 'function'

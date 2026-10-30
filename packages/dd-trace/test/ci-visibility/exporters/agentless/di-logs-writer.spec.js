@@ -26,7 +26,38 @@ describe('Test Visibility DI Writer', () => {
     sinon.restore()
   })
 
+  it('bounds logs retained before serialization', () => {
+    const BoundedLogsWriter = proxyquire(
+      '../../../../src/ci-visibility/exporters/agentless/di-logs-writer',
+      { '../limits': { MAX_DI_LOG_BUFFERED_BYTES: 3 } }
+    )
+    const logsWriter = new BoundedLogsWriter({ url: 'http://www.example.com' })
+
+    assert.strictEqual(logsWriter.append(1), true)
+    assert.strictEqual(logsWriter.append(2), false)
+  })
+
   context('agentless', () => {
+    it('uses the dedicated Test Optimization agent', (done) => {
+      const agent = {}
+      const request = sinon.stub().yieldsAsync(null, 'OK', 202)
+      const TestOptimizationLogsWriter = proxyquire(
+        '../../../../src/ci-visibility/exporters/agentless/di-logs-writer',
+        {
+          '../agents': { getAgent: () => agent },
+          '../request': request,
+          '../../../config': () => ({ DD_API_KEY: '1' }),
+        }
+      )
+      const logsWriter = new TestOptimizationLogsWriter({ url: 'http://www.example.com' })
+
+      logsWriter.append({ message: 'test' })
+      logsWriter.flush(() => {
+        sinon.assert.calledWithMatch(request, sinon.match.any, { agent })
+        done()
+      })
+    })
+
     it('can send logs to the logs intake', (done) => {
       const scope = nock('http://www.example.com')
         .post('/api/v2/logs', body => {
@@ -46,12 +77,42 @@ describe('Test Visibility DI Writer', () => {
       })
     })
 
+    it('reports enriched telemetry when a payload is dropped', (done) => {
+      const error = Object.assign(new Error('reset'), { code: 'ECONNRESET' })
+      const incrementCountMetric = sinon.stub()
+      const request = sinon.stub().yieldsAsync(error, null, undefined)
+      const TestOptimizationLogsWriter = proxyquire(
+        '../../../../src/ci-visibility/exporters/agentless/di-logs-writer',
+        {
+          '../request': request,
+          '../../../ci-visibility/telemetry': { incrementCountMetric },
+          '../../../config': () => ({ DD_API_KEY: '1' }),
+        }
+      )
+      const logsWriter = new TestOptimizationLogsWriter({ url: 'http://www.example.com' })
+
+      logsWriter.append({ message: 'test' })
+      logsWriter.flush(() => {
+        sinon.assert.calledWithExactly(
+          incrementCountMetric,
+          'endpoint_payload.requests_errors',
+          { endpoint: 'di_logs', statusCode: undefined, errorType: 'ECONNRESET' }
+        )
+        sinon.assert.calledWithExactly(
+          incrementCountMetric,
+          'endpoint_payload.dropped',
+          { endpoint: 'di_logs', statusCode: undefined, errorType: 'ECONNRESET' }
+        )
+        done()
+      })
+    })
+
     it('logs an error if the request fails', (done) => {
       const logErrorSpy = sinon.spy(log, 'error')
 
       const scope = nock('http://www.example.com')
         .post('/api/v2/logs')
-        .reply(500)
+        .reply(400)
 
       const logsWriter = new DynamicInstrumentationLogsWriterWithApiKey({ url: 'http://www.example.com' })
 
@@ -91,7 +152,7 @@ describe('Test Visibility DI Writer', () => {
 
       const scope = nock('http://www.example.com')
         .post('/debugger/v1/input')
-        .reply(500)
+        .reply(400)
 
       const logsWriter = new DynamicInstrumentationLogsWriter({ url: 'http://www.example.com', isAgentProxy: true })
 

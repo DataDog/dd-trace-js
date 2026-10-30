@@ -113,7 +113,6 @@ function getCommandExecutableIdentity (command, repositoryRoot) {
  *
  * @param {object} current current identity
  * @param {object} approved approved identity
- * @returns {boolean} exact identity match
  */
 function areExecutableIdentitiesEqual (current, approved) {
   return current.argv0 === approved.argv0 &&
@@ -159,11 +158,7 @@ function splitNodeOptions (source) {
       }
     }
     const next = source[index + 1]
-    if (character === '\\' && next && (next === quote || /[\s'"\\]/.test(next))) {
-      value += source[++index]
-    } else {
-      value += character
-    }
+    value += character === '\\' && next && (next === quote || /[\s'"\\]/.test(next)) ? source[++index] : character
     started = true
   }
   if (quote) throw new Error('NODE_OPTIONS contains an unterminated quoted value.')
@@ -176,7 +171,6 @@ function splitNodeOptions (source) {
  *
  * @param {string} value candidate value
  * @param {string} [platform] target platform
- * @returns {boolean} whether the value includes explicit path syntax
  */
 function isExplicitExecutablePath (value, platform = process.platform) {
   if (typeof value !== 'string') return false
@@ -188,7 +182,6 @@ function isExplicitExecutablePath (value, platform = process.platform) {
  * Returns whether a command has the only executable shape the validator supports.
  *
  * @param {object} command command candidate
- * @returns {boolean} whether it is a direct runner
  */
 function isDirectRunnerCommand (command) {
   return command?.usesShell === false &&
@@ -218,7 +211,6 @@ function getFileIdentity (filename) {
  * Returns whether a path resolves to a regular file.
  *
  * @param {string} filename candidate path
- * @returns {boolean} whether the file is available
  */
 function isRegularFile (filename) {
   try {
@@ -233,7 +225,6 @@ function isRegularFile (filename) {
  *
  * @param {string} root root path
  * @param {string} filename candidate path
- * @returns {boolean} whether the path is contained
  */
 function isPathInside (root, filename) {
   const relative = path.relative(path.resolve(root), path.resolve(filename))

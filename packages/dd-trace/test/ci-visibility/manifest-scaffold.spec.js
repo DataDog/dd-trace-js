@@ -128,7 +128,9 @@ describe('test optimization validation manifest scaffold', () => {
       script: 'cucumber-js --require features/cucumber.js --profile ci',
     }, fixture => {
       fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
-        'module.exports = {',
+        'module',
+        '  . exports',
+        '  = {',
         "  ci: 'features/**/*.feature -r features/steps.js -i features/steps.mjs',",
         "  description: \"old config: { ci: '-r legacy/stale.js' }\",",
         "  // old config: { ci: '-r legacy/stale.js' },",
@@ -203,6 +205,35 @@ describe('test optimization validation manifest scaffold', () => {
       ])
     })
   })
+
+  for (const [description, lineBoundary] of [
+    ['LF', '\n'],
+    ['CRLF', '\r\n'],
+    ['CR', '\r'],
+    ['line separator', '\u2028'],
+    ['paragraph separator', '\u2029'],
+    ['vertical tab before LF', '\v\n'],
+    ['form feed before LF', '\f\n'],
+    ['non-breaking space before LF', '\u00a0\n'],
+    ['byte order mark before LF', '\ufeff\n'],
+  ]) {
+    it(`expands a JavaScript Cucumber profile after ${description}`, () => {
+      withRepositoryFixture({
+        framework: 'cucumber',
+        script: 'cucumber-js --profile default',
+      }, fixture => {
+        fs.writeFileSync(
+          path.join(fixture.root, 'cucumber.js'),
+          `'use strict';${lineBoundary}module.exports = { default: '--strict' }\n`
+        )
+
+        const framework = scaffoldFramework(fixture, 'cucumber')
+
+        assert.strictEqual(framework.status, 'runnable')
+        assert.deepStrictEqual(framework.validation.runnerArgs, ['--strict'])
+      })
+    })
+  }
 
   for (const [description, requireValue] of [
     ['nested object', "{ path: 'features/steps.js' }"],
@@ -1958,7 +1989,7 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
-  it('retains Cypress configuration for generated checks', () => {
+  it('retains Cypress configuration and source for generated checks', () => {
     const fixture = createRepositoryFixture({
       framework: 'cypress',
       script: 'cypress run --spec cypress/e2e/example.cy.js --browser chrome --config-file cypress.custom.js --e2e',
@@ -1971,6 +2002,8 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
       const scenario = framework.generatedTestStrategy.scenarios[0]
       const command = getGeneratedCommand(framework, scenario)
+      const basicFile = framework.generatedTestStrategy.files[0]
+      const retryFile = framework.generatedTestStrategy.files[1]
 
       assert.deepStrictEqual(framework.validation.runnerArgs, [
         '--browser',
@@ -1989,6 +2022,16 @@ describe('test optimization validation manifest scaffold', () => {
         'cypress.custom.js',
         '--e2e',
       ])
+      assert.strictEqual(
+        basicFile.contentLines.join('\n'),
+        'describe(\'dd-test-optimization-validation\', () => {\n  it("basic-pass", () => {\n' +
+          '    expect(true).to.equal(true)\n  })\n})'
+      )
+      assert.strictEqual(
+        retryFile.contentLines.join('\n'),
+        'let attempt = 0\n\ndescribe(\'dd-test-optimization-validation\', () => {\n' +
+          '  it("atr-fail-once", () => {\n    expect(attempt++).to.equal(1)\n  })\n})'
+      )
     } finally {
       removeFixture(fixture.root)
     }
@@ -2437,7 +2480,6 @@ describe('test optimization validation manifest scaffold', () => {
  *
  * @param {string} filename config filename
  * @param {string} include selected include pattern
- * @returns {void}
  */
 function writeVitestProjectConfig (filename, include) {
   fs.mkdirSync(path.dirname(filename), { recursive: true })

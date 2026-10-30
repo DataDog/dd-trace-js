@@ -31,6 +31,13 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     }
   }
 
+  error (ctx) {
+    // NodeInterrupt or GraphInterrupt "errors" for control flow, do not mark as real errors
+    if (ctx.error?.is_bubble_up) return
+
+    super.error(ctx)
+  }
+
   bindStart (ctx) {
     // TODO(bengl): All this renaming is just so we don't have to change the existing handlers
     ctx.args = ctx.arguments

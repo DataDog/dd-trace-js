@@ -1,18 +1,19 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const { inspect } = require('node:util')
 
-const Axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
+const HttpRequest = require('../setup/helpers/http-client')
 
 function assertFingerprintInTraces (traces) {
   const span = traces[0][0]
   assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.header'), `Available keys: ${inspect(Object.keys(span.meta))}`)
-  assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-4-c348f529')
+  assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0100000100-74c2908f-4-c348f529')
   assert.ok(
     Object.hasOwn(span.meta, '_dd.appsec.fp.http.network'),
     `Available keys: ${inspect(Object.keys(span.meta))}`
@@ -27,19 +28,13 @@ function assertFingerprintInTraces (traces) {
 
 withVersions('passport-local', 'passport-local', version => {
   describe('Attacker fingerprinting', () => {
-    let port, server, axios
+    let port, server, httpRequest
 
-    before(() => {
-      return agent.load(['express', 'http'], { client: false })
-    })
-
-    before(() => {
+    before(async () => {
+      await agent.load(['express', 'http'], { client: false })
       appsec.enable(getConfigFresh({
         appsec: true,
       }))
-    })
-
-    before((done) => {
       const express = require('../../../../versions/express').get()
       const bodyParser = require('../../../../versions/body-parser').get()
       const passport = require('../../../../versions/passport').get()
@@ -66,30 +61,29 @@ withVersions('passport-local', 'passport-local', version => {
         res.end()
       })
 
-      server = app.listen(port, () => {
-        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({
-          baseURL: `http://localhost:${port}`,
-          headers: {
-            'User-Agent': 'test-user-agent',
-          },
-        })
-        done()
+      server = app.listen(port)
+      await once(server, 'listening')
+      port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      httpRequest = HttpRequest.create({
+        baseURL: `http://localhost:${port}`,
+        headers: {
+          'User-Agent': 'test-user-agent',
+        },
       })
     })
 
-    after(() => {
-      server.close()
-      return agent.close()
-    })
-
-    after(() => {
-      appsec.disable()
+    after(async () => {
+      try {
+        server?.close()
+        await agent.close()
+      } finally {
+        appsec.disable()
+      }
     })
 
     it('should report http fingerprints on login fail', async () => {
       try {
-        await axios.post(
+        await httpRequest.post(
           `http://localhost:${port}/login`,
           {
             username: 'fail',
@@ -102,7 +96,7 @@ withVersions('passport-local', 'passport-local', version => {
     })
 
     it('should report http fingerprints on login successful', async () => {
-      await axios.post(
+      await httpRequest.post(
         `http://localhost:${port}/login`,
         {
           username: 'success',

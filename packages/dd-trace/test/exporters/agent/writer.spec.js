@@ -22,6 +22,8 @@ function describeWriter (protocolVersion) {
   let url
   let prioritySampler
   let log
+  let AgentEncoder
+  let createAgentEncoder
 
   beforeEach((done) => {
     span = 'formatted'
@@ -51,14 +53,14 @@ function describeWriter (protocolVersion) {
       errorWithoutTelemetry: sinon.spy(),
     }
 
-    const AgentEncoder = function () {
-      return encoder
-    }
+    AgentEncoder = sinon.stub().returns(encoder)
+    createAgentEncoder = sinon.stub().returns(encoder)
 
     Writer = proxyquire('../../../src/exporters/agent/writer', {
       '../common/request': request,
       '../../ci-visibility/exporters/request': request,
       '../../encode/0.4': { AgentEncoder },
+      '../../encode/0.4-cross-payload': { createAgentEncoder },
       '../../encode/0.5': { AgentEncoder },
       '../../../../../package.json': { version: 'tracerVersion' },
       '../../log': log,
@@ -67,6 +69,50 @@ function describeWriter (protocolVersion) {
 
     process.nextTick(done)
   })
+
+  if (protocolVersion === '0.4') {
+    it('should use the cross-payload encoder for a zero flush interval', () => {
+      AgentEncoder.resetHistory()
+      createAgentEncoder.resetHistory()
+
+      writer = new Writer({ url, prioritySampler, protocolVersion, flushInterval: 0 })
+
+      sinon.assert.calledOnceWithExactly(createAgentEncoder, writer, sinon.match.func)
+      sinon.assert.notCalled(AgentEncoder)
+    })
+
+    it('should switch to the regular encoder when cross-payload caching is disabled', () => {
+      AgentEncoder.resetHistory()
+      createAgentEncoder.resetHistory()
+
+      writer = new Writer({ url, prioritySampler, protocolVersion, flushInterval: 0 })
+      const disableCrossPayloadCache = createAgentEncoder.firstCall.args[1]
+      disableCrossPayloadCache()
+
+      sinon.assert.calledOnceWithExactly(AgentEncoder, writer)
+      assert.strictEqual(writer._encoder, encoder)
+    })
+
+    it('should keep the regular encoder for a nonzero flush interval', () => {
+      AgentEncoder.resetHistory()
+      createAgentEncoder.resetHistory()
+
+      writer = new Writer({ url, prioritySampler, protocolVersion, flushInterval: 2000 })
+
+      sinon.assert.notCalled(createAgentEncoder)
+      sinon.assert.calledOnceWithExactly(AgentEncoder, writer)
+    })
+  } else {
+    it('should keep the 0.5 encoder independent of the flush interval', () => {
+      AgentEncoder.resetHistory()
+      createAgentEncoder.resetHistory()
+
+      writer = new Writer({ url, prioritySampler, protocolVersion, flushInterval: 0 })
+
+      sinon.assert.notCalled(createAgentEncoder)
+      sinon.assert.calledOnceWithExactly(AgentEncoder, writer)
+    })
+  }
 
   describe('append', () => {
     it('should append a trace', () => {
@@ -107,6 +153,20 @@ function describeWriter (protocolVersion) {
 
     it('should call callback when empty', (done) => {
       writer.flush(done)
+    })
+
+    it('routes flushes through the configured delivery tracker', (done) => {
+      const deliveryTracker = { track: sinon.spy((flush, done) => flush(done)) }
+      writer = new Writer({ url, prioritySampler, protocolVersion, deliveryTracker })
+
+      writer.flush(() => {
+        try {
+          sinon.assert.calledOnce(deliveryTracker.track)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
     })
 
     it('should flush its traces to the agent, and call callback', (done) => {
@@ -251,7 +311,29 @@ function describeWriter (protocolVersion) {
 }
 
 describe('Writer', () => {
-  describe('0.4', () => describeWriter(0.4))
+  it('enables backpressure retention only for Test Optimization', () => {
+    const writerOptions = []
+    class BaseWriter {
+      constructor (options) {
+        writerOptions.push(options)
+      }
+    }
+    class AgentEncoder {}
+    const Writer = proxyquire('../../../src/exporters/agent/writer', {
+      '../common/writer': BaseWriter,
+      '../../encode/0.4': { AgentEncoder },
+    })
 
-  describe('0.5', () => describeWriter(0.5))
+    const regularWriter = new Writer({ protocolVersion: '0.4' })
+    const testOptimizationWriter = new Writer({ protocolVersion: '0.4', isTestOptimization: true })
+
+    assert.ok(regularWriter instanceof Writer)
+    assert.ok(testOptimizationWriter instanceof Writer)
+    assert.strictEqual(writerOptions[0].retainOnBackpressure, undefined)
+    assert.strictEqual(writerOptions[1].retainOnBackpressure, true)
+  })
+
+  describe('0.4', () => describeWriter('0.4'))
+
+  describe('0.5', () => describeWriter('0.5'))
 })

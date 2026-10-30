@@ -13,7 +13,8 @@ if (process.env.TEST_PROGRAMMATIC_DD_LOGS_INJECTION) {
 const tracer = require('dd-trace').init(options)
 const http = require('http')
 
-const logger = require('pino')()
+const createPino = require('pino')
+const logger = createPino()
 
 const server = http
   .createServer((req, res) => {

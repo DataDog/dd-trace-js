@@ -7,6 +7,7 @@ const sinon = require('sinon')
 
 require('../setup/core')
 const SchemaDefinition = require('../../src/service-naming/schemas/definition')
+const { httpPluginClientService } = require('../../src/service-naming/schemas/util')
 const v0 = require('../../src/service-naming/schemas/v0')
 const v1 = require('../../src/service-naming/schemas/v1')
 
@@ -94,6 +95,16 @@ describe('Service naming', () => {
         sinon.assert.calledWith(dummySchema.messaging.inbound.kafka.serviceSource, opts)
         assert.deepStrictEqual(result, { name: 'kafka-service', source: 'kafka' })
       })
+    })
+  })
+
+  describe('HTTP client service resolution', () => {
+    it('should use the host when the port is missing', () => {
+      assert.strictEqual(httpPluginClientService({
+        tracerService: 'test-service',
+        pluginConfig: { splitByDomain: true },
+        sessionDetails: { host: 'example.com' },
+      }), 'example.com')
     })
   })
 

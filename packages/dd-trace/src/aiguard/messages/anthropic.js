@@ -208,12 +208,18 @@ function walkContentBlocks (blocks) {
 function partsToContent (parts, hasImages) {
   if (!parts.length) return
   if (hasImages) return parts
-  return parts.map(p => p.text).join('\n')
+  let content = ''
+  let isFirstPart = true
+  for (const part of parts) {
+    if (!isFirstPart) content += '\n'
+    content += part.text
+    isFirstPart = false
+  }
+  return content
 }
 
 /**
  * @param {Array<object>} parts
- * @returns {boolean}
  */
 function hasImageParts (parts) {
   return parts.some(part => part.type === 'image_url')
@@ -260,7 +266,6 @@ function convertAnthropicToolResultContent (content) {
 
 /**
  * @param {unknown} content
- * @returns {string}
  */
 function convertServerToolResultContent (content) {
   if (typeof content === 'string') return content || '[tool result]'
@@ -269,27 +274,39 @@ function convertServerToolResultContent (content) {
     return content.error_message ? `${content.error_code}: ${content.error_message}` : content.error_code
   }
 
-  const lines = []
+  let lines
   if (Array.isArray(content)) {
     for (const item of content) {
       if (!item || typeof item !== 'object') continue
       // text blocks (MCP / generic), then web-search title + url.
-      if (typeof item.text === 'string') lines.push(item.text)
-      if (typeof item.title === 'string') lines.push(item.title)
-      if (typeof item.url === 'string') lines.push(item.url)
+      if (typeof item.text === 'string') {
+        lines = lines === undefined ? item.text : `${lines}\n${item.text}`
+      }
+      if (typeof item.title === 'string') {
+        lines = lines === undefined ? item.title : `${lines}\n${item.title}`
+      }
+      if (typeof item.url === 'string') {
+        lines = lines === undefined ? item.url : `${lines}\n${item.url}`
+      }
     }
   } else {
-    if (typeof content.stdout === 'string' && content.stdout) lines.push(content.stdout)
-    if (typeof content.stderr === 'string' && content.stderr) lines.push(content.stderr)
-    if (typeof content.content === 'string' && content.content) lines.push(content.content)
+    if (typeof content.stdout === 'string' && content.stdout) lines = content.stdout
+    if (typeof content.stderr === 'string' && content.stderr) {
+      lines = lines === undefined ? content.stderr : `${lines}\n${content.stderr}`
+    }
+    if (typeof content.content === 'string' && content.content) {
+      lines = lines === undefined ? content.content : `${lines}\n${content.content}`
+    }
     if (Array.isArray(content.lines)) {
       for (const line of content.lines) {
-        if (typeof line === 'string') lines.push(line)
+        if (typeof line === 'string') {
+          lines = lines === undefined ? line : `${lines}\n${line}`
+        }
       }
     }
   }
 
-  return lines.join('\n') || '[tool result]'
+  return lines || '[tool result]'
 }
 
 /**
@@ -414,10 +431,74 @@ function getMessagesOutputMessages (body) {
   return convertAnthropicMessage({ role, content: body.content })
 }
 
+/**
+ * Combines Anthropic message stream events into regular output messages.
+ *
+ * Accumulates exactly the way the SDK does: every `content_block_start` appends a block, and
+ * deltas address blocks by position. Keying blocks by `event.index` instead would let a repeated
+ * or out-of-range index hide output that the caller still receives.
+ *
+ * @param {Array<object>} events
+ * @returns {Array<object>}
+ */
+function getStreamedMessagesOutputMessages (events) {
+  let message
+  let contentBlocks
+  // Keyed by block, not by index: distinct indices can resolve to one block, and a second
+  // message must not inherit partial JSON accumulated for the first.
+  const inputJson = new Map()
+
+  for (const event of events) {
+    if (!event || typeof event !== 'object') continue
+
+    if (event.type === 'message_start' && event.message && typeof event.message === 'object') {
+      contentBlocks = Array.isArray(event.message.content)
+        ? event.message.content.map(block => ({ ...block }))
+        : []
+      message = { role: event.message.role || 'assistant' }
+      continue
+    }
+
+    if (event.type === 'content_block_start' && event.content_block && typeof event.content_block === 'object') {
+      message ??= { role: 'assistant' }
+      contentBlocks ??= []
+      contentBlocks.push({ ...event.content_block })
+      continue
+    }
+
+    if (event.type !== 'content_block_delta' || !event.delta || typeof event.delta !== 'object') continue
+
+    const block = contentBlocks?.at(event.index ?? 0)
+    if (!block) continue
+
+    if (event.delta.type === 'text_delta' && block.type === 'text' && typeof event.delta.text === 'string') {
+      block.text = (block.text || '') + event.delta.text
+    } else if (event.delta.type === 'input_json_delta' && typeof event.delta.partial_json === 'string') {
+      inputJson.set(block, (inputJson.get(block) || '') + event.delta.partial_json)
+    }
+  }
+
+  if (!message) return []
+
+  for (const [block, json] of inputJson) {
+    // An empty buffer is what a no-argument tool call accumulates; the SDK keeps `{}` there.
+    if (!json) continue
+    try {
+      block.input = JSON.parse(json)
+    } catch {
+      block.input = json
+    }
+  }
+
+  message.content = contentBlocks
+  return getMessagesOutputMessages(message)
+}
+
 module.exports = {
   convertAnthropicSystem,
   convertAnthropicBlocksToContent,
   convertAnthropicMessage,
   getMessagesInputMessages,
   getMessagesOutputMessages,
+  getStreamedMessagesOutputMessages,
 }

@@ -8,18 +8,12 @@ const sinon = require('sinon')
 
 describe('direct EVP route', () => {
   let createDirectEVPRoute
-  let getProxyForUrl
-  let HttpsProxyAgent
   let log
 
   beforeEach(() => {
-    getProxyForUrl = sinon.stub().returns('')
-    HttpsProxyAgent = sinon.stub().callsFake(proxyUrl => ({ proxyUrl }))
-    log = { debug: sinon.spy() }
+    log = { warn: sinon.spy() }
 
     ;({ createDirectEVPRoute } = proxyquire('../../src/evp_proxy/direct', {
-      '../../../../vendor/dist/https-proxy-agent': { HttpsProxyAgent },
-      '../../../../vendor/dist/proxy-from-env': { getProxyForUrl },
       '../log': log,
     }))
   })
@@ -54,21 +48,16 @@ describe('direct EVP route', () => {
     })
   })
 
-  it('uses the standard HTTPS proxy for direct intake', () => {
-    const proxyUrl = 'http://proxy:8202'
-    getProxyForUrl.returns(proxyUrl)
-
-    const route = createDirectEVPRoute({
+  it('normalizes surrounding whitespace and defaults a blank site', () => {
+    assert.strictEqual(createDirectEVPRoute({
       DD_API_KEY: 'test-api-key',
-      site: 'datadoghq.com',
-    }, 'event-platform-intake')
+      site: '  DATADOGHQ.EU  ',
+    }, 'event-platform-intake').url.href, 'https://event-platform-intake.datadoghq.eu/')
 
-    assert.deepStrictEqual(route.agent, { proxyUrl })
-    sinon.assert.calledOnceWithExactly(
-      getProxyForUrl,
-      'https://event-platform-intake.datadoghq.com/'
-    )
-    sinon.assert.calledOnceWithExactly(HttpsProxyAgent, proxyUrl)
+    assert.strictEqual(createDirectEVPRoute({
+      DD_API_KEY: 'test-api-key',
+      site: '  ',
+    }, 'event-platform-intake').url.href, 'https://event-platform-intake.datadoghq.com/')
   })
 
   it('does not create a route without an API key', () => {
@@ -77,10 +66,12 @@ describe('direct EVP route', () => {
     }, 'event-platform-intake'), undefined)
   })
 
-  it('does not create a route without a site', () => {
-    assert.strictEqual(createDirectEVPRoute({
+  it('uses the default site when it is omitted', () => {
+    const route = createDirectEVPRoute({
       DD_API_KEY: 'test-api-key',
-    }, 'event-platform-intake'), undefined)
+    }, 'event-platform-intake')
+
+    assert.strictEqual(route.url.href, 'https://event-platform-intake.datadoghq.com/')
   })
 
   it('does not create a route for an invalid site', () => {
@@ -90,31 +81,23 @@ describe('direct EVP route', () => {
     }, 'event-platform-intake'), undefined)
 
     sinon.assert.calledOnceWithExactly(
-      log.debug,
-      'Unable to configure direct EVP intake: %s',
-      sinon.match.string
+      log.warn,
+      'Feature Flags direct event delivery is disabled because DD_SITE is invalid.'
     )
   })
 
-  for (const site of [
-    'datadoghq.com@evil.example',
-    'datadoghq.com:password@evil.example',
-    'datadoghq.com:443',
-    'datadoghq.com/path',
-    'datadoghq.com?query',
-    'datadoghq.com#fragment',
-  ]) {
-    it(`does not create a route for a site with URL components: ${site}`, () => {
-      assert.strictEqual(createDirectEVPRoute({
-        DD_API_KEY: 'test-api-key',
-        site,
-      }, 'event-platform-intake'), undefined)
+  it('warns once without logging an invalid site or API key', () => {
+    const config = {
+      DD_API_KEY: 'sensitive-api-key',
+      site: 'sensitive invalid site',
+    }
 
-      sinon.assert.calledOnceWithExactly(
-        log.debug,
-        'Unable to configure direct EVP intake: %s',
-        sinon.match.string
-      )
-    })
-  }
+    createDirectEVPRoute(config, 'event-platform-intake')
+    createDirectEVPRoute(config, 'event-platform-intake')
+
+    sinon.assert.calledOnce(log.warn)
+    const message = log.warn.firstCall.args.join(' ')
+    assert.ok(!message.includes(config.site))
+    assert.ok(!message.includes(config.DD_API_KEY))
+  })
 })

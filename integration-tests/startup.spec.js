@@ -95,8 +95,9 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
       })
 
       // This feature requires libdatadog which is an optional dependency.
-      if (optional) {
-        it('saves tracer configuration on disk', async () => {
+      {
+        const libdatadogTest = optional ? it : it.skip
+        libdatadogTest('saves tracer configuration on disk', async () => {
           if (process.platform !== 'linux') {
             return
           }

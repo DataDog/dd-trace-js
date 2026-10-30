@@ -12,7 +12,7 @@ Step-by-step checklist for creating a new dd-trace-js integration from scratch.
 
 ### Orchestrion (Default)
 
-Orchestrion requires four files:
+Start by adding the rewrite config and its registry entry:
 
 **1. JavaScript config** — `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/<name>.js`:
 
@@ -34,28 +34,17 @@ module.exports = [{
 
 To find `filePath`, inspect the installed package to locate where the target method is defined. **Many libraries duplicate classes across separate CJS and ESM builds** (e.g., `dist/cjs/client.js` and `dist/esm/client.js`). Add a separate entry for each file path with the same `functionQuery` and `channelName` — otherwise the uninstrumented module format will silently fail.
 
-**2. Hooks file** — `packages/datadog-instrumentations/src/<name>.js`:
+**2. Config registry entry** —
+`packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry.js`:
 
 ```javascript
-'use strict'
-
-const { addHook, getHooks } = require('./helpers/instrument')
-
-for (const hook of getHooks('<npm-package>')) {
-  addHook(hook, exports => exports)
-}
+{ activate: true, instrumentations: require('./instrumentations/<name>') },
 ```
 
-`getHooks` reads the orchestrion config and generates `addHook` entries automatically. This file is needed so the module hooks are registered for the rewriter to process.
-
-**3. Config registry entry** —
-`packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js`:
-
-```javascript
-...require('./<name>'),
-```
-
-**4. hooks.js entry** — (see Register in hooks.js below)
+Pure Orchestrion integrations need no identity instrumentation entrypoint or `hooks.js` entry. Add those only for a
+hybrid integration that also needs runtime setup or export modification (see Register in hooks.js below). For a pure
+integration, set `activate: true` in the registry entry as shown above, then run
+`npm run generate:rewriter:targets`. Omit the flag for hybrid integrations with another activation path.
 
 See [Orchestrion Reference](orchestrion.md) for the full config schema, ESQuery support, and channel naming.
 
@@ -63,7 +52,7 @@ See [Orchestrion Reference](orchestrion.md) for the full config schema, ESQuery 
 
 Create `packages/datadog-instrumentations/src/<name>.js`. Always add a comment explaining why orchestrion is not viable!!!
 
-**When using shimmer, prefer `tracingChannel` over manual channels.** `tracingChannel` (from `dc-polyfill` or `diagnostics_channel`) automatically provides `start`, `end`, `asyncStart`, `asyncEnd`, and `error` events — less boilerplate and consistent with how orchestrion works internally.
+**When using shimmer, prefer `tracingChannel` over manual channels.** `tracingChannel` from `dc-polyfill` automatically provides `start`, `end`, `asyncStart`, `asyncEnd`, and `error` events — less boilerplate and consistent with how orchestrion works internally.
 
 **Streaming example** (the main case where shimmer is needed — intercepting emitted events on returned stream objects):
 
@@ -124,11 +113,12 @@ For other shimmer patterns, refer to existing shimmer-based instrumentations in 
 
 ### Register in hooks.js
 
-Both orchestrion and shimmer paths require an entry in `packages/datadog-instrumentations/src/helpers/hooks.js`:
+Shimmer and hybrid Orchestrion paths require an entry in
+`packages/datadog-instrumentations/src/helpers/hooks.js`; pure Orchestrion paths do not:
 
 ```javascript
 module.exports = {
-  // Orchestrion or CJS-only shimmer:
+  // Hybrid Orchestrion or CJS-only shimmer:
   '<name>': () => require('../<name>'),
 
   // Shimmer with ESM/dual packages (orchestrion handles ESM automatically):
@@ -177,6 +167,7 @@ class MyPlugin extends DatabasePlugin {
   // Orchestrion:              static prefix = 'tracing:orchestrion:<npm-package>:<channelName>'
   // Shimmer + tracingChannel: static prefix = 'tracing:apm:<name>:<operation>'
   // Shimmer + manual channels: omit prefix — defaults to `apm:${id}:${operation}`
+  static prefix = '<channel-prefix>'
   static peerServicePrecursors = ['db.name']
 
   bindStart (ctx) {
@@ -195,6 +186,11 @@ class MyPlugin extends DatabasePlugin {
     }, ctx)
 
     return ctx.currentStore
+  }
+
+  // Choose `end` (sync), `asyncEnd` (promise/callback), or `finish` (legacy manual channel).
+  asyncEnd (ctx) {
+    this.finish(ctx)
   }
 }
 
@@ -215,7 +211,7 @@ If multiple npm packages map to the same plugin (e.g., `redis` and `@redis/clien
 
 ## Step 4: Add TypeScript Definitions
 
-In `index.d.ts`, add to the `plugins` namespace:
+Add the plugin type to the `plugins` namespace in every supported public TypeScript surface:
 
 ```typescript
 // In the Plugins interface:
@@ -291,12 +287,12 @@ PLUGINS="<name>" npm run test:plugins:ci
 
 ## Checklist
 
-- [ ] Instrumentation created (orchestrion JavaScript config + hooks file, or shimmer with justification comment)
-- [ ] Orchestrion config registered in `rewriter/instrumentations/index.js` (orchestrion only)
-- [ ] Registered in hooks.js (required for both orchestrion and shimmer paths)
+- [ ] Instrumentation created (Orchestrion config, or shimmer file with justification comment)
+- [ ] Orchestrion config registered in `rewriter/instrumentation-registry.js` (Orchestrion only)
+- [ ] Registered in hooks.js (shimmer and hybrid Orchestrion integrations only)
 - [ ] Plugin created with correct base class
 - [ ] Plugin registered in `packages/dd-trace/src/plugins/index.js`
-- [ ] TypeScript definitions added to `index.d.ts`
+- [ ] TypeScript definitions added to every supported public TypeScript surface
 - [ ] Type check added to `docs/test.ts`
 - [ ] Documentation added to `docs/API.md`
 - [ ] CI job added to `.github/workflows/apm-integrations.yml`

@@ -26,7 +26,48 @@ import {
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
+import { metrics } from '@opentelemetry/api';
 import { IncomingMessage, OutgoingMessage } from 'http';
+import {
+  configurationToString,
+  ConfigurationFetchError,
+  fetchRulesConfiguration,
+} from '../openfeature/rules-based';
+import type {
+  ConfigurationFetchErrorCode,
+  FlagsConfiguration,
+  FlagsConfigurationWire,
+  RulesConfigurationFetchOptions,
+} from '../openfeature/rules-based';
+import * as openFeatureRules from '../openfeature/rules-based';
+
+async function testOpenFeatureConfigurationHelpers() {
+  const options: RulesConfigurationFetchOptions = {
+    distributionChannel: 'client', clientToken: 'client-token', env: 'production',
+    site: 'datadoghq.com', timeoutMs: 1000, signal: new AbortController().signal, fetch: globalThis.fetch,
+  };
+  const configuration: FlagsConfiguration = await fetchRulesConfiguration(options);
+  const wire: FlagsConfigurationWire = configurationToString(configuration);
+  await fetchRulesConfiguration({ apiKey: 'api-key', env: 'production' });
+  await fetchRulesConfiguration({ distributionChannel: 'server', apiKey: 'api-key', env: 'production' });
+  const error = new ConfigurationFetchError('http', 'Request failed', 403);
+  const code: ConfigurationFetchErrorCode = error.code;
+  const status: number | undefined = error.status;
+
+  // @ts-expect-error Portable configuration parsing is not part of the Node SSR API.
+  openFeatureRules.configurationFromString(wire);
+  // @ts-expect-error Binary decoding remains internal to the fetch helper.
+  openFeatureRules.configurationFromRulesBinary(new Uint8Array());
+
+  // @ts-expect-error Client distribution requires a client token, not an API key.
+  await fetchRulesConfiguration({ distributionChannel: 'client', apiKey: 'api-key', env: 'production' });
+  // @ts-expect-error Server distribution is the default and requires an API key.
+  await fetchRulesConfiguration({ clientToken: 'client-token', env: 'production' });
+  // @ts-expect-error Both credentials cannot be supplied together.
+  await fetchRulesConfiguration({ apiKey: 'api-key', clientToken: 'client-token', env: 'production' });
+  // @ts-expect-error Only supported distribution channels are accepted.
+  await fetchRulesConfiguration({ distributionChannel: 'browser', clientToken: 'client-token', env: 'production' });
+}
 
 opentracing.initGlobalTracer(tracer);
 
@@ -38,6 +79,12 @@ let traceparent: string;
 let promise: Promise<void>;
 
 ddTrace.init();
+const evaluationTelemetryOptOutOption: TracerOptions = {
+  featureFlags: {
+    // @ts-expect-error The activation option must be a boolean.
+    enableEvaluationTelemetryOptOutParameter: 'true'
+  }
+};
 tracer.init({
   apmTracingEnabled: false,
   logInjection: true,
@@ -46,6 +93,9 @@ tracer.init({
   version: '1.0.0',
   url: 'http://localhost',
   runtimeMetrics: true,
+  featureFlags: {
+    enableEvaluationTelemetryOptOutParameter: true
+  },
   experimental: {
     exporter: 'log'
   },
@@ -72,7 +122,8 @@ tracer.init({
     { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
     { sampleRate: 0.1, service: /foo/, name: /foo\.request/ },
     { sampleRate: 0, resource: 'GET /health', maxPerSecond: 5 },
-    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } }
+    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } },
+    { sampleRate: 0, resource: '/health', discard: true }
   ],
   spanSamplingRules: [
     { sampleRate: 1.0, service: 'foo', name: 'foo.request', maxPerSecond: 5 },
@@ -294,12 +345,16 @@ const openSearchOptions: plugins.opensearch = {
 };
 
 tracer.use('ai', true)
+tracer.use('ai', { llmobs: false })
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
+tracer.use('anthropic', { llmobs: false });
 tracer.use('claude-agent-sdk');
+tracer.use('claude-agent-sdk', { llmobs: false });
 tracer.use('avsc');
 tracer.use('aws-sdk');
+tracer.use('aws-sdk', { llmobs: false });
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('aws-sdk', awsSdkServiceFunctionOptions);
 tracer.use('azure-cosmos');
@@ -331,7 +386,9 @@ tracer.use('fetch');
 tracer.use('fetch', httpClientOptions);
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
+tracer.use('google-cloud-vertexai', { llmobs: false });
 tracer.use('google-genai');
+tracer.use('google-genai', { llmobs: false });
 tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });
@@ -376,6 +433,7 @@ tracer.use('langchain');
 tracer.use('langchain', { llmobs: false });
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('langgraph');
+tracer.use('langgraph', { llmobs: false });
 tracer.use('memcached');
 tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);
@@ -395,6 +453,8 @@ tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);
 tracer.use('openai-agents');
+tracer.use('openai-agents', { llmobs: false });
+tracer.use('openai', { llmobs: false });
 tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
@@ -406,6 +466,13 @@ tracer.use('pg', { appendComment: true });
 tracer.use('pg', { truncate: true });
 tracer.use('pg', { truncate: 5000 });
 tracer.use('pino');
+tracer.use('postgres');
+tracer.use('postgres', { service: 'postgres-service' });
+tracer.use('postgres', { appendComment: true, dbmPropagationMode: 'full' });
+// @ts-expect-error Postgres DBM propagation accepts only the configured modes.
+tracer.use('postgres', { dbmPropagationMode: 'invalid' });
+tracer.use('postgres', { truncate: true });
+tracer.use('postgres', { truncate: 5000 });
 tracer.use('prisma');
 tracer.use('protobufjs');
 tracer.use('redis');
@@ -418,6 +485,7 @@ tracer.use('router', { middleware: false });
 tracer.use('selenium');
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
+tracer.use('supabase');
 tracer.use('tedious');
 tracer.use('undici');
 tracer.use('vitest');
@@ -450,6 +518,13 @@ span = tracer.startSpan('test', {
 });
 span = tracer.startSpan('test', { childOf: null })
 span = tracer.startSpan('test', { integrationName: 'testIntegration' })
+span.recordException(new Error('payment declined'), {
+  handled: true,
+  attempt: 1,
+  stages: ['authorize', 'capture']
+})
+// @ts-expect-error Span event attribute arrays must be homogeneous.
+span.recordException(new Error('payment declined'), { stages: ['authorize', 1] })
 
 tracer.trace('test', () => { })
 tracer.trace('test', { tags: { foo: 'bar' } }, () => { })
@@ -550,6 +625,9 @@ const provider: opentelemetry.TracerProvider = new tracer.TracerProvider();
 provider.register();
 
 const otelTracer: opentelemetry.Tracer = provider.getTracer("name", "version")
+const otelMeterProvider = metrics.getMeterProvider() as ReturnType<typeof metrics.getMeterProvider> &
+  opentelemetry.MeterProvider
+const otelShutdown: (callback?: (error: Error | null) => void) => void = otelMeterProvider.shutdown
 
 // OTel supports several time input formats
 otelTracer.startSpan("name", { startTime: new Date() })
@@ -625,6 +703,43 @@ tracer.init({
 const llmobs = tracer.llmobs
 const enabled = llmobs.enabled
 
+async function promptManagement () {
+  const prompts = llmobs.prompts
+  const prompt = await prompts.getPrompt('greeting', {
+    version: 2,
+    fallback: () => ({ template: 'Hello {name}', version: 'local' }),
+    targetingKey: 'user-1',
+    attributes: { tier: 'premium', enabled: true, score: 1 }
+  })
+  const messages = prompt.format({ name: 'Ada', count: 2 })
+  const annotation = prompt.toAnnotation({ name: 'Ada', count: 2 })
+  const nestedConfig = prompt.config.model
+  if (nestedConfig && typeof nestedConfig === 'object' && !Array.isArray(nestedConfig)) {
+    // @ts-expect-error Returned configuration is immutable, including nested objects.
+    nestedConfig.temperature = 0.5
+  }
+  if (typeof prompt.template !== 'string') {
+    // @ts-expect-error Managed prompt templates are immutable.
+    prompt.template[0].content = 'Changed'
+  }
+  llmobs.annotationContext({ prompt: annotation }, () => messages)
+  await prompts.refreshPrompt('greeting')
+  prompts.clearPromptCache({ hot: true, warm: false })
+  await prompts.createPrompt('greeting', 'Hello {name}', { title: 'Greeting', envIds: [] })
+  await prompts.createPromptVersion('greeting', 'Hello again {name}', { userVersion: '2', envIds: [] })
+  const placeholderTemplate = [
+    { role: 'system', content: 'Be concise' },
+    { type: 'placeholder' as const, name: 'history' }
+  ]
+  await prompts.createPrompt('chat', placeholderTemplate)
+  await prompts.createPromptVersion('chat', placeholderTemplate)
+  await prompts.updatePrompt('greeting', { title: '', description: '' })
+  await prompts.updatePromptVersion('greeting', 2, { description: '', envIds: [] })
+  await prompts.deletePrompt('greeting')
+  await prompts.listPrompts()
+  await prompts.listPromptVersions('greeting')
+}
+
 // manually enable
 llmobs.enable({
   mlApp: 'mlApp',
@@ -646,6 +761,7 @@ llmobs.registerProcessor((llmobsSpan) => {
     llmobsSpan.input = llmobsSpan.input.map(input => {
       return {
         ...input,
+        content: { redacted: true },
       }
     })
   }
@@ -695,6 +811,57 @@ llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: '
 
 // export a span
 llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
+
+class ExampleEvaluator extends llmobs.experiments.BaseEvaluator {
+  async evaluate (context: InstanceType<typeof llmobs.experiments.EvaluatorContext>) {
+    return context.outputData
+  }
+}
+
+const remoteEvaluator = new llmobs.experiments.RemoteEvaluator({
+  evalName: 'managed-judge',
+  transformFn: context => ({ span_input: context.inputData, span_output: context.outputData })
+})
+remoteEvaluator.name
+class ExampleSummaryEvaluator extends llmobs.experiments.BaseSummaryEvaluator {
+  async evaluate (context: InstanceType<typeof llmobs.experiments.SummaryEvaluatorContext>) {
+    return context.outputs.length
+  }
+}
+
+function checkEvaluatorTypes (dataset: ReturnType<typeof llmobs.experiments.createDataset>) {
+  llmobs.experiments.experiment({
+    name: 'typed-experiment',
+    dataset,
+    task: input => input,
+    evaluators: [new ExampleEvaluator()],
+    summaryEvaluators: [new ExampleSummaryEvaluator()]
+  })
+  // @ts-expect-error Evaluator class instances must extend the exported base class.
+  llmobs.experiments.experiment({ name: 'structural', dataset, task: input => input, evaluators: [{ name: 'structural', evaluate: () => true }] })
+  // @ts-expect-error Row and summary evaluator base classes are nominally distinct.
+  llmobs.experiments.experiment({ name: 'wrong-kind', dataset, task: input => input, evaluators: [new ExampleSummaryEvaluator()] })
+}
+
+const contextWithoutExpected = new llmobs.experiments.EvaluatorContext({ inputData: null, outputData: null })
+// @ts-expect-error Evaluator constructors are scoped to the experiments API.
+llmobs.BaseEvaluator
+// @ts-expect-error expectedOutput can be undefined when omitted from the constructor.
+const requiredExpectedOutput: Exclude<typeof contextWithoutExpected.expectedOutput, undefined> = contextWithoutExpected.expectedOutput
+
+type LocalExperiment = ReturnType<typeof llmobs.experiments.experiment>
+type LocalExperimentResult = Awaited<ReturnType<LocalExperiment['run']>>
+function inspectExperimentResult (result: LocalExperimentResult) {
+  result.summaryEvaluations.metric.reasoning
+  result.summaryEvaluations.metric.assessment
+  result.summaryEvaluations.metric.metadata
+  result.summaryEvaluations.metric.tags
+}
+
+checkEvaluatorTypes
+requiredExpectedOutput
+inspectExperimentResult
+
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
   const llmobsSpanCtx = llmobs.exportSpan(span)
   llmobsSpanCtx.traceId;
@@ -767,6 +934,26 @@ llmobs.annotate(span, {
   costTags: ['team']
 })
 
+// declare an agent
+const agentDeclaration: import('..').llmobs.Agent = {
+  version: '2.1.0',
+  name: 'travel_desk',
+  instructions: 'Book travel.',
+  model: 'gpt-4o',
+  modelSettings: { temperature: 0.1, max_tokens: 1024 },
+  tools: [
+    { name: 'get_weather', description: 'Look up the weather.', parameters: { city: { type: 'string', required: true } } },
+    { name: 'get_time', parameters: { type: 'object', properties: { tz: { type: 'string' } }, required: ['tz'] } },
+  ]
+}
+llmobs.annotate({ agent: agentDeclaration })
+llmobs.annotationContext({ agent: agentDeclaration }, () => {})
+llmobs.annotate({ agent: { version: '2.1.1' } })
+llmobs.trace({ kind: 'agent', name: 'travel_desk', version: '2.1.0' }, () => {})
+llmobs.wrap({ kind: 'agent', version: '2.1.0' }, () => {})
+// @ts-expect-error An agent version must be a string, so it is reported exactly as written.
+llmobs.wrap({ kind: 'agent', version: 2 }, () => {})
+
 
 
 // flush
@@ -783,6 +970,7 @@ tracer.init({
       endpoint: 'http://localhost',
       maxMessagesLength: 22,
       maxContentSize: 1024,
+      redactionEnabled: true,
       timeout: 1000
     }
   }
@@ -796,6 +984,14 @@ aiguard.evaluate([
   result.action && result.reason && result.tags
 })
 
+aiguard.evaluate([{
+  role: 'user',
+  content: [
+    { type: 'input_text', text: 'Describe this image' },
+    { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
+  ],
+}])
+
 aiguard.evaluate([
   {
     role: 'assistant',
@@ -807,11 +1003,18 @@ aiguard.evaluate([
     ],
   }
 ]).then(result => {
-  result.action && result.reason && result.tags && result.tagProbabilities && result.sds
+  result.action && result.reason && result.tags && result.tagProbabilities && result.sds && result.messages
 })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
   result.action && result.reason && result.tags && result.tagProbabilities && result.sds
+})
+
+aiguard.evaluate([
+  { role: 'user', content: 'My SSN is 123-45-6789' },
+]).then(result => {
+  const replacements: ddTrace.aiguard.RedactionReplacement[] = result.redactionReplacements
+  replacements.map(({ path, replacement }) => `${path}=${replacement}`)
 })

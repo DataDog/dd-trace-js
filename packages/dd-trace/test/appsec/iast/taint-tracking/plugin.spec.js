@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const dc = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -10,6 +11,7 @@ const sinon = require('sinon')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')
 const {
+  HTTP_REQUEST_BODY,
   HTTP_REQUEST_COOKIE_VALUE,
   HTTP_REQUEST_HEADER_VALUE,
   HTTP_REQUEST_PATH_PARAM,
@@ -25,6 +27,7 @@ const cookieParseFinishCh = dc.channel('datadog:cookie:parse:finish')
 const processParamsStartCh = dc.channel('datadog:express:process_params:start')
 const routerParamStartCh = dc.channel('datadog:router:param:start')
 const sequelizeFinish = dc.channel('datadog:sequelize:query:finish')
+const graphqlResolveStartChannel = dc.channel('apm:graphql:resolve:start')
 
 describe('IAST Taint tracking plugin', () => {
   let taintTrackingPlugin
@@ -305,11 +308,27 @@ describe('IAST Taint tracking plugin', () => {
       )
     })
 
+    it('Should taint GraphQL resolver arguments from the execution source', () => {
+      sinon.stub(TaintedUtils, 'getRanges').returns([{ iinfo: { type: HTTP_REQUEST_BODY } }])
+      const source = 'query { hello }'
+      const args = { name: 'world' }
+
+      graphqlResolveStartChannel.publish({ rootCtx: { source }, args })
+
+      sinon.assert.calledOnceWithExactly(TaintedUtils.getRanges, transactionId, source)
+      sinon.assert.calledOnceWithExactly(
+        taintTrackingOperations.taintObject,
+        iastContext,
+        args,
+        HTTP_REQUEST_BODY
+      )
+    })
+
     describe('taint database sources', () => {
       it('Should not taint if config is set to 0', () => {
         taintTrackingPlugin.disable()
         const config = getConfigFresh()
-        config.dbRowsToTaint = 0
+        config.DD_IAST_DB_ROWS_TO_TAINT = 0
         taintTrackingPlugin.enable(config)
 
         const result = [
@@ -416,7 +435,7 @@ describe('IAST Taint tracking plugin', () => {
         beforeEach(() => {
           taintTrackingPlugin.disable()
           const config = getConfigFresh()
-          config.dbRowsToTaint = 2
+          config.DD_IAST_DB_ROWS_TO_TAINT = 2
           taintTrackingPlugin.enable(config)
         })
 

@@ -50,6 +50,7 @@ describe('OTLP Trace Export', () => {
         DD_SERVICE: 'otlp-test-service',
         DD_ENV: 'test',
         DD_VERSION: '1.0.0',
+        DD_TAGS: 'team:core,region:us1',
       },
     })
 
@@ -77,6 +78,8 @@ describe('OTLP Trace Export', () => {
             { key: 'service.name', value: { stringValue: 'otlp-test-service' } },
             { key: 'deployment.environment.name', value: { stringValue: 'test' } },
             { key: 'service.version', value: { stringValue: '1.0.0' } },
+            { key: 'team', value: { stringValue: 'core' } },
+            { key: 'region', value: { stringValue: 'us1' } },
           ],
         },
         scopeSpans: [{
@@ -123,6 +126,8 @@ describe('OTLP Trace Export', () => {
 
     // Validate timing fields
     for (const span of spans) {
+      assert.strictEqual(span.flags, 1, 'exported spans should have the sampled flag')
+      assert.match(span.traceState, /(?:^|,)ot=rv:[0-9a-f]{14};th:0(?:,|$)/)
       assert.ok(span.startTimeUnixNano >= beforeNs, 'span startTimeUnixNano should be >= test start time')
       assert.ok(span.endTimeUnixNano > 0, 'span should have a positive endTimeUnixNano')
       assert.ok(span.endTimeUnixNano >= span.startTimeUnixNano, 'endTime should be >= startTime')
@@ -137,6 +142,15 @@ describe('OTLP Trace Export', () => {
     ])
     assertObjectContains(dbSpan.attributes, [
       { key: 'db.type', value: { stringValue: 'postgres' } },
+    ])
+
+    // Global tags (DD_TAGS) are carried by the resource only, unless a span overrides the value
+    for (const span of spans) {
+      assert.ok(!span.attributes.some(({ key }) => key === 'team'), `${span.name} should not repeat team`)
+    }
+    assert.ok(!webSpan.attributes.some(({ key }) => key === 'region'), 'web span should not repeat region')
+    assertObjectContains(dbSpan.attributes, [
+      { key: 'region', value: { stringValue: 'eu1' } },
     ])
   })
 })

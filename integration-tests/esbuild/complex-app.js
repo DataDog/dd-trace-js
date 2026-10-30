@@ -8,7 +8,8 @@ const redis = require('redis')
 const app = express()
 const PORT = 3000
 const pg = require('pg')
-const pgp = require('pg-promise')() // transient dep of 'pg'
+const createPgPromise = require('pg-promise')
+const pgp = createPgPromise() // transient dep of 'pg'
 
 assert.equal(redis.Graph.name, 'Graph')
 assert.equal(pg.types.builtins.BOOL, 16)

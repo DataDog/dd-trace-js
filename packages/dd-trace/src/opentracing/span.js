@@ -26,6 +26,15 @@ const finishedRegistry = createRegistry('finished')
 let OTEL_ENABLED = false
 const ALLOWED = new Set(['string', 'number', 'boolean'])
 
+/**
+ * @typedef {object} RecordedException
+ * @property {string} message
+ * @property {string} [name]
+ * @property {string} [stack]
+ * @typedef {string | number | boolean} SpanEventAttributeScalar
+ * @typedef {SpanEventAttributeScalar | string[] | number[] | boolean[]} SpanEventAttributeValue
+ */
+
 const integrationCounters = {
   spans_created: {},
   spans_finished: {},
@@ -204,8 +213,8 @@ class DatadogSpan {
   setTag (key, value) {
     this._spanContext.setTag(key, value)
 
-    if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
-      this._prioritySampler.sample(this, false)
+    if (isSamplingPriorityTag(key)) {
+      this._prioritySampler.setPriorityFromTags(this, this._spanContext.getTags())
     }
 
     if (tagsUpdateCh.hasSubscribers) {
@@ -227,21 +236,26 @@ class DatadogSpan {
     if (keyValueMap !== null && typeof keyValueMap === 'object' && !Array.isArray(keyValueMap)) {
       Object.assign(tags, keyValueMap)
       mayChangeSamplingPriority =
-        MANUAL_KEEP in keyValueMap ||
-        MANUAL_DROP in keyValueMap ||
-        SAMPLING_PRIORITY in keyValueMap
+        keyValueMap[MANUAL_KEEP] !== undefined ||
+        keyValueMap[MANUAL_DROP] !== undefined ||
+        keyValueMap[SAMPLING_PRIORITY] !== undefined
     } else {
       /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
       if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
-        tagger.add(tags, keyValueMap)
-        mayChangeSamplingPriority = true
+        const samplingTags = {}
+        tagger.add(samplingTags, keyValueMap)
+        Object.assign(tags, samplingTags)
+        mayChangeSamplingPriority =
+          samplingTags[MANUAL_KEEP] !== undefined ||
+          samplingTags[MANUAL_DROP] !== undefined ||
+          samplingTags[SAMPLING_PRIORITY] !== undefined
       } else {
         return this
       }
     }
 
-    if (mayChangeSamplingPriority && this._spanContext._sampling.priority === undefined) {
-      this._prioritySampler.sample(this, false)
+    if (mayChangeSamplingPriority) {
+      this._prioritySampler.setPriorityFromTags(this, tags)
     }
 
     if (tagsUpdateCh.hasSubscribers) {
@@ -304,6 +318,25 @@ class DatadogSpan {
     }
     event.startTime = startTime || this._getTime()
     this._events.push(event)
+  }
+
+  /**
+   * @param {RecordedException} exception
+   * @param {Record<string, SpanEventAttributeValue>} [attributes]
+   */
+  recordException (exception, attributes) {
+    const { message, name, stack } = exception
+    const eventAttributes = { ...attributes }
+    eventAttributes['exception.message'] ??= message
+
+    if (typeof name === 'string') {
+      eventAttributes['exception.type'] ??= name
+    }
+    if (typeof stack === 'string') {
+      eventAttributes['exception.stacktrace'] ??= stack
+    }
+
+    this.addEvent('exception', eventAttributes)
   }
 
   finish (finishTime) {

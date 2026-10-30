@@ -196,6 +196,68 @@ function getResponsesOutputMessages (body) {
 }
 
 /**
+ * Combines streamed chat completion deltas into regular output messages.
+ *
+ * @param {Array<object>} chunks
+ * @returns {Array<object>}
+ */
+function getStreamedChatCompletionsOutputMessages (chunks) {
+  const messages = new Map()
+
+  for (const chunk of chunks) {
+    if (!Array.isArray(chunk?.choices)) continue
+    for (const choice of chunk.choices) {
+      const delta = choice.delta
+      if (!delta) continue
+
+      const index = choice.index ?? 0
+      const message = messages.get(index) ?? { role: 'assistant' }
+      messages.set(index, message)
+
+      if (typeof delta.role === 'string') message.role = delta.role
+      if (typeof delta.content === 'string') message.content = (message.content ?? '') + delta.content
+      if (typeof delta.refusal === 'string') message.refusal = (message.refusal ?? '') + delta.refusal
+
+      if (delta.function_call) {
+        const functionCall = message.function_call ??= {}
+        functionCall.name ??= delta.function_call.name
+        if (typeof delta.function_call.arguments === 'string') {
+          functionCall.arguments = (functionCall.arguments ?? '') + delta.function_call.arguments
+        }
+      }
+
+      if (!Array.isArray(delta.tool_calls)) continue
+      for (const toolCallDelta of delta.tool_calls) {
+        const toolCalls = message.tool_calls ??= []
+        const toolCall = toolCalls[toolCallDelta.index ?? 0] ??= { function: {} }
+        toolCall.id ??= toolCallDelta.id
+        toolCall.type ??= toolCallDelta.type
+        toolCall.function.name ??= toolCallDelta.function?.name
+        if (typeof toolCallDelta.function?.arguments === 'string') {
+          toolCall.function.arguments = (toolCall.function.arguments ?? '') + toolCallDelta.function.arguments
+        }
+      }
+    }
+  }
+
+  const choices = [...messages.values()].map(message => {
+    if (message.tool_calls) message.tool_calls = message.tool_calls.filter(Boolean)
+    return { message }
+  })
+  return getChatCompletionsOutputMessages({ choices })
+}
+
+/**
+ * Gets output messages from the final response snapshot in a Responses API stream.
+ *
+ * @param {Array<object>} chunks
+ * @returns {Array<object>}
+ */
+function getStreamedResponsesOutputMessages (chunks) {
+  return getResponsesOutputMessages(chunks.at(-1)?.response)
+}
+
+/**
  * Converts one OpenAI reusable prompt variable value to message content.
  *
  * @param {string|object} value
@@ -322,7 +384,14 @@ function openAIResponseContentToMessageContent (content) {
 
   if (!parts.length) return
   if (hasImages) return parts
-  return parts.map(part => part.text).join('\n')
+  let textContent = ''
+  let isFirstPart = true
+  for (const part of parts) {
+    if (!isFirstPart) textContent += '\n'
+    textContent += part.text
+    isFirstPart = false
+  }
+  return textContent
 }
 
 /**
@@ -341,7 +410,6 @@ function openAIResponseImageContentPart (part) {
  * Extracts a stable text marker from an OpenAI file content part.
  *
  * @param {{file_id?: string|null, file_url?: string, filename?: string, file_data?: string}} part
- * @returns {string}
  */
 function openAIResponseFileContentPart (part) {
   return part.file_id ?? part.file_url ?? part.filename ?? FILE_FALLBACK
@@ -355,5 +423,7 @@ module.exports = {
   convertOpenAIResponsePromptToMessages,
   getResponsesInputMessages,
   getResponsesOutputMessages,
+  getStreamedChatCompletionsOutputMessages,
+  getStreamedResponsesOutputMessages,
   openAIResponseContentToMessageContent,
 }

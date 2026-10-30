@@ -9,6 +9,9 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../setup/core')
+const { storage } = require('../../../../datadog-core')
+const { isACFActive } = require('../../../../datadog-core/src/storage')
+const { endpointNameFromTags } = require('../../../src/profiling/webspan-utils')
 
 // Test adapter: these specs predate the constructor reading canonical DD_PROFILING_*
 // names off the tracer config. Map the legacy flat option names to the (config, runtime)
@@ -67,32 +70,31 @@ describe('profilers/native/wall', () => {
     })
   })
 
+  it('should prefer the resource name as the endpoint', () => {
+    const tags = {
+      'http.method': 'GET',
+      'http.route': '/foo/bar',
+      'resource.name': 'GET /resolved',
+    }
+
+    assert.strictEqual(endpointNameFromTags(tags), 'GET /resolved')
+  })
+
+  it('should build the endpoint from the method and route', () => {
+    assert.strictEqual(endpointNameFromTags({
+      'http.method': 'GET',
+      'http.route': '/foo/bar',
+    }), 'GET /foo/bar')
+  })
+
+  it('should use the route when the method is missing', () => {
+    assert.strictEqual(endpointNameFromTags({ 'http.route': '/foo/bar' }), '/foo/bar')
+  })
+
   it('should start the internal time profiler', () => {
     const profiler = makeWall(NativeWallProfiler)
 
-    // Verify start/stop profiler idle notifiers are created if not present.
-    // These functions may not exist in worker threads.
-    // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
-    const start = process._startProfilerIdleNotifier
-    // @ts-expect-error: _stopProfilerIdleNotifier is not typed on process
-    const stop = process._stopProfilerIdleNotifier
-
-    // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
-    delete process._startProfilerIdleNotifier
-    // @ts-expect-error: _stopProfilerIdleNotifier is not typed on process
-    delete process._stopProfilerIdleNotifier
-
     profiler.start()
-
-    // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
-    assert.strictEqual(typeof process._startProfilerIdleNotifier, 'function')
-    // @ts-expect-error: _stopProfilerIdleNotifier is not typed on process
-    assert.strictEqual(typeof process._stopProfilerIdleNotifier, 'function')
-
-    // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
-    process._startProfilerIdleNotifier = start
-    // @ts-expect-error: _stopProfilerIdleNotifier is not typed on process
-    process._stopProfilerIdleNotifier = stop
 
     sinon.assert.calledOnce(pprof.time.start)
     sinon.assert.calledWith(pprof.time.start,
@@ -102,7 +104,7 @@ describe('profilers/native/wall', () => {
         sourceMapper: undefined,
         withContexts: false,
         lineNumbers: false,
-        columnNumbers: 'pack',
+        columnNumbers: 'emit',
         workaroundV8Bug: false,
         collectCpuTime: false,
         useCPED: false,
@@ -122,7 +124,7 @@ describe('profilers/native/wall', () => {
         sourceMapper: undefined,
         withContexts: false,
         lineNumbers: false,
-        columnNumbers: 'pack',
+        columnNumbers: 'emit',
         workaroundV8Bug: false,
         collectCpuTime: false,
         useCPED: false,
@@ -155,6 +157,49 @@ describe('profilers/native/wall', () => {
 
     sinon.assert.calledOnce(pprof.time.stop)
   })
+
+  for (const asyncContextFrameEnabled of [true, false]) {
+    it(`should uninstrument legacy storage when stopped (asyncContextFrameEnabled=${asyncContextFrameEnabled})`, () => {
+      const legacyStorage = storage('legacy')
+      const profiler = makeWall(NativeWallProfiler, { asyncContextFrameEnabled, codeHotspotsEnabled: true })
+
+      profiler.start()
+      assert.ok(Object.hasOwn(legacyStorage, 'enterWith'))
+      // run() needs separate instrumentation only when the runtime doesn't use ACF.
+      assert.strictEqual(Object.hasOwn(legacyStorage, 'run'), !isACFActive)
+
+      profiler.profile(true)
+      assert.ok(Object.hasOwn(legacyStorage, 'enterWith'))
+
+      profiler.profile(false)
+      assert.strictEqual(Object.hasOwn(legacyStorage, 'enterWith'), false)
+      assert.strictEqual(Object.hasOwn(legacyStorage, 'run'), false)
+
+      profiler.start()
+      assert.ok(Object.hasOwn(legacyStorage, 'enterWith'))
+
+      profiler.stop()
+      assert.strictEqual(Object.hasOwn(legacyStorage, 'enterWith'), false)
+      assert.strictEqual(Object.hasOwn(legacyStorage, 'run'), false)
+    })
+
+    it(`should ${asyncContextFrameEnabled ? 'not ' : ''}need the async hook (asyncContextFrameEnabled=${
+      asyncContextFrameEnabled})`, () => {
+      const acquireChannels = sinon.spy()
+      const releaseChannels = sinon.spy()
+      const WallProfiler = proxyquire('../../../src/profiling/profilers/wall', {
+        '@datadog/pprof': pprof,
+        '../../storage-channels': { acquireChannels, releaseChannels },
+      })
+      const profiler = makeWall(WallProfiler, { asyncContextFrameEnabled, codeHotspotsEnabled: true })
+
+      profiler.start()
+      sinon.assert.calledOnceWithExactly(acquireChannels, !asyncContextFrameEnabled)
+
+      profiler.stop()
+      sinon.assert.calledOnceWithExactly(releaseChannels, !asyncContextFrameEnabled)
+    })
+  }
 
   it('should provide info', () => {
     const profiler = makeWall(NativeWallProfiler)
@@ -252,7 +297,7 @@ describe('profilers/native/wall', () => {
         sourceMapper: mapper,
         withContexts: false,
         lineNumbers: false,
-        columnNumbers: 'pack',
+        columnNumbers: 'emit',
         workaroundV8Bug: false,
         collectCpuTime: false,
         useCPED: false,
@@ -476,7 +521,8 @@ describe('profilers/native/wall', () => {
           spanFinishCh: dc.channel('dd-trace:span:finish'),
           tagsUpdateCh: dc.channel('dd-trace:span:tags:update'),
           getActiveSpan: () => currentStore && currentStore.span,
-          ensureChannelsActivated: () => {},
+          acquireChannels: () => {},
+          releaseChannels: () => {},
         },
       })
     })
@@ -781,7 +827,8 @@ describe('profilers/native/wall', () => {
           spanFinishCh: dc.channel('dd-trace:span:finish'),
           tagsUpdateCh: dc.channel('dd-trace:span:tags:update'),
           getActiveSpan: () => currentStore && currentStore.span,
-          ensureChannelsActivated: () => {},
+          acquireChannels: () => {},
+          releaseChannels: () => {},
         },
       })
     })
@@ -804,15 +851,19 @@ describe('profilers/native/wall', () => {
     function makeChildSpan (webSpanId, webSpan) {
       const tags = { 'span.type': 'router' }
       const spanId = {}
+      // Shares the parent's _trace, as spans of one trace chunk do: it is the
+      // object holding the started-spans list the parent walk reads, and what the
+      // shared cache scopes its per-trace bookkeeping to.
+      const trace = webSpan.context()._trace
       const ctx = {
         _tags: tags,
         _spanId: spanId,
         _parentId: webSpanId,
-        _trace: { started: [webSpan] },
+        _trace: trace,
         getTags () { return this._tags },
       }
       const span = { context: () => ctx }
-      ctx._trace.started.push(span)
+      trace.started.push(span)
       return { span, tags }
     }
 
@@ -903,6 +954,63 @@ describe('profilers/native/wall', () => {
       profilerState[0] = 2
       enterCh.publish()
       assert.strictEqual(sampleContext.endpoint, 'GET /x')
+
+      profiler.stop()
+    })
+
+    it('should refresh a child snapshot taken before its parent became a web span (ACF path)', () => {
+      // The reverse order of the test below: the child is activated first, so its
+      // snapshot records "no web-server ancestor". It must be refreshed the moment
+      // the parent is promoted, without waiting for the child to be reactivated —
+      // a child running uninterrupted synchronous work is never reactivated, and
+      // that is exactly the stretch samples are taken over.
+      const { span: webSpan, tags: webSpanTags, spanId: webSpanId } = makeWebSpan()
+      const { span: childSpan } = makeChildSpan(webSpanId, webSpan)
+
+      const profiler = makeWall(WallProfiler, {
+        endpointCollectionEnabled: true,
+        codeHotspotsEnabled: true,
+        asyncContextFrameEnabled: true,
+      })
+      profiler.start()
+
+      currentStore = { span: childSpan }
+      enterCh.publish()
+      const childCtx = localPprof.time.setContext.lastCall.args[0]
+      assert.strictEqual(childCtx.webTags, undefined)
+
+      webSpanTags['span.type'] = 'web'
+      tagsUpdateCh.publish(webSpan)
+      assert.strictEqual(childCtx.webTags, webSpanTags)
+
+      profiler.stop()
+    })
+
+    it('should repoint a child snapshot at a nearer web span promoted later (ACF path)', () => {
+      // Nested request handling: the child first resolves to the outer request,
+      // then an intermediate span becomes a web-server span of its own. From then
+      // on the child's samples belong to the inner request's endpoint.
+      const { span: outerSpan, tags: outerTags, spanId: outerSpanId } = makeWebSpan()
+      Object.assign(outerTags, { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/outer' })
+      const { span: innerSpan, tags: innerTags } = makeChildSpan(outerSpanId, outerSpan)
+      const innerSpanId = innerSpan.context()._spanId
+      const { span: childSpan } = makeChildSpan(innerSpanId, innerSpan)
+
+      const profiler = makeWall(WallProfiler, {
+        endpointCollectionEnabled: true,
+        codeHotspotsEnabled: true,
+        asyncContextFrameEnabled: true,
+      })
+      profiler.start()
+
+      currentStore = { span: childSpan }
+      enterCh.publish()
+      const childCtx = localPprof.time.setContext.lastCall.args[0]
+      assert.strictEqual(childCtx.webTags, outerTags)
+
+      Object.assign(innerTags, { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/inner' })
+      tagsUpdateCh.publish(innerSpan)
+      assert.strictEqual(childCtx.webTags, innerTags)
 
       profiler.stop()
     })

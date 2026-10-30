@@ -8,13 +8,14 @@ const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
-const { isEmpty } = require('../util')
+const { isEmpty, truncateString, typedArrayLength } = require('../util')
 const { getActiveRequest } = require('./store')
 const {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafConfigErrorsMetric,
   incrementWafRequestsMetric,
+  incrementRequestDurationMetrics,
   updateWafRequestsMetricTags,
   updateRaspRequestsMetricTags,
   updateRaspRuleSkippedMetricTags,
@@ -113,11 +114,15 @@ const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHea
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(responseHeaderList)
 const REDACTED_HEADERS = new Set(redactedHeadersList)
 
+/**
+ * @param {import('../config/config-types').ConfigProperties['appsec']} _config
+ * @param {boolean} [inferredProxyServicesEnabled]
+ */
 function init (_config, inferredProxyServicesEnabled) {
-  config.headersExtendedCollectionEnabled = _config.extendedHeadersCollection.enabled
-  config.maxHeadersCollected = _config.extendedHeadersCollection.maxHeaders
-  config.headersRedaction = _config.extendedHeadersCollection.redaction
-  config.raspBodyCollection = _config.rasp.bodyCollection
+  config.headersExtendedCollectionEnabled = _config.DD_APPSEC_COLLECT_ALL_HEADERS
+  config.maxHeadersCollected = _config.DD_APPSEC_MAX_COLLECTED_HEADERS
+  config.headersRedaction = _config.DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
+  config.raspBodyCollection = _config.DD_APPSEC_RASP_COLLECT_REQUEST_BODY
   config.inferredProxyServicesEnabled = inferredProxyServicesEnabled
 }
 
@@ -426,11 +431,25 @@ function reportAttack ({ events: attackData, actions }, req, rootSpan) {
   }
 }
 
+/**
+ * Copies the first elements by index, the one typed array access that user code cannot override, unlike `subarray`,
+ * `toJSON` or their species constructors. The result keeps the shape `Buffer#toJSON` and `Object.keys` produce.
+ *
+ * @param {import('../util').BinaryView} view
+ */
+function truncateTypedArray (view) {
+  const data = new Array(COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE)
+  for (let i = 0; i < COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE; i++) {
+    data[i] = view[i]
+  }
+  return Buffer.isBuffer(view) ? { type: 'Buffer', data } : { ...data }
+}
+
 function truncateRequestBody (target, depth = 0) {
   switch (typeof target) {
     case 'string':
       if (target.length > COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH) {
-        return { value: target.slice(0, COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH), truncated: true }
+        return { value: truncateString(target, COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH), truncated: true }
       }
       return { value: target, truncated: false }
     case 'object': {
@@ -440,6 +459,12 @@ function truncateRequestBody (target, depth = 0) {
 
       if (depth >= COLLECTED_REQUEST_BODY_MAX_DEPTH) {
         return { truncated: true }
+      }
+
+      // `Buffer#toJSON` and `Object.keys` both materialize one entry per byte, so cut large binary views down
+      // before they are serialized.
+      if (ArrayBuffer.isView(target) && typedArrayLength(target) > COLLECTED_REQUEST_BODY_MAX_ELEMENTS_PER_NODE) {
+        return { value: truncateTypedArray(target), truncated: true }
       }
 
       if (typeof target.toJSON === 'function') {
@@ -608,6 +633,7 @@ function finishRequest (req, res, storedResponseHeaders, requestBody, rootSpan) 
 
   if (!req) return
 
+  incrementRequestDurationMetrics(req)
   incrementWafRequestsMetric(req)
 
   const tags = rootSpan.context().getTags()

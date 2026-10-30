@@ -1,19 +1,44 @@
 'use strict'
 
-const { HTTP_CLIENT_IP, HTTP_USERAGENT, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
-const clone = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const {
+  ERROR,
+  HTTP_CLIENT_IP,
+  HTTP_USERAGENT,
+  MANUAL_DROP,
+  MANUAL_KEEP,
+  NETWORK_CLIENT_IP,
+  RESOURCE_NAME,
+  SAMPLING_PRIORITY,
+  SERVICE_NAME,
+  SPAN_KIND,
+  SPAN_TYPE,
+} = require('../../../../ext/tags')
+const createRfdc = require('../../../../vendor/dist/rfdc')
+const clone = createRfdc({ proto: false, circles: false })
 const { USER_ID, USER_SESSION_ID } = require('../appsec/addresses')
 const { getActiveRequest } = require('../appsec/store')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, PROCESS_ID, SAMPLING_PRIORITY_KEY } = require('../constants')
+const log = require('../log')
 const { keepTrace } = require('../priority_sampler')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { AI_GUARD } = require('../standalone/product')
 const telemetryMetrics = require('../telemetry/metrics')
+const { truncateString } = require('../util')
+const { normalizeRedactionReplacements, redactMessages } = require('./redaction')
 const TAGS = require('./tags')
 
 const ALLOW = 'ALLOW'
 
+/** @typedef {import('../../../../index').aiguard.ContentPart} ContentPart */
 /** @typedef {import('../../../../index').aiguard.Message} Message */
+/** @typedef {import('../../../../index').aiguard.RedactionReplacement} RedactionReplacement */
 /** @typedef {import('../opentracing/span')} Span */
+
+/**
+ * @typedef {object} ExtraEntry
+ * @property {string} key
+ * @property {unknown} value
+ */
 
 /**
  * @typedef {object} EvaluationResponse
@@ -24,19 +49,26 @@ const ALLOW = 'ALLOW'
  * @property {Record<string, unknown>} tagProbabilities
  * @property {boolean} hasTagProbabilities
  * @property {boolean} blockingEnabled
+ * @property {unknown} redactionReplacements
+ * @property {ExtraEntry[]} extraTags
+ * @property {ExtraEntry[]} extraMetastruct
  */
 
 /**
  * @typedef {object} EvaluationOutcome
  * @property {{ action: string, reason: string|undefined, tags: Array<unknown>,
- *   tagProbabilities: Record<string, unknown>, sds: Array<unknown> }} result
+ *   tagProbabilities: Record<string, unknown>, sds: Array<unknown>, messages: Message[],
+ *   redactionReplacements: RedactionReplacement[] }} result
  * @property {boolean} shouldBlock
  * @property {boolean} hasTagProbabilities
+ * @property {{ enabled: boolean, applied: boolean, failures: number }} redaction
+ * @property {ExtraEntry[]} extraTags
+ * @property {ExtraEntry[]} extraMetastruct
  */
 
 /**
  * @typedef {object} EvaluationMetaStruct
- * @property {Message[]} messages
+ * @property {Message[]} [messages]
  * @property {Array<unknown>} [attack_categories]
  * @property {Array<unknown>} [sds]
  * @property {Record<string, unknown>} [tag_probs]
@@ -45,6 +77,7 @@ const ALLOW = 'ALLOW'
 /**
  * @typedef {object} EvaluationReport
  * @property {Span} span
+ * @property {Message[]} messages
  * @property {EvaluationMetaStruct} metaStruct
  * @property {{ source: string, integration: string }} telemetryTags
  */
@@ -57,6 +90,38 @@ const ALLOW = 'ALLOW'
  */
 function isRecord (value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+// Shared by every evaluation without extra entries, so the common case allocates nothing.
+const NO_EXTRA_ENTRIES = /** @type {ExtraEntry[]} */ (/** @type {unknown} */ (Object.freeze([])))
+
+/**
+ * Normalizes a backend extra field into well-formed key/value entries. The backend sends lists of
+ * entries rather than objects because the dotted keys are not valid JSON:API member names. Values
+ * are kept as-is: which of them reach the span is decided when they are applied.
+ *
+ * @param {string} field
+ * @param {unknown} entries
+ * @returns {ExtraEntry[]}
+ */
+function normalizeExtraEntries (field, entries) {
+  if (entries === undefined) return NO_EXTRA_ENTRIES
+  if (!Array.isArray(entries)) {
+    log.debug('AI Guard: ignoring %s of type %s', field, entries === null ? 'null' : typeof entries)
+    return NO_EXTRA_ENTRIES
+  }
+
+  const normalized = []
+  for (const entry of entries) {
+    const key = isRecord(entry) ? entry.key : undefined
+    // A __proto__ key is never valid: it cannot become an own property on the span tags or the meta-struct.
+    if (typeof key === 'string' && key.length > 0 && key !== '__proto__') {
+      normalized.push({ key, value: entry.value })
+    } else {
+      log.debug('AI Guard: ignoring malformed %s entry', field)
+    }
+  }
+  return normalized.length === 0 ? NO_EXTRA_ENTRIES : normalized
 }
 
 /**
@@ -79,6 +144,10 @@ function parseEvaluationResponse (body) {
     tagProbabilities: isRecord(attributes.tag_probs) ? attributes.tag_probs : {},
     hasTagProbabilities: isRecord(attributes.tag_probs),
     blockingEnabled: attributes.is_blocking_enabled === true,
+    redactionReplacements: attributes.redaction_replacements,
+    // Malformed extra entries are dropped here instead of turning the response into a bad_response.
+    extraTags: normalizeExtraEntries('extra_tags', attributes.extra_tags),
+    extraMetastruct: normalizeExtraEntries('extra_metastruct', attributes.extra_metastruct),
   }
 }
 
@@ -87,7 +156,6 @@ function parseEvaluationResponse (body) {
  *
  * @param {boolean} block
  * @param {{ action: string, blockingEnabled: boolean }} evaluation
- * @returns {boolean}
  */
 function shouldBlockEvaluation (block, evaluation) {
   return block && evaluation.blockingEnabled && evaluation.action !== ALLOW
@@ -96,11 +164,16 @@ function shouldBlockEvaluation (block, evaluation) {
 /**
  * Applies local evaluation policy and creates the result returned to the caller.
  *
+ * @param {Message[]} messages
  * @param {EvaluationResponse} evaluation
- * @param {boolean} block
+ * @param {{ block: boolean, redactionEnabled: boolean }} options
  * @returns {EvaluationOutcome}
  */
-function createEvaluationOutcome (evaluation, block) {
+function createEvaluationOutcome (messages, evaluation, options) {
+  const redaction = options.redactionEnabled
+    ? redactMessages(messages, evaluation.redactionReplacements)
+    : { messages, redacted: false, failures: 0 }
+
   return {
     result: {
       action: evaluation.action,
@@ -108,9 +181,18 @@ function createEvaluationOutcome (evaluation, block) {
       tags: evaluation.tags,
       tagProbabilities: evaluation.tagProbabilities,
       sds: evaluation.sdsFindings,
+      messages: redaction.messages,
+      redactionReplacements: normalizeRedactionReplacements(evaluation.redactionReplacements),
     },
-    shouldBlock: shouldBlockEvaluation(block, evaluation),
+    shouldBlock: shouldBlockEvaluation(options.block, evaluation),
     hasTagProbabilities: evaluation.hasTagProbabilities,
+    redaction: {
+      enabled: options.redactionEnabled,
+      applied: redaction.redacted,
+      failures: redaction.failures,
+    },
+    extraTags: evaluation.extraTags,
+    extraMetastruct: evaluation.extraMetastruct,
   }
 }
 
@@ -126,18 +208,100 @@ const SERVICE_ENTRY_TAG_MAPPINGS = [
   [USER_SESSION_ID, TAGS.USR_SESSION_ID_TAG_KEY],
 ]
 
+// Backend extra tags never override what the tracer computes itself, nor keys that control the
+// span or its trace (sampling, service, resource, error state). Internal _dd keys are covered by
+// isReservedExtraTag instead of being listed here.
+const RESERVED_EXTRA_TAGS = new Set([
+  TAGS.ACTION_TAG_KEY,
+  TAGS.REASON_TAG_KEY,
+  TAGS.TARGET_TAG_KEY,
+  TAGS.TOOL_NAME_TAG_KEY,
+  TAGS.BLOCKED_TAG_KEY,
+  TAGS.REDACTED_TAG_KEY,
+  TAGS.EVENT_TAG_KEY,
+  ...SERVICE_ENTRY_TAG_MAPPINGS.map(([, destinationTag]) => destinationTag),
+  MANUAL_KEEP,
+  MANUAL_DROP,
+  SAMPLING_PRIORITY,
+  SERVICE_NAME,
+  RESOURCE_NAME,
+  SPAN_TYPE,
+  SPAN_KIND,
+  ERROR,
+  ERROR_TYPE,
+  ERROR_MESSAGE,
+  ERROR_STACK,
+  SAMPLING_PRIORITY_KEY,
+  PROCESS_ID,
+  'analytics.event',
+  'language',
+  'runtime-id',
+  'service.version',
+  'version',
+  'env',
+])
+
+/**
+ * Returns whether a backend extra tag key must not be set on the span.
+ *
+ * @param {string} key
+ */
+function isReservedExtraTag (key) {
+  // _dd is the tracer's internal namespace (_dd.*, _dd1.*): the span formatter writes sampling,
+  // top-level and propagation keys there and a span tag with the same key would overwrite them.
+  // This is not an AI Guard namespace filter; the backend owns ai_guard.* keys.
+  return key.startsWith('_dd') || RESERVED_EXTRA_TAGS.has(key)
+}
+
+const RESERVED_EXTRA_META_STRUCT_KEYS = new Set(['messages', 'attack_categories', 'sds', 'tag_probs'])
+
+/**
+ * Copies backend-provided extra_tags to the span and extra_metastruct to the AI Guard meta-struct,
+ * skipping values and keys the span must not receive. Keys are used verbatim and entries are
+ * applied in order, so a repeated key keeps its last value.
+ *
+ * @param {Span} span
+ * @param {EvaluationMetaStruct} metaStruct
+ * @param {ExtraEntry[]} extraTags
+ * @param {ExtraEntry[]} extraMetastruct
+ */
+function applyExtraSpanData (span, metaStruct, extraTags, extraMetastruct) {
+  // The client decodes values with JSON.parse, so a string check and a null check cover every JSON type.
+  for (const { key, value } of extraTags) {
+    if (typeof value !== 'string') {
+      log.debug('AI Guard: ignoring extra_tags entry %s with non-string value', key)
+    } else if (isReservedExtraTag(key)) {
+      log.debug('AI Guard: ignoring reserved extra tag %s', key)
+    } else {
+      span.setTag(key, value)
+    }
+  }
+
+  for (const { key, value } of extraMetastruct) {
+    if (value === undefined || value === null) {
+      log.debug('AI Guard: ignoring extra_metastruct entry %s with null value', key)
+    } else if (RESERVED_EXTRA_META_STRUCT_KEYS.has(key)) {
+      log.debug('AI Guard: ignoring reserved extra_metastruct key %s', key)
+    } else {
+      metaStruct[key] = value
+    }
+  }
+}
+
 class EvaluationReporter {
   #config
   #maxMessagesLength
   #maxContentSize
+  #redactionEnabled
 
   /**
    * @param {import('../config/config-base')} config
    */
   constructor (config) {
     this.#config = config
-    this.#maxMessagesLength = config.experimental.aiguard.maxMessagesLength
-    this.#maxContentSize = config.experimental.aiguard.maxContentSize
+    this.#maxMessagesLength = config.aiguard.DD_AI_GUARD_MAX_MESSAGES_LENGTH
+    this.#maxContentSize = config.aiguard.DD_AI_GUARD_MAX_CONTENT_SIZE
+    this.#redactionEnabled = config.aiguard.DD_AI_GUARD_REDACTION_ENABLED
   }
 
   /**
@@ -150,19 +314,18 @@ class EvaluationReporter {
    */
   start (span, messages, options) {
     const telemetryTags = { source: options.source, integration: options.integration }
-    const last = messages.at(-1)
+    const evaluatedMessages = this.#redactionEnabled ? clone(messages) : messages
+    const last = evaluatedMessages.at(-1)
     const target = this.#isToolCall(last) ? 'tool' : 'prompt'
     span.setTag(TAGS.TARGET_TAG_KEY, target)
     if (target === 'tool') {
-      const name = this.#getToolName(last, messages)
+      const name = this.#getToolName(last, evaluatedMessages)
       if (name) {
         span.setTag(TAGS.TOOL_NAME_TAG_KEY, name)
       }
     }
 
-    const metaStruct = {
-      messages: this.#buildMessagesForMetaStruct(messages, telemetryTags),
-    }
+    const metaStruct = {}
     span.meta_struct = {
       [TAGS.META_STRUCT_KEY]: metaStruct,
     }
@@ -178,6 +341,7 @@ class EvaluationReporter {
 
     return {
       span,
+      messages: evaluatedMessages,
       metaStruct,
       telemetryTags,
     }
@@ -188,9 +352,9 @@ class EvaluationReporter {
    *
    * @param {EvaluationReport} report
    * @param {string} errorType
-   * @returns {void}
    */
   fail (report, errorType) {
+    report.metaStruct.messages = this.#buildMessagesForMetaStruct(report.messages, report.telemetryTags)
     aiguardMetrics.count(TAGS.TELEMETRY_REQUESTS, { error: true, ...report.telemetryTags }).inc(1)
     aiguardMetrics.count(TAGS.TELEMETRY_ERROR, { type: errorType, ...report.telemetryTags }).inc(1)
   }
@@ -200,21 +364,41 @@ class EvaluationReporter {
    *
    * @param {EvaluationReport} report
    * @param {EvaluationOutcome} outcome
-   * @returns {void}
    */
   finish (report, outcome) {
-    const { result, shouldBlock } = outcome
+    const { result, redaction, shouldBlock } = outcome
 
     if (result.tags.length > 0) report.metaStruct.attack_categories = result.tags
     if (result.sds.length > 0) report.metaStruct.sds = result.sds
     if (outcome.hasTagProbabilities) report.metaStruct.tag_probs = result.tagProbabilities
+    applyExtraSpanData(report.span, report.metaStruct, outcome.extraTags, outcome.extraMetastruct)
 
-    const requestTelemetryTags = {
-      action: result.action,
-      error: false,
-      block: shouldBlock,
-      ...report.telemetryTags,
+    if (redaction.enabled) {
+      report.span.setTag(TAGS.REDACTED_TAG_KEY, redaction.applied ? 'true' : 'false')
+      if (redaction.failures > 0) {
+        aiguardMetrics.count(TAGS.TELEMETRY_ERROR, {
+          type: TAGS.ERROR_TYPE_REDACTION,
+          ...report.telemetryTags,
+        }).inc(redaction.failures)
+      }
     }
+
+    report.metaStruct.messages = this.#buildMessagesForMetaStruct(result.messages, report.telemetryTags)
+
+    const requestTelemetryTags = redaction.enabled
+      ? {
+          action: result.action,
+          error: false,
+          block: shouldBlock,
+          redacted: redaction.applied,
+          ...report.telemetryTags,
+        }
+      : {
+          action: result.action,
+          error: false,
+          block: shouldBlock,
+          ...report.telemetryTags,
+        }
     aiguardMetrics.count(TAGS.TELEMETRY_REQUESTS, requestTelemetryTags).inc(1)
 
     report.span.setTag(TAGS.ACTION_TAG_KEY, result.action)
@@ -242,10 +426,7 @@ class EvaluationReporter {
     let contentTruncated = false
     for (let i = messages.length - size; i < messages.length; i++) {
       const message = clone(messages[i])
-      if (message.content?.length > this.#maxContentSize) {
-        contentTruncated = true
-        message.content = message.content.slice(0, this.#maxContentSize)
-      }
+      if (this.#truncateMessageContent(message)) contentTruncated = true
       result.push(message)
     }
     if (contentTruncated) {
@@ -255,10 +436,42 @@ class EvaluationReporter {
   }
 
   /**
+   * Truncates text in a cloned message to one shared content-size limit.
+   *
+   * @param {{ content?: string|ContentPart[] }} message
+   */
+  #truncateMessageContent (message) {
+    const { content } = message
+    if (typeof content === 'string') {
+      if (content.length <= this.#maxContentSize) return false
+
+      message.content = truncateString(content, this.#maxContentSize)
+      return true
+    }
+
+    if (!Array.isArray(content)) return false
+
+    let remainingContentSize = this.#maxContentSize
+    let truncated = false
+    for (const part of content) {
+      const text = part?.text
+      if (typeof text !== 'string') continue
+
+      if (text.length > remainingContentSize) {
+        part.text = truncateString(text, remainingContentSize)
+        truncated = true
+        remainingContentSize = 0
+      } else {
+        remainingContentSize -= text.length
+      }
+    }
+    return truncated
+  }
+
+  /**
    * Returns whether a message represents a tool call or tool output.
    *
    * @param {Message} message
-   * @returns {boolean}
    */
   #isToolCall (message) {
     return Boolean(message.tool_calls || message.tool_call_id)
@@ -295,7 +508,6 @@ class EvaluationReporter {
    * Adds missing client IP tags to the service entry span.
    *
    * @param {Span} rootSpan
-   * @returns {void}
    */
   #setRootSpanClientIpTags (rootSpan) {
     const currentTags = rootSpan.context().getTags()
@@ -336,7 +548,6 @@ class EvaluationReporter {
    *
    * @param {Span} guardSpan
    * @param {Span} rootSpan
-   * @returns {void}
    */
   #copyServiceEntryTagsToGuardSpan (guardSpan, rootSpan) {
     const rootTags = rootSpan.context().getTags()

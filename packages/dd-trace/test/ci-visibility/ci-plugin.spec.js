@@ -130,9 +130,7 @@ describe('CiPlugin', () => {
     plugin.skippableSuitesCoverage = { 'suite.js': 'coverage' }
     plugin.configure({
       enabled: true,
-      experimental: {
-        exporter: 'jest_worker',
-      },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker' },
     })
 
     dc.channel('ci:vitest:library-configuration').publish({
@@ -212,9 +210,7 @@ describe('CiPlugin', () => {
     }
     plugin.configure({
       enabled: true,
-      experimental: {
-        exporter: 'jest_worker',
-      },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker' },
     })
 
     dc.channel('ci:vitest:library-configuration').publish({
@@ -254,9 +250,7 @@ describe('CiPlugin', () => {
     }
     plugin.configure({
       enabled: true,
-      experimental: {
-        exporter: 'mocha',
-      },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'mocha' },
     })
 
     dc.channel('ci:vitest:library-configuration').publish({
@@ -340,23 +334,10 @@ describe('CiPlugin', () => {
     sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
   })
 
-  it('defers worker suite events when the exporter supports late test suite updates', () => {
+  it('exports worker traces normally', () => {
     const plugin = createPlugin('vitest_worker')
-    const exportTraceWithDeferredTestSuite = sinon.spy()
     const exportTrace = sinon.spy()
     const trace = [{ type: 'test_suite_end', meta: {} }]
-    plugin.tracer._exporter = { export: exportTrace, exportTraceWithDeferredTestSuite }
-
-    plugin._exportWorkerTraceOrBuffer(trace)
-
-    sinon.assert.calledOnceWithExactly(exportTraceWithDeferredTestSuite, trace)
-    sinon.assert.notCalled(exportTrace)
-  })
-
-  it('exports worker traces normally when late test suite updates are unsupported', () => {
-    const plugin = createPlugin('vitest_worker')
-    const exportTrace = sinon.spy()
-    const trace = [{ type: 'test', meta: {} }]
     plugin.tracer._exporter = { export: exportTrace }
 
     plugin._exportWorkerTraceOrBuffer(trace)
@@ -585,7 +566,10 @@ describe('CiPlugin', () => {
   }
 
   it('excludes symlinked coverage report files', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not expose the symbolic-link behavior exercised here.
+      this.skip()
+    }
 
     const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-coverage-reports-'))
     const rootDir = path.join(fixtureDir, 'root')
@@ -666,6 +650,20 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnceWithExactly(waitForDiOperation, preparedPromise)
     assert.strictEqual(plugin.diBreakpointHitPromise, undefined)
     assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
+  })
+
+  it('adds a DI probe using the full path when the repository root repeats', () => {
+    const plugin = createPlugin('jest_worker')
+    const addLineProbe = sinon.stub().returns(['probe-1', Promise.resolve()])
+    const file = '/app/packages/app/index.js'
+    const line = 23
+    const error = { stack: `Error: test failed\n    at test (${file}:${line}:5)` }
+    plugin.di = { addLineProbe }
+    plugin._setRepositoryRoot('/app', [])
+
+    plugin.addDiProbe(error)
+
+    assert.deepStrictEqual(addLineProbe.firstCall.args[0], { file, line })
   })
 
   it('adds a new DI probe after removing one from the same location', async () => {
@@ -769,9 +767,7 @@ describe('CiPlugin', () => {
     const plugin = new TestPlugin({ _exporter: {} })
     plugin.configure({
       enabled,
-      experimental: {
-        exporter,
-      },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: exporter },
     })
     return plugin
   }

@@ -17,7 +17,8 @@ describe('Analyzers index', () => {
         configure: sinon.spy(),
       },
     }
-    analyzers = proxyquire.noCallThru()('../../../../src/appsec/iast/analyzers', {
+    const loadAnalyzers = proxyquire.noCallThru()
+    analyzers = loadAnalyzers('../../../../src/appsec/iast/analyzers', {
       './analyzers': fakeAnalyzers,
     })
   })
