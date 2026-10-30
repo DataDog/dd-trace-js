@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const crypto = require('node:crypto')
 
 const { describe, it } = require('mocha')
 
@@ -53,6 +54,119 @@ describe('encoding', () => {
     const hash2 = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), propagationHash2)
     assert.notDeepStrictEqual(hash1, hash2, 'Different propagation hashes should produce different pathway hashes')
+  })
+
+  it('hash should always give the same value with a propagation hash and a non-zero parent hash', () => {
+    const propagationHash = BigInt('0x123456789abcdef0')
+    const hash = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0102030405060708', 'hex'),
+      propagationHash)
+    assert.deepStrictEqual(hash, Buffer.from('14f85bd37aebd8a0', 'hex'))
+
+    const hashWithRealParent = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'type:kafka'], Buffer.from('67b0b35e65c0acfa', 'hex'), propagationHash)
+    assert.deepStrictEqual(hashWithRealParent, Buffer.from('bd5a8be5b8338501', 'hex'))
+  })
+
+  describe('cache', () => {
+    function sha (input) {
+      return Buffer.from(crypto.createHash('sha256').update(input).digest().subarray(0, 8))
+    }
+
+    function uncachedHash (service, env, edgeTags, parentHash, propagationHash = null) {
+      const hashableEdgeTags = edgeTags.filter(tag => tag !== 'manual_checkpoint:true').sort()
+      const baseString = `${service}${env}${hashableEdgeTags.join('')}`
+      const hashInput = propagationHash ? `${baseString}:${propagationHash.toString(16)}` : baseString
+      return sha(Buffer.concat([sha(hashInput), parentHash], 16).toString())
+    }
+
+    it('should equal the uncached computation for parents that differ only in non-UTF-8 bytes', () => {
+      const edgeTags = ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka']
+      const parents = [
+        '8000000000000000',
+        '8100000000000000',
+        'c000000000000000',
+        'c100000000000000',
+        'e000000000000000',
+        'f000000000000000',
+        'ffffffffffffffff',
+        '00000000000000e0',
+        '00000000000000e1',
+        '00000000000000f0',
+        '00000000000000f1',
+      ].map(hex => Buffer.from(hex, 'hex'))
+
+      for (const order of [parents, [...parents].reverse()]) {
+        for (const propagationHash of [null, BigInt('0x123456789abcdef0')]) {
+          for (const parent of order) {
+            const expected = uncachedHash('test-service', 'test-env', edgeTags, parent, propagationHash)
+            const actual = computePathwayHash('test-service', 'test-env', [...edgeTags], parent, propagationHash)
+            assert.deepStrictEqual(actual, expected, `parent ${parent.toString('hex')}`)
+          }
+        }
+      }
+    })
+
+    it('should equal the uncached computation when the current hash ends with a multibyte lead byte', () => {
+      const parent = Buffer.from('8080808080808080', 'hex')
+      let found = 0
+      for (let i = 0; i < 2000 && found < 3; i++) {
+        const edgeTags = ['direction:in', `topic:topic-${i}`, 'type:kafka']
+        const hashInput = 'test-service' + 'test-env' + [...edgeTags].sort().join('')
+        if (sha(hashInput)[7] < 0xc0) continue
+        found++
+        const expected = uncachedHash('test-service', 'test-env', edgeTags, parent)
+        assert.deepStrictEqual(computePathwayHash('test-service', 'test-env', [...edgeTags], parent), expected)
+        assert.deepStrictEqual(computePathwayHash('test-service', 'test-env', [...edgeTags], parent), expected)
+      }
+      assert.strictEqual(found, 3)
+    })
+
+    it('should return the same buffer on repeated calls', () => {
+      const parent = Buffer.from('0000000000000001', 'hex')
+      const first = computePathwayHash('test-service', 'test-env', ['direction:out', 'type:kafka'], parent)
+      const second = computePathwayHash('test-service', 'test-env', ['direction:out', 'type:kafka'], parent)
+      assert.strictEqual(second, first)
+    })
+
+    it('should ignore manual_checkpoint:true in the hash and sort the caller edge tags in place', () => {
+      const parent = Buffer.from('0000000000000000', 'hex')
+      const withManual = ['type:kafka', 'manual_checkpoint:true', 'direction:in']
+      const withoutManual = ['type:kafka', 'direction:in']
+
+      const manualHash = computePathwayHash('test-service', 'test-env', withManual, parent)
+      const plainHash = computePathwayHash('test-service', 'test-env', withoutManual, parent)
+
+      assert.deepStrictEqual(manualHash, plainHash)
+      assert.deepStrictEqual(manualHash, uncachedHash('test-service', 'test-env', withManual, parent))
+      assert.deepStrictEqual(withManual, ['direction:in', 'manual_checkpoint:true', 'type:kafka'])
+      assert.deepStrictEqual(withoutManual, ['direction:in', 'type:kafka'])
+    })
+
+    it('should treat a zero propagation hash as absent', () => {
+      const parent = Buffer.from('0000000000000000', 'hex')
+      const withZero = computePathwayHash('test-service', 'test-env', ['direction:in'], parent, 0n)
+      const withNull = computePathwayHash('test-service', 'test-env', ['direction:in'], parent, null)
+      assert.deepStrictEqual(withZero, withNull)
+    })
+
+    it('should stay correct after more than 500 distinct parents and recomputation after a clear', () => {
+      const edgeTags = ['direction:in', 'group:eviction', 'topic:eviction', 'type:kafka']
+      const parents = []
+      for (let i = 0; i < 1200; i++) {
+        const parent = Buffer.alloc(8)
+        parent.writeUInt32BE(i * 7919, 4)
+        parent[0] = 0x80 + (i % 64)
+        parents.push(parent)
+      }
+
+      for (let round = 0; round < 2; round++) {
+        for (const parent of parents) {
+          const expected = uncachedHash('test-service', 'test-env', edgeTags, parent)
+          assert.deepStrictEqual(computePathwayHash('test-service', 'test-env', [...edgeTags], parent), expected)
+        }
+      }
+    })
   })
 
   it('encoding and decoding should be a no op', () => {
