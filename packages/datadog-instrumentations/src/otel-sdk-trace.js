@@ -2,7 +2,7 @@
 
 const shimmer = require('../../datadog-shimmer')
 const tracer = require('../../dd-trace')
-const { isOtelSdkEnabled } = require('../../dd-trace/src/config/helper')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const { addHook } = require('./helpers/instrument')
 
 if (isOtelSdkEnabled()) {
@@ -31,4 +31,15 @@ if (isOtelSdkEnabled()) {
     })
     return mod
   })
+}
+
+function isOtelSdkEnabled () {
+  // Datadog explicit opt-out wins over every OTel signal; check it first.
+  // skipDefault: an unset option must stay undefined so the OTel signal still decides — the
+  // registered defaults (false / true) would otherwise force-disable before that check.
+  const ddTraceOtelEnabled = getValueFromEnvSources('DD_TRACE_OTEL_ENABLED', true)
+  if (ddTraceOtelEnabled === false) return false
+  const otelSdkDisabled = getValueFromEnvSources('OTEL_SDK_DISABLED', true)
+  if (otelSdkDisabled) return false
+  return ddTraceOtelEnabled || otelSdkDisabled === false
 }

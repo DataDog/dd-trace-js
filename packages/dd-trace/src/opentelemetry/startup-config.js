@@ -39,8 +39,6 @@ function startupConfig (config, rules, pipelines = {}) {
 
   /** @type {Record<string, unknown>} */
   const out = {
-    OTEL_ENABLED: traces || metrics || logs || spanMetrics ||
-      (tracing && (config.otelSdkEnabled || config.DD_TRACE_OTEL_SEMANTICS_ENABLED)),
     DD_TRACE_OTEL_ENABLED: !!config.DD_TRACE_OTEL_ENABLED,
     DD_TRACE_OTEL_SEMANTICS_ENABLED: !!config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
     DD_METRICS_OTEL_ENABLED: !!config.DD_METRICS_OTEL_ENABLED,

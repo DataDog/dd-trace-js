@@ -26,7 +26,6 @@ describe('effective OTel startup configuration', () => {
     const { configuration: c, flare } = run({}, {
       service: 'native-service', env: 'native-env', version: 'native-version', tags: { custom: 'native-tag' },
     })
-    assert.equal(c.OTEL_ENABLED, false)
     assert.equal(c.OTEL_LOG_LEVEL, 'none')
     assert.equal(c.service, 'native-service')
     assert.equal(c.env, 'native-env')
@@ -41,46 +40,40 @@ describe('effective OTel startup configuration', () => {
     assert.equal('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT' in c, false)
   })
 
-  for (const { name, env, configured, enabled } of [
-    { name: 'defaults', env: {}, configured: false, enabled: false },
-    { name: 'DD opt-in', env: { DD_TRACE_OTEL_ENABLED: 'true' }, configured: true, enabled: true },
-    { name: 'OTel opt-in', env: { OTEL_SDK_DISABLED: 'false' }, configured: false, enabled: true },
+  for (const { name, env, configured } of [
+    { name: 'defaults', env: {}, configured: false },
+    { name: 'DD opt-in', env: { DD_TRACE_OTEL_ENABLED: 'true' }, configured: true },
+    { name: 'OTel opt-in', env: { OTEL_SDK_DISABLED: 'false' }, configured: false },
     {
       name: 'DD opt-out over OTel opt-in',
       env: { DD_TRACE_OTEL_ENABLED: 'false', OTEL_SDK_DISABLED: 'false' },
       configured: false,
-      enabled: false,
     },
     {
       name: 'OTel opt-out over DD opt-in',
       env: { DD_TRACE_OTEL_ENABLED: 'true', OTEL_SDK_DISABLED: 'true' },
       configured: true,
-      enabled: false,
     },
     {
       name: 'invalid DD value with OTel opt-in',
       env: { DD_TRACE_OTEL_ENABLED: 'maybe', OTEL_SDK_DISABLED: 'false' },
       configured: false,
-      enabled: true,
     },
     {
       name: 'invalid OTel value with DD opt-in',
       env: { DD_TRACE_OTEL_ENABLED: 'true', OTEL_SDK_DISABLED: 'maybe' },
       configured: true,
-      enabled: true,
     },
     {
       name: 'both opt-ins',
       env: { DD_TRACE_OTEL_ENABLED: 'true', OTEL_SDK_DISABLED: 'false' },
       configured: true,
-      enabled: true,
     },
   ]) {
-    it(`reports startup bridge enablement independently of the configured DD flag: ${name}`, () => {
+    it(`reports the configured DD bridge flag: ${name}`, () => {
       const result = run(env)
       for (const output of [result.configuration, result.flare]) {
         assert.equal(output.DD_TRACE_OTEL_ENABLED, configured)
-        assert.equal(output.OTEL_ENABLED, enabled)
       }
     })
   }
@@ -95,7 +88,6 @@ describe('effective OTel startup configuration', () => {
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/json',
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: '1234',
     })
-    assert.equal(c.OTEL_ENABLED, true)
     assert.equal(c.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'https://collector.example/base/v1/traces')
     assert.equal(c.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'https://collector.example/base/v1/metrics')
     assert.equal(c.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'https://logs.example/custom')
@@ -122,7 +114,6 @@ describe('effective OTel startup configuration', () => {
         [`DD_${signal}_OTEL_ENABLED`]: 'true',
         OTEL_STARTUP_SAMPLE: 'true',
       })
-      assert.equal(c.OTEL_ENABLED, true)
       assert.equal(c.otlp_traces_export_enabled, false)
       assert.equal(c[`otlp_${signal.toLowerCase()}_export_enabled`], true)
       assert.equal(c[`OTEL_EXPORTER_OTLP_${signal}_PROTOCOL`], 'http/protobuf')
@@ -154,7 +145,6 @@ describe('effective OTel startup configuration', () => {
 
   it('reports span-metrics transport without claiming that a MeterProvider is active', () => {
     const { configuration: c } = run({ OTEL_TRACES_SPAN_METRICS_ENABLED: 'true' })
-    assert.equal(c.OTEL_ENABLED, true)
     assert.equal(c.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
     assert.equal(c.otlp_metrics_export_enabled, false)
     assert.equal(c.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'http/protobuf')
@@ -386,7 +376,6 @@ describe('effective OTel startup configuration', () => {
       assert.equal(result.previousProviderStillActive, true)
       assert.equal(result.configuration[`otlp_${signal}_export_enabled`], false)
       assert.equal(`OTEL_EXPORTER_OTLP_${signal.toUpperCase()}_PROTOCOL` in result.configuration, false)
-      assert.equal(result.configuration.OTEL_ENABLED, false)
     })
   }
 
@@ -458,7 +447,6 @@ describe('effective OTel startup configuration', () => {
   it('honors startupLogs=false', () => {
     const result = run(allSignals, { startupLogs: false })
     assert.equal(result.configuration, undefined)
-    assert.equal(result.flare.OTEL_ENABLED, true)
   })
 
   for (const scenario of [

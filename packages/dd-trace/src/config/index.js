@@ -31,7 +31,6 @@ const {
   getEnvironmentVariables,
   getStableConfigSources,
   getValueFromEnvSources,
-  isOtelSdkEnabled,
 } = require('./helper')
 const {
   defaults,
@@ -253,8 +252,6 @@ class Config extends ConfigBase {
     }
     this.#applyOptions(rest, 'code')
     this.#applyCalculated()
-
-    this.otelSdkEnabled = isOtelSdkEnabled()
 
     warnWrongOtelSettings()
 

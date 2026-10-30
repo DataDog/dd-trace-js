@@ -131,7 +131,6 @@ describe('startup logging', () => {
       DD_TRACE_OTEL_SEMANTICS_ENABLED: false,
       DD_METRICS_OTEL_ENABLED: false,
       DD_LOGS_OTEL_ENABLED: false,
-      OTEL_ENABLED: false,
       OTEL_LOG_LEVEL: 'none',
       OTEL_RESOURCE_ATTRIBUTES: {},
       OTEL_LOGS_EXPORTER: 'none',
