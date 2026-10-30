@@ -113,17 +113,16 @@ describe('OpenFeature Exposures Writer', () => {
       writer._bufferLimit = 2
 
       writer.append([
-        { ...exposureEvent, sequence: 1 },
-        { ...exposureEvent, sequence: 2 },
-        { ...exposureEvent, sequence: 3 },
+        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-1' } },
+        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-2' } },
+        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-3' } },
       ])
 
       assert.strictEqual(writer._buffer?.length, 2)
-      assert.strictEqual(writer._bufferStart, 1)
+      writer.flush()
       assert.deepStrictEqual(
-        [...writer._buffer.slice(writer._bufferStart), ...writer._buffer.slice(0, writer._bufferStart)]
-          .map(event => event.sequence),
-        [2, 3]
+        JSON.parse(request.firstCall.args[0]).exposures.map(event => event.subject.id),
+        ['user-2', 'user-3']
       )
       assert.strictEqual(writer._droppedEvents, 1)
       sinon.assert.calledOnce(log.warn)
@@ -134,19 +133,19 @@ describe('OpenFeature Exposures Writer', () => {
       writer._bufferLimit = 2
 
       writer.append([
-        { ...exposureEvent, sequence: 1 },
-        { ...exposureEvent, sequence: 2 },
+        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-1' } },
+        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-2' } },
       ])
       await clock.tickAsync(0)
       writer.append([
-        { ...exposureEvent, sequence: 3 },
-        { ...exposureEvent, sequence: 4 },
+        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-3' } },
+        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-4' } },
       ])
 
+      writer.flush()
       assert.deepStrictEqual(
-        [...writer._buffer.slice(writer._bufferStart), ...writer._buffer.slice(0, writer._bufferStart)]
-          .map(event => event.sequence),
-        [3, 4]
+        JSON.parse(request.firstCall.args[0]).exposures.map(event => event.subject.id),
+        ['user-3', 'user-4']
       )
       assert.strictEqual(writer._droppedEvents, 2)
     })
@@ -155,7 +154,7 @@ describe('OpenFeature Exposures Writer', () => {
       writer.setEnabled(true)
       const largeEvent = {
         ...exposureEvent,
-        largeData: 'x'.repeat(1024 * 1024 + 1), // > 1MB
+        subject: { ...exposureEvent.subject, attributes: { data: 'x'.repeat(1024 * 1024 + 1) } },
       }
 
       writer.append(largeEvent)
@@ -176,7 +175,7 @@ describe('OpenFeature Exposures Writer', () => {
       // Use ~1020KB events to safely stay under individual limit
       const largeEvent = {
         ...exposureEvent,
-        largeData: 'x'.repeat(1020 * 1024), // ~1020KB each
+        subject: { ...exposureEvent.subject, attributes: { data: 'x'.repeat(1020 * 1024) } },
       }
 
       for (let i = 0; i < 6; i++) {
@@ -189,6 +188,10 @@ describe('OpenFeature Exposures Writer', () => {
       writer.flush()
 
       sinon.assert.calledTwice(request)
+      for (const call of request.getCalls()) {
+        assert.ok(Buffer.byteLength(call.args[0]) <= writer._payloadSizeLimit)
+      }
+      assert.notStrictEqual(request.firstCall.args[1].headers, request.secondCall.args[1].headers)
       assert.strictEqual(JSON.parse(request.firstCall.args[0]).exposures.length, 5)
       assert.strictEqual(JSON.parse(request.secondCall.args[0]).exposures.length, 1)
       assert.strictEqual(writer._buffer.length, 0)
@@ -205,6 +208,40 @@ describe('OpenFeature Exposures Writer', () => {
 
       assert.strictEqual(writer._buffer.length, 0)
       sinon.assert.calledOnce(request)
+    })
+
+    it('should hold startup events until route selection completes', async () => {
+      writer.append(exposureEvent)
+      clock.tick(1000)
+      writer.flush()
+      sinon.assert.notCalled(request)
+      assert.strictEqual(writer._buffer.length, 1)
+
+      const url = new URL('http://serverless-init:9126')
+      writer.setEnabled(true, { url, basePath: '/evp_proxy/v4/' })
+      await clock.tickAsync(0)
+
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(request.firstCall.args[1].url, url)
+      assert.strictEqual(request.firstCall.args[1].path, '/evp_proxy/v4/api/v2/exposures')
+    })
+
+    it('should share one capacity bound across route resolution', async () => {
+      const events = []
+      for (let i = 0; i < 1000; i++) {
+        events.push({ ...exposureEvent, subject: { id: `user-${i}` } })
+      }
+      writer.append(events)
+      writer.setEnabled(true)
+      writer.append({ ...exposureEvent, subject: { id: 'user-1000' } })
+      await clock.tickAsync(0)
+
+      sinon.assert.calledOnce(request)
+      const ids = JSON.parse(request.firstCall.args[0]).exposures.map(event => event.subject.id)
+      assert.strictEqual(ids.length, 1000)
+      assert.strictEqual(ids[0], 'user-1')
+      assert.strictEqual(ids.at(-1), 'user-1000')
+      assert.strictEqual(writer._droppedEvents, 1)
     })
 
     it('should keep every event when count equals the cap', () => {
@@ -256,15 +293,21 @@ describe('OpenFeature Exposures Writer', () => {
       sinon.assert.calledOnce(log.warn)
     })
 
-    it('should discard pending and future events after route resolution fails', async () => {
-      writer.append(exposureEvent)
+    it('should retain events while disabled and send them on re-enable', async () => {
+      writer.append({ ...exposureEvent, subject: { id: 'before-disable' } })
       writer.setEnabled(false)
-      writer.append(exposureEvent)
+      writer.append({ ...exposureEvent, subject: { id: 'while-disabled' } })
+      writer.flush()
+      sinon.assert.notCalled(request)
       writer.setEnabled(true)
       await clock.tickAsync(0)
 
       assert.strictEqual(writer._buffer.length, 0)
-      sinon.assert.notCalled(request)
+      sinon.assert.calledOnce(request)
+      assert.deepStrictEqual(
+        JSON.parse(request.firstCall.args[0]).exposures.map(event => event.subject.id),
+        ['before-disable', 'while-disabled']
+      )
     })
   })
 
@@ -380,6 +423,33 @@ describe('OpenFeature Exposures Writer', () => {
       writer.flush()
 
       sinon.assert.notCalled(request)
+    })
+
+    for (const thrown of [null, undefined]) {
+      it(`should drop an event whose serializer throws ${thrown}`, () => {
+        writer.append({ ...exposureEvent, toJSON () { throw thrown } })
+        writer.append(exposureEvent)
+        writer.flush()
+        assert.strictEqual(writer._droppedEvents, 1)
+        sinon.assert.calledOnce(request)
+      })
+
+      it(`should drop a batch whose encoder throws ${thrown}`, () => {
+        writer._encode = () => { throw thrown }
+        writer.append(exposureEvent)
+        writer.flush()
+        assert.strictEqual(writer._droppedEvents, 1)
+        sinon.assert.notCalled(request)
+      })
+    }
+
+    it('should log structural metadata without exposure contents', () => {
+      writer.append(exposureEvent)
+      writer.flush()
+      const message = log.debug.firstCall.args[0]()
+      assert.match(message, /ExposuresWriter flushing 1 events \(\d+ bytes\)/)
+      assert.ok(!message.includes(exposureEvent.subject.id))
+      assert.ok(!message.includes('premium'))
     })
 
     it('should flush events to agent via EVP proxy', () => {
@@ -602,7 +672,10 @@ describe('OpenFeature Exposures Writer', () => {
       writer.flush()
 
       assert.strictEqual(writer._buffer?.length, 0)
-      assert.strictEqual(writer._bufferStart, 0)
+      writer.append(exposureEvent)
+      writer.flush()
+      sinon.assert.calledTwice(request)
+      assert.strictEqual(JSON.parse(request.secondCall.args[0]).exposures[0].subject.id, exposureEvent.subject.id)
     })
 
     it('should log errors on request failure', (done) => {

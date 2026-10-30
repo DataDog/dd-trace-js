@@ -1,7 +1,6 @@
 'use strict'
 
 const request = require('../../exporters/common/request')
-const { safeJSONStringify } = require('../../exporters/common/util')
 
 const log = require('../../log')
 
@@ -61,6 +60,8 @@ function isAmbiguousNetworkFailure (error) {
  */
 class BaseFFEWriter {
   #destroyer
+  #bufferStart = 0
+  #dropWarningLogged = false
   /**
    * @param {BaseFFEWriterOptions} options - Writer configuration options
    */
@@ -70,8 +71,6 @@ class BaseFFEWriter {
 
     this._buffer = []
     this._bufferLimit = 1000
-    this._bufferStart = 0
-    this._dropWarningLogged = false
 
     this._config = config
     this._endpoint = endpoint
@@ -116,12 +115,12 @@ class BaseFFEWriter {
       if (this._buffer.length < this._bufferLimit) {
         this._buffer.push(event)
       } else {
-        this._buffer[this._bufferStart] = event
-        this._bufferStart = (this._bufferStart + 1) % this._bufferLimit
+        this._buffer[this.#bufferStart] = event
+        this.#bufferStart = (this.#bufferStart + 1) % this._bufferLimit
         this._droppedEvents++
 
-        if (!this._dropWarningLogged) {
-          this._dropWarningLogged = true
+        if (!this.#dropWarningLogged) {
+          this.#dropWarningLogged = true
           log.warn(
             '%s dropped exposure event(s) at cap %d. This may invalidate experiment results.',
             this.constructor.name,
@@ -140,11 +139,11 @@ class BaseFFEWriter {
       return
     }
 
-    const events = this._bufferStart === 0
+    const events = this.#bufferStart === 0
       ? this._buffer
-      : [...this._buffer.slice(this._bufferStart), ...this._buffer.slice(0, this._bufferStart)]
+      : [...this._buffer.slice(this.#bufferStart), ...this._buffer.slice(0, this.#bufferStart)]
     this._buffer = []
-    this._bufferStart = 0
+    this.#bufferStart = 0
 
     let batch = []
     let batchSize = 0
@@ -154,7 +153,7 @@ class BaseFFEWriter {
       try {
         eventSize = Buffer.byteLength(JSON.stringify(event))
       } catch (error) {
-        log.warn('%s could not serialize an event, dropping event: %s', this.constructor.name, error.message)
+        log.warn('%s could not serialize an event, dropping event: %s', this.constructor.name, error?.message)
         this._droppedEvents++
         continue
       }
@@ -218,7 +217,11 @@ class BaseFFEWriter {
       this.#destroyer = undefined
 
       if (this._droppedEvents > 0) {
-        log.warn('%s dropped %d events due to buffer overflow', this.constructor.name, this._droppedEvents)
+        log.warn(
+          '%s dropped %d events (buffer cap, size limits or serialization errors)',
+          this.constructor.name,
+          this._droppedEvents
+        )
       }
     }
   }
@@ -237,7 +240,6 @@ class BaseFFEWriter {
    *
    * @param {WriterRoute} route - Active route
    * @param {WriterRoute} [fallbackRoute] - Direct fallback route
-   * @returns {void}
    */
   _setRoutes (route, fallbackRoute) {
     this.#activateRoute(this.#createRoute(route))
@@ -248,7 +250,6 @@ class BaseFFEWriter {
    * Sends one event batch.
    *
    * @param {Array<object>} events - Events in the batch
-   * @returns {void}
    */
   #send (events) {
     let payload
@@ -259,14 +260,14 @@ class BaseFFEWriter {
         '%s could not encode %d event(s), dropping batch: %s',
         this.constructor.name,
         events.length,
-        error.message
+        error?.message
       )
       this._droppedEvents += events.length
       return
     }
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `${this.constructor.name} flushing payload: ${safeJSONStringify(payload)}`)
+    log.debug(() => `${this.constructor.name} flushing ${events.length} events (${Buffer.byteLength(payload)} bytes)`)
 
     const route = this.#createActiveRoute()
     this.#sendRequest(payload, events.length, route, this._fallbackRoute)
@@ -314,7 +315,6 @@ class BaseFFEWriter {
    * Makes a route active for future event batches.
    *
    * @param {ActiveWriterRoute} route - Route state
-   * @returns {void}
    */
   #activateRoute (route) {
     this._baseUrl = route.url
@@ -329,10 +329,10 @@ class BaseFFEWriter {
    * @param {number} eventCount - Event count
    * @param {ActiveWriterRoute} route - Selected route
    * @param {ActiveWriterRoute} [fallbackRoute] - Direct fallback route
-   * @returns {void}
    */
   #sendRequest (payload, eventCount, route, fallbackRoute) {
-    request(payload, route.requestOptions, (error, response, statusCode) => {
+    const options = { ...route.requestOptions, headers: { ...route.requestOptions.headers } }
+    request(payload, options, (error, response, statusCode) => {
       if (fallbackRoute && isDefinitiveRejection(error, statusCode)) {
         log.debug(
           '%s switching from %s%s to direct intake after definitive rejection',
@@ -360,7 +360,7 @@ class BaseFFEWriter {
       }
 
       if (error) {
-        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
+        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error?.message)
       } else if (statusCode >= 200 && statusCode < 300) {
         log.debug('Successfully sent %d events', eventCount)
       } else {

@@ -57,8 +57,6 @@ class ExposuresWriter extends BaseFFEWriter {
   // Disabled until route selection resolves.
   #enabled = false
 
-  #routeResolved = false
-
   /** @type {ReturnType<typeof setImmediate> | undefined} */
   #startupFlushImmediate
 
@@ -107,11 +105,8 @@ class ExposuresWriter extends BaseFFEWriter {
   /**
    * @param {boolean} enabled - Whether to enable the writer
    * @param {ExposureRoute} [route] - Selected EVP route
-   * @returns {void}
    */
   setEnabled (enabled, route) {
-    this.#routeResolved = true
-
     if (route) {
       this.#setRoute(route)
     }
@@ -122,8 +117,6 @@ class ExposuresWriter extends BaseFFEWriter {
       this.#scheduleStartupFlush()
     } else {
       this.#cancelStartupFlush()
-      this._buffer = []
-      this._bufferStart = 0
     }
   }
 
@@ -131,7 +124,6 @@ class ExposuresWriter extends BaseFFEWriter {
    * Applies caller-supplied route data without performing discovery.
    *
    * @param {ExposureRoute} route - Selected EVP route
-   * @returns {void}
    */
   #setRoute (route) {
     const fallbackRoute = route.fallback && {
@@ -153,21 +145,8 @@ class ExposuresWriter extends BaseFFEWriter {
   }
 
   /**
-   * Appends exposure event(s) to the buffer.
-   *
-   * @param {ExposureEvent|ExposureEvent[]} events - Exposure event(s) to append
-   * @returns {void}
-   */
-  append (events) {
-    if (this.#routeResolved && !this.#enabled) return
-
-    super.append(events)
-  }
-
-  /**
    * Flushes buffered exposure events through the selected route.
    *
-   * @returns {void}
    */
   flush () {
     if (!this.#enabled) return
@@ -179,7 +158,6 @@ class ExposuresWriter extends BaseFFEWriter {
   /**
    * Flushes startup events after route selection completes.
    *
-   * @returns {void}
    */
   #scheduleStartupFlush () {
     if (this.#startupFlushImmediate || this._buffer.length === 0) return
@@ -193,7 +171,6 @@ class ExposuresWriter extends BaseFFEWriter {
   /**
    * Cancels a scheduled drain.
    *
-   * @returns {void}
    */
   #cancelStartupFlush () {
     if (!this.#startupFlushImmediate) return
