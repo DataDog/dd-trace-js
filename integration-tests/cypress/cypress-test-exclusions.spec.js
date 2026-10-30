@@ -307,7 +307,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'browser-saved-local', 'browser-all-saved-local',
     'browser-numeric-open', 'browser-all-numeric-open',
     'browser-descriptor', 'browser-all-descriptor-root', 'browser-all-descriptor-same',
-    'browser-accessor-root', 'browser-retries', 'browser-same-budget', 'inherited-mode',
+    'browser-object-config-getter', 'browser-accessor-root', 'browser-retries', 'browser-same-budget', 'inherited-mode',
     'browser-runtime', 'browser-inactive-mode',
     'browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite',
     'browser-delete-mode', 'browser-partial-root',
@@ -323,6 +323,8 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
   ]) {
     for (const atrEnabled of [false, true]) {
       const numericNative = mode.includes('numeric-open')
+      // Experimental-config override validation adds a getter read before general validation and assignment.
+      const objectGetterReads = supportsExperimental ? 3 : 2
       // Cypress <15.17 retains the old restoration callback across tests without overrides.
       const legacySavedLocal = ['browser-saved-local', 'browser-all-saved-local'].includes(mode) &&
         version !== 'latest' && (cypressMajor < 15 || (cypressMajor === 15 && cypressMinor < 17))
@@ -345,9 +347,11 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       boundaryTest(`preserves ${mode} native retry executions (ATR=${atrEnabled})`, async () => {
         const boundarySuite = 'cypress/e2e/native-retry-boundaries.cy.js'
         const ledger = join(cwd, 'native-retry-executions.json')
-        const nativeAttempts = mode === 'experimental-native-checkpoint'
-          ? 5
-          : descriptorNative || mode.includes('-detached') ? 4 : thresholdNative ? 5 : disabledNative ? 1 : 3
+        const nativeAttempts = mode === 'browser-object-config-getter'
+          ? objectGetterReads + 1
+          : mode === 'experimental-native-checkpoint'
+            ? 5
+            : descriptorNative || mode.includes('-detached') ? 4 : thresholdNative ? 5 : disabledNative ? 1 : 3
         const experimentalEnvironment = experimentalMode
           ? {
               CYPRESS_EXPERIMENTAL_RETRIES: thresholdNative
@@ -363,14 +367,14 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           }),
           'excluded recovery': zeroNative
             ? 1
-            : descriptorNative ? 3 : nativeAttempts,
+            : descriptorNative || mode === 'browser-object-config-getter' ? 3 : nativeAttempts,
           'excluded persistent': zeroNative
             ? 1
             : thresholdNative ? 3 : nativeAttempts,
           'excluded explicit zero': mode === 'browser-accessor-root' ? 3 : 1,
           'ordinary control': zeroControl || browserZeroNative
             ? 1
-            : descriptorNative ? 3 : nativeAttempts,
+            : descriptorNative || mode === 'browser-object-config-getter' ? 3 : nativeAttempts,
           ...(mode.startsWith('browser-runtime') && { 'changes runtime retries': 1 }),
           ...(['browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite'].includes(mode) &&
             { 'excluded after zero': 3 }),
@@ -396,6 +400,10 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           : zeroControl || browserZeroNative || experimentalMode
             ? 4
             : mode === 'inherited-mode' ? 3 : 2
+        if (mode === 'browser-object-config-getter') {
+          assert.deepStrictEqual(JSON.parse(readFileSync(join(cwd, 'native-config-getter-reads.json'), 'utf8')),
+            { reads: objectGetterReads, budget: objectGetterReads })
+        }
         assert.strictEqual(nativeExit, expectedExit, output)
         assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
         rmSync(ledger)
@@ -411,6 +419,10 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           ? 3
           : expectedExit
         await run(mode, instrumentedExit, tests => {
+          if (mode === 'browser-object-config-getter') {
+            assert.deepStrictEqual(JSON.parse(readFileSync(join(cwd, 'native-config-getter-reads.json'), 'utf8')),
+              { reads: objectGetterReads, budget: objectGetterReads })
+          }
           assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
           assert.strictEqual(tests.length, Object.values(expected).reduce((sum, count) => sum + count, 0))
           for (const name of Object.keys(expected)) {

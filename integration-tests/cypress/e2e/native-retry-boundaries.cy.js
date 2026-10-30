@@ -6,6 +6,7 @@ const { noAutoRetry } = require('dd-trace/test-optimization')
 const { getTestEnvironment } = require('../support/test-environment')
 
 const executions = {}
+let configGetterReads = 0
 
 /**
  * @param {string} name
@@ -14,12 +15,18 @@ const executions = {}
 function attempt (name, passAt) {
   executions[name] = (executions[name] || 0) + 1
   return cy.writeFile('native-retry-executions.json', executions, { log: false }).then(() => {
+    if (mode === 'browser-object-config-getter') {
+      cy.writeFile('native-config-getter-reads.json', { reads: configGetterReads, budget: Cypress.config('retries') })
+    }
     if (executions[name] < passAt) throw new Error(`native retry boundary: ${name}`)
   })
 }
 
 const mode = getTestEnvironment('EXCLUSIONS_MODE')
 let savedLocalRetries
+if (mode === 'browser-object-config-getter') {
+  Cypress.config({ get retries () { return ++configGetterReads } })
+}
 if (mode === 'browser-accessor-root') {
   Object.defineProperty(Cypress.config(), 'retries', { get: () => 2, configurable: true, enumerable: true })
 }
