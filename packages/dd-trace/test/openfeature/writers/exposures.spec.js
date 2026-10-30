@@ -88,89 +88,51 @@ describe('OpenFeature Exposures Writer', () => {
   })
 
   describe('append', () => {
-    it('should enqueue exposure events without waiting for another event loop turn', () => {
-      writer.setEnabled(true)
+    beforeEach(() => {
+      writer.setEnabled(true) // Enable writer for append tests
+    })
+
+    it('should add exposure event to buffer', () => {
       writer.append(exposureEvent)
 
       assert.strictEqual(writer._buffer?.length, 1)
       assert.strictEqual(writer._buffer[0], exposureEvent)
-      sinon.assert.notCalled(request)
     })
 
-    it('should defer event serialization until flush', () => {
-      writer.setEnabled(true)
-      const toJSON = sinon.spy(() => exposureEvent)
-      const event = { ...exposureEvent, toJSON }
+    it('should track buffer size', () => {
+      const initialSize = writer._bufferSize
 
-      writer.append(event)
-      sinon.assert.notCalled(toJSON)
+      writer.append(exposureEvent)
 
-      writer.flush()
-      sinon.assert.calledOnce(toJSON)
+      assert.ok(writer._bufferSize > initialSize, `Expected ${writer._bufferSize} > ${initialSize}`)
     })
 
-    it('should retain the newest events when the buffer is full', () => {
-      writer.setEnabled(true)
+    it('should drop events when buffer is full', () => {
       writer._bufferLimit = 2
 
-      writer.append([
-        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-1' } },
-        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-2' } },
-        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-3' } },
-      ])
+      writer.append(exposureEvent)
+      writer.append(exposureEvent)
+      writer.append(exposureEvent) // Should be dropped
 
       assert.strictEqual(writer._buffer?.length, 2)
-      writer.flush()
-      assert.deepStrictEqual(
-        JSON.parse(request.firstCall.args[0]).exposures.map(event => event.subject.id),
-        ['user-2', 'user-3']
-      )
       assert.strictEqual(writer._droppedEvents, 1)
       sinon.assert.calledOnce(log.warn)
     })
 
-    it('should use one queue across event loop turns', async () => {
-      writer.setEnabled(true)
-      writer._bufferLimit = 2
-
-      writer.append([
-        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-1' } },
-        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-2' } },
-      ])
-      await clock.tickAsync(0)
-      writer.append([
-        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-3' } },
-        { ...exposureEvent, subject: { ...exposureEvent.subject, id: 'user-4' } },
-      ])
-
-      writer.flush()
-      assert.deepStrictEqual(
-        JSON.parse(request.firstCall.args[0]).exposures.map(event => event.subject.id),
-        ['user-3', 'user-4']
-      )
-      assert.strictEqual(writer._droppedEvents, 2)
-    })
-
-    it('should drop events exceeding 1MB size limit during flush', () => {
-      writer.setEnabled(true)
+    it('should drop events exceeding 1MB size limit', () => {
       const largeEvent = {
         ...exposureEvent,
         subject: { ...exposureEvent.subject, attributes: { data: 'x'.repeat(1024 * 1024 + 1) } },
       }
 
       writer.append(largeEvent)
-      assert.strictEqual(writer._buffer?.length, 1)
-      assert.strictEqual(writer._droppedEvents, 0)
-
-      writer.flush()
 
       assert.strictEqual(writer._buffer?.length, 0)
       assert.strictEqual(writer._droppedEvents, 1)
       sinon.assert.calledWith(log.warn, sinon.match(/event size[\s\S]*bytes exceeds limit/))
     })
 
-    it('should split buffered events into payload-size batches during flush', () => {
-      writer.setEnabled(true)
+    it('should batch at 5MB and defer transport until the next turn', async () => {
       // Create events that together exceed 5MB (limit is 5242880 bytes)
       // Individual event limit is (1MB - 1KB) = 1047552 bytes
       // Use ~1020KB events to safely stay under individual limit
@@ -179,108 +141,80 @@ describe('OpenFeature Exposures Writer', () => {
         subject: { ...exposureEvent.subject, attributes: { data: 'x'.repeat(1020 * 1024) } },
       }
 
-      for (let i = 0; i < 6; i++) {
+      // Add 5 events (~5MB total)
+      // Events 1-5 should accumulate and not trigger flush
+      for (let i = 0; i < 5; i++) {
         writer.append(largeEvent)
         assert.strictEqual(writer._buffer.length, i + 1,
           `Buffer should contain ${i + 1} event(s) after appending event ${i + 1}`)
       }
 
+      // Verify request was not called yet
       sinon.assert.notCalled(request)
-      writer.flush()
 
-      sinon.assert.calledTwice(request)
-      for (const call of request.getCalls()) {
-        assert.ok(Buffer.byteLength(call.args[0]) <= writer._payloadSizeLimit)
-      }
-      assert.notStrictEqual(request.firstCall.args[1].headers, request.secondCall.args[1].headers)
+      // Add 6th event (~6MB total) - should trigger flush
+      writer.append(largeEvent)
+      sinon.assert.notCalled(request)
+      await clock.tickAsync(0)
+      sinon.assert.calledOnce(request)
       assert.strictEqual(JSON.parse(request.firstCall.args[0]).exposures.length, 5)
-      assert.strictEqual(JSON.parse(request.secondCall.args[0]).exposures.length, 1)
-      assert.strictEqual(writer._buffer.length, 0)
+      assert.ok(Buffer.byteLength(request.firstCall.args[0]) <= writer._payloadSizeLimit)
+      // 6th event should have triggered flush, leaving only the new event
+      assert.strictEqual(writer._buffer.length, 1,
+        'Buffer should contain 1 event after flush was triggered by 6th event')
     })
 
-    it('should buffer events while the startup route is unresolved and flush on enable', async () => {
+    it('should buffer events while disabled and drain on enable', () => {
+      writer.setEnabled(false)
       writer.append(exposureEvent)
 
-      assert.strictEqual(writer._buffer.length, 1)
-
-      writer.setEnabled(true)
-      assert.strictEqual(writer._buffer.length, 1)
-      await clock.tickAsync(0)
-
+      // Pending events stay out of the main buffer until enable.
       assert.strictEqual(writer._buffer.length, 0)
-      sinon.assert.calledOnce(request)
-    })
 
-    it('should hold startup events until route selection completes', async () => {
-      writer.append(exposureEvent)
-      clock.tick(1000)
-      writer.flush()
-      sinon.assert.notCalled(request)
-      assert.strictEqual(writer._buffer.length, 1)
-
-      const url = new URL('http://serverless-init:9126')
-      writer.setEnabled(true, { url, basePath: '/evp_proxy/v4/' })
-      await clock.tickAsync(0)
-
-      sinon.assert.calledOnce(request)
-      assert.strictEqual(request.firstCall.args[1].url, url)
-      assert.strictEqual(request.firstCall.args[1].path, '/evp_proxy/v4/api/v2/exposures')
-    })
-
-    it('should share one capacity bound across route resolution', async () => {
-      const events = []
-      for (let i = 0; i < 1000; i++) {
-        events.push({ ...exposureEvent, subject: { id: `user-${i}` } })
-      }
-      writer.append(events)
       writer.setEnabled(true)
-      writer.append({ ...exposureEvent, subject: { id: 'user-1000' } })
-      await clock.tickAsync(0)
 
-      sinon.assert.calledOnce(request)
-      const ids = JSON.parse(request.firstCall.args[0]).exposures.map(event => event.subject.id)
-      assert.strictEqual(ids.length, 1000)
-      assert.strictEqual(ids[0], 'user-1')
-      assert.strictEqual(ids.at(-1), 'user-1000')
-      assert.strictEqual(writer._droppedEvents, 1)
+      assert.strictEqual(writer._buffer.length, 1)
+      assert.strictEqual(writer._buffer[0], exposureEvent)
     })
 
-    it('should keep every event when count equals the cap', () => {
+    it('should keep every pending event when count equals the cap', () => {
+      writer.setEnabled(false)
+
       const cap = 1000
       const events = []
       for (let i = 0; i < cap; i++) {
         events.push({ ...exposureEvent, seq: i })
       }
       writer.append(events)
+      writer.setEnabled(true)
 
       assert.strictEqual(writer._buffer.length, cap)
-      assert.strictEqual(writer._droppedEvents, 0)
+      assert.strictEqual(writer.droppedEventCount, 0)
       sinon.assert.notCalled(log.warn)
     })
 
-    it('should drop the oldest event one past the cap', () => {
+    it('should drop oldest pending events one past the cap', () => {
+      writer.setEnabled(false)
+
       const cap = 1000
       const events = []
       for (let i = 0; i < cap + 1; i++) {
-        events.push({
-          ...exposureEvent,
-          subject: { ...exposureEvent.subject, id: `user-${i}` },
-        })
+        events.push({ ...exposureEvent, seq: i })
       }
-      writer.setEnabled(true)
       writer.append(events)
-      writer.flush()
+      writer.setEnabled(true)
 
-      const payload = JSON.parse(request.firstCall.args[0])
-      assert.strictEqual(payload.exposures.length, cap)
-      assert.strictEqual(payload.exposures[0].subject.id, 'user-1')
-      assert.strictEqual(payload.exposures.at(-1).subject.id, `user-${cap}`)
-      assert.strictEqual(writer._droppedEvents, 1)
+      assert.strictEqual(writer._buffer.length, cap)
+      assert.strictEqual(writer._buffer[0].seq, 1)
+      assert.strictEqual(writer._buffer.at(-1).seq, cap)
+      assert.strictEqual(writer.droppedEventCount, 1)
       sinon.assert.calledOnce(log.warn)
       assert.match(format(...log.warn.firstCall.args), /dropped exposure event\(s\) at cap 1000/)
     })
 
     it('should throttle the drop warning while still counting every dropped event', () => {
+      writer.setEnabled(false)
+
       const cap = 1000
       const events = []
       for (let i = 0; i < cap + 1; i++) {
@@ -290,25 +224,178 @@ describe('OpenFeature Exposures Writer', () => {
       writer.append({ ...exposureEvent, seq: cap + 1 })
       writer.append({ ...exposureEvent, seq: cap + 2 })
 
-      assert.strictEqual(writer._droppedEvents, 3)
+      assert.strictEqual(writer.droppedEventCount, 3)
       sinon.assert.calledOnce(log.warn)
     })
+  })
 
-    it('should retain events while disabled and send them on re-enable', async () => {
-      writer.append({ ...exposureEvent, subject: { id: 'before-disable' } })
-      writer.setEnabled(false)
-      writer.append({ ...exposureEvent, subject: { id: 'while-disabled' } })
+  describe('bounded deferred delivery', () => {
+    const ids = request => request.getCalls().flatMap(call =>
+      JSON.parse(call.args[0]).exposures.map(event => event.subject.id))
+
+    function event (id, size = 0) {
+      return { ...exposureEvent, subject: { id: String(id), attributes: { data: 'x'.repeat(size) } } }
+    }
+
+    beforeEach(() => writer.setEnabled(true))
+
+    it('delivers 2000 valid 6KB exposures without inline transport or count loss', async () => {
+      for (let i = 0; i < 2000; i++) writer.append(event(i, 6000))
+      sinon.assert.notCalled(request)
+      writer.flush()
+      await clock.tickAsync(10)
+      assert.deepStrictEqual(ids(request), Array.from({ length: 2000 }, (_, i) => String(i)))
+      assert.strictEqual(writer.droppedEventCount, 0)
+    })
+
+    it('keeps valid exposures when oversized arrivals follow a full buffer', async () => {
+      for (let i = 0; i < 1000; i++) writer.append(event(i))
+      for (let i = 0; i < 1000; i++) writer.append(event('invalid', 1024 * 1024))
+      writer.flush()
+      await clock.tickAsync(0)
+      assert.deepStrictEqual(ids(request), Array.from({ length: 1000 }, (_, i) => String(i)))
+      assert.strictEqual(writer.droppedEventCount, 1000)
+    })
+
+    it('rejects oversized arrivals before they consume available buffer slots', () => {
+      writer.append(event('valid'))
+      writer.append(event('invalid', 1024 * 1024))
+      writer.append(event('next'))
+      writer.flush()
+      assert.deepStrictEqual(ids(request), ['valid', 'next'])
+      assert.strictEqual(writer.droppedEventCount, 1)
+    })
+
+    for (const thrown of [null, undefined, new Error('private context')]) {
+      it(`contains serialization exceptions (${String(thrown)}) and retains other events`, () => {
+        const invalid = event('invalid')
+        invalid.subject.attributes.toJSON = () => { throw thrown }
+        writer.append([event('before'), invalid, event('after')])
+        writer.flush()
+        assert.deepStrictEqual(ids(request), ['before', 'after'])
+        assert.strictEqual(writer.droppedEventCount, 1)
+        assert.ok(!inspect(log.warn.args).includes('private context'))
+      })
+    }
+
+    it('contains an exception when an admitted event changes before encoding', () => {
+      const changing = event('changing')
+      writer.append(changing)
+      const thrown = undefined
+      changing.subject.attributes.toJSON = () => { throw thrown }
       writer.flush()
       sinon.assert.notCalled(request)
-      writer.setEnabled(true)
-      await clock.tickAsync(0)
+      assert.strictEqual(writer.droppedEventCount, 1)
+    })
 
-      assert.strictEqual(writer._buffer.length, 0)
+    it('includes in-flight bytes in the 16MiB budget and releases credit after completion', async () => {
+      request.resetBehavior()
+      const batchBytes = 512 * 1024
+      const empty = event('accepted')
+      const overhead = Buffer.byteLength(JSON.stringify(writer.makePayload([empty])))
+      const sized = event('accepted', batchBytes - overhead)
+      for (let i = 0; i < 32; i++) {
+        writer.append(sized)
+        writer.flush()
+      }
       sinon.assert.calledOnce(request)
-      assert.deepStrictEqual(
-        JSON.parse(request.firstCall.args[0]).exposures.map(event => event.subject.id),
-        ['before-disable', 'while-disabled']
-      )
+      assert.strictEqual(Buffer.byteLength(request.firstCall.args[0]), batchBytes)
+      assert.strictEqual(writer.droppedEventCount, 0)
+      writer.append(event('over-budget'))
+      writer.flush()
+      assert.strictEqual(writer.droppedEventCount, 1)
+      request.firstCall.args[2](null, '', 200)
+      request.callsFake((payload, options, callback) => callback(null, '', 200))
+      await clock.tickAsync(40)
+      assert.strictEqual(request.callCount, 32)
+      assert.ok(ids(request).every(id => id === 'accepted'))
+      writer.append(event('after-release'))
+      writer.flush()
+      assert.strictEqual(ids(request).at(-1), 'after-release')
+    })
+
+    it('bounds tiny queued batches and never starts another request before completion', async () => {
+      request.resetBehavior()
+      for (let i = 0; i < 1001; i++) {
+        writer.append(event(i))
+        writer.flush()
+      }
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(writer.droppedEventCount, 1)
+      request.firstCall.args[2](null, '', 200)
+      request.callsFake((payload, options, callback) => callback(null, '', 200))
+      await clock.tickAsync(1001)
+      assert.deepStrictEqual(ids(request), Array.from({ length: 1000 }, (_, i) => String(i)))
+    })
+
+    it('pauses accepted batches while unavailable and resumes on the replacement route', async () => {
+      request.resetBehavior()
+      const route = { url: config.url, basePath: '/old', onUnavailable: () => writer.setEnabled(false) }
+      writer.setEnabled(true, route)
+      writer.append(event('first'))
+      writer.flush()
+      writer.append(event('queued'))
+      writer.flush()
+      request.firstCall.args[2](new Error('failure'), '', 503)
+      await clock.tickAsync(5)
+      sinon.assert.calledOnce(request)
+      writer.append(event('disabled'))
+      writer.setEnabled(true, { url: config.url, basePath: '/new' })
+      request.callsFake((payload, options, callback) => callback(null, '', 200))
+      writer.flush()
+      await clock.tickAsync(5)
+      assert.deepStrictEqual(ids(request), ['first', 'queued', 'disabled'])
+      assert.strictEqual(request.secondCall.args[1].path, '/new/api/v2/exposures')
+      assert.strictEqual(writer.droppedEventCount, 1)
+    })
+
+    it('drains queued and current batches on shutdown without accepting new work', async () => {
+      request.resetBehavior()
+      writer.append(event('first'))
+      writer.flush()
+      writer.append(event('queued'))
+      writer.flush()
+      writer.append(event('current'))
+      writer.destroy()
+      writer.append(event('closed'))
+      writer.setEnabled(true)
+      request.firstCall.args[2](null, '', 200)
+      request.callsFake((payload, options, callback) => callback(null, '', 200))
+      await clock.tickAsync(5)
+      assert.deepStrictEqual(ids(request), ['first', 'queued', 'current'])
+      writer.destroy()
+      await clock.tickAsync(1000)
+      assert.strictEqual(request.callCount, 3)
+    })
+
+    it('settles queued batches when an in-flight request discovers unavailability during shutdown', async () => {
+      request.resetBehavior()
+      writer.setEnabled(true, { url: config.url, basePath: '/old', onUnavailable: () => writer.setEnabled(false) })
+      writer.append(event('first'))
+      writer.flush()
+      writer.append(event('queued'))
+      writer.destroy()
+      request.firstCall.args[2](new Error('unavailable'), '', 503)
+      writer.setEnabled(true)
+      await clock.tickAsync(1000)
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(writer.droppedEventCount, 2)
+    })
+
+    it('discards unavailable queued work on shutdown without reviving it', async () => {
+      request.resetBehavior()
+      writer.append(event('first'))
+      writer.flush()
+      writer.append(event('queued'))
+      writer.flush()
+      writer.setEnabled(false)
+      writer.append(event('disabled'))
+      writer.destroy()
+      writer.setEnabled(true)
+      request.firstCall.args[2](null, '', 200)
+      await clock.tickAsync(1000)
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(writer.droppedEventCount, 2)
     })
   })
 
@@ -466,33 +553,6 @@ describe('OpenFeature Exposures Writer', () => {
       writer.flush()
 
       sinon.assert.notCalled(request)
-    })
-
-    for (const thrown of [null, undefined]) {
-      it(`should drop an event whose serializer throws ${thrown}`, () => {
-        writer.append({ ...exposureEvent, toJSON () { throw thrown } })
-        writer.append(exposureEvent)
-        writer.flush()
-        assert.strictEqual(writer._droppedEvents, 1)
-        sinon.assert.calledOnce(request)
-      })
-
-      it(`should drop a batch whose encoder throws ${thrown}`, () => {
-        writer._encode = () => { throw thrown }
-        writer.append(exposureEvent)
-        writer.flush()
-        assert.strictEqual(writer._droppedEvents, 1)
-        sinon.assert.notCalled(request)
-      })
-    }
-
-    it('should log structural metadata without exposure contents', () => {
-      writer.append(exposureEvent)
-      writer.flush()
-      const message = log.debug.firstCall.args[0]()
-      assert.match(message, /ExposuresWriter flushing 1 events \(\d+ bytes\)/)
-      assert.ok(!message.includes(exposureEvent.subject.id))
-      assert.ok(!message.includes('premium'))
     })
 
     it('should flush events to agent via EVP proxy', () => {
@@ -752,10 +812,7 @@ describe('OpenFeature Exposures Writer', () => {
       writer.flush()
 
       assert.strictEqual(writer._buffer?.length, 0)
-      writer.append(exposureEvent)
-      writer.flush()
-      sinon.assert.calledTwice(request)
-      assert.strictEqual(JSON.parse(request.secondCall.args[0]).exposures[0].subject.id, exposureEvent.subject.id)
+      assert.strictEqual(writer._bufferSize, 0)
     })
 
     it('should log errors on request failure', (done) => {

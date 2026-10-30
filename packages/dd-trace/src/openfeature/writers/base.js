@@ -81,8 +81,6 @@ function shouldSwitchFutureRoute (statusCode) {
  */
 class BaseFFEWriter {
   #destroyer
-  #bufferStart = 0
-  #dropWarningLogged = false
   #formatError
   /**
    * @param {BaseFFEWriterOptions} options - Writer configuration options
@@ -96,6 +94,7 @@ class BaseFFEWriter {
 
     this._buffer = []
     this._bufferLimit = 1000
+    this._bufferSize = 0
 
     this._config = config
     this._endpoint = endpoint
@@ -138,87 +137,64 @@ class BaseFFEWriter {
     const eventArray = Array.isArray(events) ? events : [events]
 
     for (const event of eventArray) {
-      if (this._buffer.length < this._bufferLimit) {
-        this._buffer.push(event)
-      } else {
-        this._buffer[this.#bufferStart] = event
-        this.#bufferStart = (this.#bufferStart + 1) % this._bufferLimit
+      if (this._buffer.length >= this._bufferLimit) {
+        log.warn('%s event buffer full (limit is %d), dropping event', this.constructor.name, this._bufferLimit)
         this._droppedEvents++
-
-        if (!this.#dropWarningLogged) {
-          this.#dropWarningLogged = true
-          log.warn(
-            '%s dropped exposure event(s) at cap %d. This may invalidate experiment results.',
-            this.constructor.name,
-            this._bufferLimit
-          )
-        }
+        continue
       }
+
+      let eventSizeBytes
+      try {
+        eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
+      } catch {
+        log.warn('%s could not serialize an event, dropping event', this.constructor.name)
+        this._droppedEvents++
+        continue
+      }
+
+      // Check individual event size limit if configured
+      if (this._eventSizeLimit && eventSizeBytes > this._eventSizeLimit) {
+        log.warn('%s event size %d bytes exceeds limit %d, dropping event',
+          this.constructor.name, eventSizeBytes, this._eventSizeLimit)
+        this._droppedEvents++
+        continue
+      }
+
+      // Check if adding this event would exceed payload size limit if configured
+      if (this._payloadSizeLimit && this._bufferSize + eventSizeBytes > this._payloadSizeLimit) {
+        log.debug('%s buffer size would exceed %d bytes, flushing first', this.constructor.name, this._payloadSizeLimit)
+        this.flush()
+      }
+
+      this._bufferSize += eventSizeBytes
+      this._buffer.push(event)
     }
   }
 
   /**
-   * Sizes, batches, and flushes all buffered events.
+   * Flushes all buffered events to the agent
    */
   flush () {
     if (this._buffer.length === 0) {
       return
     }
-
-    const events = this.#bufferStart === 0
-      ? this._buffer
-      : [...this._buffer.slice(this.#bufferStart), ...this._buffer.slice(0, this.#bufferStart)]
+    const events = this._buffer
     this._buffer = []
-    this.#bufferStart = 0
+    this._bufferSize = 0
 
-    let batch = []
-    let batchSize = 0
-
-    for (const event of events) {
-      let eventSize
-      try {
-        eventSize = Buffer.byteLength(JSON.stringify(event))
-      } catch (error) {
-        log.warn('%s could not serialize an event, dropping event: %s', this.constructor.name, error?.message)
-        this._droppedEvents++
-        continue
-      }
-
-      if (this._eventSizeLimit && eventSize > this._eventSizeLimit) {
-        log.warn(
-          '%s event size %d bytes exceeds limit %d, dropping event',
-          this.constructor.name,
-          eventSize,
-          this._eventSizeLimit
-        )
-        this._droppedEvents++
-        continue
-      }
-
-      if (this._payloadSizeLimit && eventSize > this._payloadSizeLimit) {
-        log.warn(
-          '%s event size %d bytes exceeds payload limit %d, dropping event',
-          this.constructor.name,
-          eventSize,
-          this._payloadSizeLimit
-        )
-        this._droppedEvents++
-        continue
-      }
-
-      if (batch.length > 0 && this._payloadSizeLimit && batchSize + eventSize > this._payloadSizeLimit) {
-        this.#send(batch)
-        batch = []
-        batchSize = 0
-      }
-
-      batch.push(event)
-      batchSize += eventSize
+    let payload
+    try {
+      payload = this._encode(this.makePayload(events))
+    } catch {
+      log.warn('%s could not encode %d events, dropping batch', this.constructor.name, events.length)
+      this._droppedEvents += events.length
+      return
     }
 
-    if (batch.length > 0) {
-      this.#send(batch)
-    }
+    // Keep byte counting behind the debug callback because payloads can be several megabytes.
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.debug(() => `${this.constructor.name} flushing ${events.length} events (${Buffer.byteLength(payload)} bytes)`)
+    this._sendPayload(payload, events.length)
   }
 
   /**
@@ -244,7 +220,7 @@ class BaseFFEWriter {
 
       if (this._droppedEvents > 0) {
         log.warn(
-          '%s dropped %d events (buffer cap, size limits or serialization errors)',
+          '%s dropped %d events (buffer capacity, size limits, serialization or delivery failures)',
           this.constructor.name,
           this._droppedEvents
         )
@@ -282,32 +258,6 @@ class BaseFFEWriter {
   _setRoutes (route, fallbackRoute) {
     this.#activateRoute(this.#createRoute(route))
     this._fallbackRoute = fallbackRoute ? this.#createRoute(fallbackRoute) : undefined
-  }
-
-  /**
-   * Sends one event batch.
-   *
-   * @param {Array<object>} events - Events in the batch
-   */
-  #send (events) {
-    let payload
-    try {
-      payload = this._encode(this.makePayload(events))
-    } catch (error) {
-      log.warn(
-        '%s could not encode %d event(s), dropping batch: %s',
-        this.constructor.name,
-        events.length,
-        error?.message
-      )
-      this._droppedEvents += events.length
-      return
-    }
-
-    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `${this.constructor.name} flushing ${events.length} events (${Buffer.byteLength(payload)} bytes)`)
-
-    this._sendPayload(payload, events.length)
   }
 
   /**
