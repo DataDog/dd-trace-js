@@ -18,6 +18,9 @@ const BaseFFEWriter = require('./base')
 // exposure dedupe cache keeps masking dropped events after recovery. The first
 // drop emits a warning and `droppedEventCount` accumulates the cumulative loss.
 const PENDING_MAX_EVENTS = 1000
+// Include the in-flight batch in both budgets. Leave headroom in the shared 64 MiB request buffer.
+const DELIVERY_MAX_BYTES = 16 * 1024 * 1024
+const DELIVERY_MAX_BATCHES = 1000
 
 /**
  * @typedef {object} ExposureRoute
@@ -73,6 +76,19 @@ class ExposuresWriter extends BaseFFEWriter {
   #context
 
   #dropWarned = false
+  #deliveryWarned = false
+  #closed = false
+  #appendDepth = 0
+  #inFlight = false
+  #deliveryBytes = 0
+  #deliveryCount = 0
+  /** @type {{ payload: string, eventCount: number, bytes: number }[]} */
+  #deliveryQueue = []
+  /** @type {ReturnType<typeof setImmediate> | undefined} */
+  #deliveryImmediate
+  #shutdownDeadline = Infinity
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  #shutdownTimer
 
   /**
    * @param {import('../../config/config-base')} config - Tracer configuration object
@@ -118,6 +134,14 @@ class ExposuresWriter extends BaseFFEWriter {
    * @param {ExposureRoute} [route] - Selected EVP route
    */
   setEnabled (enabled, route) {
+    if (this.#closed) {
+      // An outstanding request may discover unavailability during shutdown.
+      if (!enabled) {
+        this.#enabled = false
+        this.#discardDelivery()
+      }
+      return
+    }
     if (route) {
       this.#setRoute(route)
     }
@@ -129,6 +153,8 @@ class ExposuresWriter extends BaseFFEWriter {
       super.append(this.#pendingEvents)
       this.#pendingEvents = []
     }
+    if (enabled) this.#scheduleDelivery()
+    else this.#cancelDelivery()
   }
 
   /**
@@ -162,8 +188,14 @@ class ExposuresWriter extends BaseFFEWriter {
    * @param {ExposureEvent|ExposureEvent[]} events - Exposure event(s) to append
    */
   append (events) {
+    if (this.#closed) return
     if (this.#enabled) {
-      super.append(events)
+      this.#appendDepth++
+      try {
+        super.append(events)
+      } finally {
+        this.#appendDepth--
+      }
       return
     }
 
@@ -194,6 +226,113 @@ class ExposuresWriter extends BaseFFEWriter {
       return
     }
     super.flush()
+    // Explicit, periodic and shutdown flushes may start delivery immediately.
+    // A byte-triggered flush during append must never initiate transport inline.
+    if (this.#appendDepth === 0) this.#drainDelivery()
+  }
+
+  destroy () {
+    if (this.#closed) return
+    this.#closed = true
+    this.#shutdownDeadline = Date.now() + this._timeout
+    this.#shutdownTimer = setTimeout(() => {
+      this.#shutdownTimer = undefined
+      const before = this._droppedEvents
+      this.#discardDelivery()
+      const dropped = this._droppedEvents - before
+      if (dropped > 0) {
+        log.warn('%s shutdown deadline reached, dropping %d queued events', this.constructor.name, dropped)
+      }
+    }, this._timeout)
+    this.#shutdownTimer.unref?.()
+    if (!this.#enabled) {
+      this._droppedEvents += this.#pendingEvents.length + this._buffer.length
+      this.#pendingEvents = []
+      this._buffer = []
+      this._bufferSize = 0
+      this.#discardDelivery()
+    }
+    super.destroy()
+  }
+
+  /**
+   * Queues an encoded exposure batch, keeping accepted batches when capacity is exhausted.
+   * @param {string} payload - Encoded payload
+   * @param {number} eventCount - Number of exposures
+   */
+  _sendPayload (payload, eventCount) {
+    const bytes = Buffer.byteLength(payload)
+    if (this.#deliveryBytes + bytes > DELIVERY_MAX_BYTES || this.#deliveryCount >= DELIVERY_MAX_BATCHES) {
+      this._droppedEvents += eventCount
+      if (!this.#deliveryWarned) {
+        this.#deliveryWarned = true
+        log.warn('%s delivery queue full, dropping newest batch', this.constructor.name)
+      }
+      return
+    }
+    this.#deliveryQueue.push({ payload, eventCount, bytes })
+    this.#deliveryBytes += bytes
+    this.#deliveryCount++
+    this.#scheduleDelivery()
+  }
+
+  #scheduleDelivery () {
+    if (this.#deliveryQueue.length === 0) {
+      if (!this.#inFlight) this.#cancelShutdownTimer()
+      return
+    }
+    if (!this.#enabled || this.#inFlight || this.#deliveryImmediate) return
+    // Only the bounded shutdown drain should keep an otherwise idle process alive.
+    this.#deliveryImmediate = setImmediate(() => {
+      this.#deliveryImmediate = undefined
+      this.#drainDelivery()
+    })
+    if (!this.#closed) this.#deliveryImmediate.unref?.()
+  }
+
+  #cancelShutdownTimer () {
+    clearTimeout(this.#shutdownTimer)
+    this.#shutdownTimer = undefined
+  }
+
+  #cancelDelivery () {
+    if (!this.#deliveryImmediate) return
+    clearImmediate(this.#deliveryImmediate)
+    this.#deliveryImmediate = undefined
+  }
+
+  #discardDelivery () {
+    this.#cancelDelivery()
+    this.#cancelShutdownTimer()
+    for (const batch of this.#deliveryQueue) {
+      this._droppedEvents += batch.eventCount
+      this.#deliveryBytes -= batch.bytes
+      this.#deliveryCount--
+    }
+    this.#deliveryQueue = []
+  }
+
+  #drainDelivery () {
+    this.#cancelDelivery()
+    if (Date.now() >= this.#shutdownDeadline) {
+      this.#discardDelivery()
+      return
+    }
+    if (!this.#enabled || this.#inFlight) return
+    const batch = this.#deliveryQueue.shift()
+    if (!batch) {
+      this.#cancelShutdownTimer()
+      return
+    }
+    this.#inFlight = true
+    super._sendPayload(batch.payload, batch.eventCount, delivered => {
+      this.#inFlight = false
+      this.#deliveryBytes -= batch.bytes
+      this.#deliveryCount--
+      if (!delivered) this._droppedEvents += batch.eventCount
+      // Yield even when a transport implementation invokes its callback synchronously.
+      this.#scheduleDelivery()
+    })
   }
 
   /**
