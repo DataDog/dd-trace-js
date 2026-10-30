@@ -86,6 +86,9 @@ class ExposuresWriter extends BaseFFEWriter {
   #deliveryQueue = []
   /** @type {ReturnType<typeof setImmediate> | undefined} */
   #deliveryImmediate
+  #shutdownDeadline = Infinity
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  #shutdownTimer
 
   /**
    * @param {import('../../config/config-base')} config - Tracer configuration object
@@ -231,6 +234,17 @@ class ExposuresWriter extends BaseFFEWriter {
   destroy () {
     if (this.#closed) return
     this.#closed = true
+    this.#shutdownDeadline = Date.now() + this._timeout
+    this.#shutdownTimer = setTimeout(() => {
+      this.#shutdownTimer = undefined
+      const before = this._droppedEvents
+      this.#discardDelivery()
+      const dropped = this._droppedEvents - before
+      if (dropped > 0) {
+        log.warn('%s shutdown deadline reached, dropping %d queued events', this.constructor.name, dropped)
+      }
+    }, this._timeout)
+    this.#shutdownTimer.unref?.()
     if (!this.#enabled) {
       this._droppedEvents += this.#pendingEvents.length + this._buffer.length
       this.#pendingEvents = []
@@ -263,12 +277,22 @@ class ExposuresWriter extends BaseFFEWriter {
   }
 
   #scheduleDelivery () {
-    if (!this.#enabled || this.#inFlight || this.#deliveryImmediate || this.#deliveryQueue.length === 0) return
-    // Keep accepted delivery work alive through beforeExit, including between requests.
+    if (this.#deliveryQueue.length === 0) {
+      if (!this.#inFlight) this.#cancelShutdownTimer()
+      return
+    }
+    if (!this.#enabled || this.#inFlight || this.#deliveryImmediate) return
+    // Only the bounded shutdown drain should keep an otherwise idle process alive.
     this.#deliveryImmediate = setImmediate(() => {
       this.#deliveryImmediate = undefined
       this.#drainDelivery()
     })
+    if (!this.#closed) this.#deliveryImmediate.unref?.()
+  }
+
+  #cancelShutdownTimer () {
+    clearTimeout(this.#shutdownTimer)
+    this.#shutdownTimer = undefined
   }
 
   #cancelDelivery () {
@@ -279,6 +303,7 @@ class ExposuresWriter extends BaseFFEWriter {
 
   #discardDelivery () {
     this.#cancelDelivery()
+    this.#cancelShutdownTimer()
     for (const batch of this.#deliveryQueue) {
       this._droppedEvents += batch.eventCount
       this.#deliveryBytes -= batch.bytes
@@ -289,9 +314,16 @@ class ExposuresWriter extends BaseFFEWriter {
 
   #drainDelivery () {
     this.#cancelDelivery()
+    if (Date.now() >= this.#shutdownDeadline) {
+      this.#discardDelivery()
+      return
+    }
     if (!this.#enabled || this.#inFlight) return
     const batch = this.#deliveryQueue.shift()
-    if (!batch) return
+    if (!batch) {
+      this.#cancelShutdownTimer()
+      return
+    }
     this.#inFlight = true
     super._sendPayload(batch.payload, batch.eventCount, delivered => {
       this.#inFlight = false

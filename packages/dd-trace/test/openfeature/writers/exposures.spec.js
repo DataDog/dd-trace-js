@@ -368,6 +368,44 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(request.callCount, 3)
     })
 
+    it('bounds shutdown with 1000 batches and an unresponsive receiver', async () => {
+      request.resetBehavior()
+      request.callsFake((payload, options, callback) => {
+        setTimeout(() => callback(new Error('timeout')), options.timeout)
+      })
+      for (let i = 0; i < 1000; i++) {
+        writer.append(event(i))
+        writer.flush()
+      }
+      writer.destroy()
+      await clock.tickAsync(4999)
+      sinon.assert.calledOnce(request)
+      await clock.tickAsync(1)
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(writer.droppedEventCount, 1000)
+      assert.strictEqual(clock.countTimers(), 0)
+      await clock.tickAsync(5000000)
+      sinon.assert.calledOnce(request)
+    })
+
+    it('stops launching queued requests at the deadline while allowing the in-flight request to finish', async () => {
+      request.resetBehavior()
+      request.callsFake((payload, options, callback) => {
+        setTimeout(() => callback(null, '', 200), 3000)
+      })
+      for (let i = 0; i < 3; i++) {
+        writer.append(event(i))
+        writer.flush()
+      }
+      writer.destroy()
+      await clock.tickAsync(5000)
+      sinon.assert.calledTwice(request)
+      assert.strictEqual(writer.droppedEventCount, 1)
+      await clock.tickAsync(2000)
+      sinon.assert.calledTwice(request)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
     it('settles queued batches when an in-flight request discovers unavailability during shutdown', async () => {
       request.resetBehavior()
       writer.setEnabled(true, { url: config.url, basePath: '/old', onUnavailable: () => writer.setEnabled(false) })
