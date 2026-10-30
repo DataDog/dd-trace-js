@@ -383,10 +383,10 @@ For optional speaker activity colors, open the ElevenLabs agent's **Advanced →
 changing your agent configuration or subscriptions. Without VAD events, audio playback and phase-based colors continue
 to work. VAD estimates change activity metadata only, never the captured audio or interruption cuts.
 
-The tested SDK version filters agent audio whose event ID is less than or equal to its last interruption ID.
-If the service reuses that boundary ID for a new response, the SDK drops its audio. The tracer observes the SDK's
-behavior and cannot restore audio that the application did not receive. Full playback after barge-in depends on
-resolving this SDK limitation.
+Audio capture follows delivery through the SDK's output interface. When the SDK delivers a replacement response
+at the interruption ID, the tracer assigns its audio to that response and rejects older stale audio. The tested
+2.75.0 SDK artifact instead drops audio at that boundary; full playback requires the upstream correction. Tests
+also cover the assumed corrected comparison, without changing the SDK's behavior in customer applications.
 
 Configure the integration with `tracer.use('elevenlabs', { llmobs: false })` to disable LLM Observability for it.
 

@@ -52,7 +52,7 @@ describe('integrations', () => {
   describe('elevenlabs', () => {
     const { getEvents } = useLlmObs({ plugin: 'elevenlabs', tracerConfigOptions: {} })
     withVersions('elevenlabs', '@elevenlabs/elevenlabs-js', '>=2.75.0 <3', version => {
-      let Conversation, ClientTools, clock, conversation, socket, audio, tools
+      let Conversation, ClientTools, clock, conversation, socket, audio, tools, outputSpy
 
       beforeEach(() => {
         clock = sinon.useFakeTimers({ now: 1_000_000, toFake: ['Date'] })
@@ -61,10 +61,11 @@ describe('integrations', () => {
         Conversation = sdk.Conversation
         ClientTools = sdk.ClientTools
         tools = new ClientTools()
+        outputSpy = sinon.spy()
         audio = {
           start: sinon.spy(callback => { audio.input = callback }),
           stop: sinon.spy(),
-          output: sinon.spy(),
+          output: outputSpy,
           interrupt: sinon.spy(),
         }
         socket = new Socket()
@@ -221,7 +222,7 @@ describe('integrations', () => {
           assert.equal(llms[1].meta.output.messages[0].audio_parts, undefined)
           assert.equal(llms[1].meta.metadata.output_audio_omitted_reason, 'sdk_interruption_filter')
           assert.equal(llms[2].meta.input.messages[0].content, 'Later question')
-          assert.equal(audio.output.callCount, 0)
+          assert.equal(outputSpy.callCount, 0)
         })
       }
 
@@ -591,6 +592,42 @@ describe('integrations', () => {
         assert.equal(dc.channel('dd-trace:elevenlabs:audio').hasSubscribers, true)
       })
 
+      it('annotates deferred spans, speech phases, and async tools before finish after re-enable', async () => {
+        const tracer = require('../../../../../..')
+        tracer.use('elevenlabs', { llmobs: false })
+        tracer.use('elevenlabs', {})
+        await start()
+        tools.register('reenabled', async () => 'tool output')
+        input(20)
+        response()
+        output(1, 20)
+        event('client_tool_call', 'client_tool_call', 1,
+          { tool_name: 'reenabled', tool_call_id: 'reenabled-call', parameters: {} })
+        for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+        close()
+        const { llmobsSpans } = await getEvents(5)
+        const llm = byName(llmobsSpans, 'elevenlabs response')
+        wav(llm.meta.input.messages[0].audio_parts[0], 16000, pcm(20))
+        wav(llm.meta.output.messages[0].audio_parts[0], 24000, pcm(20, 24000, 9))
+        assert.equal(byName(llmobsSpans, 'elevenlabs audio turn').meta.output.value, 'Hello')
+        assert.equal(byName(llmobsSpans, 'reenabled').meta.output.value, 'tool output')
+        for (const span of llmobsSpans) assert.equal(span.meta.metadata.ttfa_eligible, false)
+      })
+
+      it('observes a replaced output handler without changing its receiver or return value', async () => {
+        await start()
+        const replacement = sinon.stub().returns('output accepted')
+        audio.output = replacement
+        output(1, 20)
+        close()
+        const { llmobsSpans } = await getEvents(3)
+        assert.equal(replacement.callCount, 1)
+        assert.equal(replacement.firstCall.thisValue, audio)
+        wav(byName(llmobsSpans, 'elevenlabs response').meta.output.messages[0].audio_parts[0],
+          24000, pcm(20, 24000, 9))
+        assert.equal(audio.output(Buffer.alloc(0)), 'output accepted')
+      })
+
       it('preserves callbacks, selected events, sends, and audio interfaces', async () => {
         const callback = sinon.spy()
         conversation.callbackMessageReceived = callback
@@ -599,7 +636,7 @@ describe('integrations', () => {
         await getEvents(4)
         assert.equal(callback.callCount, 3)
         assert.equal(audio.start.callCount, 1)
-        assert.equal(audio.output.callCount, 1)
+        assert.equal(outputSpy.callCount, 1)
         assert.deepEqual(socket.sent[0], {
           type: 'conversation_initiation_client_data',
           custom_llm_extra_body: {},

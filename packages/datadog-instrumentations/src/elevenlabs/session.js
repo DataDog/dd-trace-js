@@ -163,8 +163,9 @@ class Session {
   /**
    * @param {object} event
    * @param {number} now
+   * @param {boolean} [audioAccepted] Whether the SDK delivered this audio to its output interface.
    */
-  receive (event, now) {
+  receive (event, now, audioAccepted = true) {
     if (this.closed || !event || typeof event !== 'object') return
     const kind = event.type
     if (kind === 'conversation_initiation_metadata') {
@@ -208,7 +209,7 @@ class Session {
     if (!data || typeof data !== 'object') return
     const id = eventId(data.event_id)
     if (id === undefined) return
-    if (kind === 'audio' && id <= this.lastInterrupt) {
+    if (kind === 'audio' && !audioAccepted) {
       if (id === this.lastInterrupt) {
         this.filteredAudioId = id
         const rejected = this.turns.get(id)
@@ -220,6 +221,7 @@ class Session {
       }
       return
     }
+    if (kind === 'audio' && id < this.lastInterrupt) return
     const lookupOnly = ['agent_response_complete', 'context_usage', 'agent_tool_response_full_payload'].includes(kind)
     const turn = lookupOnly ? this.turns.get(id) : this.turn(id, now)
     if (!turn) return

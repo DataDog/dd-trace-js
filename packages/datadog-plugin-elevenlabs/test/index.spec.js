@@ -38,8 +38,7 @@ withVersions('elevenlabs', '@elevenlabs/elevenlabs-js', '>=2.75.0 <3', version =
         assert.ok(spans.every(span => span.meta.component === 'elevenlabs'))
       })
       try {
-        await conversation.startSession()
-        const [socket] = await connection
+        const [, [socket]] = await Promise.all([conversation.startSession(), connection])
         const received = once(conversation, 'conversation_started')
         socket.send(JSON.stringify({
           type: 'conversation_initiation_metadata',
@@ -70,6 +69,30 @@ withVersions('elevenlabs', '@elevenlabs/elevenlabs-js', '>=2.75.0 <3', version =
         await new Promise(resolve => server.close(resolve))
       }
     })
+
+    for (const audioFirst of [false, true]) {
+      it(`preserves full playback with the assumed SDK correction (audioFirst=${audioFirst})`, async () => {
+        const fakeAgent = await new FakeAgent().start()
+        const message = fakeAgent.assertMessageReceived(({ payload }) => {
+          assert.ok(Array.isArray(payload))
+          assert.ok(payload.flat().some(span => span.name === 'elevenlabs.request'))
+        })
+        const proc = spawnPluginIntegrationTestProcAndExpectExit(process.cwd(),
+          'packages/datadog-plugin-elevenlabs/test/fixtures/corrected-sdk.cjs', fakeAgent.port, {
+            SDK_CONVERSATION_PATH: sdkModule.getPath(
+              '@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation'),
+            AUDIO_FIRST: String(audioFirst),
+            DD_LLMOBS_ENABLED: 'true',
+            DD_LLMOBS_ML_APP: 'elevenlabs-corrected-sdk-test',
+            DD_LLMOBS_AGENTLESS_ENABLED: 'false',
+            _DD_LLMOBS_FLUSH_INTERVAL: '0',
+            NODE_OPTIONS: `--import=${join(process.cwd(), 'initialize.mjs')}`,
+          })
+        try {
+          await Promise.all([proc, message])
+        } finally { await fakeAgent.stop() }
+      })
+    }
 
     for (const format of ['cjs', 'esm']) {
       it(`loads the actual SDK through the ${format} process entrypoint`, async () => {

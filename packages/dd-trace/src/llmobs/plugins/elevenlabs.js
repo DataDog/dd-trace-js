@@ -26,9 +26,7 @@ class ElevenLabsLLMObsPlugin extends LLMObsPlugin {
       const previous = scope.runInContext ?? (fn => fn())
       scope.runInContext = fn => previous(() => storage.run(store, fn))
     })
-    this.addSub('apm:elevenlabs:finish', /** @param {object} ctx */ ctx => {
-      if (!ctx.finished) this.setLLMObsTags(ctx)
-    })
+    this.addSub('apm:elevenlabs:annotate', ctx => this.setLLMObsTags(ctx))
   }
 
   /** @param {object} ctx */
@@ -45,14 +43,8 @@ class ElevenLabsLLMObsPlugin extends LLMObsPlugin {
     return options
   }
 
-  /** @param {object} ctx */
-  end (ctx) {
-    if (!ctx.deferred && !ctx.promise) this.setLLMObsTags(ctx)
-    super.end(ctx)
-  }
-
-  /** @param {object} ctx */
-  asyncEnd (ctx) { if (!ctx.finished) this.setLLMObsTags(ctx) }
+  // Annotation is owned by the APM pre-finish signal; the base asyncEnd would tag after serialization.
+  asyncEnd () {}
 
   /** @param {object} ctx */
   setLLMObsTags (ctx) {

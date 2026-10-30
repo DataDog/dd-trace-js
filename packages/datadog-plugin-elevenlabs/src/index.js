@@ -1,9 +1,13 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const { storage } = require('../../datadog-core')
 const ElevenLabsLLMObsPlugin = require('../../dd-trace/src/llmobs/plugins/elevenlabs')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+
+const annotate = channel('apm:elevenlabs:annotate')
 
 /** @typedef {import('../../datadog-instrumentations/src/elevenlabs/session').Scope} Scope */
 /** @typedef {import('../../datadog-core/src/storage').Store<unknown>} Store */
@@ -46,6 +50,9 @@ class ElevenLabsTracingPlugin extends TracingPlugin {
   finish (ctx) {
     if (ctx.finished) return
     const span = ctx.currentStore?.span
+    // Configuration changes can reorder subscribers. Keep deferred spans, speech phases, and
+    // asynchronous tools annotated before serialization through one explicit completion owner.
+    annotate.publish(ctx)
     if (ctx.error) this.addError(ctx.error, span)
     if (ctx.turn.failed && ['elevenlabs audio turn', 'elevenlabs response'].includes(ctx.name)) {
       span?.setTag('error', 1)

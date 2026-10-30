@@ -13,6 +13,7 @@ const audioCh = dc.channel('dd-trace:elevenlabs:audio')
 const sessions = new WeakMap()
 const tools = new WeakMap()
 const emitters = new WeakSet()
+const audioInterfaces = new WeakMap()
 const live = new Set()
 const collected = new FinalizationRegistry(reference => live.delete(reference))
 let handling
@@ -122,6 +123,22 @@ function create (conversation) {
   return session
 }
 
+/** @param {{output: (audio: Buffer) => unknown}} audio */
+function attachAudio (audio) {
+  if (!audio || audioInterfaces.get(audio) === audio.output) return
+  // Customer audio implementations are runtime objects outside the SDK's source. Observing their
+  // output entrypoint follows both the released and corrected SDK without duplicating its filter.
+  shimmer.wrap(audio, 'output', output => function () {
+    const reception = handling?.reception
+    if (reception && !reception.accepted) {
+      reception.accepted = true
+      observe(() => reception.session.receive(reception.event, reception.receivedAt))
+    }
+    return output.apply(this, arguments)
+  })
+  audioInterfaces.set(audio, audio.output)
+}
+
 /**
  * @param {Session} session
  * @param {object} socket
@@ -163,11 +180,25 @@ channel('_handleMessage').subscribe({
     observe(() => {
       const session = sessions.get(ctx.self)
       if (!session || ctx.self.shouldStop) return
-      const turn = session.receive(ctx.arguments[0], Date.now())
+      const event = ctx.arguments[0]
+      const receivedAt = Date.now()
+      if (event?.type === 'audio') {
+        attachAudio(ctx.self.audioInterface)
+        ctx.reception = { session, event, receivedAt, accepted: false }
+        handling = { reception: ctx.reception }
+        return
+      }
+      const turn = session.receive(event, receivedAt)
       handling = turn ? { session, turn } : undefined
     })
   },
-  end (ctx) { handling = ctx.previous },
+  end (ctx) {
+    const reception = ctx.reception
+    if (reception && !reception.accepted) {
+      observe(() => reception.session.receive(reception.event, reception.receivedAt, false))
+    }
+    handling = ctx.previous
+  },
 })
 channel('endSession').end.subscribe(ctx => {
   observe(() => sessions.get(ctx.self)?.finalize(Boolean(ctx.error)))
@@ -182,7 +213,7 @@ channel('_onWebSocketClose').start.subscribe(ctx => {
   observe(() => sessions.get(ctx.self)?.finalize(!ctx.self.shouldStop && ![1000, 1001, 1005].includes(code)))
 })
 channel('executeToolAsync').start.subscribe(ctx => {
-  if (handling && ctx.arguments[1] && typeof ctx.arguments[1] === 'object') {
+  if (handling?.turn && ctx.arguments[1] && typeof ctx.arguments[1] === 'object') {
     tools.set(ctx.arguments[1], handling)
   }
 })
