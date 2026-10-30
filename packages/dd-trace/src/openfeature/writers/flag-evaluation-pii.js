@@ -114,7 +114,7 @@ function flagEvaluationFeatures (features) {
   for (const key of Object.keys(features).sort()) {
     const value = features[key]
     if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue
-    normalized ??= {}
+    normalized ??= /** @type {Record<string, string|number|boolean>} */ (Object.create(null))
     normalized[key] = value
   }
   return normalized

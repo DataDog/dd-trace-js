@@ -83,7 +83,7 @@ function sortedFeatures (features) {
   for (const key of Object.keys(features).sort()) {
     const value = features[key]
     if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue
-    sorted ??= {}
+    sorted ??= /** @type {Record<string, string|number|boolean>} */ (Object.create(null))
     sorted[key] = value
   }
   return sorted

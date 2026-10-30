@@ -62,6 +62,19 @@ describe('flag evaluation count features', () => {
     assert.match(result[0].targeting_key, /^sha256_/)
   })
 
+  it('splits buckets on a feature named __proto__', () => {
+    const result = rows([
+      event(JSON.parse('{"__proto__":"a"}')),
+      event(JSON.parse('{"__proto__":"a"}')),
+      event(JSON.parse('{"__proto__":"b"}')),
+    ])
+
+    assert.strictEqual(result.length, 2)
+    const counts = new Map(result.map(row => [Object.getOwnPropertyDescriptor(row.features, '__proto__')?.value,
+      row.evaluation_count]))
+    assert.deepStrictEqual([...counts].sort(), [['a', 2], ['b', 1]])
+  })
+
   it('adds no features field when the split has none', () => {
     const encoded = JSON.stringify(rows([event()])[0])
 

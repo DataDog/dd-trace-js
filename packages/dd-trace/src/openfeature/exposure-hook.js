@@ -51,16 +51,31 @@ class ExposureHook {
   finally (hookContext, evaluationDetails) {
     if (evaluationDetails == null) return
     try {
-      this.#callback(new ExposureEvaluation(hookContext, evaluationDetails))
+      const result = /** @type {unknown} */ (this.#callback(new ExposureEvaluation(hookContext, evaluationDetails)))
+      // An async callback reports its failure through the returned promise, which the catch below never sees.
+      if (isThenable(result)) result.then(undefined, error => this.#logFailure(error))
     } catch (error) {
-      if (this.#warned) {
-        log.debug('Exposure callback failed', error)
-      } else {
-        this.#warned = true
-        log.warn('Exposure callback failed; later failures are logged at debug level', error)
-      }
+      this.#logFailure(error)
     }
   }
+
+  /** @param {unknown} error */
+  #logFailure (error) {
+    if (this.#warned) {
+      log.debug('Exposure callback failed', error)
+    } else {
+      this.#warned = true
+      log.warn('Exposure callback failed; later failures are logged at debug level', error)
+    }
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is PromiseLike<unknown>}
+ */
+function isThenable (value) {
+  return typeof (/** @type {{ then?: unknown } | null | undefined} */ (value))?.then === 'function'
 }
 
 /** A completed evaluation and its Datadog exposure decision. */
@@ -148,7 +163,7 @@ class ExposureEvaluation {
    */
   getFeatures () {
     const metadata = this.#details.flagMetadata
-    const features = {}
+    const features = Object.create(null)
     if (metadata != null) {
       for (const [key, value] of Object.entries(metadata)) {
         if (!key.startsWith(METADATA_FEATURE_PREFIX)) continue

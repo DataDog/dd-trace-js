@@ -310,11 +310,19 @@ describe('OpenFeature Exposures Writer', () => {
         features: { 'holdout.key': '06ad', 'holdout.should_include_in_holdout_analysis': false, ratio: 0.5 },
       }])
 
-      assert.deepStrictEqual(payload.exposures[0].features, {
+      assert.deepStrictEqual({ ...payload.exposures[0].features }, {
         'holdout.key': '06ad',
         'holdout.should_include_in_holdout_analysis': false,
         ratio: 0.5,
       })
+    })
+
+    it('should keep a feature named __proto__ on the event', () => {
+      const payload = writer.makePayload([{ ...exposureEvent, features: JSON.parse('{"__proto__":"proto-value"}') }])
+
+      const features = payload.exposures[0].features
+      assert.strictEqual(Object.getOwnPropertyDescriptor(features, '__proto__')?.value, 'proto-value')
+      assert.ok(JSON.stringify(payload).includes('"features":{"__proto__":"proto-value"}'))
     })
 
     it('should omit features entirely when none are valid', () => {

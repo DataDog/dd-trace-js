@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const { OpenFeature } = require('@openfeature/server-sdk')
 const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
@@ -48,6 +50,7 @@ const configuration = {
 }
 
 describe('ExposureHook', () => {
+  let ExposureEvaluation
   let ExposureHook
   let log
   let exposureChannel
@@ -55,7 +58,7 @@ describe('ExposureHook', () => {
 
   beforeEach(async () => {
     log = { debug: sinon.spy(), info: sinon.spy(), warn: sinon.spy(), error: sinon.spy() }
-    ;({ ExposureHook } = proxyquire('../../src/openfeature/exposure-hook', {
+    ;({ ExposureEvaluation, ExposureHook } = proxyquire('../../src/openfeature/exposure-hook', {
       '../log': log,
     }))
 
@@ -109,7 +112,7 @@ describe('ExposureHook', () => {
 
     await client.getBooleanDetails('holdout-flag', true, { targetingKey: 'subject-1' })
 
-    assert.deepStrictEqual(evaluations[0].getFeatures(), {
+    assert.deepStrictEqual({ ...evaluations[0].getFeatures() }, {
       'holdout.key': '06ad',
       'holdout.assignment_group': 'status_quo',
       'holdout.should_include_in_holdout_analysis': false,
@@ -128,7 +131,7 @@ describe('ExposureHook', () => {
     assert.ok(!evaluations[0].isExposure())
     assert.ok(!evaluations[0].isCacheHit())
     assert.ok(!evaluations[0].shouldSend())
-    assert.deepStrictEqual(evaluations[0].getFeatures(), {})
+    assert.deepStrictEqual({ ...evaluations[0].getFeatures() }, {})
     assert.strictEqual(exposureChannel.publish.callCount, 0)
 
     const wrongType = await client.getStringDetails('holdout-flag', 'default', { targetingKey: 'subject-1' })
@@ -156,6 +159,47 @@ describe('ExposureHook', () => {
     sinon.assert.calledOnce(log.warn)
     sinon.assert.calledOnce(log.debug)
     sinon.assert.calledWith(log.warn, sinon.match('Exposure callback failed'), sinon.match.instanceOf(Error))
+  })
+
+  it('logs a rejected promise from an async callback instead of leaving it unhandled', async () => {
+    const unhandled = []
+    const onUnhandled = reason => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const asyncHook = new ExposureHook(async () => { throw new Error('async callback failed') })
+      await OpenFeature.setProviderAndWait(provider)
+      const client = OpenFeature.getClient()
+      client.addHooks(asyncHook)
+
+      const result = await client.getBooleanDetails('holdout-flag', true, { targetingKey: 'subject-1' })
+      await new Promise(resolve => setImmediate(resolve))
+
+      assert.strictEqual(result.errorCode, undefined)
+      sinon.assert.calledOnce(log.warn)
+      sinon.assert.calledWith(log.warn, sinon.match('Exposure callback failed'), sinon.match.instanceOf(Error))
+      assert.deepStrictEqual(unhandled, [])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('keeps a feature named __proto__', () => {
+    const evaluation = new ExposureEvaluation({ flagKey: 'flag' }, {
+      flagKey: 'flag',
+      flagMetadata: { '__dd_feature.__proto__': 'proto-value', '__dd_feature.holdout.key': '06ad' },
+    })
+
+    const features = evaluation.getFeatures()
+    assert.deepStrictEqual(Object.keys(features).sort(), ['__proto__', 'holdout.key'])
+    assert.strictEqual(Object.getOwnPropertyDescriptor(features, '__proto__')?.value, 'proto-value')
+  })
+
+  it('ships every public openfeature entrypoint in the npm package', () => {
+    const repoRoot = path.join(__dirname, '..', '..', '..', '..')
+    const { files } = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))
+    for (const name of fs.readdirSync(path.join(repoRoot, 'openfeature'))) {
+      assert.ok(files.includes(`openfeature/${name}`), `package.json#files must include openfeature/${name}`)
+    }
   })
 
   it('requires a callback function', () => {

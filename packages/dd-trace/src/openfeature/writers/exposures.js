@@ -253,7 +253,7 @@ function exposureEventFeatures (features) {
   let formatted
   for (const [key, value] of Object.entries(features)) {
     if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue
-    formatted ??= {}
+    formatted ??= Object.create(null)
     formatted[key] = value
   }
   return formatted

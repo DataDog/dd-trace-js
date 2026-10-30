@@ -25,7 +25,7 @@ function evaluationFeatures (metadata) {
   for (const [key, value] of Object.entries(metadata)) {
     if (!key.startsWith(EVALUATION_FEATURE_PREFIX)) continue
     if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue
-    features ??= {}
+    features ??= Object.create(null)
     features[key.slice(EVALUATION_FEATURE_PREFIX.length)] = value
   }
   return features

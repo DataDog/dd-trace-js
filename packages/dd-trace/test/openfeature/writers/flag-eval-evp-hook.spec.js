@@ -123,7 +123,7 @@ describe('FlagEvalEVPHook', () => {
         '__dd_evaluation_feature.holdout.ratio': 0.5,
       }))
 
-      assert.deepStrictEqual(writer.enqueue.firstCall.args[0].features, {
+      assert.deepStrictEqual({ ...writer.enqueue.firstCall.args[0].features }, {
         'holdout.key': '06ad',
         'holdout.should_include_in_holdout_analysis': false,
         'holdout.ratio': 0.5,
@@ -137,7 +137,7 @@ describe('FlagEvalEVPHook', () => {
         '__dd_evaluation_feature.holdout.key': '06ad',
       }))
 
-      assert.deepStrictEqual(writer.enqueue.firstCall.args[0].features, { 'holdout.key': '06ad' })
+      assert.deepStrictEqual({ ...writer.enqueue.firstCall.args[0].features }, { 'holdout.key': '06ad' })
       assert.strictEqual(writer.enqueue.firstCall.args[0].attrs, undefined)
     })
 
@@ -151,6 +151,17 @@ describe('FlagEvalEVPHook', () => {
       assert.strictEqual(writer.enqueue.firstCall.args[0]['__dd_evaluation_feature.holdout.key'], undefined)
     })
 
+    it('keeps an EVALUATION feature named __proto__', () => {
+      enable()
+      hook.finally({ flagKey: 'flag', context: {} }, details(true, {
+        __dd_has_evaluation_features: true,
+        '__dd_evaluation_feature.__proto__': 'proto-value',
+      }))
+
+      const { features } = writer.enqueue.firstCall.args[0]
+      assert.strictEqual(Object.getOwnPropertyDescriptor(features, '__proto__')?.value, 'proto-value')
+    })
+
     it('drops features without a scalar value', () => {
       enable()
       hook.finally({ flagKey: 'flag', context: {} }, details(true, {
@@ -160,7 +171,7 @@ describe('FlagEvalEVPHook', () => {
         '__dd_evaluation_feature.listed': ['value'],
       }))
 
-      assert.deepStrictEqual(writer.enqueue.firstCall.args[0].features, { valid: 'yes' })
+      assert.deepStrictEqual({ ...writer.enqueue.firstCall.args[0].features }, { valid: 'yes' })
     })
   })
 
