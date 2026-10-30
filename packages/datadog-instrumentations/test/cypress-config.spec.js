@@ -722,3 +722,119 @@ describe('Cypress initialization and setup handoff ordering', () => {
     }
   }
 })
+
+describe('Cypress nested returned retry getters', () => {
+  for (const asynchronous of [false, true]) {
+    for (const experimental of [false, true]) {
+      it(`retains only recursively materialized overrides (async=${asynchronous}, experimental=${experimental})`,
+        async () => {
+          const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+          const plugin = new CypressPlugin()
+          const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-nested-getter-'))
+          const original = Object.getOwnPropertyDescriptor(process, 'send')
+          let wire
+          process.send = message => { wire = JSON.parse(JSON.stringify(message)).args[0].setupConfig }
+          const native = experimental
+            ? {
+                runMode: true,
+                openMode: false,
+                experimentalStrategy: 'detect-flake-but-always-fail',
+                experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+              }
+            : { runMode: 2, openMode: 0 }
+          const config = { version: '16.2.0', projectRoot: project, supportFile: false, retries: native }
+          const tracer = {
+            _tracer: {
+              _config: { isServiceUserProvided: false },
+              _exporter: {
+                getLibraryConfiguration: (_config, callback) => callback(null, {
+                  isFlakyTestRetriesEnabled: true, flakyTestRetriesCount: 4,
+                }),
+              },
+            },
+          }
+          const handlers = {}
+          try {
+            await plugin.init(tracer, config)
+            let reads = 0
+            const retryOverride = experimental
+              ? { experimentalOptions: { get maxRetries () { return ++reads } } }
+              : { get runMode () { return ++reads } }
+            const returned = { retries: retryOverride }
+            let ignoredSymbolReads = 0
+            Object.defineProperty(returned, Symbol('ignored config field'), {
+              enumerable: true,
+              get () { ignoredSymbolReads++; return 'ignored' },
+            })
+            const wrapped = wrapConfig({
+              e2e: {
+                setupNodeEvents: () => asynchronous ? Promise.resolve(returned) : returned,
+              },
+            })
+            const result = await wrapped.e2e.setupNodeEvents((event, handler) => { handlers[event] = handler }, config)
+            process.send({ event: 'setupTestingType:reply', args: [{ setupConfig: result }] })
+            assert.strictEqual(ignoredSymbolReads, 0)
+            assert.strictEqual(reads, 1)
+            assert.deepStrictEqual(plugin.originalCypressRetries,
+              experimental
+                ? { ...native, experimentalOptions: { maxRetries: 1, stopIfAnyPassed: false } }
+                : { runMode: 1, openMode: 0 })
+            assert.strictEqual(experimental ? wire.retries.experimentalOptions.maxRetries : wire.retries.runMode, 1)
+          } finally {
+            plugin.retryConfigObserver?.stop(false)
+            plugin.stopSetupHandoff?.()
+            if (original) Object.defineProperty(process, 'send', original)
+            else delete process.send
+            await handlers['after:run']?.({})
+            fs.rmSync(project, { recursive: true, force: true })
+          }
+        })
+    }
+  }
+})
+
+describe('Cypress saved options across Node retry roots', () => {
+  for (const define of [false, true]) {
+    for (const kind of ['saved', 'detached', 'fresh']) {
+      it(`preserves child identity at handoff (define=${define}, kind=${kind})`, async () => {
+        const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+        const plugin = new CypressPlugin()
+        const config = {
+          version: '16.2.0',
+          retries: {
+            runMode: true,
+            openMode: false,
+            experimentalStrategy: 'detect-flake-but-always-fail',
+            experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+          },
+        }
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: {
+              getLibraryConfiguration: (_config, callback) => callback(null, {
+                isFlakyTestRetriesEnabled: true, flakyTestRetriesCount: 4,
+              }),
+            },
+          },
+        }
+        try {
+          const result = await plugin.init(tracer, config)
+          const saved = result.retries.experimentalOptions
+          assert.strictEqual(saved.maxRetries, 4)
+          result.retries = { ...result.retries, experimentalOptions: { maxRetries: 1, stopIfAnyPassed: false } }
+          if (kind === 'detached') saved.maxRetries = 3
+          const selected = kind === 'fresh' ? { maxRetries: 4, stopIfAnyPassed: false } : saved
+          if (define) Object.defineProperty(result.retries, 'experimentalOptions', { value: selected })
+          else result.retries.experimentalOptions = selected
+          plugin.retryConfigObserver.stop()
+          assert.strictEqual(plugin.originalCypressRetries.experimentalOptions.maxRetries,
+            kind === 'saved' ? 2 : kind === 'detached' ? 3 : 4)
+        } finally {
+          plugin.retryConfigObserver?.stop(false)
+          plugin.stopSetupHandoff?.()
+        }
+      })
+    }
+  }
+})

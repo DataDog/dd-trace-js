@@ -1837,6 +1837,40 @@ moduleTypes.forEach(({
       }
     })
 
+    for (const key of ['retries', 'custom']) {
+      it(`deletes browser ${key} accessors without evaluating them`, () => {
+        for (const instrumented of [false, true]) {
+          const state = { retries: 0 }
+          const root = { [Symbol.for('dd-trace.cypress.defer-lifecycle')]: true }
+          const context = {
+            Cypress: {
+              _: { isEqual, cloneDeep },
+              config: name => name === undefined ? state : state[name],
+              state () {},
+              mocha: { getRootSuite: () => root },
+            },
+          }
+          if (instrumented) {
+            runInNewContext(fs.readFileSync(
+              path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+            ), context)
+          }
+          let reads = 0
+          const config = context.Cypress.config()
+          Object.defineProperty(config, key, {
+            configurable: true,
+            get () {
+              reads++
+              throw new Error('deletion must not evaluate the getter')
+            },
+          })
+          assert.strictEqual(Reflect.deleteProperty(config, key), true)
+          assert.strictEqual(reads, 0)
+          assert.strictEqual(Object.getOwnPropertyDescriptor(state, key), undefined)
+        }
+      })
+    }
+
     for (const stage of ['complete', 'restoring', 'pending', 'suite', 'explicit-root']) {
       it(`retains saved browser retry object provenance at ${stage} stage`, async () => {
         const localRetries = { runMode: 2, openMode: 0 }
@@ -1906,6 +1940,8 @@ moduleTypes.forEach(({
       'same-options', 'locked-options', 'assigned-options', 'raw-locked-options',
       'pre-suite-options', 'queued-detached-options', 'descriptor-root', 'descriptor-options',
       'saved-options', 'saved-descriptor-options', 'saved-detached-options', 'saved-checkpoint-options',
+      'cross-root-options', 'cross-root-descriptor-options', 'cross-root-detached-options',
+      'cross-root-queued-options',
       'saved-equal-options',
       'saved-queued-options', 'saved-initial-options',
     ]) {
@@ -1965,6 +2001,21 @@ moduleTypes.forEach(({
         runInNewContext(fs.readFileSync(
           path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
         ), context)
+        if (mode.startsWith('cross-root-')) {
+          if (mode !== 'cross-root-queued-options') await hooks.before()
+          const config = context.Cypress.config
+          const saved = config('retries').experimentalOptions
+          config().retries = { ...native, experimentalOptions: { maxRetries: 1, stopIfAnyPassed: false } }
+          const replacement = config('retries')
+          if (mode === 'cross-root-detached-options') saved.maxRetries = 3
+          if (mode === 'cross-root-descriptor-options') {
+            Object.defineProperty(replacement, 'experimentalOptions', { value: saved })
+          } else replacement.experimentalOptions = saved
+          if (mode === 'cross-root-queued-options') await hooks.before()
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, mode === 'cross-root-detached-options' ? 3 : 2)
+          return
+        }
         if (['saved-queued-options', 'saved-initial-options'].includes(mode)) {
           const retries = context.Cypress.config('retries')
           const saved = retries.experimentalOptions

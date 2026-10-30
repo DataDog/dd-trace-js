@@ -69,6 +69,17 @@ if (mode.startsWith('experimental-native-saved-options')) {
   if (mode.endsWith('-descriptor')) Object.defineProperty(retries, 'experimentalOptions', { value: saved })
   else retries.experimentalOptions = saved
 }
+if (mode.startsWith('experimental-native-cross-root')) {
+  const saved = Cypress.config('retries').experimentalOptions
+  Cypress.config().retries = {
+    runMode: true,
+    openMode: false,
+    experimentalStrategy: 'detect-flake-but-always-fail',
+    experimentalOptions: { maxRetries: 1, stopIfAnyPassed: false },
+  }
+  if (mode.endsWith('-detached')) saved.maxRetries = 3
+  Cypress.config('retries').experimentalOptions = saved
+}
 if (mode === 'experimental-native-checkpoint') {
   const retries = Cypress.config('retries')
   const proxied = retries.experimentalOptions
