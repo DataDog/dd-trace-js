@@ -172,6 +172,8 @@
     "openfeature.js",
     "openfeature/rules-based.js",
     "openfeature/rules-based.d.ts",
+    "test-optimization.js",
+    "test-optimization.d.ts",
     "packages/*/index.js",
     "packages/*/index.electron.js",
     "packages/*/lib/**/*",
