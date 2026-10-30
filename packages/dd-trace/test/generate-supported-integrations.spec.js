@@ -1,55 +1,67 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { execFileSync } = require('node:child_process')
-const path = require('node:path')
 
-const scriptPath = path.join(__dirname, '../../../scripts/generate-supported-integrations.js')
-const versions = require('./plugins/versions/package.json').dependencies
+const { generateSupportedIntegrations } = require('../../../scripts/generate-supported-integrations')
+const latestVersions = require('./plugins/versions/package.json').dependencies
 
 describe('generate supported integrations', () => {
-  it('derives hookless integration ranges from rewriter descriptors', () => {
-    const stdout = execFileSync(process.execPath, ['--eval', `
-      global.fetch = async () => ({ ok: false })
-      const { generateSupportedIntegrations } = require(${JSON.stringify(scriptPath)})
-      generateSupportedIntegrations().then(({ rows }) => {
-        const names = new Set([
-          '@azure/cosmos',
-          '@langchain/core',
-          '@langchain/langgraph',
-          'bullmq',
-          'mercurius',
-        ])
-        console.log(JSON.stringify(rows.filter(row => names.has(row.dependency))))
-      })
-    `], { encoding: 'utf8' })
+  it('derives hookless integration ranges from rewriter descriptors', async () => {
+    const latest = dependency => latestVersions[dependency]
+    const packageVersions = {
+      '@azure/cosmos': ['4.4.1', latest('@azure/cosmos')],
+      '@langchain/core': ['0.1.0', latest('@langchain/core')],
+      '@langchain/langgraph': ['1.1.2', latest('@langchain/langgraph')],
+      bullmq: ['5.66.0', latest('bullmq')],
+      mercurius: ['13.0.0', '14.0.0', '15.0.0', latest('mercurius')],
+    }
+    const plugins = new Map([
+      ['@azure/cosmos', 'azure-cosmos'],
+      ['@langchain/core', 'langchain'],
+      ['@langchain/langgraph', 'langgraph'],
+      ['bullmq', 'bullmq'],
+      ['mercurius', 'graphql'],
+    ])
 
-    assert.deepStrictEqual(JSON.parse(stdout), [
-      integration('@azure/cosmos', 'azure-cosmos', '4.4.1'),
-      integration('@langchain/core', 'langchain', '0.1.0'),
-      integration('@langchain/langgraph', 'langgraph', '1.1.2'),
-      integration('bullmq', 'bullmq', '5.66.0'),
-      integration('mercurius', 'graphql', '13.0.0'),
+    const { rows } = await generateSupportedIntegrations({
+      nodeProfiles: [{ key: '24', version: '24.16.0' }],
+      plugins,
+      getPackageVersions: async dependency => packageVersions[dependency],
+    })
+
+    assert.deepStrictEqual(rows, [
+      supportedIntegration('@azure/cosmos', 'azure-cosmos', '>=4.4.1', ['4.4.1', latest('@azure/cosmos')]),
+      supportedIntegration('bullmq', 'bullmq', '>=5.66.0', ['5.66.0', latest('bullmq')]),
+      supportedIntegration('mercurius', 'graphql', '>=13', [
+        '13.0.0', '14.0.0', '15.0.0', latest('mercurius'),
+      ]),
+      supportedIntegration('@langchain/core', 'langchain', '>=0.1', ['0.1.0', latest('@langchain/core')]),
+      supportedIntegration('@langchain/langgraph', 'langgraph', '>=1.1.2', [
+        '1.1.2', latest('@langchain/langgraph'),
+      ]),
     ])
   })
 
-  it('lists hookless umbrella package aliases next to their instrumented subpackages', () => {
-    const stdout = execFileSync(process.execPath, ['--eval', `
-      global.fetch = async () => ({ ok: false })
-      const { generateSupportedIntegrations } = require(${JSON.stringify(scriptPath)})
-      generateSupportedIntegrations().then(({ rows }) => {
-        console.log(JSON.stringify(rows.filter(row => row.dependency.startsWith('@supabase/'))))
-      })
-    `], { encoding: 'utf8' })
+  it('lists hookless umbrella package aliases next to their instrumented subpackages', async () => {
+    const nodeVersion = '24.16.0'
+    const dependencies = [
+      '@supabase/auth-js',
+      '@supabase/functions-js',
+      '@supabase/postgrest-js',
+      '@supabase/realtime-js',
+      '@supabase/storage-js',
+      '@supabase/supabase-js',
+    ]
+    const plugins = new Map(dependencies.slice(0, -1).map(dependency => [dependency, 'supabase']))
+    const { rows } = await generateSupportedIntegrations({
+      nodeProfiles: [{ key: '24', version: nodeVersion }],
+      plugins,
+      getPackageVersions: async dependency => ['2.112.2', latestVersions[dependency]],
+    })
 
-    assert.deepStrictEqual(JSON.parse(stdout), [
-      integration('@supabase/auth-js', 'supabase', '2.112.2'),
-      integration('@supabase/functions-js', 'supabase', '2.112.2'),
-      integration('@supabase/postgrest-js', 'supabase', '2.112.2'),
-      integration('@supabase/realtime-js', 'supabase', '2.112.2'),
-      integration('@supabase/storage-js', 'supabase', '2.112.2'),
-      integration('@supabase/supabase-js', 'supabase', '2.112.2'),
-    ])
+    assert.deepStrictEqual(rows, dependencies.map(dependency =>
+      supportedIntegration(dependency, 'supabase', '>=2.112.2', ['2.112.2', latestVersions[dependency]])
+    ))
   })
 
   it('keeps umbrella package aliases out of the runtime hooks and plugin registry', () => {
@@ -62,12 +74,23 @@ describe('generate supported integrations', () => {
   })
 })
 
-function integration (dependency, name, minimum) {
+/**
+ * @param {string} dependency
+ * @param {string} integration
+ * @param {string} supportedRange
+ * @param {string[]} testedVersions
+ * @returns {{ dependencyName: string, integrationName: string, autoInstrumented: boolean,
+ *   versions: Array<{ testedRuntimes: { node: string[] }, supportedRange: string, tested: string[] }> }}
+ */
+function supportedIntegration (dependency, integration, supportedRange, testedVersions) {
   return {
-    dependency,
-    integration: name,
-    minimum_tracer_supported: minimum,
-    max_tracer_supported: versions[dependency],
-    'auto-instrumented': 'True',
+    dependencyName: dependency,
+    integrationName: integration,
+    autoInstrumented: true,
+    versions: [{
+      testedRuntimes: { node: ['24.16.0'] },
+      supportedRange,
+      tested: testedVersions,
+    }],
   }
 }
