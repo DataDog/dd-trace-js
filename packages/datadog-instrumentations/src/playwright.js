@@ -2769,6 +2769,8 @@ function instrumentWorkerMainMethods (workerMain) {
     } else if (event === 'stepEnd') {
       const stepInfo = stepInfoByStepId[payload.stepId]
       delete stepInfoByStepId[payload.stepId]
+      if (!stepInfo) return dispatchEvent.apply(this, arguments)
+
       steps.push({
         testId: stepInfo.testId,
         startTime: new Date(stepInfo.startTime),
