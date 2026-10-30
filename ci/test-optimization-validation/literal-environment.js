@@ -12,7 +12,7 @@ const ASSIGNMENT_PATTERN =
  * @returns {{assignments: Array<{name: string, source: string, value: string}>, length: number}} parsed prefix
  */
 function parseLiteralEnvironmentPrefix (command) {
-  const source = String(command || '')
+  const source = String(command)
   const assignments = []
   let offset = 0
 

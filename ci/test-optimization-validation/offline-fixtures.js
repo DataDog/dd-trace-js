@@ -59,7 +59,7 @@ function createOfflineFixture ({
   skippableTests = [],
   testManagementTests = {},
 }) {
-  if (!/^[a-f0-9]{64}$/.test(approvedPlanSha256 || '')) {
+  if (!/^[a-f0-9]{64}$/.test(approvedPlanSha256)) {
     throw new Error('Offline validation requires an approved plan digest before creating fixtures.')
   }
   if (!OFFLINE_FIXTURE_NONCE_PATTERN.test(offlineFixtureNonce || '')) {

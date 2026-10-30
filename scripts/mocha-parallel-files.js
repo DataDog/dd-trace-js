@@ -780,7 +780,7 @@ async function main () {
   if (failed.length) {
     process.stdout.write('\n=== Failed files ===\n')
     for (const { file, code, signal } of failed) {
-      process.stdout.write(`- ${file} (exit=${code ?? 'null'} signal=${signal ?? 'null'})\n`)
+      process.stdout.write(`- ${file} (exit=${code} signal=${signal})\n`)
     }
     process.stdout.write(
       'Legend: [n] = global failure index across all files; n) = local failure index within a file.\n'

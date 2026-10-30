@@ -856,7 +856,7 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
 function warnWrongOtelSettings () {
   // This mostly works for non-aliased environment variables only.
   // TODO: Adjust this to work across all sources.
-  for (const [otelEnvVar, ddEnvVar, key] of [
+  for (const [otelEnvVar, ddEnvVar, key = otelEnvVar] of [
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL', 'logLevel'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
@@ -873,7 +873,7 @@ function warnWrongOtelSettings () {
   ]) {
     // eslint-disable-next-line eslint-rules/eslint-process-env
     const envs = process.env
-    const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key ?? otelEnvVar))
+    const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key))
     const otelEnvValue = envs[otelEnvVar]
     if (otelEnvValue) {
       if (envs[ddEnvVar]) {
