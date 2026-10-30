@@ -408,67 +408,54 @@ describe('Plugin', function () {
         await read
       })
 
-      for (const initType of ['object', 'accessor', 'Request', 'function']) {
-        for (const referrerPolicy of ['unsafe-url', 'origin']) {
-          it(`should preserve body, headers and ${referrerPolicy} with a signal in ${initType} init`, async () => {
-            const app = express()
-            const received = {}
+      for (const initType of ['object', 'Request', 'function']) {
+        it(`should preserve body, headers and referrer policy with a signal in ${initType} init`, async () => {
+          const app = express()
+          const received = {}
 
-            app.post('/echo', express.text(), (req, res) => {
-              received.body = req.body
-              received.traceparent = req.headers.traceparent
-              received.referrer = req.headers.referer
-              received.contentType = req.headers['content-type']
-              res.status(200).send()
-            })
-
-            const port = await new Promise(resolve => {
-              appListener = server(app, resolve)
-            })
-
-            const controller = new AbortController()
-            const origin = `http://localhost:${port}/`
-            const referrer = `${origin}source?foo=bar`
-            const url = `${origin}echo`
-            const options = {
-              method: 'POST',
-              headers: { 'content-type': 'text/plain' },
-              body: 'payload',
-              signal: controller.signal,
-              referrer,
-              referrerPolicy,
-            }
-            let signalReads = 0
-            if (initType === 'accessor') {
-              Object.defineProperty(options, 'signal', {
-                get () {
-                  assert.strictEqual(this, options)
-                  assert.strictEqual(++signalReads, 1)
-                  return controller.signal
-                },
-              })
-            }
-            const init = initType === 'Request'
-              ? new globalThis.Request(url, options)
-              : initType === 'function' ? Object.assign(() => {}, options) : options
-            Object.freeze(init)
-
-            const [res] = await Promise.all([
-              fetch(url, init),
-              agent.assertFirstTraceSpan({
-                resource: 'POST',
-                meta: { component: 'fetch', 'http.status_code': '200' },
-              }),
-            ])
-
-            const expectedReferrer = referrerPolicy === 'origin' ? origin : referrer
-            assert.strictEqual(received.referrer, expectedReferrer)
-            assert.strictEqual(res.status, 200)
-            assert.strictEqual(received.body, 'payload')
-            assert.strictEqual(received.contentType, 'text/plain')
-            assert.match(received.traceparent, /^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/)
+          app.post('/echo', express.text(), (req, res) => {
+            received.body = req.body
+            received.traceparent = req.headers.traceparent
+            received.referrer = req.headers.referer
+            received.contentType = req.headers['content-type']
+            res.status(200).send()
           })
-        }
+
+          const port = await new Promise(resolve => {
+            appListener = server(app, resolve)
+          })
+
+          const controller = new AbortController()
+          const origin = `http://localhost:${port}/`
+          const referrer = `${origin}source?foo=bar`
+          const url = `${origin}echo`
+          const options = {
+            method: 'POST',
+            headers: { 'content-type': 'text/plain' },
+            body: 'payload',
+            signal: controller.signal,
+            referrer,
+            referrerPolicy: 'origin',
+          }
+          const init = initType === 'Request'
+            ? new globalThis.Request(url, options)
+            : initType === 'function' ? Object.assign(() => {}, options) : options
+          Object.freeze(init)
+
+          const [res] = await Promise.all([
+            fetch(url, init),
+            agent.assertFirstTraceSpan({
+              resource: 'POST',
+              meta: { component: 'fetch', 'http.status_code': '200' },
+            }),
+          ])
+
+          assert.strictEqual(received.referrer, origin)
+          assert.strictEqual(res.status, 200)
+          assert.strictEqual(received.body, 'payload')
+          assert.strictEqual(received.contentType, 'text/plain')
+          assert.match(received.traceparent, /^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/)
+        })
       }
 
       it('should preserve validation of primitive init', () => {

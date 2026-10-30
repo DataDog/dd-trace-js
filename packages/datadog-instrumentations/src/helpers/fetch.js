@@ -17,23 +17,9 @@ exports.createWrapFetch = function createWrapFetch (Request, ch, onLoad) {
 
         return ch.tracePromise(() => fetch.call(this, input, init), ctx)
       }
-      let signal
-      if (init && (typeof init === 'object' || typeof init === 'function')) {
-        // Capture the native signal read without changing other getters or their receiver.
-        init = new Proxy(init, {
-          /**
-           * @param {import('undici').RequestInit} target
-           * @param {string | symbol} key
-           */
-          get (target, key) {
-            const value = Reflect.get(target, key, target)
-            if (key === 'signal') signal = value
-            return value
-          },
-        })
-      }
       const req = new Request(input, init)
       const ctx = { req }
+      const signal = init?.signal
 
       // The signal of `req` only weakly follows `init.signal` and is collected once `req` is unreachable, which
       // stops aborts from reaching the in-flight request. Passing it again lets `fetch` follow it directly.
