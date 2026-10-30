@@ -51,6 +51,13 @@ describe('GraphQL', () => {
       updateBlockFailureMetric: sinon.stub(),
     }
 
+    sinon.stub(waf, 'wafManager').value({
+      getWAFContext: sinon.stub().returns({
+        knownAddresses: new Set([addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]),
+        skipEmptyGraphqlResolvers: false,
+      }),
+    })
+
     graphql = proxyquire('../../src/appsec/graphql', {
       './blocking': blocking,
       './telemetry': telemetry,
@@ -150,6 +157,26 @@ describe('GraphQL', () => {
       sinon.assert.notCalled(message.createResolverInfo)
     })
 
+    it('should pass the request context policy to the resolver materializer', () => {
+      waf.wafManager.getWAFContext().skipEmptyGraphqlResolvers = true
+      const message = createResolverMessage(null)
+
+      startGraphqlResolver.publish(message)
+
+      sinon.assert.notCalled(waf.run)
+      sinon.assert.calledOnceWithExactly(message.createResolverInfo, message, true)
+    })
+
+    it('should not materialize resolver inputs when the context does not use GraphQL data', () => {
+      waf.wafManager.getWAFContext().knownAddresses.clear()
+      const message = createResolverMessage({ user: {} })
+
+      startGraphqlResolver.publish(message)
+
+      sinon.assert.notCalled(message.createResolverInfo)
+      sinon.assert.notCalled(waf.run)
+    })
+
     it('Should call waf if resolvers is well formatted', () => {
       const resolverInfo = {
         user: [{ id: '1234' }],
@@ -158,7 +185,7 @@ describe('GraphQL', () => {
       const message = createResolverMessage(resolverInfo)
       startGraphqlResolver.publish(message)
 
-      sinon.assert.calledOnceWithExactly(message.createResolverInfo, message)
+      sinon.assert.calledOnceWithExactly(message.createResolverInfo, message, false)
       sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
           [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo,

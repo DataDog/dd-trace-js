@@ -27,6 +27,16 @@ describe('WAFContextWrapper', () => {
     sinon.restore()
   })
 
+  describe('empty GraphQL resolver policy', () => {
+    for (const skipEmptyResolvers of [false, true]) {
+      it(`should preserve the constructor policy ${skipEmptyResolvers}`, () => {
+        const context = new WAFContextWrapper({}, 1000, '1.14.0', '1.8.0', knownAddresses, skipEmptyResolvers)
+
+        assert.strictEqual(context.skipEmptyGraphqlResolvers, skipEmptyResolvers)
+      })
+    }
+  })
+
   it('Should send HTTP_INCOMING_QUERY only once', () => {
     const ddwafContext = {
       run: sinon.stub().returns({

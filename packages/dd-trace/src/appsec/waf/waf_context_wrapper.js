@@ -12,12 +12,13 @@ const preventDuplicateAddresses = new Set([
 ])
 
 class WAFContextWrapper {
-  constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion, knownAddresses) {
+  constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion, knownAddresses, skipEmptyGraphqlResolvers = false) {
     this.ddwafContext = ddwafContext
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
     this.knownAddresses = knownAddresses
+    this.skipEmptyGraphqlResolvers = skipEmptyGraphqlResolvers
     this.addressesToSkip = new Set()
     this.cachedUserIdResults = new Map()
     // Reused across run() calls; Reporter.reportMetrics consumes it synchronously.

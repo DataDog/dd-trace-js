@@ -24,7 +24,9 @@ const legacyStorage = storage('legacy')
 function noop () {}
 
 /**
- * @param {{ createResolverInfo: (data: object) => Record<string, Record<string, unknown>> }} message
+ * @param {{
+ *   createResolverInfo: (data: object, skipEmpty?: boolean) => Record<string, Record<string, unknown>>
+ * }} message
  * @returns {Record<string, Record<string, unknown>>}
  */
 function materializeResolverInfo (message) {
@@ -2245,6 +2247,73 @@ describe('Plugin', () => {
           assert.deepStrictEqual(humanResolverInfo, { human: {} },
             `Expected empty human resolver args. Got ${inspect(resolverInfo)}`)
         })
+
+        for (const skipEmpty of [undefined, false, true]) {
+          it(`should apply the empty resolver policy ${skipEmpty} without dropping values`, async () => {
+            const payloadSchema = graphql.buildSchema(`
+              directive @marker(value: String) on FIELD
+              directive @flag(value: Boolean) on FIELD
+              directive @include(if: Boolean!, payload: String) on FIELD
+              type Query { empty: String argument(value: Int): String defaulted(value: Int = 0): String }
+            `)
+            const document = graphql.parse(`query EmptyResolverPolicy($include: Boolean!) {
+              empty
+              marked: empty @marker(value: "kept")
+              unmarked: empty @marker
+              included: empty @include(if: true)
+              notSkipped: empty @skip(if: false)
+              excluded: empty @include(if: false)
+              skipped: empty @skip(if: true)
+              variable: empty @include(if: $include)
+              extended: empty @include(if: true, payload: "kept")
+              flagged: empty @flag(value: true)
+              argument(value: null)
+              defaulted
+            }`)
+            const rootValue = { empty: 'ok', argument: 'ok', defaulted: 'ok' }
+            const resolverInfos = []
+            const channel = dc.channel('datadog:graphql:resolver:start')
+            /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+            const onResolver = message => resolverInfos.push(message.createResolverInfo(message, skipEmpty))
+
+            channel.subscribe(onResolver)
+            try {
+              const result = await graphql.execute({
+                schema: payloadSchema, document, rootValue, variableValues: { include: true },
+              })
+              assert.strictEqual(result.errors, undefined)
+              assertObjectContains(result.data, {
+                empty: 'ok',
+                marked: 'ok',
+                unmarked: 'ok',
+                argument: 'ok',
+                defaulted: 'ok',
+                included: 'ok',
+                notSkipped: 'ok',
+                variable: 'ok',
+                extended: 'ok',
+                flagged: 'ok',
+              })
+              assert.strictEqual(result.data.excluded, undefined)
+              assert.strictEqual(result.data.skipped, undefined)
+            } finally {
+              channel.unsubscribe(onResolver)
+            }
+
+            assert.deepStrictEqual(resolverInfos, [
+              skipEmpty ? null : { empty: {} },
+              { empty: { marker: { value: 'kept' } } },
+              skipEmpty ? null : { empty: {} },
+              skipEmpty ? null : { empty: { include: { if: true } } },
+              skipEmpty ? null : { empty: { skip: { if: false } } },
+              { empty: { include: { if: undefined } } },
+              { empty: { include: { if: true, payload: 'kept' } } },
+              { empty: { flag: { value: true } } },
+              { argument: { value: null } },
+              { defaulted: { value: 0 } },
+            ])
+          })
+        }
 
         it('should support multiple validations on a pre-parsed document', () => {
           const source = 'query MyQuery { hello(name: "world") }'

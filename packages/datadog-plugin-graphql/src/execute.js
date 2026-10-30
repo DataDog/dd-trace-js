@@ -6,6 +6,7 @@ const dc = require('dc-polyfill')
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const { isEmpty } = require('../../dd-trace/src/util')
 const GraphQLParsePlugin = require('./parse')
 const { recordResolveError } = require('./resolve-error')
 const {
@@ -1322,10 +1323,11 @@ function getParentField (rootCtx, field) {
 
 /**
  * @param {{ info: import('graphql').GraphQLResolveInfo, args: Record<string, unknown> }} data
+ * @param {boolean} [skipEmpty]
  * @returns {Record<string, Record<string, unknown>> | null}
  */
-function createResolverInfo ({ info, args }) {
-  return getResolverInfo(info, args)
+function createResolverInfo ({ info, args }, skipEmpty = false) {
+  return getResolverInfo(info, args, skipEmpty)
 }
 
 /**
@@ -1334,26 +1336,31 @@ function createResolverInfo ({ info, args }) {
  *   descriptor: JitDescriptor,
  *   argumentFactory: ArgumentFactory | undefined
  * }} data
+ * @param {boolean} [skipEmpty]
  * @returns {Record<string, Record<string, unknown>> | null}
  */
-function createJitDefaultResolverInfo ({ rootCtx, descriptor, argumentFactory }) {
+function createJitDefaultResolverInfo ({ rootCtx, descriptor, argumentFactory }, skipEmpty = false) {
   const args = getJitDefaultArguments(rootCtx, descriptor, argumentFactory, false)
 
-  return getResolverInfo(descriptor, args)
+  return getResolverInfo(descriptor, args, skipEmpty)
 }
 
 /**
  * @param {{ fieldName: string, fieldNodes?: readonly import('graphql').FieldNode[] }} info
  * @param {Record<string, unknown> | undefined} args
+ * @param {boolean} skipEmpty
  * @returns {Record<string, Record<string, unknown>> | null}
  */
-function getResolverInfo (info, args) {
-  let resolverVars = args ? { ...args } : undefined
+function getResolverInfo (info, args, skipEmpty) {
+  let resolverVars = args && (!skipEmpty || !isEmpty(args)) ? { ...args } : undefined
 
   const directives = info.fieldNodes?.[0]?.directives
   if (Array.isArray(directives)) {
     for (const directive of directives) {
       if (!directive.arguments?.length) continue
+      if (skipEmpty && directive.arguments.length === 1 &&
+          (directive.name.value === 'include' || directive.name.value === 'skip') &&
+          directive.arguments[0].name.value === 'if' && directive.arguments[0].value.kind === 'BooleanValue') continue
 
       const argList = {}
       for (const argument of directive.arguments) {
