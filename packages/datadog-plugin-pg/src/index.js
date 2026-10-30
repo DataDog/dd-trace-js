@@ -2,9 +2,9 @@
 
 const { storage } = require('../../datadog-core')
 const { CLIENT_PORT_KEY, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
-const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const SQLDatabasePlugin = require('../../dd-trace/src/plugins/sql-database')
 
-class PGPlugin extends DatabasePlugin {
+class PGPlugin extends SQLDatabasePlugin {
   static id = 'pg'
   static operation = 'query'
   static system = 'postgres'
@@ -67,6 +67,11 @@ class PGPlugin extends DatabasePlugin {
 
   bindStart (ctx) {
     const { params = {}, query, originalText, processId, stream } = ctx
+    if (this.shouldIgnoreTransaction(originalText)) {
+      ctx.injected = originalText
+      return this.skipTransaction(ctx)
+    }
+
     const service = this.serviceName({ pluginConfig: this.config, params })
     const originalStatement = this.maybeTruncate(originalText)
 
