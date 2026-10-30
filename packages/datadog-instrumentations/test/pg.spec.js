@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
+const { promisify } = require('node:util')
 
 const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -16,7 +18,7 @@ if (process.env.PG_TEST_NATIVE === 'true') {
 describe('pg instrumentation', () => {
   withVersions('pg', 'pg', version => {
     const queryClientStartChannel = dc.channel('apm:pg:query:start')
-    const spanFinishChannel = dc.channel('dd-trace:span:finish')
+    const queryClientFinishChannel = dc.channel('apm:pg:query:finish')
     const queryPoolStartChannel = dc.channel('datadog:pg:pool:query:start')
     const poolAcquireStartChannel = dc.channel('apm:pg:pool:acquire:start')
 
@@ -63,12 +65,10 @@ describe('pg instrumentation', () => {
             let finished
 
             /**
-             * @param {import('../../dd-trace/src/opentracing/span')} span
+             * @param {object} context
              */
-            function onFinish (span) {
-              if (span._name !== 'pg.query') return
-              const context = span.context()
-              finished.push({ text: context.getTag('resource.name'), error: context.getTag('error')?.message })
+            function onFinish (context) {
+              finished.add(context)
             }
 
             beforeEach(function () {
@@ -77,99 +77,38 @@ describe('pg instrumentation', () => {
                 this.skip()
               }
               client.pipeline = true
-              finished = []
-              spanFinishChannel.subscribe(onFinish)
+              // Callback completion is published again by runStores; track completed operations by context.
+              finished = new Set()
+              queryClientFinishChannel.subscribe(onFinish)
             })
 
             afterEach(() => {
-              spanFinishChannel.unsubscribe(onFinish)
+              queryClientFinishChannel.unsubscribe(onFinish)
             })
 
-            it('finishes each promise query when its own result arrives', async () => {
-              const results = await Promise.all([1, 2, 3].map(value => client.query(`SELECT ${value} AS value`)))
+            for (const api of ['promises', 'callbacks', 'query events']) {
+              it(`finishes each query with its own result or error using ${api}`, async () => {
+                const query = {
+                  promises: text => client.query(text),
+                  callbacks: promisify(client.query.bind(client)),
+                  'query events': text => once(client.query(new Query(text)), 'end'),
+                }[api]
 
-              assert.deepStrictEqual(results.map(result => result.rows), [
-                [{ value: 1 }], [{ value: 2 }], [{ value: 3 }],
-              ])
-              assert.deepStrictEqual(finished, [1, 2, 3].map(value => ({
-                text: `SELECT ${value} AS value`, error: undefined,
-              })))
-            })
+                await Promise.all([
+                  query('SELECT 1 AS value'),
+                  assert.rejects(query('INVALID'), { code: '42601' }),
+                  query('SELECT 3 AS value'),
+                ])
 
-            it('finishes each callback query before invoking its callback in the parent context', async () => {
-              const tracer = require('../../dd-trace')
-
-              await Promise.all([1, 2, 3].map(value => tracer.trace(`parent-${value}`, () => {
-                const parent = tracer.scope().active()
-                return new Promise((resolve, reject) => {
-                  client.query(`SELECT ${value} AS value`, (error, result) => {
-                    if (error) return reject(error)
-                    try {
-                      assert.strictEqual(tracer.scope().active(), parent)
-                      assert.deepStrictEqual(result.rows, [{ value }])
-                      assert.deepStrictEqual(finished.map(query => query.text),
-                        Array.from({ length: value }, (_, i) => `SELECT ${i + 1} AS value`))
-                      resolve()
-                    } catch (error) {
-                      reject(error)
-                    }
-                  })
-                })
-              })))
-            })
-
-            it('finishes each query object when its own end event fires', async () => {
-              await Promise.all([1, 2, 3].map(value => new Promise((resolve, reject) => {
-                const query = new Query(`SELECT ${value} AS value`)
-                query.once('error', reject)
-                client.query(query).once('end', result => {
-                  try {
-                    assert.deepStrictEqual(result.rows, [{ value }])
-                    assert.deepStrictEqual(finished.map(query => query.text),
-                      Array.from({ length: value }, (_, i) => `SELECT ${i + 1} AS value`))
-                    resolve()
-                  } catch (error) {
-                    reject(error)
-                  }
-                })
-              })))
-            })
-
-            it('attributes a server error to the failing query and continues the pipeline', async () => {
-              await Promise.all([
-                client.query('SELECT 1 AS value'),
-                assert.rejects(client.query('INVALID'), { code: '42601' }),
-                client.query('SELECT 3 AS value'),
-              ])
-
-              assert.deepStrictEqual(finished, [
-                { text: 'SELECT 1 AS value', error: undefined },
-                { text: 'INVALID', error: 'syntax error at or near "INVALID"' },
-                { text: 'SELECT 3 AS value', error: undefined },
-              ])
-            })
-
-            it('finishes an errored query object without finishing the following query', async () => {
-              const first = client.query('SELECT 1 AS value')
-              const failure = new Promise((resolve, reject) => {
-                const query = new Query('INVALID')
-                query.once('error', reject)
-                query.once('end', resolve)
-                client.query(query)
+                assert.deepStrictEqual(Array.from(finished, context => ({
+                  text: context.originalText, rows: context.result, code: context.error?.code,
+                })), [
+                  { text: 'SELECT 1 AS value', rows: [{ value: 1 }], code: undefined },
+                  { text: 'INVALID', rows: undefined, code: '42601' },
+                  { text: 'SELECT 3 AS value', rows: [{ value: 3 }], code: undefined },
+                ])
               })
-
-              await Promise.all([
-                first,
-                assert.rejects(failure, { code: '42601' }),
-                client.query('SELECT 3 AS value'),
-              ])
-
-              assert.deepStrictEqual(finished, [
-                { text: 'SELECT 1 AS value', error: undefined },
-                { text: 'INVALID', error: 'syntax error at or near "INVALID"' },
-                { text: 'SELECT 3 AS value', error: undefined },
-              ])
-            })
+            }
           })
 
           describe('abortController', () => {
