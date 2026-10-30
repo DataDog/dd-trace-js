@@ -502,15 +502,16 @@ describe('SpanProcessor', () => {
     assert.ok(!Object.hasOwn(formattedSpan.metrics, APM_TRACING_ENABLED_KEY))
   })
 
-  describe('with DD_TRACE_OTEL_SEMANTICS_ENABLED', () => {
+  describe('HTTP semantics', () => {
     function formattedHttpSpan () {
       return {
         meta: {
           'span.kind': 'server',
           'http.method': 'GET',
-          'http.url': 'http://localhost:8080/u',
+          'http.url': 'http://localhost:8080/users/123',
           'http.status_code': '200',
-          'http.endpoint': '/u',
+          'http.route': '/users/:id',
+          'http.endpoint': '/users/{param:int}',
         },
         metrics: {},
       }
@@ -536,29 +537,34 @@ describe('SpanProcessor', () => {
       assert.ok(!('http.method' in exported.meta))
     })
 
-    it('records span stats from the Datadog tag names, before the export-only rename', () => {
-      spanFormat.returns(formattedHttpSpan())
-      const otelConfig = {
-        flushMinSpans: 3,
-        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
-        appsec: {},
-        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
-      }
-      const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
-      const statsView = {}
-      processor._stats = {
-        onSpanFinished: sinon.spy(span => {
-          statsView.method = span.meta['http.method']
-          statsView.statusCode = span.meta['http.status_code']
-          statsView.endpoint = span.meta['http.endpoint']
-        }),
-      }
-      trace.started = [finishedSpan]
-      trace.finished = [finishedSpan]
+    for (const enabled of [false, true]) {
+      it(`passes HTTP attributes to stats with DD_TRACE_OTEL_SEMANTICS_ENABLED=${enabled}`, () => {
+        config.DD_TRACE_OTEL_SEMANTICS_ENABLED = enabled
+        const formattedSpan = formattedHttpSpan()
+        formattedSpan.resource = 'PROPFIND /users/:id'
+        formattedSpan.meta['http.method'] = 'PROPFIND'
+        spanFormat.returns(formattedSpan)
+        const statsView = {}
+        processor._stats = {
+          onSpanFinished (span) {
+            statsView.resource = span.resource
+            statsView.method = span.meta[enabled ? 'http.request.method' : 'http.method']
+            statsView.statusCode = enabled
+              ? span.metrics['http.response.status_code']
+              : span.meta['http.status_code']
+          },
+        }
+        trace.started = [finishedSpan]
+        trace.finished = [finishedSpan]
 
-      processor.process(finishedSpan)
+        processor.process(finishedSpan)
 
-      assert.deepStrictEqual(statsView, { method: 'GET', statusCode: '200', endpoint: '/u' })
-    })
+        assert.deepStrictEqual(statsView, {
+          resource: enabled ? 'HTTP /users/:id' : 'PROPFIND /users/:id',
+          method: enabled ? '_OTHER' : 'PROPFIND',
+          statusCode: enabled ? 200 : '200',
+        })
+      })
+    }
   })
 })
