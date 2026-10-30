@@ -102,7 +102,16 @@ async function main () {
         Object.defineProperty(flag, 'enabled', { get () { throw new Error('released-error-canary') } })
         break
     }
+    if (options.path === 'not-ready') {
+      OpenFeature.setProvider('released-provider', provider)
+    } else {
+      provider.setConfiguration(selected)
+      await OpenFeature.setProviderAndWait('released-provider', provider)
+      if (options.path === 'no-config') provider.setConfiguration(undefined)
+      if (options.path === 'fatal') provider.events.emit(ProviderEvents.Error, { errorCode: 'PROVIDER_FATAL' })
+    }
     if (options.swap) {
+      // Install evaluation-time hooks after configuration preparation has traversed the flags.
       Object.defineProperty(selected, 'observeFullEvaluationData', {
         get () { consentReads++; return options.consent },
       })
@@ -114,14 +123,6 @@ async function main () {
           return flag
         },
       })
-    }
-    if (options.path === 'not-ready') {
-      OpenFeature.setProvider('released-provider', provider)
-    } else {
-      provider.setConfiguration(selected)
-      await OpenFeature.setProviderAndWait('released-provider', provider)
-      if (options.path === 'no-config') provider.setConfiguration(undefined)
-      if (options.path === 'fatal') provider.events.emit(ProviderEvents.Error, { errorCode: 'PROVIDER_FATAL' })
     }
     const client = OpenFeature.getClient('released-provider')
     const details = []

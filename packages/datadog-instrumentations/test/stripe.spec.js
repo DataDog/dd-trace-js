@@ -2,7 +2,8 @@
 
 const assert = require('node:assert/strict')
 
-const { after, before, describe, it } = require('mocha')
+const dc = require('dc-polyfill')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -36,6 +37,73 @@ withVersions('stripe', 'stripe', version => {
         assert.equal(typeof stripe.paymentIntents?.create, 'function')
         assert.equal(typeof stripe.webhooks?.constructEvent, 'function')
         assert.equal(typeof stripe.webhooks?.constructEventAsync, 'function')
+      })
+    })
+
+    describe('shared webhooks', () => {
+      const constructEventFinishCh = dc.channel('datadog:stripe:constructEvent:finish')
+      const payload = JSON.stringify({ id: 'evt_test', object: 'event' })
+      const secret = 'whsec_FAKE'
+
+      let publishes
+
+      function onPublish () {
+        publishes++
+      }
+
+      beforeEach(() => {
+        publishes = 0
+        constructEventFinishCh.subscribe(onPublish)
+      })
+
+      afterEach(() => {
+        constructEventFinishCh.unsubscribe(onPublish)
+      })
+
+      for (const method of ['constructEvent', 'constructEventAsync']) {
+        it(`wraps a replaced ${method} once and reuses the restored wrapper`, async function () {
+          const { webhooks } = new Stripe('sk_test_FAKE')
+          if (webhooks !== Stripe('sk_test_FAKE').webhooks) this.skip()
+
+          const original = webhooks[method]
+          const event = { id: 'evt_replacement', object: 'event' }
+          const header = webhooks.generateTestHeaderString({ payload, secret })
+
+          try {
+            webhooks[method] = method === 'constructEvent' ? () => event : async () => event
+            assert.equal(new Stripe('sk_test_FAKE').webhooks, webhooks)
+            assert.equal(Stripe('sk_test_FAKE').webhooks, webhooks)
+
+            assert.equal(await webhooks[method](payload, header, secret), event)
+            assert.equal(publishes, 1)
+
+            webhooks[method] = original
+            assert.equal(new Stripe('sk_test_FAKE').webhooks, webhooks)
+            assert.equal(Stripe('sk_test_FAKE').webhooks, webhooks)
+
+            assert.equal((await webhooks[method](payload, header, secret)).id, 'evt_test')
+            assert.equal(publishes, 2)
+          } finally {
+            webhooks[method] = original
+          }
+        })
+      }
+
+      it('does not stack wrappers when many clients are created', async () => {
+        let stripe
+        for (let i = 0; i < 20_000; i++) {
+          stripe = new Stripe('sk_test_FAKE')
+        }
+
+        const header = stripe.webhooks.generateTestHeaderString({ payload, secret })
+
+        assert.equal(stripe.webhooks.constructEvent(payload, header, secret).id, 'evt_test')
+        assert.equal(publishes, 1)
+
+        const promise = stripe.webhooks.constructEventAsync(payload, header, secret)
+        assert.equal(typeof promise.then, 'function')
+        assert.equal((await promise).id, 'evt_test')
+        assert.equal(publishes, 2)
       })
     })
   })
