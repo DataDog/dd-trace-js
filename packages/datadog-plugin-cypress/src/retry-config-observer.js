@@ -2,11 +2,16 @@
 
 const observeSetupHandoff = require('./setup-handoff')
 
-/** @param {object} value Retry values observed at a Cypress IPC boundary. */
-function snapshot (value) {
-  // Match Cypress's JSON wire values, independently of descriptor flags.
-  // eslint-disable-next-line unicorn/prefer-structured-clone
-  return JSON.parse(JSON.stringify(value))
+// Configuration inspection must not evaluate accessors before Cypress serializes them.
+function snapshot (value, previous) {
+  if (!value || typeof value !== 'object') return value
+  const result = Array.isArray(value) ? [] : {}
+  for (const key of Object.keys(value)) {
+    const property = Object.getOwnPropertyDescriptor(value, key)
+    const entry = 'value' in property ? snapshot(property.value, previous?.[key]) : previous?.[key]
+    if (entry !== undefined) result[key] = entry
+  }
+  return result
 }
 
 /**
@@ -35,15 +40,16 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   const refreshChild = (key, child) => {
     if (!active || !options?.reconcileNative) return
     child.native = options.reconcileNative(
-      { [key]: child.native }, { [key]: child.observed }, { [key]: child.raw }
+      { [key]: child.native }, { [key]: child.observed }, { [key]: snapshot(child.raw, child.observed) }
     )[key]
-    child.observed = snapshot(child.raw)
+    child.observed = snapshot(child.raw, child.observed)
   }
   const refreshNative = metadata => {
     if (active && metadata && options?.reconcileNative) {
-      const actual = { ...metadata.raw }
+      const actual = snapshot(metadata.raw, metadata.observed)
       for (const key of Object.keys(actual)) {
-        const child = children.get(unwrap(actual[key]))
+        const property = Object.getOwnPropertyDescriptor(metadata.raw, key)
+        const child = property && 'value' in property && children.get(unwrap(property.value))
         if (child) {
           refreshChild(key, child)
           actual[key] = child.native
@@ -51,7 +57,10 @@ module.exports = function observeRetryConfig (config, onChange, options) {
       }
       metadata.native = options.reconcileNative(metadata.native, metadata.observed, actual)
       metadata.observed = snapshot(actual)
-      for (const key of Object.keys(metadata.raw)) rememberChild(metadata, key, metadata.raw[key])
+      for (const key of Object.keys(metadata.raw)) {
+        const property = Object.getOwnPropertyDescriptor(metadata.raw, key)
+        if ('value' in property) rememberChild(metadata, key, property.value)
+      }
     }
   }
   const refreshTarget = (metadata, path, target) => {
@@ -65,7 +74,7 @@ module.exports = function observeRetryConfig (config, onChange, options) {
     refreshNative(metadata)
     let native
     if (options) {
-      native = metadata ? metadata.native : options.updateNative(undefined, value, [])
+      native = metadata ? metadata.native : options.updateNative(undefined, snapshot(value), [])
       if (!metadata && value && typeof value === 'object') {
         // A new root can select options already observed under another root.
         for (const key of Object.keys(value)) {
@@ -91,7 +100,10 @@ module.exports = function observeRetryConfig (config, onChange, options) {
     : undefined
   if (initialMetadata) {
     roots.set(initial, initialMetadata)
-    for (const key of Object.keys(initial)) rememberChild(initialMetadata, key, initial[key])
+    for (const key of Object.keys(initial)) {
+      const property = Object.getOwnPropertyDescriptor(initial, key)
+      if ('value' in property) rememberChild(initialMetadata, key, property.value)
+    }
   }
   const record = (metadata, path, target) => {
     if (!active) return
@@ -101,16 +113,19 @@ module.exports = function observeRetryConfig (config, onChange, options) {
       if (child) {
         refreshChild(key, child)
         child.native = options.updateNative(
-          { [key]: child.native }, { [key]: child.raw }, path
+          { [key]: child.native }, { [key]: snapshot(child.raw, child.observed) }, path
         )[key]
-        child.observed = snapshot(child.raw)
+        child.observed = snapshot(child.raw, child.observed)
         // A saved options object can change while a different object is selected.
-        if (unwrap(metadata.raw[key]) !== child.raw) return
+        if (unwrap(Object.getOwnPropertyDescriptor(metadata.raw, key)?.value) !== child.raw) return
         metadata.native = { ...metadata.native, [key]: child.native }
       } else {
-        const restored = path.length === 1 && children.get(unwrap(metadata.raw[key]))
+        const restored = path.length === 1 && children.get(
+          unwrap(Object.getOwnPropertyDescriptor(metadata.raw, key)?.value)
+        )
         if (restored) refreshChild(key, restored)
-        const supplied = restored ? { ...metadata.raw, [key]: restored.native } : metadata.raw
+        const actual = snapshot(metadata.raw, metadata.observed)
+        const supplied = restored ? { ...actual, [key]: restored.native } : actual
         metadata.native = options.updateNative(metadata.native, supplied, path)
       }
     }
@@ -195,17 +210,55 @@ module.exports = function observeRetryConfig (config, onChange, options) {
       config.retries = unwrap(currentDescriptor.value)
     }
   }
-  const stopIpc = observeSetupHandoff((returnedConfig, event) => {
+  const stopIpc = observeSetupHandoff((returnedConfig, event, context) => {
     try {
       if (active && event === 'setupTestingType:reply') {
-        const retries = unwrap(returnedConfig?.retries)
-        notify(retries, [], retries && typeof retries === 'object' && roots.get(retries))
+        const property = returnedConfig && Object.getOwnPropertyDescriptor(returnedConfig, 'retries')
+        const retries = property?.enumerable ? returnedConfig.retries : undefined
+        const original = value => context?.originalFor(value) ?? value
+        const source = original(retries)
+        const raw = unwrap(source)
+        const metadata = raw && typeof raw === 'object' && roots.get(raw)
+        const cached = context?.snapshotFor(source) ?? retries
+        const actual = snapshot(cached, metadata?.observed)
+        let native = options && (metadata
+          ? (options.reconcileNative
+              ? options.reconcileNative(metadata.native, metadata.observed, actual)
+              : metadata.native)
+          : options.updateNative(undefined, actual, []))
+        if (options && actual && typeof actual === 'object') {
+          for (const key of Object.keys(actual)) {
+            const sourceChild = original(cached[key])
+            const rawChild = unwrap(sourceChild)
+            const child = rawChild && typeof rawChild === 'object' && children.get(rawChild)
+            if (!child) continue
+            let childNative = options.reconcileNative
+              ? options.reconcileNative(
+                { [key]: child.native }, { [key]: child.observed }, { [key]: actual[key] }
+              )[key]
+              : child.native
+            if (context) {
+              for (const getterKey of context.getterKeys(sourceChild)) {
+                childNative = options.updateNative(
+                  { [key]: childNative }, { [key]: actual[key] }, [key, getterKey]
+                )[key]
+              }
+            }
+            native = options.updateNative(native, { [key]: childNative }, [key])
+          }
+          if (context) {
+            for (const key of context.getterKeys(source)) {
+              native = options.updateNative(native, actual, [key])
+            }
+          }
+        }
+        onChange(retries, [], options && { retries: native })
       }
     } finally {
       // Later child-local writes cannot change the parent's serialized config.
       stop(false)
     }
-  })
+  }, unwrap)
 
   return {
     isWatching: candidate => active && candidate === config,

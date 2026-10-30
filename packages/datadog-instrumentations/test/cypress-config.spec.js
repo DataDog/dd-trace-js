@@ -838,3 +838,193 @@ describe('Cypress saved options across Node retry roots', () => {
     }
   }
 })
+
+describe('Cypress automatic private configuration propagation', () => {
+  for (const phase of ['before', 'during']) {
+    for (const atrEnabled of [false, true]) {
+      it(`returns the initialized private config (${phase}, ATR=${atrEnabled})`, async () => {
+        const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+        const plugin = new CypressPlugin()
+        let handler
+        class Subscriber {
+          constructor (tracer) { this._tracer = tracer }
+          addSub (_name, callback) { handler = callback }
+        }
+        const Adapter = proxyquire('../../datadog-plugin-cypress/src/index', {
+          '../../dd-trace/src/plugins/plugin': Subscriber,
+          './cypress-plugin': plugin,
+        })
+        let finishSettings
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: { getLibraryConfiguration: (_config, callback) => { finishSettings = callback } },
+          },
+        }
+        const adapter = new Adapter(tracer)
+        assert.strictEqual(adapter._tracer, tracer)
+        const native = { runMode: 2, openMode: 0 }
+        const config = { version: '16.2.0', retries: native }
+        if (phase === 'before') Object.defineProperty(config, 'retries', { writable: false })
+        const payload = {
+          config,
+          on () {},
+          registerBeforeRun () {},
+          cleanupWrapper () {},
+          userAfterSpecHandlers: [],
+          userAfterRunHandlers: [],
+          userAfterScreenshotHandlers: [],
+        }
+        try {
+          handler(payload)
+          if (phase === 'during') Object.defineProperty(config, 'retries', { writable: false })
+          finishSettings(null, { isFlakyTestRetriesEnabled: atrEnabled, flakyTestRetriesCount: 4 })
+          const result = await payload.configPromise
+          assert.strictEqual(result, plugin.cypressConfig)
+          assert.notStrictEqual(result, config)
+          assert.deepStrictEqual(JSON.parse(JSON.stringify(result.retries)),
+            { runMode: atrEnabled ? 4 : 2, openMode: 0 })
+          assert.deepStrictEqual(native, { runMode: 2, openMode: 0 })
+          assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').writable, false)
+        } finally {
+          plugin.retryConfigObserver?.stop(false)
+          plugin.stopSetupHandoff?.()
+        }
+      })
+    }
+  }
+})
+
+describe('Cypress saved native aliases while settings are pending', () => {
+  for (const experimental of [false, true]) {
+    for (const atrEnabled of [false, true]) {
+      it(`keeps pre-init alias writes native (experimental=${experimental}, ATR=${atrEnabled})`, async () => {
+        const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+        const plugin = new CypressPlugin()
+        const native = experimental
+          ? {
+              runMode: true,
+              openMode: false,
+              experimentalStrategy: 'detect-flake-but-always-fail',
+              experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+            }
+          : { runMode: 0, openMode: 0 }
+        const saved = experimental ? native.experimentalOptions : native
+        const config = { version: '16.2.0', retries: native }
+        let finishSettings
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: { getLibraryConfiguration: (_config, callback) => { finishSettings = callback } },
+          },
+        }
+        try {
+          const pending = plugin.init(tracer, config)
+          if (experimental) saved.maxRetries = 3
+          else saved.runMode = 2
+          const serialized = JSON.parse(JSON.stringify(config.retries))
+          finishSettings(null, { isFlakyTestRetriesEnabled: atrEnabled, flakyTestRetriesCount: 4 })
+          const result = await pending
+          assert.strictEqual(experimental ? serialized.experimentalOptions.maxRetries : serialized.runMode,
+            experimental ? 3 : 2)
+          assert.strictEqual(experimental
+            ? plugin.originalCypressRetries.experimentalOptions.maxRetries
+            : plugin.originalCypressRetries.runMode,
+          experimental ? 3 : 2)
+          assert.strictEqual(experimental ? saved.maxRetries : saved.runMode, experimental ? 3 : 2)
+          assert.notStrictEqual(result.retries, native)
+        } finally {
+          plugin.retryConfigObserver?.stop(false)
+          plugin.stopSetupHandoff?.()
+        }
+      })
+    }
+  }
+})
+
+describe('Cypress retry accessor observation', () => {
+  for (const nested of [false, true]) {
+    it(`keeps retry accessor definition lazy (nested=${nested})`, () => {
+      let reads = 0
+      const config = { retries: nested ? { experimentalOptions: { maxRetries: 4 } } : { runMode: 4 } }
+      const observer = observeRetryConfig(config, () => {}, {
+        nativeRetries: nested ? { experimentalOptions: { maxRetries: 2 } } : { runMode: 2 },
+        updateNative: native => native,
+        reconcileNative: native => native,
+      })
+      try {
+        const target = nested ? config.retries.experimentalOptions : config.retries
+        Object.defineProperty(target, nested ? 'maxRetries' : 'runMode', {
+          configurable: true,
+          enumerable: true,
+          get () {
+            reads++
+            throw new Error('native setup is not ready')
+          },
+        })
+        Object.defineProperty(target, nested ? 'maxRetries' : 'runMode', { configurable: false })
+        assert.strictEqual(reads, 0)
+      } finally {
+        observer.stop(false)
+      }
+    })
+  }
+})
+
+describe('Cypress serialized retry accessor provenance', () => {
+  for (const nested of [false, true]) {
+    for (const fresh of [false, true]) {
+      it(`reads retry getters once at handoff (nested=${nested}, fresh=${fresh})`, async () => {
+        const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+        const plugin = new CypressPlugin()
+        const original = Object.getOwnPropertyDescriptor(process, 'send')
+        let wire
+        let reads = 0
+        process.send = message => { wire = JSON.parse(JSON.stringify(message)).args[0].setupConfig }
+        const config = {
+          version: '16.2.0',
+          retries: nested
+            ? {
+                runMode: true,
+                openMode: false,
+                experimentalStrategy: 'detect-flake-but-always-fail',
+                experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+              }
+            : { runMode: 2, openMode: 0 },
+        }
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: {
+              getLibraryConfiguration: (_config, callback) => callback(null, {
+                isFlakyTestRetriesEnabled: true, flakyTestRetriesCount: 4,
+              }),
+            },
+          },
+        }
+        try {
+          const result = await plugin.init(tracer, config)
+          const retries = fresh
+            ? (nested ? { experimentalOptions: {} } : {})
+            : result.retries
+          const target = nested ? retries.experimentalOptions : retries
+          Object.defineProperty(target, nested ? 'maxRetries' : 'runMode', {
+            configurable: true, enumerable: true, get: () => ++reads,
+          })
+          assert.strictEqual(reads, 0)
+          process.send({ event: 'setupTestingType:reply', args: [{ setupConfig: { retries } }] })
+          assert.strictEqual(reads, 1)
+          assert.strictEqual(nested ? wire.retries.experimentalOptions.maxRetries : wire.retries.runMode, 1)
+          assert.strictEqual(nested
+            ? plugin.originalCypressRetries.experimentalOptions.maxRetries
+            : plugin.originalCypressRetries.runMode, 1)
+        } finally {
+          plugin.retryConfigObserver?.stop(false)
+          plugin.stopSetupHandoff?.()
+          if (original) Object.defineProperty(process, 'send', original)
+          else delete process.send
+        }
+      })
+    }
+  }
+})

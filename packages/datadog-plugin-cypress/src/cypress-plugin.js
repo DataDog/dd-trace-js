@@ -921,8 +921,6 @@ class CypressPlugin {
       this.hasOriginalCypressRetries = true
     }
     this.nativeCypressRetriesBaseline = copyCypressRetries(cypressConfig.retries)
-    // Keep injected budgets separate from developer-held native configuration objects.
-    cypressConfig.retries = copyCypressRetries(cypressConfig.retries)
     this.resetRunState()
     this._isInit = true
     this.tracer = tracer
@@ -956,7 +954,10 @@ class CypressPlugin {
       handoff.seen = true
       if (event === 'setupTestingType:reply') {
         handoff.hasReply = true
-        handoff.retries = mergeNativeRetries(this.nativeCypressRetriesBaseline, returnedConfig?.retries)
+        const retryProperty = returnedConfig && Object.getOwnPropertyDescriptor(returnedConfig, 'retries')
+        handoff.retries = mergeNativeRetries(
+          this.nativeCypressRetriesBaseline, retryProperty?.enumerable ? returnedConfig.retries : undefined
+        )
       }
     })
     this.stopSetupHandoff = stopSetupHandoff

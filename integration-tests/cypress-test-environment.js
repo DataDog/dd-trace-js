@@ -3,6 +3,8 @@
 const { version } = require('cypress/package.json')
 
 const exposedEnvironmentVariables = [
+  'ACCESSOR_DIAGNOSTICS',
+  'MATCHED_NATIVE_HOOKS',
   'BASE_URL_SECOND',
   'DYNAMIC_ATR_DURATION_MS',
   'EARLY_BEFORE_EACH_FAILURE',
