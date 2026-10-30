@@ -5,17 +5,14 @@ const Module = require('node:module')
 const path = require('node:path')
 
 const satisfies = require('../../vendor/dist/semifies')
-const hooks = require('../datadog-instrumentations/src/helpers/hooks')
-const { getRewriteTargetNames } = require('../datadog-instrumentations/src/helpers/rewriter/targets')
+const { packagePathPattern } = require('../datadog-instrumentations/src/helpers/bundler-transform')
 const { SYNTHETIC_EXTENSION } = require('./src/constants')
 
-const BUILTIN_MODULES = new Set(Module.builtinModules)
 const loader = path.join(__dirname, 'src/loader.js')
 const EXTENSIONLESS_PATH_PATTERN = /(?:^|\/)[^/.]+$/
 const PHASE_PRODUCTION_SERVER = 'phase-production-server'
 const SOURCE_EXTENSIONS = ['*.js', '*.cjs', '*.mjs', '*.jsx', '*.ts', '*.cts', '*.mts', '*.tsx']
 const SOURCE_PATH_PATTERN = /\.(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)$/
-const PACKAGE_PATH_PATTERN = createPackagePathPattern()
 
 /**
  * Adds Datadog instrumentation to a Next.js Turbopack configuration.
@@ -88,14 +85,14 @@ function addModernRules (turbopack) {
   const rules = { ...turbopack.rules }
   for (const extension of SOURCE_EXTENSIONS) {
     appendRule(rules, extension, {
-      condition: { all: ['node', 'foreign', { path: PACKAGE_PATH_PATTERN }] },
+      condition: { all: ['node', 'foreign', { path: packagePathPattern }] },
       loaders: [createLoader()],
     })
   }
   appendRule(rules, '*', {
     as: `*${SYNTHETIC_EXTENSION}`,
     condition: {
-      all: ['node', 'foreign', { path: PACKAGE_PATH_PATTERN }, { path: EXTENSIONLESS_PATH_PATTERN }],
+      all: ['node', 'foreign', { path: packagePathPattern }, { path: EXTENSIONLESS_PATH_PATTERN }],
     },
     loaders: [createLoader()],
   })
@@ -129,7 +126,7 @@ function addLegacyRule (turbopack) {
   }
   conditions[name] = {
     all: [
-      { path: PACKAGE_PATH_PATTERN },
+      { path: packagePathPattern },
       { any: [{ path: SOURCE_PATH_PATTERN }, { path: EXTENSIONLESS_PATH_PATTERN }] },
     ],
   }
@@ -152,27 +149,6 @@ function hasDatadogLoader (value) {
   if (!value || typeof value !== 'object') return false
   if (/** @type {{ loader?: unknown }} */ (value).loader === loader) return true
   return Object.values(value).some(hasDatadogLoader)
-}
-
-/**
- * @returns {RegExp}
- */
-function createPackagePathPattern () {
-  const names = []
-  const targetPackages = new Set(Object.keys(hooks))
-  for (const name of getRewriteTargetNames()) targetPackages.add(name)
-  for (const name of targetPackages) {
-    if (!name.startsWith('.') && !BUILTIN_MODULES.has(name)) names.push(escapeRegExp(name))
-  }
-  names.sort()
-  return new RegExp(`(?:^|/)(?:${names.join('|')})(?:/|$)`)
-}
-
-/**
- * @param {string} value
- */
-function escapeRegExp (value) {
-  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
 }
 
 function getNextMajor () {

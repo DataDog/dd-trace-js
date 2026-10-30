@@ -12,11 +12,14 @@ const vm = require('node:vm')
 const sinon = require('sinon')
 
 const loaderPath = require.resolve('../src/loader')
+const helperPath = require.resolve('../../datadog-instrumentations/src/helpers/bundler-transform')
 const directories = []
 
 describe('Turbopack loader', () => {
   afterEach(() => {
     for (const directory of directories.splice(0)) fs.rmSync(directory, { force: true, recursive: true })
+    delete require.cache[loaderPath]
+    delete require.cache[helperPath]
     sinon.restore()
   })
 
@@ -674,6 +677,24 @@ describe('Turbopack loader', () => {
     sinon.assert.calledTwice(hook)
     sinon.assert.notCalled(rewriteFactory)
   })
+
+  it('fails open if the loader context cannot supply a resource path', () => {
+    const { loader } = loadLoader({ hooks: {}, instrumentations: {} })
+    const failure = new Error('resource path unavailable')
+    const source = 'module.exports = true\n'
+    const sourceMap = { mappings: 'AAAA', version: 3 }
+    const callback = sinon.spy()
+    const emitWarning = sinon.spy()
+
+    loader.call({
+      callback,
+      emitWarning,
+      get resourcePath () { throw failure },
+    }, source, sourceMap)
+
+    sinon.assert.calledOnceWithExactly(emitWarning, failure)
+    sinon.assert.calledOnceWithExactly(callback, undefined, source, sourceMap)
+  })
 })
 
 /**
@@ -698,12 +719,12 @@ function loadLoader ({
   const originalRequire = Module.prototype.require
   const rewriteFactory = sinon.stub().returns(rewrite)
   Module.prototype.require = function (request) {
-    if (this.filename === loaderPath) {
+    if (this.filename === helperPath) {
       const stubs = {
-        '../../datadog-instrumentations/src/helpers/hooks': hooks,
-        '../../datadog-instrumentations/src/helpers/instrumentations': instrumentations,
-        '../../datadog-instrumentations/src/helpers/rewriter': { createBundlerRewriter: rewriteFactory },
-        '../../datadog-instrumentations/src/helpers/rewriter/targets': {
+        './hooks': hooks,
+        './instrumentations': instrumentations,
+        './rewriter': { createBundlerRewriter: rewriteFactory },
+        './rewriter/targets': {
           getRewriteTarget: rewriteTarget,
           getRewriteTargetNames: () => rewriteTargetNames.values(),
         },
@@ -714,9 +735,12 @@ function loadLoader ({
     return originalRequire.call(this, request)
   }
   delete require.cache[loaderPath]
-  const loader = require('../src/loader')
-  Module.prototype.require = originalRequire
-  return { loader, rewriteFactory }
+  delete require.cache[helperPath]
+  try {
+    return { loader: require('../src/loader'), rewriteFactory }
+  } finally {
+    Module.prototype.require = originalRequire
+  }
 }
 
 /**
