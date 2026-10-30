@@ -6,6 +6,8 @@
   "@azure/cosmos/dist/commonjs/plugins/Plugin.js": "@azure/cosmos",
   "@azure/cosmos/dist/esm/plugins/Plugin.js": "@azure/cosmos",
   "@azure/cosmos/dist/react-native/plugins/Plugin.js": "@azure/cosmos",
+  "@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation/ClientTools.js": "@elevenlabs/elevenlabs-js",
+  "@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation/Conversation.js": "@elevenlabs/elevenlabs-js",
   "@graphql-tools/executor/cjs/execution/execute.js": "@graphql-tools/executor",
   "@graphql-tools/executor/cjs/execution/normalizedExecutor.js": "@graphql-tools/executor",
   "@graphql-tools/executor/esm/execution/execute.js": "@graphql-tools/executor",

@@ -91,6 +91,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@elevenlabs/elevenlabs-js",
+    "integration": "elevenlabs",
+    "minimum_tracer_supported": "2.75.0",
+    "max_tracer_supported": "2.75.0",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@google-cloud/pubsub",
     "integration": "google-cloud-pubsub",
     "minimum_tracer_supported": "1.2.0",
