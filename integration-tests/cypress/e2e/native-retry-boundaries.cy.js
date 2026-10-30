@@ -7,6 +7,8 @@ const { getTestEnvironment } = require('../support/test-environment')
 
 const executions = {}
 let configGetterReads = 0
+let retryAccessorReads = 0
+const retryAccessorStacks = []
 
 /**
  * @param {string} name
@@ -14,6 +16,12 @@ let configGetterReads = 0
  */
 function attempt (name, passAt) {
   executions[name] = (executions[name] || 0) + 1
+  if (['browser-field-accessor', 'experimental-native-field-accessor'].includes(mode)) {
+    cy.writeFile('native-retry-accessor-reads.json', {
+      reads: retryAccessorReads,
+      ...(getTestEnvironment('ACCESSOR_DIAGNOSTICS') && { stacks: retryAccessorStacks.slice() }),
+    })
+  }
   return cy.writeFile('native-retry-executions.json', executions, { log: false }).then(() => {
     if (mode === 'browser-object-config-getter') {
       cy.writeFile('native-config-getter-reads.json', { reads: configGetterReads, budget: Cypress.config('retries') })
@@ -23,7 +31,29 @@ function attempt (name, passAt) {
 }
 
 const mode = getTestEnvironment('EXCLUSIONS_MODE')
+// Match the two SDK test hooks so Native hook-status config reads have the same workload.
+if (getTestEnvironment('MATCHED_NATIVE_HOOKS')) {
+  beforeEach(() => {})
+  afterEach(() => {})
+}
 let savedLocalRetries
+if (['browser-field-accessor', 'experimental-native-field-accessor'].includes(mode)) {
+  let ready = false
+  const retries = Cypress.config('retries')
+  const options = mode === 'experimental-native-field-accessor'
+  Object.defineProperty(options ? retries.experimentalOptions : retries, options ? 'maxRetries' : 'runMode', {
+    configurable: true,
+    enumerable: true,
+    get () {
+      if (!ready) throw new Error('retry accessor evaluated during declaration')
+      retryAccessorReads++
+      if (getTestEnvironment('ACCESSOR_DIAGNOSTICS')) retryAccessorStacks.push(new Error().stack)
+      return 3
+    },
+  })
+  ready = true
+}
+
 if (mode === 'browser-object-config-getter') {
   Cypress.config({ get retries () { return ++configGetterReads } })
 }

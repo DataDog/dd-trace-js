@@ -307,6 +307,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'browser-saved-local', 'browser-all-saved-local',
     'browser-numeric-open', 'browser-all-numeric-open',
     'browser-descriptor', 'browser-all-descriptor-root', 'browser-all-descriptor-same',
+    'browser-field-accessor', 'experimental-native-field-accessor',
     'browser-object-config-getter', 'browser-accessor-root', 'browser-retries', 'browser-same-budget', 'inherited-mode',
     'browser-runtime', 'browser-inactive-mode',
     'browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite',
@@ -324,6 +325,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
   ]) {
     for (const atrEnabled of [false, true]) {
       const numericNative = mode.includes('numeric-open')
+      const fieldAccessor = ['browser-field-accessor', 'experimental-native-field-accessor'].includes(mode)
       // Experimental-config override validation adds a getter read before general validation and assignment.
       const objectGetterReads = supportsExperimental ? 3 : 2
       // Cypress <15.17 retains the old restoration callback across tests without overrides.
@@ -348,11 +350,13 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       boundaryTest(`preserves ${mode} native retry executions (ATR=${atrEnabled})`, async () => {
         const boundarySuite = 'cypress/e2e/native-retry-boundaries.cy.js'
         const ledger = join(cwd, 'native-retry-executions.json')
-        const nativeAttempts = mode === 'browser-object-config-getter'
-          ? objectGetterReads + 1
-          : mode === 'experimental-native-checkpoint'
-            ? 5
-            : descriptorNative || mode.includes('-detached') ? 4 : thresholdNative ? 5 : disabledNative ? 1 : 3
+        const nativeAttempts = fieldAccessor
+          ? 4
+          : mode === 'browser-object-config-getter'
+            ? objectGetterReads + 1
+            : mode === 'experimental-native-checkpoint'
+              ? 5
+              : descriptorNative || mode.includes('-detached') ? 4 : thresholdNative ? 5 : disabledNative ? 1 : 3
         const experimentalEnvironment = experimentalMode
           ? {
               CYPRESS_EXPERIMENTAL_RETRIES: thresholdNative
@@ -360,22 +364,27 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
                 : disabledNative ? 'disabled' : 'true',
             }
           : {}
+        if (process.env.CYPRESS_ACCESSOR_DIAGNOSTICS_DIR) {
+          experimentalEnvironment.CYPRESS_ACCESSOR_DIAGNOSTICS = 'true'
+        }
         if (numericNative) experimentalEnvironment.CYPRESS_RETRIES_AS_NUMBER = '2'
         if (mode === 'browser-accessor-root') experimentalEnvironment.CYPRESS_RETRIES = '0'
+        const standardRecovery = descriptorNative ||
+          ['browser-object-config-getter', 'browser-field-accessor'].includes(mode)
         const expected = {
           ...(['browser-saved-local', 'browser-all-saved-local'].includes(mode) && {
             'initial local control': 1, 'captures local retries': 1, 'restores local retries': 1,
           }),
           'excluded recovery': zeroNative
             ? 1
-            : descriptorNative || mode === 'browser-object-config-getter' ? 3 : nativeAttempts,
+            : standardRecovery ? 3 : nativeAttempts,
           'excluded persistent': zeroNative
             ? 1
             : thresholdNative ? 3 : nativeAttempts,
           'excluded explicit zero': mode === 'browser-accessor-root' ? 3 : 1,
           'ordinary control': zeroControl || browserZeroNative
             ? 1
-            : descriptorNative || mode === 'browser-object-config-getter' ? 3 : nativeAttempts,
+            : standardRecovery ? 3 : nativeAttempts,
           ...(mode.startsWith('browser-runtime') && { 'changes runtime retries': 1 }),
           ...(['browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite'].includes(mode) &&
             { 'excluded after zero': 3 }),
@@ -389,6 +398,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
             DD_TRACE_ENABLED: 'false',
             SPEC_PATTERN: boundarySuite,
             CYPRESS_EXCLUSIONS_MODE: mode,
+            CYPRESS_MATCHED_NATIVE_HOOKS: fieldAccessor ? 'true' : undefined,
             ...experimentalEnvironment,
           },
         })
@@ -396,6 +406,13 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         childProcess.stdout.on('data', chunk => { output += chunk })
         childProcess.stderr.on('data', chunk => { output += chunk })
         const [nativeExit] = await once(childProcess, 'exit')
+        const accessorReads = fieldAccessor
+          ? JSON.parse(readFileSync(join(cwd, 'native-retry-accessor-reads.json'), 'utf8'))
+          : undefined
+        if (accessorReads && process.env.CYPRESS_ACCESSOR_DIAGNOSTICS_DIR) {
+          writeFileSync(join(process.env.CYPRESS_ACCESSOR_DIAGNOSTICS_DIR, `native-${mode}-${atrEnabled}.json`),
+            JSON.stringify(accessorReads))
+        }
         const expectedExit = thresholdNative
           ? 2
           : zeroControl || browserZeroNative || experimentalMode
@@ -410,7 +427,8 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         rmSync(ledger)
         receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
         if (browserZeroNative && atrEnabled) expected['ordinary control'] = 3
-        if (experimentalMode && atrEnabled && !mode.includes('-detached')) {
+        if (experimentalMode && atrEnabled && !mode.includes('-detached') &&
+          mode !== 'experimental-native-field-accessor') {
           expected['ordinary control'] = disabledNative
             ? Math.min(atrBudget + 1, 3)
             : Math.max(nativeAttempts, atrBudget + 1)
@@ -420,6 +438,14 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           ? 3
           : expectedExit
         await run(mode, instrumentedExit, tests => {
+          if (accessorReads) {
+            const actualReads = JSON.parse(readFileSync(join(cwd, 'native-retry-accessor-reads.json'), 'utf8'))
+            if (process.env.CYPRESS_ACCESSOR_DIAGNOSTICS_DIR) {
+              writeFileSync(join(process.env.CYPRESS_ACCESSOR_DIAGNOSTICS_DIR, `sdk-${mode}-${atrEnabled}.json`),
+                JSON.stringify(actualReads))
+            }
+            assert.strictEqual(actualReads.reads, accessorReads.reads)
+          }
           if (mode === 'browser-object-config-getter') {
             assert.deepStrictEqual(JSON.parse(readFileSync(join(cwd, 'native-config-getter-reads.json'), 'utf8')),
               { reads: objectGetterReads, budget: objectGetterReads })

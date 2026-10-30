@@ -1934,6 +1934,7 @@ moduleTypes.forEach(({
     }
 
     for (const mode of [
+      'field-mode', 'field-child-options',
       'object-config-getter', 'inherited-config-getter', 'accessor-root',
       'raw-after', 'raw-before', 'raw-saved', 'raw-detached', 'locked-root', 'locked-root-unchanged',
       'suite-owner', 'suite-root-owner', 'framework-known-root', 'framework-scalar',
@@ -1971,6 +1972,15 @@ moduleTypes.forEach(({
         const context = {
           Cypress: {
             _: { isEqual, cloneDeep },
+            ...(mode.startsWith('field-') && {
+              getTestRetries (...args) {
+                assert.strictEqual(this, context.Cypress)
+                if (args.length) assert.deepStrictEqual(args, ['native-budget', currentTest])
+                const retries = this.config('retries')
+                const active = retries.runMode
+                return active === true ? retries.experimentalOptions.maxRetries : active
+              },
+            }),
             config: function (key, value) {
               if (!arguments.length) return state
               if (key && typeof key === 'object') {
@@ -2001,6 +2011,36 @@ moduleTypes.forEach(({
         runInNewContext(fs.readFileSync(
           path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
         ), context)
+        if (mode.startsWith('field-')) {
+          await hooks.before()
+          const retries = context.Cypress.config('retries')
+          const nested = mode === 'field-child-options'
+          const target = nested ? retries.experimentalOptions : retries
+          const key = nested ? 'maxRetries' : 'runMode'
+          let ready = false
+          let reads = 0
+          Object.defineProperty(target, key, {
+            enumerable: true,
+            configurable: true,
+            get () {
+              if (!ready) throw new Error('retry getter read before support initialized')
+              reads++
+              return 3
+            },
+          })
+          Object.defineProperty(target, key, { configurable: false })
+          retries.openMode = 1
+          assert.strictEqual(reads, 0)
+          ready = true
+          currentTest._retries = context.Cypress.getTestRetries('native-budget', currentTest)
+          assert.strictEqual(currentTest._retries, 3)
+          const nativeReads = reads
+          events['test:before:run']({}, currentTest)
+          events['test:before:run:async']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 3)
+          assert.strictEqual(reads, nativeReads)
+          return
+        }
         if (mode.startsWith('cross-root-')) {
           if (mode !== 'cross-root-queued-options') await hooks.before()
           const config = context.Cypress.config
@@ -2320,6 +2360,49 @@ moduleTypes.forEach(({
       assert.strictEqual(observeRetryConfig(config, () => assert.fail('must not observe')), undefined)
       assert.strictEqual(config.retries, frozen)
     })
+
+    for (const inherited of [false, true]) {
+      it(`ignores omitted setup reply retry getters (inherited=${inherited})`, async () => {
+        const observeSetupHandoff = require('../../packages/datadog-plugin-cypress/src/setup-handoff')
+        const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+        const receiver = {}
+        const handle = {}
+        const options = { keepOpen: true }
+        const callback = () => {}
+        let reads = 0
+        const owner = {}
+        Object.defineProperty(owner, 'retries', {
+          enumerable: inherited,
+          get () {
+            reads++
+            throw new Error('omitted retry getter must not run')
+          },
+        })
+        const setupConfig = inherited ? Object.create(owner) : owner
+        const message = { event: 'setupTestingType:reply', args: [{ setupConfig }] }
+        const nativeWire = JSON.parse(JSON.stringify(message))
+        let observed
+        let forwarded
+        process.send = function (...args) {
+          assert.strictEqual(this, receiver)
+          forwarded = args
+          assert.deepStrictEqual(JSON.parse(JSON.stringify(args[0])), nativeWire)
+          return 42
+        }
+        const stop = observeSetupHandoff(config => { observed = config })
+        try {
+          assert.strictEqual(process.send.call(receiver, message, handle, options, callback), 42)
+          assert.strictEqual(reads, 0)
+          assert.strictEqual(observed, undefined)
+          assert.deepStrictEqual(forwarded, [message, handle, options, callback])
+          assert.strictEqual(forwarded[0], message)
+        } finally {
+          stop()
+          if (descriptor) Object.defineProperty(process, 'send', descriptor)
+          else delete process.send
+        }
+      })
+    }
 
     it('serializes returned retry getter values once while retaining IPC arguments', () => {
       const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
