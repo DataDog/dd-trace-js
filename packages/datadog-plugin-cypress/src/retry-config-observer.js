@@ -1,11 +1,18 @@
 'use strict'
 
+/** @param {object} value Retry values observed at a Cypress IPC boundary. */
+function snapshot (value) {
+  // Match Cypress's JSON wire values, independently of descriptor flags.
+  // eslint-disable-next-line unicorn/prefer-structured-clone
+  return JSON.parse(JSON.stringify(value))
+}
+
 /**
  * Observe user writes after plugin initialization without changing the config's identity.
  *
  * @param {object} config
  * @param {Function} onChange
- * @param {{ nativeRetries: unknown, updateNative: Function }} [options]
+ * @param {{ nativeRetries: unknown, updateNative: Function, reconcileNative?: Function }} [options]
  */
 module.exports = function observeRetryConfig (config, onChange, options) {
   const descriptor = Object.getOwnPropertyDescriptor(config, 'retries')
@@ -16,7 +23,14 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   const roots = new WeakMap()
   const targets = new WeakMap()
   const unwrap = value => targets.get(value) || value
+  const refreshNative = metadata => {
+    if (active && metadata && options?.reconcileNative) {
+      metadata.native = options.reconcileNative(metadata.native, metadata.observed, metadata.raw)
+      metadata.observed = snapshot(metadata.raw)
+    }
+  }
   const notify = (value, path, metadata) => {
+    refreshNative(metadata)
     const provenance = options && {
       retries: metadata ? metadata.native : options.updateNative(undefined, value, []),
     }
@@ -25,7 +39,9 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   const getRoot = (raw, native) => {
     if (!raw || typeof raw !== 'object') return
     if (roots.has(raw)) return roots.get(raw)
-    const metadata = { raw, native, proxies: new WeakMap() }
+    const metadata = {
+      raw, native, proxies: new WeakMap(), observed: options?.reconcileNative ? snapshot(raw) : undefined,
+    }
     roots.set(raw, metadata)
     return metadata
   }
@@ -35,8 +51,21 @@ module.exports = function observeRetryConfig (config, onChange, options) {
     if (options) metadata.native = options.updateNative(metadata.native, metadata.raw, path)
     // A detached alias updates only its own provenance until that root is selected again.
     if (metadata.raw === unwrap(config.retries)) notify(metadata.raw, path, metadata)
+    else refreshNative(metadata)
+  }
+  /**
+   * @param {object} target
+   * @param {string|symbol} key
+   * @param {unknown} value
+   */
+  const isSameObjectValue = (target, key, value) => {
+    const raw = unwrap(value)
+    const previous = Object.getOwnPropertyDescriptor(target, key)
+    return raw !== null && typeof raw === 'object' && previous &&
+      'value' in previous && raw === unwrap(previous.value)
   }
   const wrap = (value, metadata, path = []) => {
+    value = unwrap(value)
     if (value === null || typeof value !== 'object') return value
     if (metadata.proxies.has(value)) return metadata.proxies.get(value)
     const proxy = new Proxy(value, {
@@ -49,8 +78,12 @@ module.exports = function observeRetryConfig (config, onChange, options) {
           : wrap(result, metadata, [...path, key])
       },
       set (target, key, value) {
+        const sameObject = isSameObjectValue(target, key, value)
         const result = Reflect.set(target, key, unwrap(value))
-        if (result) record(metadata, [...path, key])
+        if (result) {
+          if (sameObject) refreshNative(metadata)
+          else record(metadata, [...path, key])
+        }
         return result
       },
       deleteProperty (target, key) {
@@ -59,10 +92,13 @@ module.exports = function observeRetryConfig (config, onChange, options) {
         return result
       },
       defineProperty (target, key, property) {
-        const result = Reflect.defineProperty(target, key, 'value' in property
-          ? { ...property, value: unwrap(property.value) }
-          : property)
-        if (result) record(metadata, [...path, key])
+        const hasValue = 'value' in property
+        const sameObject = hasValue && isSameObjectValue(target, key, property.value)
+        const result = Reflect.defineProperty(target, key, property)
+        if (result) {
+          if (hasValue && !sameObject) record(metadata, [...path, key])
+          else refreshNative(metadata)
+        }
         return result
       },
     })
