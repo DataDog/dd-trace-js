@@ -9,7 +9,9 @@ module.exports = defineConfig({
   retries: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE === 'numeric-open'
     ? 2
     : {
-        runMode: process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE === 'during-init-partial' ? 2 : 0,
+        runMode: ['during-init-partial', 'freeze-during-init'].includes(process.env.CYPRESS_LATE_NATIVE_RETRIES_MODE)
+          ? 2
+          : 0,
         openMode: 0,
       },
   video: false,
@@ -27,7 +29,14 @@ module.exports = defineConfig({
       const pending = plugin(on, config)
       if (mode === 'during-init') config.retries.runMode = 2
       if (mode === 'during-init-partial') config.retries = { openMode: 1 }
+      if (mode === 'freeze-during-init') Object.freeze(config)
       const result = await pending
+      if (mode === 'freeze-during-init') return result
+      if (mode === 'freeze-retries' || mode === 'seal-retries') {
+        if (mode === 'freeze-retries') Object.freeze(result.retries)
+        else Object.seal(result.retries)
+        return result
+      }
       if (mode === 'indirect-returned-support') return { retries: 2 }
       if (mode === 'numeric-open') {
         if (typeof result.retries === 'number') {

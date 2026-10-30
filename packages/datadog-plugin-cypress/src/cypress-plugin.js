@@ -503,6 +503,13 @@ function reconcileNativeRetries (native, baseline, configured, actual) {
       result[key] = reconcileNativeRetries(result[key], baseline && baseline[key], configured[key], actual[key])
     }
   }
+  for (const key of Object.keys(configured)) {
+    // Cypress 6's plugin process uses Node 12, which predates Object.hasOwn.
+    // eslint-disable-next-line prefer-object-has-own
+    if (!Object.prototype.hasOwnProperty.call(actual, key)) {
+      result[key] = copyCypressRetries(baseline && baseline[key])
+    }
+  }
   return result
 }
 
@@ -943,6 +950,12 @@ class CypressPlugin {
     this._pendingRequestErrorTags = []
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
+        // Manual setup can freeze its original object while settings are pending.
+        // Keep later SDK writes private without changing the user's frozen root.
+        const pendingRetryDescriptor = Object.getOwnPropertyDescriptor(this.cypressConfig, 'retries')
+        if (pendingRetryDescriptor && 'value' in pendingRetryDescriptor && !pendingRetryDescriptor.writable) {
+          this.cypressConfig = { ...this.cypressConfig }
+        }
         // Setup can change native retries while backend settings are resolving.
         // Capture them before the first SDK retry write, including on settings errors.
         this.cypressConfig.retries = mergeNativeRetries(
@@ -1040,6 +1053,9 @@ class CypressPlugin {
           this.originalCypressRetries = copyCypressRetries(provenance.retries)
         }, {
           nativeRetries: copyCypressRetries(this.originalCypressRetries),
+          reconcileNative: (native, observed, actual) => reconcileNativeRetries(
+            native, this.nativeCypressRetriesBaseline, observed, actual
+          ),
           updateNative: (native, retries, path) => updateNativeRetries(
             native, this.nativeCypressRetriesBaseline, retries, path
           ),

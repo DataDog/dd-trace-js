@@ -196,7 +196,8 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'root-deleted', 'root-redefined', 'root-deleted-returned', 'root-deleted-partial', 'root-deleted-alias',
     'open-only', 'returned-open', 'spread-open', 'returned-open-preloaded', 'returned-object-preloaded',
     'browser-partial-before-support', 'saved-reference', 'saved-reference-changed',
-    'after-handoff-equal-preloaded', 'during-init', 'during-init-partial',
+    'after-handoff-equal-preloaded', 'during-init', 'during-init-partial', 'freeze-during-init',
+    'freeze-retries', 'seal-retries',
     'returned-experimental', 'returned-experimental-preloaded',
     'browser-queued-native-before-support',
     'browser-equal-before-support', 'browser-equal-before-support-preloaded',
@@ -214,7 +215,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         const ledger = join(cwd, 'late-native-retry-executions.json')
         const alternateLedger = join(cwd, 'late-support-alternate-executions.json')
         const noRunOverride = [
-          'unchanged', 'root-deleted', 'root-deleted-partial',
+          'unchanged', 'root-deleted', 'root-deleted-partial', 'freeze-retries', 'seal-retries',
           'open-only', 'returned-open', 'spread-open', 'returned-open-preloaded',
           'browser-partial-before-support', 'saved-reference', 'after-handoff-equal-preloaded',
         ].includes(lateMode)
@@ -284,6 +285,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
   }
 
   for (const mode of [
+    'browser-saved-local', 'browser-all-saved-local',
     'browser-numeric-open', 'browser-all-numeric-open',
     'browser-descriptor', 'browser-all-descriptor-root', 'browser-all-descriptor-same',
     'browser-retries', 'browser-same-budget', 'inherited-mode', 'browser-runtime', 'browser-inactive-mode',
@@ -292,18 +294,23 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'browser-all-equal', 'browser-all-inactive', 'browser-all-root',
     'browser-same-reference', 'browser-saved-reference',
     'experimental-native', 'experimental-native-zero',
+    'experimental-native-same-options', 'experimental-native-locked-options', 'experimental-native-assigned-options',
+    'experimental-native-locked-detached', 'experimental-native-checkpoint',
     'experimental-native-detached', 'experimental-native-detached-delete',
     'experimental-native-threshold', 'experimental-native-disabled',
     'experimental-native-disabled-zero', 'experimental-native-disabled-one', 'experimental-native-threshold-dynamic',
   ]) {
     for (const atrEnabled of [false, true]) {
       const numericNative = mode.includes('numeric-open')
+      // Cypress <15.17 retains the old restoration callback across tests without overrides.
+      const legacySavedLocal = ['browser-saved-local', 'browser-all-saved-local'].includes(mode) &&
+        version !== 'latest' && (cypressMajor < 15 || (cypressMajor === 15 && cypressMinor < 17))
       const descriptorNative = ['browser-descriptor', 'browser-all-descriptor-root'].includes(mode)
-      const zeroNative = [
+      const zeroNative = legacySavedLocal || [
         'inherited-mode', 'browser-runtime', 'browser-inactive-mode', 'browser-delete-mode', 'browser-partial-root',
         'browser-all-inactive', 'browser-same-reference', 'browser-saved-reference', 'browser-all-descriptor-same',
       ].includes(mode)
-      const browserZeroNative = [
+      const browserZeroNative = legacySavedLocal || [
         'browser-runtime', 'browser-inactive-mode', 'browser-all-inactive',
         'browser-same-reference', 'browser-saved-reference', 'browser-all-descriptor-same',
       ].includes(mode)
@@ -317,9 +324,9 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       boundaryTest(`preserves ${mode} native retry executions (ATR=${atrEnabled})`, async () => {
         const boundarySuite = 'cypress/e2e/native-retry-boundaries.cy.js'
         const ledger = join(cwd, 'native-retry-executions.json')
-        const nativeAttempts = descriptorNative || mode.includes('-detached')
-          ? 4
-          : thresholdNative ? 5 : disabledNative ? 1 : 3
+        const nativeAttempts = mode === 'experimental-native-checkpoint'
+          ? 5
+          : descriptorNative || mode.includes('-detached') ? 4 : thresholdNative ? 5 : disabledNative ? 1 : 3
         const experimentalEnvironment = experimentalMode
           ? {
               CYPRESS_EXPERIMENTAL_RETRIES: thresholdNative
@@ -329,6 +336,9 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           : {}
         if (numericNative) experimentalEnvironment.CYPRESS_RETRIES_AS_NUMBER = '2'
         const expected = {
+          ...(['browser-saved-local', 'browser-all-saved-local'].includes(mode) && {
+            'initial local control': 1, 'captures local retries': 1, 'restores local retries': 1,
+          }),
           'excluded recovery': zeroNative
             ? 1
             : descriptorNative ? 3 : nativeAttempts,
@@ -421,6 +431,57 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
             DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
           }),
         }, command)
+      })
+    }
+  }
+
+  for (const mode of ['raw-after', 'raw-before', 'raw-saved', 'raw-detached',
+    'locked-root', 'locked-root-reset', 'locked-root-unchanged']) {
+    for (const atrEnabled of [false, true]) {
+      it(`reconciles ${mode} browser retry object writes (ATR=${atrEnabled})`, async () => {
+        const rawSuite = 'cypress/e2e/browser-raw-retry-objects.cy.js'
+        const ledger = join(cwd, 'browser-raw-retry-executions.json')
+        const command = `./node_modules/.bin/cypress run --spec ${rawSuite}`
+        const unchanged = mode === 'locked-root-unchanged'
+        const expected = unchanged
+          ? { 'excluded recovery': 1, 'excluded persistent': 1, 'ordinary control': 1 }
+          : { 'excluded recovery': 3, 'excluded persistent': 4, 'ordinary control': 3 }
+        childProcess = exec(`${command} --config supportFile=false`, {
+          cwd,
+          env: {
+            ...cypressEnvironment(),
+            NODE_OPTIONS: '',
+            DD_TRACE_ENABLED: 'false',
+            SPEC_PATTERN: rawSuite,
+            CYPRESS_EXCLUSIONS_MODE: mode,
+          },
+        })
+        let output = ''
+        childProcess.stdout.on('data', chunk => { output += chunk })
+        childProcess.stderr.on('data', chunk => { output += chunk })
+        const [nativeExit] = await once(childProcess, 'exit')
+        assert.strictEqual(nativeExit, unchanged ? 3 : 1, output)
+        assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected, output)
+        rmSync(ledger)
+        receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
+        if (unchanged && atrEnabled) expected['ordinary control'] = 3
+        await run(mode, unchanged ? atrEnabled ? 2 : 3 : 1, tests => {
+          assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
+          assert.strictEqual(tests.length, Object.values(expected).reduce((sum, count) => sum + count, 0))
+          for (const [name, count] of Object.entries(expected)) {
+            const attempts = named(tests, `raw retry boundaries ${name}`)
+            assert.strictEqual(attempts.length, count, name)
+            const failed = name === 'excluded persistent' ||
+              (unchanged && (name !== 'ordinary control' || !atrEnabled))
+            assert.strictEqual(attempts.at(-1).meta['test.status'], failed ? 'fail' : 'pass')
+            const annotated = name.startsWith('excluded')
+            for (const attempt of attempts) assert.strictEqual(attempt.meta[exclusion], annotated ? 'true' : undefined)
+            for (const retry of attempts.slice(1)) {
+              assert.strictEqual(retry.meta['test.retry_reason'],
+                atrEnabled && !annotated ? 'auto_test_retry' : 'external', name)
+            }
+          }
+        }, { SPEC_PATTERN: rawSuite, DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '4' }, command)
       })
     }
   }
