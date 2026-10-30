@@ -305,6 +305,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
 
   for (const mode of [
     'browser-saved-local', 'browser-all-saved-local',
+    'browser-undefined-root', 'browser-experimental-strategy',
     'browser-numeric-open', 'browser-all-numeric-open',
     'browser-descriptor', 'browser-all-descriptor-root', 'browser-all-descriptor-same',
     'browser-field-accessor', 'experimental-native-field-accessor',
@@ -325,6 +326,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'experimental-native-disabled-zero', 'experimental-native-disabled-one', 'experimental-native-threshold-dynamic',
   ]) {
     for (const atrEnabled of [false, true]) {
+      const browserExperimental = mode === 'browser-experimental-strategy'
       const numericNative = mode.includes('numeric-open')
       const fieldAccessor = ['browser-field-accessor', 'experimental-native-field-accessor'].includes(mode)
       const rootAccessor = mode === 'experimental-native-root-accessor'
@@ -344,7 +346,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         'browser-same-reference', 'browser-saved-reference', 'browser-all-descriptor-same',
       ].includes(mode)
       const zeroControl = ['browser-delete-mode', 'browser-partial-root'].includes(mode)
-      const experimentalMode = mode.startsWith('experimental-native')
+      const experimentalMode = mode.startsWith('experimental-native') || browserExperimental
       const disabledNative = mode.includes('-disabled')
       const thresholdNative = mode.includes('-threshold')
       const dynamicRetries = mode.endsWith('-dynamic')
@@ -362,7 +364,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
               : descriptorNative || (mode.includes('-detached') && mode !== 'experimental-native-detached-accessor')
                 ? 4
                 : thresholdNative ? 5 : disabledNative ? 1 : 3
-        const experimentalEnvironment = experimentalMode
+        const experimentalEnvironment = experimentalMode && !browserExperimental
           ? {
               CYPRESS_EXPERIMENTAL_RETRIES: thresholdNative
                 ? 'threshold'
@@ -374,6 +376,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         }
         if (numericNative) experimentalEnvironment.CYPRESS_RETRIES_AS_NUMBER = '2'
         if (mode === 'browser-accessor-root') experimentalEnvironment.CYPRESS_RETRIES = '0'
+        if (mode === 'browser-undefined-root') experimentalEnvironment.CYPRESS_RETRIES = '2'
         const standardRecovery = descriptorNative ||
           ['browser-object-config-getter', 'browser-field-accessor'].includes(mode)
         const expected = {
@@ -432,7 +435,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         rmSync(ledger)
         receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
         if (browserZeroNative && atrEnabled) expected['ordinary control'] = 3
-        if (experimentalMode && atrEnabled && !mode.includes('-detached') &&
+        if (experimentalMode && !browserExperimental && atrEnabled && !mode.includes('-detached') &&
           mode !== 'experimental-native-field-accessor' && mode !== 'experimental-native-detached-accessor') {
           expected['ordinary control'] = disabledNative
             ? Math.min(atrBudget + 1, 3)
@@ -470,7 +473,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
                   name === 'excluded recovery') ||
                 (disabledNative && expected['ordinary control'] < 3 && name === 'ordinary control') ||
                 ((browserZeroNative && !atrEnabled ||
-                  ['browser-delete-mode', 'browser-partial-root'].includes(mode)) && name === 'ordinary control')
+                  zeroControl) && name === 'ordinary control')
                 ? 'fail'
                 : 'pass', name)
             if (experimentalMode) {
