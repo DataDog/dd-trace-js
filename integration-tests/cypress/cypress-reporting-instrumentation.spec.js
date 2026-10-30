@@ -2507,8 +2507,8 @@ moduleTypes.forEach(({
           assert.strictEqual(process.send.call(receiver, message, handle, options, callback), 42)
           assert.strictEqual(reads, 0)
           assert.strictEqual(observed, undefined)
-          assert.deepStrictEqual(forwarded, [message, handle, options, callback])
-          assert.strictEqual(forwarded[0], message)
+          assert.deepStrictEqual(forwarded.slice(1), [handle, options, callback])
+          assert.strictEqual(message.args[0].setupConfig, setupConfig)
         } finally {
           stop()
           if (descriptor) Object.defineProperty(process, 'send', descriptor)
@@ -2563,7 +2563,7 @@ moduleTypes.forEach(({
       }
     })
 
-    it('observes only the native setup reply and restores IPC identity without changing the message', () => {
+    it('observes the native setup snapshot and restores IPC identity without mutating the input', () => {
       const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
       const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
       const calls = []
@@ -2585,8 +2585,8 @@ moduleTypes.forEach(({
         const reply = { event: 'setupTestingType:reply', args: [{ setupConfig: returnedConfig }] }
         assert.strictEqual(process.send(reply), 17)
         assert.strictEqual(changes.length, 1)
-        assert.strictEqual(changes[0], returnedConfig.retries)
-        assert.strictEqual(calls[1].args[0], reply)
+        assert.deepStrictEqual(changes[0], returnedConfig.retries)
+        assert.deepStrictEqual(calls[1].args[0], reply)
         assert.strictEqual(observer.isWatching(config), false)
         assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').get, undefined)
         config.retries.openMode = 7
