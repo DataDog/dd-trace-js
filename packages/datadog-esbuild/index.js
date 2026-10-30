@@ -1,11 +1,11 @@
 'use strict'
 
-const { execSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL, fileURLToPath } = require('node:url')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
+const { getGitMetadata } = require('../datadog-instrumentations/src/helpers/bundler-git-metadata')
 const { isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
@@ -74,40 +74,6 @@ function isESMBuild (build) {
   return format === 'esm' || outputFile?.endsWith('.mjs') || outExtension === '.mjs'
 }
 
-function getGitMetadata () {
-  /**
-   * @type {object}
-   * @property {string | null} repositoryURL
-   * @property {string | null} commitSHA
-   */
-  const gitMetadata = {
-    repositoryURL: null,
-    commitSHA: null,
-  }
-
-  try {
-    gitMetadata.repositoryURL = execSync('git config --get remote.origin.url', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-      cwd: process.cwd(),
-    }).trim()
-  } catch (e) {
-    log.warn('failed to get git repository URL:', e.message)
-  }
-
-  try {
-    gitMetadata.commitSHA = execSync('git rev-parse HEAD', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-      cwd: process.cwd(),
-    }).trim()
-  } catch (e) {
-    log.warn('failed to get git commit SHA:', e.message)
-  }
-
-  return gitMetadata
-}
-
 module.exports.setup = function (build) {
   if (build.initialOptions.minify && !build.initialOptions.keepNames) {
     throw new Error(
@@ -148,7 +114,7 @@ ${build.initialOptions.banner.js}`
 
   // Bake DD_GIT_* into the banner unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
   if (DD_BUNDLER_INJECT_GIT_METADATA) {
-    const gitMetadata = getGitMetadata()
+    const gitMetadata = getGitMetadata(log)
     if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
       build.initialOptions.banner ??= {}
       build.initialOptions.banner.js ??= ''

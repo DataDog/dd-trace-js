@@ -60,6 +60,25 @@ jobs:
         with:
           id: ${{ github.job }}
 
+  vite:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: npm run test:vite:ci
+      - uses: ./.github/actions/node/latest
+      - run: npm run test:vite:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: platform-vite
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
+
   webpack:
     runs-on: ubuntu-latest
     permissions:
