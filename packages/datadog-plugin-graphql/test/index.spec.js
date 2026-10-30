@@ -24,7 +24,9 @@ const legacyStorage = storage('legacy')
 function noop () {}
 
 /**
- * @param {{ createResolverInfo: (data: object) => Record<string, Record<string, unknown>> }} message
+ * @param {{
+ *   createResolverInfo: (data: object, skipEmpty?: boolean) => Record<string, Record<string, unknown>>
+ * }} message
  * @returns {Record<string, Record<string, unknown>>}
  */
 function materializeResolverInfo (message) {
@@ -2245,6 +2247,46 @@ describe('Plugin', () => {
           assert.deepStrictEqual(humanResolverInfo, { human: {} },
             `Expected empty human resolver args. Got ${inspect(resolverInfo)}`)
         })
+
+        for (const skipEmpty of [undefined, false, true]) {
+          it(`should apply the empty resolver policy ${skipEmpty} without dropping values`, async () => {
+            const payloadSchema = graphql.buildSchema(`
+              directive @marker(value: String) on FIELD
+              type Query { empty: String argument(value: Int): String defaulted(value: Int = 0): String }
+            `)
+            const document = graphql.parse(`query EmptyResolverPolicy {
+              empty
+              marked: empty @marker(value: "kept")
+              unmarked: empty @marker
+              argument(value: null)
+              defaulted
+            }`)
+            const rootValue = { empty: 'ok', argument: 'ok', defaulted: 'ok' }
+            const resolverInfos = []
+            const channel = dc.channel('datadog:graphql:resolver:start')
+            /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+            const onResolver = message => resolverInfos.push(message.createResolverInfo(message, skipEmpty))
+
+            channel.subscribe(onResolver)
+            try {
+              const result = await graphql.execute({ schema: payloadSchema, document, rootValue })
+              assert.strictEqual(result.errors, undefined)
+              assertObjectContains(result.data, {
+                empty: 'ok', marked: 'ok', unmarked: 'ok', argument: 'ok', defaulted: 'ok',
+              })
+            } finally {
+              channel.unsubscribe(onResolver)
+            }
+
+            assert.deepStrictEqual(resolverInfos, [
+              skipEmpty ? null : { empty: {} },
+              { empty: { marker: { value: 'kept' } } },
+              skipEmpty ? null : { empty: {} },
+              { argument: { value: null } },
+              { defaulted: { value: 0 } },
+            ])
+          })
+        }
 
         it('should support multiple validations on a pre-parsed document', () => {
           const source = 'query MyQuery { hello(name: "world") }'
