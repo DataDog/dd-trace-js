@@ -17,10 +17,11 @@ const { isRewriteActivationEnabled } = require('./rewriter/targets')
 const disabledInstrumentations = getDisabledInstrumentations()
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
-// environments (webpack, esbuild, Turbopack), Node.js built-ins required by the
-// application or by dd-trace itself may have been loaded and cached by the
-// bundle before ritm was active, bypassing it. Re-requiring them via the real
-// Module.prototype.require lets ritm apply their hooks to the shared exports.
+// environments (webpack, esbuild, Turbopack, Vite), Node.js built-ins and
+// Electron's `electron` module required by the application or by dd-trace itself
+// may have been loaded and cached by the bundle before ritm was active, bypassing
+// it. Re-requiring them via the real Module.prototype.require lets ritm apply
+// their hooks to the shared exports.
 //
 // In regular Node.js, `module` is an instance of Module. In bundlers, the
 // module wrapper object is a plain object (not a Module instance), so we use
@@ -39,6 +40,11 @@ function patchLoadedBuiltins () {
 
   let patched = false
   for (const name of registeredBuiltinNames) {
+    if (name === 'electron') {
+      // Outside Electron, `electron` is the npm package that downloads the binary, not the runtime module.
+      if (process.versions.electron) patchElectron()
+      continue
+    }
     if (loadedBuiltins?.includes(`NativeModule ${name}`) === false) continue
 
     try {
@@ -54,6 +60,16 @@ function patchLoadedBuiltins () {
     Module.syncBuiltinESMExports()
   } catch (error) {
     log.error('Error synchronizing bundled built-in ESM exports: %s', String(error?.message ?? error), error)
+  }
+}
+
+// The hook patches `net`, `ipcMain` and `BrowserWindow.prototype` in place, so the exports the bundle already holds
+// are traced. Only the preload injection relies on the replaced exports, and is not applied to them.
+function patchElectron () {
+  try {
+    Module.prototype.require.call(module, 'electron')
+  } catch (error) {
+    log.error('Error patching the bundled electron module: %s', String(error?.message ?? error), error)
   }
 }
 

@@ -15,7 +15,7 @@ const {
 } = require('./instrumentation-utils')
 const rewriter = require('./rewriter')
 const { getActivationSetup } = require('./rewriter/instrumentation-registry')
-const { isNodeBuiltinModuleName } = require('./shared-utils')
+const { isBuiltinModuleName } = require('./shared-utils')
 
 const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG')
 
@@ -63,7 +63,7 @@ const compatibleOrchestrionTargets = new Set()
 /** @type {Set<(activation: import('./rewriter/instrumentation-registry').Activation) => void>} */
 const blockedActivationSetups = new Set()
 /**
- * Node.js built-ins that passed the disabled and serverless checks and received a hook.
+ * Node.js and Electron built-ins that passed the disabled and serverless checks and received a hook.
  * @type {string[]}
  */
 const registeredBuiltinNames = []
@@ -130,7 +130,7 @@ for (const name of names) {
     hook = hook.fn
   }
 
-  if (isNodeBuiltinModuleName(name)) registeredBuiltinNames.push(name)
+  if (isBuiltinModuleName(name)) registeredBuiltinNames.push(name)
 
   Hook([name], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     // All loaded versions are first expected to fail instrumentation.

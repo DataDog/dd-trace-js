@@ -94,6 +94,45 @@ describe('bundler register', () => {
       sinon.assert.notCalled(log.error)
     })
 
+    describe('electron', () => {
+      const originalElectron = process.versions.electron
+
+      afterEach(() => {
+        if (originalElectron === undefined) {
+          delete process.versions.electron
+        } else {
+          process.versions.electron = originalElectron
+        }
+      })
+
+      it('re-requires electron in Electron, without syncing built-in ESM exports for it', () => {
+        process.versions.electron = '45.0.0'
+
+        const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, registered: ['electron'], loaded: [] })
+
+        assert.deepStrictEqual(requireBuiltin.args, [['electron']])
+        sinon.assert.notCalled(sync)
+      })
+
+      it('does not require the electron npm package outside of Electron', () => {
+        delete process.versions.electron
+
+        const { requireBuiltin } = loadBuiltinRegister({ bundled: true, registered: ['electron', 'http'] })
+
+        assert.deepStrictEqual(requireBuiltin.args, [['http']])
+      })
+
+      it('logs a failing electron require instead of throwing', () => {
+        process.versions.electron = '45.0.0'
+        const error = new Error('electron failed')
+
+        const { log } = loadBuiltinRegister({ bundled: true, registered: ['electron'], failing: { electron: error } })
+
+        sinon.assert.calledWithExactly(log.error, 'Error patching the bundled electron module: %s', error.message,
+          error)
+      })
+    })
+
     it('logs a failing ESM synchronization instead of throwing', () => {
       const error = new Error('sync failed')
       const { log } = loadBuiltinRegister({ bundled: true, syncError: error })

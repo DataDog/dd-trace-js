@@ -158,6 +158,14 @@ describe('register', () => {
       assert.deepStrictEqual(registeredBuiltinNames, ['fs', 'http', 'dns'])
     })
 
+    it('lists electron, which Electron provides as a built-in', () => {
+      hooksMock.electron = sinon.stub()
+
+      const { registeredBuiltinNames } = loadRegisterWithEnv()
+
+      assert.deepStrictEqual(registeredBuiltinNames, ['fs', 'http', 'dns', 'electron'])
+    })
+
     for (const disabledName of ['http', 'node:http']) {
       it(`omits http when ${disabledName} is disabled`, () => {
         const { registeredBuiltinNames } = loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: disabledName })
