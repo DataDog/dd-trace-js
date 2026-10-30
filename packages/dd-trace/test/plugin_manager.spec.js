@@ -388,6 +388,46 @@ describe('Plugin Manager', () => {
   })
 
   describe('configure', () => {
+    describe('DBM propagation mode', () => {
+      it('allows plugin configuration to override non-remote tracer configuration', () => {
+        pm.configure(makeTracerConfig({
+          dbmPropagationMode: 'service',
+          getOrigin: () => 'code',
+        }))
+        pm.configurePlugin('two', { dbmPropagationMode: 'full' })
+        loadChannel.publish({ name: 'two' })
+
+        sinon.assert.calledWithMatch(Two.prototype.configure, {
+          dbmPropagationMode: 'full',
+        })
+      })
+
+      it('applies remote configuration over plugin configuration and restores it on unapply', () => {
+        let origin = 'remote_config'
+        const tracerConfig = makeTracerConfig({
+          dbmPropagationMode: 'disabled',
+          getOrigin: () => origin,
+        })
+
+        pm.configure(tracerConfig)
+        pm.configurePlugin('two', { dbmPropagationMode: 'full' })
+        loadChannel.publish({ name: 'two' })
+
+        sinon.assert.calledWithMatch(Two.prototype.configure, {
+          dbmPropagationMode: 'disabled',
+        })
+
+        Two.prototype.configure.resetHistory()
+        origin = 'code'
+        tracerConfig.dbmPropagationMode = 'service'
+        pm.configure(tracerConfig)
+
+        sinon.assert.calledWithMatch(Two.prototype.configure, {
+          dbmPropagationMode: 'full',
+        })
+      })
+    })
+
     describe('without the load event', () => {
       it('should not instantiate plugins', () => {
         pm.configure(makeTracerConfig())
