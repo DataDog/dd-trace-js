@@ -20,6 +20,9 @@ function attempt (name, passAt) {
 
 const mode = getTestEnvironment('EXCLUSIONS_MODE')
 let savedLocalRetries
+if (mode === 'browser-accessor-root') {
+  Object.defineProperty(Cypress.config(), 'retries', { get: () => 2, configurable: true, enumerable: true })
+}
 if (['browser-numeric-open', 'browser-all-numeric-open'].includes(mode)) {
   const state = mode === 'browser-all-numeric-open' ? Cypress.config() : null
   let retries = state ? state.retries : Cypress.config('retries')

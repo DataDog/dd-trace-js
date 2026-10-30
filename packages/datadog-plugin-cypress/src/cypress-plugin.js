@@ -1919,7 +1919,7 @@ class CypressPlugin {
           const finalStatus = getFinalStatus({
             // Native retries use Cypress's aggregate outcome; managed attempts retain their own policy.
             status: finalRetryKind === FINAL_STATUS_RETRY_KIND.none && !isDatadogManagedAttempt
-              ? CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+              ? CYPRESS_STATUS_TO_TEST_STATUS[isCypressHookFailure(cypressTest) ? 'failed' : cypressTest.state]
               : cypressTestStatus,
             retryKind: finalRetryKind,
             hasFailedAllAttempts,

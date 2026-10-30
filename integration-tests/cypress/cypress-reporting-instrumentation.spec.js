@@ -1900,6 +1900,7 @@ moduleTypes.forEach(({
     }
 
     for (const mode of [
+      'accessor-root',
       'raw-after', 'raw-before', 'raw-saved', 'raw-detached', 'locked-root', 'locked-root-unchanged',
       'suite-owner', 'suite-root-owner', 'framework-known-root', 'framework-scalar',
       'same-options', 'locked-options', 'assigned-options', 'raw-locked-options',
@@ -2073,6 +2074,44 @@ moduleTypes.forEach(({
           currentTest._testConfig.applied = 'complete'
           events['test:before:run']({}, currentTest)
           assert.strictEqual(currentTest._retries, 0)
+          return
+        }
+        if (mode === 'accessor-root') {
+          let reads = 0
+          let budget = 2
+          const getter = () => { reads++; return budget }
+          Object.defineProperty(config(), 'retries', { get: getter, configurable: true, enumerable: true })
+          assert.strictEqual(reads, 0)
+          assert.strictEqual(Object.getOwnPropertyDescriptor(config(), 'retries').get, getter)
+          assert.strictEqual(reads, 0)
+          assert.strictEqual(Reflect.set(config(), 'retries', 9), false)
+          assert.strictEqual(reads, 0)
+          assert.throws(() => config('retries', 9), TypeError)
+          assert.strictEqual(reads, 0)
+          assert.strictEqual(config('retries'), 2)
+          assert.strictEqual(reads, 1)
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 2)
+          budget = 3
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 3)
+          const beforeReplacement = reads
+          Object.defineProperty(config(), 'retries', { value: 0, writable: true })
+          assert.strictEqual(reads, beforeReplacement)
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 0)
+          Object.defineProperty(config(), 'retries', {
+            get: getter,
+            set: value => { budget = value },
+            configurable: true,
+          })
+          const beforeSet = reads
+          assert.strictEqual(Reflect.set(config(), 'retries', 5), true)
+          assert.strictEqual(reads, beforeSet)
+          assert.strictEqual(budget, 5)
+          config('retries', 6)
+          assert.strictEqual(reads, beforeSet + 1)
+          assert.strictEqual(budget, 6)
           return
         }
         if (mode === 'descriptor-root') {

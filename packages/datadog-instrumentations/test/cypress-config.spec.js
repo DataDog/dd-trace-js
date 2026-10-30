@@ -614,3 +614,68 @@ describe('Cypress saved experimental options', () => {
     }
   }
 })
+
+describe('Cypress native final status after late hooks', () => {
+  for (const scenario of [
+    { name: 'late hook', state: 'passed', attempts: ['failed'], hook: true, final: 'fail' },
+    { name: 'native aggregate failure', state: 'failed', attempts: ['failed', 'passed'], final: 'fail' },
+    { name: 'native aggregate pass', state: 'passed', attempts: ['passed', 'failed'], final: 'pass' },
+    { name: 'ordinary pass', state: 'passed', attempts: ['passed'], final: 'pass' },
+  ]) {
+    it(`keeps duplicate declarations independent (${scenario.name})`, async () => {
+      const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+      const plugin = new CypressPlugin()
+      const createSpan = status => {
+        const tags = { 'test.status': status }
+        return {
+          tags,
+          context: () => ({
+            getTag: key => tags[key],
+            getTags: () => tags,
+            toTraceId: () => '123',
+            toSpanId: () => '456',
+          }),
+          setTag: (key, value) => { tags[key] = value },
+          finish: sinon.spy(),
+        }
+      }
+      const first = createSpan('pass')
+      const attempts = scenario.attempts.map(state => createSpan(state === 'passed' ? 'pass' : 'fail'))
+      const spec = { relative: 'duplicate-late-hook.cy.js' }
+      const title = ['duplicate title']
+      plugin.testSuiteSpan = createSpan('pass')
+      plugin.ciVisEvent = () => {}
+      plugin.getTestCodeOwners = () => undefined
+      plugin.finishedTestsByFile[spec.relative] = [
+        { testId: 'first', testName: title[0], testStatus: 'pass', testSpan: first, finishTime: 1 },
+        ...attempts.map((testSpan, index) => ({
+          testId: 'second',
+          testName: title[0],
+          testStatus: scenario.hook ? 'pass' : testSpan.tags['test.status'],
+          testSpan,
+          finishTime: index + 2,
+          hasNativeRetries: attempts.length > 1,
+        })),
+      ]
+      await plugin.afterSpec(spec, {
+        stats: { tests: 2, failures: scenario.final === 'fail' ? 1 : 0 },
+        tests: [
+          { title, state: 'passed', attempts: [{ state: 'passed' }] },
+          {
+            title,
+            state: scenario.state,
+            attempts: scenario.attempts.map(state => ({ state })),
+            ...(scenario.hook && { displayError: 'after all hook failed' }),
+          },
+        ],
+      })
+      assert.strictEqual(first.tags['test.status'], 'pass')
+      assert.strictEqual(first.tags['test.final_status'], 'pass')
+      assert.strictEqual(attempts.at(-1).tags['test.status'],
+        scenario.attempts.at(-1) === 'passed' ? 'pass' : 'fail')
+      assert.strictEqual(attempts.at(-1).tags['test.final_status'], scenario.final)
+      sinon.assert.calledOnce(first.finish)
+      for (const attempt of attempts) sinon.assert.calledOnce(attempt.finish)
+    })
+  }
+})
