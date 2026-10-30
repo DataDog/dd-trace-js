@@ -154,9 +154,15 @@ function isPlainObject (value) {
  * @param {unknown} value
  */
 function isValidCustomTag (key, value) {
-  if (key.length === 0 || key.length > MAX_META_KEY_LENGTH) return false
-  if (key === TAGS.RESERVED_TAG_KEY || key.startsWith(TAGS.RESERVED_TAG_PREFIX)) return false
-  if (key === SERVICE_NAME && typeof value !== 'string') return false
+  if (
+    key.length === 0 ||
+    key.length > MAX_META_KEY_LENGTH ||
+    key === TAGS.RESERVED_TAG_KEY ||
+    key.startsWith(TAGS.RESERVED_TAG_PREFIX) ||
+    (key === SERVICE_NAME && typeof value !== 'string')
+  ) {
+    return false
+  }
 
   switch (typeof value) {
     case 'string':
