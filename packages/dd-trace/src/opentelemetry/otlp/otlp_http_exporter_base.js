@@ -5,7 +5,7 @@ const https = require('node:https')
 const { URL } = require('node:url')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
-const { createServerlessDeliveryTracker } = require('../../serverless')
+const TelemetryDeliveryTracker = require('../../serverless/telemetry-delivery-tracker')
 const { getHttpsProxyAgent } = require('../../exporters/common/proxy')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { version: tracerVersion } = require('../../../../../package.json')
@@ -23,7 +23,7 @@ const legacyStorage = storage('legacy')
  */
 class OtlpHttpExporterBase {
   #transport = https
-  #serverlessDeliveryTracker
+  #deliveryTracker = new TelemetryDeliveryTracker()
 
   /**
    * Creates a new OtlpHttpExporterBase instance.
@@ -36,7 +36,6 @@ class OtlpHttpExporterBase {
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
    */
   constructor (url, headers, timeout, protocol, signalType) {
-    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this.protocol = protocol
     this.signalType = signalType
 
@@ -82,10 +81,7 @@ class OtlpHttpExporterBase {
    * @protected
    */
   sendPayload (payload, resultCallback) {
-    if (this.#serverlessDeliveryTracker) {
-      return this.#serverlessDeliveryTracker.track(done => this.#sendPayload(payload, resultCallback, done))
-    }
-    this.#sendPayload(payload, resultCallback)
+    this.#deliveryTracker.track(done => this.#sendPayload(payload, resultCallback, done))
   }
 
   #sendPayload (payload, resultCallback, done) {
@@ -101,8 +97,11 @@ class OtlpHttpExporterBase {
     const complete = result => {
       if (completed) return
       completed = true
-      resultCallback(result)
-      done?.()
+      try {
+        resultCallback(result)
+      } finally {
+        done(result.error)
+      }
     }
 
     try {
@@ -145,17 +144,16 @@ class OtlpHttpExporterBase {
       })
     } catch (error) {
       log.error('Error sending OTLP %s:', this.signalType, error)
-      complete({ code: 1, error })
+      complete({ code: 1, error: error instanceof Error ? error : new Error(String(error)) })
     }
   }
 
   /**
-   * Calls back once Vercel-tracked requests active at the flush boundary complete.
-   * @param {Function} [done]
+   * Calls back once requests active at the flush boundary complete, with the first delivery error, if any.
+   * @param {(error?: Error) => void} [done]
    */
   flush (done) {
-    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.waitForIdle(done)
-    done?.()
+    this.#deliveryTracker.waitForIdle(done)
   }
 
   /**
