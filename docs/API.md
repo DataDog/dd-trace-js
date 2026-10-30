@@ -155,6 +155,32 @@ const tracer = require('dd-trace').init({
 
 The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project name is configured, Experiments uses `default-project`. The `mlApp` and `service` settings are not used as Experiments project-name fallbacks. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
 
+<h3 id="llmobs-experiments-evaluators">Built-in evaluators and experiment control plane</h3>
+
+`tracer.llmobs.experiments` exposes built-in evaluators that extend `BaseEvaluator` and can be passed to `experiments.experiment({ evaluators })`: `LengthEvaluator`, `JSONEvaluator`, `StringCheckEvaluator`, `RegexMatchEvaluator`, `SemanticSimilarityEvaluator`, and `LLMJudge` with `BooleanStructuredOutput`, `ScoreStructuredOutput`, or `CategoricalStructuredOutput`. `LLMJudge` does not ship a provider SDK; pass a `client` function that performs the model call and returns the JSON response:
+
+```javascript
+const { LLMJudge, BooleanStructuredOutput } = tracer.llmobs.experiments
+
+const judge = new LLMJudge({
+  provider: 'openai',
+  model: 'gpt-4o',
+  userPrompt: 'Is {{output_data}} a correct answer to {{input_data}}?',
+  structuredOutput: new BooleanStructuredOutput({ description: 'correct', reasoning: true, passWhen: true }),
+  client: async ({ messages, jsonSchema, model }) => callYourModel({ messages, jsonSchema, model })
+})
+
+await tracer.llmobs.experiments.publishEvaluator(judge, { agentService: 'my-agent' })
+const pulled = await tracer.llmobs.experiments.pullExperiment('experiment-id')
+const summaries = await tracer.llmobs.experiments.listExperiments({ experimentName: 'my-experiment' })
+const dataset = await tracer.llmobs.experiments.createDatasetFromCsv({
+  csvPath: './records.csv',
+  datasetName: 'my-dataset',
+  inputDataColumns: ['question'],
+  expectedOutputColumns: ['answer']
+})
+```
+
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.

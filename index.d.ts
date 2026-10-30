@@ -57,6 +57,42 @@ declare const RemoteEvaluator: {
   }): tracer.llmobs.RemoteEvaluator
 }
 
+declare const LengthEvaluator: {
+  new (options: tracer.llmobs.LengthEvaluatorOptions): tracer.llmobs.BaseEvaluator
+}
+
+declare const JSONEvaluator: {
+  new (options?: tracer.llmobs.JSONEvaluatorOptions): tracer.llmobs.BaseEvaluator
+}
+
+declare const StringCheckEvaluator: {
+  new (options?: tracer.llmobs.StringCheckEvaluatorOptions): tracer.llmobs.BaseEvaluator
+}
+
+declare const RegexMatchEvaluator: {
+  new (options: tracer.llmobs.RegexMatchEvaluatorOptions): tracer.llmobs.BaseEvaluator
+}
+
+declare const SemanticSimilarityEvaluator: {
+  new (options: tracer.llmobs.SemanticSimilarityEvaluatorOptions): tracer.llmobs.BaseEvaluator
+}
+
+declare const LLMJudge: {
+  new (options: tracer.llmobs.LLMJudgeOptions): tracer.llmobs.LLMJudge
+}
+
+declare const BooleanStructuredOutput: {
+  new (options?: tracer.llmobs.BooleanStructuredOutputOptions): tracer.llmobs.StructuredOutput
+}
+
+declare const ScoreStructuredOutput: {
+  new (options: tracer.llmobs.ScoreStructuredOutputOptions): tracer.llmobs.StructuredOutput
+}
+
+declare const CategoricalStructuredOutput: {
+  new (options: tracer.llmobs.CategoricalStructuredOutputOptions): tracer.llmobs.StructuredOutput
+}
+
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
@@ -4192,6 +4228,138 @@ declare namespace tracer {
       evaluate (context: EvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
     }
 
+    /** Transforms the output (or expected output) before a built-in evaluator inspects it. */
+    type EvaluatorOutputExtractor = (output: JSONType) => JSONType
+
+    interface BuiltinEvaluatorOptions {
+      /** Metric label. Defaults to the class name. */
+      name?: string
+    }
+
+    interface LengthEvaluatorOptions extends BuiltinEvaluatorOptions {
+      /** Inclusive minimum length. At least one of `minLength`/`maxLength` is required. */
+      minLength?: number
+      /** Inclusive maximum length. */
+      maxLength?: number
+      /** Unit to count. Default `'characters'`. */
+      countType?: 'characters' | 'words' | 'lines'
+      outputExtractor?: EvaluatorOutputExtractor
+    }
+
+    interface JSONEvaluatorOptions extends BuiltinEvaluatorOptions {
+      /** Top-level keys that must be present in the parsed JSON object. */
+      requiredKeys?: string[]
+      outputExtractor?: EvaluatorOutputExtractor
+    }
+
+    interface StringCheckEvaluatorOptions extends BuiltinEvaluatorOptions {
+      /** Comparison between output and expected output. Default `'eq'`. */
+      operation?: 'eq' | 'ne' | 'contains' | 'icontains'
+      /** Default `true`. Ignored for `icontains`. */
+      caseSensitive?: boolean
+      /** Trim both sides before comparing. Default `false`. */
+      stripWhitespace?: boolean
+      outputExtractor?: EvaluatorOutputExtractor
+      expectedOutputExtractor?: EvaluatorOutputExtractor
+    }
+
+    interface RegexMatchEvaluatorOptions extends BuiltinEvaluatorOptions {
+      pattern: string | RegExp
+      /** `'search'` anywhere (default), `'match'` anchored at start, `'fullmatch'` whole string. */
+      matchMode?: 'search' | 'match' | 'fullmatch'
+      /** RegExp flags, e.g. `'i'`. */
+      flags?: string
+      outputExtractor?: EvaluatorOutputExtractor
+    }
+
+    interface SemanticSimilarityEvaluatorOptions extends BuiltinEvaluatorOptions {
+      /** Returns the embedding vector for a text (sync or async). */
+      embeddingFn: (text: string) => number[] | Promise<number[]>
+      /** Normalized cosine similarity in [0, 1] at or above which the row passes. Default 0.7. */
+      threshold?: number
+    }
+
+    interface StructuredOutputOptions {
+      /** Ask the judge for a `reasoning` field alongside the label. Default `false`. */
+      reasoning?: boolean
+      reasoningDescription?: string
+    }
+
+    interface BooleanStructuredOutputOptions extends StructuredOutputOptions {
+      description?: string
+      /** Value that counts as `'pass'`. */
+      passWhen?: boolean
+    }
+
+    interface ScoreStructuredOutputOptions extends StructuredOutputOptions {
+      description: string
+      minScore: number
+      maxScore: number
+      /** Scores below this fail. */
+      minThreshold?: number
+      /** Scores above this fail. */
+      maxThreshold?: number
+    }
+
+    interface CategoricalStructuredOutputOptions extends StructuredOutputOptions {
+      /** Category label -> description map. */
+      categories: Record<string, string>
+      /** Categories that count as `'pass'`. */
+      passValues?: string[]
+    }
+
+    /** Structured-output definition used by `LLMJudge` to build the JSON schema and assess responses. */
+    interface StructuredOutput {
+      readonly label: string
+      readonly reasoning: boolean
+      toJsonSchema (): Record<string, JSONType>
+    }
+
+    type LLMJudgeProvider = 'openai' | 'anthropic' | 'azure_openai' | 'vertexai' | 'bedrock'
+
+    /** Request handed to the user-supplied `LLMJudge` client. */
+    interface LLMJudgeClientRequest {
+      provider: LLMJudgeProvider | null
+      model: string
+      /** Rendered system (optional) and user prompts. */
+      messages: Array<{ role: 'system' | 'user', content: string }>
+      /** JSON schema the response must satisfy, or `null` when no structured output is configured. */
+      jsonSchema: Record<string, JSONType> | null
+      modelParams: Record<string, JSONType> | null
+    }
+
+    /**
+     * Performs the judge LLM call (dd-trace-py `LLMClient`). With a structured output it must return the JSON text;
+     * without one, the raw response is used as the metric value.
+     */
+    type LLMJudgeClient = (request: LLMJudgeClientRequest) => string | Promise<string>
+
+    interface LLMJudgeOptions extends BuiltinEvaluatorOptions {
+      /**
+       * Prompt template. `{{input_data}}`, `{{output_data}}`, `{{expected_output}}`, `{{span_id}}`,
+       * `{{trace_id}}` and `{{metadata.key}}` placeholders are rendered from the evaluator context.
+       */
+      userPrompt: string
+      /** Performs the LLM request. No provider SDK is bundled. */
+      client: LLMJudgeClient
+      /** Model identifier forwarded to `client`; required to evaluate or publish. */
+      model?: string
+      systemPrompt?: string
+      /** Structured output definition or raw JSON schema. */
+      structuredOutput?: StructuredOutput | Record<string, JSONType>
+      /** Forwarded to `client`; required for `experiments.publishEvaluator()`. */
+      provider?: LLMJudgeProvider
+      modelParams?: Record<string, JSONType>
+    }
+
+    interface LLMJudge extends BaseEvaluator {
+      userPrompt: string
+      systemPrompt: string | null
+      model: string | null
+      provider: LLMJudgeProvider | null
+      modelParams: Record<string, JSONType> | null
+    }
+
     /** Base class for reusable synchronous or asynchronous summary evaluators. */
     interface BaseSummaryEvaluator {
       readonly [baseSummaryEvaluatorBrand]: never
@@ -4306,6 +4474,90 @@ declare namespace tracer {
       errorMessage: string | null
       evaluations: Record<string, JSONType>
       evaluationErrors: Record<string, string>
+      /** Only set on rows pulled with `experiments.pullExperiment()`. */
+      evaluationDetails?: Record<string, ExperimentEvaluationDetail>
+    }
+
+    /** Full evaluation metric for a pulled experiment row. */
+    interface ExperimentEvaluationDetail {
+      value: JSONType
+      /** Metric type: `boolean`, `score`, `categorical` or `json`. */
+      type: string
+      reasoning: string | null
+      assessment: string | null
+      status: string | null
+      error: JSONType
+    }
+
+    /** Experiment metadata returned by `listExperiments()` / `pullExperiment()`. */
+    interface ExperimentSummary {
+      id: string
+      name: string
+      /** Logical experiment name as returned by the backend. */
+      experiment: string
+      projectId: string
+      datasetId: string
+      datasetVersion: number
+      description: string
+      config: Record<string, JSONType>
+      runCount: number
+      /** `key:value` metadata tags parsed into an object, e.g. `{ project_name: 'my-project' }`. */
+      tags: Record<string, string | string[]>
+      parentExperimentId: string | null
+      aggregateData: Record<string, JSONType> | null
+      status: string | null
+      error: string | null
+      createdAt: string | null
+      updatedAt: string | null
+    }
+
+    interface PulledExperiment extends ExperimentSummary {
+      /** Project name from the experiment tags, or the configured project. */
+      projectName: string
+      url: string | null
+      /** Rows and evaluations reconstructed from the experiment's span events. */
+      result: ExperimentResult
+    }
+
+    interface ListExperimentsOptions {
+      experimentName?: string
+      /** Metadata filter, e.g. `{ tags: ['git.commit.sha:abc'] }`. */
+      metadataFilter?: Record<string, JSONType>
+      parentExperimentIds?: string[]
+      /** Defaults to the configured project. */
+      projectName?: string
+      /** Page size (1-5000). Default 100. */
+      pageLimit?: number
+      /** Stop after this many experiments. Default: all pages. */
+      maxResults?: number
+    }
+
+    interface PublishEvaluatorOptions {
+      /** Agent service (ML app) the evaluator is attached to. Defaults to the configured `mlApp` / `service`. */
+      agentService?: string
+      /** @deprecated Use `agentService`. */
+      mlApp?: string
+      /** Overrides the evaluator's name. */
+      evalName?: string
+      /** Maps prompt template variables to span fields, e.g. `{ question: 'input_data' }`. */
+      variableMapping?: Record<string, string>
+    }
+
+    interface CreateDatasetFromCsvOptions {
+      csvPath: string
+      datasetName: string
+      /** CSV columns that make up each record's input object. */
+      inputDataColumns: string[]
+      expectedOutputColumns?: string[]
+      metadataColumns?: string[]
+      /** Single-character delimiter. Default `,`. */
+      csvDelimiter?: string
+      description?: string
+      projectName?: string
+      /** Skip duplicate rows server-side. Default `true`. */
+      deduplicate?: boolean
+      /** Column used as the record id. */
+      idColumn?: string
     }
 
     interface ExperimentRun {
@@ -4466,6 +4718,15 @@ declare namespace tracer {
       MultiEvaluatorResult: typeof MultiEvaluatorResult
       RemoteEvaluator: typeof RemoteEvaluator
       RemoteEvaluatorError: typeof RemoteEvaluatorError
+      LLMJudge: typeof LLMJudge
+      BooleanStructuredOutput: typeof BooleanStructuredOutput
+      ScoreStructuredOutput: typeof ScoreStructuredOutput
+      CategoricalStructuredOutput: typeof CategoricalStructuredOutput
+      StringCheckEvaluator: typeof StringCheckEvaluator
+      RegexMatchEvaluator: typeof RegexMatchEvaluator
+      LengthEvaluator: typeof LengthEvaluator
+      JSONEvaluator: typeof JSONEvaluator
+      SemanticSimilarityEvaluator: typeof SemanticSimilarityEvaluator
       /** Create a local dataset buffer; pushed on the first experiment run. */
       createDataset (name: string, description?: string): Dataset
       createDataset (name: string, options?: CreateDatasetOptions): Dataset
@@ -4475,6 +4736,14 @@ declare namespace tracer {
       experiment (options: ExperimentOptions): Experiment
       /** Start an externally-driven experiment. */
       startExperiment (options: StartExperimentOptions): Promise<ExternalExperiment>
+      /** Publish an `LLMJudge` as a custom evaluator configuration (published disabled). */
+      publishEvaluator (evaluator: LLMJudge, options?: PublishEvaluatorOptions): Promise<{ uiUrl: string | null }>
+      /** Fetch an existing experiment's metadata plus its rows and evaluations. */
+      pullExperiment (experimentId: string): Promise<PulledExperiment>
+      /** List experiments in a project. */
+      listExperiments (options?: ListExperimentsOptions): Promise<ExperimentSummary[]>
+      /** Create a dataset from a CSV file and bulk-upload its rows. */
+      createDatasetFromCsv (options: CreateDatasetFromCsvOptions): Promise<Dataset>
     }
 
     interface LLMObservabilitySpan {

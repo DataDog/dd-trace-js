@@ -862,6 +862,82 @@ checkEvaluatorTypes
 requiredExpectedOutput
 inspectExperimentResult
 
+// experiments: built-in evaluators and control plane (type-checked only; never executed)
+async function llmobsExperimentsControlPlaneTypes () {
+  const {
+    LengthEvaluator,
+    JSONEvaluator,
+    StringCheckEvaluator,
+    RegexMatchEvaluator,
+    SemanticSimilarityEvaluator,
+    LLMJudge,
+    BooleanStructuredOutput,
+    ScoreStructuredOutput,
+    CategoricalStructuredOutput,
+    EvaluatorResult
+  } = llmobs.experiments
+
+  const judge = new LLMJudge({
+    userPrompt: 'Is {{output_data}} a good answer to {{input_data}}?',
+    provider: 'openai',
+    model: 'gpt-4o',
+    structuredOutput: new BooleanStructuredOutput({ description: 'correct', reasoning: true, passWhen: true }),
+    client: async (request) => {
+      request.messages[0].content
+      request.jsonSchema
+      return JSON.stringify({ boolean_eval: true, reasoning: 'ok' })
+    }
+  })
+  // @ts-expect-error LLMJudge requires a client function.
+  new LLMJudge({ userPrompt: 'x', model: 'gpt-4o' })
+
+  const experimentWithEvaluators = llmobs.experiments.experiment({
+    name: 'exp',
+    dataset: llmobs.experiments.createDataset('ds'),
+    task: (input) => input,
+    evaluators: [
+      new LengthEvaluator({ minLength: 1, maxLength: 100, countType: 'words' }),
+      new JSONEvaluator({ requiredKeys: ['answer'] }),
+      new StringCheckEvaluator({ operation: 'icontains', stripWhitespace: true }),
+      new RegexMatchEvaluator({ pattern: /^yes/i, matchMode: 'fullmatch' }),
+      new SemanticSimilarityEvaluator({ embeddingFn: async (text) => [text.length], threshold: 0.9 }),
+      judge,
+      (input, output, expectedOutput) => new EvaluatorResult(output === expectedOutput, { assessment: 'pass' })
+    ]
+  })
+  experimentWithEvaluators.run().then(result => result.rows[0].evaluationDetails?.LengthEvaluator?.assessment)
+
+  new ScoreStructuredOutput({ description: 'quality', minScore: 0, maxScore: 10, minThreshold: 7 }).toJsonSchema()
+  new CategoricalStructuredOutput({ categories: { good: 'Good', bad: 'Bad' }, passValues: ['good'] }).label
+
+  const { uiUrl } = await llmobs.experiments.publishEvaluator(judge, {
+    agentService: 'my-agent',
+    variableMapping: { question: 'input_data' }
+  })
+  uiUrl
+  const pulled = await llmobs.experiments.pullExperiment('experiment-id')
+  pulled.projectName
+  pulled.result.rows[0].evaluations
+  const summaries = await llmobs.experiments.listExperiments({
+    experimentName: 'exp',
+    metadataFilter: { tags: ['git.commit.sha:abc'] },
+    maxResults: 10
+  })
+  summaries[0].tags.project_name
+  const csvDataset = await llmobs.experiments.createDatasetFromCsv({
+    csvPath: './data.csv',
+    datasetName: 'csv-dataset',
+    inputDataColumns: ['question'],
+    expectedOutputColumns: ['answer'],
+    metadataColumns: ['source'],
+    csvDelimiter: ';',
+    idColumn: 'id',
+    deduplicate: false
+  })
+  csvDataset.records().length
+}
+llmobsExperimentsControlPlaneTypes
+
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
   const llmobsSpanCtx = llmobs.exportSpan(span)
   llmobsSpanCtx.traceId;
