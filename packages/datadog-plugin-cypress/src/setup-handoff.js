@@ -18,7 +18,7 @@ module.exports = function observeSetupHandoff (onHandoff, normalizeIdentity = va
         const originals = new WeakMap()
         const getters = new WeakMap()
         const states = new WeakMap()
-        const materialize = value => {
+        const materialize = (value, propertyKey) => {
           if (!value || typeof value !== 'object') return value
           const identity = normalizeIdentity(value)
           if (snapshots.has(identity)) return snapshots.get(identity)
@@ -28,7 +28,7 @@ module.exports = function observeSetupHandoff (onHandoff, normalizeIdentity = va
           let holder
           // JSON owns the traversal: earlier getters and toJSON methods can change
           // later retry values. Observe the same values that will cross IPC once.
-          const serialized = JSON.stringify(value, function (key, current) {
+          const serialized = JSON.stringify({ [propertyKey]: value }, function (key, current) {
             if (!holder) holder = this
             const path = this === holder ? [] : [...paths.get(this), key]
             const property = Object.getOwnPropertyDescriptor(this, key)
@@ -48,9 +48,9 @@ module.exports = function observeSetupHandoff (onHandoff, normalizeIdentity = va
             }
             return current
           })
-          const cached = serialized === undefined ? undefined : JSON.parse(serialized)
+          const envelope = JSON.parse(serialized)
           for (const { path, original, keys, state } of records) {
-            let snapshot = cached
+            let snapshot = envelope
             for (const key of path) snapshot = snapshot[key]
             snapshots.set(original, snapshot)
             if (snapshot && typeof snapshot === 'object') {
@@ -60,10 +60,10 @@ module.exports = function observeSetupHandoff (onHandoff, normalizeIdentity = va
               states.set(snapshot, state)
             }
           }
-          return cached
+          return envelope[propertyKey]
         }
         if (wireConfig && typeof wireConfig === 'object') {
-          const cached = materialize(wireConfig)
+          const cached = materialize(wireConfig, 'setupConfig')
           if (cached !== wireConfig) {
             const metadataKey = Symbol.for('dd-trace.cypress.returned-config')
             const metadata = Object.getOwnPropertyDescriptor(wireConfig, metadataKey)
@@ -90,7 +90,7 @@ module.exports = function observeSetupHandoff (onHandoff, normalizeIdentity = va
           const wireOriginal = originals.get(wireValue) || normalizeIdentity(wireValue)
           const cached = wireRetry?.enumerable && normalizeIdentity(original) === wireOriginal
             ? wireValue
-            : materialize(original)
+            : materialize(original, 'retries')
           observedConfig = original === cached && 'value' in returnedDescriptor ? returnedConfig : { retries: cached }
         }
         onHandoff(observedConfig, message.event, {

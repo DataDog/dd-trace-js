@@ -2977,6 +2977,37 @@ moduleTypes.forEach(({
       })
     }
 
+    for (const throws of [false, true]) {
+      it(`does not evaluate a replacement getter when a detached retry alias changes (throws=${throws})`, () => {
+        const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+        const config = { retries: { runMode: 0, openMode: 0 } }
+        const observer = observeRetryConfig(config, () => {})
+        const saved = config.retries
+        let reads = 0
+        Object.defineProperty(config, 'retries', {
+          enumerable: true,
+          configurable: true,
+          get () {
+            reads++
+            if (throws) throw new Error('native serialization getter')
+            return { runMode: reads, openMode: 0 }
+          },
+        })
+        try {
+          saved.runMode = 2
+          assert.strictEqual(reads, 0)
+          if (throws) {
+            assert.throws(() => JSON.stringify(config), /native serialization getter/)
+          } else {
+            assert.deepStrictEqual(JSON.parse(JSON.stringify(config)), { retries: { runMode: 1, openMode: 0 } })
+          }
+          assert.strictEqual(reads, 1)
+        } finally {
+          observer.stop(false)
+        }
+      })
+    }
+
     it('keeps stopped retry proxies inert for same-object and descriptor-only writes', () => {
       const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
       const config = { retries: { experimentalOptions: { maxRetries: 2 } } }
