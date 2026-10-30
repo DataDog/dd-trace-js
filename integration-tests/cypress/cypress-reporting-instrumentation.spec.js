@@ -11,6 +11,7 @@ const { runInNewContext } = require('node:vm')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
+const { isEqual, cloneDeep } = require('lodash')
 const {
   sandboxCwd,
   useSandbox,
@@ -1046,6 +1047,10 @@ moduleTypes.forEach(({
       libraryConfigurationPromise: cypressPlugin.libraryConfigurationPromise,
       hasOriginalCypressRetries: cypressPlugin.hasOriginalCypressRetries,
       originalCypressRetries: cypressPlugin.originalCypressRetries,
+      configuredCypressRetries: cypressPlugin.configuredCypressRetries,
+      resolvedCypressRetries: cypressPlugin.resolvedCypressRetries,
+      nativeCypressRetriesBaseline: cypressPlugin.nativeCypressRetriesBaseline,
+      retryConfigObserver: cypressPlugin.retryConfigObserver,
       tracer: cypressPlugin.tracer,
       finishedTestsByFile: cypressPlugin.finishedTestsByFile,
       hasTestsReported: cypressPlugin.hasTestsReported,
@@ -1061,11 +1066,18 @@ moduleTypes.forEach(({
     }
 
     afterEach(() => {
+      if (cypressPlugin.retryConfigObserver !== originalState.retryConfigObserver) {
+        cypressPlugin.retryConfigObserver?.stop()
+      }
+      cypressPlugin.retryConfigObserver = originalState.retryConfigObserver
       cypressPlugin.cypressConfig = originalState.cypressConfig
       cypressPlugin._isInit = originalState.isInit
       cypressPlugin.libraryConfigurationPromise = originalState.libraryConfigurationPromise
       cypressPlugin.hasOriginalCypressRetries = originalState.hasOriginalCypressRetries
       cypressPlugin.originalCypressRetries = originalState.originalCypressRetries
+      cypressPlugin.configuredCypressRetries = originalState.configuredCypressRetries
+      cypressPlugin.resolvedCypressRetries = originalState.resolvedCypressRetries
+      cypressPlugin.nativeCypressRetriesBaseline = originalState.nativeCypressRetriesBaseline
       cypressPlugin.tracer = originalState.tracer
       cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
       cypressPlugin.hasTestsReported = originalState.hasTestsReported
@@ -1173,6 +1185,8 @@ moduleTypes.forEach(({
       cypressPlugin._isInit = true
       cypressPlugin.libraryConfigurationPromise = Promise.reject(initializationError)
       const init = sinon.stub(cypressPlugin, 'init')
+      const stop = sinon.spy()
+      cypressPlugin.retryConfigObserver = { stop }
 
       await assert.rejects(cypressPlugin.beforeRun({}), error => {
         assert.strictEqual(error, initializationError)
@@ -1180,6 +1194,7 @@ moduleTypes.forEach(({
       })
 
       sinon.assert.notCalled(init)
+      sinon.assert.calledOnce(stop)
     })
 
     it('reinitializes before a subsequent interactive run', async () => {
@@ -1597,7 +1612,10 @@ moduleTypes.forEach(({
             path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
           ), {
             Cypress: {
+              _: { isEqual, cloneDeep },
               config: name => {
+                if (name === undefined) return { retries, isTextTerminal }
+                if (name === 'retries') return retries
                 assert.strictEqual(name, 'isTextTerminal')
                 return isTextTerminal
               },
@@ -1713,6 +1731,1395 @@ moduleTypes.forEach(({
         }
       }
     }
+
+    it('observes retry writes before installing manual lifecycle hooks once', () => {
+      const root = { [Symbol.for('dd-trace.cypress.defer-lifecycle')]: true }
+      const retryConfig = { runMode: 2, openMode: 0 }
+      const hooks = []
+      const runner = { runTests () {}, suite: { ctx: {} } }
+      const originalRunTests = runner.runTests
+      const context = {
+        Cypress: {
+          _: { isEqual, cloneDeep },
+          config: name => {
+            if (name === 'retries') return retryConfig
+            assert.strictEqual(name, 'isTextTerminal')
+            return true
+          },
+          state () {},
+          on: name => hooks.push(name),
+          mocha: { getRunner: () => runner, getRootSuite: () => root },
+        },
+        cy: { on: name => hooks.push(name) },
+        before: () => hooks.push('before'),
+        beforeEach: () => hooks.push('beforeEach'),
+        afterEach: () => hooks.push('afterEach'),
+        after: () => hooks.push('after'),
+      }
+      runInNewContext(fs.readFileSync(
+        path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+      ), context)
+      assert.deepStrictEqual(hooks, [])
+      assert.strictEqual(runner.runTests, originalRunTests)
+      const observedRetries = context.Cypress.config('retries')
+      assert.notStrictEqual(observedRetries, retryConfig)
+      observedRetries.runMode = 2
+      const install = root[Symbol.for('dd-trace.cypress.install-lifecycle')]
+      install()
+      const registered = hooks.slice()
+      assert.strictEqual(registered.filter(name => name === 'afterEach').length, 1)
+      assert.notStrictEqual(runner.runTests, originalRunTests)
+      install()
+      assert.deepStrictEqual(hooks, registered)
+      assert.strictEqual(context.Cypress.config('retries'), observedRetries)
+    })
+
+    it('does not evaluate a retries root accessor during ordinary teardown', async () => {
+      const state = { retries: 0, isTextTerminal: true }
+      const hooks = {}
+      const currentTest = { id: 'ordinary', title: 'ordinary', state: 'passed', fullTitle: () => 'ordinary' }
+      const root = { file: 'test.cy.js', eachTest () {} }
+      const context = {
+        Cypress: {
+          _: { isEqual, cloneDeep },
+          config: name => name === undefined ? state : state[name],
+          state () {},
+          on () {},
+          mocha: {
+            getRunner: () => ({ runTests () {}, suite: { ctx: { currentTest } } }),
+            getRootSuite: () => root,
+          },
+        },
+        cy: { on () {}, task: () => Promise.resolve() },
+        before () {},
+        beforeEach () {},
+        after () {},
+        afterEach: callback => { hooks.afterEach = callback },
+      }
+      runInNewContext(fs.readFileSync(
+        path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+      ), context)
+      let reads = 0
+      Object.defineProperty(context.Cypress.config(), 'retries', {
+        configurable: true,
+        get () { reads++; throw new Error('teardown must not evaluate retries') },
+      })
+      hooks.afterEach()
+      assert.strictEqual(reads, 0)
+    })
+
+    for (const experimental of [false, true]) {
+      it(`reports the active browser retry strategy without extra getter reads (experimental=${experimental})`, () => {
+        const state = { retries: 2, isTextTerminal: true }
+        const hooks = {}
+        let reported
+        let reads = 0
+        const test = { id: 'policy', title: 'policy', state: 'passed', fullTitle: () => 'policy' }
+        const root = { file: 'test.cy.js', eachTest () {} }
+        const context = {
+          Cypress: {
+            _: { isEqual, cloneDeep },
+            config: name => name === undefined ? state : state[name],
+            getTestRetries () {
+              const retries = this.config('retries')
+              const strategy = retries.experimentalStrategy
+              return strategy && retries.runMode === true ? retries.experimentalOptions.maxRetries : retries.runMode
+            },
+            state: name => name === 'test' ? test : false,
+            on () {},
+            mocha: {
+              getRunner: () => ({ runTests () {}, suite: { ctx: { currentTest: test } } }),
+              getRootSuite: () => root,
+            },
+          },
+          cy: { on () {}, task: (_name, args) => { reported = args.test; return Promise.resolve() } },
+          before () {},
+          beforeEach () {},
+          after () {},
+          afterEach: callback => { hooks.afterEach = callback },
+        }
+        runInNewContext(fs.readFileSync(
+          path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+        ), context)
+        const retries = { runMode: experimental ? true : 2, experimentalOptions: { maxRetries: 2 } }
+        Object.defineProperty(retries, 'experimentalStrategy', {
+          configurable: true,
+          enumerable: true,
+          get () { reads++; return experimental ? 'detect-flake-but-always-fail' : undefined },
+        })
+        Object.defineProperty(context.Cypress.config(), 'retries', { value: retries })
+        assert.strictEqual(reads, 0)
+        assert.strictEqual(context.Cypress.getTestRetries(), 2)
+        assert.strictEqual(reads, 1)
+        hooks.afterEach()
+        assert.strictEqual(reported.hasNativeExperimentalRetries, experimental)
+        assert.strictEqual(reads, 1)
+      })
+    }
+
+    for (const mode of ['known-root', 'fresh-root', 'known-options', 'configurable-options']) {
+      it(`preserves locked browser retry descriptor identity (${mode})`, () => {
+        for (const instrumented of [false, true]) {
+          const state = { retries: { runMode: 2, openMode: 0, experimentalOptions: { maxRetries: 2 } } }
+          const root = { [Symbol.for('dd-trace.cypress.defer-lifecycle')]: true }
+          const context = {
+            Cypress: {
+              _: { isEqual, cloneDeep },
+              config: name => name === undefined ? state : state[name],
+              state () {},
+              mocha: { getRootSuite: () => root },
+            },
+          }
+          if (instrumented) {
+            runInNewContext(fs.readFileSync(
+              path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+            ), context)
+          }
+          const config = context.Cypress.config()
+          const retries = config.retries
+          const isOptions = mode.endsWith('options')
+          const target = isOptions ? retries : config
+          const key = isOptions ? 'experimentalOptions' : 'retries'
+          const value = isOptions
+            ? retries.experimentalOptions
+            : mode === 'known-root' ? retries : { runMode: 2, openMode: 0 }
+          const configurable = mode === 'configurable-options'
+          Object.defineProperty(target, key, { value, writable: false, configurable })
+          assert.strictEqual(target[key], value)
+          const descriptor = Object.getOwnPropertyDescriptor(target, key)
+          assert.strictEqual(descriptor.value, value)
+          assert.strictEqual(descriptor.writable, false)
+          assert.strictEqual(descriptor.configurable, configurable)
+        }
+      })
+    }
+
+    it('does not read browser config getters for flags-only descriptor changes', () => {
+      for (const instrumented of [false, true]) {
+        const state = { retries: { runMode: 0, openMode: 0 } }
+        let reads = 0
+        Object.defineProperty(state, 'custom', {
+          configurable: true,
+          get () { reads++; return 1 },
+        })
+        const root = { [Symbol.for('dd-trace.cypress.defer-lifecycle')]: true }
+        const context = {
+          Cypress: {
+            _: { isEqual, cloneDeep },
+            config: name => name === undefined ? state : state[name],
+            state () {},
+            mocha: { getRootSuite: () => root },
+          },
+        }
+        if (instrumented) {
+          runInNewContext(fs.readFileSync(
+            path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+          ), context)
+        }
+        Object.defineProperty(context.Cypress.config(), 'custom', { configurable: false })
+        assert.strictEqual(reads, 0)
+      }
+    })
+
+    for (const key of ['retries', 'custom']) {
+      it(`deletes browser ${key} accessors without evaluating them`, () => {
+        for (const instrumented of [false, true]) {
+          const state = { retries: 0 }
+          const root = { [Symbol.for('dd-trace.cypress.defer-lifecycle')]: true }
+          const context = {
+            Cypress: {
+              _: { isEqual, cloneDeep },
+              config: name => name === undefined ? state : state[name],
+              state () {},
+              mocha: { getRootSuite: () => root },
+            },
+          }
+          if (instrumented) {
+            runInNewContext(fs.readFileSync(
+              path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+            ), context)
+          }
+          let reads = 0
+          const config = context.Cypress.config()
+          Object.defineProperty(config, key, {
+            configurable: true,
+            get () {
+              reads++
+              throw new Error('deletion must not evaluate the getter')
+            },
+          })
+          assert.strictEqual(Reflect.deleteProperty(config, key), true)
+          assert.strictEqual(reads, 0)
+          assert.strictEqual(Object.getOwnPropertyDescriptor(state, key), undefined)
+        }
+      })
+    }
+
+    for (const stage of ['complete', 'restoring', 'pending', 'suite', 'explicit-root']) {
+      it(`retains saved browser retry object provenance at ${stage} stage`, async () => {
+        const localRetries = { runMode: 2, openMode: 0 }
+        const state = { retries: { runMode: 4, openMode: 0 }, isTextTerminal: true }
+        let currentTest
+        const hooks = {}
+        const events = {}
+        const root = { file: 'test.cy.js', eachTest () {} }
+        const context = {
+          Cypress: {
+            _: { isEqual, cloneDeep },
+            config: function (key, value) {
+              if (!arguments.length) return state
+              if (arguments.length > 1) state[key] = value
+              return state[key]
+            },
+            state: name => name === 'test' ? currentTest : false,
+            on: (name, callback) => { events[name] = callback },
+            mocha: { getRunner: () => ({ runTests () {}, suite: { ctx: {} } }), getRootSuite: () => root },
+          },
+          cy: {
+            on () {},
+            task: () => Promise.resolve({
+              frameworkRetries: 0,
+              originalRetries: { runMode: 0, openMode: 0 },
+              configuredRetries: { runMode: 4, openMode: 0 },
+              isTextTerminal: true,
+            }),
+          },
+          before: callback => { hooks.before = callback },
+          beforeEach () {},
+          afterEach () {},
+          after () {},
+        }
+        runInNewContext(fs.readFileSync(
+          path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+        ), context)
+        await hooks.before()
+        const applied = ['suite', 'explicit-root'].includes(stage)
+          ? 'complete'
+          : stage === 'pending' ? undefined : stage
+        currentTest = {
+          _testConfig: { applied, unverifiedTestConfig: stage === 'suite' ? {} : { retries: localRetries } },
+          ...(stage === 'suite' && { parent: { _testConfig: { retries: localRetries } } }),
+        }
+        if (['complete', 'suite', 'explicit-root'].includes(stage)) state.retries = { ...localRetries }
+        if (stage === 'explicit-root') context.Cypress.config('retries', { runMode: 3, openMode: 0 })
+        const saved = context.Cypress.config('retries')
+        state.retries = { runMode: 4, openMode: 0 }
+        currentTest = {
+          _testConfig: { applied: 'complete', unverifiedTestConfig: {} },
+          _ddTestAnnotations: { noAutoRetry: true },
+          _retries: 4,
+        }
+        context.Cypress.config('retries', saved)
+        events['test:before:run']({}, currentTest)
+        assert.strictEqual(currentTest._retries, stage === 'explicit-root'
+          ? 3
+          : stage === 'complete' || stage === 'suite' ? 2 : 0)
+      })
+    }
+
+    for (const mode of [
+      'field-mode', 'field-child-options', 'saved-accessor-options', 'detached-accessor-options',
+      'object-config-getter', 'inherited-config-getter', 'accessor-root',
+      'raw-after', 'raw-before', 'raw-saved', 'raw-detached', 'locked-root', 'locked-root-unchanged',
+      'suite-owner', 'suite-root-owner', 'framework-known-root', 'framework-scalar',
+      'same-options', 'locked-options', 'assigned-options', 'raw-locked-options',
+      'pre-suite-options', 'queued-detached-options', 'descriptor-root', 'descriptor-options',
+      'saved-options', 'saved-descriptor-options', 'saved-detached-options', 'saved-checkpoint-options',
+      'cross-root-options', 'cross-root-descriptor-options', 'cross-root-detached-options',
+      'cross-root-queued-options',
+      'saved-equal-options',
+      'saved-queued-options', 'saved-initial-options',
+    ]) {
+      it(`reconciles observed browser retry snapshots for ${mode}`, async () => {
+        const scalar = mode === 'framework-scalar'
+        const experimental = mode.endsWith('-options')
+        const native = experimental
+          ? {
+              runMode: true,
+              openMode: false,
+              experimentalStrategy: 'detect-flake-but-always-fail',
+              experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+            }
+          : scalar ? 0 : { runMode: 0, openMode: 0 }
+        const configured = experimental
+          ? { ...native, experimentalOptions: { maxRetries: 4, stopIfAnyPassed: false } }
+          : scalar ? 0 : { runMode: 4, openMode: 0 }
+        const state = { retries: cloneDeep(configured), isTextTerminal: true }
+        const currentTest = {
+          _testConfig: { applied: 'complete', unverifiedTestConfig: {} },
+          _ddTestAnnotations: { noAutoRetry: true },
+          _retries: 4,
+        }
+        const hooks = {}
+        const events = {}
+        const root = { file: 'test.cy.js', eachTest () {} }
+        const context = {
+          Cypress: {
+            _: { isEqual, cloneDeep },
+            ...((mode.startsWith('field-') || mode === 'saved-accessor-options') && {
+              getTestRetries (...args) {
+                assert.strictEqual(this, context.Cypress)
+                if (args.length) assert.deepStrictEqual(args, ['native-budget', currentTest])
+                const retries = this.config('retries')
+                const active = retries.runMode
+                return active === true ? retries.experimentalOptions.maxRetries : active
+              },
+            }),
+            config: function (key, value) {
+              if (!arguments.length) return state
+              if (key && typeof key === 'object') {
+                for (const name in key) state[name] = key[name]
+                return key
+              }
+              if (arguments.length > 1) state[key] = value
+              return state[key]
+            },
+            state: name => name === 'test' ? currentTest : false,
+            on: (name, callback) => { events[name] = callback },
+            mocha: { getRunner: () => ({ runTests () {}, suite: { ctx: {} } }), getRootSuite: () => root },
+          },
+          cy: {
+            on () {},
+            task: () => Promise.resolve({
+              frameworkRetries: experimental ? 2 : 0,
+              originalRetries: native,
+              configuredRetries: configured,
+              isTextTerminal: true,
+            }),
+          },
+          before: callback => { hooks.before = callback },
+          beforeEach () {},
+          afterEach () {},
+          after () {},
+        }
+        runInNewContext(fs.readFileSync(
+          path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+        ), context)
+        if (mode === 'saved-accessor-options') {
+          await hooks.before()
+          const saved = context.Cypress.config('retries')
+          let reads = 0
+          Object.defineProperty(context.Cypress.config(), 'retries', {
+            configurable: true,
+            get () { reads++; return saved },
+          })
+          assert.strictEqual(reads, 0)
+          currentTest._retries = context.Cypress.getTestRetries()
+          const nativeReads = reads
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 2)
+          assert.strictEqual(reads, nativeReads)
+          return
+        }
+        if (mode === 'detached-accessor-options') {
+          await hooks.before()
+          const retries = context.Cypress.config('retries')
+          const saved = retries.experimentalOptions
+          let reads = 0
+          Object.defineProperty(retries, 'experimentalOptions', {
+            configurable: true,
+            get () { reads++; throw new Error('replacement getter must remain unread') },
+          })
+          saved.maxRetries = 3
+          assert.strictEqual(reads, 0)
+          return
+        }
+        if (mode.startsWith('field-')) {
+          await hooks.before()
+          const retries = context.Cypress.config('retries')
+          const nested = mode === 'field-child-options'
+          const target = nested ? retries.experimentalOptions : retries
+          const key = nested ? 'maxRetries' : 'runMode'
+          let ready = false
+          let reads = 0
+          Object.defineProperty(target, key, {
+            enumerable: true,
+            configurable: true,
+            get () {
+              if (!ready) throw new Error('retry getter read before support initialized')
+              reads++
+              return 3
+            },
+          })
+          Object.defineProperty(target, key, { configurable: false })
+          retries.openMode = 1
+          assert.strictEqual(reads, 0)
+          ready = true
+          currentTest._retries = context.Cypress.getTestRetries('native-budget', currentTest)
+          assert.strictEqual(currentTest._retries, 3)
+          const nativeReads = reads
+          events['test:before:run']({}, currentTest)
+          events['test:before:run:async']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 3)
+          assert.strictEqual(reads, nativeReads)
+          return
+        }
+        if (mode.startsWith('cross-root-')) {
+          if (mode !== 'cross-root-queued-options') await hooks.before()
+          const config = context.Cypress.config
+          const saved = config('retries').experimentalOptions
+          config().retries = { ...native, experimentalOptions: { maxRetries: 1, stopIfAnyPassed: false } }
+          const replacement = config('retries')
+          if (mode === 'cross-root-detached-options') saved.maxRetries = 3
+          if (mode === 'cross-root-descriptor-options') {
+            Object.defineProperty(replacement, 'experimentalOptions', { value: saved })
+          } else replacement.experimentalOptions = saved
+          if (mode === 'cross-root-queued-options') await hooks.before()
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, mode === 'cross-root-detached-options' ? 3 : 2)
+          return
+        }
+        if (['saved-queued-options', 'saved-initial-options'].includes(mode)) {
+          const retries = context.Cypress.config('retries')
+          const saved = retries.experimentalOptions
+          retries.experimentalOptions = { maxRetries: 1, stopIfAnyPassed: false }
+          if (mode === 'saved-queued-options') saved.maxRetries = 3
+          retries.experimentalOptions = saved
+          await hooks.before()
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, mode === 'saved-queued-options' ? 3 : 2)
+          return
+        }
+        if (mode === 'queued-detached-options') {
+          const config = context.Cypress.config
+          const retries = config('retries')
+          const proxied = retries.experimentalOptions
+          const raw = Object.getOwnPropertyDescriptor(retries, 'experimentalOptions').value
+          raw.maxRetries = 3
+          retries.experimentalOptions = proxied
+          config('retries', 0)
+          await hooks.before()
+          proxied.maxRetries = 4
+          raw.maxRetries = 3
+          config('retries', retries)
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 3)
+          return
+        }
+        if (mode === 'pre-suite-options') {
+          const retries = context.Cypress.config('retries')
+          const proxied = retries.experimentalOptions
+          const raw = Object.getOwnPropertyDescriptor(retries, 'experimentalOptions').value
+          raw.maxRetries = 3
+          retries.experimentalOptions = proxied
+          raw.maxRetries = 4
+          await hooks.before()
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 4)
+          return
+        }
+        await hooks.before()
+        const config = context.Cypress.config
+        if (experimental) {
+          const retries = config('retries')
+          const saved = retries.experimentalOptions
+          if (mode.startsWith('saved-')) {
+            const raw = Object.getOwnPropertyDescriptor(retries, 'experimentalOptions').value
+            retries.experimentalOptions = { maxRetries: 1, stopIfAnyPassed: false }
+            if (mode === 'saved-detached-options') saved.maxRetries = 3
+            if (mode === 'saved-equal-options') saved.maxRetries = 4
+            if (mode === 'saved-checkpoint-options') {
+              raw.maxRetries = 3
+              Object.defineProperty(saved, 'stopIfAnyPassed', { configurable: false })
+              raw.maxRetries = 4
+            }
+            events['test:before:run']({}, currentTest)
+            assert.strictEqual(currentTest._retries, 1)
+            if (mode === 'saved-descriptor-options') {
+              Object.defineProperty(retries, 'experimentalOptions', { value: saved })
+            } else retries.experimentalOptions = saved
+            assert.strictEqual(retries.experimentalOptions, saved)
+            events['test:before:run']({}, currentTest)
+            assert.strictEqual(currentTest._retries, mode === 'saved-detached-options'
+              ? 3
+              : ['saved-checkpoint-options', 'saved-equal-options'].includes(mode) ? 4 : 2)
+            return
+          }
+          if (mode === 'descriptor-options') {
+            const descriptor = Object.getOwnPropertyDescriptor(retries, 'experimentalOptions')
+            assert.strictEqual(descriptor.value, state.retries.experimentalOptions)
+            descriptor.value.maxRetries = 3
+          } else if (mode === 'assigned-options') retries.experimentalOptions = saved
+          else if (mode === 'raw-locked-options') {
+            Object.defineProperty(retries, 'experimentalOptions', { writable: false, configurable: false })
+            retries.experimentalOptions.maxRetries = 3
+          } else {
+            const locked = mode === 'locked-options'
+            Object.defineProperty(retries, 'experimentalOptions', {
+              value: saved, writable: !locked, configurable: !locked,
+            })
+          }
+          if (mode !== 'raw-locked-options') assert.strictEqual(retries.experimentalOptions, saved)
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, ['raw-locked-options', 'descriptor-options'].includes(mode) ? 3 : 2)
+          return
+        }
+        if (mode.startsWith('framework-')) {
+          const original = config('retries')
+          config('retries', 2)
+          currentTest._testConfig.applied = 'restoring'
+          config('retries', original)
+          currentTest._testConfig.applied = 'complete'
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 0)
+          return
+        }
+        if (mode.startsWith('suite-')) {
+          currentTest.parent = { _testConfig: { retries: { runMode: 2, openMode: 0 } } }
+          const raw = { runMode: 2, openMode: 0 }
+          state.retries = raw
+          if (mode === 'suite-owner') {
+            config('retries').openMode = 1
+            raw.runMode = 3
+          } else {
+            config('retries', { runMode: 3, openMode: 0 })
+          }
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 2)
+          delete currentTest.parent
+          currentTest._testConfig.applied = 'restoring'
+          config('retries', { runMode: 4, openMode: 0 })
+          currentTest._testConfig.applied = 'complete'
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 0)
+          return
+        }
+        if (mode === 'object-config-getter' || mode === 'inherited-config-getter') {
+          let reads = 0
+          const prototype = { inherited: 'retained' }
+          const supplied = Object.create(prototype)
+          Object.defineProperty(mode === 'inherited-config-getter' ? prototype : supplied, 'retries', {
+            enumerable: true, get: () => ++reads,
+          })
+          Object.defineProperty(supplied, Symbol('ignored'), {
+            enumerable: true,
+            get () {
+              throw new Error('native configuration ignores symbol properties')
+            },
+          })
+          assert.strictEqual(config(supplied), supplied)
+          assert.strictEqual(reads, 1)
+          assert.strictEqual(state.retries, 1)
+          assert.strictEqual(state.inherited, 'retained')
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 1)
+          return
+        }
+        if (mode === 'accessor-root') {
+          let reads = 0
+          let budget = 2
+          const getter = () => { reads++; return budget }
+          Object.defineProperty(config(), 'retries', { get: getter, configurable: true, enumerable: true })
+          assert.strictEqual(reads, 0)
+          assert.strictEqual(Object.getOwnPropertyDescriptor(config(), 'retries').get, getter)
+          assert.strictEqual(reads, 0)
+          assert.strictEqual(Reflect.set(config(), 'retries', 9), false)
+          assert.strictEqual(reads, 0)
+          assert.throws(() => config('retries', 9), TypeError)
+          assert.strictEqual(reads, 0)
+          assert.strictEqual(config('retries'), 2)
+          assert.strictEqual(reads, 1)
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 2)
+          budget = 3
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 3)
+          const beforeReplacement = reads
+          Object.defineProperty(config(), 'retries', { value: 0, writable: true })
+          assert.strictEqual(reads, beforeReplacement)
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 0)
+          Object.defineProperty(config(), 'retries', {
+            get: getter,
+            set: value => { budget = value },
+            configurable: true,
+          })
+          const beforeSet = reads
+          assert.strictEqual(Reflect.set(config(), 'retries', 5), true)
+          assert.strictEqual(reads, beforeSet)
+          assert.strictEqual(budget, 5)
+          config('retries', 6)
+          assert.strictEqual(reads, beforeSet + 1)
+          assert.strictEqual(budget, 6)
+          return
+        }
+        if (mode === 'descriptor-root') {
+          const descriptor = Object.getOwnPropertyDescriptor(config(), 'retries')
+          assert.strictEqual(descriptor.value, state.retries)
+          assert.strictEqual(descriptor.writable, true)
+          assert.strictEqual(descriptor.configurable, true)
+          descriptor.value.runMode = 3
+        } else if (mode.startsWith('locked-root')) {
+          Object.defineProperty(config(), 'retries', { writable: false, configurable: false })
+          if (mode === 'locked-root') config().retries.runMode = 3
+        } else {
+          const raw = { runMode: mode === 'raw-detached' ? 3 : 1, openMode: 0 }
+          config('retries', raw)
+          const observed = config('retries')
+          if (mode === 'raw-before') raw.runMode = 3
+          observed.openMode = 1
+          if (['raw-saved', 'raw-detached'].includes(mode)) config('retries', 0)
+          if (mode === 'raw-detached') observed.runMode = 1
+          if (mode !== 'raw-before') raw.runMode = 3
+          if (['raw-saved', 'raw-detached'].includes(mode)) config('retries', observed)
+        }
+        events['test:before:run']({}, currentTest)
+        assert.strictEqual(currentTest._retries, mode === 'locked-root-unchanged' ? 0 : 3)
+      })
+    }
+
+    it('restores declaration capture after a skipped-suite callback throws', () => {
+      const declareTest = (title, callback) => ({ title, fn: callback, stack: new Error().stack })
+      const declareSuite = (title, callback) => callback()
+      declareSuite.skip = (title, callback) => callback()
+      const root = { file: 'test.cy.js', eachTest () {} }
+      const context = {
+        Cypress: {
+          _: { isEqual, cloneDeep },
+          config: name => {
+            if (name === 'retries') return 0
+            assert.strictEqual(name, 'isTextTerminal')
+            return true
+          },
+          on () {},
+          mocha: { getRunner: () => ({ runTests () {}, suite: { ctx: {} } }), getRootSuite: () => root },
+        },
+        cy: { on () {} },
+        before () {},
+        beforeEach () {},
+        afterEach () {},
+        after () {},
+        it: declareTest,
+        specify: declareTest,
+        describe: declareSuite,
+      }
+      runInNewContext(fs.readFileSync(
+        path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+      ), context)
+      const alias = context.it
+      const error = new Error('suite declaration failed')
+      assert.throws(() => context.describe.skip('throws', () => { throw error }), candidate => candidate === error)
+      const callback = () => {}
+      callback[Symbol.for('dd-trace:test-annotations')] = { mustFail: true, noAutoRetry: true }
+      const test = alias('after declaration failure', callback)
+      assert.strictEqual(context.it, alias)
+      assert.strictEqual(test.fn, callback)
+      assert.doesNotMatch(test.stack, /captureTestDeclaration/)
+    })
+
+    it('preserves native data descriptors and captures fresh retry roots at handoff', () => {
+      const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+      const config = { retries: { runMode: 2, openMode: 0 } }
+      const changes = []
+      const observer = observeRetryConfig(config, value => changes.push(JSON.parse(JSON.stringify(value))))
+      try {
+        assert.strictEqual(JSON.stringify(config), '{"retries":{"runMode":2,"openMode":0}}')
+        assert.strictEqual(changes.length, 0)
+        const descriptor = Object.getOwnPropertyDescriptor(config, 'retries')
+        assert.strictEqual(descriptor.get, undefined)
+        assert.strictEqual(descriptor.set, undefined)
+        assert.strictEqual(descriptor.writable, true)
+        const stale = config.retries
+        config.retries = { runMode: 2, openMode: 0 }
+        stale.runMode = 8
+        assert.strictEqual(changes.length, 0)
+        const current = config.retries
+        observer.stop()
+        assert.deepStrictEqual(changes, [{ runMode: 2, openMode: 0 }])
+        assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').enumerable, true)
+        current.runMode = 3
+        assert.strictEqual(changes.length, 1)
+        assert.strictEqual(config.retries.runMode, 3)
+      } finally {
+        observer.stop(false)
+      }
+    })
+
+    it('preserves retry observer aliases and paths through same-reference root assignments', () => {
+      const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+      const config = { retries: { runMode: 2, openMode: 0 } }
+      const writes = []
+      const observer = observeRetryConfig(config, (value, path) => writes.push(path))
+      try {
+        const alias = config.retries
+        config.retries = alias
+        assert.strictEqual(config.retries, alias)
+        assert.deepStrictEqual(writes, [])
+        alias.openMode = 1
+        alias.runMode = 2
+        assert.deepStrictEqual(writes, [['openMode'], ['runMode']])
+        config.retries = { runMode: 2 }
+        assert.deepStrictEqual(writes, [['openMode'], ['runMode']])
+        observer.stop()
+        assert.deepStrictEqual(writes, [['openMode'], ['runMode'], []])
+      } finally {
+        observer.stop()
+      }
+    })
+
+    it('preserves frozen retry objects and does not replace readonly data descriptors', () => {
+      const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+      const config = { retries: 0 }
+      const changes = []
+      const observer = observeRetryConfig(config, value => changes.push(value))
+      const frozen = Object.freeze({ runMode: true, experimentalOptions: Object.freeze({ maxRetries: 2 }) })
+      config.retries = frozen
+      assert.deepStrictEqual(JSON.parse(JSON.stringify(config.retries)), frozen)
+      assert.strictEqual(changes.length, 0)
+      observer.stop()
+      assert.strictEqual(changes.length, 1)
+      assert.strictEqual(config.retries, frozen)
+      Object.defineProperty(config, 'retries', { configurable: false, writable: false })
+      assert.strictEqual(observeRetryConfig(config, () => assert.fail('must not observe')), undefined)
+      assert.strictEqual(config.retries, frozen)
+    })
+
+    for (const inherited of [false, true]) {
+      it(`ignores omitted setup reply retry getters (inherited=${inherited})`, async () => {
+        const observeSetupHandoff = require('../../packages/datadog-plugin-cypress/src/setup-handoff')
+        const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+        const receiver = {}
+        const handle = {}
+        const options = { keepOpen: true }
+        const callback = () => {}
+        let reads = 0
+        const owner = {}
+        Object.defineProperty(owner, 'retries', {
+          enumerable: inherited,
+          get () {
+            reads++
+            throw new Error('omitted retry getter must not run')
+          },
+        })
+        const setupConfig = inherited ? Object.create(owner) : owner
+        const message = { event: 'setupTestingType:reply', args: [{ setupConfig }] }
+        const nativeWire = JSON.parse(JSON.stringify(message))
+        let observed
+        let forwarded
+        process.send = function (...args) {
+          assert.strictEqual(this, receiver)
+          forwarded = args
+          assert.deepStrictEqual(JSON.parse(JSON.stringify(args[0])), nativeWire)
+          return 42
+        }
+        const stop = observeSetupHandoff(config => { observed = config })
+        try {
+          assert.strictEqual(process.send.call(receiver, message, handle, options, callback), 42)
+          assert.strictEqual(reads, 0)
+          assert.strictEqual(observed, undefined)
+          assert.deepStrictEqual(forwarded.slice(1), [handle, options, callback])
+          assert.strictEqual(message.args[0].setupConfig, setupConfig)
+        } finally {
+          stop()
+          if (descriptor) Object.defineProperty(process, 'send', descriptor)
+          else delete process.send
+        }
+      })
+    }
+
+    it('serializes returned retry getter values once while retaining IPC arguments', () => {
+      const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+      const calls = []
+      const originalSend = function (...args) {
+        calls.push({ receiver: this, args, wire: JSON.parse(JSON.stringify(args[0])) })
+        return 17
+      }
+      Object.defineProperty(process, 'send', { configurable: true, writable: true, value: originalSend })
+      const config = { retries: 0 }
+      const changes = []
+      const observer = observeRetryConfig(config, value => changes.push(value))
+      try {
+        let reads = 0
+        const getter = () => ++reads
+        const returned = Object.freeze(Object.defineProperty({}, 'retries', { enumerable: true, get: getter }))
+        const extra = { preserved: true }
+        const message = Object.freeze({
+          event: 'setupTestingType:reply',
+          args: Object.freeze([Object.freeze({ setupConfig: returned, extra }), extra]),
+        })
+        const receiver = {}
+        const handle = {}
+        const options = {}
+        const callback = () => {}
+        assert.strictEqual(process.send.call(receiver, message, handle, options, callback), 17)
+        assert.strictEqual(reads, 1)
+        assert.deepStrictEqual(changes, [1])
+        assert.strictEqual(calls.length, 1)
+        assert.strictEqual(calls[0].receiver, receiver)
+        assert.strictEqual(calls[0].args[1], handle)
+        assert.strictEqual(calls[0].args[2], options)
+        assert.strictEqual(calls[0].args[3], callback)
+        assert.strictEqual(calls[0].args[0].args[1], extra)
+        assert.strictEqual(calls[0].args[0].args[0].extra, extra)
+        assert.strictEqual(calls[0].wire.args[0].setupConfig.retries, 1)
+        assert.strictEqual(message.args[0].setupConfig, returned)
+        assert.strictEqual(Object.getOwnPropertyDescriptor(returned, 'retries').get, getter)
+        assert.strictEqual(process.send, originalSend)
+      } finally {
+        observer.stop(false)
+        if (descriptor) Object.defineProperty(process, 'send', descriptor)
+        else delete process.send
+      }
+    })
+
+    it('observes the native setup snapshot and restores IPC identity without mutating the input', () => {
+      const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+      const calls = []
+      const originalSend = function (...args) { calls.push({ receiver: this, args }); return 17 }
+      Object.defineProperty(process, 'send', { configurable: true, writable: true, value: originalSend })
+      let observer
+      try {
+        const config = { retries: { runMode: 2, openMode: 0 } }
+        const changes = []
+        observer = observeRetryConfig(config, value => changes.push(value))
+        const receiver = {}
+        const unrelated = { event: 'other:reply', args: [{ setupConfig: { retries: 9 } }] }
+        assert.strictEqual(process.send.call(receiver, unrelated, 'handle', 'options'), 17)
+        assert.strictEqual(changes.length, 0)
+        assert.notStrictEqual(process.send, originalSend)
+        assert.strictEqual(calls[0].receiver, receiver)
+        assert.deepStrictEqual(calls[0].args, [unrelated, 'handle', 'options'])
+        const returnedConfig = { retries: { runMode: 2, openMode: 0 } }
+        const reply = { event: 'setupTestingType:reply', args: [{ setupConfig: returnedConfig }] }
+        assert.strictEqual(process.send(reply), 17)
+        assert.strictEqual(changes.length, 1)
+        assert.deepStrictEqual(changes[0], returnedConfig.retries)
+        assert.deepStrictEqual(calls[1].args[0], reply)
+        assert.strictEqual(observer.isWatching(config), false)
+        assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').get, undefined)
+        config.retries.openMode = 7
+        assert.strictEqual(changes.length, 1)
+        assert.strictEqual(process.send, originalSend)
+        observer.stop()
+        observer = observeRetryConfig(config, value => changes.push(value))
+        process.send({ event: 'setupTestingType:error', args: [{ error: 'setup failed' }] })
+        assert.strictEqual(changes.length, 1)
+        assert.strictEqual(process.send, originalSend)
+        observer.stop()
+        observer = observeRetryConfig(config, value => changes.push(value))
+        observer.stopIpc()
+        assert.strictEqual(process.send, originalSend)
+        // This branch checks IPC-only cleanup, without a final configuration snapshot.
+        observer.stop(false)
+        observer = observeRetryConfig(config, value => changes.push(value))
+        const retained = process.send
+        const outer = function (...args) { return retained.apply(this, args) }
+        process.send = outer
+        observer.stopIpc()
+        const laterReply = { event: 'setupTestingType:reply', args: [{ setupConfig: { retries: 9 } }] }
+        assert.strictEqual(process.send.call(receiver, laterReply, 'handle'), 17)
+        assert.strictEqual(changes.length, 1)
+        assert.strictEqual(process.send, outer)
+        assert.strictEqual(calls.at(-1).receiver, receiver)
+        assert.deepStrictEqual(calls.at(-1).args, [laterReply, 'handle'])
+        config.retries.runMode = 2
+        assert.strictEqual(changes.length, 2)
+      } finally {
+        observer?.stop()
+        if (descriptor) Object.defineProperty(process, 'send', descriptor)
+        else delete process.send
+      }
+    })
+
+    it('rearms retry observation on the same config without mutating developer-held native data', async () => {
+      const nativeRetries = { openMode: 0, runMode: 0 }
+      const config = { retries: nativeRetries, version: '12.0.0' }
+      const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
+      assert.strictEqual(await cypressPlugin.init(tracer, config), config)
+      const prior = config.retries
+      config.retries.runMode = 2
+      assert.deepStrictEqual(nativeRetries, { openMode: 0, runMode: 0 })
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { openMode: 0, runMode: 2 })
+      assert.strictEqual(await cypressPlugin.init(tracer, config), config)
+      prior.runMode = 7
+      assert.strictEqual(config.retries.runMode, 2)
+      assert.strictEqual(cypressPlugin.originalCypressRetries.runMode, 2)
+      config.retries.runMode = 2
+      assert.deepStrictEqual(JSON.parse(JSON.stringify(config.retries)), { openMode: 0, runMode: 2 })
+      assert.strictEqual(cypressPlugin.retryConfigObserver.isWatching(config), true)
+    })
+
+    for (const mode of ['deleted', 'redefined', 'intact']) {
+      it(`reconciles ${mode} root retries at the beforeRun fallback without an IPC handoff`, async () => {
+        const config = { retries: { runMode: 0, openMode: 0 }, version: '12.0.0' }
+        const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
+        await cypressPlugin.init(tracer, config)
+        config.retries = 2
+        if (mode !== 'intact') delete config.retries
+        if (mode === 'redefined') {
+          Object.defineProperty(config, 'retries', { value: 2, configurable: true, writable: true, enumerable: true })
+        }
+        const afterObservation = new Error('stop after observing the run-start configuration')
+        cypressPlugin.libraryConfigurationPromise = Promise.reject(afterObservation)
+        await assert.rejects(cypressPlugin.beforeRun({ config: { retries: mode === 'deleted' ? 0 : 2 } }),
+          error => error === afterObservation)
+        if (mode === 'deleted') {
+          assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 0, openMode: 0 })
+          assert.strictEqual(Object.hasOwn(config, 'retries'), false)
+        } else {
+          assert.strictEqual(cypressPlugin.originalCypressRetries, 2)
+          assert.strictEqual(config.retries, 2)
+        }
+        assert.strictEqual(cypressPlugin.retryConfigObserver.isWatching(config), false)
+      })
+    }
+
+    it('preserves numeric native mode budgets after an observed inactive-mode write', async () => {
+      const config = { retries: 2, version: '16.2.0' }
+      const tracer = {
+        _tracer: {
+          _config: { isServiceUserProvided: false },
+          _exporter: {
+            getLibraryConfiguration: (config, callback) => callback(null, {
+              isFlakyTestRetriesEnabled: true,
+              flakyTestRetriesCount: 4,
+            }),
+          },
+        },
+      }
+      await cypressPlugin.init(tracer, config)
+      assert.deepStrictEqual(JSON.parse(JSON.stringify(config.retries)), { openMode: 2, runMode: 4 })
+      config.retries.openMode = 1
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 1 })
+    })
+
+    it('preserves numeric native mode budgets when reconciling resolved retry objects', async () => {
+      cypressPlugin._isInit = false
+      cypressPlugin.retryConfigObserver = undefined
+      cypressPlugin.cypressConfig = { version: '16.2.0', retries: { runMode: 4, openMode: 2 } }
+      cypressPlugin.originalCypressRetries = 2
+      cypressPlugin.nativeCypressRetriesBaseline = 2
+      cypressPlugin.configuredCypressRetries = { runMode: 4, openMode: 2 }
+      const afterReconcile = new Error('stop after resolving native modes')
+      sinon.stub(cypressPlugin, 'init').rejects(afterReconcile)
+      await assert.rejects(cypressPlugin.beforeRun({ config: { retries: { runMode: 4, openMode: 1 } } }),
+        error => error === afterReconcile)
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 1 })
+    })
+
+    for (const atrEnabled of [false, true]) {
+      it(`preserves a readonly retry root on first initialization (ATR=${atrEnabled})`, async () => {
+        const native = { runMode: 2, openMode: 0 }
+        const config = { retries: native, version: '16.2.0' }
+        Object.defineProperty(config, 'retries', { writable: false, configurable: false })
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: {
+              getLibraryConfiguration: (config, callback) => callback(null, {
+                isFlakyTestRetriesEnabled: atrEnabled,
+                flakyTestRetriesCount: 4,
+              }),
+            },
+          },
+        }
+        const result = await cypressPlugin.init(tracer, config)
+        assert.notStrictEqual(result, config)
+        assert.strictEqual(config.retries, native)
+        assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').writable, false)
+        assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').configurable, false)
+        assert.deepStrictEqual(native, { runMode: 2, openMode: 0 })
+        assert.deepStrictEqual(JSON.parse(JSON.stringify(result.retries)),
+          { runMode: atrEnabled ? 4 : 2, openMode: 0 })
+        assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 0 })
+      })
+    }
+
+    it('reinitializes a reused frozen configuration without changing its native root', async () => {
+      const config = { retries: { runMode: 0, openMode: 0 }, version: '12.0.0' }
+      const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
+      await cypressPlugin.init(tracer, config)
+      const saved = config.retries
+      saved.runMode = 2
+      Object.freeze(config)
+      const result = await cypressPlugin.init(tracer, config)
+      assert.notStrictEqual(result, config)
+      assert.strictEqual(config.retries, saved)
+      assert.strictEqual(Object.isFrozen(config), true)
+      assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').writable, false)
+      assert.deepStrictEqual(JSON.parse(JSON.stringify(result.retries)), { runMode: 2, openMode: 0 })
+      saved.runMode = 7
+      assert.strictEqual(result.retries.runMode, 2)
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 0 })
+    })
+
+    for (const [atrEnabled, settingsError] of [[false, false], [true, false], [false, true]]) {
+      it(`preserves a config frozen while initialization settings resolve (ATR=${atrEnabled}, error=${settingsError})`,
+        async () => {
+          const config = { retries: { runMode: 2, openMode: 0 }, version: '16.2.0' }
+          const settingsFailure = settingsError ? new Error('settings failed') : null
+          const tracer = {
+            _tracer: {
+              _config: { isServiceUserProvided: false },
+              _exporter: {
+                getLibraryConfiguration: (config, callback) => callback(settingsFailure, {
+                  isFlakyTestRetriesEnabled: atrEnabled,
+                  flakyTestRetriesCount: 4,
+                }),
+              },
+            },
+          }
+          const pending = cypressPlugin.init(tracer, config)
+          const native = config.retries
+          Object.freeze(config)
+          const result = await pending
+          assert.notStrictEqual(result, config)
+          assert.strictEqual(Object.isFrozen(config), true)
+          assert.strictEqual(config.retries, native)
+          assert.strictEqual(Object.getOwnPropertyDescriptor(config, 'retries').writable, false)
+          assert.deepStrictEqual(native, { runMode: 2, openMode: 0 })
+          assert.deepStrictEqual(JSON.parse(JSON.stringify(result.retries)),
+            { runMode: atrEnabled ? 4 : 2, openMode: 0 })
+          assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 0 })
+          assert.strictEqual(cypressPlugin.retryConfigObserver.isWatching(result), true)
+        })
+    }
+
+    for (const lock of ['freeze', 'seal']) {
+      for (const experimental of [false, true]) {
+        it(`preserves native retry intent across descriptor-only ${lock} (experimental=${experimental})`, async () => {
+          const native = experimental
+            ? {
+                runMode: true,
+                openMode: false,
+                experimentalStrategy: 'detect-flake-but-always-fail',
+                experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+              }
+            : { runMode: 0, openMode: 0 }
+          const config = { retries: native, version: '16.2.0' }
+          const tracer = {
+            _tracer: {
+              _config: { isServiceUserProvided: false },
+              _exporter: {
+                getLibraryConfiguration: (config, callback) => callback(null, {
+                  isFlakyTestRetriesEnabled: true,
+                  flakyTestRetriesCount: 4,
+                }),
+              },
+            },
+          }
+          await cypressPlugin.init(tracer, config)
+          Object[lock](experimental ? config.retries.experimentalOptions : config.retries)
+          assert.deepStrictEqual(cypressPlugin.originalCypressRetries, native)
+          cypressPlugin.retryConfigObserver.stop()
+          assert.deepStrictEqual(cypressPlugin.originalCypressRetries, native)
+        })
+      }
+    }
+
+    it('reconciles mutable nested retries returned through a frozen Node retry root', async () => {
+      const native = {
+        runMode: true,
+        openMode: false,
+        experimentalStrategy: 'detect-flake-but-always-fail',
+        experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+      }
+      const control = JSON.parse(JSON.stringify(native))
+      Object.freeze(control)
+      control.experimentalOptions.maxRetries = 3
+      const config = { retries: native, version: '16.2.0' }
+      const tracer = {
+        _tracer: {
+          _config: { isServiceUserProvided: false },
+          _exporter: {
+            getLibraryConfiguration: (config, callback) => callback(null, {
+              isFlakyTestRetriesEnabled: true,
+              flakyTestRetriesCount: 4,
+            }),
+          },
+        },
+      }
+      await cypressPlugin.init(tracer, config)
+      Object.freeze(config.retries)
+      config.retries.experimentalOptions.maxRetries = 3
+      cypressPlugin.retryConfigObserver.stop()
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, control)
+    })
+
+    it('preserves config-load defaults for raw and proxied nested Node retry deletions', async () => {
+      for (const raw of [false, true]) {
+        const native = {
+          runMode: true,
+          openMode: false,
+          experimentalStrategy: 'detect-flake-but-always-fail',
+          experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+        }
+        const config = { retries: native, version: '16.2.0' }
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: {
+              getLibraryConfiguration: (config, callback) => callback(null, {
+                isFlakyTestRetriesEnabled: true,
+                flakyTestRetriesCount: 4,
+              }),
+            },
+          },
+        }
+        await cypressPlugin.init(tracer, config)
+        config.retries.experimentalOptions.maxRetries = 3
+        if (raw) Object.freeze(config.retries)
+        delete config.retries.experimentalOptions.maxRetries
+        cypressPlugin.retryConfigObserver.stop()
+        assert.deepStrictEqual(cypressPlugin.originalCypressRetries, native)
+      }
+    })
+
+    it('refreshes a detached Node root after a same-object write', async () => {
+      const native = {
+        runMode: true,
+        openMode: false,
+        experimentalStrategy: 'detect-flake-but-always-fail',
+        experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+      }
+      const config = { retries: native, version: '16.2.0' }
+      const tracer = {
+        _tracer: {
+          _config: { isServiceUserProvided: false },
+          _exporter: {
+            getLibraryConfiguration: (config, callback) => callback(null, {
+              isFlakyTestRetriesEnabled: true,
+              flakyTestRetriesCount: 4,
+            }),
+          },
+        },
+      }
+      await cypressPlugin.init(tracer, config)
+      const owned = config.retries
+      const proxied = owned.experimentalOptions
+      const raw = Object.getOwnPropertyDescriptor(owned, 'experimentalOptions').value
+      config.retries = 0
+      raw.maxRetries = 3
+      owned.experimentalOptions = proxied
+      raw.maxRetries = 4
+      config.retries = owned
+      cypressPlugin.retryConfigObserver.stop()
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries,
+        { ...native, experimentalOptions: { maxRetries: 4, stopIfAnyPassed: false } })
+    })
+
+    it('reconciles raw writes after proxy writes to a detached Node retry root', async () => {
+      const native = {
+        runMode: true,
+        openMode: false,
+        experimentalStrategy: 'detect-flake-but-always-fail',
+        experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+      }
+      const config = { retries: native, version: '16.2.0' }
+      const tracer = {
+        _tracer: {
+          _config: { isServiceUserProvided: false },
+          _exporter: {
+            getLibraryConfiguration: (config, callback) => callback(null, {
+              isFlakyTestRetriesEnabled: true,
+              flakyTestRetriesCount: 4,
+            }),
+          },
+        },
+      }
+      await cypressPlugin.init(tracer, config)
+      const owned = config.retries
+      const proxied = owned.experimentalOptions
+      const raw = Object.getOwnPropertyDescriptor(owned, 'experimentalOptions').value
+      config.retries = 0
+      proxied.maxRetries = 3
+      raw.maxRetries = 4
+      config.retries = owned
+      cypressPlugin.retryConfigObserver.stop()
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries,
+        { ...native, experimentalOptions: { maxRetries: 4, stopIfAnyPassed: false } })
+    })
+
+    for (const [operation, locked] of [
+      ['define', false], ['define', true], ['assign', false], ['fresh', false], ['primitive', false],
+    ]) {
+      it(`preserves nested Node retry ownership for ${operation} (locked=${locked})`, async () => {
+        const native = {
+          runMode: true,
+          openMode: false,
+          experimentalStrategy: 'detect-flake-but-always-fail',
+          experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+        }
+        const config = { retries: native, version: '16.2.0' }
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: {
+              getLibraryConfiguration: (config, callback) => callback(null, {
+                isFlakyTestRetriesEnabled: true,
+                flakyTestRetriesCount: 4,
+              }),
+            },
+          },
+        }
+        await cypressPlugin.init(tracer, config)
+        const saved = config.retries.experimentalOptions
+        if (operation === 'define') {
+          Object.defineProperty(config.retries, 'experimentalOptions', {
+            value: saved, writable: !locked, configurable: !locked,
+          })
+        } else if (operation === 'assign') {
+          config.retries.experimentalOptions = saved
+        } else if (operation === 'fresh') {
+          config.retries.experimentalOptions = { ...saved }
+        } else {
+          const injected = saved.maxRetries
+          saved.maxRetries = injected
+        }
+        if (operation !== 'fresh') assert.strictEqual(config.retries.experimentalOptions, saved)
+        cypressPlugin.retryConfigObserver.stop()
+        assert.deepStrictEqual(cypressPlugin.originalCypressRetries,
+          operation === 'fresh' || operation === 'primitive'
+            ? { ...native, experimentalOptions: { maxRetries: 4, stopIfAnyPassed: false } }
+            : native)
+      })
+    }
+
+    for (const throws of [false, true]) {
+      it(`does not evaluate a replacement getter when a detached retry alias changes (throws=${throws})`, () => {
+        const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+        const config = { retries: { runMode: 0, openMode: 0 } }
+        const observer = observeRetryConfig(config, () => {})
+        const saved = config.retries
+        let reads = 0
+        Object.defineProperty(config, 'retries', {
+          enumerable: true,
+          configurable: true,
+          get () {
+            reads++
+            if (throws) throw new Error('native serialization getter')
+            return { runMode: reads, openMode: 0 }
+          },
+        })
+        try {
+          saved.runMode = 2
+          assert.strictEqual(reads, 0)
+          if (throws) {
+            assert.throws(() => JSON.stringify(config), /native serialization getter/)
+          } else {
+            assert.deepStrictEqual(JSON.parse(JSON.stringify(config)), { retries: { runMode: 1, openMode: 0 } })
+          }
+          assert.strictEqual(reads, 1)
+        } finally {
+          observer.stop(false)
+        }
+      })
+    }
+
+    it('keeps stopped retry proxies inert for same-object and descriptor-only writes', () => {
+      const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+      const config = { retries: { experimentalOptions: { maxRetries: 2 } } }
+      const reconcileNative = sinon.spy(native => native)
+      const observer = observeRetryConfig(config, () => {}, {
+        nativeRetries: { experimentalOptions: { maxRetries: 2 } },
+        updateNative: native => native,
+        reconcileNative,
+      })
+      const owned = config.retries
+      const options = owned.experimentalOptions
+      observer.stop()
+      const calls = reconcileNative.callCount
+      owned.experimentalOptions = options
+      Object.defineProperty(owned, 'experimentalOptions', { configurable: false })
+      assert.strictEqual(reconcileNative.callCount, calls)
+    })
+
+    for (const locked of [false, true]) {
+      it(`preserves a supplied nested proxy in a retry descriptor (locked=${locked})`, () => {
+        const observeRetryConfig = require('../../packages/datadog-plugin-cypress/src/retry-config-observer')
+        const config = { retries: { experimentalOptions: { maxRetries: 2 } } }
+        const observer = observeRetryConfig(config, () => {})
+        try {
+          const saved = config.retries.experimentalOptions
+          Object.defineProperty(config.retries, 'experimentalOptions', {
+            value: saved, writable: !locked, configurable: !locked,
+          })
+          assert.strictEqual(config.retries.experimentalOptions, saved)
+          assert.deepStrictEqual(JSON.parse(JSON.stringify(config.retries)), { experimentalOptions: { maxRetries: 2 } })
+        } finally {
+          observer.stop()
+        }
+      })
+    }
+
+    it('captures native retries written during initialization while retaining config-load defaults', async () => {
+      const config = { retries: { runMode: 0, openMode: 0 }, version: '12.0.0' }
+      const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
+      const pending = cypressPlugin.init(tracer, config)
+      config.retries.runMode = 2
+      await pending
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 0 })
+      assert.deepStrictEqual(cypressPlugin.nativeCypressRetriesBaseline, { runMode: 0, openMode: 0 })
+      config.retries = { openMode: 1 }
+      cypressPlugin.retryConfigObserver.stop()
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 0, openMode: 1 })
+    })
+
+    for (const [name, initial, partial, expected] of [
+      ['mode', { runMode: 2, openMode: 0 }, { openMode: 1 }, { runMode: 2, openMode: 1 }],
+      ['experimental policy', {
+        runMode: true,
+        openMode: false,
+        experimentalStrategy: 'detect-flake-but-always-fail',
+        experimentalOptions: { maxRetries: 4, stopIfAnyPassed: false },
+      }, { experimentalOptions: { stopIfAnyPassed: true } }, {
+        runMode: true,
+        openMode: false,
+        experimentalStrategy: 'detect-flake-but-always-fail',
+        experimentalOptions: { maxRetries: 4, stopIfAnyPassed: true },
+      }],
+    ]) {
+      it(`retains native ${name} defaults for a partial retry object during initialization`, async () => {
+        const config = { retries: initial, version: '16.2.0' }
+        const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
+        const pending = cypressPlugin.init(tracer, config)
+        config.retries = partial
+        await pending
+        assert.deepStrictEqual(cypressPlugin.nativeCypressRetriesBaseline, initial)
+        assert.deepStrictEqual(cypressPlugin.originalCypressRetries, expected)
+        assert.deepStrictEqual(config.retries, expected)
+      })
+    }
+
+    for (const selection of ['detached', 'selected', 'deleted-field']) {
+      it(`captures ${selection} Node retry provenance at handoff`, async () => {
+        const config = { retries: { runMode: 0, openMode: 0 }, version: '12.0.0' }
+        const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
+        await cypressPlugin.init(tracer, config)
+        const saved = config.retries
+        config.retries = 1
+        saved.runMode = 2
+        assert.strictEqual(config.retries, 1)
+        if (selection !== 'detached') config.retries = saved
+        if (selection === 'deleted-field') delete saved.runMode
+        cypressPlugin.retryConfigObserver.stop()
+        if (selection === 'detached') {
+          assert.strictEqual(cypressPlugin.originalCypressRetries, 1)
+        } else {
+          assert.deepStrictEqual(cypressPlugin.originalCypressRetries, {
+            runMode: selection === 'deleted-field' ? 0 : 2, openMode: 0,
+          })
+        }
+      })
+    }
+
+    it('restores native defaults on deleted or undefined Node retry fields', async () => {
+      const config = { retries: { runMode: 2, openMode: 0 }, version: '12.0.0' }
+      const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
+      await cypressPlugin.init(tracer, config)
+      config.retries.runMode = 8
+      config.retries.openMode = 1
+      delete config.retries.runMode
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 1 })
+      config.retries.runMode = 9
+      config.retries.runMode = undefined
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 1 })
+      config.retries = { openMode: 3 }
+      cypressPlugin.retryConfigObserver.stop()
+      assert.deepStrictEqual(cypressPlugin.originalCypressRetries, { runMode: 2, openMode: 3 })
+    })
 
     it('restores user retries before requesting configuration for a subsequent run', async () => {
       const cypressConfig = { retries: { openMode: 1, runMode: 2 }, version: '12.0.0' }
@@ -2809,3 +4216,87 @@ moduleTypes.forEach(({
     })
   })
 }
+
+describe('Cypress exclusions CI partitioning', () => {
+  const createExclusionsShard = require('./exclusions-shard')
+
+  it('retains the original unsharded declaration interface', () => {
+    const original = () => {}
+    const previous = process.env.CYPRESS_EXCLUSIONS_SHARD
+    delete process.env.CYPRESS_EXCLUSIONS_SHARD
+    try {
+      for (const selection of [undefined, '', '1/1']) {
+        assert.strictEqual(createExclusionsShard(original, selection), original)
+      }
+    } finally {
+      if (previous === undefined) delete process.env.CYPRESS_EXCLUSIONS_SHARD
+      else process.env.CYPRESS_EXCLUSIONS_SHARD = previous
+    }
+  })
+
+  it('uses the dedicated CI selection when no explicit selection is supplied', () => {
+    const original = sinon.stub()
+    const previous = process.env.CYPRESS_EXCLUSIONS_SHARD
+    process.env.CYPRESS_EXCLUSIONS_SHARD = '2/2'
+    try {
+      const declaration = createExclusionsShard(original)
+      declaration('first', () => {})
+      declaration('second', () => {})
+      sinon.assert.calledOnce(original)
+      assert.strictEqual(original.firstCall.args[0], 'second')
+    } finally {
+      if (previous === undefined) delete process.env.CYPRESS_EXCLUSIONS_SHARD
+      else process.env.CYPRESS_EXCLUSIONS_SHARD = previous
+    }
+  })
+
+  it('declares every case once across eight shards, retaining explicit pending cases', () => {
+    const all = []
+    const callbacks = Array.from({ length: 37 }, () => () => {})
+    for (let shard = 1; shard <= 8; shard++) {
+      const declarations = []
+      const nativeIt = (title, callback) => declarations.push({ title, callback, pending: false })
+      nativeIt.skip = (title, callback) => declarations.push({ title, callback, pending: true })
+      const declaration = createExclusionsShard(nativeIt, `${shard}/8`)
+      for (let index = 0; index < callbacks.length; index++) {
+        const method = [2, 9, 16, 28].includes(index) ? declaration.skip : declaration
+        method(`case-${index}`, callbacks[index])
+      }
+      assert.ok(declarations.length > 0)
+      for (const entry of declarations) {
+        const index = Number(entry.title.slice(5))
+        assert.strictEqual(entry.callback, callbacks[index])
+        assert.strictEqual(entry.pending, [2, 9, 16, 28].includes(index))
+      }
+      all.push(...declarations.map(entry => entry.title))
+    }
+    assert.strictEqual(new Set(all).size, callbacks.length)
+    assert.strictEqual(all.length, callbacks.length)
+    assert.deepStrictEqual(all.sort(), callbacks.map((_callback, index) => `case-${index}`).sort())
+  })
+
+  it('preserves selected declaration receivers, arguments and return values', () => {
+    const receiver = {}
+    const callback = () => {}
+    const normalResult = {}
+    const pendingResult = {}
+    const nativeIt = sinon.stub().returns(normalResult)
+    nativeIt.skip = sinon.stub().returns(pendingResult)
+    const declaration = createExclusionsShard(nativeIt, '1/2')
+    assert.strictEqual(declaration.call(receiver, 'selected', callback), normalResult)
+    assert.strictEqual(declaration('not selected', callback), undefined)
+    assert.strictEqual(declaration.skip.call(receiver, 'pending', callback), pendingResult)
+    sinon.assert.calledOnceWithExactly(nativeIt, 'selected', callback)
+    sinon.assert.calledOn(nativeIt, receiver)
+    sinon.assert.calledOnceWithExactly(nativeIt.skip, 'pending', callback)
+    sinon.assert.calledOn(nativeIt.skip, receiver)
+  })
+
+  for (const invalid of [
+    '0/8', '9/8', '1/0', '1', '2/a', '-1/2', '1.5/2', '1/2 ', '9007199254740992/9007199254740992',
+  ]) {
+    it(`rejects an invalid shard selection (${invalid})`, () => {
+      assert.throws(() => createExclusionsShard(() => {}, invalid), /Invalid Cypress exclusions shard/)
+    })
+  }
+})

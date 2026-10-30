@@ -572,6 +572,64 @@ jobs:
         with:
           flags: test-optimization-cypress-${{ matrix.version }}-${{ matrix.cypress-version }}-${{ matrix.module-type }}
 
+  # Native comparisons launch separate baseline and instrumented browsers per case.
+  # Bound each cell without changing All Green polling, test timeouts, or coverage gates.
+  integration-cypress-exclusions:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [oldest, latest]
+        cypress-version: [12.0.0, 14.5.4, latest]
+        module-type: ["commonJS", "esm"]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        exclude:
+          # Node 18 supports Cypress 12 and 14.5.4; annotations require Cypress 12+.
+          - version: oldest
+            cypress-version: latest
+    name: integration-cypress-exclusions (${{ matrix.cypress-version }}, node-${{ matrix.version }}, ${{ matrix.module-type }}, shard-${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+        continue-on-error: true
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - name: Resolve Cypress version
+        id: cypress-version
+        run: |
+          if [ "${{ matrix.cypress-version }}" = "latest" ]; then
+            RESOLVED=$(node -p "require('./packages/dd-trace/test/plugins/versions/package.json').dependencies.cypress")
+          else
+            RESOLVED="${{ matrix.cypress-version }}"
+          fi
+          echo "resolved=$RESOLVED" >> "$GITHUB_OUTPUT"
+      - name: Cache Cypress binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-binary-${{ steps.cypress-version.outputs.resolved }}
+      - run: yarn config set ignore-engines true
+      - run: npm run test:integration:cypress:coverage
+        env:
+          CYPRESS_VERSION: ${{ matrix.cypress-version }}
+          NODE_OPTIONS: "-r ./ci/init"
+          CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
+          OPTIONS_OVERRIDE: 1
+          SPEC: cypress-test-exclusions
+          CYPRESS_EXCLUSIONS_SHARD: ${{ matrix.shard }}/8
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-cypress-${{ matrix.version }}-${{ matrix.cypress-version }}-${{ matrix.module-type }}
+
   integration-vitest:
     runs-on: ubuntu-latest
     permissions:
