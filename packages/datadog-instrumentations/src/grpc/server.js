@@ -23,6 +23,14 @@ const isValid = (server, args) => {
     (server.type === 'unary' ? typeof args[1] === 'function' : isEmitter(args[0])))
 }
 
+// A call can end through several paths (cancellation, error, handler callback);
+// only the first one may finish the span and set its status.
+function finish (ctx) {
+  if (ctx.finished) return
+  ctx.finished = true
+  finishChannel.publish(ctx)
+}
+
 function wrapHandler (func, name) {
   return function (call, callback) {
     if (!isValid(this, arguments)) return func.apply(this, arguments)
@@ -37,7 +45,7 @@ function wrapHandler (func, name) {
       try {
         const onCancel = () => {
           ctx.code = CANCELLED
-          finishChannel.publish(ctx)
+          finish(ctx)
         }
 
         // Finish the span if the call was cancelled.
@@ -101,7 +109,7 @@ function createWrapEmit (call, ctx, onCancel) {
           ctx.error = arg1
           errorChannel.publish(ctx)
           ctx.code = arg1.code
-          finishChannel.publish(ctx)
+          finish(ctx)
           call.removeListener('cancelled', onCancel)
           break
         // Streams are always cancelled before `finish` since 1.10.0 so we have
@@ -111,7 +119,7 @@ function createWrapEmit (call, ctx, onCancel) {
             updateChannel.publish(call.status)
           }
           if (!call.status || call.status.code === 0) {
-            finishChannel.publish(ctx)
+            finish(ctx)
           }
           call.removeListener('cancelled', onCancel)
           break
@@ -140,7 +148,7 @@ function wrapCallback (callback = () => {}, call, ctx, onCancel) {
       ctx.trailer = trailer
     }
 
-    finishChannel.publish(ctx)
+    finish(ctx)
 
     call.removeListener('cancelled', onCancel)
 
