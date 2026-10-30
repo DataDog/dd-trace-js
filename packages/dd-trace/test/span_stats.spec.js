@@ -163,7 +163,7 @@ describe('SpanAggKey', () => {
     assert.strictEqual(key.endpoint, '/users/:id')
   })
 
-  it('should skip a malformed Datadog HTTP status and use the OTel attribute', () => {
+  it('should skip an empty Datadog HTTP status and use the OTel attribute', () => {
     const span = {
       ...basicSpan,
       meta: {
@@ -184,6 +184,25 @@ describe('SpanAggKey', () => {
       const key = new SpanAggKey({ ...basicSpan, meta: { 'http.response.status_code': status }, metrics: {} })
 
       assert.strictEqual(key.statusCode, 0, `status ${JSON.stringify(status)} must not be aggregated`)
+    }
+  })
+
+  it('should accept only safe integer OTel HTTP status metrics', () => {
+    for (const [status, expected] of [
+      [204.5, 0],
+      [NaN, 0],
+      [Infinity, 0],
+      [-Infinity, 0],
+      [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
+      [Number.MAX_SAFE_INTEGER + 1, 0],
+    ]) {
+      const key = new SpanAggKey({
+        ...basicSpan,
+        meta: {},
+        metrics: { 'http.response.status_code': status },
+      })
+
+      assert.strictEqual(key.statusCode, expected, `status ${String(status)}`)
     }
   })
 
@@ -220,6 +239,32 @@ describe('SpanAggKey', () => {
     }
 
     assert.strictEqual(new SpanAggKey(span).statusCode, 202)
+  })
+
+  it('should use the OTel status metric when the OTel meta status is invalid', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        'http.response.status_code': 'invalid',
+      },
+      metrics: {
+        'http.response.status_code': 204,
+      },
+    }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, 204)
+  })
+
+  it('should preserve Datadog-first HTTP method precedence', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        [HTTP_METHOD]: 'GET',
+        'http.request.method': 'POST',
+      },
+    }
+
+    assert.strictEqual(new SpanAggKey(span).method, 'GET')
   })
 
   it('should include HTTP method and endpoint in aggregation key', () => {
