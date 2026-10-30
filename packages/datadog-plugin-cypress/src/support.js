@@ -14,6 +14,7 @@ const initialBrowserRetries = Cypress._.cloneDeep(Cypress.config('retries'))
 let originalRetries
 let configuredRetries
 let browserRetrySelection
+let browserRetryAccessor
 const browserRetryObjects = new WeakMap()
 const browserRetryTargets = new WeakMap()
 const browserConfigStates = new WeakMap()
@@ -361,6 +362,24 @@ function observeLockedBrowserRetries (value) {
   if (metadata) metadata.reconcileOnRead = true
 }
 
+// An accessor's value is native intent, but defining or inspecting it must not run its getter.
+function getBrowserRetryAccessor () {
+  if (!browserRetryAccessor) return
+  const property = Object.getOwnPropertyDescriptor(browserRetryAccessor.state, 'retries')
+  if (property && !('value' in property) && property.get === browserRetryAccessor.get &&
+    property.set === browserRetryAccessor.set) return property
+  browserRetryAccessor = undefined
+}
+
+function recordBrowserRetryAccessorRead (value) {
+  if (!getBrowserRetryAccessor()) return
+  const raw = unwrapBrowserRetries(value)
+  const metadata = raw && typeof raw === 'object' && browserRetryObjects.get(raw)
+  browserRetrySelection = metadata || undefined
+  browserRetries = metadata ? metadata.native : raw
+  hasBrowserRetries = true
+}
+
 function observeBrowserConfig (state) {
   if (browserConfigStates.has(state)) return browserConfigStates.get(state)
   const proxy = new Proxy(state, {
@@ -372,6 +391,7 @@ function observeBrowserConfig (state) {
     get (target, key, receiver) {
       const value = Reflect.get(target, key, receiver)
       const property = Object.getOwnPropertyDescriptor(target, key)
+      if (key === 'retries') recordBrowserRetryAccessorRead(value)
       if (property && !property.configurable && !property.writable && 'value' in property) {
         if (key === 'retries') observeLockedBrowserRetries(value)
         return value
@@ -379,18 +399,23 @@ function observeBrowserConfig (state) {
       return key === 'retries' ? observeBrowserRetries(value) : value
     },
     set (target, key, value) {
-      const previous = target[key]
+      const previousProperty = Object.getOwnPropertyDescriptor(target, key)
+      const previous = previousProperty && previousProperty.value
       const result = Reflect.set(target, key, key === 'retries' ? unwrapBrowserRetries(value) : value)
       if (result && key === 'retries') recordBrowserRetryReplacement(value, previous)
       return result
     },
     defineProperty (target, key, descriptor) {
       const hasValue = 'value' in descriptor
-      const previous = key === 'retries' && hasValue ? target[key] : undefined
+      const previousProperty = key === 'retries' && hasValue && Object.getOwnPropertyDescriptor(target, key)
+      const previous = previousProperty && previousProperty.value
       const result = Reflect.defineProperty(target, key, descriptor)
       if (result && key === 'retries') {
         if (hasValue) recordBrowserRetryReplacement(descriptor.value, previous)
         const property = Object.getOwnPropertyDescriptor(target, key)
+        browserRetryAccessor = property && !('value' in property)
+          ? { state: target, get: property.get, set: property.set }
+          : undefined
         if (property && !property.configurable && !property.writable && 'value' in property) {
           observeLockedBrowserRetries(property.value)
         }
@@ -412,7 +437,9 @@ Cypress.config = Object.assign(function (key, value) {
   const retries = typeof key === 'object' && key !== null
     ? key.retries
     : key === 'retries' && arguments.length > 1 ? value : undefined
-  const previous = retries === undefined ? undefined : cypressConfig.call(this, 'retries')
+  const previous = retries === undefined || getBrowserRetryAccessor()
+    ? undefined
+    : cypressConfig.call(this, 'retries')
   const args = [...arguments]
   if (retries !== undefined && unwrapBrowserRetries(retries) !== retries) {
     if (key !== null && typeof key === 'object') args[0] = { ...key, retries: unwrapBrowserRetries(retries) }
@@ -421,6 +448,7 @@ Cypress.config = Object.assign(function (key, value) {
   const result = cypressConfig.apply(this, args)
   if (retries !== undefined) recordBrowserRetryReplacement(retries, previous)
   if (arguments.length === 0) return observeBrowserConfig(result)
+  if (key === 'retries' && arguments.length === 1) recordBrowserRetryAccessorRead(result)
   return key === 'retries' && arguments.length === 1 ? observeBrowserRetries(result) : result
 }, cypressConfig)
 
@@ -557,19 +585,25 @@ function getNativeRetryOverrides (test) {
 
 /** @param {object} test */
 function getNativeRetryBudget (test) {
+  const accessor = getBrowserRetryAccessor()
+  const accessorValue = accessor && cypressConfig.call(Cypress, 'retries')
+  if (accessor) recordBrowserRetryAccessorRead(accessorValue)
   const overrides = getNativeRetryOverrides(test)
   let metadata = browserRetrySelection
   if (!metadata) {
-    const current = unwrapBrowserRetries(cypressConfig.call(Cypress, 'retries'))
+    const current = unwrapBrowserRetries(accessor ? accessorValue : cypressConfig.call(Cypress, 'retries'))
     const observed = current && typeof current === 'object' && browserRetryObjects.get(current)
     if (observed && observed.reconcileOnRead) metadata = observed
   }
   if (metadata) reconcileBrowserRetryMetadata(metadata)
-  const retries = overrides
-    ? nativeRetryCount(overrides.retries)
-    : metadata
-      ? nativeRetryCount(metadata.native)
-      : hasBrowserRetries ? nativeRetryCount(browserRetries) : frameworkRetries
+  // A getter-only root rejects Cypress's declaration writes, so its current value remains authoritative.
+  const retries = accessor && !accessor.set
+    ? nativeRetryCount(browserRetries)
+    : overrides
+      ? nativeRetryCount(overrides.retries)
+      : metadata
+        ? nativeRetryCount(metadata.native)
+        : hasBrowserRetries ? nativeRetryCount(browserRetries) : frameworkRetries
   return Number.isSafeInteger(retries) ? retries : 0
 }
 

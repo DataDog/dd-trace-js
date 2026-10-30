@@ -307,7 +307,8 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'browser-saved-local', 'browser-all-saved-local',
     'browser-numeric-open', 'browser-all-numeric-open',
     'browser-descriptor', 'browser-all-descriptor-root', 'browser-all-descriptor-same',
-    'browser-retries', 'browser-same-budget', 'inherited-mode', 'browser-runtime', 'browser-inactive-mode',
+    'browser-accessor-root', 'browser-retries', 'browser-same-budget', 'inherited-mode',
+    'browser-runtime', 'browser-inactive-mode',
     'browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite',
     'browser-delete-mode', 'browser-partial-root',
     'browser-all-equal', 'browser-all-inactive', 'browser-all-root',
@@ -355,6 +356,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
             }
           : {}
         if (numericNative) experimentalEnvironment.CYPRESS_RETRIES_AS_NUMBER = '2'
+        if (mode === 'browser-accessor-root') experimentalEnvironment.CYPRESS_RETRIES = '0'
         const expected = {
           ...(['browser-saved-local', 'browser-all-saved-local'].includes(mode) && {
             'initial local control': 1, 'captures local retries': 1, 'restores local retries': 1,
@@ -365,7 +367,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           'excluded persistent': zeroNative
             ? 1
             : thresholdNative ? 3 : nativeAttempts,
-          'excluded explicit zero': 1,
+          'excluded explicit zero': mode === 'browser-accessor-root' ? 3 : 1,
           'ordinary control': zeroControl || browserZeroNative
             ? 1
             : descriptorNative ? 3 : nativeAttempts,
