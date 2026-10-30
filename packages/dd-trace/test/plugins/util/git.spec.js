@@ -1287,6 +1287,61 @@ done
     })
   }
 
+  for (const partial of [false, true]) {
+    for (const missingObject of ['head', 'tree']) {
+      const clone = partial ? 'partial' : 'single-branch'
+      it(`recovers a missing ${missingObject} in a non-shallow ${clone} clone after a failed fetch`, () => {
+        git(remote, ['update-ref', 'refs/heads/juan-fernandez/root', baseSha])
+        fs.rmSync(checkout, { recursive: true, force: true })
+        git(directory, [
+          'clone', '--single-branch', '--no-checkout', ...(partial ? ['--filter=blob:none'] : []),
+          '--branch', 'juan-fernandez/root', pathToFileURL(remote).href, checkout,
+        ])
+        if (missingObject === 'tree') {
+          const object = execFileSync('git', ['cat-file', 'commit', headSha], { cwd: remote, stdio: 'pipe' })
+          git(checkout, ['hash-object', '-t', 'commit', '-w', '--stdin'], { input: object })
+        }
+        const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+        const originalRefs = git(checkout, ['show-ref'])
+        const fetchHeadPath = path.join(checkout, '.git', 'FETCH_HEAD')
+        fs.writeFileSync(fetchHeadPath, 'unchanged\n')
+        const fetchOptions = []
+        const execute = (command, flags, options) => {
+          if (flags[0] === 'fetch') {
+            assert.ok(!flags.includes('--depth=1'))
+            fetchOptions.push(options)
+            throw Object.assign(new Error('spawnSync git ETIMEDOUT'), { code: 'ETIMEDOUT' })
+          }
+          return cachedExecSpy(command, flags, options)
+        }
+        const gitUtils = proxyquire('../../../src/plugins/util/git', {
+          './git-cache': { cachedExec: execute },
+          'node:child_process': { execFileSync: execute },
+        })
+
+        const unavailable = gitUtils.getGitMetadata({ headCommitSha: headSha })
+
+        assert.strictEqual(unavailable[GIT_COMMIT_HEAD_MESSAGE], undefined)
+        assert.strictEqual(unavailable[GIT_COMMIT_SHA], originalHead)
+        assert.strictEqual(fetchOptions.length, 1)
+        assert.strictEqual(fetchOptions[0].timeout, 5000)
+        const metadata = getGitMetadata({ headCommitSha: headSha })
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_COMMITTER_EMAIL], 'pr-committer@example.com')
+        const fetches = cachedExecSpy.getCalls().filter(call => call.args[1][0] === 'fetch')
+        assert.strictEqual(fetches.length, 1)
+        assert.ok(!fetches[0].args[1].includes('--depth=1'))
+        assert.strictEqual(fetches[0].args[2].timeout, 5000)
+        assert.strictEqual(git(checkout, ['rev-parse', '--is-shallow-repository']), 'false')
+        assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
+        assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+        assert.strictEqual(git(checkout, ['show-ref']), originalRefs)
+        assert.strictEqual(fs.readFileSync(fetchHeadPath, 'utf8'), 'unchanged\n')
+      })
+    }
+  }
+
   it('preserves existing base history while preparing a missing head for the diff', () => {
     git(remote, ['config', 'uploadpack.allowFilter', 'false'])
     git(remote, ['fast-import', '--quiet'], {

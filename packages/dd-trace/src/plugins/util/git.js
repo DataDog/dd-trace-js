@@ -519,7 +519,7 @@ function getGitMetadata (ciMetadata) {
     // Only explicit, bounded fetches may contact the remote during head metadata recovery.
     const headOptions = { uncached: true, localOnly: true }
     let headInfo = sanitizedExec(headFlags, null, null, null, false, headOptions)
-    if (!headInfo && fetchedAtDepthOne) {
+    if (!headInfo && (fetchedAtDepthOne || !shallow)) {
       fetchHeadCommitSha(headCommitSha, false)
       headInfo = sanitizedExec(headFlags, null, null, null, false, headOptions)
     }
