@@ -516,3 +516,101 @@ if (!root[Symbol.for('dd-trace.cypress.defer-lifecycle')]) root[Symbol.for('dd-t
     })
   }
 })
+
+describe('Cypress getter-only retry roots', () => {
+  for (const phase of ['before', 'during']) {
+    for (const atrEnabled of [false, true]) {
+      it(`preserves getter-only retries ${phase} initialization (ATR=${atrEnabled})`, async () => {
+        const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+        const plugin = new CypressPlugin()
+        const native = { runMode: 2, openMode: 0 }
+        const config = { retries: native, version: '16.2.0' }
+        const getter = () => native
+        const lock = () => Object.defineProperty(config, 'retries', {
+          enumerable: true, configurable: false, get: getter,
+        })
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: {
+              getLibraryConfiguration: (_config, callback) => callback(null, {
+                isFlakyTestRetriesEnabled: atrEnabled, flakyTestRetriesCount: 4,
+              }),
+            },
+          },
+        }
+        try {
+          if (phase === 'before') lock()
+          const pending = plugin.init(tracer, config)
+          if (phase === 'during') lock()
+          const result = await pending
+          assert.notStrictEqual(result, config)
+          assert.strictEqual(config.retries, native)
+          const descriptor = Object.getOwnPropertyDescriptor(config, 'retries')
+          assert.strictEqual(descriptor.get, getter)
+          assert.strictEqual(descriptor.set, undefined)
+          assert.strictEqual(descriptor.configurable, false)
+          assert.deepStrictEqual(native, { runMode: 2, openMode: 0 })
+          assert.deepStrictEqual(plugin.originalCypressRetries, native)
+          assert.deepStrictEqual(JSON.parse(JSON.stringify(result.retries)),
+            { runMode: atrEnabled ? 4 : 2, openMode: 0 })
+        } finally {
+          plugin.retryConfigObserver?.stop()
+        }
+      })
+    }
+  }
+})
+
+describe('Cypress saved experimental options', () => {
+  for (const define of [false, true]) {
+    for (const detachedRetryCount of [undefined, 3, 4, 'flags-raw-roundtrip']) {
+      it(`retains saved options provenance (define=${define}, detached=${detachedRetryCount})`, async () => {
+        const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+        const plugin = new CypressPlugin()
+        const config = {
+          version: '16.2.0',
+          retries: {
+            runMode: true,
+            openMode: false,
+            experimentalStrategy: 'detect-flake-but-always-fail',
+            experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+          },
+        }
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: {
+              getLibraryConfiguration: (_config, callback) => callback(null, {
+                isFlakyTestRetriesEnabled: true, flakyTestRetriesCount: 4,
+              }),
+            },
+          },
+        }
+        try {
+          const result = await plugin.init(tracer, config)
+          const saved = result.retries.experimentalOptions
+          const raw = Object.getOwnPropertyDescriptor(result.retries, 'experimentalOptions').value
+          assert.strictEqual(saved.maxRetries, 4)
+          result.retries.experimentalOptions = { maxRetries: 1, stopIfAnyPassed: false }
+          if (detachedRetryCount === 'flags-raw-roundtrip') {
+            raw.maxRetries = 3
+            Object.defineProperty(saved, 'stopIfAnyPassed', { configurable: false })
+            raw.maxRetries = 4
+          } else if (detachedRetryCount !== undefined) saved.maxRetries = detachedRetryCount
+          assert.strictEqual(plugin.originalCypressRetries.experimentalOptions.maxRetries, 1)
+          if (define) {
+            Object.defineProperty(result.retries, 'experimentalOptions', { value: saved })
+          } else {
+            result.retries.experimentalOptions = saved
+          }
+          assert.strictEqual(result.retries.experimentalOptions, saved)
+          assert.strictEqual(plugin.originalCypressRetries.experimentalOptions.maxRetries,
+            detachedRetryCount === 'flags-raw-roundtrip' ? 4 : detachedRetryCount ?? 2)
+        } finally {
+          plugin.retryConfigObserver?.stop()
+        }
+      })
+    }
+  }
+})

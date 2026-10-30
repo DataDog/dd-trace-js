@@ -906,9 +906,9 @@ class CypressPlugin {
     this.retryConfigObserver = undefined
     const isReusedConfig = this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries
     const retryDescriptor = Object.getOwnPropertyDescriptor(cypressConfig, 'retries')
-    if (retryDescriptor && 'value' in retryDescriptor && !retryDescriptor.writable) {
+    if (retryDescriptor && !retryDescriptor.writable && !retryDescriptor.set) {
       // Setup may make the retry root read-only before initial or repeated use.
-      // Work on a private copy without changing the external data property.
+      // Work on a private copy without changing the external retry descriptor.
       cypressConfig = { ...cypressConfig }
     }
     if (isReusedConfig) {
@@ -950,10 +950,10 @@ class CypressPlugin {
     this._pendingRequestErrorTags = []
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
-        // Manual setup can freeze its original object while settings are pending.
-        // Keep later SDK writes private without changing the user's frozen root.
+        // Manual setup can make retries read-only while settings are pending.
+        // Keep later SDK writes private without changing the user's retry descriptor.
         const pendingRetryDescriptor = Object.getOwnPropertyDescriptor(this.cypressConfig, 'retries')
-        if (pendingRetryDescriptor && 'value' in pendingRetryDescriptor && !pendingRetryDescriptor.writable) {
+        if (pendingRetryDescriptor && !pendingRetryDescriptor.writable && !pendingRetryDescriptor.set) {
           this.cypressConfig = { ...this.cypressConfig }
         }
         // Setup can change native retries while backend settings are resolving.

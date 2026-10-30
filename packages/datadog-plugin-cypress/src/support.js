@@ -42,6 +42,72 @@ function overlayBrowserRetries (native, configured, actual) {
   return result
 }
 
+// Cypress retry objects contain first-level experimental options with primitive fields.
+function rememberBrowserRetryChild (metadata, key, value, explicit) {
+  const raw = unwrapBrowserRetries(value)
+  if (!raw || typeof raw !== 'object') return
+  if (metadata.children.has(raw)) return metadata.children.get(raw)
+  const child = {
+    raw,
+    key,
+    initial: Cypress._.cloneDeep(raw),
+    configured: Cypress._.cloneDeep(metadata.observed && metadata.observed[key]),
+    observed: Cypress._.cloneDeep(raw),
+    native: explicit ? Cypress._.cloneDeep(raw) : undefined,
+    nativeReady: Boolean(explicit),
+    writes: [],
+  }
+  metadata.children.set(raw, child)
+  if (hasSuiteConfig) initializeBrowserRetryChild(metadata, child)
+  else metadata.pendingChildren.push(child)
+  return child
+}
+
+function initializeBrowserRetryChild (metadata, child) {
+  if (!metadata.nativeReady) return
+  if (!child.nativeReady) {
+    child.native = overlayBrowserRetries(metadata.native && metadata.native[child.key], child.configured, child.initial)
+    child.nativeReady = true
+  }
+  const writes = child.writes.splice(0)
+  if (writes.length) child.observed = Cypress._.cloneDeep(child.initial)
+  for (const write of writes) {
+    if (write.raw) {
+      child.native = overlayBrowserRetries(child.native, write.observed, write.raw)
+      child.observed = Cypress._.cloneDeep(write.raw)
+    } else {
+      child.native = updateBrowserRetryPath(child.native, [write.key], write.value, write.deleted)
+      child.observed = updateBrowserRetryPath(child.observed, [write.key], write.value, write.deleted)
+    }
+  }
+}
+
+function refreshBrowserRetryChild (metadata, child) {
+  if (hasSuiteConfig) {
+    initializeBrowserRetryMetadata(metadata)
+    initializeBrowserRetryChild(metadata, child)
+    child.native = overlayBrowserRetries(child.native, child.observed, child.raw)
+  } else if (!Cypress._.isEqual(child.observed, child.raw)) {
+    child.writes.push({ observed: Cypress._.cloneDeep(child.observed), raw: Cypress._.cloneDeep(child.raw) })
+  }
+  child.observed = Cypress._.cloneDeep(child.raw)
+}
+
+function recordBrowserRetryChild (metadata, child, key, value, deleted) {
+  if (hasSuiteConfig) {
+    initializeBrowserRetryMetadata(metadata)
+    initializeBrowserRetryChild(metadata, child)
+    child.native = updateBrowserRetryPath(child.native, [key], value, deleted)
+  } else child.writes.push({ key, value: Cypress._.cloneDeep(value), deleted })
+  child.observed = updateBrowserRetryPath(child.observed, [key], value, deleted)
+}
+
+function captureBrowserRetryChild (metadata, key, value) {
+  const child = rememberBrowserRetryChild(metadata, key, value, true)
+  if (child) refreshBrowserRetryChild(metadata, child)
+  return child
+}
+
 function initializeBrowserRetryMetadata (metadata) {
   if (!hasSuiteConfig) return
   if (!metadata.nativeReady) {
@@ -49,13 +115,14 @@ function initializeBrowserRetryMetadata (metadata) {
     metadata.nativeReady = true
   }
   const writes = metadata.writes.splice(0)
+  for (const child of metadata.pendingChildren.splice(0)) initializeBrowserRetryChild(metadata, child)
   if (writes.length) metadata.observed = Cypress._.cloneDeep(metadata.initial)
   for (const write of writes) {
     if (write.raw) {
       metadata.native = overlayBrowserRetries(metadata.native, write.observed, write.raw)
       metadata.observed = Cypress._.cloneDeep(write.raw)
       selectBrowserRetryMetadata(metadata)
-    } else recordBrowserRetryPath(metadata, write.path, write.value, write.deleted)
+    } else recordBrowserRetryPath(metadata, write.path, write.value, write.deleted, write.child)
   }
 }
 
@@ -82,16 +149,17 @@ function updateBrowserRetryPath (retries, path, value, deleted) {
   return retries
 }
 
-function recordBrowserRetryPath (metadata, path, value, deleted) {
+function recordBrowserRetryPath (metadata, path, value, deleted, child) {
   // Track only the known write: unrelated raw aliases can change other paths before selection.
   if (!hasSuiteConfig) {
     metadata.observed = updateBrowserRetryPath(metadata.observed, path, value, deleted)
-    metadata.writes.push({ path, value: Cypress._.cloneDeep(value), deleted })
+    metadata.writes.push({ path, value: Cypress._.cloneDeep(value), deleted, child })
     return
   }
   initializeBrowserRetryMetadata(metadata)
   metadata.observed = updateBrowserRetryPath(metadata.observed, path, value, deleted)
-  metadata.native = updateBrowserRetryPath(metadata.native, path, value, deleted)
+  if (child) refreshBrowserRetryChild(metadata, child)
+  metadata.native = updateBrowserRetryPath(metadata.native, path, child ? child.native : value, deleted)
   selectBrowserRetryMetadata(metadata)
 }
 
@@ -107,6 +175,14 @@ function selectBrowserRetryMetadata (metadata) {
 /** @param {object} metadata */
 function reconcileBrowserRetryMetadata (metadata) {
   initializeBrowserRetryMetadata(metadata)
+  for (const key of Object.keys(metadata.raw)) {
+    const property = Object.getOwnPropertyDescriptor(metadata.raw, key)
+    const child = property && 'value' in property && metadata.children.get(unwrapBrowserRetries(property.value))
+    if (!child) continue
+    refreshBrowserRetryChild(metadata, child)
+    if (hasSuiteConfig) metadata.native = updateBrowserRetryPath(metadata.native, [key], child.native, false)
+    metadata.observed[key] = Cypress._.cloneDeep(child.raw)
+  }
   if (!hasSuiteConfig) {
     if (!Cypress._.isEqual(metadata.observed, metadata.raw)) {
       const raw = Cypress._.cloneDeep(metadata.raw)
@@ -161,12 +237,19 @@ function observeBrowserRetries (raw) {
     native: Cypress._.cloneDeep(overrides ? overrides.retries : hasBrowserRetries ? browserRetries : originalRetries),
     nativeReady: Boolean(overrides) || hasSuiteConfig || hasBrowserRetries,
     writes: [],
+    children: new WeakMap(),
+    pendingChildren: [],
+  }
+  for (const key of Object.keys(raw)) {
+    const property = Object.getOwnPropertyDescriptor(raw, key)
+    if (property && 'value' in property) rememberBrowserRetryChild(metadata, key, property.value, false)
   }
   const proxies = new WeakMap()
   function wrap (value, path) {
     value = unwrapBrowserRetries(value)
     if (!value || typeof value !== 'object') return value
     if (proxies.has(value)) return proxies.get(value)
+    const child = path.length === 1 && rememberBrowserRetryChild(metadata, path[0], value, false)
     const proxy = new Proxy(value, {
       getOwnPropertyDescriptor (target, key) {
         const property = Reflect.getOwnPropertyDescriptor(target, key)
@@ -187,22 +270,43 @@ function observeBrowserRetries (raw) {
       },
       set (target, key, value) {
         const sameObject = isSameBrowserObjectValue(target, key, value)
+        const previous = !path.length && Object.getOwnPropertyDescriptor(target, key)
+        const previousChild = previous && 'value' in previous &&
+          metadata.children.get(unwrapBrowserRetries(previous.value))
+        if (previousChild) refreshBrowserRetryChild(metadata, previousChild)
         const result = Reflect.set(target, key, unwrapBrowserRetries(value))
+        if (result && child) {
+          if (sameObject) refreshBrowserRetryChild(metadata, child)
+          else recordBrowserRetryChild(metadata, child, key, value, false)
+        }
         if (result && ownsNestedPath(metadata.raw, path, target)) {
           if (sameObject) {
             metadata.reconcileOnRead = true
             reconcileBrowserRetryMetadata(metadata)
-          } else recordBrowserRetryPath(metadata, [...path, key], value, false)
+          } else {
+            const restored = !path.length && captureBrowserRetryChild(metadata, key, value)
+            recordBrowserRetryPath(metadata, [...path, key], value, false, restored)
+          }
         }
         return result
       },
       defineProperty (target, key, descriptor) {
         const hasValue = 'value' in descriptor
         const sameObject = hasValue && isSameBrowserObjectValue(target, key, descriptor.value)
+        const previous = !path.length && hasValue && Object.getOwnPropertyDescriptor(target, key)
+        const previousChild = previous && 'value' in previous &&
+          metadata.children.get(unwrapBrowserRetries(previous.value))
+        if (previousChild) refreshBrowserRetryChild(metadata, previousChild)
         const result = Reflect.defineProperty(target, key, descriptor)
+        if (result && child) {
+          if (hasValue && !sameObject) recordBrowserRetryChild(metadata, child, key, descriptor.value, false)
+          else refreshBrowserRetryChild(metadata, child)
+        }
         if (result && ownsNestedPath(metadata.raw, path, target)) {
-          if (hasValue && !sameObject) recordBrowserRetryPath(metadata, [...path, key], descriptor.value, false)
-          else {
+          if (hasValue && !sameObject) {
+            const restored = !path.length && captureBrowserRetryChild(metadata, key, descriptor.value)
+            recordBrowserRetryPath(metadata, [...path, key], descriptor.value, false, restored)
+          } else {
             metadata.reconcileOnRead = true
             reconcileBrowserRetryMetadata(metadata)
           }
@@ -211,6 +315,7 @@ function observeBrowserRetries (raw) {
       },
       deleteProperty (target, key) {
         const result = Reflect.deleteProperty(target, key)
+        if (result && child) recordBrowserRetryChild(metadata, child, key, undefined, true)
         if (result && ownsNestedPath(metadata.raw, path, target)) {
           recordBrowserRetryPath(metadata, [...path, key], undefined, true)
         }

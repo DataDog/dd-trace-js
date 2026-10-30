@@ -22,12 +22,42 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   let active = true
   const roots = new WeakMap()
   const targets = new WeakMap()
+  // Cypress keeps nested retry settings in first-level options objects.
+  const children = new WeakMap()
   const unwrap = value => targets.get(value) || value
+  const rememberChild = (metadata, key, value) => {
+    const raw = unwrap(value)
+    if (!options || !raw || typeof raw !== 'object' || children.has(raw)) return
+    children.set(raw, { raw, native: metadata.native?.[key], observed: snapshot(raw) })
+  }
+  const refreshChild = (key, child) => {
+    if (!active || !options?.reconcileNative) return
+    child.native = options.reconcileNative(
+      { [key]: child.native }, { [key]: child.observed }, { [key]: child.raw }
+    )[key]
+    child.observed = snapshot(child.raw)
+  }
   const refreshNative = metadata => {
     if (active && metadata && options?.reconcileNative) {
-      metadata.native = options.reconcileNative(metadata.native, metadata.observed, metadata.raw)
-      metadata.observed = snapshot(metadata.raw)
+      const actual = { ...metadata.raw }
+      for (const key of Object.keys(actual)) {
+        const child = children.get(unwrap(actual[key]))
+        if (child) {
+          refreshChild(key, child)
+          actual[key] = child.native
+        }
+      }
+      metadata.native = options.reconcileNative(metadata.native, metadata.observed, actual)
+      metadata.observed = snapshot(actual)
+      for (const key of Object.keys(metadata.raw)) rememberChild(metadata, key, metadata.raw[key])
     }
+  }
+  const refreshTarget = (metadata, path, target) => {
+    if (active && path.length === 1) {
+      const child = children.get(unwrap(target))
+      if (child) refreshChild(path[0], child)
+    }
+    refreshNative(metadata)
   }
   const notify = (value, path, metadata) => {
     refreshNative(metadata)
@@ -44,10 +74,31 @@ module.exports = function observeRetryConfig (config, onChange, options) {
         observed: options?.reconcileNative ? snapshot(initial) : undefined,
       }
     : undefined
-  if (initialMetadata) roots.set(initial, initialMetadata)
-  const record = (metadata, path) => {
+  if (initialMetadata) {
+    roots.set(initial, initialMetadata)
+    for (const key of Object.keys(initial)) rememberChild(initialMetadata, key, initial[key])
+  }
+  const record = (metadata, path, target) => {
     if (!active) return
-    if (options) metadata.native = options.updateNative(metadata.native, metadata.raw, path)
+    if (options) {
+      const [key] = path
+      const child = path.length === 2 && children.get(unwrap(target))
+      if (child) {
+        refreshChild(key, child)
+        child.native = options.updateNative(
+          { [key]: child.native }, { [key]: child.raw }, path
+        )[key]
+        child.observed = snapshot(child.raw)
+        // A saved options object can change while a different object is selected.
+        if (unwrap(metadata.raw[key]) !== child.raw) return
+        metadata.native = { ...metadata.native, [key]: child.native }
+      } else {
+        const restored = path.length === 1 && children.get(unwrap(metadata.raw[key]))
+        if (restored) refreshChild(key, restored)
+        const supplied = restored ? { ...metadata.raw, [key]: restored.native } : metadata.raw
+        metadata.native = options.updateNative(metadata.native, supplied, path)
+      }
+    }
     // A detached alias updates only its own provenance until that root is selected again.
     if (metadata.raw === unwrap(config.retries)) notify(metadata.raw, path, metadata)
     else refreshNative(metadata)
@@ -66,6 +117,10 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   const wrap = (value, metadata, path = []) => {
     value = unwrap(value)
     if (value === null || typeof value !== 'object') return value
+    if (path.length === 1 && options && !children.has(value)) {
+      refreshNative(metadata)
+      rememberChild(metadata, path[0], value)
+    }
     if (metadata.proxies.has(value)) return metadata.proxies.get(value)
     const proxy = new Proxy(value, {
       get (target, key, receiver) {
@@ -80,14 +135,14 @@ module.exports = function observeRetryConfig (config, onChange, options) {
         const sameObject = isSameObjectValue(target, key, value)
         const result = Reflect.set(target, key, unwrap(value))
         if (result) {
-          if (sameObject) refreshNative(metadata)
-          else record(metadata, [...path, key])
+          if (sameObject) refreshTarget(metadata, path, target)
+          else record(metadata, [...path, key], target)
         }
         return result
       },
       deleteProperty (target, key) {
         const result = Reflect.deleteProperty(target, key)
-        if (result) record(metadata, [...path, key])
+        if (result) record(metadata, [...path, key], target)
         return result
       },
       defineProperty (target, key, property) {
@@ -95,8 +150,8 @@ module.exports = function observeRetryConfig (config, onChange, options) {
         const sameObject = hasValue && isSameObjectValue(target, key, property.value)
         const result = Reflect.defineProperty(target, key, property)
         if (result) {
-          if (hasValue && !sameObject) record(metadata, [...path, key])
-          else refreshNative(metadata)
+          if (hasValue && !sameObject) record(metadata, [...path, key], target)
+          else refreshTarget(metadata, path, target)
         }
         return result
       },
