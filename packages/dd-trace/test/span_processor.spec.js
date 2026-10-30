@@ -91,7 +91,8 @@ describe('SpanProcessor', () => {
   })
 
   it('should configure span stats when enabled outside standalone AppSec', () => {
-    const otlpStatsExporter = {}
+    const resourceAttributes = { 'service.name': 'stats-service' }
+    const otlpStatsExporter = { protocol: 'http/protobuf', getStartupResourceAttributes: () => resourceAttributes }
     const stats = {}
     config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
     config.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = false
@@ -101,6 +102,7 @@ describe('SpanProcessor', () => {
 
     sinon.assert.calledOnceWithExactly(SpanStatsProcessor, config, otlpStatsExporter)
     assert.strictEqual(processor._stats, stats)
+    assert.deepEqual(processor.getSpanMetricsStartupConfig(), { protocol: 'http/protobuf', resourceAttributes })
   })
 
   it('should not configure span stats in standalone AppSec', () => {
@@ -112,6 +114,19 @@ describe('SpanProcessor', () => {
     sinon.assert.notCalled(SpanStatsProcessor)
     assert.strictEqual(processor._stats, undefined)
   })
+
+  for (const [statsEnabled, standalone] of [[false, false], [true, true]]) {
+    it(`omits span-metrics startup configuration when stats=${statsEnabled} and standalone=${standalone}`, () => {
+      config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = statsEnabled
+      config.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = standalone
+
+      const processor = new SpanProcessor(exporter, prioritySampler, config, { protocol: 'http/json' })
+
+      assert.strictEqual(processor._stats, undefined)
+      sinon.assert.notCalled(SpanStatsProcessor)
+      assert.strictEqual(processor.getSpanMetricsStartupConfig(), undefined)
+    })
+  }
 
   it('should generate sampling priority', () => {
     processor.process(finishedSpan)

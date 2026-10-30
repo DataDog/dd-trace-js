@@ -328,6 +328,7 @@
 /packages/dd-trace/test/log-submission/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/fixtures/otel-startup.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/opentracing/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-capabilities
