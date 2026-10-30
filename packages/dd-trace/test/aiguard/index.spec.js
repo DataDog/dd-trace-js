@@ -1261,6 +1261,177 @@ describe('AIGuard SDK', () => {
     }, { messages: toolCall })
   })
 
+  describe('createClient', () => {
+    const allow = { body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } } }
+    const tenant = {
+      apiKey: 'TENANT_API_KEY',
+      appKey: 'TENANT_APP_KEY',
+      site: 'datadoghq.eu',
+      service: 'tenant_service',
+      env: 'tenant_env',
+    }
+    const messages = [{ role: 'user', content: 'What is 2 + 2' }]
+
+    const assertClientRequest = (call, { url, apiKey, appKey, service, env }) => {
+      const [postData, opts] = call.args
+      assert.deepStrictEqual(JSON.parse(postData), { data: { attributes: { messages, meta: { service, env } } } })
+      assert.deepStrictEqual(opts.url, new URL(url))
+      assert.strictEqual(opts.headers['DD-API-KEY'], apiKey)
+      assert.strictEqual(opts.headers['DD-APPLICATION-KEY'], appKey)
+    }
+
+    it('uses the client keys, site, service and env', async () => {
+      mockRequest(allow)
+
+      await aiguard.createClient(tenant).evaluate(messages)
+
+      sinon.assert.calledOnce(request)
+      assertClientRequest(request.firstCall, {
+        url: 'https://app.datadoghq.eu/api/v2/ai-guard/evaluate',
+        apiKey: tenant.apiKey,
+        appKey: tenant.appKey,
+        service: tenant.service,
+        env: tenant.env,
+      })
+      assertTelemetry('requests', { action: 'ALLOW', error: false, block: false, ...sdkTags })
+      await agent.assertFirstTraceSpan(span => {
+        assert.strictEqual(span.name, 'ai_guard')
+        assert.strictEqual(span.service, tenant.service)
+        assert.strictEqual(span.meta.env, tenant.env)
+        assert.strictEqual(span.meta.version, undefined)
+        assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
+      }, { rejectFirst: true })
+    })
+
+    it('uses the global configuration for unset options', async () => {
+      mockRequest(allow)
+
+      await aiguard.createClient().evaluate(messages)
+
+      assertRequest(messages)
+      await agent.assertFirstTraceSpan(span => {
+        assert.strictEqual(span.service, config.service)
+        assert.strictEqual(span.meta.env, config.env)
+        assert.strictEqual(span.meta.version, config.version)
+      }, { rejectFirst: true })
+    })
+
+    it('uses the global configuration for empty and non-string options', async () => {
+      mockRequest(allow)
+
+      await aiguard.createClient({ apiKey: '', appKey: 42, site: null, service: '', env: {} }).evaluate(messages)
+
+      assertRequest(messages)
+    })
+
+    it('replaces only the options that are set', async () => {
+      mockRequest(allow)
+
+      await aiguard.createClient({ appKey: tenant.appKey, env: tenant.env }).evaluate(messages)
+
+      assertClientRequest(request.firstCall, {
+        url: `${config.aiguard.DD_AI_GUARD_ENDPOINT}/evaluate`,
+        apiKey: config.DD_API_KEY,
+        appKey: tenant.appKey,
+        service: config.service,
+        env: tenant.env,
+      })
+      await agent.assertFirstTraceSpan(span => {
+        assert.strictEqual(span.service, config.service)
+        assert.strictEqual(span.meta.env, tenant.env)
+        assert.strictEqual(span.meta.version, config.version)
+      }, { rejectFirst: true })
+    })
+
+    it('uses a site with a subdomain as the AI Guard host', async () => {
+      mockRequest(allow)
+
+      await aiguard.createClient({ site: 'us3.datadoghq.com' }).evaluate(messages)
+
+      assert.deepStrictEqual(request.firstCall.args[1].url, new URL('https://us3.datadoghq.com/api/v2/ai-guard/evaluate'))
+    })
+
+    it('keeps the settings of each client and of the global client independent', async () => {
+      mockRequest(allow)
+      const other = { apiKey: 'OTHER_API_KEY', appKey: 'OTHER_APP_KEY', service: 'other_service', env: 'other_env' }
+      const tenantClient = aiguard.createClient(tenant)
+      const otherClient = tenantClient.createClient(other)
+
+      // One parent span sends the three ai_guard spans in the same trace.
+      await tracer.trace('test', () => Promise.all([
+        tenantClient.evaluate(messages),
+        otherClient.evaluate(messages),
+        aiguard.evaluate(messages),
+      ]))
+
+      sinon.assert.calledThrice(request)
+      assertClientRequest(request.getCall(0), {
+        url: 'https://app.datadoghq.eu/api/v2/ai-guard/evaluate',
+        apiKey: tenant.apiKey,
+        appKey: tenant.appKey,
+        service: tenant.service,
+        env: tenant.env,
+      })
+      // Options of the parent client are not inherited: unset options use the global configuration.
+      assertClientRequest(request.getCall(1), {
+        url: `${config.aiguard.DD_AI_GUARD_ENDPOINT}/evaluate`,
+        ...other,
+      })
+      assertClientRequest(request.getCall(2), {
+        url: `${config.aiguard.DD_AI_GUARD_ENDPOINT}/evaluate`,
+        apiKey: config.DD_API_KEY,
+        appKey: config.DD_APP_KEY,
+        service: config.service,
+        env: config.env,
+      })
+      await agent.assertSomeTraces(traces => {
+        const spans = traces[0].filter(span => span.name === 'ai_guard')
+        assert.deepStrictEqual(
+          spans.map(span => [span.service, span.meta.env]).sort(),
+          [
+            [config.service, config.env],
+            [other.service, other.env],
+            [tenant.service, tenant.env],
+          ]
+        )
+      })
+    })
+
+    it('creates a working client when only the client options have keys', async () => {
+      mockRequest(allow)
+      const globalAIGuard = new AIGuard(tracer, { ...config, DD_API_KEY: undefined, DD_APP_KEY: undefined })
+
+      assert.strictEqual((await globalAIGuard.evaluate(messages)).reason, 'AI Guard is not enabled')
+      sinon.assert.notCalled(request)
+
+      const evaluation = await globalAIGuard.createClient({ apiKey: tenant.apiKey, appKey: tenant.appKey })
+        .evaluate(messages)
+
+      assert.strictEqual(evaluation.reason, 'OK')
+      assert.strictEqual(request.firstCall.args[1].headers['DD-API-KEY'], tenant.apiKey)
+      assert.strictEqual(request.firstCall.args[1].headers['DD-APPLICATION-KEY'], tenant.appKey)
+    })
+
+    it('uses noop when neither the client options nor the global configuration have both keys', async () => {
+      const globalAIGuard = new AIGuard(tracer, { ...config, DD_APP_KEY: undefined })
+
+      const evaluation = await globalAIGuard.createClient({ apiKey: tenant.apiKey }).evaluate(messages)
+
+      assert.strictEqual(evaluation.action, 'ALLOW')
+      assert.strictEqual(evaluation.reason, 'AI Guard is not enabled')
+      sinon.assert.notCalled(request)
+    })
+
+    it('returns the noop client from the noop implementation', async () => {
+      const noop = new NoopAIGuard()
+
+      const client = noop.createClient(tenant)
+
+      assert.strictEqual(client, noop)
+      assert.strictEqual((await client.evaluate(messages)).reason, 'AI Guard is not enabled')
+    })
+  })
+
   it('test noop implementation', async () => {
     const noop = new NoopAIGuard()
     const result = await noop.evaluate(prompt)

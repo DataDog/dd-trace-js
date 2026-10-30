@@ -1018,3 +1018,14 @@ aiguard.evaluate([
   const replacements: ddTrace.aiguard.RedactionReplacement[] = result.redactionReplacements
   replacements.map(({ path, replacement }) => `${path}=${replacement}`)
 })
+
+const aiguardOptions: ddTrace.aiguard.ClientOptions = {
+  apiKey: 'api-key',
+  appKey: 'app-key',
+  site: 'datadoghq.eu',
+  service: 'tenant-service',
+  env: 'tenant-env',
+}
+const tenantAIGuard: ddTrace.aiguard.AIGuard = aiguard.createClient(aiguardOptions)
+tenantAIGuard.evaluate([{ role: 'user', content: 'What is 2 + 2' }], { block: true }).then(result => result.action)
+aiguard.createClient({ service: 'tenant-service' }).createClient()
