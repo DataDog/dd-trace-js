@@ -14,6 +14,10 @@ function snapshot (value, previous) {
   return result
 }
 
+function snapshotMetadata (metadata) {
+  return metadata && { native: snapshot(metadata.native), observed: snapshot(metadata.observed) }
+}
+
 /**
  * Observe user writes after plugin initialization without changing the config's identity.
  *
@@ -218,8 +222,9 @@ module.exports = function observeRetryConfig (config, onChange, options) {
         const original = value => context?.originalFor(value) ?? value
         const source = original(retries)
         const raw = unwrap(source)
-        const metadata = raw && typeof raw === 'object' && roots.get(raw)
-        const cached = context?.snapshotFor(source) ?? retries
+        const cached = context?.snapshotFor(retries) ?? retries
+        const captured = context?.stateFor(cached)
+        const metadata = captured ? captured.root : raw && typeof raw === 'object' && roots.get(raw)
         const actual = snapshot(cached, metadata?.observed)
         let native = options && (metadata
           ? (options.reconcileNative
@@ -230,7 +235,10 @@ module.exports = function observeRetryConfig (config, onChange, options) {
           for (const key of Object.keys(actual)) {
             const sourceChild = original(cached[key])
             const rawChild = unwrap(sourceChild)
-            const child = rawChild && typeof rawChild === 'object' && children.get(rawChild)
+            const capturedChild = context?.stateFor(cached[key])
+            const child = capturedChild
+              ? capturedChild.child
+              : rawChild && typeof rawChild === 'object' && children.get(rawChild)
             if (!child) continue
             let childNative = options.reconcileNative
               ? options.reconcileNative(
@@ -238,7 +246,7 @@ module.exports = function observeRetryConfig (config, onChange, options) {
               )[key]
               : child.native
             if (context) {
-              for (const getterKey of context.getterKeys(sourceChild)) {
+              for (const getterKey of context.getterKeys(cached[key])) {
                 childNative = options.updateNative(
                   { [key]: childNative }, { [key]: actual[key] }, [key, getterKey]
                 )[key]
@@ -247,7 +255,7 @@ module.exports = function observeRetryConfig (config, onChange, options) {
             native = options.updateNative(native, { [key]: childNative }, [key])
           }
           if (context) {
-            for (const key of context.getterKeys(source)) {
+            for (const key of context.getterKeys(cached)) {
               native = options.updateNative(native, actual, [key])
             }
           }
@@ -258,7 +266,11 @@ module.exports = function observeRetryConfig (config, onChange, options) {
       // Later child-local writes cannot change the parent's serialized config.
       stop(false)
     }
-  }, unwrap)
+  }, unwrap, value => {
+    // Freeze provenance at this serialized occurrence. Later config getters can
+    // mutate the same retry object after its active value has already crossed IPC.
+    return { root: snapshotMetadata(roots.get(value)), child: snapshotMetadata(children.get(value)) }
+  })
 
   return {
     isWatching: candidate => active && candidate === config,

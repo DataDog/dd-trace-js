@@ -1279,3 +1279,242 @@ describe('Cypress manual setup JSON symbol semantics', () => {
     })
   }
 })
+
+describe('Cypress setup reply serialization order', () => {
+  for (const placement of ['before', 'after', 'nested', 'self-deleting']) {
+    for (const dataBudget of [false, true]) {
+      it(`matches native JSON traversal (${placement}, data budget=${dataBudget})`, () => {
+        const build = () => {
+          let budget = 0
+          const reads = []
+          const retries = dataBudget
+            ? { runMode: 0 }
+            : {
+                get runMode () { reads.push('runMode'); return budget },
+              }
+          const env = {
+            get update () {
+              reads.push('env')
+              if (placement === 'self-deleting') delete this.update
+              budget = 2
+              if (dataBudget) retries.runMode = 2
+              return true
+            },
+          }
+          const config = placement === 'after'
+            ? { retries, env }
+            : placement === 'nested' ? { env: [{ nested: env }], retries } : { env, retries }
+          return { config, reads }
+        }
+        const native = build()
+        const expected = JSON.parse(JSON.stringify(native.config))
+        const sdk = build()
+        const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+        let sent
+        let observed
+        process.send = message => { sent = JSON.parse(JSON.stringify(message)).args[0].setupConfig }
+        const observer = observeRetryConfig({ retries: 0 }, value => { observed = value })
+        try {
+          process.send({ event: 'setupTestingType:reply', args: [{ setupConfig: sdk.config }] })
+          assert.deepStrictEqual(sent, expected)
+          assert.deepStrictEqual(observed, expected.retries)
+          assert.deepStrictEqual(sdk.reads, native.reads)
+        } finally {
+          observer.stop(false)
+          if (descriptor) Object.defineProperty(process, 'send', descriptor)
+          else delete process.send
+        }
+      })
+    }
+  }
+})
+
+describe('Cypress setup reply JSON conversion', () => {
+  for (const conversion of ['self', 'replacement', 'omitted']) {
+    it(`runs native toJSON once (${conversion})`, () => {
+      const build = () => {
+        let reads = 0
+        const config = {
+          retries: { runMode: 0 },
+          toJSON () {
+            reads++
+            this.retries.runMode = 2
+            return conversion === 'self' ? this : conversion === 'replacement' ? { retries: this.retries } : undefined
+          },
+        }
+        return { config, reads: () => reads }
+      }
+      const native = build()
+      const expected = JSON.parse(JSON.stringify({ setupConfig: native.config }))
+      const sdk = build()
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+      let sent
+      process.send = message => { sent = JSON.parse(JSON.stringify(message)).args[0] }
+      const observeSetupHandoff = require('../../datadog-plugin-cypress/src/setup-handoff')
+      const stop = observeSetupHandoff(() => {})
+      try {
+        process.send({ event: 'setupTestingType:reply', args: [{ setupConfig: sdk.config }] })
+        assert.deepStrictEqual(sent, expected)
+        assert.strictEqual(sdk.reads(), native.reads())
+      } finally {
+        stop()
+        if (descriptor) Object.defineProperty(process, 'send', descriptor)
+        else delete process.send
+      }
+    })
+  }
+})
+
+describe('Cypress serialized retry alias occurrences', () => {
+  for (const canonical of [false, true]) {
+    for (const retriesFirst of [false, true]) {
+      it(`observes the actual retry occurrence (retries first=${retriesFirst}, canonical=${canonical})`, async () => {
+        const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+        const plugin = new CypressPlugin()
+        const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+        let wire
+        process.send = message => { wire = JSON.parse(JSON.stringify(message)).args[0].setupConfig }
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: {
+              getLibraryConfiguration: (_config, callback) => callback(null, {
+                isFlakyTestRetriesEnabled: true, flakyTestRetriesCount: 4,
+              }),
+            },
+          },
+        }
+        try {
+          await plugin.init(tracer, { version: '16.2.0', retries: { runMode: 2, openMode: 0 } })
+          let budget = 0
+          const retries = { get runMode () { return budget } }
+          const env = { get alias () { budget = 2; return retries } }
+          const setupConfig = retriesFirst ? { retries, env } : { env, retries }
+          if (canonical) {
+            Object.defineProperty(setupConfig, Symbol.for('dd-trace.cypress.returned-config'), {
+              value: { retries, env },
+            })
+          }
+          process.send({ event: 'setupTestingType:reply', args: [{ setupConfig }] })
+          assert.strictEqual(wire.retries.runMode, retriesFirst ? 0 : 2)
+          assert.strictEqual(plugin.originalCypressRetries.runMode, wire.retries.runMode)
+        } finally {
+          plugin.retryConfigObserver?.stop(false)
+          plugin.stopSetupHandoff?.()
+          if (descriptor) Object.defineProperty(process, 'send', descriptor)
+          else delete process.send
+        }
+      })
+    }
+  }
+})
+
+describe('Cypress serialized injected getter occurrences', () => {
+  it('does not promote a getter introduced only in a later alias occurrence', async () => {
+    const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+    const plugin = new CypressPlugin()
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+    let wire
+    process.send = message => { wire = JSON.parse(JSON.stringify(message)).args[0].setupConfig }
+    const build = retries => ({
+      retries,
+      env: {
+        get alias () {
+          Object.defineProperty(retries, 'runMode', { configurable: true, enumerable: true, get: () => 4 })
+          return retries
+        },
+      },
+    })
+    const native = JSON.parse(JSON.stringify(build({ runMode: 2, openMode: 0 })))
+    const tracer = {
+      _tracer: {
+        _config: { isServiceUserProvided: false },
+        _exporter: {
+          getLibraryConfiguration: (_config, callback) => callback(null, {
+            isFlakyTestRetriesEnabled: true, flakyTestRetriesCount: 4,
+          }),
+        },
+      },
+    }
+    try {
+      const config = await plugin.init(tracer, { version: '16.2.0', retries: { runMode: 2, openMode: 0 } })
+      process.send({ event: 'setupTestingType:reply', args: [{ setupConfig: build(config.retries) }] })
+      assert.strictEqual(wire.retries.runMode, 4)
+      assert.strictEqual(wire.env.alias.runMode, 4)
+      assert.strictEqual(plugin.originalCypressRetries.runMode, native.retries.runMode)
+    } finally {
+      plugin.retryConfigObserver?.stop(false)
+      plugin.stopSetupHandoff?.()
+      if (descriptor) Object.defineProperty(process, 'send', descriptor)
+      else delete process.send
+    }
+  })
+})
+
+describe('Cypress retry provenance at serialization time', () => {
+  it('ignores a later alias data write when observing the earlier active retries', async () => {
+    const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+    const plugin = new CypressPlugin()
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+    let wire
+    process.send = message => { wire = JSON.parse(JSON.stringify(message)).args[0].setupConfig }
+    const build = retries => ({ retries, env: { get alias () { retries.runMode = 6; return retries } } })
+    const native = JSON.parse(JSON.stringify(build({ runMode: 2, openMode: 0 })))
+    const tracer = {
+      _tracer: {
+        _config: { isServiceUserProvided: false },
+        _exporter: {
+          getLibraryConfiguration: (_config, callback) => callback(null, {
+            isFlakyTestRetriesEnabled: true, flakyTestRetriesCount: 4,
+          }),
+        },
+      },
+    }
+    try {
+      const config = await plugin.init(tracer, { version: '16.2.0', retries: { runMode: 2, openMode: 0 } })
+      process.send({ event: 'setupTestingType:reply', args: [{ setupConfig: build(config.retries) }] })
+      assert.strictEqual(wire.retries.runMode, 4)
+      assert.strictEqual(wire.env.alias.runMode, 6)
+      assert.strictEqual(plugin.originalCypressRetries.runMode, native.retries.runMode)
+    } finally {
+      plugin.retryConfigObserver?.stop(false)
+      plugin.stopSetupHandoff?.()
+      if (descriptor) Object.defineProperty(process, 'send', descriptor)
+      else delete process.send
+    }
+  })
+})
+
+describe('Cypress retries introduced by Native JSON conversion', () => {
+  it('observes retries emitted only by setupConfig.toJSON', async () => {
+    const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+    const plugin = new CypressPlugin()
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+    let wire
+    let reads = 0
+    process.send = message => { wire = JSON.parse(JSON.stringify(message)).args[0].setupConfig }
+    const tracer = {
+      _tracer: {
+        _config: { isServiceUserProvided: false },
+        _exporter: {
+          getLibraryConfiguration: (_config, callback) => callback(null, {
+            isFlakyTestRetriesEnabled: true, flakyTestRetriesCount: 4,
+          }),
+        },
+      },
+    }
+    try {
+      await plugin.init(tracer, { version: '16.2.0', retries: { runMode: 2, openMode: 0 } })
+      const setupConfig = { toJSON () { reads++; return { retries: { runMode: 4, openMode: 0 } } } }
+      process.send({ event: 'setupTestingType:reply', args: [{ setupConfig }] })
+      assert.strictEqual(reads, 1)
+      assert.deepStrictEqual(wire.retries, { runMode: 4, openMode: 0 })
+      assert.deepStrictEqual(plugin.originalCypressRetries, wire.retries)
+    } finally {
+      plugin.retryConfigObserver?.stop(false)
+      plugin.stopSetupHandoff?.()
+      if (descriptor) Object.defineProperty(process, 'send', descriptor)
+      else delete process.send
+    }
+  })
+})

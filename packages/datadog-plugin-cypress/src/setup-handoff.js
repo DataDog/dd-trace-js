@@ -1,7 +1,7 @@
 'use strict'
 
 // Observe the actual setup serialization boundary without retaining ownership of process.send.
-module.exports = function observeSetupHandoff (onHandoff, normalizeIdentity = value => value) {
+module.exports = function observeSetupHandoff (onHandoff, normalizeIdentity = value => value, captureIdentity) {
   const originalSend = process.send
   if (typeof originalSend !== 'function') return () => {}
   let active = true
@@ -17,47 +17,60 @@ module.exports = function observeSetupHandoff (onHandoff, normalizeIdentity = va
         const snapshots = new WeakMap()
         const originals = new WeakMap()
         const getters = new WeakMap()
+        const states = new WeakMap()
         const materialize = value => {
           if (!value || typeof value !== 'object') return value
           const identity = normalizeIdentity(value)
           if (snapshots.has(identity)) return snapshots.get(identity)
-          snapshots.set(value, value)
-          snapshots.set(identity, value)
-          const entries = []
-          const keys = new Set()
-          let changed = false
-          for (const key of Object.keys(value)) {
-            const property = Object.getOwnPropertyDescriptor(value, key)
-            const accessor = property && !('value' in property)
-            const original = accessor ? Reflect.get(value, key, value) : property?.value
-            const cached = materialize(original)
-            if (accessor) keys.add(key)
-            changed ||= accessor || cached !== original
-            entries.push([key, cached])
+          const paths = new WeakMap()
+          const records = []
+          const occurrences = new WeakMap()
+          let holder
+          // JSON owns the traversal: earlier getters and toJSON methods can change
+          // later retry values. Observe the same values that will cross IPC once.
+          const serialized = JSON.stringify(value, function (key, current) {
+            if (!holder) holder = this
+            const path = this === holder ? [] : [...paths.get(this), key]
+            const property = Object.getOwnPropertyDescriptor(this, key)
+            if (property && !('value' in property)) occurrences.get(this)?.keys.add(key)
+            if (current && typeof current === 'object') {
+              const keys = new Set()
+              const names = Array.isArray(current) ? Object.getOwnPropertyNames(current) : Object.keys(current)
+              for (const name of names) {
+                const descriptor = Object.getOwnPropertyDescriptor(current, name)
+                if (descriptor && !('value' in descriptor)) keys.add(name)
+              }
+              const original = normalizeIdentity(current)
+              const record = { path, original, keys, state: captureIdentity?.(original) }
+              paths.set(current, path)
+              occurrences.set(current, record)
+              records.push(record)
+            }
+            return current
+          })
+          const cached = serialized === undefined ? undefined : JSON.parse(serialized)
+          for (const { path, original, keys, state } of records) {
+            let snapshot = cached
+            for (const key of path) snapshot = snapshot[key]
+            snapshots.set(original, snapshot)
+            if (snapshot && typeof snapshot === 'object') {
+              originals.set(snapshot, original)
+              snapshots.set(snapshot, snapshot)
+              getters.set(snapshot, keys)
+              states.set(snapshot, state)
+            }
           }
-          getters.set(value, keys)
-          getters.set(identity, keys)
-          if (!changed) return value
-          const cached = Array.isArray(value)
-            ? Object.assign(new Array(value.length), Object.fromEntries(entries))
-            : Object.fromEntries(entries)
-          snapshots.set(value, cached)
-          snapshots.set(identity, cached)
-          originals.set(cached, identity)
           return cached
         }
-        const retriesDescriptor = wireConfig && typeof wireConfig === 'object' &&
-          Object.getOwnPropertyDescriptor(wireConfig, 'retries')
-        if (retriesDescriptor?.enumerable) {
-          const original = 'value' in retriesDescriptor ? retriesDescriptor.value : wireConfig.retries
-          const cached = materialize(original)
-          if (!('value' in retriesDescriptor) || cached !== original) {
-            const entries = Object.keys(wireConfig).map(key => [key, key === 'retries' ? cached : wireConfig[key]])
-            const clone = Object.fromEntries(entries)
+        if (wireConfig && typeof wireConfig === 'object') {
+          const cached = materialize(wireConfig)
+          if (cached !== wireConfig) {
             const metadataKey = Symbol.for('dd-trace.cypress.returned-config')
             const metadata = Object.getOwnPropertyDescriptor(wireConfig, metadataKey)
-            if (metadata) Object.defineProperty(clone, metadataKey, metadata)
-            wireConfig = clone
+            if (metadata && cached && typeof cached === 'object') {
+              Object.defineProperty(cached, metadataKey, metadata)
+            }
+            wireConfig = cached
             forwardedArguments = [...arguments]
             forwardedArguments[0] = {
               ...message,
@@ -71,12 +84,19 @@ module.exports = function observeSetupHandoff (onHandoff, normalizeIdentity = va
         let observedConfig
         if (returnedDescriptor?.enumerable) {
           const original = 'value' in returnedDescriptor ? returnedDescriptor.value : returnedConfig.retries
-          const cached = materialize(original)
+          const wireRetry = wireConfig && typeof wireConfig === 'object' &&
+            Object.getOwnPropertyDescriptor(wireConfig, 'retries')
+          const wireValue = wireRetry && 'value' in wireRetry ? wireRetry.value : undefined
+          const wireOriginal = originals.get(wireValue) || normalizeIdentity(wireValue)
+          const cached = wireRetry?.enumerable && normalizeIdentity(original) === wireOriginal
+            ? wireValue
+            : materialize(original)
           observedConfig = original === cached && 'value' in returnedDescriptor ? returnedConfig : { retries: cached }
         }
         onHandoff(observedConfig, message.event, {
           originalFor: value => originals.get(value) || normalizeIdentity(value),
           snapshotFor: value => snapshots.get(normalizeIdentity(value)) ?? value,
+          stateFor: value => states.get(normalizeIdentity(value)),
           getterKeys: value => getters.get(normalizeIdentity(value)) || new Set(),
         })
       } finally {
