@@ -304,6 +304,39 @@ describe('Plugin', () => {
         })
       })
 
+      it('keeps concurrent requests on their own spans', async () => {
+        const states = ['first message', 'second message', 'third message', 'fourth message']
+        const respond = []
+        let allSent
+        const sent = new Promise(resolve => { allSent = resolve })
+        const client = new sdk.TypeSafeClient({
+          apiKey: 'not-a-real-key',
+          retry: { maxRetries: 0 },
+          // Each response names the state it answers, and they arrive in the reverse of the order they were sent
+          fetch: (url, init) => new Promise(resolve => {
+            const { state } = JSON.parse(init.body)
+            respond.push(() => resolve(new Response(JSON.stringify({ ...STUB_RESPONSE, model: state }), {
+              headers: { 'content-type': 'application/json' },
+            })))
+            if (respond.length === states.length) allSent()
+          }),
+        })
+
+        const calls = states.map(state => client.systemOne({ state, questions: questions(), model: MODEL }))
+        await sent
+        for (const send of respond.reverse()) send()
+        await Promise.all(calls)
+
+        const { llmobsSpans } = await getEvents(states.length)
+        assert.equal(llmobsSpans.length, states.length)
+        for (const span of llmobsSpans) {
+          const { state } = JSON.parse(span.meta.input.messages[0].content)
+          assert.equal(JSON.parse(span.meta.output.messages[0].content).model, state)
+        }
+        assert.deepEqual(llmobsSpans.map(span => JSON.parse(span.meta.input.messages[0].content).state).sort(),
+          [...states].sort())
+      })
+
       it('records the request as it was when sent, even if the caller reuses the object', async () => {
         const request = { state: STATE, questions: questions(), model: MODEL }
         const promise = createStubbedClient().systemOne(request)
