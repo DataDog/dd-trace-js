@@ -96,12 +96,6 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this.#waitingForConfiguration = !hasConfiguration
     const promise = super.initialize(context)
 
-    // `DatadogNodeServerProvider#initialize` starts a timer that is never unref'd, which would
-    // otherwise keep an idle process (a short script, a serverless handler) alive for up to
-    // `initializationTimeoutMs` while waiting for configuration to arrive.
-    // TODO: remove once `@datadog/openfeature-node-server` unrefs this timer itself.
-    this.initController?.timeoutId?.unref?.()
-
     if (hasConfiguration) {
       this.#logInitialConfiguration()
     } else {
@@ -121,9 +115,11 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       this.initController !== undefined && !this.initController.isInitializing()
 
     super.setConfiguration(configuration)
+    // An empty update leaves upstream initialization pending until configuration arrives or it times out.
+    if (configuration == null) return
     this.#waitingForConfiguration = false
 
-    if (wasWaiting && configuration != null) {
+    if (wasWaiting) {
       this.#logInitialConfiguration()
     } else if (recovering) {
       this.#logRecovery()

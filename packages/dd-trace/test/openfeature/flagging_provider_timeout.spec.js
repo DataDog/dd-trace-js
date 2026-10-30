@@ -161,22 +161,57 @@ describe('FlaggingProvider Initialization Timeout', () => {
   })
 
   for (const configuration of [undefined, null]) {
-    it(`does not log configuration availability for a ${configuration} update`, async () => {
+    it(`keeps waiting after a ${configuration} update and logs the first available configuration`, async () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
-      const promise = provider.initialize()
+      const initialized = sinon.spy()
+      const promise = provider.initialize().then(initialized)
       log.debug.resetHistory()
 
       provider.setConfiguration(configuration)
-      // Upstream 2.4.0 settles initialization even for configuration removal.
+      await clock.tickAsync(29999)
+
+      assert.strictEqual(provider.getConfiguration(), undefined)
+      sinon.assert.notCalled(initialized)
+      sinon.assert.notCalled(log.debug)
+      sinon.assert.notCalled(log.errorWithoutTelemetry)
+
+      provider.setConfiguration({ flags: {} })
       await promise
 
-      assert.strictEqual(provider.getConfiguration(), configuration)
-      sinon.assert.notCalled(log.debug)
-
-      await clock.tickAsync(30000)
-      provider.setConfiguration({ flags: {} })
+      sinon.assert.calledOnce(initialized)
+      sinon.assert.calledOnceWithExactly(log.debug, 'Feature Flags: initial configuration available')
+      await clock.tickAsync(1)
       sinon.assert.notCalled(log.errorWithoutTelemetry)
-      // Restoring configuration after it was removed takes the recovery branch.
+
+      log.debug.resetHistory()
+      provider.setConfiguration({ flags: {} })
+      sinon.assert.notCalled(log.debug)
+    })
+
+    it(`preserves the initialization timeout and diagnostic after repeated ${configuration} updates`, async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const rejection = assert.rejects(provider.initialize(), {
+        name: 'Error', message: 'Initialization timeout after 30000ms',
+      })
+      log.debug.resetHistory()
+
+      provider.setConfiguration(configuration)
+      await clock.tickAsync(10000)
+      provider.setConfiguration(configuration)
+      await clock.tickAsync(19999)
+      sinon.assert.notCalled(log.errorWithoutTelemetry)
+
+      await clock.tickAsync(1)
+      await rejection
+      sinon.assert.calledOnceWithExactly(
+        log.errorWithoutTelemetry,
+        'Feature Flags: provider failed to initialize: %s',
+        'Initialization timeout after 30000ms'
+      )
+
+      log.debug.resetHistory()
+      provider.setConfiguration({ flags: {} })
+      // Configuration arriving after the timeout takes the recovery branch, not the initial one.
       sinon.assert.calledOnce(log.debug)
     })
   }
