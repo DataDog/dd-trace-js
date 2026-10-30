@@ -41,7 +41,13 @@ const registry = [
   { instrumentations: require('./instrumentations/playwright') },
   { activate: true, instrumentations: require('./instrumentations/postgres') },
   { instrumentations: require('./instrumentations/vitest') },
-  { instrumentations: require('./instrumentations/webdriverio') },
+  {
+    activate: {
+      modules: ['@wdio/cli', '@wdio/jasmine-framework', '@wdio/local-runner', '@wdio/utils', 'webdriverio'],
+      setup: activation => require('../../webdriverio').recordLocalRunnerVersion(activation),
+    },
+    instrumentations: require('./instrumentations/webdriverio'),
+  },
   {
     activate: { setup: () => require('../../aws-durable-execution-sdk-js') },
     instrumentations: require('./instrumentations/aws-durable-execution-sdk-js'),
