@@ -388,7 +388,7 @@ describe('evaluation telemetry opt-out', () => {
       assert.strictEqual(result.errorCode, errorCode)
       if (failure === 'not-ready') provider.setConfiguration(configuration())
       assert.deepStrictEqual(signals(), {
-        evaluations: 0, metrics: 0, spanTags: 0, exposures: failure === 'after-hook' ? 1 : 0, customerHooks: 1,
+        evaluations: 0, metrics: 0, spanTags: 0, exposures: 0, customerHooks: 1,
       })
     })
   }

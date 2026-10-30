@@ -77,6 +77,46 @@ evaluation-context snapshot. To disable aggregated `flagevaluation` events as we
 Span enrichment, OpenTelemetry evaluation metrics, and debug logging retain their own settings; this switch does not
 disable all Feature Flagging telemetry.
 
+<h2 id="feature-flag-exposures-in-your-own-data-store">Feature Flag Exposures in Your Own Data Store</h2>
+
+Use the `ExposureHook` to receive every feature flag evaluation with the same deduplication decision the tracer uses, so your application can
+record exposures in its own data store:
+
+```javascript
+const tracer = require('dd-trace').init()
+const { OpenFeature } = require('@openfeature/server-sdk')
+const { ExposureHook } = require('dd-trace/openfeature/exposure-hook')
+
+OpenFeature.addHooks(new ExposureHook((evaluation) => {
+  if (!evaluation.shouldSend()) return
+  // Queue for your own writer; the callback runs on the evaluation thread and must not do I/O.
+  recordExposure({
+    flag: evaluation.flagKey,
+    variant: evaluation.variant,
+    allocation: evaluation.allocation,
+    targetingKey: evaluation.targetingKey,
+    features: evaluation.getFeatures(),
+  })
+}))
+
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+```
+
+Register the hook with `OpenFeature.addHooks` or on a client. The callback runs for every evaluation, including errors and repeats:
+
+- `isExposure()`: the evaluation succeeded and selected an allocation that logs exposures, whether or not this subject was already exposed.
+- `isCacheHit()`: this exposure repeats one already recorded for this subject (same flag, allocation, variant and serial id).
+- `shouldSend()`: a new or changed exposure; exactly what the tracer sends to Datadog.
+- `getFeatures()`: the read-only `__dd_feature.<key>` metadata of the selected split, such as `holdout.key`, `holdout.assignment_group` and
+  `holdout.should_include_in_holdout_analysis`.
+
+The callback runs on the evaluation thread: hand the data to a background queue instead of writing it from the callback. An exception from the
+callback does not affect the evaluation; the first failure is logged at warn level and later ones at debug level.
+
+To stop sending exposures to Datadog while the hook keeps working, see
+[Feature Flag Exposure Logging](#feature-flag-exposure-logging). The hook still receives every evaluation with the same
+`shouldSend()` decision, and exposure deduplication keeps running.
+
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 
 The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set

@@ -95,11 +95,33 @@ function normalizeFlagEvaluationEvent (event, targetingKey) {
     targetingKey,
     attrs: consent ? event.attrs : undefined,
     observeFullEvaluationData: consent,
+    features: flagEvaluationFeatures(event.features),
     timestamp: typeof event.timestamp === 'number' ? event.timestamp : NaN,
   }
 }
 
+/**
+ * Split features routed to the EVALUATION destination. Keys are sorted so the
+ * aggregation identity does not depend on metadata insertion order.
+ *
+ * @param {unknown} features
+ * @returns {Record<string, string|number|boolean> | undefined}
+ */
+function flagEvaluationFeatures (features) {
+  if (typeof features !== 'object' || features === null || Array.isArray(features)) return
+  /** @type {Record<string, string|number|boolean> | undefined} */
+  let normalized
+  for (const key of Object.keys(features).sort()) {
+    const value = features[key]
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue
+    normalized ??= {}
+    normalized[key] = value
+  }
+  return normalized
+}
+
 module.exports = {
+  flagEvaluationFeatures,
   normalizeFlagEvaluationEvent,
   normalizeTargetingKey,
   optionalKey,
