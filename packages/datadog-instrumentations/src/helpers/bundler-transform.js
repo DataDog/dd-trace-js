@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const Module = require('node:module')
 const path = require('node:path')
 
-const { isESMFile } = require('../../../datadog-esbuild/src/utils')
+const { isESMFile } = require('./bundler-utils')
 const extractPackageAndModulePath = require('./extract-package-and-module-path')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
