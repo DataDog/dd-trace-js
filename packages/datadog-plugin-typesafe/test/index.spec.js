@@ -128,6 +128,39 @@ describe('Plugin', () => {
         await tracesPromise
       })
 
+      it('records errors reading the response for the span', async () => {
+        const tracesPromise = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+
+          assert.equal(span.name, 'typesafe.request')
+          assert.equal(span.error, 1)
+          assert.equal(span.meta['error.message'], 'clone read failed')
+        })
+
+        const client = new sdk.TypeSafeClient({
+          apiKey: 'not-a-real-key',
+          retry: { maxRetries: 0 },
+          fetch: () => {
+            const response = new Response(JSON.stringify({ model: MODEL, answers: {} }), {
+              headers: { 'content-type': 'application/json' },
+            })
+            // Reading a copy fails, while the SDK's own read of the original still succeeds
+            const { clone } = response
+            response.clone = function () {
+              const copy = clone.call(this)
+              copy.text = () => Promise.reject(new Error('clone read failed'))
+              return copy
+            }
+            return Promise.resolve(response)
+          },
+        })
+
+        const result = await client.systemOne({ state: STATE, questions: questions(), model: MODEL })
+        assert.equal(result.model, MODEL)
+
+        await tracesPromise
+      })
+
       it('records validation errors raised before any request is sent', async () => {
         const tracesPromise = agent.assertSomeTraces(traces => {
           assert.equal(traces.length, 1)

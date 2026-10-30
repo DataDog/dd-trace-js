@@ -55,9 +55,9 @@ function readResponse (ctx, response) {
     response.clone().text().then(body => {
       ctx.responseText = body
       finish(ctx, parseBody(body))
-    }, () => finish(ctx))
-  } catch {
-    finish(ctx)
+    }, error => finish(ctx, undefined, error))
+  } catch (error) {
+    finish(ctx, undefined, error)
   }
 }
 
