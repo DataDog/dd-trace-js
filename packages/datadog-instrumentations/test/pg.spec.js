@@ -16,6 +16,7 @@ if (process.env.PG_TEST_NATIVE === 'true') {
 describe('pg instrumentation', () => {
   withVersions('pg', 'pg', version => {
     const queryClientStartChannel = dc.channel('apm:pg:query:start')
+    const spanFinishChannel = dc.channel('dd-trace:span:finish')
     const queryPoolStartChannel = dc.channel('datadog:pg:pool:query:start')
     const poolAcquireStartChannel = dc.channel('apm:pg:pool:acquire:start')
 
@@ -56,6 +57,119 @@ describe('pg instrumentation', () => {
 
           afterEach(() => {
             client.end()
+          })
+
+          describe('pipeline mode', () => {
+            let finished
+
+            /**
+             * @param {import('../../dd-trace/src/opentracing/span')} span
+             */
+            function onFinish (span) {
+              if (span._name !== 'pg.query') return
+              const context = span.context()
+              finished.push({ text: context.getTag('resource.name'), error: context.getTag('error')?.message })
+            }
+
+            beforeEach(function () {
+              if (implementation !== 'pg' || !Object.hasOwn(client, '_sentQueryQueue')) {
+                // Older pg releases and the native client do not have the JavaScript pipeline queue.
+                this.skip()
+              }
+              client.pipeline = true
+              finished = []
+              spanFinishChannel.subscribe(onFinish)
+            })
+
+            afterEach(() => {
+              spanFinishChannel.unsubscribe(onFinish)
+            })
+
+            it('finishes each promise query when its own result arrives', async () => {
+              const results = await Promise.all([1, 2, 3].map(value => client.query(`SELECT ${value} AS value`)))
+
+              assert.deepStrictEqual(results.map(result => result.rows), [
+                [{ value: 1 }], [{ value: 2 }], [{ value: 3 }],
+              ])
+              assert.deepStrictEqual(finished, [1, 2, 3].map(value => ({
+                text: `SELECT ${value} AS value`, error: undefined,
+              })))
+            })
+
+            it('finishes each callback query before invoking its callback in the parent context', async () => {
+              const tracer = require('../../dd-trace')
+
+              await Promise.all([1, 2, 3].map(value => tracer.trace(`parent-${value}`, () => {
+                const parent = tracer.scope().active()
+                return new Promise((resolve, reject) => {
+                  client.query(`SELECT ${value} AS value`, (error, result) => {
+                    if (error) return reject(error)
+                    try {
+                      assert.strictEqual(tracer.scope().active(), parent)
+                      assert.deepStrictEqual(result.rows, [{ value }])
+                      assert.deepStrictEqual(finished.map(query => query.text),
+                        Array.from({ length: value }, (_, i) => `SELECT ${i + 1} AS value`))
+                      resolve()
+                    } catch (error) {
+                      reject(error)
+                    }
+                  })
+                })
+              })))
+            })
+
+            it('finishes each query object when its own end event fires', async () => {
+              await Promise.all([1, 2, 3].map(value => new Promise((resolve, reject) => {
+                const query = new Query(`SELECT ${value} AS value`)
+                query.once('error', reject)
+                client.query(query).once('end', result => {
+                  try {
+                    assert.deepStrictEqual(result.rows, [{ value }])
+                    assert.deepStrictEqual(finished.map(query => query.text),
+                      Array.from({ length: value }, (_, i) => `SELECT ${i + 1} AS value`))
+                    resolve()
+                  } catch (error) {
+                    reject(error)
+                  }
+                })
+              })))
+            })
+
+            it('attributes a server error to the failing query and continues the pipeline', async () => {
+              await Promise.all([
+                client.query('SELECT 1 AS value'),
+                assert.rejects(client.query('INVALID'), { code: '42601' }),
+                client.query('SELECT 3 AS value'),
+              ])
+
+              assert.deepStrictEqual(finished, [
+                { text: 'SELECT 1 AS value', error: undefined },
+                { text: 'INVALID', error: 'syntax error at or near "INVALID"' },
+                { text: 'SELECT 3 AS value', error: undefined },
+              ])
+            })
+
+            it('finishes an errored query object without finishing the following query', async () => {
+              const first = client.query('SELECT 1 AS value')
+              const failure = new Promise((resolve, reject) => {
+                const query = new Query('INVALID')
+                query.once('error', reject)
+                query.once('end', resolve)
+                client.query(query)
+              })
+
+              await Promise.all([
+                first,
+                assert.rejects(failure, { code: '42601' }),
+                client.query('SELECT 3 AS value'),
+              ])
+
+              assert.deepStrictEqual(finished, [
+                { text: 'SELECT 1 AS value', error: undefined },
+                { text: 'INVALID', error: 'syntax error at or near "INVALID"' },
+                { text: 'SELECT 3 AS value', error: undefined },
+              ])
+            })
           })
 
           describe('abortController', () => {
