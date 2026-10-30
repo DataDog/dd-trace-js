@@ -43,6 +43,21 @@ it does not inherit tracer configuration or read environment variables automatic
 Catch <code>ConfigurationFetchError</code> to handle loading failures using its <code>code</code> and optional HTTP <code>status</code>.</p>
 <p>Use <code>require('dd-trace/openfeature/rules-based')</code> for CommonJS or named imports from
 <code>dd-trace/openfeature/rules-based.js</code> for native Node.js ESM.</p>
+<h2 id="feature-flag-exposure-logging">Feature Flag Exposure Logging</h2>
+<p>Built-in Datadog exposure logging is enabled by default (<code>DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED=true</code>).
+Set <code>DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED=false</code> before tracer initialization to disable exposure
+buffering and delivery to Datadog in both agentless and Remote Configuration modes. Local flag evaluation and
+application OpenFeature hooks continue to work.
+Only <code>false</code> (case-insensitive) or <code>0</code> disables exposure logging. The tracer ignores unrecognized values.</p>
+<p>Disabling Datadog exposure delivery prevents experiment results from using those Datadog-collected exposures. If you
+log exposures separately to your data warehouse, warehouse-native analysis can use that source instead.</p>
+<p>This switch is independent of <a href="#feature-flag-evaluation-counts">evaluation counts</a>, which remain enabled by default.
+Evaluation events can include targeting keys. By default, valid non-empty keys are sent as unsalted SHA-256 hashes.
+When the flag configuration sets <code>observeFullEvaluationData</code> to <code>true</code>, events can include raw keys and a bounded
+evaluation-context snapshot. To disable aggregated <code>flagevaluation</code> events as well, also set
+<code>DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false</code>.
+Span enrichment, OpenTelemetry evaluation metrics, and debug logging retain their own settings; this switch does not
+disable all Feature Flagging telemetry.</p>
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 <p>The tracer-managed Datadog OpenFeature provider emits aggregated <code>flagevaluation</code> track EVP events by default. Set
 <code>DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false</code> to disable this collection. This setting does not disable
@@ -115,26 +130,8 @@ The option does not change protected/full-data reporting consent or debug loggin
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-sdk"></h5>
-<p>Amazon Nova 2 Sonic LLM Observability supports <code>InvokeModelWithBidirectionalStreamCommand</code> in
-<code>@aws-sdk/client-bedrock-runtime &gt;=3.785.0</code> with model <code>amazon.nova-2-sonic-v1:0</code>, supplied as a model ID
-or a foundation-model ARN such as <code>arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-2-sonic-v1:0</code>.
-Spans use the canonical model ID; the identifier sent to AWS is unchanged. Inference-profile identifiers,
-cross-region prefixes, other model versions (including Nova 2.5 Sonic), and malformed ARNs pass through
-without Nova capture. The integration does not perform model-resolution API calls.
-Initialize the tracer with LLM Observability enabled before loading the AWS SDK. Each logical response
-creates a <code>nova sonic audio turn</code> workflow with a <code>nova sonic response</code> LLM child and, when timing is
-available, <code>user speech</code> and <code>agent speech</code> workflow children. Turns inherit the invocation's application
-workflow, if present, and share a conversation session ID.</p>
-<p>The LLM child contains transcripts, tool calls/results, token usage, and bounded inline WAV audio.
-Invalid or oversized audio falls back to text without dropping independently valid speech timing.
-Audio-token counts are subsets of the input/output token totals. Input speech offsets select the audio
-clip; time to first audio uses local receipt of <code>userSpeechEnd</code> and the first output audio. Output speech
-timing projects PCM playback, including queueing, underrun silence, and interruption cuts; it does not
-measure sound heard at a device. Input is observed as the SDK consumes it, which may precede transmission.</p>
-<p>Original Nova Sonic and restarting a different prompt on the same connection are unsupported. On a prompt
-restart, the integration flushes the first prompt and stops capturing that connection. Set
-<code>tracer.use('aws-sdk', { llmobs: false })</code> to disable Nova audio/turn capture. Standard Bedrock APM tracing
-for other operations is unaffected.</p>
+<p>For Amazon Bedrock LLM Observability integrations, see the
+<a href="https://docs.datadoghq.com/llm_observability/instrument/auto_instrumentation/#amazon-bedrock">automatic instrumentation documentation</a>.</p>
 <h5 id="azure-cosmos"></h5>
 <h5 id="azure-event-hubs"></h5>
 <h5 id="azure-functions"></h5>

@@ -13,7 +13,7 @@
 <h1>Interface AnnotationContextOptions</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">AnnotationContextOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#agent">agent</a><span class="tsd-signature-symbol">?:</span> <a href="llmobs.Agent.html" class="tsd-signature-type tsd-kind-interface">Agent</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#costtags">costTags</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#name">name</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#prompt">prompt</a><span class="tsd-signature-symbol">?:</span> <a href="llmobs.Prompt.html" class="tsd-signature-type tsd-kind-interface">Prompt</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tags">tags</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">any</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/6718c6585a7d62b532746474bfb1d10c9e0aaf16/index.d.ts#L4956">index.d.ts:4956</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L4960">index.d.ts:4960</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -33,12 +33,12 @@
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="agent"><code class="tsd-tag">Optional</code><span>agent</span><a href="#agent" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">agent</span><span class="tsd-signature-symbol">?:</span> <a href="llmobs.Agent.html" class="tsd-signature-type tsd-kind-interface">Agent</a></div>
-<div class="tsd-comment tsd-typography"><p>Declares the agent running in this context, read when the context is entered. The manifest is
-reported on every <code>agent</code> span in the context, nested ones included. Use <code>annotate</code> on a nested agent
+<div class="tsd-comment tsd-typography"><p>Declares the agent running in this context, read when the context is entered. The version and manifest
+are reported on every <code>agent</code> span in the context, nested ones included. Use <code>annotate</code> on a nested agent
 span to declare its own agent.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/6718c6585a7d62b532746474bfb1d10c9e0aaf16/index.d.ts#L4984">index.d.ts:4984</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L4988">index.d.ts:4988</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="costtags"><code class="tsd-tag">Optional</code><span>cost<wbr/>Tags</span><a href="#costtags" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">costTags</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></div>
@@ -47,28 +47,28 @@ in the context.
 Each key must already be present in <code>tags</code> on the span when it starts.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/6718c6585a7d62b532746474bfb1d10c9e0aaf16/index.d.ts#L4967">index.d.ts:4967</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L4971">index.d.ts:4971</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="name"><code class="tsd-tag">Optional</code><span>name</span><a href="#name" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">name</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>Set to override the span name for any spans annotated within the returned context.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/6718c6585a7d62b532746474bfb1d10c9e0aaf16/index.d.ts#L4972">index.d.ts:4972</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L4976">index.d.ts:4976</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="prompt"><code class="tsd-tag">Optional</code><span>prompt</span><a href="#prompt" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">prompt</span><span class="tsd-signature-symbol">?:</span> <a href="llmobs.Prompt.html" class="tsd-signature-type tsd-kind-interface">Prompt</a></div>
 <div class="tsd-comment tsd-typography"><p>A Prompt object that represents the prompt used for an LLM call. Only used on <code>llm</code> spans.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/6718c6585a7d62b532746474bfb1d10c9e0aaf16/index.d.ts#L4977">index.d.ts:4977</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L4981">index.d.ts:4981</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tags"><code class="tsd-tag">Optional</code><span>tags</span><a href="#tags" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tags</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-signature-symbol">[</span><span class="tsd-kind-index-signature">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]:</span> <span class="tsd-signature-type">any</span> <span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-comment tsd-typography"><p>Dictionary of JSON serializable key-value tag pairs to set or update on the LLMObs span regarding the span's context.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/6718c6585a7d62b532746474bfb1d10c9e0aaf16/index.d.ts#L4960">index.d.ts:4960</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L4964">index.d.ts:4964</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
