@@ -32,7 +32,7 @@ jobs:
   main:
     needs:
       - build-artifacts
-    uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
+    uses: DataDog/system-tests/.github/workflows/system-tests.yml@dependent-flags-variant-key-node-activation
     permissions:
       contents: read
       id-token: write
