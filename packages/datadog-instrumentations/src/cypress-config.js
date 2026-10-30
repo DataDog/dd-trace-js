@@ -300,9 +300,12 @@ function getRelativeImportPath (fromDirectory, importedFile) {
  * @param {string|false|undefined} originalSupportFile user's support file
  * @param {string} browserHooksSource Datadog browser-side support hooks
  * @param {boolean} deferLifecycle whether manual support owns lifecycle registration
+ * @param {string} lifecycleOwnerSource browser lifecycle ownership detection
  * @returns {string[]} generated files
  */
-function createSupportWrapper (directory, originalSupportFile, browserHooksSource, deferLifecycle) {
+function createSupportWrapper (
+  directory, originalSupportFile, browserHooksSource, deferLifecycle, lifecycleOwnerSource
+) {
   const suffix = `${process.pid}-${randomUUID()}`
   const browserHooksFile = path.join(directory, `dd-cypress-support-hooks-${suffix}.mjs`)
   const wrapperFile = path.join(directory, `dd-cypress-support-${suffix}.mjs`)
@@ -318,7 +321,13 @@ function createSupportWrapper (directory, originalSupportFile, browserHooksSourc
   try {
     const guardedSource = `const ddSupportRoot = Cypress.mocha.getRootSuite()
 const ddSupportKey = Symbol.for('dd-trace.cypress.support-installed')
-if (!ddSupportRoot[ddSupportKey]) {
+const ddHasLifecycle = (() => {
+const module = { exports: {} }
+${lifecycleOwnerSource}
+return module.exports
+})()
+ddSupportRoot[Symbol.for('dd-trace.cypress.has-lifecycle')] = ddHasLifecycle
+if (!ddSupportRoot[ddSupportKey] && !ddHasLifecycle(ddSupportRoot)) {
 ddSupportRoot[Symbol.for('dd-trace.cypress.defer-lifecycle')] = ${deferLifecycle}
 ${browserHooksSource}
 ddSupportRoot[ddSupportKey] = true
@@ -326,8 +335,10 @@ ddSupportRoot[ddSupportKey] = true
 `
     writeExclusiveFile(browserHooksFile, guardedSource)
     generatedFiles.push(browserHooksFile)
-    const finalize = `const install = Cypress.mocha.getRootSuite()[Symbol.for('dd-trace.cypress.install-lifecycle')]
-if (typeof install === 'function') install()
+    const finalize = `const root = Cypress.mocha.getRootSuite()
+const install = root[Symbol.for('dd-trace.cypress.install-lifecycle')]
+const hasLifecycle = root[Symbol.for('dd-trace.cypress.has-lifecycle')]
+if (typeof install === 'function' && (!hasLifecycle || !hasLifecycle(root))) install()
 `
     writeExclusiveFile(wrapperFile, `${wrapperImports.join('\n')}\n${finalize}`)
     generatedFiles.push(wrapperFile)
@@ -378,9 +389,11 @@ function injectSupportFile (config, manualLifecycle = false) {
 
   let browserHooksSource
   let browserHooksPath
+  let lifecycleOwnerSource
   try {
     browserHooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
     browserHooksSource = fs.readFileSync(browserHooksPath, 'utf8')
+    lifecycleOwnerSource = fs.readFileSync(require.resolve('../../datadog-plugin-cypress/src/lifecycle-owner'), 'utf8')
   } catch (error) {
     logBrowserInstrumentationError(
       'Datadog could not read its Cypress browser support hooks: %s. %s',
@@ -399,7 +412,9 @@ function injectSupportFile (config, manualLifecycle = false) {
   for (const directory of new Set(candidateDirectories)) {
     if (projectRoot && !isPathInside(projectRoot, directory)) continue
     try {
-      const generatedFiles = createSupportWrapper(directory, originalSupportFile, browserHooksSource, !!deferLifecycle)
+      const generatedFiles = createSupportWrapper(
+        directory, originalSupportFile, browserHooksSource, !!deferLifecycle, lifecycleOwnerSource
+      )
       config.supportFile = generatedFiles[1]
       // Shared across SDK copies, but scoped to this exact generated support path.
       config[DD_SUPPORT_OWNER] = { path: config.supportFile, deferLifecycle: !!deferLifecycle }
@@ -624,7 +639,7 @@ function registerDdTraceHooks (
   userAfterScreenshotHandlers,
   manualPlugin
 ) {
-  const generatedSupportFiles = installSupportFile(config)
+  const generatedSupportFiles = installSupportFile(config, manualPlugin.detected)
 
   const cleanupWrapper = () => {
     // Open mode reuses this support file across runs, including failed setup attempts.

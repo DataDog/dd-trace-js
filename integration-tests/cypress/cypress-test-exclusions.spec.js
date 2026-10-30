@@ -308,6 +308,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'browser-numeric-open', 'browser-all-numeric-open',
     'browser-descriptor', 'browser-all-descriptor-root', 'browser-all-descriptor-same',
     'browser-field-accessor', 'experimental-native-field-accessor',
+    'experimental-native-root-accessor', 'experimental-native-detached-accessor',
     'browser-object-config-getter', 'browser-accessor-root', 'browser-retries', 'browser-same-budget', 'inherited-mode',
     'browser-runtime', 'browser-inactive-mode',
     'browser-runtime-global', 'browser-runtime-persistent', 'browser-runtime-suite',
@@ -326,6 +327,8 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     for (const atrEnabled of [false, true]) {
       const numericNative = mode.includes('numeric-open')
       const fieldAccessor = ['browser-field-accessor', 'experimental-native-field-accessor'].includes(mode)
+      const rootAccessor = mode === 'experimental-native-root-accessor'
+      const observedAccessor = fieldAccessor || rootAccessor
       // Experimental-config override validation adds a getter read before general validation and assignment.
       const objectGetterReads = supportsExperimental ? 3 : 2
       // Cypress <15.17 retains the old restoration callback across tests without overrides.
@@ -356,7 +359,9 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
             ? objectGetterReads + 1
             : mode === 'experimental-native-checkpoint'
               ? 5
-              : descriptorNative || mode.includes('-detached') ? 4 : thresholdNative ? 5 : disabledNative ? 1 : 3
+              : descriptorNative || (mode.includes('-detached') && mode !== 'experimental-native-detached-accessor')
+                ? 4
+                : thresholdNative ? 5 : disabledNative ? 1 : 3
         const experimentalEnvironment = experimentalMode
           ? {
               CYPRESS_EXPERIMENTAL_RETRIES: thresholdNative
@@ -381,7 +386,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           'excluded persistent': zeroNative
             ? 1
             : thresholdNative ? 3 : nativeAttempts,
-          'excluded explicit zero': mode === 'browser-accessor-root' ? 3 : 1,
+          'excluded explicit zero': mode === 'browser-accessor-root' || rootAccessor ? 3 : 1,
           'ordinary control': zeroControl || browserZeroNative
             ? 1
             : standardRecovery ? 3 : nativeAttempts,
@@ -398,7 +403,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
             DD_TRACE_ENABLED: 'false',
             SPEC_PATTERN: boundarySuite,
             CYPRESS_EXCLUSIONS_MODE: mode,
-            CYPRESS_MATCHED_NATIVE_HOOKS: fieldAccessor ? 'true' : undefined,
+            CYPRESS_MATCHED_NATIVE_HOOKS: observedAccessor ? 'true' : undefined,
             ...experimentalEnvironment,
           },
         })
@@ -406,7 +411,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         childProcess.stdout.on('data', chunk => { output += chunk })
         childProcess.stderr.on('data', chunk => { output += chunk })
         const [nativeExit] = await once(childProcess, 'exit')
-        const accessorReads = fieldAccessor
+        const accessorReads = observedAccessor
           ? JSON.parse(readFileSync(join(cwd, 'native-retry-accessor-reads.json'), 'utf8'))
           : undefined
         if (accessorReads && process.env.CYPRESS_ACCESSOR_DIAGNOSTICS_DIR) {
@@ -428,7 +433,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
         receiver.setSettings({ flaky_test_retries_enabled: atrEnabled })
         if (browserZeroNative && atrEnabled) expected['ordinary control'] = 3
         if (experimentalMode && atrEnabled && !mode.includes('-detached') &&
-          mode !== 'experimental-native-field-accessor') {
+          mode !== 'experimental-native-field-accessor' && mode !== 'experimental-native-detached-accessor') {
           expected['ordinary control'] = disabledNative
             ? Math.min(atrBudget + 1, 3)
             : Math.max(nativeAttempts, atrBudget + 1)
@@ -438,13 +443,16 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           ? 3
           : expectedExit
         await run(mode, instrumentedExit, tests => {
+          assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
           if (accessorReads) {
             const actualReads = JSON.parse(readFileSync(join(cwd, 'native-retry-accessor-reads.json'), 'utf8'))
             if (process.env.CYPRESS_ACCESSOR_DIAGNOSTICS_DIR) {
               writeFileSync(join(process.env.CYPRESS_ACCESSOR_DIAGNOSTICS_DIR, `sdk-${mode}-${atrEnabled}.json`),
                 JSON.stringify(actualReads))
             }
-            assert.strictEqual(actualReads.reads, accessorReads.reads)
+            assert.strictEqual(actualReads.excludedReads, accessorReads.excludedReads)
+            // The ordinary control gains two ATR attempts; excluded tests keep the identical native workload.
+            if (!rootAccessor || !atrEnabled) assert.strictEqual(actualReads.reads, accessorReads.reads)
           }
           if (mode === 'browser-object-config-getter') {
             assert.deepStrictEqual(JSON.parse(readFileSync(join(cwd, 'native-config-getter-reads.json'), 'utf8')),

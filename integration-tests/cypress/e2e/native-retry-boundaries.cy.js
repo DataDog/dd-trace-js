@@ -8,6 +8,7 @@ const { getTestEnvironment } = require('../support/test-environment')
 const executions = {}
 let configGetterReads = 0
 let retryAccessorReads = 0
+let excludedAccessorReads = 0
 const retryAccessorStacks = []
 
 /**
@@ -16,9 +17,12 @@ const retryAccessorStacks = []
  */
 function attempt (name, passAt) {
   executions[name] = (executions[name] || 0) + 1
-  if (['browser-field-accessor', 'experimental-native-field-accessor'].includes(mode)) {
+  if (['browser-field-accessor', 'experimental-native-field-accessor',
+    'experimental-native-root-accessor'].includes(mode)) {
+    if (name.startsWith('excluded')) excludedAccessorReads = retryAccessorReads
     cy.writeFile('native-retry-accessor-reads.json', {
       reads: retryAccessorReads,
+      excludedReads: excludedAccessorReads,
       ...(getTestEnvironment('ACCESSOR_DIAGNOSTICS') && { stacks: retryAccessorStacks.slice() }),
     })
   }
@@ -54,6 +58,29 @@ if (['browser-field-accessor', 'experimental-native-field-accessor'].includes(mo
   ready = true
 }
 
+if (mode === 'experimental-native-root-accessor') {
+  const saved = Cypress.config('retries')
+  Object.defineProperty(Cypress.config(), 'retries', {
+    configurable: true,
+    enumerable: true,
+    get () { retryAccessorReads++; return saved },
+  })
+}
+if (mode === 'experimental-native-detached-accessor') {
+  const retries = Cypress.config('retries')
+  const saved = retries.experimentalOptions
+  let ready = false
+  Object.defineProperty(retries, 'experimentalOptions', {
+    configurable: true,
+    enumerable: true,
+    get () {
+      if (!ready) throw new Error('detached write evaluated replacement getter')
+      return { maxRetries: 2, stopIfAnyPassed: false }
+    },
+  })
+  saved.maxRetries = 3
+  ready = true
+}
 if (mode === 'browser-object-config-getter') {
   Cypress.config({ get retries () { return ++configGetterReads } })
 }
@@ -123,7 +150,7 @@ if (mode === 'experimental-native-locked-detached') {
   Object.defineProperty(retries, 'experimentalOptions', { writable: false, configurable: false })
   retries.experimentalOptions.maxRetries = 3
 }
-if (mode.startsWith('experimental-native-detached')) {
+if (['experimental-native-detached', 'experimental-native-detached-delete'].includes(mode)) {
   const retries = Cypress.config('retries')
   const saved = retries.experimentalOptions
   retries.experimentalOptions = { maxRetries: 3, stopIfAnyPassed: false }

@@ -304,7 +304,10 @@ describe('Cypress support initialization ownership', () => {
         const context = createContext({
           Cypress: { mocha: { getRootSuite: () => root } },
           installations: 0,
-          require: () => { context.installations++ },
+          require: name => {
+            if (name.endsWith('/lifecycle-owner')) return require('../../datadog-plugin-cypress/src/lifecycle-owner')
+            context.installations++
+          },
         })
         const automatic = () => runInContext(`(function () {${generatedSource}\n})()`, context)
         const manual = () => runInContext(`(function () {${manualSource}\n})()`, context)
@@ -492,7 +495,13 @@ if (!root[Symbol.for('dd-trace.cypress.defer-lifecycle')]) root[Symbol.for('dd-t
         if (mode === 'manual-upgrade') installSupportFile(config)
         const files = installSupportFile(config, explicitManual)
         const root = {}
-        const context = createContext({ Cypress: { mocha: { getRootSuite: () => root } }, calls: [], require () {} })
+        const context = createContext({
+          Cypress: { mocha: { getRootSuite: () => root } },
+          calls: [],
+          require: name => {
+            if (name.endsWith('/lifecycle-owner')) return require('../../datadog-plugin-cypress/src/lifecycle-owner')
+          },
+        })
         const execute = source => runInContext(`(function () {${source}\n})()`, context)
         execute(fs.readFileSync(files[0], 'utf8'))
         context.calls.push('user before')
@@ -1027,4 +1036,95 @@ describe('Cypress serialized retry accessor provenance', () => {
       })
     }
   }
+})
+
+describe('Cypress legacy manual lifecycle ownership', () => {
+  for (const manualFirst of [false, true]) {
+    for (const currentEntry of [false, true]) {
+      it(`keeps one legacy lifecycle (manual first=${manualFirst}, current entry=${currentEntry})`, () => {
+        const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-legacy-owner-'))
+        const support = join(project, 'support.js')
+        fs.writeFileSync(support, "require('dd-trace/ci/cypress/support')\n")
+        const hooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
+        const raw = `const root = Cypress.mocha.getRootSuite()
+let active = false
+root[Symbol.for('dd-trace.cypress.install-lifecycle')] = () => {
+  if (active) return
+  active = true
+  root.owners.push('current')
+  before(function () { cy.task('dd:testSuiteStart', {}) })
+  afterEach(function () { cy.task('dd:afterEach', {}) })
+  Cypress.on('test:before:run', () => { root.executions *= 3 })
+}
+if (!root[Symbol.for('dd-trace.cypress.defer-lifecycle')]) root[Symbol.for('dd-trace.cypress.install-lifecycle')]()
+`
+        const legacy = `const root = Cypress.mocha.getRootSuite()
+root.owners.push('legacy')
+before(function () { cy.task('dd:testSuiteStart', {}) })
+afterEach(function () { cy.task('dd:afterEach', {}) })
+Cypress.on('test:before:run', () => { root.executions *= 3 })
+`
+        const originalRead = fs.readFileSync
+        const read = sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
+          return filename === hooksPath ? raw : originalRead(filename, ...args)
+        })
+        try {
+          const files = installSupportFile({ projectRoot: project, supportFile: support })
+          const userBefore = () => 'user before'
+          const userAfter = () => 'user after'
+          const root = { _beforeAll: [{ fn: userBefore }], _afterEach: [{ fn: userAfter }], owners: [], executions: 1 }
+          const listeners = []
+          const context = createContext({
+            Cypress: {
+              mocha: { getRootSuite: () => root },
+              on: (_event, callback) => listeners.push(callback),
+            },
+            before: fn => root._beforeAll.push({ fn }),
+            afterEach: fn => root._afterEach.push({ fn }),
+            require: name => {
+              if (name.endsWith('/lifecycle-owner')) return require('../../datadog-plugin-cypress/src/lifecycle-owner')
+              throw new Error(`unexpected module ${name}`)
+            },
+          })
+          const execute = source => runInContext(`(function () {${source}\n})()`, context)
+          if (manualFirst) execute(legacy)
+          execute(fs.readFileSync(files[0], 'utf8'))
+          if (!manualFirst) execute(legacy)
+          if (currentEntry) execute(fs.readFileSync(join(__dirname, '../../../ci/cypress/support.js'), 'utf8'))
+          execute(fs.readFileSync(files[1], 'utf8').split('\n')
+            .filter(line => !line.startsWith('import ')).join('\n'))
+          for (const callback of listeners) callback()
+          assert.strictEqual(root.executions, 3)
+          assert.deepStrictEqual(Array.from(root.owners), ['legacy'])
+          assert.strictEqual(root._beforeAll.length, 2)
+          assert.strictEqual(root._afterEach.length, 2)
+          assert.strictEqual(root._beforeAll[0].fn, userBefore)
+          assert.strictEqual(root._afterEach[0].fn, userAfter)
+        } finally {
+          read.restore()
+          fs.rmSync(project, { recursive: true, force: true })
+        }
+      })
+    }
+  }
+})
+
+describe('Cypress lifecycle ownership documentation controls', () => {
+  const hasCypressLifecycle = require('../../datadog-plugin-cypress/src/lifecycle-owner')
+
+  it('does not treat task comments in user hooks as a lifecycle owner', () => {
+    const root = {
+      _beforeAll: [{ fn () { /* cy.task('dd:testSuiteStart', {}) */ } }],
+      _afterEach: [{ fn () { /* cy.task('dd:afterEach', {}) */ } }],
+    }
+    assert.strictEqual(hasCypressLifecycle(root), false)
+  })
+
+  it('does not treat quoted task examples in user hooks as a lifecycle owner', () => {
+    const root = {
+      _beforeAll: [{ fn () { return "cy.task('dd:testSuiteStart', {})" } }],
+      _afterEach: [{ fn () { return "cy.task('dd:afterEach', {})" } }],
+    }
+    assert.strictEqual(hasCypressLifecycle(root), false)
+  })
 })
