@@ -41,6 +41,8 @@
   "@supabase/realtime-js/dist/module/RealtimeChannel.js": "@supabase/realtime-js",
   "@supabase/storage-js/dist/index.cjs": "@supabase/storage-js",
   "@supabase/storage-js/dist/index.mjs": "@supabase/storage-js",
+  "@typesafe-ai/sdk/dist/index.cjs": "@typesafe-ai/sdk",
+  "@typesafe-ai/sdk/dist/index.mjs": "@typesafe-ai/sdk",
   "@vitest/runner/dist/chunk-hooks.js": "@vitest/runner",
   "@vitest/runner/dist/index.js": "@vitest/runner",
   "@wdio/cli/build/index.js": "@wdio/cli",
