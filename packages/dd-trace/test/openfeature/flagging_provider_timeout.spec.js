@@ -209,10 +209,22 @@ describe('FlaggingProvider Initialization Timeout', () => {
         'Initialization timeout after 30000ms'
       )
 
+      log.debug.resetHistory()
       provider.setConfiguration({ flags: {} })
-      sinon.assert.notCalled(log.debug)
+      // Configuration arriving after the timeout takes the recovery branch, not the initial one.
+      sinon.assert.calledOnce(log.debug)
     })
   }
+
+  it('does not log the initialization timeout when configuration is already applied', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    provider.setConfiguration({ flags: {} })
+    log.debug.resetHistory()
+
+    await provider.initialize()
+
+    sinon.assert.neverCalledWith(log.debug, sinon.match.string, 30_000)
+  })
 
   it('logs only the first configuration before the initialization promise settles', async () => {
     const provider = new FlaggingProvider(mockTracer, mockConfig)
@@ -273,10 +285,12 @@ describe('FlaggingProvider Initialization Timeout', () => {
     const provider = new FlaggingProvider(mockTracer, mockConfig)
 
     // Start initialization
+    log.debug.resetHistory()
     const initPromise = provider.initialize()
 
     // Verify initialization is in progress
     assert.strictEqual(provider.initController.isInitializing(), true)
+    sinon.assert.calledWith(log.debug, sinon.match.string, 30_000)
 
     // Advance time by 20 seconds (before timeout)
     await clock.tickAsync(20000)
@@ -384,8 +398,16 @@ describe('FlaggingProvider Initialization Timeout', () => {
     // Should emit READY event to signal recovery
     sinon.assert.calledOnce(readyEventSpy)
     assert.strictEqual(provider.getConfiguration(), ufc)
-    sinon.assert.notCalled(log.debug)
     sinon.assert.calledOnce(log.errorWithoutTelemetry)
+    sinon.assert.calledOnce(log.debug)
+
+    // A removed and restored configuration is the same recovery transition.
+    provider.setConfiguration(undefined)
+    provider.setConfiguration(ufc)
+
+    sinon.assert.calledTwice(readyEventSpy)
+    sinon.assert.calledOnce(log.errorWithoutTelemetry)
+    sinon.assert.calledTwice(log.debug)
   })
 
   describe('custom timeout configuration', () => {

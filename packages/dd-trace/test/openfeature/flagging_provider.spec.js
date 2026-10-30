@@ -9,6 +9,10 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
+const RAW_EVALUATION_DATA_WARNING = 'Feature Flags: debug logging is enabled, so feature flag logs include raw ' +
+  'evaluation data (targeting keys, evaluation context attributes, flag values, and default values) that may ' +
+  'contain personal or sensitive information. Unset DD_TRACE_DEBUG when you no longer need it.'
+
 describe('FlaggingProvider', () => {
   let FlaggingProvider
   let mockTracer
@@ -108,7 +112,38 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.ok(provider)
-      sinon.assert.calledWith(log.debug, '%s created with timeout: %dms', 'FlaggingProvider', 30000)
+      sinon.assert.calledWith(log.debug,
+        'Feature Flags: %s created (configuration source %s, sdk env=%s, initialization timeout %dms)',
+        'FlaggingProvider', undefined, 'test', 30000)
+    })
+
+    it('logs the configuration source and an unset SDK environment', () => {
+      mockConfig.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+      delete mockConfig.env
+
+      // eslint-disable-next-line no-new
+      new FlaggingProvider(mockTracer, mockConfig)
+
+      sinon.assert.calledWith(log.debug,
+        'Feature Flags: %s created (configuration source %s, sdk env=%s, initialization timeout %dms)',
+        'FlaggingProvider', 'remote_config', 'unset', 30000)
+    })
+
+    it('gives the debug hook access to the configuration used for evaluations', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const configuration = { flags: {} }
+      provider.setConfiguration(configuration)
+
+      const [getConfiguration] = mockDebugLoggingHookClass.firstCall.args
+      assert.strictEqual(getConfiguration(), configuration)
+    })
+
+    it('logs when the provider is closed', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+
+      sinon.assert.calledWith(log.debug, 'Feature Flags: provider closed')
     })
   })
 
@@ -208,7 +243,7 @@ describe('FlaggingProvider', () => {
     it('should register DebugLoggingHook when debug logging is enabled', () => {
       new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
 
-      sinon.assert.calledOnceWithExactly(mockDebugLoggingHookClass)
+      sinon.assert.calledOnceWithExactly(mockDebugLoggingHookClass, sinon.match.func)
     })
 
     it('should not register DebugLoggingHook when debug logging is disabled', () => {
@@ -226,6 +261,24 @@ describe('FlaggingProvider', () => {
 
       sinon.assert.notCalled(mockDebugLoggingHookClass)
       assert.strictEqual(provider.hooks.length, 3)
+    })
+
+    it('warns once that debug logs include raw evaluation data when the DebugLoggingHook is registered', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      await provider.resolveBooleanEvaluation('flag', false, { targetingKey: 'user' })
+
+      sinon.assert.calledOnceWithExactly(log.warn, RAW_EVALUATION_DATA_WARNING)
+    })
+
+    it('does not warn about raw evaluation data when the DebugLoggingHook is not registered', () => {
+      mockConfig.debug = false
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      mockConfig.debug = true
+      debugChannel.hasSubscribers = false
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.notCalled(log.warn)
     })
 
     it('should log info message when span enrichment is enabled', () => {

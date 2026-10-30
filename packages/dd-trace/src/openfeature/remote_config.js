@@ -4,6 +4,13 @@ const log = require('../log')
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
 
 /**
+ * @param {unknown} value
+ */
+function stringOrUndefined (value) {
+  return typeof value === 'string' ? value : undefined
+}
+
+/**
  * Configures remote config handlers for openfeature feature flagging
  *
  * @param {import('../remote_config')} rc - RemoteConfig instance
@@ -20,18 +27,28 @@ function enable (rc, getOpenfeatureProxy, subscribe) {
   /**
    * @param {string} action
    * @param {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} conf
+   * @param {string} [id] - Remote Config configuration ID
    */
-  const updateConfiguration = (action, conf) => {
+  const updateConfiguration = (action, conf, id) => {
     if (action === 'apply' || action === 'modify') {
       getOpenfeatureProxy().setConfiguration(conf)
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => {
+        // The payload is not schema-validated and this runs after setConfiguration, so a throw here would
+        // report an already applied configuration as failed only when debug logging is on. Interpolating a
+        // non-string (e.g. an object with a non-callable toString) can throw, so only strings are included.
         const flagCount = Object.keys(conf?.flags ?? {}).length
-        return `Feature Flags: remote_config configuration ${action} applied successfully (${flagCount} flag(s))`
+        return `Feature Flags: remote_config configuration ${action} applied successfully ` +
+          `(${flagCount} flag(s) received; per-flag validity is checked at evaluation, ` +
+          `configuration environment=${stringOrUndefined(conf?.environment?.name)}, ` +
+          `createdAt=${stringOrUndefined(conf?.createdAt)}, id=${stringOrUndefined(id)})`
       })
     } else if (action === 'unapply') {
-      log.debug('Feature Flags: remote_config configuration removed')
       getOpenfeatureProxy().setConfiguration(undefined)
+      log.debug(
+        'Feature Flags: remote_config configuration %s removed; flag evaluations will return their default values',
+        id
+      )
     }
   }
   rc.setProductHandler('FFE_FLAGS', updateConfiguration)

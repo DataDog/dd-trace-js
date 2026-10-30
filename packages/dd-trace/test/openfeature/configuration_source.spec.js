@@ -152,9 +152,32 @@ describe('OpenFeature configuration source', () => {
 
     sinon.assert.calledOnceWithExactly(
       log.debug,
-      'Feature Flags: starting agentless configuration source at %s',
-      'https://example.com'
+      'Feature Flags: starting agentless configuration source at %s ' +
+      '(%s endpoint, poll interval %ds, request timeout %ds, DD-API-KEY header %s)',
+      'https://example.com',
+      'custom',
+      30,
+      5,
+      'not sent'
     )
+  })
+
+  it('logs the effective agentless settings for the default endpoint', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = 7200
+
+    createSourceConfig()
+
+    sinon.assert.calledOnceWithExactly(
+      log.debug,
+      'Feature Flags: starting agentless configuration source at %s ' +
+      '(%s endpoint, poll interval %ds, request timeout %ds, DD-API-KEY header %s)',
+      'https://ufc-server.ff-cdn.datadoghq.com',
+      'default',
+      3600,
+      5,
+      'sent'
+    )
+    assert.doesNotMatch(JSON.stringify(log.debug.firstCall.args), /test-api-key/)
   })
 
   it('derives and creates the managed GovCloud endpoint without hard-coding availability', () => {
@@ -261,6 +284,21 @@ describe('OpenFeature configuration source', () => {
 
     assert.strictEqual(source, undefined)
     sinon.assert.notCalled(AgentlessConfigurationSource)
+  })
+
+  it('warns when Remote Config delivery is selected but Remote Configuration is disabled', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+    config.remoteConfig = { DD_REMOTE_CONFIGURATION_ENABLED: false }
+
+    configurationSource.create(config, sinon.spy())
+
+    sinon.assert.calledOnceWithMatch(log.warn, /Remote Configuration is disabled.*DD_REMOTE_CONFIGURATION_ENABLED=true/)
+
+    log.warn.resetHistory()
+    config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = true
+    configurationSource.create(config, sinon.spy())
+
+    sinon.assert.notCalled(log.warn)
   })
 
   for (const source of ['offline', 'invalid']) {

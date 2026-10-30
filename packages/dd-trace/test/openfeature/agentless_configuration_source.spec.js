@@ -148,7 +148,9 @@ describe('AgentlessConfigurationSource', () => {
     const debugCall = log.debug.getCalls().find((call) => typeof call.args[0] === 'function')
     assert.strictEqual(
       debugCall.args[0](),
-      'Feature Flags: agentless configuration applied successfully (0 flag(s), env=test-env)'
+      'Feature Flags: agentless configuration applied successfully (0 flag(s) received; ' +
+      'per-flag validity is checked at evaluation, configuration environment=test, ' +
+      'createdAt=2026-01-01T00:00:00.000Z, etag=W/"ufc-v1", sdk env=test-env, requested dd_env=not sent)'
     )
     assert.strictEqual(requests[0].data, '')
     assert.strictEqual(requests[0].options.url, config.endpoint)
@@ -311,6 +313,17 @@ describe('AgentlessConfigurationSource', () => {
       log.error,
       'Feature Flagging agentless endpoint returned malformed UFC payload'
     )
+    sinon.assert.calledWithExactly(
+      log.debug,
+      'Feature Flags: agentless configuration payload rejected: %s',
+      'response body is not valid JSON'
+    )
+    sinon.assert.calledWithExactly(
+      log.debug,
+      'Feature Flags: agentless configuration payload rejected: %s',
+      'Expected a Universal Flag Configuration v1 object'
+    )
+    assert.doesNotMatch(JSON.stringify(log.debug.args), /secret/)
   })
 
   it('does not advance the ETag after an application failure and logs it once', async () => {
@@ -605,5 +618,90 @@ describe('AgentlessConfigurationSource', () => {
 
     assert.strictEqual(requests.length, 2)
     sinon.assert.calledOnceWithExactly(applyConfiguration, VALID_UFC)
+  })
+
+  it('logs retry delays, the configuration state after a failed poll, and the later recovery', async () => {
+    responses.push(
+      { statusCode: 503 },
+      { statusCode: 503 },
+      { statusCode: 503 },
+      { statusCode: 200, body: responseBody() },
+      { statusCode: 404 },
+      { statusCode: 304 }
+    )
+
+    source().start()
+    await flush()
+    await tick(5000)
+    await tick(10_000)
+
+    sinon.assert.calledWithExactly(log.debug,
+      'Feature Flags: agentless configuration poll attempt %d/%d is retryable; retrying in %dms', 1, 3, 5000)
+    sinon.assert.calledWithExactly(log.debug,
+      'Feature Flags: agentless configuration poll attempt %d/%d is retryable; retrying in %dms', 2, 3, 10_000)
+    sinon.assert.calledWithExactly(log.debug,
+      'Feature Flags: agentless configuration poll failed (%s); no configuration has been applied yet, ' +
+      'so flag evaluations return their default values', 'retries exhausted')
+
+    await tick(30_000)
+
+    sinon.assert.calledWithExactly(log.debug,
+      'Feature Flags: agentless configuration poll succeeded after %d failed poll(s)', 1)
+
+    await tick(30_000)
+
+    sinon.assert.calledWithExactly(log.debug,
+      'Feature Flags: agentless configuration poll failed (%s); keeping the configuration created at %s',
+      'HTTP status is not retryable', VALID_UFC.createdAt)
+
+    log.debug.resetHistory()
+    await tick(30_000)
+
+    sinon.assert.calledWithExactly(log.debug,
+      'Feature Flags: agentless configuration poll succeeded after %d failed poll(s)', 1)
+  })
+
+  it('labels the requested environment separately from the SDK and delivered environments', async () => {
+    config.endpoint = new URL('https://ufc.example.test/api/v2/feature-flagging/config/rules-based/server?dd_env=prod')
+    config.env = 'staging'
+    responses.push({
+      statusCode: 200,
+      body: responseBody({ ...VALID_UFC, environment: { name: 'Production' }, flags: { a: {}, b: {} } }),
+    })
+
+    source().start()
+    await flush()
+
+    const debugCall = log.debug.getCalls().find((call) => typeof call.args[0] === 'function')
+    assert.strictEqual(
+      debugCall.args[0](),
+      'Feature Flags: agentless configuration applied successfully (2 flag(s) received; ' +
+      'per-flag validity is checked at evaluation, configuration environment=Production, ' +
+      'createdAt=2026-01-01T00:00:00.000Z, etag=none, sdk env=staging, requested dd_env=prod)'
+    )
+  })
+
+  it('logs an authentication failure as not retried', async () => {
+    responses.push({ statusCode: 403 })
+
+    source().start()
+    await flush()
+
+    sinon.assert.calledWithExactly(log.debug,
+      'Feature Flags: agentless configuration poll failed (%s); no configuration has been applied yet, ' +
+      'so flag evaluations return their default values', 'authentication failed, not retried')
+  })
+
+  it('logs when polling stops, only once', async () => {
+    responses.push({ pending: true })
+    const configurationSource = source()
+
+    configurationSource.start()
+    configurationSource.stop()
+    configurationSource.stop()
+
+    const stopped = log.debug.getCalls()
+      .filter((call) => call.args[0] === 'Feature Flags: agentless configuration polling stopped')
+    assert.strictEqual(stopped.length, 1)
   })
 })

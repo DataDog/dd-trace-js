@@ -84,8 +84,86 @@ describe('OpenFeature Remote Config', () => {
       const debugCall = log.debug.getCalls().find((call) => typeof call.args[0] === 'function')
       assert.strictEqual(
         debugCall.args[0](),
-        'Feature Flags: remote_config configuration apply applied successfully (2 flag(s))'
+        'Feature Flags: remote_config configuration apply applied successfully (2 flag(s) received; ' +
+      'per-flag validity is checked at evaluation, ' +
+        'configuration environment=undefined, createdAt=undefined, id=undefined)'
       )
+    })
+
+    it('logs the delivered configuration identity on apply', () => {
+      enable(rc, getOpenfeatureProxy, true)
+
+      const flagConfig = {
+        createdAt: '2026-01-01T00:00:00.000Z',
+        environment: { name: 'Production' },
+        flags: { 'test-flag': {} },
+      }
+      const handler = handlers.get('FFE_FLAGS')
+      handler('apply', flagConfig, 'config-id')
+
+      const debugCall = log.debug.getCalls().find((call) => typeof call.args[0] === 'function')
+      assert.strictEqual(
+        debugCall.args[0](),
+        'Feature Flags: remote_config configuration apply applied successfully (1 flag(s) received; ' +
+      'per-flag validity is checked at evaluation, ' +
+        'configuration environment=Production, createdAt=2026-01-01T00:00:00.000Z, id=config-id)'
+      )
+    })
+
+    it('does not fail applying a configuration without flags when formatting the debug log', () => {
+      enable(rc, getOpenfeatureProxy, true)
+
+      const handler = handlers.get('FFE_FLAGS')
+      for (const flagConfig of [{}, { flags: null }]) {
+        handler('apply', flagConfig, 'config-id')
+        sinon.assert.calledWithExactly(openfeatureProxy.setConfiguration, flagConfig)
+
+        const debugCall = log.debug.getCalls().findLast((call) => typeof call.args[0] === 'function')
+        assert.strictEqual(
+          debugCall.args[0](),
+          'Feature Flags: remote_config configuration apply applied successfully (0 flag(s) received; ' +
+          'per-flag validity is checked at evaluation, ' +
+          'configuration environment=undefined, createdAt=undefined, id=config-id)'
+        )
+      }
+    })
+
+    describe('with malformed configuration metadata', () => {
+      // Objects whose toString is not callable throw when interpolated into a template literal.
+      const malformedConfigs = [
+        { flags: {}, createdAt: { toString: null }, environment: { name: 'Production' } },
+        { flags: {}, createdAt: '2026-01-01T00:00:00.000Z', environment: { name: { toString: null } } },
+        { flags: {}, createdAt: Symbol('createdAt'), environment: { name: Symbol('name') } },
+      ]
+
+      for (const action of ['apply', 'modify']) {
+        it(`does not fail ${action} when formatting the debug log`, () => {
+          enable(rc, getOpenfeatureProxy, true)
+
+          const handler = handlers.get('FFE_FLAGS')
+          for (const flagConfig of malformedConfigs) {
+            handler(action, flagConfig, 'config-id')
+            sinon.assert.calledWithExactly(openfeatureProxy.setConfiguration, flagConfig)
+
+            const debugCall = log.debug.getCalls().findLast((call) => typeof call.args[0] === 'function')
+            const message = debugCall.args[0]()
+            assert.match(message, /\(0 flag\(s\) received;/)
+            assert.match(message, /id=config-id\)$/)
+            assert.doesNotMatch(message, /\[object Object\]|Symbol\(/)
+          }
+        })
+      }
+
+      it('applies the configuration without evaluating the debug log when debug logging is disabled', () => {
+        log.debug = sinon.spy()
+        enable(rc, getOpenfeatureProxy, true)
+
+        const handler = handlers.get('FFE_FLAGS')
+        for (const flagConfig of malformedConfigs) {
+          handler('apply', flagConfig, 'config-id')
+          sinon.assert.calledWithExactly(openfeatureProxy.setConfiguration, flagConfig)
+        }
+      })
     })
 
     it('should call setConfiguration on modify action when feature is enabled', () => {
@@ -105,10 +183,12 @@ describe('OpenFeature Remote Config', () => {
       const flagConfig = { flags: { 'test-flag': {} } }
       const handler = handlers.get('FFE_FLAGS')
 
-      handler('unapply', flagConfig)
+      handler('unapply', flagConfig, 'config-id')
 
       sinon.assert.calledOnceWithExactly(openfeatureProxy.setConfiguration, undefined)
-      sinon.assert.calledWith(log.debug, 'Feature Flags: remote_config configuration removed')
+      sinon.assert.calledWith(log.debug,
+        'Feature Flags: remote_config configuration %s removed; flag evaluations will return their default values',
+        'config-id')
     })
 
     it('should not call setConfiguration on unknown action', () => {
