@@ -288,10 +288,12 @@ describe('FlaggingProvider EVP lifecycle', () => {
 
     sinon.assert.calledOnce(request)
     const rows = JSON.parse(request.firstCall.args[0]).flagEvaluations
-    assert.deepStrictEqual(rows.map(row => row.flag.key), ['prerequisite', 'root'])
+    assert.deepStrictEqual(rows.map(row => row.flag.key), ['prerequisite', 'missing', 'root'])
     assert.strictEqual(rows[0].error, undefined)
-    assert.deepStrictEqual(rows[1].error, { message: 'FLAG_NOT_FOUND' })
-    assert.strictEqual(rows[1].runtime_default_used, true)
+    for (const row of rows.slice(1)) {
+      assert.deepStrictEqual(row.error, { message: 'FLAG_NOT_FOUND' })
+      assert.strictEqual(row.runtime_default_used, true)
+    }
   })
 
   it('records errors for dependency ancestors affected by a missing descendant', async () => {
@@ -309,7 +311,7 @@ describe('FlaggingProvider EVP lifecycle', () => {
 
     sinon.assert.calledOnce(request)
     const rows = JSON.parse(request.firstCall.args[0]).flagEvaluations
-    assert.deepStrictEqual(rows.map(row => row.flag.key), ['parent', 'root'])
+    assert.deepStrictEqual(rows.map(row => row.flag.key), ['missing', 'parent', 'root'])
     for (const row of rows) {
       assert.deepStrictEqual(row.error, { message: 'FLAG_NOT_FOUND' })
       assert.strictEqual(row.runtime_default_used, true)
