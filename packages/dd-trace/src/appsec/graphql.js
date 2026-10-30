@@ -33,14 +33,18 @@ function disable () {
 }
 
 /**
- * @param {{ createResolverInfo?: (data: object) => object | null }} data
+ * @param {{ createResolverInfo?: (data: object, skipEmpty: boolean) => object | null }} data
  */
 function onGraphqlStartResolver (data) {
   const req = getActiveRequest()
 
   if (!req) return
 
-  const resolverInfo = data.createResolverInfo?.(data)
+  const wafContext = waf.wafManager.getWAFContext(req)
+  if (!wafContext.knownAddresses.has(addresses.HTTP_INCOMING_GRAPHQL_RESOLVER)) return
+
+  const skipEmpty = wafContext.canSkipEmptyGraphqlResolvers()
+  const resolverInfo = data.createResolverInfo?.(data, skipEmpty)
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
   const result = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)

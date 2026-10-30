@@ -38,7 +38,9 @@ function identity (value) {
 }
 
 /**
- * @param {{ createResolverInfo: (data: object) => Record<string, Record<string, unknown>> }} message
+ * @param {{
+ *   createResolverInfo: (data: object, skipEmpty?: boolean) => Record<string, Record<string, unknown>>
+ * }} message
  * @returns {Record<string, Record<string, unknown>>}
  */
 function materializeResolverInfo (message) {
@@ -2058,6 +2060,47 @@ void generatedResolver
         assert.strictEqual(resolveStartCalls, 2)
         assert.deepStrictEqual(resolverStartFields.sort(), ['defaultHello', 'hello'])
       })
+
+      for (const skipEmpty of [undefined, false, true]) {
+        it(`should apply the empty resolver policy ${skipEmpty} without dropping values`, async () => {
+          const payloadSchema = graphql.buildSchema(`
+            directive @marker(value: String) on FIELD
+            type Query { empty: String argument(value: Int): String defaulted(value: Int = 0): String }
+          `)
+          payloadSchema.getQueryType().getFields().defaulted.resolve = (source, args) => String(args.value)
+          const document = graphql.parse(`query EmptyResolverPolicy($value: Int = 0) {
+            empty
+            marked: empty @marker(value: "kept")
+            unmarked: empty @marker
+            argument(value: null)
+            defaulted(value: $value)
+          }`)
+          const rootValue = { empty: 'ok', argument: 'ok', defaulted: 'ok' }
+          const resolverInfos = []
+          const channel = dc.channel('datadog:graphql:resolver:start')
+          /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+          const onResolver = message => resolverInfos.push(message.createResolverInfo(message, skipEmpty))
+
+          channel.subscribe(onResolver)
+          try {
+            const result = await executeWithTrace(() => compileQuery(payloadSchema, document).query(rootValue, {}, {}), /EmptyResolverPolicy/, () => {})
+            assert.strictEqual(result.errors, undefined)
+            assertObjectContains(result.data, {
+              empty: 'ok', marked: 'ok', unmarked: 'ok', argument: 'ok', defaulted: '0',
+            })
+          } finally {
+            channel.unsubscribe(onResolver)
+          }
+
+          assert.deepStrictEqual(resolverInfos, [
+            skipEmpty ? null : { empty: {} },
+            { empty: { marker: { value: 'kept' } } },
+            skipEmpty ? null : { empty: {} },
+            { argument: { value: null } },
+            { defaulted: { value: 0 } },
+          ])
+        })
+      }
 
       it('aborts explicit and inline default resolvers from the resolver start channel', async () => {
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')

@@ -1,10 +1,15 @@
 'use strict'
 
+const { isDeepStrictEqual } = require('node:util')
+
 const log = require('../../log')
 const Reporter = require('../reporter')
 const WAFContextWrapper = require('./waf_context_wrapper')
 
 const contexts = new WeakMap()
+const resolverSafeConfigKeys = new Set([
+  'actions', 'metadata', 'rules_data', 'rules_override', 'exclusions', 'exclusion_data',
+])
 
 /**
  * @typedef {object} WAFManagerConfig
@@ -16,6 +21,8 @@ const contexts = new WeakMap()
 class WAFManager {
   static defaultWafConfigPath = 'datadog/00/ASM_DD/default/config'
 
+  #inspectEmptyGraphqlResolvers = new Set()
+
   /**
    * @param {object} rules
    * @param {WAFManagerConfig} config
@@ -26,6 +33,9 @@ class WAFManager {
     this.ddwaf = this._loadDDWAF(rules)
     this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
     this.defaultRules = rules
+    if (!canSkipEmptyGraphqlResolvers(rules)) {
+      this.#inspectEmptyGraphqlResolvers.add(WAFManager.defaultWafConfigPath)
+    }
 
     Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, this.ddwaf.diagnostics.rules, true)
   }
@@ -60,7 +70,8 @@ class WAFManager {
         this.wafTimeout,
         this.ddwafVersion,
         this.rulesVersion,
-        this.ddwaf.knownAddresses
+        this.ddwaf.knownAddresses,
+        this.#inspectEmptyGraphqlResolvers.size === 0
       )
       contexts.set(req, wafContext)
     }
@@ -81,13 +92,17 @@ class WAFManager {
   }
 
   updateConfig (path, rules) {
+    const skipEmptyResolvers = canSkipEmptyGraphqlResolvers(rules)
+    if (!skipEmptyResolvers) this.#inspectEmptyGraphqlResolvers.add(path)
+
     const updateResult = this.ddwaf.createOrUpdateConfig(rules, path)
+    if (updateResult && skipEmptyResolvers) this.#inspectEmptyGraphqlResolvers.delete(path)
     this.setRulesVersion()
     return updateResult
   }
 
   removeConfig (path) {
-    this.ddwaf.removeConfig(path)
+    if (this.ddwaf.removeConfig(path)) this.#inspectEmptyGraphqlResolvers.delete(path)
     this.setRulesVersion()
   }
 
@@ -96,6 +111,21 @@ class WAFManager {
       this.ddwaf.dispose()
     }
   }
+}
+
+/**
+ * @param {object} config
+ */
+function canSkipEmptyGraphqlResolvers (config) {
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) return false
+  const bundled = require('../recommended.json')
+  // The bundled key predicates require "$", which GraphQL names cannot contain. Unknown rules and processors
+  // retain full resolver coverage; comparing at update time avoids duplicating the WAF's rule semantics.
+  for (const key of Object.keys(config)) {
+    if (resolverSafeConfigKeys.has(key)) continue
+    if (!Object.hasOwn(bundled, key) || !isDeepStrictEqual(config[key], bundled[key])) return false
+  }
+  return true
 }
 
 module.exports = WAFManager

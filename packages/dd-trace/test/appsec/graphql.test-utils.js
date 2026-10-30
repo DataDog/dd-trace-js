@@ -5,8 +5,11 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const appsec = require('../../src/appsec')
+const addresses = require('../../src/appsec/addresses')
+const waf = require('../../src/appsec/waf')
 const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
 const httpRequest = require('../setup/helpers/http-client')
@@ -74,6 +77,40 @@ async function makeGraphqlRequest (port, variables, derivativeParam, extraHeader
 }
 
 function graphqlCommonTests (config) {
+  describe('Empty resolver arguments', () => {
+    const sandbox = sinon.createSandbox()
+
+    afterEach(() => {
+      sandbox.restore()
+      appsec.disable()
+    })
+
+    for (const { name, rules, expectedRuns } of [
+      { name: 'bundled rules', rules: undefined, expectedRuns: 1 },
+      { name: 'rules without GraphQL inputs', rules: 'cookie-parser-rules.json', expectedRuns: 0 },
+    ]) {
+      it(`should skip unused native resolver runs with ${name}`, async () => {
+        appsec.enable(getConfigFresh({ appsec: { enabled: true, rules: rules && path.join(__dirname, rules) } }))
+        const nativeWaf = waf.wafManager.ddwaf
+        const createContext = nativeWaf.createContext.bind(nativeWaf)
+        const contexts = []
+        sandbox.stub(nativeWaf, 'createContext').callsFake(() => {
+          const context = createContext()
+          sandbox.spy(context, 'run')
+          contexts.push(context)
+          return context
+        })
+
+        const response = await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower')
+
+        const resolverRuns = contexts.flatMap(context => context.run.getCalls())
+          .filter(call => call.args[0].ephemeral?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER])
+        assert.strictEqual(resolverRuns.length, expectedRuns)
+        assert.deepStrictEqual(response.data, { data: { books } })
+      })
+    }
+  })
+
   describe('Block with content', () => {
     beforeEach(() => {
       appsec.enable(getConfigFresh({ appsec: { enabled: true, rules: path.join(__dirname, 'graphql-rules.json') } }))
@@ -230,4 +267,5 @@ module.exports = {
   query,
   resolvers,
   graphqlCommonTests,
+  makeGraphqlRequest,
 }
