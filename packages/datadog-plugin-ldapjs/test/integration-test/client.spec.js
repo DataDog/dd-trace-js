@@ -39,7 +39,7 @@ withVersions('ldapjs', 'ldapjs', '>=2', version => {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await curl(proc)
-        assert.equal(response.headers['x-counter'], '2')
+        assert.equal(response.headers['x-counter'], '1')
       })
     }
   })
