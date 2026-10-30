@@ -1,0 +1,55 @@
+{
+  "responses": [
+    {
+      "match": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "status": 200,
+      "headers": {
+        "CF-RAY": "92379b40489fd6a4-IAD",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Date": "Thu, 20 Mar 2025 19:27:22 GMT",
+        "Server": "cloudflare",
+        "Set-Cookie": "__cf_bm=T7IHiNF.rXD7TnYDby6rH_0WEDfhoLk0rXgXaDzXt5Y-1742498842-1.0.1.1-YuRNJsro5ObW4wArs2.XNlPPLY8N0_0G3z8C0rZKb7dnc7uifHka9XN98wLWnHfJcSFzHUTgkWeWiTQILuwOM7Zu5qLidbGRkOIK3GjWJyc; path=/; expires=Thu, 20-Mar-25 19:57:22 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None",
+        "Transfer-Encoding": "chunked",
+        "X-Content-Type-Options": "nosniff",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "openai-organization": "datadog-staging",
+        "openai-processing-ms": "526",
+        "openai-version": "2020-10-01",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-request-id": "req_8635bdc3c1d88a31acc583c82a9ad7fe"
+      },
+      "body": "{\n  \"id\": \"resp_67dc6c19d6248191aa77e12fe1dd260705ba05d1f4d5a21e\",\n  \"object\": \"response\",\n  \"created_at\": 1742498841,\n  \"status\": \"completed\",\n  \"error\": null,\n  \"incomplete_details\": null,\n  \"instructions\": \"You are a helpful assistant specialized in addition calculations.\",\n  \"max_output_tokens\": null,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"output\": [\n    {\n      \"type\": \"function_call\",\n      \"id\": \"fc_67dc6c1a427481919d5502a93a9a034f05ba05d1f4d5a21e\",\n      \"call_id\": \"call_xHztRD2un5qUnUzaZ2Dw5xAh\",\n      \"name\": \"add\",\n      \"arguments\": \"{\\\"a\\\":1,\\\"b\\\":2}\",\n      \"status\": \"completed\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\": null,\n  \"reasoning\": {\n    \"effort\": null,\n    \"generate_summary\": null\n  },\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    }\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"description\": \"Add two numbers together\",\n      \"name\": \"add\",\n      \"parameters\": {\n        \"properties\": {\n          \"a\": {\n            \"title\": \"A\",\n            \"type\": \"integer\"\n          },\n          \"b\": {\n            \"title\": \"B\",\n            \"type\": \"integer\"\n          }\n        },\n        \"required\": [\n          \"a\",\n          \"b\"\n        ],\n        \"title\": \"add_args\",\n        \"type\": \"object\",\n        \"additionalProperties\": false\n      },\n      \"strict\": true\n    }\n  ],\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 289,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 18,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 307\n  },\n  \"user\": null,\n  \"metadata\": {}\n}",
+      "stream": false
+    },
+    {
+      "match": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "status": 200,
+      "headers": {
+        "CF-RAY": "92379b4509f4d6a4-IAD",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Date": "Thu, 20 Mar 2025 19:27:22 GMT",
+        "Server": "cloudflare",
+        "Transfer-Encoding": "chunked",
+        "X-Content-Type-Options": "nosniff",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "openai-organization": "datadog-staging",
+        "openai-processing-ms": "527",
+        "openai-version": "2020-10-01",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-request-id": "req_922bea4d6e70bccbbb83c854291eaed2"
+      },
+      "body": "{\n  \"id\": \"resp_67dc6c1a6c348191a3e893b39459c47c05ba05d1f4d5a21e\",\n  \"object\": \"response\",\n  \"created_at\": 1742498842,\n  \"status\": \"completed\",\n  \"error\": null,\n  \"incomplete_details\": null,\n  \"instructions\": \"You are a helpful assistant specialized in addition calculations.\",\n  \"max_output_tokens\": null,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"output\": [\n    {\n      \"type\": \"message\",\n      \"id\": \"msg_67dc6c1ad9008191a421ebec399c746905ba05d1f4d5a21e\",\n      \"status\": \"completed\",\n      \"role\": \"assistant\",\n      \"content\": [\n        {\n          \"type\": \"output_text\",\n          \"text\": \"The sum of 1 and 2 is 3.\",\n          \"annotations\": []\n        }\n      ]\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\": null,\n  \"reasoning\": {\n    \"effort\": null,\n    \"generate_summary\": null\n  },\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    }\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"description\": \"Add two numbers together\",\n      \"name\": \"add\",\n      \"parameters\": {\n        \"properties\": {\n          \"a\": {\n            \"title\": \"A\",\n            \"type\": \"integer\"\n          },\n          \"b\": {\n            \"title\": \"B\",\n            \"type\": \"integer\"\n          }\n        },\n        \"required\": [\n          \"a\",\n          \"b\"\n        ],\n        \"title\": \"add_args\",\n        \"type\": \"object\",\n        \"additionalProperties\": false\n      },\n      \"strict\": true\n    }\n  ],\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 312,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 14,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 326\n  },\n  \"user\": null,\n  \"metadata\": {}\n}",
+      "stream": false
+    }
+  ]
+}

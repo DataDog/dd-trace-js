@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const path = require('node:path')
 const { inspect } = require('node:util')
 const { describe, it, before, after } = require('mocha')
@@ -17,7 +17,7 @@ const {
  *
  * @param {string} version
  * @param {(server: object) => void} registerTools
- * @returns {Promise<{ client: object, server: object }>}
+ * @returns {Promise<{ client: object, server: object, clientTransport: object }>}
  */
 async function connectClientAndServer (version, registerTools) {
   const versionModule = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
@@ -42,19 +42,28 @@ async function connectClientAndServer (version, registerTools) {
   const client = new Client({ name: 'test-client', version: '1.0.0' })
   await client.connect(clientTransport)
 
-  return { client, server }
+  return { client, server, clientTransport }
+}
+
+function getClientEvent (llmobsSpans, name) {
+  return llmobsSpans.find(span => span.name === name)
+}
+
+function getClientApmSpan (apmSpans, resource) {
+  return apmSpans.find(span => span.resource === resource)
 }
 
 describe('integrations', () => {
   let client
   let server
+  let clientTransport
 
   describe('modelcontextprotocol-sdk', () => {
     const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
       before(async () => {
-        ;({ client, server } = await connectClientAndServer(version, (mcpServer) => {
+        ;({ client, server, clientTransport } = await connectClientAndServer(version, (mcpServer) => {
           mcpServer.registerTool(
             'test-tool',
             { description: 'A test tool', inputSchema: {} },
@@ -96,13 +105,15 @@ describe('integrations', () => {
           assert.ok(result.content)
           assert.equal(result.content[0].text, 'Result from test-tool')
 
-          const { apmSpans, llmobsSpans } = await getEvents()
+          const { apmSpans, llmobsSpans } = await getEvents(2)
 
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
+          const clientEvent = getClientEvent(llmobsSpans, 'MCP Client Tool Call: test-tool')
+          const clientApmSpan = getClientApmSpan(apmSpans, 'client_tool_call')
+          assertLlmObsSpanEvent(clientEvent, {
+            span: clientApmSpan,
             spanKind: 'tool',
             name: 'MCP Client Tool Call: test-tool',
-            inputValue: JSON.stringify({ name: 'test-tool', arguments: {} }),
+            inputValue: JSON.stringify({}),
             outputValue: JSON.stringify({
               content: [{ type: 'text', text: 'Result from test-tool', annotations: {}, meta: {} }],
               isError: false,
@@ -113,6 +124,30 @@ describe('integrations', () => {
               mcp_tool_kind: 'client',
               mcp_server_name: 'test-server',
               mcp_server_version: '1.0.0',
+            },
+          })
+
+          const serverEvent = getClientEvent(llmobsSpans, 'test-tool')
+          assertLlmObsSpanEvent(serverEvent, {
+            span: getClientApmSpan(apmSpans, 'server_tool_call'),
+            parentId: clientApmSpan.span_id,
+            spanKind: 'tool',
+            name: 'test-tool',
+            inputValue: JSON.stringify({
+              method: 'tools/call',
+              params: { name: 'test-tool', arguments: {} },
+              jsonrpc: '2.0',
+              id: 1,
+            }),
+            outputValue: JSON.stringify({
+              content: [{ type: 'text', text: 'Result from test-tool' }],
+            }),
+            tags: {
+              ml_app: 'test',
+              integration: 'modelcontextprotocol-sdk',
+              mcp_method: 'tools/call',
+              mcp_tool: 'test-tool',
+              mcp_tool_kind: 'server',
             },
           })
         })
@@ -127,14 +162,11 @@ describe('integrations', () => {
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
+          assertLlmObsSpanEvent(getClientEvent(llmobsSpans, 'MCP Client Tool Call: test-tool'), {
+            span: getClientApmSpan(apmSpans, 'client_tool_call'),
             spanKind: 'tool',
             name: 'MCP Client Tool Call: test-tool',
-            inputValue: JSON.stringify({
-              name: 'test-tool',
-              arguments: { query: 'hello world', limit: 10 },
-            }),
+            inputValue: JSON.stringify({ query: 'hello world', limit: 10 }),
             outputValue: JSON.stringify({
               content: [{ type: 'text', text: 'Result from test-tool', annotations: {}, meta: {} }],
               isError: false,
@@ -157,11 +189,11 @@ describe('integrations', () => {
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
+          assertLlmObsSpanEvent(getClientEvent(llmobsSpans, 'MCP Client Tool Call: multi-content-tool'), {
+            span: getClientApmSpan(apmSpans, 'client_tool_call'),
             spanKind: 'tool',
             name: 'MCP Client Tool Call: multi-content-tool',
-            inputValue: JSON.stringify({ name: 'multi-content-tool', arguments: {} }),
+            inputValue: JSON.stringify({}),
             outputValue: JSON.stringify({
               content: [
                 { type: 'text', text: 'First part', annotations: {}, meta: {} },
@@ -190,16 +222,23 @@ describe('integrations', () => {
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
+          const event = getClientEvent(llmobsSpans, 'MCP Client Tool Call: error-tool')
+          const eventWithoutError = {
+            ...event,
+            meta: { ...event.meta },
+            tags: [...event.tags],
+          }
+          eventWithoutError.meta['error.stack'] = undefined
+          assertLlmObsSpanEvent(eventWithoutError, {
+            span: getClientApmSpan(apmSpans, 'client_tool_call'),
             spanKind: 'tool',
             name: 'MCP Client Tool Call: error-tool',
-            inputValue: JSON.stringify({ name: 'error-tool', arguments: {} }),
-            error: {
-              type: MOCK_STRING,
-              message: MOCK_STRING,
-              stack: MOCK_STRING,
-            },
+            inputValue: JSON.stringify({}),
+            outputValue: JSON.stringify({
+              content: [{ type: 'text', text: 'Intentional test error', annotations: {}, meta: {} }],
+              isError: true,
+            }),
+            error: { type: 'Error', message: 'Intentional test error' },
             tags: {
               ml_app: 'test',
               integration: 'modelcontextprotocol-sdk',
@@ -208,6 +247,8 @@ describe('integrations', () => {
               mcp_server_version: '1.0.0',
             },
           })
+          assert.equal(event.meta['error.type'], 'Error')
+          assert.equal(event.meta['error.message'], 'Intentional test error')
         })
       })
 
@@ -220,14 +261,56 @@ describe('integrations', () => {
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
+          assertLlmObsSpanEvent(getClientEvent(llmobsSpans, 'MCP Client List Tools'), {
+            span: getClientApmSpan(apmSpans, 'ClientSession.list_tools'),
             spanKind: 'task',
             name: 'MCP Client List Tools',
-            outputValue: JSON.stringify(result),
+            inputValue: JSON.stringify({ cursor: null }),
+            outputValue: MOCK_STRING,
             tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
           })
+
+          const serverEvent = getClientEvent(llmobsSpans, 'mcp.tools/list')
+          assert.equal(serverEvent.name, 'mcp.tools/list')
+          assert.equal(serverEvent.parent_id, getClientEvent(llmobsSpans, 'MCP Client List Tools').span_id)
         })
+      })
+
+      it('parents a server tool event from injected cross-process context', async () => {
+        let workflowSpanId
+        const requestId = Date.now()
+        let traceContext
+        const tracer = global._ddtrace
+
+        await tracer.llmobs.trace({ kind: 'workflow', name: 'external workflow' }, workflow => {
+          workflowSpanId = workflow.context().toSpanId()
+          traceContext = {}
+          tracer.inject(tracer.scope().active(), 'text_map', traceContext)
+        })
+        await clientTransport.send({
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'tools/call',
+          params: {
+            name: 'test-tool',
+            arguments: {},
+            _meta: { _dd_trace_context: traceContext },
+          },
+        })
+
+        const { llmobsSpans } = await getEvents(1)
+        const serverEvent = getClientEvent(llmobsSpans, 'test-tool')
+        assert.equal(serverEvent.parent_id, workflowSpanId)
+        assert.equal(serverEvent.meta['span.kind'], 'tool')
+        assert.equal(serverEvent.meta.input.value, JSON.stringify({
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'tools/call',
+          params: { name: 'test-tool', arguments: {} },
+        }))
+        assert.equal(serverEvent.meta.output.value, JSON.stringify({
+          content: [{ type: 'text', text: 'Result from test-tool' }],
+        }))
       })
     })
   })

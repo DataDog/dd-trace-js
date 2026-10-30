@@ -521,6 +521,7 @@ function processStep (
  *   cwd?: string,
  *   permissionMode?: string,
  *   output?: unknown,
+ *   initChunk?: Chunk,
  *   arguments?: Array<{ prompt?: string }>,
  *   runInContext?: (fn: () => number) => number,
  * }} agentCtx
@@ -531,8 +532,9 @@ function processChunks (chunks, agentCtx) {
   const sessionCtx = agentCtx.sessionCtx
   const getLifecycle = createStreamLookup(chunks)
 
-  const initChunk = chunks.find(chunk => chunk.type === 'system' && chunk.subtype === 'init') || chunks[0]
-  const { type, subtype, ...rest } = initChunk
+  const initChunk = chunks.find(chunk => chunk.type === 'system' && chunk.subtype === 'init')
+  if (initChunk) agentCtx.initChunk = initChunk
+  const { type, subtype, ...rest } = initChunk || chunks[0]
   Object.assign(agentCtx, rest)
   if (sessionCtx) {
     if (sessionCtx.sessionId) agentCtx.session_id = sessionCtx.sessionId
@@ -575,6 +577,7 @@ function finishStream (chunks, ctx, error) {
   if (chunks.length > 0) {
     const lastChunk = chunks.at(-1)
     if (lastChunk?.type === 'result') ctx.output = lastChunk.result
+    ctx.resultChunk = lastChunk?.type === 'result' ? lastChunk : undefined
 
     try {
       processChunks(chunks, ctx)
