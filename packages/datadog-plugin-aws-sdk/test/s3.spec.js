@@ -183,11 +183,8 @@ describe('Plugin', () => {
           })
         })
 
-        it('should allow disabling a specific span kind of a service', (done) => {
-          let total = 0
-
-          agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
+        it('should allow disabling a specific span kind of a service', async () => {
+          const tracePromise = agent.assertFirstTraceSpan(span => {
             assertObjectContains(span, {
               name: 'aws.request',
               resource: `putObject ${bucketName}`,
@@ -198,26 +195,16 @@ describe('Plugin', () => {
               aws_service: 'S3',
               region: 'us-east-1',
             })
+          }, { spanResourceMatch: /^putObject / })
 
-            total++
-          }, { timeoutMs: 100 }).catch(() => {})
-
-          s3.putObject({
-            Bucket: bucketName,
-            Key: 'test-key',
-            Body: 'test body',
-          }, (err) => {
-            if (err) return done(err)
-
-            setTimeout(() => {
-              try {
-                assert.strictEqual(total, 1)
-                done()
-              } catch (e) {
-                done(e)
-              }
-            }, 250)
-          })
+          await Promise.all([
+            tracePromise,
+            callViaCallback(s3, 'putObject', {
+              Bucket: bucketName,
+              Key: 'test-key',
+              Body: 'test body',
+            }),
+          ])
         })
       })
     })
