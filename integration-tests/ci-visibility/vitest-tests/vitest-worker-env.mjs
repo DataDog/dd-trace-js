@@ -20,6 +20,10 @@ describe('vitest worker env', () => {
       expect(process.env.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE).toBeUndefined()
     }
 
+    if (process.env.EXPECT_DD_TRACE_INIT) {
+      expect(globalThis._ddtrace).toBeDefined()
+    }
+
     if (process.env.EXPECT_NO_DD_TRACE_INIT) {
       expect(globalThis._ddtrace).toBeUndefined()
     }

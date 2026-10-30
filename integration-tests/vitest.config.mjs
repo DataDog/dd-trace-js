@@ -26,6 +26,19 @@ const config = {
   },
 }
 
+if (['native-tags', 'plain-tags'].includes(process.env.EXCLUSIONS_MODE)) {
+  config.test.tags = Object.freeze([
+    Object.freeze({ name: 'flaky', retry: 2, meta: Object.freeze({ userTag: 'preserved' }) }),
+    Object.freeze({ name: 'plain' }),
+  ])
+}
+
+if (process.env.VITEST_OPTIONAL_OPTIMIZER_PLUGINS) {
+  config.optimizeDeps = {
+    rolldownOptions: { plugins: [null, undefined, false, []] },
+  }
+}
+
 if (process.env.VITEST_THROWING_REPORTER) {
   config.test.reporters.push('./ci-visibility/vitest-reporter-throws.mjs')
 }
