@@ -16,6 +16,8 @@ let configuredRetries
 let browserRetrySelection
 let browserRetryAccessor
 const browserRetryObjects = new WeakMap()
+// Saved options keep their provenance when moved to a different retry root.
+const browserRetryChildren = new WeakMap()
 const browserRetryTargets = new WeakMap()
 const browserConfigStates = new WeakMap()
 const unwrapBrowserRetries = value => browserRetryTargets.get(value) || value
@@ -47,8 +49,13 @@ function overlayBrowserRetries (native, configured, actual) {
 function rememberBrowserRetryChild (metadata, key, value, explicit) {
   const raw = unwrapBrowserRetries(value)
   if (!raw || typeof raw !== 'object') return
-  if (metadata.children.has(raw)) return metadata.children.get(raw)
+  if (browserRetryChildren.has(raw)) {
+    const child = browserRetryChildren.get(raw)
+    metadata.children.set(raw, child)
+    return child
+  }
   const child = {
+    owner: metadata,
     raw,
     key,
     initial: Cypress._.cloneDeep(raw),
@@ -59,15 +66,19 @@ function rememberBrowserRetryChild (metadata, key, value, explicit) {
     writes: [],
   }
   metadata.children.set(raw, child)
-  if (hasSuiteConfig) initializeBrowserRetryChild(metadata, child)
+  browserRetryChildren.set(raw, child)
+  if (hasSuiteConfig) initializeBrowserRetryChild(child)
   else metadata.pendingChildren.push(child)
   return child
 }
 
-function initializeBrowserRetryChild (metadata, child) {
-  if (!metadata.nativeReady) return
+function initializeBrowserRetryChild (child) {
+  // A deferred child is initialized from its original root, not the root that later selects it.
+  const owner = child.owner
+  if (!owner.nativeReady && hasSuiteConfig) initializeBrowserRetryMetadata(owner)
+  if (!owner.nativeReady) return
   if (!child.nativeReady) {
-    child.native = overlayBrowserRetries(metadata.native && metadata.native[child.key], child.configured, child.initial)
+    child.native = overlayBrowserRetries(owner.native && owner.native[child.key], child.configured, child.initial)
     child.nativeReady = true
   }
   const writes = child.writes.splice(0)
@@ -86,7 +97,7 @@ function initializeBrowserRetryChild (metadata, child) {
 function refreshBrowserRetryChild (metadata, child) {
   if (hasSuiteConfig) {
     initializeBrowserRetryMetadata(metadata)
-    initializeBrowserRetryChild(metadata, child)
+    initializeBrowserRetryChild(child)
     child.native = overlayBrowserRetries(child.native, child.observed, child.raw)
   } else if (!Cypress._.isEqual(child.observed, child.raw)) {
     child.writes.push({ observed: Cypress._.cloneDeep(child.observed), raw: Cypress._.cloneDeep(child.raw) })
@@ -97,7 +108,7 @@ function refreshBrowserRetryChild (metadata, child) {
 function recordBrowserRetryChild (metadata, child, key, value, deleted) {
   if (hasSuiteConfig) {
     initializeBrowserRetryMetadata(metadata)
-    initializeBrowserRetryChild(metadata, child)
+    initializeBrowserRetryChild(child)
     child.native = updateBrowserRetryPath(child.native, [key], value, deleted)
   } else child.writes.push({ key, value: Cypress._.cloneDeep(value), deleted })
   child.observed = updateBrowserRetryPath(child.observed, [key], value, deleted)
@@ -116,7 +127,7 @@ function initializeBrowserRetryMetadata (metadata) {
     metadata.nativeReady = true
   }
   const writes = metadata.writes.splice(0)
-  for (const child of metadata.pendingChildren.splice(0)) initializeBrowserRetryChild(metadata, child)
+  for (const child of metadata.pendingChildren.splice(0)) initializeBrowserRetryChild(child)
   if (writes.length) metadata.observed = Cypress._.cloneDeep(metadata.initial)
   for (const write of writes) {
     if (write.raw) {
@@ -423,7 +434,8 @@ function observeBrowserConfig (state) {
       return result
     },
     deleteProperty (target, key) {
-      const previous = target[key]
+      const previousProperty = Object.getOwnPropertyDescriptor(target, key)
+      const previous = previousProperty && previousProperty.value
       const result = Reflect.deleteProperty(target, key)
       if (result && key === 'retries') recordBrowserRetryReplacement(undefined, previous)
       return result

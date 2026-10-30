@@ -63,9 +63,22 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   }
   const notify = (value, path, metadata) => {
     refreshNative(metadata)
-    const provenance = options && {
-      retries: metadata ? metadata.native : options.updateNative(undefined, value, []),
+    let native
+    if (options) {
+      native = metadata ? metadata.native : options.updateNative(undefined, value, [])
+      if (!metadata && value && typeof value === 'object') {
+        // A new root can select options already observed under another root.
+        for (const key of Object.keys(value)) {
+          const property = Object.getOwnPropertyDescriptor(value, key)
+          const child = property && 'value' in property && children.get(unwrap(property.value))
+          if (child) {
+            refreshChild(key, child)
+            native = options.updateNative(native, { [key]: child.native }, [key])
+          }
+        }
+      }
     }
+    const provenance = options && { retries: native }
     onChange(value, path, provenance)
   }
   const initialMetadata = initial && typeof initial === 'object'

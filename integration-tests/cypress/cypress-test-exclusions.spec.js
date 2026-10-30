@@ -317,6 +317,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     'experimental-native-same-options', 'experimental-native-locked-options', 'experimental-native-assigned-options',
     'experimental-native-locked-detached', 'experimental-native-checkpoint',
     'experimental-native-saved-options', 'experimental-native-saved-options-descriptor',
+    'experimental-native-cross-root-options', 'experimental-native-cross-root-detached',
     'experimental-native-detached', 'experimental-native-detached-delete',
     'experimental-native-threshold', 'experimental-native-disabled',
     'experimental-native-disabled-zero', 'experimental-native-disabled-one', 'experimental-native-threshold-dynamic',

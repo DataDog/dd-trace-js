@@ -254,12 +254,16 @@ function mergeReturnedConfig (config, updatedConfig) {
 
   const mergedConfig = { ...config }
   // Retain the values already read for the reply, rather than invoking user getters again at IPC.
-  const returnedConfig = { ...updatedConfig }
+  const returnedConfig = Object.fromEntries(Object.entries(updatedConfig))
 
   for (const [key, value] of Object.entries(returnedConfig)) {
-    mergedConfig[key] = isPlainObject(value) && isPlainObject(mergedConfig[key])
-      ? mergeReturnedConfig(mergedConfig[key], value)
-      : value
+    if (isPlainObject(value) && isPlainObject(mergedConfig[key]) && value !== mergedConfig[key]) {
+      mergedConfig[key] = mergeReturnedConfig(mergedConfig[key], value)
+      // Keep only the returned overrides, using values already read by the recursive merge.
+      returnedConfig[key] = mergedConfig[key][Symbol.for('dd-trace.cypress.returned-config')]
+    } else {
+      mergedConfig[key] = value
+    }
   }
 
   Object.defineProperty(mergedConfig, Symbol.for('dd-trace.cypress.returned-config'), { value: returnedConfig })
