@@ -1,0 +1,37 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.18.0.1:9911/completions",
+    "headers": {
+      "Content-Length": "205",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.12.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "600",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"gpt-3.5-turbo-instruct\",\n  \"temperature\": 0.7,\n  \"max_tokens\": 256,\n  \"top_p\": 1,\n  \"frequency_penalty\": 0,\n  \"presence_penalty\": 0,\n  \"n\": 1,\n  \"stream\": true,\n  \"prompt\": \"What is 2 + 2?\"\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "text/event-stream",
+      "Date": "Tue, 08 Sep 2026 17:16:47 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "data: {\"id\":\"cmpl-stub-stream\",\"object\":\"text_completion\",\"created\":1700000000,\"model\":\"gpt-3.5-turbo-instruct\",\"choices\":[{\"index\":0,\"text\":\"\\n\\n\",\"finish_reason\":null,\"logprobs\":null}]}\n\ndata: {\"id\":\"cmpl-stub-stream\",\"object\":\"text_completion\",\"created\":1700000000,\"model\":\"gpt-3.5-turbo-instruct\",\"choices\":[{\"index\":0,\"text\":\"4\",\"finish_reason\":null,\"logprobs\":null}]}\n\ndata: {\"id\":\"cmpl-stub-stream\",\"object\":\"text_completion\",\"created\":1700000000,\"model\":\"gpt-3.5-turbo-instruct\",\"choices\":[{\"index\":0,\"text\":\"\",\"finish_reason\":\"stop\",\"logprobs\":null}]}\n\ndata: {\"id\":\"cmpl-stub-stream\",\"object\":\"text_completion\",\"created\":1700000000,\"model\":\"gpt-3.5-turbo-instruct\",\"choices\":[],\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":2,\"total_tokens\":10}}\n\ndata: [DONE]\n\n"
+  }
+}

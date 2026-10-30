@@ -234,4 +234,88 @@ module.exports = [
     },
     channelName: 'VectorStore_similaritySearchWithScore',
   },
+  {
+    module: {
+      name: '@langchain/core',
+      versionRange: '>=0.1',
+      filePath: 'dist/language_models/chat_models.cjs',
+    },
+    functionQuery: {
+      methodName: '_streamIterator',
+      kind: 'Sync',
+      className: 'BaseChatModel',
+      returnKind: 'AsyncIterator',
+    },
+    channelName: 'BaseChatModel_streamIterator',
+  },
+  {
+    module: {
+      name: '@langchain/core',
+      versionRange: '>=0.1',
+      filePath: 'dist/language_models/llms.cjs',
+    },
+    functionQuery: {
+      methodName: '_streamIterator',
+      kind: 'Sync',
+      className: 'BaseLLM',
+      returnKind: 'AsyncIterator',
+    },
+    channelName: 'BaseLLM_streamIterator',
+  },
+  {
+    module: {
+      name: '@langchain/core',
+      versionRange: '>=0.1',
+      filePath: 'dist/runnables/base.cjs',
+    },
+    functionQuery: {
+      methodName: '_streamIterator',
+      kind: 'Sync',
+      className: 'RunnableSequence',
+      returnKind: 'AsyncIterator',
+    },
+    channelName: 'RunnableSequence_streamIterator',
+  },
+  {
+    module: {
+      name: '@langchain/core',
+      versionRange: '>=0.1',
+      filePath: 'dist/language_models/chat_models.js',
+    },
+    functionQuery: {
+      methodName: '_streamIterator',
+      kind: 'Sync',
+      className: 'BaseChatModel',
+      returnKind: 'AsyncIterator',
+    },
+    channelName: 'BaseChatModel_streamIterator',
+  },
+  {
+    module: {
+      name: '@langchain/core',
+      versionRange: '>=0.1',
+      filePath: 'dist/language_models/llms.js',
+    },
+    functionQuery: {
+      methodName: '_streamIterator',
+      kind: 'Sync',
+      className: 'BaseLLM',
+      returnKind: 'AsyncIterator',
+    },
+    channelName: 'BaseLLM_streamIterator',
+  },
+  {
+    module: {
+      name: '@langchain/core',
+      versionRange: '>=0.1',
+      filePath: 'dist/runnables/base.js',
+    },
+    functionQuery: {
+      methodName: '_streamIterator',
+      kind: 'Sync',
+      className: 'RunnableSequence',
+      returnKind: 'AsyncIterator',
+    },
+    channelName: 'RunnableSequence_streamIterator',
+  },
 ]
