@@ -4,10 +4,10 @@ const { execSync } = require('node:child_process')
 const fs = require('node:fs')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
+const { isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
 const { getRewriteTarget } = require('../datadog-instrumentations/src/helpers/rewriter/targets')
-const { isESMFile } = require('../datadog-esbuild/src/utils')
 const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
 
