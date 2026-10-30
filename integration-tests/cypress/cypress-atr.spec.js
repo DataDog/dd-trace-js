@@ -124,7 +124,8 @@ moduleTypes.forEach(({
       await stopWebAppServer(webAppServer)
     })
 
-    it('attributes explicit test and suite native retries correctly with flat ATR', async () => {
+    // Cypress 6 does not expose unverifiedTestConfig, which identifies native retry overrides.
+    over12It('attributes explicit test and suite native retries correctly with flat ATR', async () => {
       receiver.setSettings({
         itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
       })

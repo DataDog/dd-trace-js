@@ -126,8 +126,8 @@ async function traverseGetPropertiesResult (props, opts, depth) {
     if (prop.value === undefined) continue
     const { value: { type, objectId, subtype, description } } = prop
     if (type === 'object') {
-      if (objectId === undefined) continue // if `subtype` is "null"
-      if (LEAF_SUBTYPES.has(subtype)) continue // don't waste time with these subtypes
+      // if `subtype` is "null"
+      if (objectId === undefined || LEAF_SUBTYPES.has(subtype)) continue // don't waste time with these subtypes
       const size = parseLengthFromDescription(description, subtype)
       if (size !== null && size >= LARGE_OBJECT_SKIP_THRESHOLD) {
         const empty = []
@@ -310,8 +310,7 @@ function removeNonEnumerableProperties (props) {
 }
 
 function parseLengthFromDescription (description, subtype) {
-  if (typeof description !== 'string') return null
-  if (!SIZE_IN_DESCRIPTION_SUBTYPES.has(subtype)) return null
+  if (typeof description !== 'string' || !SIZE_IN_DESCRIPTION_SUBTYPES.has(subtype)) return null
 
   const open = description.lastIndexOf('(')
   if (open === -1) return null
@@ -323,8 +322,7 @@ function parseLengthFromDescription (description, subtype) {
   if (s === '') return null
 
   const n = Number(s)
-  if (!Number.isSafeInteger(n) || n < 0) return null
-  if (String(n) !== s) return null
+  if (!Number.isSafeInteger(n) || n < 0 || String(n) !== s) return null
 
   return n
 }
