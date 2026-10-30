@@ -78,7 +78,6 @@ function createProfilers (config, { asyncContextFrameEnabled, flushInterval, tag
   const profilers = []
   for (const name of selectProfilerTypes(config)) {
     switch (name) {
-      case 'cpu':
       case 'wall':
         profilers.push(new WallProfiler(config, { asyncContextFrameEnabled, flushInterval }))
         break
@@ -112,7 +111,12 @@ function selectProfilerTypes ({
   // snapshots the space profile won't include memory taken by profiles created
   // before it in the sequence. That memory is ultimately transient and will be
   // released when all profiles are subsequently encoded.
-  const profilers = new Set(DD_PROFILING_PROFILERS)
+  // 'cpu' is an alias of 'wall'. Normalizing it here keeps the settings below from adding a second
+  // wall profiler next to the alias.
+  const profilers = new Set()
+  for (const name of DD_PROFILING_PROFILERS) {
+    profilers.add(name === 'cpu' ? 'wall' : name)
+  }
 
   let spaceExplicitlyEnabled = false
   // Add/remove space depending on the value of DD_PROFILING_HEAP_ENABLED
@@ -133,7 +137,6 @@ function selectProfilerTypes ({
       profilers.add('wall')
     } else {
       profilers.delete('wall')
-      profilers.delete('cpu') // remove alias too
     }
   }
 

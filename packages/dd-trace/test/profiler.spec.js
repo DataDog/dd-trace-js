@@ -31,6 +31,7 @@ describe('profiler', () => {
         enabled: false,
         stopping: false,
         isStopping () { return this.stopping },
+        getRunningTypes: sinon.stub().returns([]),
         start: sinon.stub(),
         stop: sinon.stub(),
         setCustomLabelKeys: sinon.spy(),
@@ -371,6 +372,128 @@ describe('profiler', () => {
       sinon.assert.calledOnce(profilingModule.profiler.start)
       sinon.assert.notCalled(FakeSSIHeuristics)
       assert.strictEqual(profiler.isStarted(), false)
+    })
+
+    describe('restart for changed settings', () => {
+      /**
+       * @param {string} enabled
+       * @param {Record<string, unknown>} [settings]
+       */
+      function publishSettings (enabled, settings = {}) {
+        const config = { profiling: { DD_PROFILING_ENABLED: enabled }, ...settings }
+        configUpdateChannel.publish(config)
+        return config
+      }
+
+      it('restarts a running profiler with the changed settings once the shutdown has settled', () => {
+        publishSettings('true', { DD_PROFILING_HEAP_ENABLED: undefined })
+        const changed = publishSettings('true', { DD_PROFILING_HEAP_ENABLED: false })
+
+        sinon.assert.calledOnce(profilingModule.profiler.stop)
+        sinon.assert.calledOnce(profilingModule.profiler.start)
+
+        settleShutdown()
+
+        sinon.assert.calledTwice(profilingModule.profiler.start)
+        assert.strictEqual(profilingModule.profiler.start.secondCall.args[0], changed)
+        assert.strictEqual(profiler.isStarted(), true)
+      })
+
+      it('restarts for each remotely configurable setting', () => {
+        const settings = {
+          DD_PROFILING_CPU_ENABLED: true,
+          DD_PROFILING_WALLTIME_ENABLED: true,
+          DD_PROFILING_HEAP_ENABLED: true,
+          DD_PROFILING_ALLOCATION_ENABLED: true,
+        }
+        publishSettings('true', settings)
+
+        const changes = {
+          DD_PROFILING_CPU_ENABLED: false,
+          DD_PROFILING_WALLTIME_ENABLED: false,
+          DD_PROFILING_HEAP_ENABLED: false,
+          DD_PROFILING_ALLOCATION_ENABLED: false,
+        }
+        for (const [name, value] of Object.entries(changes)) {
+          settings[name] = value
+          profilingModule.profiler.stop.resetHistory()
+
+          publishSettings('true', settings)
+          sinon.assert.calledOnce(profilingModule.profiler.stop)
+          settleShutdown()
+        }
+
+        sinon.assert.callCount(profilingModule.profiler.start, 5)
+      })
+
+      it('does not restart a running profiler for unrelated changes', () => {
+        publishSettings('true', { DD_PROFILING_HEAP_ENABLED: true, sampleRate: 0.5 })
+        publishSettings('true', { DD_PROFILING_HEAP_ENABLED: true, sampleRate: 1 })
+
+        sinon.assert.notCalled(profilingModule.profiler.stop)
+        sinon.assert.calledOnce(profilingModule.profiler.start)
+      })
+
+      it('restarts a profiler started by the heuristics without handing it back to them', () => {
+        publishSettings('auto', { DD_PROFILING_HEAP_ENABLED: undefined })
+        ssiHeuristics.triggeredCallback()
+        sinon.assert.calledOnce(profilingModule.profiler.start)
+
+        const changed = publishSettings('auto', { DD_PROFILING_HEAP_ENABLED: true })
+        settleShutdown()
+
+        sinon.assert.calledTwice(profilingModule.profiler.start)
+        assert.strictEqual(profilingModule.profiler.start.secondCall.args[0], changed)
+        sinon.assert.calledOnce(FakeSSIHeuristics)
+      })
+
+      it('lets a disable published during the restart win', () => {
+        publishSettings('true', { DD_PROFILING_HEAP_ENABLED: undefined })
+        publishSettings('true', { DD_PROFILING_HEAP_ENABLED: true })
+        publishSettings('false', { DD_PROFILING_HEAP_ENABLED: true })
+
+        settleShutdown()
+
+        sinon.assert.calledOnce(profilingModule.profiler.start)
+        assert.strictEqual(profiler.isStarted(), false)
+      })
+
+      it('lets an explicit stop retract a pending restart, even under auto', () => {
+        publishSettings('auto', { DD_PROFILING_HEAP_ENABLED: undefined })
+        ssiHeuristics.triggeredCallback()
+        const changed = publishSettings('auto', { DD_PROFILING_HEAP_ENABLED: true })
+
+        profiler.stop()
+        // After an explicit stop, a new auto update must go through the heuristics.
+        configUpdateChannel.publish(changed)
+        settleShutdown()
+
+        sinon.assert.calledOnce(profilingModule.profiler.start)
+        sinon.assert.calledTwice(FakeSSIHeuristics)
+        assert.strictEqual(profiler.isStarted(), false)
+      })
+    })
+  })
+
+  describe('restart without a shutdown export', () => {
+    it('restarts right away when stopping leaves nothing to settle', () => {
+      configUpdateChannel.publish({ profiling: { DD_PROFILING_ENABLED: 'true' }, DD_PROFILING_HEAP_ENABLED: true })
+      const changed = { profiling: { DD_PROFILING_ENABLED: 'true' }, DD_PROFILING_HEAP_ENABLED: false }
+      configUpdateChannel.publish(changed)
+
+      sinon.assert.calledOnce(profilingModule.profiler.stop)
+      sinon.assert.calledTwice(profilingModule.profiler.start)
+      assert.strictEqual(profilingModule.profiler.start.secondCall.args[0], changed)
+      assert.strictEqual(profiler.isStarted(), true)
+    })
+  })
+
+  describe('running profile types', () => {
+    it('reports the types the profiling layer runs', () => {
+      publishConfig('true')
+      profilingModule.profiler.getRunningTypes.returns(['wall', 'cpu', 'space'])
+
+      assert.deepStrictEqual(profiler.getRunningProfileTypes(), ['wall', 'cpu', 'space'])
     })
   })
 

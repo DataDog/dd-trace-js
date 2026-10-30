@@ -216,6 +216,7 @@ describe('TracerProxy', () => {
 
     profiler = {
       isStarted: sinon.stub().returns(true),
+      getRunningProfileTypes: sinon.stub().returns([]),
       start: sinon.stub().returns(true),
       stop: sinon.spy(),
       setCustomLabelKeys: sinon.spy(),
@@ -501,6 +502,38 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.notCalled(runtimeMetrics.start)
+      })
+
+      it('should subscribe to the profiling remote config product even when profiling is disabled', () => {
+        proxy.init()
+
+        sinon.assert.calledWith(rc.subscribeProducts, 'DEBUG')
+        const handleProfiling = handlers.get('DEBUG')
+        handleProfiling({
+          toApply: [{
+            id: 'profiling-config',
+            path: 'datadog/2/DEBUG/profiling-config/config',
+            file: { profilers: { heapSize: true } },
+          }],
+          toModify: [],
+          toUnapply: [],
+          ack: sinon.spy(),
+          error: sinon.spy(),
+        })
+
+        // Nothing runs locally, so only the requested profile type is turned on. (On Node.js 26 and later
+        // allocations are turned off too; the profiling remote config spec covers that.)
+        sinon.assert.calledOnce(profiler.getRunningProfileTypes)
+        sinon.assert.calledWith(
+          config.setRemoteConfig,
+          sinon.match({
+            DD_PROFILING_WALLTIME_ENABLED: 'false',
+            DD_PROFILING_CPU_ENABLED: 'false',
+            DD_PROFILING_HEAP_ENABLED: 'true',
+            DD_PROFILING_ENABLED: 'true',
+          }),
+          'profiling'
+        )
       })
 
       it('should support applying remote config', () => {
