@@ -37,6 +37,7 @@ describe('sdk', () => {
     sinon.spy(LLMObsSpanProcessor.prototype, 'process')
     sinon.spy(LLMObsSpanProcessor.prototype, 'format')
     sinon.spy(tracer._tracer._processor, 'process')
+    sinon.stub(tracer._tracer, 'flushAll')
 
     // stub writer functionality
     sinon.stub(LLMObsEvalMetricsWriter.prototype, 'append')
@@ -58,6 +59,7 @@ describe('sdk', () => {
     LLMObsSpanProcessor.prototype.process.resetHistory()
     LLMObsSpanProcessor.prototype.format.resetHistory()
     tracer._tracer._processor.process.resetHistory()
+    tracer._tracer.flushAll.resetHistory()
 
     LLMObsEvalMetricsWriter.prototype.append.resetHistory()
     LLMObsEvalMetricsWriter.prototype.flush.resetHistory()
@@ -1446,16 +1448,18 @@ describe('sdk', () => {
         })
       })
 
-      it('emits the manifest named after the span and the version tag on the span event', () => {
-        llmobs.trace({ kind: 'agent', name: 'travel_desk_span' }, () => {
+      it('emits the manifest named after the span and the version tag on the APM span', () => {
+        let agentSpan
+        llmobs.trace({ kind: 'agent', name: 'travel_desk_span' }, span => {
+          agentSpan = span
           llmobs.annotate({ agent: { version: '2.1.0', model: 'gpt-4o' } })
         })
 
-        const event = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
-        assert.deepStrictEqual(event.meta.metadata, {
+        assert.deepStrictEqual(agentSpan.meta_struct._llmobs.meta.metadata, {
           _dd: { agent_manifest: { framework: 'manual', model: 'gpt-4o', name: 'travel_desk_span' } },
         })
-        assert.ok(event.tags.includes('agent_version:2.1.0'))
+        assert.strictEqual(agentSpan.meta_struct._llmobs.tags.agent_version, '2.1.0')
+        sinon.assert.notCalled(LLMObsSpanWriter.prototype.append)
       })
 
       it('does not store a manifest for a version-only agent', () => {
@@ -1775,8 +1779,8 @@ describe('sdk', () => {
       }
 
       function emittedEvent (name) {
-        const call = LLMObsSpanWriter.prototype.append.getCalls().find(call => call.args[0].name === name)
-        return call?.args[0]
+        const call = LLMObsSpanProcessor.prototype.process.getCalls().find(call => call.args[0]._name === name)
+        return call?.args[0].meta_struct?._llmobs
       }
 
       function createPluginTagger () {
@@ -3040,20 +3044,29 @@ describe('sdk', () => {
 
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.flush)
       sinon.assert.notCalled(LLMObsSpanWriter.prototype.flush)
+      sinon.assert.notCalled(tracer._tracer.flushAll)
       tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
-    it('flushes the evaluation writer and span writer', () => {
+    it('flushes the LLMObs writers before the APM exporter', () => {
       llmobs.flush()
 
-      sinon.assert.called(LLMObsEvalMetricsWriter.prototype.flush)
-      sinon.assert.called(LLMObsSpanWriter.prototype.flush)
+      sinon.assert.calledOnce(LLMObsEvalMetricsWriter.prototype.flush)
+      sinon.assert.calledOnce(LLMObsSpanWriter.prototype.flush)
+      sinon.assert.calledOnce(tracer._tracer.flushAll)
+      sinon.assert.callOrder(
+        LLMObsSpanWriter.prototype.flush,
+        LLMObsEvalMetricsWriter.prototype.flush,
+        tracer._tracer.flushAll
+      )
     })
 
-    it('logs if there was an error flushing', () => {
+    it('flushes the APM exporter if an LLMObs writer throws', () => {
       LLMObsEvalMetricsWriter.prototype.flush.throws(new Error('boom'))
 
       llmobs.flush()
+
+      sinon.assert.calledOnce(tracer._tracer.flushAll)
     })
   })
 

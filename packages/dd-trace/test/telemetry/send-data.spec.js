@@ -20,11 +20,14 @@ describe('sendData', () => {
 
   let sendDataModule
   let request
+  let getEnvironmentVariable
 
   beforeEach(() => {
     request = sinon.stub()
+    getEnvironmentVariable = sinon.stub()
     sendDataModule = proxyquire('../../src/telemetry/send-data', {
       '../exporters/common/request': request,
+      '../config/helper': { getEnvironmentVariable },
     })
   })
 
@@ -295,6 +298,51 @@ describe('sendData', () => {
     assert.deepStrictEqual(options.url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
     assert.strictEqual(options.headers['dd-api-key'], 'secret-key')
   })
+
+  it('uses the direct telemetry intake when the LLMObs exporter wraps global agentless mode', () => {
+    sendDataModule.sendData(
+      {
+        DD_AGENTLESS_ENABLED: true,
+        DD_API_KEY: 'secret-key',
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'llmobs' },
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.eu',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+    assert.strictEqual(options.path, '/api/v2/apmtelemetry')
+    assert.deepStrictEqual(options.url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    assert.strictEqual(options.headers['dd-api-key'], 'secret-key')
+  })
+
+  for (const value of ['true', '1', 'false', '0', undefined]) {
+    it(`honors the private APM agentless flag ${value} with the LLMObs exporter`, () => {
+      getEnvironmentVariable.withArgs('_DD_APM_TRACING_AGENTLESS_ENABLED').returns(value)
+      const agentUrl = new URL('http://localhost:8126')
+      sendDataModule.sendData({
+        DD_AGENTLESS_ENABLED: false,
+        DD_API_KEY: 'secret-key',
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'llmobs' },
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.eu',
+        url: agentUrl,
+      }, application, host, 'req-type')
+
+      sinon.assert.calledOnce(request)
+      const options = request.firstCall.args[1]
+      const agentless = value === 'true' || value === '1'
+      assert.strictEqual(options.path, agentless ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry')
+      assert.deepStrictEqual(options.url, agentless
+        ? new URL('https://instrumentation-telemetry-intake.datadoghq.eu')
+        : agentUrl)
+      assert.strictEqual(options.headers['dd-api-key'], agentless ? 'secret-key' : undefined)
+    })
+  }
 
   it('uses the staging telemetry intake for APM agentless mode', () => {
     sendDataModule.sendData(

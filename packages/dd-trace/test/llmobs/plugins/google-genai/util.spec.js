@@ -3,9 +3,29 @@
 const assert = require('node:assert')
 const { describe, it } = require('mocha')
 
-const { extractMetrics, formatOutputMessages } = require('../../../../src/llmobs/plugins/genai/util')
+const { extractMetadata, extractMetrics, formatOutputMessages } = require('../../../../src/llmobs/plugins/genai/util')
 
 describe('google-genai llmobs util', () => {
+  describe('extractMetadata', () => {
+    it('returns no metadata when no configuration values are provided', () => {
+      assert.strictEqual(extractMetadata({}), undefined)
+    })
+
+    it('omits nullish configuration values', () => {
+      assert.deepStrictEqual(extractMetadata({
+        temperature: 0,
+        topP: null,
+        topK: undefined,
+        responseLogprobs: false,
+        maxOutputTokens: 100,
+      }), {
+        temperature: 0,
+        max_output_tokens: 100,
+        response_logprobs: false,
+      })
+    })
+  })
+
   describe('extractMetrics', () => {
     it('derives totalTokens from prompt and candidate counts when totalTokenCount is absent', () => {
       const metrics = extractMetrics({ usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 7 } })
