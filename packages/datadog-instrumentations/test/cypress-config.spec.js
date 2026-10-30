@@ -679,3 +679,46 @@ describe('Cypress native final status after late hooks', () => {
     })
   }
 })
+
+describe('Cypress initialization and setup handoff ordering', () => {
+  for (const phase of ['pending', 'resolved']) {
+    for (const getter of [false, true]) {
+      it(`keeps serialized retry intent after early setup handoff (${phase}, getter=${getter})`, async () => {
+        const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+        const plugin = new CypressPlugin()
+        const original = Object.getOwnPropertyDescriptor(process, 'send')
+        let wire
+        process.send = message => { wire = JSON.parse(JSON.stringify(message)).args[0].setupConfig }
+        let finishSettings
+        const tracer = {
+          _tracer: {
+            _config: { isServiceUserProvided: false },
+            _exporter: { getLibraryConfiguration: (_config, callback) => { finishSettings = callback } },
+          },
+        }
+        const config = { version: '16.2.0', retries: { runMode: 4, openMode: 0 } }
+        try {
+          const pending = plugin.init(tracer, config)
+          let reads = 0
+          const supplied = getter ? { get retries () { return ++reads } } : config
+          process.send({ event: 'setupTestingType:reply', args: [{ setupConfig: supplied }] })
+          if (phase === 'pending') config.retries.runMode = 2
+          finishSettings(null, { isFlakyTestRetriesEnabled: true, flakyTestRetriesCount: 4 })
+          const result = await pending
+          if (phase === 'resolved') result.retries.runMode = 2
+          assert.deepStrictEqual(wire.retries, getter ? 1 : { runMode: 4, openMode: 0 })
+          assert.strictEqual(reads, Number(getter))
+          plugin.retryConfigObserver?.stop()
+          assert.deepStrictEqual(plugin.originalCypressRetries, getter ? 1 : { runMode: 4, openMode: 0 })
+          assert.deepStrictEqual(plugin.configuredCypressRetries, { runMode: 4, openMode: getter ? 1 : 0 })
+          assert.ok(!plugin.retryConfigObserver?.isWatching(plugin.cypressConfig))
+        } finally {
+          plugin.retryConfigObserver?.stop(false)
+          plugin.stopSetupHandoff?.()
+          if (original) Object.defineProperty(process, 'send', original)
+          else delete process.send
+        }
+      })
+    }
+  }
+})

@@ -151,6 +151,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/env')
 const { DD_MAJOR } = require('../../../version')
 const observeRetryConfig = require('./retry-config-observer')
+const observeSetupHandoff = require('./setup-handoff')
 const {
   resolveOriginalSourceFile,
   resolveSourceLineForTest,
@@ -904,6 +905,8 @@ class CypressPlugin {
   init (tracer, cypressConfig) {
     this.retryConfigObserver?.stop()
     this.retryConfigObserver = undefined
+    this.stopSetupHandoff?.()
+    this.stopSetupHandoff = undefined
     const isReusedConfig = this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries
     const retryDescriptor = Object.getOwnPropertyDescriptor(cypressConfig, 'retries')
     if (retryDescriptor && !retryDescriptor.writable && !retryDescriptor.set) {
@@ -948,8 +951,32 @@ class CypressPlugin {
       tracer._tracer._config.isServiceUserProvided ? 'true' : 'false'
 
     this._pendingRequestErrorTags = []
+    const handoff = { seen: false, hasReply: false, retries: undefined }
+    const stopSetupHandoff = observeSetupHandoff((returnedConfig, event) => {
+      handoff.seen = true
+      if (event === 'setupTestingType:reply') {
+        handoff.hasReply = true
+        handoff.retries = mergeNativeRetries(this.nativeCypressRetriesBaseline, returnedConfig?.retries)
+      }
+    })
+    this.stopSetupHandoff = stopSetupHandoff
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
+        stopSetupHandoff()
+        if (this.stopSetupHandoff === stopSetupHandoff) this.stopSetupHandoff = undefined
+        if (handoff.hasReply) {
+          // Keep the serialized retry snapshot independent of later child-local writes.
+          const properties = Object.getOwnPropertyDescriptors(this.cypressConfig)
+          for (const key of Reflect.ownKeys(properties)) {
+            const property = properties[key]
+            property.configurable = true
+            if ('value' in property) property.writable = true
+          }
+          properties.retries = {
+            value: copyCypressRetries(handoff.retries), enumerable: true, configurable: true, writable: true,
+          }
+          this.cypressConfig = Object.defineProperties({}, properties)
+        }
         // Manual setup can make retries read-only while settings are pending.
         // Keep later SDK writes private without changing the user's retry descriptor.
         const pendingRetryDescriptor = Object.getOwnPropertyDescriptor(this.cypressConfig, 'retries')
@@ -1049,17 +1076,19 @@ class CypressPlugin {
           this.isImpactedTestsEnabled = isImpactedTestsEnabled
         }
         this.configuredCypressRetries = copyCypressRetries(this.cypressConfig.retries)
-        this.retryConfigObserver = observeRetryConfig(this.cypressConfig, (retries, path, provenance) => {
-          this.originalCypressRetries = copyCypressRetries(provenance.retries)
-        }, {
-          nativeRetries: copyCypressRetries(this.originalCypressRetries),
-          reconcileNative: (native, observed, actual) => reconcileNativeRetries(
-            native, this.nativeCypressRetriesBaseline, observed, actual
-          ),
-          updateNative: (native, retries, path) => updateNativeRetries(
-            native, this.nativeCypressRetriesBaseline, retries, path
-          ),
-        })
+        if (!handoff.seen) {
+          this.retryConfigObserver = observeRetryConfig(this.cypressConfig, (retries, path, provenance) => {
+            this.originalCypressRetries = copyCypressRetries(provenance.retries)
+          }, {
+            nativeRetries: copyCypressRetries(this.originalCypressRetries),
+            reconcileNative: (native, observed, actual) => reconcileNativeRetries(
+              native, this.nativeCypressRetriesBaseline, observed, actual
+            ),
+            updateNative: (native, retries, path) => updateNativeRetries(
+              native, this.nativeCypressRetriesBaseline, retries, path
+            ),
+          })
+        }
         return this.cypressConfig
       })
     return this.libraryConfigurationPromise

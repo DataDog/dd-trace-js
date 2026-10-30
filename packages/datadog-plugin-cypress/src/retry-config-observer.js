@@ -1,5 +1,7 @@
 'use strict'
 
+const observeSetupHandoff = require('./setup-handoff')
+
 /** @param {object} value Retry values observed at a Cypress IPC boundary. */
 function snapshot (value) {
   // Match Cypress's JSON wire values, independently of descriptor flags.
@@ -168,58 +170,29 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   // Cypress serializes the actual setupNodeEvents return value through this reply.
   // Observing it before serialization also handles a fresh partial return when the
   // manual plugin was loaded inside an already-running setup callback.
-  const originalSend = process.send
-  let sendObserver
-  let ipcActive = true
-  const stopIpc = () => {
-    ipcActive = false
-    if (sendObserver && process.send === sendObserver) process.send = originalSend
-    sendObserver = undefined
-  }
   const stop = (reconcileCurrent = true) => {
     if (active && reconcileCurrent) {
       const retries = unwrap(config.retries)
       notify(retries, [], retries && typeof retries === 'object' && roots.get(retries))
     }
     active = false
-    stopIpc()
+    stopIpc?.()
     const currentDescriptor = Object.getOwnPropertyDescriptor(config, 'retries')
     if (currentDescriptor?.writable && targets.has(currentDescriptor.value)) {
       config.retries = unwrap(currentDescriptor.value)
     }
   }
-  if (typeof originalSend === 'function') {
-    sendObserver = function (message) {
-      let forwardedArguments = arguments
-      if (ipcActive &&
-        (message?.event === 'setupTestingType:reply' || message?.event === 'setupTestingType:error')) {
-        try {
-          let wireConfig = message.event === 'setupTestingType:reply' && message.args?.[0]?.setupConfig
-          const retriesDescriptor = wireConfig && typeof wireConfig === 'object' &&
-            Object.getOwnPropertyDescriptor(wireConfig, 'retries')
-          if (retriesDescriptor?.enumerable && retriesDescriptor.get) {
-            // Match the single native wire read, then inspect and serialize those same values.
-            wireConfig = { ...wireConfig }
-            forwardedArguments = [...arguments]
-            forwardedArguments[0] = {
-              ...message,
-              args: [{ ...message.args[0], setupConfig: wireConfig }, ...message.args.slice(1)],
-            }
-          }
-          const returnedConfig = wireConfig?.[Symbol.for('dd-trace.cypress.returned-config')] ?? wireConfig
-          if (active && message.event === 'setupTestingType:reply') {
-            const retries = unwrap(returnedConfig?.retries)
-            notify(retries, [], retries && typeof retries === 'object' && roots.get(retries))
-          }
-        } finally {
-          // Later child-local writes cannot change the parent's serialized config.
-          stop(false)
-        }
+  const stopIpc = observeSetupHandoff((returnedConfig, event) => {
+    try {
+      if (active && event === 'setupTestingType:reply') {
+        const retries = unwrap(returnedConfig?.retries)
+        notify(retries, [], retries && typeof retries === 'object' && roots.get(retries))
       }
-      return originalSend.apply(this, forwardedArguments)
+    } finally {
+      // Later child-local writes cannot change the parent's serialized config.
+      stop(false)
     }
-    process.send = sendObserver
-  }
+  })
 
   return {
     isWatching: candidate => active && candidate === config,

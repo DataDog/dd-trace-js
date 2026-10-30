@@ -434,19 +434,26 @@ function observeBrowserConfig (state) {
 }
 
 Cypress.config = Object.assign(function (key, value) {
-  const retries = typeof key === 'object' && key !== null
-    ? key.retries
-    : key === 'retries' && arguments.length > 1 ? value : undefined
-  const previous = retries === undefined || getBrowserRetryAccessor()
+  const objectConfig = typeof key === 'object' && key !== null
+  let objectRetries = false
+  if (objectConfig) {
+    // Native _.extend handles enumerable own/inherited string keys without reading symbols.
+    for (const name in key) {
+      if (name === 'retries') objectRetries = true
+    }
+  }
+  const retries = !objectConfig && key === 'retries' && arguments.length > 1 ? value : undefined
+  const previous = (!objectRetries && retries === undefined) || getBrowserRetryAccessor()
     ? undefined
     : cypressConfig.call(this, 'retries')
   const args = [...arguments]
-  if (retries !== undefined && unwrapBrowserRetries(retries) !== retries) {
-    if (key !== null && typeof key === 'object') args[0] = { ...key, retries: unwrapBrowserRetries(retries) }
-    else args[1] = unwrapBrowserRetries(retries)
-  }
+  if (retries !== undefined && unwrapBrowserRetries(retries) !== retries) args[1] = unwrapBrowserRetries(retries)
+  // Delegate the original object so validation and assignment retain native getter evaluation semantics.
   const result = cypressConfig.apply(this, args)
-  if (retries !== undefined) recordBrowserRetryReplacement(retries, previous)
+  if (objectRetries) {
+    const property = Object.getOwnPropertyDescriptor(cypressConfig.call(this), 'retries')
+    if (property && 'value' in property) recordBrowserRetryReplacement(property.value, previous)
+  } else if (retries !== undefined) recordBrowserRetryReplacement(retries, previous)
   if (arguments.length === 0) return observeBrowserConfig(result)
   if (key === 'retries' && arguments.length === 1) recordBrowserRetryAccessorRead(result)
   return key === 'retries' && arguments.length === 1 ? observeBrowserRetries(result) : result

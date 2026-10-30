@@ -1900,7 +1900,7 @@ moduleTypes.forEach(({
     }
 
     for (const mode of [
-      'accessor-root',
+      'object-config-getter', 'inherited-config-getter', 'accessor-root',
       'raw-after', 'raw-before', 'raw-saved', 'raw-detached', 'locked-root', 'locked-root-unchanged',
       'suite-owner', 'suite-root-owner', 'framework-known-root', 'framework-scalar',
       'same-options', 'locked-options', 'assigned-options', 'raw-locked-options',
@@ -1937,6 +1937,10 @@ moduleTypes.forEach(({
             _: { isEqual, cloneDeep },
             config: function (key, value) {
               if (!arguments.length) return state
+              if (key && typeof key === 'object') {
+                for (const name in key) state[name] = key[name]
+                return key
+              }
               if (arguments.length > 1) state[key] = value
               return state[key]
             },
@@ -2074,6 +2078,27 @@ moduleTypes.forEach(({
           currentTest._testConfig.applied = 'complete'
           events['test:before:run']({}, currentTest)
           assert.strictEqual(currentTest._retries, 0)
+          return
+        }
+        if (mode === 'object-config-getter' || mode === 'inherited-config-getter') {
+          let reads = 0
+          const prototype = { inherited: 'retained' }
+          const supplied = Object.create(prototype)
+          Object.defineProperty(mode === 'inherited-config-getter' ? prototype : supplied, 'retries', {
+            enumerable: true, get: () => ++reads,
+          })
+          Object.defineProperty(supplied, Symbol('ignored'), {
+            enumerable: true,
+            get () {
+              throw new Error('native configuration ignores symbol properties')
+            },
+          })
+          assert.strictEqual(config(supplied), supplied)
+          assert.strictEqual(reads, 1)
+          assert.strictEqual(state.retries, 1)
+          assert.strictEqual(state.inherited, 'retained')
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 1)
           return
         }
         if (mode === 'accessor-root') {
