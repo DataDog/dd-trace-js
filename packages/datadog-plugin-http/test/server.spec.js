@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -317,6 +318,50 @@ describe('Plugin', () => {
           ])
         })
       })
+
+      for (const configuredStatuses of [undefined, '500-599']) {
+        const rangeDescription = configuredStatuses === undefined ? 'default' : 'explicit default-shaped'
+        describe(`with ${rangeDescription} server statuses`, () => {
+          let responseStatus
+
+          beforeEach(async () => {
+            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'false'
+            if (configuredStatuses === undefined) {
+              delete process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES
+            } else {
+              process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = configuredStatuses
+            }
+            await agent.load('http', { client: false })
+            http = require(pluginToBeLoaded)
+            appListener = new http.Server((req, res) => {
+              res.writeHead(responseStatus)
+              res.end()
+            })
+            appListener.listen(0, 'localhost')
+            await once(appListener, 'listening')
+            port = appListener.address().port
+          })
+
+          afterEach(() => {
+            delete process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES
+            delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          })
+
+          for (const status of [499, 500, 599, 600]) {
+            it(`classifies status ${status} using the configured range origin`, async () => {
+              responseStatus = status
+              const expectedError = status >= 500 && (configuredStatuses === undefined || status <= 599) ? 1 : 0
+              await Promise.all([
+                agent.assertFirstTraceSpan(span => {
+                  assert.strictEqual(span.error, expectedError)
+                  assert.strictEqual(span.meta['http.status_code'], String(status))
+                }),
+                httpRequest.get(`http://localhost:${port}/user`, { validateStatus: () => true }),
+              ])
+            })
+          }
+        })
+      }
 
       describe('with a `server` configuration', () => {
         beforeEach(() => {

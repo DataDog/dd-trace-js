@@ -8,7 +8,6 @@ const MAX_HTTP_STATUS_CODE = 599
 
 const SERVER_ERROR_STATUSES = 'DD_TRACE_HTTP_SERVER_ERROR_STATUSES'
 const CLIENT_ERROR_STATUSES = 'DD_TRACE_HTTP_CLIENT_ERROR_STATUSES'
-
 /** @typedef {(code: number) => boolean} StatusValidator */
 
 /** @type {StatusValidator} */
@@ -21,30 +20,46 @@ function isNotClientErrorCode (code) {
   return code < 400 || code >= 500
 }
 
-/**
- * @param {{ validateStatus?: unknown, DD_TRACE_HTTP_SERVER_ERROR_STATUSES?: unknown }} config
- * @returns {StatusValidator}
- */
-function getServerStatusValidator (config) {
-  return getStatusValidator(config, SERVER_ERROR_STATUSES, '500-599', isNotServerErrorCode)
+// OTel treats client 5xx responses and unrecognized codes above 599 as errors.
+/** @type {StatusValidator} */
+function isNotOtelClientErrorCode (code) {
+  return code < 400
 }
 
 /**
- * @param {{ validateStatus?: unknown, DD_TRACE_HTTP_CLIENT_ERROR_STATUSES?: unknown }} config
+ * @param {{
+ *   validateStatus?: unknown,
+ *   DD_TRACE_HTTP_SERVER_ERROR_STATUSES?: unknown,
+ * }} config
+ * @returns {StatusValidator}
+ */
+function getServerStatusValidator (config) {
+  return getStatusValidator(config, SERVER_ERROR_STATUSES, isNotServerErrorCode)
+}
+
+/**
+ * @param {{
+ *   validateStatus?: unknown,
+ *   DD_TRACE_HTTP_CLIENT_ERROR_STATUSES?: unknown,
+ *   DD_TRACE_OTEL_SEMANTICS_ENABLED?: unknown
+ * }} config
  * @returns {StatusValidator}
  */
 function getClientStatusValidator (config) {
-  return getStatusValidator(config, CLIENT_ERROR_STATUSES, '400-499', isNotClientErrorCode)
+  if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    return getStatusValidator(config, CLIENT_ERROR_STATUSES, isNotOtelClientErrorCode)
+  }
+
+  return getStatusValidator(config, CLIENT_ERROR_STATUSES, isNotClientErrorCode)
 }
 
 /**
  * @param {Record<string, unknown>} config
  * @param {string} optionName - Name of the configuration holding the error status ranges.
- * @param {string} defaultRanges - Ranges covered by `defaultValidator`
  * @param {StatusValidator} defaultValidator
  * @returns {StatusValidator}
  */
-function getStatusValidator (config, optionName, defaultRanges, defaultValidator) {
+function getStatusValidator (config, optionName, defaultValidator) {
   if (typeof config.validateStatus === 'function') {
     return /** @type {StatusValidator} */ (config.validateStatus)
   } else if (Object.hasOwn(config, 'validateStatus')) {
@@ -57,10 +72,7 @@ function getStatusValidator (config, optionName, defaultRanges, defaultValidator
     log.error('Expected `%s` to be a string.', optionName)
     return defaultValidator
   }
-  if (ranges === defaultRanges) return defaultValidator
-
   const normalized = ranges.replaceAll(whitespacePattern, '')
-  if (normalized === defaultRanges) return defaultValidator
   if (!statusCodeRangesPattern.test(normalized)) {
     log.error('`%s` must contain comma-separated status codes or ranges from 100 to 599.', optionName)
     return defaultValidator
