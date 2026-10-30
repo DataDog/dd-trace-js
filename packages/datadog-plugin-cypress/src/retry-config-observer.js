@@ -36,16 +36,15 @@ module.exports = function observeRetryConfig (config, onChange, options) {
     }
     onChange(value, path, provenance)
   }
-  const getRoot = (raw, native) => {
-    if (!raw || typeof raw !== 'object') return
-    if (roots.has(raw)) return roots.get(raw)
-    const metadata = {
-      raw, native, proxies: new WeakMap(), observed: options?.reconcileNative ? snapshot(raw) : undefined,
-    }
-    roots.set(raw, metadata)
-    return metadata
-  }
-  getRoot(initial, options?.nativeRetries)
+  const initialMetadata = initial && typeof initial === 'object'
+    ? {
+        raw: initial,
+        native: options?.nativeRetries,
+        proxies: new WeakMap(),
+        observed: options?.reconcileNative ? snapshot(initial) : undefined,
+      }
+    : undefined
+  if (initialMetadata) roots.set(initial, initialMetadata)
   const record = (metadata, path) => {
     if (!active) return
     if (options) metadata.native = options.updateNative(metadata.native, metadata.raw, path)
@@ -109,7 +108,7 @@ module.exports = function observeRetryConfig (config, onChange, options) {
   // Keep the native data descriptor: freeze/seal must retain JavaScript's own
   // strict/sloppy write semantics. Fresh root replacements are reconciled by
   // identity at the setup handoff; only injected objects need nested proxies.
-  config.retries = wrap(initial, getRoot(initial))
+  config.retries = wrap(initial, initialMetadata)
 
   // Cypress serializes the actual setupNodeEvents return value through this reply.
   // Observing it before serialization also handles a fresh partial return when the
