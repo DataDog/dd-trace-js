@@ -1614,6 +1614,7 @@ moduleTypes.forEach(({
             Cypress: {
               _: { isEqual, cloneDeep },
               config: name => {
+                if (name === undefined) return { retries, isTextTerminal }
                 if (name === 'retries') return retries
                 assert.strictEqual(name, 'isTextTerminal')
                 return isTextTerminal
@@ -1771,6 +1772,40 @@ moduleTypes.forEach(({
       install()
       assert.deepStrictEqual(hooks, registered)
       assert.strictEqual(context.Cypress.config('retries'), observedRetries)
+    })
+
+    it('does not evaluate a retries root accessor during ordinary teardown', async () => {
+      const state = { retries: 0, isTextTerminal: true }
+      const hooks = {}
+      const currentTest = { id: 'ordinary', title: 'ordinary', state: 'passed', fullTitle: () => 'ordinary' }
+      const root = { file: 'test.cy.js', eachTest () {} }
+      const context = {
+        Cypress: {
+          _: { isEqual, cloneDeep },
+          config: name => name === undefined ? state : state[name],
+          state () {},
+          on () {},
+          mocha: {
+            getRunner: () => ({ runTests () {}, suite: { ctx: { currentTest } } }),
+            getRootSuite: () => root,
+          },
+        },
+        cy: { on () {}, task: () => Promise.resolve() },
+        before () {},
+        beforeEach () {},
+        after () {},
+        afterEach: callback => { hooks.afterEach = callback },
+      }
+      runInNewContext(fs.readFileSync(
+        path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+      ), context)
+      let reads = 0
+      Object.defineProperty(context.Cypress.config(), 'retries', {
+        configurable: true,
+        get () { reads++; throw new Error('teardown must not evaluate retries') },
+      })
+      hooks.afterEach()
+      assert.strictEqual(reads, 0)
     })
 
     for (const mode of ['known-root', 'fresh-root', 'known-options', 'configurable-options']) {
@@ -1934,7 +1969,7 @@ moduleTypes.forEach(({
     }
 
     for (const mode of [
-      'field-mode', 'field-child-options',
+      'field-mode', 'field-child-options', 'saved-accessor-options', 'detached-accessor-options',
       'object-config-getter', 'inherited-config-getter', 'accessor-root',
       'raw-after', 'raw-before', 'raw-saved', 'raw-detached', 'locked-root', 'locked-root-unchanged',
       'suite-owner', 'suite-root-owner', 'framework-known-root', 'framework-scalar',
@@ -1972,7 +2007,7 @@ moduleTypes.forEach(({
         const context = {
           Cypress: {
             _: { isEqual, cloneDeep },
-            ...(mode.startsWith('field-') && {
+            ...((mode.startsWith('field-') || mode === 'saved-accessor-options') && {
               getTestRetries (...args) {
                 assert.strictEqual(this, context.Cypress)
                 if (args.length) assert.deepStrictEqual(args, ['native-budget', currentTest])
@@ -2011,6 +2046,35 @@ moduleTypes.forEach(({
         runInNewContext(fs.readFileSync(
           path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
         ), context)
+        if (mode === 'saved-accessor-options') {
+          await hooks.before()
+          const saved = context.Cypress.config('retries')
+          let reads = 0
+          Object.defineProperty(context.Cypress.config(), 'retries', {
+            configurable: true,
+            get () { reads++; return saved },
+          })
+          assert.strictEqual(reads, 0)
+          currentTest._retries = context.Cypress.getTestRetries()
+          const nativeReads = reads
+          events['test:before:run']({}, currentTest)
+          assert.strictEqual(currentTest._retries, 2)
+          assert.strictEqual(reads, nativeReads)
+          return
+        }
+        if (mode === 'detached-accessor-options') {
+          await hooks.before()
+          const retries = context.Cypress.config('retries')
+          const saved = retries.experimentalOptions
+          let reads = 0
+          Object.defineProperty(retries, 'experimentalOptions', {
+            configurable: true,
+            get () { reads++; throw new Error('replacement getter must remain unread') },
+          })
+          saved.maxRetries = 3
+          assert.strictEqual(reads, 0)
+          return
+        }
         if (mode.startsWith('field-')) {
           await hooks.before()
           const retries = context.Cypress.config('retries')

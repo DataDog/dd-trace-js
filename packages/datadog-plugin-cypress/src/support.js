@@ -49,6 +49,8 @@ const browserRetryChildren = new WeakMap()
 const browserRetryTargets = new WeakMap()
 const browserConfigStates = new WeakMap()
 const nativeAccessorBudgets = new WeakMap()
+let computingNativeRetries = false
+let nativeRetryValue
 const unwrapBrowserRetries = value => browserRetryTargets.get(value) || value
 const cypressConfig = Cypress.config
 
@@ -205,9 +207,15 @@ function recordBrowserRetryPath (metadata, path, value, deleted, child) {
   selectBrowserRetryMetadata(metadata)
 }
 
+function peekBrowserRetries () {
+  const property = browserRetryDescriptor(cypressConfig.call(Cypress), 'retries')
+  if (property && 'value' in property) return property.value
+  if (getBrowserRetryAccessor()) return browserRetryAccessor.value
+}
+
 /** @param {object} metadata */
 function selectBrowserRetryMetadata (metadata) {
-  if (metadata.raw === unwrapBrowserRetries(cypressConfig.call(Cypress, 'retries'))) {
+  if (metadata.raw === unwrapBrowserRetries(peekBrowserRetries())) {
     browserRetries = metadata.native
     browserRetrySelection = metadata
     hasBrowserRetries = true
@@ -244,7 +252,9 @@ function ownsNestedPath (root, path, target) {
   let current = root
   for (const key of path) {
     if (!current || typeof current !== 'object') return false
-    current = unwrapBrowserRetries(current[key])
+    const property = browserRetryDescriptor(current, key)
+    if (!property || !('value' in property)) return false
+    current = unwrapBrowserRetries(property.value)
   }
   return current === target
 }
@@ -420,7 +430,9 @@ function getBrowserRetryAccessor () {
 }
 
 function recordBrowserRetryAccessorRead (value) {
+  if (computingNativeRetries) nativeRetryValue = value
   if (!getBrowserRetryAccessor()) return
+  browserRetryAccessor.value = value
   const raw = unwrapBrowserRetries(value)
   const metadata = raw && typeof raw === 'object' && browserRetryObjects.get(raw)
   browserRetrySelection = metadata || undefined
@@ -490,7 +502,11 @@ function hasNativeRetryAccessor () {
   const retries = unwrapBrowserRetries(root.value)
   if (!retries || typeof retries !== 'object') return false
   const interactive = browserRetryDescriptor(state, 'isInteractive')
-  const mode = browserRetryDescriptor(retries, interactive && interactive.value ? 'openMode' : 'runMode')
+  return hasNativeRetryValueAccessor(retries, interactive && interactive.value)
+}
+
+function hasNativeRetryValueAccessor (retries, interactive) {
+  const mode = browserRetryDescriptor(retries, interactive ? 'openMode' : 'runMode')
   if (mode && !('value' in mode)) return true
   if (!mode || mode.value !== true) return false
   const strategy = browserRetryDescriptor(retries, 'experimentalStrategy')
@@ -506,9 +522,25 @@ if (typeof Cypress.getTestRetries === 'function') {
   const getTestRetries = Cypress.getTestRetries
   Cypress.getTestRetries = Object.assign(function () {
     const accessor = hasNativeRetryAccessor()
-    const retries = Reflect.apply(getTestRetries, this, arguments)
+    nativeRetryValue = undefined
+    computingNativeRetries = true
+    let retries
+    try {
+      retries = Reflect.apply(getTestRetries, this, arguments)
+    } finally {
+      computingNativeRetries = false
+    }
+    const value = unwrapBrowserRetries(nativeRetryValue)
+    const metadata = value && typeof value === 'object' && browserRetryObjects.get(value)
+    const state = cypressConfig.call(Cypress)
+    const interactive = browserRetryDescriptor(state, 'isInteractive')
+    const knownRoot = metadata && !hasNativeRetryValueAccessor(value, interactive && interactive.value)
+    const strategy = value && typeof value === 'object' && browserRetryDescriptor(value, 'experimentalStrategy')
+    const experimental = Boolean(strategy && 'value' in strategy && strategy.value)
     const test = Cypress.state('test')
-    if (test && typeof test === 'object') nativeAccessorBudgets.set(test, { accessor, retries })
+    if (test && typeof test === 'object') {
+      nativeAccessorBudgets.set(test, { accessor, retries, metadata: knownRoot && metadata, experimental })
+    }
     return retries
   }, getTestRetries)
 }
@@ -673,7 +705,14 @@ function getNativeRetryOverrides (test) {
 /** @param {object} test */
 function getNativeRetryBudget (test) {
   const computed = nativeAccessorBudgets.get(test)
-  if (computed && computed.accessor) return Number.isSafeInteger(computed.retries) ? computed.retries : 0
+  if (computed && computed.accessor) {
+    if (computed.metadata) {
+      reconcileBrowserRetryMetadata(computed.metadata)
+      const retries = nativeRetryCount(computed.metadata.native)
+      return Number.isSafeInteger(retries) ? retries : 0
+    }
+    return Number.isSafeInteger(computed.retries) ? computed.retries : 0
+  }
   if (!computed && typeof Cypress.getTestRetries === 'function' && hasNativeRetryAccessor()) {
     // Future runnables are provisional until Cypress computes their actual accessor budget.
     return Number.isSafeInteger(test._retries) ? test._retries : frameworkRetries
@@ -1155,7 +1194,7 @@ function installLifecycleHooks () {
         frameworkRetries = suiteConfig.frameworkRetries
         originalRetries = suiteConfig.originalRetries
         configuredRetries = suiteConfig.configuredRetries
-        const rawRetries = cypressConfig.call(Cypress, 'retries')
+        const rawRetries = peekBrowserRetries()
         const metadata = rawRetries && typeof rawRetries === 'object' && browserRetryObjects.get(rawRetries)
         if (metadata) initializeBrowserRetryMetadata(metadata)
         if (!hasBrowserRetries &&
@@ -1226,8 +1265,11 @@ function installLifecycleHooks () {
       ? { message: suppressedError.message, stack: suppressedError.stack }
       : currentTest.err
 
-    const activeRetries = Cypress.config('retries')
-    const nativeRetryFloor = activeRetries && activeRetries.experimentalStrategy ? getNativeRetryBudget(currentTest) : 0
+    const computed = nativeAccessorBudgets.get(currentTest)
+    const experimental = computed
+      ? computed.experimental
+      : initialBrowserRetries && initialBrowserRetries.experimentalStrategy
+    const nativeRetryFloor = isDynamicAtrEnabled && experimental ? getNativeRetryBudget(currentTest) : 0
     const testInfo = {
       nativeRetryFloor,
       testId: currentTest.id,
