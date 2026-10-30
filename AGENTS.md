@@ -3,39 +3,22 @@
 dd-trace-js is Datadog's tracing and observability library for Node.js.
 
 These instructions apply repository-wide. More specific instructions may exist in nested directories and take
-precedence within their scope. Read the relevant implementation and tests before editing; keep changes focused and
-do not modify unrelated behavior.
+precedence within their scope.
 
 ## Setup and Commands
 
-- Prerequisites: a Node.js version satisfying `package.json#engines` (`>=22` on `master`), yarn 1.x, and Docker
-  with Docker Compose for service-backed tests.
-- Use yarn only to install dependencies (`yarn add`, `yarn install`) and run `yarn services`.
+- Use a Node.js version satisfying `package.json#engines`; service-backed tests require Docker with Docker Compose.
+- Use yarn 1.x only to install dependencies (`yarn add`, `yarn install`) and run `yarn services`.
 - Use npm for scripts, tests, linting, builds, and all other commands: `npm run <script>`.
-- The root `npm test` is intentionally disabled. Run a specific `*.spec.js` file or targeted `test:<area>` script.
-
-## Repository Map
-
-- `packages/dd-trace/` — tracer implementation and product features
-- `packages/datadog-core/` — async context storage and shared utilities
-- `packages/datadog-instrumentations/` — third-party library instrumentation
-- `packages/datadog-plugin-*/` — integration plugins
-- `integration-tests/` — end-to-end and process-level tests
-- `benchmark/` — performance benchmarks
-- `scripts/` — repository and release tooling
-- `vendor/` — bundled dependencies
-
-Packages generally contain `src/` and `test/`; unit tests use the `*.spec.js` suffix.
+- Never run the root `npm test`; it is intentionally disabled. Use a targeted `test:<area>` script or spec below.
 
 ## Development Workflow
 
-1. Search for existing utilities and patterns before introducing another implementation.
-2. Read the relevant production code and existing tests to understand the real behavior.
-3. Choose the smallest clean solution. Ask before implementing when meaningful architectural trade-offs exist.
-4. Implement the change without unrelated refactors or new dependencies unless justified.
-5. Add or update tests for behavior changes, including failure cases and relevant edge cases.
-6. Run the narrowest relevant validation first, then broaden it when needed.
-7. Report the commands run and their results; do not claim validation that was not performed.
+1. Read the relevant implementation and tests; search for existing utilities before adding another implementation.
+2. Choose the smallest clean solution. Ask before implementing when meaningful architectural trade-offs exist.
+3. Keep changes focused. Justify new dependencies and refactors outside the requested behavior.
+4. Cover behavior changes, failure cases, and relevant edge cases. Run narrow validation first, then broaden as needed.
+5. Report the commands run and their results; do not claim validation that was not performed.
 
 Prefer composition and explicit contracts. Avoid new public APIs unless the use case requires a lasting contract.
 Do not expose internals or bend production code solely to make a test possible. Fix upstream issues upstream rather
@@ -43,30 +26,35 @@ than maintaining a local workaround when practical.
 
 ## Testing
 
-Run individual tests with:
+Run individual specs from the repository root:
 
 ```bash
 ./node_modules/.bin/mocha path/to/test.spec.js
 ./node_modules/.bin/mocha --timeout 60000 path/to/integration-test.spec.js
 ```
 
-Use `node scripts/mocha-run-file.js path/to/test.spec.js` when a spec must be the process entrypoint. Use `--grep`
-to narrow a test. Integration tests may require Docker, network access, and elevated sandbox permissions.
+Use `node scripts/mocha-run-file.js path/to/test.spec.js` when the spec must be the process entrypoint.
+Preserve required Node flags from the suite script, such as `--expose-gc`.
+Use the Mocha CLI `--grep` option to select test names.
+Integration tests may require Docker, network access, and elevated sandbox permissions.
 
-For plugin tests:
+Set `PLUGINS` explicitly. Clear inherited `SPEC` unless intentionally narrowing by filename prefix.
+Unset inherited `SERVICES` when the plugin requires no service.
+Clear exporter variables in the shell running each plugin command:
 
 ```bash
 unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
-PLUGINS="<name>" npm run test:plugins
+PLUGINS="<name>" npm run test:plugins:ci
 ```
 
-Use `SPEC` to narrow plugin specs. For service-backed plugins, find `<service>` in
-`.github/workflows/apm-integrations.yml`, then run:
-
-```bash
-docker compose up -d <service>
-SERVICES="<service>" PLUGINS="<name>" npm run test:plugins:ci
-```
+The `:ci` script runs `yarn services` to install versioned dependencies and check services before testing.
+After setup, use `PLUGINS="<name>" npm run test:plugins` to rerun without repeating dependency installation.
+For service-backed tests, find the CI job that runs the target spec under `.github/workflows/`.
+Match its test action or script, `PLUGINS`, and any `SPEC` filter.
+Start the job's services locally, using matching `docker-compose.yml` entries when available.
+Repeat any job-specific setup steps.
+Check `packages/dd-trace/test/setup/services.js` before setting the `SERVICES` filter.
+Run the job's test script with the required environment.
 
 `aerospike`, `couchbase`, `grpc`, and `oracledb` are incompatible with ARM64.
 
@@ -77,7 +65,8 @@ SERVICES="<service>" PLUGINS="<name>" npm run test:plugins:ci
 - Never rely on real time in unit tests; use sinon fake timers.
 - Test real entry points and observable output, not prototype-created instances or test-only production hooks.
 - A bug fix must cover the failure and untested sibling cases sharing the corrected path.
-- Scope coverage to changed production paths. Sandbox integration tests do not contribute to nyc coverage.
+- When a fix removes a path, assert its public absence or surviving behavior; do not recreate obsolete state to test it.
+- Scope coverage to changed production paths.
 
 See `CONTRIBUTING.md#testing` for detailed test conventions and service setup.
 
@@ -93,14 +82,10 @@ Every added or modified test must pass or be explicitly skipped under v5.
 - Comments should explain non-obvious intent, constraints, or trade-offs, not narrate the code.
 - Prefer `#private` fields for class-local state. Avoid accessors and large refactors of existing `_underscore` fields.
 - Never use `for-in`; use `for-of`, `for`, or `while` in production hot paths.
-- Call the product **Test Optimization** in new names and prose; retain legacy `ci-visibility` spellings only in
-  existing module paths and classes.
+- Use **Test Optimization** in repository-owned names/prose; preserve external names, ids, and cross-SDK terms.
 
-Group imports with blank lines and sort within each group:
-
-1. Node.js core modules using the `node:` prefix.
-2. Third-party modules.
-3. Internal modules, furthest path first.
+Group imports with blank lines: Node.js core modules with `node:`, third-party modules, then internal modules.
+Sort within groups, with internal modules ordered furthest path first. Preserve tracer-first loading where required.
 
 New methods require specific TypeScript-compatible JSDoc parameter types; modifying an existing method does not
 require adding JSDoc. Never use `@return`/`@returns` for primitive or `void` return types, and remove any such tag
@@ -111,15 +96,21 @@ satisfy static typing. Do not rewrite unrelated code only to improve its types.
 
 The tracer runs in user applications and hot paths:
 
-- Never crash a user application. Catch and log errors, then resume safely or disable the affected subsystem.
+- Tracer, instrumentation, and logging failures must not escape into or terminate customer applications. Invalid
+  configuration may disable a subsystem during initialization; partial initialization or recovery is not required
+  without a public contract. Preserve the application's own thrown, rejected, or callback error outcome.
 - Use `packages/dd-trace/src/log/index.js` with printf-style formatting; use callback formatting for expensive data.
-- Do not add promises or `async`/`await` to shipped production code. They are allowed in tests and worker threads.
+- Do not add promise machinery to synchronous library paths or inactive and hot paths. Inherently asynchronous APIs,
+  control-plane code, and worker threads may follow their upstream asynchronous contract; keep inactive paths cheap.
 - Avoid unnecessary allocations, closures, listeners, parsing, and per-call compilation. Cache reusable work.
 - Avoid try/catch in hot paths when inputs can be validated early.
-- Use `.once()` for one-shot events. Register process `beforeExit` work in
+- Use `.once()` for one terminal event on a conforming Node.js `EventEmitter`. Multiple terminal names need a shared
+  completion guard and cleanup. Do not defend against a non-conforming emitter without supported-source proof. Put
+  process `beforeExit` work in
   `globalThis[Symbol.for('dd-trace')].beforeExitHandlers`.
-- A performance-motivated complexity increase requires a focused, reproducible microbenchmark: keep the more readable
-  implementation within ~±2%, justify ~5% in the commit body, keep ≥10% reproducible wins with the numbers.
+- A performance-motivated complexity increase needs reproducible measurement. Prefer readable code within ~±2%,
+  and keep ≥5% reproducible wins with the numbers. Add a lasting benchmark only for a stable workload
+  that warrants a regression guard; otherwise record the temporary workload, runtime, baseline, candidate, and results.
 
 ## Backportability and Runtime Support
 
@@ -132,14 +123,15 @@ Update every supported public TypeScript surface for new public APIs unless the 
 
 ## Cross-Cutting Configuration Changes
 
-When adding configuration:
+For new top-level tracer options or environment variables, update these surfaces.
+Other settings update only their owning surfaces:
 
 1. Add the default in `packages/dd-trace/src/config/defaults.js`.
 2. Map the environment variable in `packages/dd-trace/src/config/index.js`.
-3. Update public TypeScript definitions in both supported surfaces when applicable.
+3. Update both supported public TypeScript surfaces when applicable.
 4. Add the telemetry name mapping in `packages/dd-trace/src/telemetry/telemetry.js` when applicable.
 5. Update `packages/dd-trace/src/config/supported-configurations.json`.
-6. Document non-internal, non-experimental options in `docs/API.md`.
+6. Document non-internal, non-experimental options in `docs/API.md` when it owns the public surface.
 7. Test the option in `packages/dd-trace/test/config/index.spec.js`.
 
 Use unit suffixes for size and time options, such as `timeoutMs`, `maxBytes`, and `intervalSeconds`.
@@ -173,8 +165,8 @@ Load the relevant repository skill when the task matches:
 - [LLMObs tests and VCR cassettes](.agents/skills/llmobs-testing/SKILL.md)
 - [Serverless platform integrations](.agents/skills/serverless-integrations/SKILL.md)
 
-New instrumentations belong in `packages/datadog-instrumentations/` and communicate with plugins through diagnostic
-channels. Validate new plugin structure with
+Instrumentations hook libraries and publish diagnostic-channel events; plugins own tracing behavior.
+Validate new plugin registration and structure with
 `./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js`.
 
 Use `dc-polyfill` for production diagnostic-channel imports. Do not import `node:diagnostics_channel` directly.
