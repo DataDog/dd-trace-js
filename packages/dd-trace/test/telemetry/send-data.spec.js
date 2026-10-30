@@ -57,6 +57,39 @@ describe('sendData', () => {
     assert.strictEqual(options.agent, undefined)
   })
 
+  it('passes the MicroVM identity controller to telemetry and fallback requests', () => {
+    const controller = {}
+    request.getIdentityRefreshController = sinon.stub().returns(controller)
+    request.onFirstCall().yields(new Error('agent unavailable'))
+    request.onSecondCall().yields(null)
+
+    sendDataModule.sendData({
+      DD_API_KEY: 'api-key',
+      site: 'datadoghq.com',
+      tags: { 'runtime-id': '123' },
+    }, application, host, 'req-type')
+
+    assert.strictEqual(request.firstCall.args[1].resetController, controller)
+    assert.strictEqual(request.secondCall.args[1].resetController, controller)
+  })
+
+  it('does not retry telemetry after an identity refresh cancellation', () => {
+    const controller = {}
+    const error = Object.assign(new Error('identity refreshed'), { code: 'ERR_DD_IDENTITY_REFRESH' })
+    request.getIdentityRefreshController = sinon.stub().returns(controller)
+    request.onFirstCall().yields(error)
+    const callback = sinon.spy()
+
+    sendDataModule.sendData({
+      DD_API_KEY: 'api-key',
+      site: 'datadoghq.com',
+      tags: { 'runtime-id': '123' },
+    }, application, host, 'req-type', {}, callback)
+
+    sinon.assert.calledOnce(request)
+    sinon.assert.calledOnceWithExactly(callback, null, { payload: {}, reqType: 'req-type' })
+  })
+
   it('sends telemetry to the configured socket url', () => {
     sendDataModule.sendData({
       url: 'unix:/foo/bar/baz',
