@@ -247,6 +247,7 @@
     "vite": "8.3.5",
     "vitest": "5.0.5",
     "webdriverio": "10.1.0",
+    "webpack": "5.112.2",
     "when": "3.7.8",
     "winston": "3.19.0",
     "workerpool": "10.0.3",
