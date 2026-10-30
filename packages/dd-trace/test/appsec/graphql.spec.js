@@ -55,7 +55,7 @@ describe('GraphQL', () => {
     sinon.stub(waf, 'wafManager').value({
       getWAFContext: sinon.stub().returns({
         knownAddresses: new Set([addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]),
-        canSkipEmptyGraphqlResolvers: () => false,
+        skipEmptyGraphqlResolvers: false,
       }),
     })
 
@@ -163,7 +163,7 @@ describe('GraphQL', () => {
     })
 
     it('should pass the request context policy to the resolver materializer', () => {
-      waf.wafManager.getWAFContext().canSkipEmptyGraphqlResolvers = () => true
+      waf.wafManager.getWAFContext().skipEmptyGraphqlResolvers = true
       const message = createResolverMessage(null)
 
       startGraphqlResolver.publish(message)

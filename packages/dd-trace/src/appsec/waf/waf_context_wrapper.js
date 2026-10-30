@@ -12,16 +12,13 @@ const preventDuplicateAddresses = new Set([
 ])
 
 class WAFContextWrapper {
-  #skipEmptyGraphqlResolvers
-  #extractSchema = false
-
   constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion, knownAddresses, skipEmptyGraphqlResolvers = false) {
     this.ddwafContext = ddwafContext
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
     this.knownAddresses = knownAddresses
-    this.#skipEmptyGraphqlResolvers = skipEmptyGraphqlResolvers
+    this.skipEmptyGraphqlResolvers = skipEmptyGraphqlResolvers
     this.addressesToSkip = new Set()
     this.cachedUserIdResults = new Map()
     // Reused across run() calls; Reporter.reportMetrics consumes it synchronously.
@@ -38,10 +35,6 @@ class WAFContextWrapper {
       maxTruncatedContainerSize: null,
       maxTruncatedContainerDepth: null,
     }
-  }
-
-  canSkipEmptyGraphqlResolvers () {
-    return this.#skipEmptyGraphqlResolvers && !this.#extractSchema
   }
 
   run ({ persistent, ephemeral }, raspRule, req, rootSpan) {
@@ -66,7 +59,6 @@ class WAFContextWrapper {
 
     const payload = {}
     let payloadHasData = false
-    const extractSchema = persistent?.[addresses.WAF_CONTEXT_PROCESSOR]?.['extract-schema'] ?? this.#extractSchema
     // Cloned lazily; only the preventDuplicateAddresses branch below adds to it.
     let newAddressesToSkip
 
@@ -148,7 +140,6 @@ class WAFContextWrapper {
       if (newAddressesToSkip !== undefined) {
         this.addressesToSkip = newAddressesToSkip
       }
-      this.#extractSchema = extractSchema
 
       const ruleTriggered = !!result.events?.length
 

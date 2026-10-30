@@ -2252,12 +2252,21 @@ describe('Plugin', () => {
           it(`should apply the empty resolver policy ${skipEmpty} without dropping values`, async () => {
             const payloadSchema = graphql.buildSchema(`
               directive @marker(value: String) on FIELD
+              directive @flag(value: Boolean) on FIELD
+              directive @include(if: Boolean!, payload: String) on FIELD
               type Query { empty: String argument(value: Int): String defaulted(value: Int = 0): String }
             `)
-            const document = graphql.parse(`query EmptyResolverPolicy {
+            const document = graphql.parse(`query EmptyResolverPolicy($include: Boolean!) {
               empty
               marked: empty @marker(value: "kept")
               unmarked: empty @marker
+              included: empty @include(if: true)
+              notSkipped: empty @skip(if: false)
+              excluded: empty @include(if: false)
+              skipped: empty @skip(if: true)
+              variable: empty @include(if: $include)
+              extended: empty @include(if: true, payload: "kept")
+              flagged: empty @flag(value: true)
               argument(value: null)
               defaulted
             }`)
@@ -2269,11 +2278,24 @@ describe('Plugin', () => {
 
             channel.subscribe(onResolver)
             try {
-              const result = await graphql.execute({ schema: payloadSchema, document, rootValue })
+              const result = await graphql.execute({
+                schema: payloadSchema, document, rootValue, variableValues: { include: true },
+              })
               assert.strictEqual(result.errors, undefined)
               assertObjectContains(result.data, {
-                empty: 'ok', marked: 'ok', unmarked: 'ok', argument: 'ok', defaulted: 'ok',
+                empty: 'ok',
+                marked: 'ok',
+                unmarked: 'ok',
+                argument: 'ok',
+                defaulted: 'ok',
+                included: 'ok',
+                notSkipped: 'ok',
+                variable: 'ok',
+                extended: 'ok',
+                flagged: 'ok',
               })
+              assert.strictEqual(result.data.excluded, undefined)
+              assert.strictEqual(result.data.skipped, undefined)
             } finally {
               channel.unsubscribe(onResolver)
             }
@@ -2282,6 +2304,11 @@ describe('Plugin', () => {
               skipEmpty ? null : { empty: {} },
               { empty: { marker: { value: 'kept' } } },
               skipEmpty ? null : { empty: {} },
+              skipEmpty ? null : { empty: { include: { if: true } } },
+              skipEmpty ? null : { empty: { skip: { if: false } } },
+              { empty: { include: { if: undefined } } },
+              { empty: { include: { if: true, payload: 'kept' } } },
+              { empty: { flag: { value: true } } },
               { argument: { value: null } },
               { defaulted: { value: 0 } },
             ])
