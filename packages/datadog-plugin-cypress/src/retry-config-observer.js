@@ -134,7 +134,8 @@ module.exports = function observeRetryConfig (config, onChange, options) {
       }
     }
     // A detached alias updates only its own provenance until that root is selected again.
-    if (metadata.raw === unwrap(config.retries)) notify(metadata.raw, path, metadata)
+    const selected = Object.getOwnPropertyDescriptor(config, 'retries')?.value
+    if (metadata.raw === unwrap(selected)) notify(metadata.raw, path, metadata)
     else refreshNative(metadata)
   }
   /**

@@ -1518,3 +1518,47 @@ describe('Cypress retries introduced by Native JSON conversion', () => {
     }
   })
 })
+
+describe('Cypress IPC JSON property context', () => {
+  for (const nested of [false, true]) {
+    it(`preserves native toJSON property keys (nested retries=${nested})`, () => {
+      const build = () => {
+        const keys = []
+        const retries = nested
+          ? {
+              toJSON (key) {
+                keys.push(key)
+                return { runMode: key === 'retries' ? 2 : 0 }
+              },
+            }
+          : 2
+        const config = {
+          toJSON (key) {
+            keys.push(key)
+            return { retries: key === 'setupConfig' ? retries : 0 }
+          },
+        }
+        return { config, keys }
+      }
+      const native = build()
+      const message = config => ({ event: 'setupTestingType:reply', args: [{ setupConfig: config }] })
+      const expected = JSON.parse(JSON.stringify(message(native.config)))
+      const sdk = build()
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+      let wire
+      let observed
+      process.send = reply => { wire = JSON.parse(JSON.stringify(reply)) }
+      const observer = observeRetryConfig({ retries: 0 }, value => { observed = value })
+      try {
+        process.send(message(sdk.config))
+        assert.deepStrictEqual(wire, expected)
+        assert.deepStrictEqual(observed, expected.args[0].setupConfig.retries)
+        assert.deepStrictEqual(sdk.keys, native.keys)
+      } finally {
+        observer.stop(false)
+        if (descriptor) Object.defineProperty(process, 'send', descriptor)
+        else delete process.send
+      }
+    })
+  }
+})
