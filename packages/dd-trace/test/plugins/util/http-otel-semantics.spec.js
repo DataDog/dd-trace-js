@@ -89,18 +89,19 @@ describe('http-otel-semantics', () => {
         {
           'span.kind': 'server',
           'http.method': 'GET',
-          'http.url': 'http://localhost:8080/u?x=1',
+          'http.url': 'http://localhost:8080/users/123?x=1',
           'http.status_code': '500',
           'http.useragent': 'ua',
           'http.client_ip': '1.2.3.4',
-          'http.endpoint': '/u',
+          'http.route': '/users/:id',
+          'http.endpoint': '/users/{param:int}',
         },
         {},
         1
       )
 
       assert.strictEqual(meta['http.request.method'], 'GET')
-      assert.strictEqual(meta['url.path'], '/u')
+      assert.strictEqual(meta['url.path'], '/users/123')
       assert.strictEqual(meta['url.scheme'], 'http')
       assert.strictEqual(meta['url.query'], 'x=1')
       assert.strictEqual(meta['server.address'], 'localhost')
@@ -110,7 +111,8 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(metrics['http.response.status_code'], 500)
       assert.strictEqual(meta['error.type'], '500')
       assert.ok(!('http.url' in meta))
-      assert.strictEqual(meta['http.endpoint'], '/u')
+      assert.strictEqual(meta['http.route'], '/users/:id')
+      assert.strictEqual(meta['http.endpoint'], '/users/{param:int}')
       assert.ok(!('http.useragent' in meta))
       assert.ok(!('http.client_ip' in meta))
     })
