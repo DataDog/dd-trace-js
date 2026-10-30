@@ -12,6 +12,9 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 const { getCypressDependencies } = require('./dependencies')
+const createExclusionsShard = require('./exclusions-shard')
+
+const it = createExclusionsShard(global.it)
 
 const version = process.env.CYPRESS_VERSION || '14.5.4'
 const moduleType = process.env.CYPRESS_MODULE_TYPE || 'commonJS'
