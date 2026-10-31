@@ -3233,12 +3233,12 @@ declare namespace tracer {
      */
     interface prisma extends PrismaClient, PrismaEngine {
       /**
-       * Configuration for prisma client.
+       * Configuration for prisma client. Set to `false` to skip `prisma.client` spans.
        */
       client?: PrismaClient | boolean,
 
       /**
-       * Configuration for Prisma engine.
+       * Configuration for Prisma engine. Set to `false` to skip `prisma.engine` spans.
        */
       engine?: PrismaEngine | boolean
     }
