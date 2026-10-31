@@ -505,6 +505,8 @@ tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('supabase');
 tracer.use('tedious');
+tracer.use('typesafe');
+tracer.use('typesafe', { llmobs: false });
 tracer.use('undici');
 tracer.use('vitest');
 tracer.use('vitest', { service: 'vitest-service' });
@@ -954,6 +956,7 @@ llmobs.annotate(span, {
 
 // declare an agent
 const agentDeclaration: import('..').llmobs.Agent = {
+  version: '2.1.0',
   name: 'travel_desk',
   instructions: 'Book travel.',
   model: 'gpt-4o',
@@ -965,6 +968,11 @@ const agentDeclaration: import('..').llmobs.Agent = {
 }
 llmobs.annotate({ agent: agentDeclaration })
 llmobs.annotationContext({ agent: agentDeclaration }, () => {})
+llmobs.annotate({ agent: { version: '2.1.1' } })
+llmobs.trace({ kind: 'agent', name: 'travel_desk', version: '2.1.0' }, () => {})
+llmobs.wrap({ kind: 'agent', version: '2.1.0' }, () => {})
+// @ts-expect-error An agent version must be a string, so it is reported exactly as written.
+llmobs.wrap({ kind: 'agent', version: 2 }, () => {})
 
 
 

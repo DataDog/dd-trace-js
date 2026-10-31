@@ -1165,6 +1165,15 @@
         "namespace": "featureFlags"
       }
     ],
+    "DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "description": "Enable Feature Flagging exposure delivery to Datadog independently of flag evaluation and evaluation telemetry.",
+        "namespace": "featureFlags"
+      }
+    ],
     "DD_FLAGGING_EVALUATION_COUNTS_ENABLED": [
       {
         "implementation": "A",
@@ -4382,6 +4391,13 @@
       }
     ],
     "DD_TRACE_TEDIOUS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_TYPESAFE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

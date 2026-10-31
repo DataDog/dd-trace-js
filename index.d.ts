@@ -218,6 +218,7 @@ interface Tracer extends opentracing.Tracer {
    * @env DD_FEATURE_FLAGS_ENABLED
    * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
    * @env DD_FLAGGING_EVALUATION_COUNTS_ENABLED
+   * @env DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED
    */
   openfeature: tracer.OpenFeatureProvider;
 
@@ -365,6 +366,7 @@ interface Plugins {
   "sharedb": tracer.plugins.sharedb;
   "supabase": tracer.plugins.supabase;
   "tedious": tracer.plugins.tedious;
+  "typesafe": tracer.plugins.typesafe;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
   "web": tracer.plugins.web;
@@ -3503,6 +3505,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [@typesafe-ai/sdk](https://www.npmjs.com/package/@typesafe-ai/sdk) module.
+     */
+    interface typesafe extends Instrumentation, LLMObsIntegration {}
+
+    /**
+     * This plugin automatically instruments the
      * [undici](https://github.com/nodejs/undici) module.
      */
     interface undici extends HttpClient {}
@@ -5027,11 +5035,14 @@ declare namespace tracer {
     }
 
     /**
-     * Declares the agent an `agent` span represents, reported as the agent's manifest. Only applies to
-     * `agent` spans. Unreportable values are dropped with a warning, and unset values (`undefined`, `null`,
-     * `''`, `[]`) leave what an earlier annotation declared in place.
+     * Declares the agent an `agent` span represents. `version` is set as an `agent_version` tag on the agent
+     * span and its child spans within the same process. The other fields are reported as the agent's manifest.
+     * Only applies to `agent` spans. Unreportable values are dropped with a warning, and unset values
+     * (`undefined`, `null`, `''`, `[]`) leave what an earlier annotation declared in place.
      */
     interface Agent {
+      /** The version of the agent. Must not contain a comma. */
+      version?: string,
       /** The agent's name. Defaults to the agent span's name. */
       name?: string,
       /** The system instructions the agent runs with. */
@@ -5126,8 +5137,8 @@ declare namespace tracer {
       prompt?: Prompt,
 
       /**
-       * Declares the agent running in this context, read when the context is entered. The manifest is
-       * reported on every `agent` span in the context, nested ones included. Use `annotate` on a nested agent
+       * Declares the agent running in this context, read when the context is entered. The version and manifest
+       * are reported on every `agent` span in the context, nested ones included. Use `annotate` on a nested agent
        * span to declare its own agent.
        */
       agent?: Agent,
@@ -5188,6 +5199,13 @@ declare namespace tracer {
        * If not provided for LLM or embedding spans, a default value of 'custom' will be set.
        */
       modelProvider?: string,
+
+      /**
+       * The version of the agent, set as an `agent_version` tag on the agent span and its child spans within the
+       * same process. Must not contain a comma. Only used on `agent` spans, and wins over a version declared by an
+       * enclosing `annotationContext`.
+       */
+      version?: string,
     }
 
     interface LLMObsNamedSpanOptions extends LLMObsSpanOptions {

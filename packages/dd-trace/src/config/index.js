@@ -12,6 +12,7 @@ const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to 
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const log = require('../log')
+const { warn } = require('../log/writer')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
@@ -25,6 +26,7 @@ const {
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
+const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -199,6 +201,12 @@ class Config extends ConfigBase {
    * @type {Record<string, string>}
    */
   #parsedDdTags
+
+  /**
+   * Options already explained as deactivated, so recalculating the config doesn't repeat the explanation
+   * @type {Set<ConfigPath>}
+   */
+  #explainedDeactivations = new Set()
 
   /**
    * @type {Record<string, string>}
@@ -761,10 +769,41 @@ class Config extends ConfigBase {
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
     }
 
+    const unsupportedRuntime = getUnsupportedRuntime()
+    if (unsupportedRuntime !== undefined) {
+      this.#deactivateOnUnsupportedRuntime(
+        'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED',
+        `Live Debugger/Dynamic Instrumentation is disabled, because it is not supported on ${unsupportedRuntime}.`
+      )
+      this.#deactivateOnUnsupportedRuntime(
+        'testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED',
+        'Failed Test Replay is disabled, ' +
+          `because Live Debugger/Dynamic Instrumentation is not supported on ${unsupportedRuntime}.`
+      )
+    }
+
     // Single tags update is tracked as a calculated value.
     setAndTrack(this, 'tags', this.tags)
 
     telemetry.updateConfig([...configWithOrigin.values()], this)
+  }
+
+  /**
+   * Only explains the deactivation of an option that was explicitly set, since Failed Test Replay is enabled by
+   * default.
+   *
+   * @param {ConfigPath} name
+   * @param {string} reason
+   */
+  #deactivateOnUnsupportedRuntime (name, reason) {
+    if (!get(this, name)) return
+
+    if (this.startupLogs && trackedConfigOrigins.has(name) && !this.#explainedDeactivations.has(name)) {
+      this.#explainedDeactivations.add(name)
+      // `log.warn` only prints with debug logging enabled, so write the diagnostic like the startup logs do
+      warn(`DATADOG TRACER DIAGNOSTIC - ${reason}`)
+    }
+    setAndTrack(this, name, false)
   }
 }
 

@@ -33,7 +33,7 @@ class Turn {
   textEnd
   completionId
   metrics = { input_tokens: 0, output_tokens: 0, total_tokens: 0 }
-  missingAudioMetrics = new Set()
+  missingModalityMetrics = new Set()
   emitted = false
 }
 
@@ -86,7 +86,9 @@ class SonicSession {
   #sessionId = randomUUID()
   #providerSessionId
   #totals = { input_tokens: 0, output_tokens: 0 }
-  #audioTotals = { input: 0, output: 0 }
+  #modalityTotals = {
+    input_audio_tokens: 0, output_audio_tokens: 0, input_text_tokens: 0, output_text_tokens: 0,
+  }
 
   /** @param {(descriptor: object) => void} emit */
   constructor (emit) {
@@ -389,21 +391,28 @@ class SonicSession {
       target.metrics[key] += delta
       target.metrics.total_tokens += delta
 
-      // Speech usage is a subset of these totals, never another charge to total_tokens.
-      const audioKey = `${direction}_audio_tokens`
-      const audioTotal = data.details?.total?.[direction]?.speechTokens
-      const previous = this.#audioTotals[direction]
-      const valid = Number.isSafeInteger(audioTotal) && audioTotal >= 0 && audioTotal <= total &&
-        (previous === undefined || audioTotal >= previous)
-      const audioDelta = valid && previous !== undefined ? audioTotal - previous : undefined
-      this.#audioTotals[direction] = valid ? audioTotal : delta ? undefined : previous
-      if (audioDelta === undefined || audioDelta > delta) {
-        if (delta || audioDelta > delta) {
-          target.missingAudioMetrics.add(audioKey)
-          delete target.metrics[audioKey]
+      // Each modality is a subset of the aggregate and has its own cumulative baseline.
+      // Missing text must not discard valid speech or charge a previous turn's gap.
+      let remaining = delta
+      for (const [modality, field] of [['audio', 'speechTokens'], ['text', 'textTokens']]) {
+        const modalityKey = `${direction}_${modality}_tokens`
+        const modalityTotal = data.details?.total?.[direction]?.[field]
+        const previous = this.#modalityTotals[modalityKey]
+        const valid = Number.isSafeInteger(modalityTotal) && modalityTotal >= 0 && modalityTotal <= total &&
+          (previous === undefined || modalityTotal >= previous)
+        const modalityDelta = valid && previous !== undefined ? modalityTotal - previous : undefined
+        this.#modalityTotals[modalityKey] = valid ? modalityTotal : delta ? undefined : previous
+        if (modalityDelta === undefined || modalityDelta > remaining) {
+          if (delta || modalityDelta > remaining) {
+            target.missingModalityMetrics.add(modalityKey)
+            delete target.metrics[modalityKey]
+          }
+        } else {
+          remaining -= modalityDelta
+          if (!target.missingModalityMetrics.has(modalityKey)) {
+            target.metrics[modalityKey] = (target.metrics[modalityKey] ?? 0) + modalityDelta
+          }
         }
-      } else if (!target.missingAudioMetrics.has(audioKey)) {
-        target.metrics[audioKey] = (target.metrics[audioKey] ?? 0) + audioDelta
       }
     }
   }
