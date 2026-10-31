@@ -476,6 +476,7 @@ tracer.use('postgres', { dbmPropagationMode: 'invalid' });
 tracer.use('postgres', { truncate: true });
 tracer.use('postgres', { truncate: 5000 });
 tracer.use('prisma');
+tracer.use('prisma', { client: false, engine: false });
 tracer.use('protobufjs');
 tracer.use('react-router');
 tracer.use('react-router', { measured: true });

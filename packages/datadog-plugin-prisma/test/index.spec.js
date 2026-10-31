@@ -226,6 +226,25 @@ describe('Plugin', () => {
       assert.strictEqual(started.length, 0)
     })
 
+    it('dispatchEngineSpans should not start engine spans when engine is disabled', () => {
+      const DatadogTracingHelper = getHelperClass()
+      /** @type {Array<unknown>} */
+      const started = []
+
+      const prismaClient = {
+        config: { engine: false },
+        startEngineSpan: (ctx) => started.push(ctx),
+      }
+      const helper = new DatadogTracingHelper({ database: 'db' }, prismaClient)
+
+      helper.dispatchEngineSpans([
+        { id: '1', parentId: null, name: 'prisma:engine:query' },
+        { id: '2', parentId: '1', name: 'prisma:engine:db_query' },
+      ])
+
+      assert.strictEqual(started.length, 0)
+    })
+
     it('runInChildSpan should use tracePromise for allowed non-serialize operations', () => {
       /** @type {Array<{ type: string, ctx?: { resourceName?: string, attributes?: Record<string, unknown> } }>} */
       const calls = []
@@ -293,6 +312,38 @@ describe('Plugin', () => {
 
       assert.strictEqual(result, 'ok')
       assert.strictEqual(calls.length, 0)
+    })
+
+    it('runInChildSpan should bypass tracing when client is disabled', () => {
+      /** @type {Array<{ type: string }>} */
+      const calls = []
+      const DatadogTracingHelper = getHelperClass({
+        tracePromise: () => { calls.push({ type: 'promise' }) },
+        traceSync: () => { calls.push({ type: 'sync' }) },
+      })
+
+      const helper = new DatadogTracingHelper(undefined, { config: { client: false } })
+
+      assert.strictEqual(helper.runInChildSpan({ name: 'operation' }, () => 'ok'), 'ok')
+      assert.strictEqual(helper.runInChildSpan({ name: 'serialize' }, () => 'ok'), 'ok')
+      assert.strictEqual(calls.length, 0)
+    })
+
+    it('getTraceParent should still return a sampled traceparent when engine and client are disabled', () => {
+      const DatadogTracingHelper = getHelperClass()
+      const helper = new DatadogTracingHelper(undefined, { config: { client: false, engine: false } })
+
+      const span = {
+        _spanContext: {
+          _sampling: {},
+          toTraceId: () => '00000000000000000000000000000001',
+          toSpanId: () => '0000000000000001',
+        },
+      }
+
+      storage('legacy').enterWith({ span })
+
+      assert.strictEqual(helper.getTraceParent(), '00-00000000000000000000000000000001-0000000000000001-01')
     })
 
     it('runInChildSpan should bypass tracing when operation is not in the allowlist', () => {
@@ -590,6 +641,84 @@ describe('Plugin', () => {
         })
 
         describe('with configuration', () => {
+          /**
+           * @param {Array<Array<{ name: string }>>} traces
+           * @param {string} name
+           */
+          function assertNoSpanNamed (traces, name) {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === name) {
+                  throw new Error(`Unexpected ${name} span`)
+                }
+              }
+            }
+          }
+
+          describe('with engine spans disabled', () => {
+            before(async function () {
+              this.timeout(10000)
+              await agent.load(['prisma', 'pg'], { engine: false })
+              prisma = loadPrismaModule(config, range)
+              prismaClient = createPrismaClient(prisma, config)
+              tracingHelper = prismaClient._tracingHelper
+            })
+
+            after(() => { return agent.close() })
+
+            it('should keep client spans and not create engine spans', async () => {
+              const noEngineSpans = agent.assertNoTraces(traces => {
+                assertNoSpanNamed(traces, expectedSchema.engine.opName)
+              })
+              const clientSpan = agent.assertFirstTraceSpan({
+                name: expectedSchema.client.opName,
+                resource: 'queryRaw',
+              }, { spanResourceMatch: /^queryRaw$/ })
+
+              await Promise.all([
+                prismaClient.$queryRaw`SELECT 1`,
+                // Engine spans reported by Prisma must be dropped regardless of the engine type in use.
+                tracingHelper.dispatchEngineSpans([{
+                  id: '1',
+                  parentId: null,
+                  name: 'prisma:engine:query',
+                  startTime: [1745340876, 436692000],
+                  endTime: [1745340876, 438653250],
+                  kind: 'internal',
+                }]),
+                clientSpan,
+                noEngineSpans,
+              ])
+            })
+          })
+
+          describe('with client spans disabled', () => {
+            before(async function () {
+              this.timeout(10000)
+              await agent.load(['prisma', 'pg'], { client: false })
+              prisma = loadPrismaModule(config, range)
+              prismaClient = createPrismaClient(prisma, config)
+            })
+
+            after(() => { return agent.close() })
+
+            it('should keep the database span and not create client spans', async () => {
+              const noClientSpans = agent.assertNoTraces(traces => {
+                assertNoSpanNamed(traces, expectedSchema.client.opName)
+              })
+              const databaseSpan = agent.assertFirstTraceSpan({
+                name: config.v7 ? 'pg.query' : expectedSchema.engine.opName,
+                resource: 'SELECT 1',
+              }, { spanResourceMatch: /^SELECT 1$/ })
+
+              await Promise.all([
+                prismaClient.$queryRaw`SELECT 1`,
+                databaseSpan,
+                noClientSpans,
+              ])
+            })
+          })
+
           describe('with custom service name', () => {
             before(async function () {
               this.timeout(10000)
