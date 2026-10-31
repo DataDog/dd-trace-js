@@ -1,15 +1,13 @@
 'use strict'
 
-const { types: { isProxy } } = require('node:util')
-
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
+const { copyHandlerMetadata, getDataProperty } =
+  require('../../../datadog-instrumentations/src/helpers/lambda-handler')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const log = require('../log')
 const { ImpendingTimeout } = require('./runtime/errors')
 const { extractContext } = require('./context')
 
-const HANDLER_STREAMING = Symbol.for('aws.lambda.runtime.handler.streaming')
-const HANDLER_HIGHWATERMARK = Symbol.for('aws.lambda.runtime.handler.streaming.highWaterMark')
 const BEFORE_EXIT = Symbol.for('aws.lambda.beforeExit')
 const timeoutChannel = channel('apm:aws:lambda:timeout')
 const monitoredContexts = new WeakSet()
@@ -69,7 +67,7 @@ function crashFlush () {
  * Monitors an AWS Lambda handler for impending timeouts without creating a span.
  *
  * @param {Function} lambdaHandler a Lambda handler function.
- * @param {boolean} normalized whether datadog-lambda-js owns completion selection.
+ * @param {boolean} normalized whether a completion adapter owns completion selection.
  */
 exports.datadog = function datadog (lambdaHandler, normalized = false) {
   function monitored (...args) {
@@ -171,28 +169,7 @@ exports.datadog = function datadog (lambdaHandler, normalized = false) {
 
   if (normalized) return monitored
 
-  // datadog-lambda-js uses arity and the runtime's streaming metadata to choose how to invoke the handler.
-  Object.defineProperty(monitored, 'length', { value: getDataProperty(lambdaHandler, 'length') ?? 0 })
-  for (const name of [HANDLER_STREAMING, HANDLER_HIGHWATERMARK, '_ddWrapped']) {
-    const value = getDataProperty(lambdaHandler, name)
-    if (value !== undefined) monitored[name] = value
-  }
-  if (!isProxy(lambdaHandler)) {
-    for (const name of Reflect.ownKeys(lambdaHandler)) {
-      if (name === 'arguments' || name === 'caller') continue
-      const descriptor = Object.getOwnPropertyDescriptor(lambdaHandler, name)
-      if (!Object.hasOwn(descriptor, 'value')) continue
-      const existing = Object.getOwnPropertyDescriptor(monitored, name)
-      if (existing?.configurable === false) {
-        // Intrinsic function slots such as prototype cannot change their descriptor shape.
-        if (existing.writable) {
-          Object.defineProperty(monitored, name, { value: descriptor.value, writable: descriptor.writable })
-        }
-      } else {
-        Object.defineProperty(monitored, name, descriptor)
-      }
-    }
-  }
+  copyHandlerMetadata(lambdaHandler, monitored)
   return monitored
 }
 
@@ -224,20 +201,5 @@ function onCompletion (callback, clear) {
   return function (...args) {
     clear()
     return Reflect.apply(callback, this, args)
-  }
-}
-
-/**
- * Reads metadata without executing application getters or Proxy traps.
- *
- * @param {unknown} target
- * @param {string | symbol} name
- */
-function getDataProperty (target, name) {
-  if (target === null || (typeof target !== 'object' && typeof target !== 'function')) return
-  while (target !== null && !isProxy(target)) {
-    const descriptor = Object.getOwnPropertyDescriptor(target, name)
-    if (descriptor) return descriptor.value
-    target = Object.getPrototypeOf(target)
   }
 }
