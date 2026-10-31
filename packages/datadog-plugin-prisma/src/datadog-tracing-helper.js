@@ -56,7 +56,7 @@ class DatadogTracingHelper {
    * @param {object[]} spans
    */
   dispatchEngineSpans (spans) {
-    if (!spans?.length) {
+    if (!spans?.length || this.#prismaClient.config?.engine === false) {
       return
     }
     const childrenByParent = new Map()
@@ -90,7 +90,9 @@ class DatadogTracingHelper {
    * @returns {unknown}
    */
   runInChildSpan (options, callback) {
-    if (!clientCH.start?.hasSubscribers) {
+    // Skipping here rather than in the plugin's `bindStart` avoids finishing the parent span, which
+    // `finish()` would fall back to when no client span was started.
+    if (!clientCH.start?.hasSubscribers || this.#prismaClient.config?.client === false) {
       return callback.apply(this, arguments)
     }
     if (typeof options === 'string') {
