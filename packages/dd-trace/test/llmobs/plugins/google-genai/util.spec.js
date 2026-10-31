@@ -19,6 +19,35 @@ describe('google-genai llmobs util', () => {
       assert.deepStrictEqual(metrics, { inputTokens: 5, outputTokens: 7, totalTokens: 20 })
     })
 
+    it('counts thinking tokens in outputTokens and reports them as reasoningOutputTokens', () => {
+      const metrics = extractMetrics({
+        usageMetadata: {
+          promptTokenCount: 5,
+          candidatesTokenCount: 7,
+          thoughtsTokenCount: 30,
+          totalTokenCount: 42,
+        },
+      })
+      assert.deepStrictEqual(metrics, {
+        inputTokens: 5,
+        outputTokens: 37,
+        totalTokens: 42,
+        reasoningOutputTokens: 30,
+      })
+    })
+
+    it('counts tool-use prompt tokens in inputTokens and reports cached tokens as cacheReadTokens', () => {
+      const metrics = extractMetrics({
+        usageMetadata: {
+          promptTokenCount: 5,
+          toolUsePromptTokenCount: 4,
+          cachedContentTokenCount: 3,
+          candidatesTokenCount: 7,
+        },
+      })
+      assert.deepStrictEqual(metrics, { inputTokens: 9, outputTokens: 7, totalTokens: 16, cacheReadTokens: 3 })
+    })
+
     it('omits totalTokens when no token counts are present', () => {
       assert.deepStrictEqual(extractMetrics({ usageMetadata: {} }), {})
     })
