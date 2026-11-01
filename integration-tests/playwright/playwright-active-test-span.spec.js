@@ -169,17 +169,6 @@ versions.forEach((version) => {
       // Playwright 1.64 builds hook step stacks from hook.location. The afterEach hook injected by Test
       // Optimization used to have no location, which crashed the worker when the trace was retained.
       it('does not crash when the injected hook has a retained trace', async (receiver, run) => {
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.strictEqual(tests.length, 2)
-            for (const test of tests) {
-              assert.strictEqual(test.meta[TEST_STATUS], 'pass', test.meta[ERROR_MESSAGE])
-            }
-          })
-
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js injected-hook-location-test.js',
           {
@@ -188,9 +177,22 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: './ci-visibility/playwright-tests-hook-location',
               PLAYWRIGHT_WORKERS: '1',
+              // Parallel scenarios share the sandbox. Playwright removes the output dir on startup and the
+              // worker artifacts dir on exit, which would delete this run's trace files while they are written.
+              PLAYWRIGHT_OUTPUT_DIR: './test-results-injected-hook-location',
             },
           }
         )
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(proc, ({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(tests.length, 2)
+            for (const test of tests) {
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass', test.meta[ERROR_MESSAGE])
+            }
+          }, { hardTimeout: 70_000 })
 
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), receiverPromise])
 

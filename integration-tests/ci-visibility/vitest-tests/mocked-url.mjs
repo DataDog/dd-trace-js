@@ -1,3 +1,4 @@
+import tracer from 'dd-trace'
 import { afterEach, describe, test, vi } from 'vitest'
 
 describe('mocked global URL', () => {
@@ -5,12 +6,11 @@ describe('mocked global URL', () => {
     vi.unstubAllGlobals()
   })
 
-  test('continues reporting while DogStatsD telemetry is flushed', async () => {
+  test('continues reporting while DogStatsD is disabled', () => {
     vi.stubGlobal('URL', () => {})
 
-    // Keep the mock active across the automatic 10-second CustomMetrics telemetry flush.
-    await new Promise(resolve => setTimeout(resolve, 11_000))
-  }, 15_000)
+    tracer.dogstatsd.flush()
+  })
 
   test('preserves the original test failure', () => {
     vi.stubGlobal('URL', () => {})

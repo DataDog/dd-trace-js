@@ -37,6 +37,7 @@ describe('AIGuard SDK', () => {
     flushInterval: 0,
     service: 'ai_guard_demo',
     env: 'test',
+    version: '1.0.0',
     DD_API_KEY: 'API_KEY',
     DD_APP_KEY: 'APP_KEY',
     protocolVersion: '0.4',
@@ -677,6 +678,431 @@ describe('AIGuard SDK', () => {
       assert.ok(!Object.hasOwn(span.meta, 'ai_guard.redacted'))
       assert.deepStrictEqual(msgpack.decode(span.meta_struct.ai_guard), { messages })
     }, { rejectFirst: true })
+  })
+
+  describe('extra_tags and extra_metastruct', () => {
+    const messages = [{ role: 'user', content: 'What is 2 + 2' }]
+    const evaluateId = '8f1c6a52-0a43-4c3e-9b8e-2d6f4f1e7a90'
+    const fields = ['extra_tags', 'extra_metastruct']
+
+    // The backend sends lists of key/value entries because dotted keys are not valid JSON:API members.
+    const kv = (mapping) => Object.entries(mapping).map(([key, value]) => ({ key, value }))
+
+    /**
+     * @param {{ tags?: unknown, metastruct?: unknown, attributes?: object, id?: string }} options
+     */
+    const mockExtra = ({ tags, metastruct, attributes = {}, id = evaluateId }) => {
+      mockRequest({
+        body: {
+          data: {
+            id,
+            attributes: { action: 'ALLOW', ...attributes, extra_tags: tags, extra_metastruct: metastruct },
+          },
+        },
+      })
+    }
+
+    const assertSpan = (assertions) => agent.assertFirstTraceSpan(span => {
+      assert.strictEqual(span.name, 'ai_guard')
+      assertions(span, msgpack.decode(span.meta_struct.ai_guard))
+    }, { rejectFirst: true })
+
+    const assertEvaluationUnchanged = (result) => {
+      assert.strictEqual(result.action, 'ALLOW')
+      assert.strictEqual(result.reason, 'ok')
+      assertTelemetry('requests', { action: 'ALLOW', error: false, block: false, ...sdkTags })
+      sinon.assert.neverCalledWith(count, 'error')
+    }
+
+    it('sets string extra_tags on the span under the returned key', async () => {
+      mockExtra({ tags: kv({ 'ai_guard.policy_name': 'newsroom-default', 'custom_context.tenant': 'newsroom' }) })
+
+      const result = await aiguard.evaluate(messages)
+
+      assert.strictEqual(result.action, 'ALLOW')
+      await assertSpan((span, metaStruct) => {
+        assert.strictEqual(span.meta['ai_guard.policy_name'], 'newsroom-default')
+        assert.strictEqual(span.meta['custom_context.tenant'], 'newsroom')
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard.custom_context.tenant'))
+        assert.deepStrictEqual(metaStruct, { messages })
+      })
+    })
+
+    it('reads the evaluate id from the backend response document', async () => {
+      const tagProbs = { jailbreak: 0.01 }
+      mockRequest({
+        body: {
+          data: {
+            id: evaluateId,
+            type: 'evaluations',
+            attributes: {
+              action: 'ALLOW',
+              reason: 'No rule match.',
+              tag_probs: tagProbs,
+              global_prob: 0.01,
+              extra_tags: [{ key: 'ai_guard.evaluate_id', value: evaluateId }],
+            },
+          },
+        },
+      })
+
+      const result = await aiguard.evaluate(messages)
+
+      assert.strictEqual(result.action, 'ALLOW')
+      await assertSpan((span, metaStruct) => {
+        assert.strictEqual(span.meta['ai_guard.evaluate_id'], evaluateId)
+        assert.ok(!Object.hasOwn(span.meta, 'global_prob'))
+        assert.ok(!Object.hasOwn(span.metrics, 'global_prob'))
+        assert.deepStrictEqual(metaStruct, { messages, tag_probs: tagProbs })
+      })
+    })
+
+    it('adds extra_metastruct objects, arrays and scalars to the meta-struct only', async () => {
+      const policyMatch = { rule: 'credit_card', categories: ['pii', 'financial'] }
+      const matchedRules = [{ id: 'r1', action: 'DENY' }, { id: 'r2', action: 'ALLOW' }]
+      mockExtra({
+        metastruct: kv({ policy_match: policyMatch, matched_rules: matchedRules, policy_version: 'v3' }),
+      })
+
+      await aiguard.evaluate(messages)
+
+      await assertSpan((span, metaStruct) => {
+        assert.deepStrictEqual(metaStruct, {
+          messages,
+          policy_match: policyMatch,
+          matched_rules: matchedRules,
+          policy_version: 'v3',
+        })
+        for (const key of ['policy_match', 'matched_rules', 'policy_version']) {
+          assert.ok(!Object.hasOwn(span.meta, key), `Unexpected tag ${key}`)
+          assert.ok(!Object.hasOwn(span.metrics, key), `Unexpected metric ${key}`)
+        }
+      })
+    })
+
+    it('skips non-string extra_tags values without moving them to the meta-struct', async () => {
+      mockExtra({
+        tags: kv({
+          'ai_guard.number': 7,
+          'ai_guard.boolean': true,
+          'ai_guard.object': { policy: 'default' },
+          'ai_guard.array': ['a', 'b'],
+          'ai_guard.null': null,
+          'ai_guard.valid': 'kept',
+        }),
+        attributes: { reason: 'ok' },
+      })
+
+      const result = await aiguard.evaluate(messages)
+
+      assertEvaluationUnchanged(result)
+      await assertSpan((span, metaStruct) => {
+        assert.strictEqual(span.meta['ai_guard.valid'], 'kept')
+        const skipped = ['ai_guard.number', 'ai_guard.boolean', 'ai_guard.object', 'ai_guard.array', 'ai_guard.null']
+        for (const key of skipped) {
+          assert.ok(!Object.hasOwn(span.meta, key), `Unexpected tag ${key}`)
+          assert.ok(!Object.hasOwn(span.metrics, key), `Unexpected metric ${key}`)
+        }
+        assert.deepStrictEqual(metaStruct, { messages })
+      })
+    })
+
+    it('skips extra_metastruct entries without a value', async () => {
+      mockExtra({ metastruct: [{ key: 'empty', value: null }, { key: 'missing' }, { key: 'kept', value: false }] })
+
+      await aiguard.evaluate(messages)
+
+      await assertSpan((span, metaStruct) => {
+        assert.deepStrictEqual(metaStruct, { messages, kept: false })
+      })
+    })
+
+    it('keeps the last value of a repeated key', async () => {
+      mockExtra({
+        tags: [{ key: 'ai_guard.policy', value: 'v1' }, { key: 'ai_guard.policy', value: 'v2' }],
+        metastruct: [{ key: 'policy', value: ['v1'] }, { key: 'policy', value: ['v2'] }],
+      })
+
+      await aiguard.evaluate(messages)
+
+      await assertSpan((span, metaStruct) => {
+        assert.strictEqual(span.meta['ai_guard.policy'], 'v2')
+        assert.deepStrictEqual(metaStruct, { messages, policy: ['v2'] })
+      })
+    })
+
+    it('never overrides tags and meta-struct keys computed by the tracer', async () => {
+      const sdsFindings = [{ rule_tag: 'email', category: 'pii' }]
+      const tagProbs = { jailbreak: 0.1 }
+      mockExtra({
+        tags: kv({
+          'ai_guard.action': 'DENY',
+          'ai_guard.reason': 'forged',
+          'ai_guard.target': 'tool',
+          'ai_guard.tool_name': 'fake_tool',
+          'ai_guard.blocked': 'true',
+          'ai_guard.redacted': 'true',
+          'ai_guard.event': 'false',
+          'ai_guard.http.useragent': 'forged-agent/1.0',
+          'ai_guard.http.client_ip': '6.6.6.6',
+          'ai_guard.network.client.ip': '6.6.6.6',
+          'ai_guard.usr.id': 'forged-user',
+          'ai_guard.usr.session_id': 'forged-session',
+          'ai_guard.backend_tag': 'kept',
+        }),
+        metastruct: kv({
+          messages: [{ role: 'user', content: 'forged' }],
+          attack_categories: ['forged'],
+          sds: [{ forged: true }],
+          tag_probs: { forged: 1 },
+        }),
+        attributes: { reason: 'fine', sds_findings: sdsFindings, tag_probs: tagProbs },
+      })
+
+      const result = await aiguard.evaluate(messages)
+
+      assert.strictEqual(result.action, 'ALLOW')
+      assert.strictEqual(result.reason, 'fine')
+      await assertSpan((span, metaStruct) => {
+        assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
+        assert.strictEqual(span.meta['ai_guard.reason'], 'fine')
+        assert.strictEqual(span.meta['ai_guard.target'], 'prompt')
+        assert.strictEqual(span.meta['ai_guard.redacted'], 'false')
+        assert.strictEqual(span.meta['ai_guard.event'], 'true')
+        assert.strictEqual(span.meta['ai_guard.backend_tag'], 'kept')
+        for (const key of [
+          'ai_guard.tool_name',
+          'ai_guard.blocked',
+          'ai_guard.http.useragent',
+          'ai_guard.http.client_ip',
+          'ai_guard.network.client.ip',
+          'ai_guard.usr.id',
+          'ai_guard.usr.session_id',
+        ]) {
+          assert.ok(!Object.hasOwn(span.meta, key), `Unexpected tag ${key}`)
+        }
+        // Conditional tracer keys (attack_categories here) stay absent rather than being filled in.
+        assert.deepStrictEqual(metaStruct, { messages, sds: sdsFindings, tag_probs: tagProbs })
+      })
+    })
+
+    it('never sets span-control keys', async () => {
+      mockExtra({
+        tags: kv({
+          'manual.drop': 'true',
+          'manual.keep': 'true',
+          'sampling.priority': '-1',
+          'service.name': 'forged-service',
+          'resource.name': 'forged-resource',
+          'span.type': 'forged-type',
+          'span.kind': 'server',
+          '_dd.measured': '0',
+          '_dd.base_service': 'forged-base',
+          error: 'true',
+          'error.type': 'ForgedError',
+          'error.message': 'forged',
+          'error.stack': 'forged',
+          'service.version': 'forged-version',
+          version: 'forged-version',
+          env: 'forged-env',
+          'analytics.event': 'true',
+          '_dd.hostname': 'forged-host',
+          '_dd.origin': 'forged-origin',
+        }),
+      })
+
+      const result = await aiguard.evaluate(messages)
+
+      assert.strictEqual(result.action, 'ALLOW')
+      await assertSpan(span => {
+        assert.strictEqual(span.service, config.service)
+        assert.strictEqual(span.resource, 'ai_guard')
+        assert.strictEqual(span.type, undefined)
+        assert.strictEqual(span.error, 0)
+        assert.strictEqual(span.metrics._sampling_priority_v1, USER_KEEP)
+        assert.ok(!Object.hasOwn(span.metrics, '_dd1.sr.eausr'))
+        assert.ok(!Object.hasOwn(span.metrics, '_dd.hostname'))
+        // tracer.trace marks its spans as measured by default.
+        assert.strictEqual(span.metrics['_dd.measured'], 1)
+        for (const key of [
+          'manual.drop',
+          'manual.keep',
+          'sampling.priority',
+          'span.kind',
+          '_dd.measured',
+          '_dd.base_service',
+          '_dd.hostname',
+          '_dd.origin',
+          'analytics.event',
+          'error.type',
+          'error.message',
+          'error.stack',
+          'service.version',
+        ]) {
+          assert.ok(!Object.hasOwn(span.meta, key), `Unexpected tag ${key}`)
+        }
+        assert.strictEqual(span.meta.version, config.version)
+        assert.strictEqual(span.meta.env, config.env)
+      })
+    })
+
+    it('never overwrites tracer-internal keys written by the span formatter', async () => {
+      mockExtra({
+        tags: kv({
+          '_dd.top_level': '0',
+          '_dd.rule_psr': '0.5',
+          '_dd1.sr.eausr': '1',
+          '_dd.p.dm': 'forged',
+          '_dd.tags.process': 'forged',
+          '_dd.custom': 'x',
+          _sampling_priority_v1: '0',
+          process_id: '1',
+          language: 'forged',
+          'runtime-id': 'forged',
+          'dd.custom': 'kept',
+        }),
+      })
+
+      const result = await aiguard.evaluate(messages)
+
+      assert.strictEqual(result.action, 'ALLOW')
+      await assertSpan(span => {
+        // The SDK span is the root span here, so the formatter writes its root and chunk tags on it.
+        assert.strictEqual(span.parent_id.toString(10), '0')
+        assert.strictEqual(span.metrics['_dd.top_level'], 1)
+        assert.strictEqual(span.metrics._sampling_priority_v1, USER_KEEP)
+        assert.strictEqual(span.metrics.process_id, process.pid)
+        assert.strictEqual(span.meta.language, 'javascript')
+        assert.strictEqual(span.meta['_dd.p.dm'], `-${SAMPLING_MECHANISM_AI_GUARD}`)
+        assert.match(span.meta['_dd.tags.process'], /entrypoint\.name:/)
+        assert.match(span.meta['runtime-id'], /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/)
+        for (const key of [
+          '_dd.top_level',
+          '_dd.rule_psr',
+          '_dd1.sr.eausr',
+          '_dd.custom',
+          '_sampling_priority_v1',
+          'process_id',
+        ]) {
+          assert.ok(!Object.hasOwn(span.meta, key), `Unexpected tag ${key}`)
+        }
+        for (const key of ['_dd.rule_psr', '_dd1.sr.eausr', '_dd.custom']) {
+          assert.ok(!Object.hasOwn(span.metrics, key), `Unexpected metric ${key}`)
+        }
+        assert.strictEqual(span.meta['dd.custom'], 'kept')
+      })
+    })
+
+    it('does not add ai_guard.redacted when the redaction kill-switch is off', async () => {
+      const disabled = new AIGuard(tracer, {
+        ...config,
+        aiguard: { ...config.aiguard, DD_AI_GUARD_REDACTION_ENABLED: false },
+      })
+      mockExtra({ tags: kv({ 'ai_guard.redacted': 'false', 'ai_guard.policy_name': 'default' }) })
+
+      const result = await disabled.evaluate(messages)
+
+      assert.strictEqual(result.action, 'ALLOW')
+      await assertSpan(span => {
+        assert.ok(!Object.hasOwn(span.meta, 'ai_guard.redacted'))
+        assert.strictEqual(span.meta['ai_guard.policy_name'], 'default')
+      })
+    })
+
+    it('applies extra tags and meta-struct values on the blocking path', async () => {
+      const policyDetails = { rule: 'no-recursive-delete' }
+      mockExtra({
+        tags: kv({ 'ai_guard.policy_name': 'destructive-actions', 'ai_guard.evaluate_id': evaluateId }),
+        metastruct: kv({ policy_details: policyDetails }),
+        attributes: { action: 'DENY', reason: 'Nope', tags: ['destructive'], is_blocking_enabled: true },
+      })
+
+      await rejects(
+        () => aiguard.evaluate(messages, { block: true }),
+        err => err.name === 'AIGuardAbortError' && err.reason === 'Nope'
+      )
+
+      assertTelemetry('requests', { action: 'DENY', error: false, block: true, ...sdkTags })
+      await assertSpan((span, metaStruct) => {
+        assert.strictEqual(span.meta['ai_guard.action'], 'DENY')
+        assert.strictEqual(span.meta['ai_guard.blocked'], 'true')
+        assert.strictEqual(span.meta['ai_guard.policy_name'], 'destructive-actions')
+        assert.strictEqual(span.meta['ai_guard.evaluate_id'], evaluateId)
+        assert.deepStrictEqual(metaStruct, {
+          messages,
+          attack_categories: ['destructive'],
+          policy_details: policyDetails,
+        })
+      })
+    })
+
+    for (const field of fields) {
+      for (const payload of [
+        { 'ai_guard.policy_name': 'newsroom-default' },
+        'ai_guard.policy_name=newsroom-default',
+        42,
+        true,
+        null,
+        [],
+        undefined,
+      ]) {
+        it(`ignores ${field} ${inspect(payload)} without changing the evaluation`, async () => {
+          mockExtra({
+            tags: field === 'extra_tags' ? payload : undefined,
+            metastruct: field === 'extra_metastruct' ? payload : undefined,
+            attributes: { reason: 'ok' },
+          })
+
+          const result = await aiguard.evaluate(messages)
+
+          assertEvaluationUnchanged(result)
+          await assertSpan((span, metaStruct) => {
+            assert.strictEqual(span.error, 0)
+            assert.deepStrictEqual(
+              Object.keys(span.meta).filter(key => key.startsWith('ai_guard.')).sort(),
+              ['ai_guard.action', 'ai_guard.event', 'ai_guard.reason', 'ai_guard.redacted', 'ai_guard.target']
+            )
+            assert.deepStrictEqual(metaStruct, { messages })
+          })
+        })
+      }
+
+      it(`skips malformed ${field} entries and keeps the valid ones`, async () => {
+        const entries = [
+          'ai_guard.policy_name',
+          42,
+          null,
+          ['ai_guard.policy_name', 'forged'],
+          { value: 'missing key' },
+          { key: '', value: 'empty key' },
+          { key: 1, value: 'number key' },
+          { key: '__proto__', value: { polluted: 'true' } },
+          { key: 'valid', value: 'kept' },
+        ]
+        mockExtra({
+          tags: field === 'extra_tags' ? entries : undefined,
+          metastruct: field === 'extra_metastruct' ? entries : undefined,
+          attributes: { reason: 'ok' },
+        })
+
+        const result = await aiguard.evaluate(messages)
+
+        assertEvaluationUnchanged(result)
+        await assertSpan((span, metaStruct) => {
+          assert.strictEqual(span.error, 0)
+          for (const key of ['', '1']) {
+            assert.ok(!Object.hasOwn(span.meta, key), `Unexpected tag ${key}`)
+          }
+          if (field === 'extra_tags') {
+            assert.strictEqual(span.meta.valid, 'kept')
+            assert.deepStrictEqual(metaStruct, { messages })
+          } else {
+            assert.ok(!Object.hasOwn(span.meta, 'valid'))
+            assert.deepStrictEqual(metaStruct, { messages, valid: 'kept' })
+          }
+        })
+      })
+    }
   })
 
   it('test evaluate with sds_findings in abort error', async () => {

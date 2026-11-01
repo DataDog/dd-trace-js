@@ -31,14 +31,14 @@ const deliveryStrategies = new WeakMap()
 let missingRouteWarningLogged = false
 
 /**
- * Logs the unavailable exposure-delivery warning once.
+ * Logs the unavailable event-delivery warning once.
  *
  */
-function warnExposureDeliveryUnavailable () {
+function warnEventDeliveryUnavailable () {
   if (missingRouteWarningLogged) return
   missingRouteWarningLogged = true
   logger.warn(
-    'Feature Flags exposure delivery is disabled because no compatible local EVP route or direct intake ' +
+    'Feature Flags event delivery is disabled because no compatible local EVP route or direct intake ' +
     'credentials are available.'
   )
 }
@@ -169,7 +169,7 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
       if (error) {
         logger.debug('FFE Writer disabled - error getting local receiver info: %s', error.message)
       }
-      warnExposureDeliveryUnavailable()
+      warnEventDeliveryUnavailable()
       markUnavailable()
     })
   }

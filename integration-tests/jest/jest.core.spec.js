@@ -2,9 +2,10 @@
 
 const assert = require('node:assert/strict')
 
+const { exec, fork, spawn } = require('node:child_process')
 const { once } = require('node:events')
-const { fork, exec } = require('child_process')
 const fs = require('node:fs')
+const { createServer } = require('node:http')
 const path = require('path')
 const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
@@ -21,6 +22,7 @@ const {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_SESSION_EMPTY_REASON,
   TEST_SKIP_REASON,
   TEST_SKIPPED_BY_ITR,
@@ -77,6 +79,7 @@ const isJest28OrNewer = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('
 const defaultCircusIt = isJest28OrNewer ? it : it.skip
 const esmIt = isJest28OrNewer ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = isJest28OrNewer
+const supportsWorkerIdleMemoryLimit = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 29
 
 describe(`jest@${JEST_VERSION} commonJS`, () => {
   let receiver
@@ -168,6 +171,87 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     testOutput = ''
     await receiver.stop()
   })
+
+  for (const { status, recovers } of [
+    { status: 'pass', recovers: false },
+    { status: 'fail', recovers: false },
+    { status: 'pass', recovers: true },
+    { status: 'fail', recovers: true },
+  ]) {
+    const discovery = recovers ? 'recovers after a connection reset' : 'fails'
+    it(`runs ${status}ing tests when agent discovery ${discovery}`, async () => {
+      let discoveryRequests = 0
+      const requestedPaths = new Set()
+      const agent = createServer((req, res) => {
+        requestedPaths.add(req.url)
+        if (req.url === '/info') {
+          discoveryRequests++
+          if (!recovers || discoveryRequests === 1) {
+            req.socket.destroy()
+            return
+          }
+          res.end(JSON.stringify({ endpoints: ['/evp_proxy/v2'] }))
+          return
+        }
+        // Accept uploads so this only tests startup, not the separate final-flush retry deadline.
+        const response = req.url.endsWith('/libraries/tests/services/setting')
+          ? { data: { attributes: { itr_enabled: false, tests_skipping: false, code_coverage: false } } }
+          : { rate_by_service: {} }
+        req.once('end', () => res.end(JSON.stringify(response)))
+        req.resume()
+      })
+      agent.listen(0, '127.0.0.1')
+      await once(agent, 'listening')
+
+      try {
+        const { port } = /** @type {import('node:net').AddressInfo} */ (agent.address())
+        const config = JSON.stringify({
+          testRegex: 'jest-agent-discovery-test.js$',
+          testRunner: 'jest-circus/runner',
+          testEnvironment: 'node',
+          watchman: false,
+        })
+        childProcess = spawn(process.execPath, [
+          'node_modules/jest/bin/jest', '--runInBand', '--no-cache', '--config', config,
+        ], {
+          cwd,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 30_000,
+          env: {
+            ...getCiVisEvpProxyConfig(port),
+            DD_INJECT_FORCE: 'true',
+            JEST_AGENT_DISCOVERY_TEST_FAIL: status === 'fail' ? '1' : '0',
+            JEST_WORKER_ID: undefined,
+            MOCHA_WORKER_ID: undefined,
+          },
+        })
+        childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+        const [[exitCode, signal]] = await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+        ])
+        assert.ok(discoveryRequests > 0, 'The tracer did not attempt agent discovery')
+        assert.strictEqual(signal, null, testOutput)
+        assert.match(testOutput, /^JEST_AGENT_DISCOVERY_TEST_RAN$/m,
+          `Jest exited with code ${exitCode} without executing the test:\n${testOutput}`)
+        assert.match(testOutput, new RegExp(`Tests:\\s+1 ${status}ed, 1 total`))
+        assert.strictEqual(exitCode, status === 'fail' ? 1 : 0, testOutput)
+        if (recovers) {
+          assert.ok(discoveryRequests >= 2, 'Agent discovery did not retry')
+          assert.ok(requestedPaths.has('/evp_proxy/v2/api/v2/libraries/tests/services/setting'),
+            'Test Optimization settings were not requested after recovery')
+          assert.ok(requestedPaths.has('/evp_proxy/v2/api/v2/citestcycle'),
+            'Test events were not uploaded through the discovered endpoint')
+        }
+      } finally {
+        agent.close()
+        await once(agent, 'close')
+      }
+    })
+  }
 
   for (const { mode, args, reason, exitCode: expectedExitCode } of [
     { mode: 'skip-tests', args: '', reason: 'all_tests_skipped', exitCode: 0 },
@@ -991,6 +1075,99 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     assert.strictEqual(exitCode, 0)
   })
 
+  for (const retryCount of [1, 2, 3]) {
+    for (const passes of [false, true]) {
+      it(`attributes explicit native retries correctly (count=${retryCount}, passes=${passes})`, async () => {
+        receiver.setSettings({
+          itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
+        })
+        childProcess = exec(
+          'node ./node_modules/jest/bin/jest --runInBand --config ci-visibility/jest-native-retry.config.js', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NATIVE_RETRY_COUNT: String(retryCount),
+              NATIVE_RETRY_PASSES: passes ? '1' : '0',
+              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            },
+          })
+        let output = ''
+        childProcess.stdout.on('data', data => { output += data })
+        childProcess.stderr.on('data', data => { output += data })
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, retryCount + 1)
+            const finalStatus = passes ? 'pass' : 'fail'
+            assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_STATUS] === 'fail'))
+            assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+            assert.strictEqual(tests.at(-1).meta[TEST_STATUS], finalStatus)
+            assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], finalStatus)
+            const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, retryCount)
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext))
+          })
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise]).catch(error => {
+          throw new Error(`${output}\n${error.message}`, { cause: error })
+        })
+        assert.strictEqual(exitCode, passes ? 0 : 1)
+      })
+    }
+  }
+
+  // Describe-scoped retries were added in Jest 30.5.
+  const describeRetryIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) > 30 ||
+    (Number(JEST_VERSION.split('.')[0]) === 30 && Number(JEST_VERSION.split('.')[1]) >= 5)
+    ? it
+    : it.skip
+  for (const retryCount of [1, 2]) {
+    describeRetryIt(`isolates describe-scoped native retries from sibling ATR (count=${retryCount})`, async () => {
+      receiver.setSettings({
+        itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
+      })
+      childProcess = exec(
+        'node ./node_modules/jest/bin/jest --runInBand --config ci-visibility/jest-native-retry.config.js ' +
+        '--testMatch "**/test/describe-native-retry-attribution-test.js"', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NATIVE_RETRY_COUNT: String(retryCount),
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          },
+        })
+      let output = ''
+      childProcess.stdout.on('data', data => { output += data })
+      childProcess.stderr.on('data', data => { output += data })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          for (const [name, count, reason] of [
+            ['root ATR', 2, TEST_RETRY_REASON_TYPES.atr],
+            ['sibling ATR fails', 2, TEST_RETRY_REASON_TYPES.atr],
+            ['native describe fails', retryCount + 1, TEST_RETRY_REASON_TYPES.ext],
+            ['native describe passes', retryCount + 1, TEST_RETRY_REASON_TYPES.ext],
+            ['native describe nested fails', retryCount + 1, TEST_RETRY_REASON_TYPES.ext],
+          ]) {
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+            assert.strictEqual(attempts.length, count, name)
+            const status = name.endsWith('passes') ? 'pass' : 'fail'
+            assert.ok(attempts.every(test => test.meta[TEST_STATUS] === status), name)
+            const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, count - 1, name)
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === reason), name)
+          }
+        })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise]).catch(error => {
+        throw new Error(`${output}\n${error.message}`, { cause: error })
+      })
+      assert.strictEqual(exitCode, 1, output)
+    })
+  }
+
   onlyLatestIt('rebinds test.concurrent retry bodies to the current test span', async () => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -1304,6 +1481,21 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       done()
     })
   })
+
+  for (const runInParallel of [false, true]) {
+    it(`loads the runner without instrumentation errors ${runInParallel ? 'in workers' : 'in band'}`, async () => {
+      const output = await runJestAndCaptureOutput({
+        DD_TRACE_DEBUG: '1',
+        DD_TRACE_LOG_LEVEL: 'info',
+        RUN_IN_PARALLEL: runInParallel ? '1' : '',
+        MAX_WORKERS: '2',
+        TESTS_TO_RUN: 'jest-teardown-timers/passing-.*-test.js$',
+      })
+
+      assert.match(output, /Test Suites: 2 passed/)
+      assert.doesNotMatch(output, /Error during ddtrace instrumentation of application/)
+    })
+  }
 
   context('test runner support warning', () => {
     defaultCircusIt('does not warn for Jest defaulting to jest-circus', async () => {
@@ -2082,6 +2274,169 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('when using off timing imports', () => {
+    for (const definition of ['method', 'field', 'getter', 'accessor', 'constructor-decorator', 'setup-decorator']) {
+      const errorModes = definition.endsWith('-decorator')
+        ? ['after-super', 'success']
+        : ['sync', 'async', 'after-super', 'success']
+      for (const errorMode of errorModes) {
+        // Worker recycling was introduced in Jest 29.
+        const teardownIt = supportsWorkerIdleMemoryLimit ? it : it.skip
+        teardownIt(`flushes suites after custom teardown ${definition}: ${errorMode}`, async () => {
+          childProcess = exec(runTestsCommand, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'jest-teardown-timers/passing-.*-test',
+              CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jest-environment-teardown-error.js',
+              RUN_IN_PARALLEL: 'true',
+              WORKER_IDLE_MEMORY_LIMIT: '1024',
+              JEST_TEARDOWN_DEFINITION: definition,
+              JEST_TEARDOWN_ERROR_MODE: errorMode,
+              SHOULD_CHECK_RESULTS: 'true',
+            },
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 2, testOutput)
+              assert.strictEqual(events.filter(event => event.type === 'test').length, 2, testOutput)
+              for (const type of ['test_module_end', 'test_session_end']) {
+                const event = events.find(event => event.type === type)?.content
+                assert.ok(event, testOutput)
+                assert.strictEqual(event.meta[TEST_STATUS], errorMode === 'success' ? 'pass' : 'fail', testOutput)
+                if (errorMode !== 'success') {
+                  assert.match(event.meta[ERROR_MESSAGE], /expected custom environment teardown failure/)
+                }
+              }
+            }
+          )
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, errorMode === 'success' ? 0 : 1, testOutput)
+          if (errorMode !== 'success') {
+            assert.match(testOutput, /TypeError: expected custom environment teardown failure/)
+          }
+        })
+      }
+    }
+
+    it('clears the active suite after a synchronous post-super teardown failure', async () => {
+      const config = JSON.stringify({
+        testRegex: 'jest-teardown-timers/passing-one-test.js$',
+        testRunner: 'jest-circus/runner',
+        testEnvironment: './ci-visibility/jest-environment-teardown-error.js',
+        watchman: false,
+      })
+      childProcess = exec(`node node_modules/jest/bin/jest --runInBand --config '${config}'`, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          JEST_TEARDOWN_ERROR_MODE: 'sync-after-super',
+        },
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1, testOutput)
+          assert.strictEqual(events.filter(event => event.type === 'test').length, 1, testOutput)
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 1, testOutput)
+      assert.match(testOutput, /^UNRELATED_POST_TEARDOWN_REFERENCE_ERROR:/m)
+      assert.doesNotMatch(testOutput, /UNEXPECTED_LATE_SUITE_ERROR/)
+    })
+
+    for (const workerIdleMemoryLimit of [undefined, '1024']) {
+      for (const errorMode of ['sync', 'async']) {
+        // workerIdleMemoryLimit was introduced in Jest 29.
+        const teardownIt = workerIdleMemoryLimit && !supportsWorkerIdleMemoryLimit ? it.skip : it
+        const mode = workerIdleMemoryLimit ? 'with worker recycling' : 'without a worker memory limit'
+        teardownIt(`flushes suites when environment teardown fails ${errorMode} ${mode}`, async () => {
+          childProcess = exec(runTestsCommand, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '-r ./ci-visibility/jest-teardown-error.js -r dd-trace/ci/init',
+              TESTS_TO_RUN: 'jest-teardown-timers/passing-.*-test',
+              RUN_IN_PARALLEL: 'true',
+              WORKER_IDLE_MEMORY_LIMIT: workerIdleMemoryLimit,
+              JEST_TEARDOWN_ERROR_MODE: errorMode,
+              SHOULD_CHECK_RESULTS: 'true',
+            },
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 2, testOutput)
+              assert.strictEqual(events.filter(event => event.type === 'test').length, 2, testOutput)
+              for (const type of ['test_module_end', 'test_session_end']) {
+                const event = events.find(event => event.type === type)?.content
+                assert.ok(event, testOutput)
+                assert.strictEqual(event.meta[TEST_STATUS], 'fail', testOutput)
+                assert.match(event.meta[ERROR_MESSAGE], /expected environment teardown failure/)
+              }
+            }
+          )
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, 1, testOutput)
+          assert.match(testOutput, /TypeError: expected environment teardown failure/)
+        })
+      }
+    }
+
+    for (const workerIdleMemoryLimit of [undefined, '1024']) {
+      for (const status of ['pass', 'fail', 'error']) {
+        // workerIdleMemoryLimit was introduced in Jest 29.
+        const timerIt = workerIdleMemoryLimit && !supportsWorkerIdleMemoryLimit ? it.skip : it
+        const mode = workerIdleMemoryLimit ? 'with worker recycling' : 'without a worker memory limit'
+        timerIt(`cancels pending jsdom timers for ${status} suites ${mode}`, async () => {
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const suites = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test_suite_end')
+              assert.strictEqual(suites.length, 3)
+              assert.strictEqual(suites.filter(suite => suite.content.meta[TEST_STATUS] === 'fail').length,
+                status === 'pass' ? 0 : 1)
+            })
+
+          childProcess = exec(runTestsCommand, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'jest-teardown-timers/.*-test',
+              RUN_IN_PARALLEL: 'true',
+              ENABLE_JSDOM: 'true',
+              WORKER_IDLE_MEMORY_LIMIT: workerIdleMemoryLimit,
+              JEST_TIMER_SUITE_STATUS: status,
+              SHOULD_CHECK_RESULTS: 'true',
+            },
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+          assert.strictEqual(exitCode, status === 'pass' ? 0 : 1, testOutput)
+          assert.doesNotMatch(testOutput, /PENDING_JSDOM_TIMER_FIRED/,
+            'A pending window timer ran before environment teardown')
+        })
+      }
+    }
+
     onlyLatestIt('reports test suite errors when waitForUnhandledRejections=true', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {

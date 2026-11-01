@@ -41,6 +41,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @supabase/realtime-js,supabase,2.112.2,2.116.0,True
 @supabase/storage-js,supabase,2.112.2,2.116.0,True
 @supabase/supabase-js,supabase,2.112.2,2.116.0,True
+@typesafe-ai/sdk,typesafe,0.6.0,0.7.0,True
 @wdio/local-runner,mocha,9.0.0,9.31.9,True
 aerospike,aerospike,4.0.0,6.7.1,True
 ai,ai,4.0.0,7.0.108,True

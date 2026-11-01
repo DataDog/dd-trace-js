@@ -249,6 +249,11 @@ describe('webdriverio instrumentation', () => {
     const runOrder = []
     let resolveReplay
     class Runnable {
+      retries (count) {
+        if (arguments.length) this._retries = count
+        return this._retries
+      }
+
       run () {
         runOrder.push('run')
         return 'done'

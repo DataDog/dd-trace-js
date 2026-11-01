@@ -15,6 +15,7 @@ const { getRequestOptions } = require('./utils')
 const ddsource = 'dd_debugger'
 const service = 'my-service'
 const runtimeId = 'my-runtime-id'
+const now = 1_700_000_000_000
 
 describe('diagnostic message http requests', function () {
   let clock, statusproxy, request, jsonBuffer, jsonBufferOptions
@@ -31,6 +32,7 @@ describe('diagnostic message http requests', function () {
 
   beforeEach(function () {
     clock = sinon.useFakeTimers({
+      now,
       toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
 
@@ -154,6 +156,18 @@ describe('diagnostic message http requests', function () {
 
         done()
       })
+
+      it('should timestamp the status when it is queued, not when it is flushed', function () {
+        ackFn({ id: 'foo', version: 0 })
+        clock.tick(400)
+        ackFn({ id: 'foo', version: 1 })
+        clock.tick(1000)
+
+        assert.deepStrictEqual(getFormPayload(request), [
+          formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }),
+          formatAsDiagnosticsEvent({ probeId: 'foo', version: 1, status, exception, timestamp: now + 400 }),
+        ])
+      })
     })
   }
 
@@ -218,13 +232,13 @@ describe('diagnostic message http requests', function () {
   })
 })
 
-function formatAsDiagnosticsEvent ({ probeId, version, status, exception }) {
+function formatAsDiagnosticsEvent ({ probeId, version, status, exception, timestamp = now }) {
   const diagnostics = { probeId, runtimeId, probeVersion: version, status }
 
   // Error requests will also contain an `exception` property
   if (exception) diagnostics.exception = exception
 
-  return { ddsource, service, debugger: { diagnostics } }
+  return { ddsource, service, timestamp, debugger: { diagnostics } }
 }
 
 function getFormPayload (request) {

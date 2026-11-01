@@ -41,6 +41,30 @@ const defaultStopProcTimeoutMs = 2_000
 const processGroupClosePromises = new WeakMap()
 
 /**
+ * @param {string} out
+ * @param {string} expectedOut
+ */
+function assertOutputMatchesInOrder (out, expectedOut) {
+  let offset = 0
+  let expectedOffset = 0
+
+  while (expectedOffset < expectedOut.length) {
+    const newline = expectedOut.indexOf('\n', expectedOffset)
+    const end = newline === -1 ? expectedOut.length : newline + 1
+    const expectedLine = expectedOut.slice(expectedOffset, end)
+    const match = out.slice(offset).match(new RegExp(expectedLine))
+
+    assert.notStrictEqual(
+      match,
+      null,
+      `output "${out}" does not contain expected output line "${expectedLine}" after offset ${offset}`
+    )
+    offset += match.index + match[0].length
+    expectedOffset = end
+  }
+}
+
+/**
  * @param {string} filename
  * @param {string} cwd
  * @param {string|((out: Promise<string>) => void)} expectedOut
@@ -50,7 +74,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
   assert.notStrictEqual(proc.pid, undefined, 'Process PID is not available')
   const pid = proc.pid
-  let out = await new Promise((resolve, reject) => {
+  const out = await new Promise((resolve, reject) => {
     proc.once('error', reject)
     const out = []
     proc.stdout.on('data', data => {
@@ -68,10 +92,10 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
     expectedOut(out)
   } else {
     if (process.env.DD_TRACE_DEBUG) {
-      // Debug adds this, which we don't care about in these tests
-      out = out.replace('Flushing 0 metrics via HTTP\n', '')
+      assertOutputMatchesInOrder(out, expectedOut)
+    } else {
+      assert.match(out, new RegExp(expectedOut), `output "${out}" does not contain expected output "${expectedOut}"`)
     }
-    assert.match(out, new RegExp(expectedOut), `output "${out}" does not contain expected output "${expectedOut}"`)
   }
 
   if (expectedSource) {
@@ -1537,6 +1561,7 @@ module.exports = {
   ANY_VALUE,
   FakeAgent,
   hookFile,
+  assertOutputMatchesInOrder,
   assertObjectContains,
   assertUUID,
   deepFreeze,

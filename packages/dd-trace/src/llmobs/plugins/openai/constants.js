@@ -12,6 +12,9 @@ const AUDIO_MIME_TYPES = {
   mp3: 'audio/mpeg',
 }
 
+const DECISION_PROVIDER_TAG = 'decision_provider'
+const DECISION_PROVIDER = 'openai'
+
 module.exports = {
   INPUT_TYPE_IMAGE,
   INPUT_TYPE_FILE,
@@ -19,4 +22,6 @@ module.exports = {
   IMAGE_FALLBACK,
   FILE_FALLBACK,
   AUDIO_MIME_TYPES,
+  DECISION_PROVIDER_TAG,
+  DECISION_PROVIDER,
 }

@@ -191,10 +191,10 @@ const optionsTable = {
   },
 }
 
-const parser = (value, optionName, source) => {
+const parser = (value, optionName, source, reportInvalid = true) => {
   const { type, canonicalName = optionName } = configurationsTable[optionName]
   const parsed = parsers[type](value, canonicalName)
-  if (parsed === undefined) {
+  if (parsed === undefined && reportInvalid) {
     warnInvalidValue(value, optionName, source, `Invalid ${type} input`)
   }
   return parsed
@@ -249,13 +249,13 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
       regExps[entry.allowed] ??= new RegExp(`^(${entry.allowed})$`, 'i')
       const allowed = regExps[entry.allowed]
       const originalTransform = transformer
-      transformer = (value, optionName, source) => {
+      transformer = (value, optionName, source, reportInvalid = true) => {
         if (!allowed.test(value)) {
-          warnInvalidValue(value, optionName, source, 'Invalid value')
+          if (reportInvalid) warnInvalidValue(value, optionName, source, 'Invalid value')
           return
         }
         if (originalTransform) {
-          value = originalTransform(value)
+          value = originalTransform(value, optionName, source, reportInvalid)
         }
         return value
       }

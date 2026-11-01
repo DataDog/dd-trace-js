@@ -124,6 +124,41 @@ moduleTypes.forEach(({
       await stopWebAppServer(webAppServer)
     })
 
+    // Cypress 6 does not expose unverifiedTestConfig, which identifies native retry overrides.
+    over12It('attributes explicit test and suite native retries correctly with flat ATR', async () => {
+      receiver.setSettings({
+        itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
+      })
+      const spec = 'cypress/e2e/native-retry-attribution.js'
+      childProcess = exec(`${testCommand} --spec ${spec}`, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          CYPRESS_BASE_URL: webAppBaseUrl,
+          SPEC_PATTERN: spec,
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+        },
+      })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          for (const [name, count] of [
+            ['inherited', 2], ['equal override', 2], ['different override', 3], ['suite override fails', 2],
+          ]) {
+            const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+            assert.strictEqual(attempts.length, count, name)
+            const reason = name === 'inherited' ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
+            assert.ok(attempts.every(test => test.meta[TEST_STATUS] === 'fail'), name)
+            const retries = attempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, count - 1, name)
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === reason), name)
+          }
+        })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 4)
+    })
+
     context('flaky test retries', () => {
       it('retries flaky tests with object Cypress retries', async () => {
         receiver.setSettings({
