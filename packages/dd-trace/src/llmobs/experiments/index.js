@@ -115,7 +115,7 @@ class Experiments {
   // wait until that many records are readable. Pass `tags` to filter records by
   // dataset record tags.
   async pullDataset (name, options = {}) {
-    const { expectedRecordCount, maxWaitMs = 30_000, projectName, tags, version } = options
+    const { expectedRecordCount, maxWaitMs = 30_000, projectName, tags, version: datasetVersion = null } = options
     const filterTags = validateTagsList(tags)
     const client = this.#clientForOperation(projectName)
     const resolvedProjectName = projectName ?? this.#projectName
@@ -123,7 +123,6 @@ class Experiments {
 
     let pulledDataset = null
     let records = []
-    const datasetVersion = version ?? null
     let latestVersion = null
     let lastError = ''
 

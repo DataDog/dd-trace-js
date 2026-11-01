@@ -69,10 +69,10 @@ const defaults = {
   logger: undefined,
 }
 
-for (const [name, value] of Object.entries(defaults)) {
+for (const [name, value = null] of Object.entries(defaults)) {
   configWithOrigin.set(`${name}default`, {
     name,
-    value: value ?? null,
+    value,
     origin: 'default',
     seq_id: seqId++,
   })

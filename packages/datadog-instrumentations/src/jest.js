@@ -64,7 +64,7 @@ const {
   getChannelPromise,
   publishWithCompletion,
 } = require('./helpers/channel')
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, getHooks, tracingChannel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -196,6 +196,7 @@ const dynamicAtrResultHandlerRegistrations = new WeakMap()
 // Tests that are genuinely new (not in known tests list).
 const newTests = new Set()
 const testSuiteJestObjects = new Map()
+const deferredTestSuiteFinishes = new Map()
 const testSuiteDatadogEnvironments = new Map()
 const wrappedJestGlobals = new WeakSet()
 const wrappedJestEsmLoaders = new WeakSet()
@@ -2664,19 +2665,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
       }
-      const clearActiveTestSuite = () => {
-        realSetTimeout(() => {
-          if (activeTestSuiteAbsolutePath === this.testSuiteAbsolutePath) {
-            activeTestSuiteAbsolutePath = undefined
-          }
-        }, 0)
-      }
-      const result = super.teardown()
-      if (result?.then) {
-        return result.finally(clearActiveTestSuite)
-      }
-      clearActiveTestSuite()
-      return result
+      return super.teardown()
     }
   }
 }
@@ -3505,21 +3494,47 @@ function shouldWaitForTestSuiteFinish (environment) {
 }
 
 /**
- * @param {Record<string, unknown>} payload
- * @param {boolean} waitForFinish
+ * @param {string} testSuiteAbsolutePath
  */
-function publishTestSuiteFinish (payload, waitForFinish) {
+function finishTestSuiteAfterRun (testSuiteAbsolutePath) {
+  const clearActiveTestSuite = () => {
+    realSetTimeout(() => {
+      if (activeTestSuiteAbsolutePath === testSuiteAbsolutePath) {
+        activeTestSuiteAbsolutePath = undefined
+      }
+    }, 0)
+  }
+  const payload = deferredTestSuiteFinishes.get(testSuiteAbsolutePath)
+  deferredTestSuiteFinishes.delete(testSuiteAbsolutePath)
+  if (payload) {
+    return getChannelPromise(testSuiteFinishCh, { ...payload, waitForFinish: true })
+      .finally(clearActiveTestSuite)
+  }
+  return clearActiveTestSuite()
+}
+
+tracingChannel('orchestrion:jest-runner:runTestInternal').end.subscribe((message) => {
+  const ctx = /** @type {{ arguments: [string, ...unknown[]], result: Promise<unknown> }} */ (message)
+  const [testSuiteAbsolutePath] = ctx.arguments
+  // Jest's runner awaits the complete custom teardown before this promise settles.
+  ctx.result = ctx.result.finally(() => finishTestSuiteAfterRun(testSuiteAbsolutePath))
+})
+
+for (const hook of getHooks('jest-runner').values()) addHook(hook, moduleExports => moduleExports)
+
+/**
+ * @param {Record<string, unknown>} payload
+ * @param {InstanceType<ReturnType<typeof getWrappedEnvironment>>} environment
+ */
+function publishTestSuiteFinish (payload, environment) {
   if (!testSuiteFinishCh.hasSubscribers) return
 
-  if (!waitForFinish) {
-    testSuiteFinishCh.publish(payload)
+  if (shouldWaitForTestSuiteFinish(environment)) {
+    deferredTestSuiteFinishes.set(environment.testSuiteAbsolutePath, payload)
     return
   }
 
-  return getChannelPromise(testSuiteFinishCh, {
-    ...payload,
-    waitForFinish,
-  })
+  testSuiteFinishCh.publish(payload)
 }
 
 function cleanupTestSuiteState (testSuiteAbsolutePath) {
@@ -3696,48 +3711,24 @@ function jestAdapterWrapper (jestAdapter, jestVersion, isIitm, hookMeta) {
           testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
         })
       }
-      const waitForFinish = shouldWaitForTestSuiteFinish(environment)
       const finishPayload = {
         status,
         errorMessage,
         testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
       }
-      if (waitForFinish) {
-        const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
-        if (finishPromise) {
-          return finishPromise.then(() => {
-            // Cleanup per-suite state to avoid memory leaks
-            cleanupTestSuiteState(environment.testSuiteAbsolutePath)
-
-            return suiteResults
-          })
-        }
-      }
-      publishTestSuiteFinish(finishPayload, waitForFinish)
+      publishTestSuiteFinish(finishPayload, environment)
 
       // Cleanup per-suite state to avoid memory leaks
       cleanupTestSuiteState(environment.testSuiteAbsolutePath)
 
       return suiteResults
     }).catch(error => {
-      const waitForFinish = shouldWaitForTestSuiteFinish(environment)
       const finishPayload = {
         status: 'fail',
         error,
         testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
       }
-      if (waitForFinish) {
-        const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
-        if (finishPromise) {
-          return finishPromise.then(() => {
-            // Cleanup per-suite state to avoid memory leaks
-            cleanupTestSuiteState(environment.testSuiteAbsolutePath)
-
-            throw error
-          })
-        }
-      }
-      publishTestSuiteFinish(finishPayload, waitForFinish)
+      publishTestSuiteFinish(finishPayload, environment)
 
       // Cleanup per-suite state to avoid memory leaks
       cleanupTestSuiteState(environment.testSuiteAbsolutePath)
