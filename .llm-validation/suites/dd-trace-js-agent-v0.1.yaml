@@ -119,28 +119,30 @@ cases:
       to be faster. What evidence is required, and when should the readable implementation remain? Answer in at most
       4 bullets.
     expected_criteria:
-      - Requires a focused, reproducible microbenchmark before accepting the complexity.
+      - Requires reproducible measurement before accepting the complexity.
       - Keeps the readable implementation when results are within roughly ±2%.
-      - Requires commit-body justification for a result around 5%.
-      - Keeps gains of at least 10% only when they are reproducible and reported with numbers.
+      - Keeps gains of at least 5% only when they are reproducible and reported with numbers.
+      - Requires a lasting benchmark only for a stable workload that warrants a regression guard.
     bad_signals:
       - Accepts the loop as faster without benchmark evidence.
       - Treats any measured improvement as sufficient to keep the more complex code.
 
-  # AGENTS.md — Production Safety and Performance: no async/await in shipped production code.
+  # AGENTS.md — Production Safety and Performance: async/await on synchronous, inactive, and hot paths.
   - id: dd-trace-js-production-async-012
     files: [AGENTS.md]
     input: |
-      May I add async/await to ordinary shipped tracer production code?
-      Answer in at most 3 bullets and mention every stated exception.
+      I want to make a synchronous tracer helper async on a request hot path, including when its feature is disabled.
+      May I add async/await? Explain the rule for this path and every stated production exception in at most 3 bullets.
     expected_criteria:
-      - Rejects adding async/await to ordinary shipped production code.
-      - Notes that async/await is allowed in tests.
-      - Notes that async/await is allowed in worker threads.
+      - Rejects adding async/await to the synchronous helper on the active and inactive request paths.
+      - >
+        Allows inherently asynchronous APIs, control-plane code, and worker threads to follow their upstream
+        asynchronous contract.
+      - Keeps inactive paths cheap.
     bad_signals:
-      - Accepts adding async/await to ordinary shipped production code.
-      - Claims async/await is forbidden in tests.
-      - Claims async/await is forbidden in worker threads.
+      - Accepts adding async/await to the synchronous helper on either request path.
+      - Treats the exceptions as permission to add promise machinery to arbitrary production paths.
+      - Claims async/await is forbidden for inherently asynchronous APIs, control-plane code, or worker threads.
 
   # AGENTS.md — Backportability and Cross-Cutting Configuration Changes: public surfaces, docs, and tests.
   - id: dd-trace-js-public-config-surfaces-013
@@ -157,17 +159,20 @@ cases:
       - Omits docs/API.md.
       - Omits packages/dd-trace/test/config/index.spec.js.
 
-  # AGENTS.md — Production Safety and Performance: no promises in shipped production code.
+  # AGENTS.md — Production Safety and Performance: promise machinery without async syntax.
   - id: dd-trace-js-production-promises-014
     files: [AGENTS.md]
     input: |
-      May I add a promise-returning helper without async syntax to ordinary shipped tracer production code?
-      Answer in at most 3 bullets and mention every stated exception.
+      I want to add a promise-returning helper without async syntax to a synchronous tracer request path.
+      Does avoiding async syntax make this acceptable? Explain the rule and every stated production exception
+      in at most 3 bullets.
     expected_criteria:
-      - Rejects adding a promise-returning helper to ordinary shipped production code.
-      - Notes that promises are allowed in tests.
-      - Notes that promises are allowed in worker threads.
+      - Rejects adding promise machinery to the synchronous request path regardless of async syntax.
+      - >
+        Allows inherently asynchronous APIs, control-plane code, and worker threads to follow their upstream
+        asynchronous contract.
+      - Keeps inactive paths cheap.
     bad_signals:
-      - Accepts adding a promise-returning helper to ordinary shipped production code.
-      - Claims promises are forbidden in tests.
-      - Claims promises are forbidden in worker threads.
+      - Accepts the promise-returning helper because it avoids async syntax.
+      - Treats the exceptions as permission to add promise machinery to arbitrary production paths.
+      - Claims promises are forbidden for inherently asynchronous APIs, control-plane code, or worker threads.
