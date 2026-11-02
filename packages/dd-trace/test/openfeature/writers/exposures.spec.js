@@ -226,6 +226,17 @@ describe('OpenFeature Exposures Writer', () => {
     })
   })
 
+  it('preserves scalar exposure features, including false, zero, and prototype-like keys', () => {
+    const features = JSON.parse('{"holdout.key":"holdout","included":false,"weight":0,"__proto__":"value"}')
+    features.invalid = { nested: 'omit' }
+    features.nonfinite = Infinity
+    Object.defineProperty(features, 'accessor', { enumerable: true, get () { throw new Error('must not read') } })
+    const payload = JSON.parse(JSON.stringify(writer.makePayload([{ ...exposureEvent, features }])))
+    assert.deepStrictEqual(payload.exposures[0].features,
+      JSON.parse('{"holdout.key":"holdout","included":false,"weight":0,"__proto__":"value"}'))
+    assert.strictEqual(writer.makePayload([{ ...exposureEvent, features: {} }]).exposures[0].features, undefined)
+  })
+
   describe('makePayload', () => {
     it('should return context wrapper with exposures array', () => {
       const events = [exposureEvent]
