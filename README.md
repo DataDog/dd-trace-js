@@ -109,6 +109,25 @@ source-rewrite targets in Node.js bundles.
 The wrapper does not instrument client or edge bundles. It also excludes generic ESM export replacement, linked
 workspaces, Prisma clients outside `node_modules`, and Yarn Plug'n'Play packages.
 
+Node.js code built with Vite 6 or newer, such as SSR servers, libraries and Electron main processes, can use the Vite
+plugin:
+
+```javascript
+// vite.config.mjs
+import { defineConfig } from 'vite'
+import { datadogVite } from 'dd-trace/vite.js'
+
+export default defineConfig({
+  plugins: [datadogVite()],
+  build: { ssr: 'src/server.js' }
+})
+```
+
+The plugin imports `dd-trace` before the rest of the application; keep calling `tracer.init()` in the application.
+Client builds are not instrumented. See the
+[Vite section of the API documentation](https://datadoghq.dev/dd-trace-js/#vite) for bundled and external tracers,
+Electron, SSR frameworks and limitations.
+
 ## Security Vulnerabilities
 
 Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/master/SECURITY.md) document if you have found a security issue.

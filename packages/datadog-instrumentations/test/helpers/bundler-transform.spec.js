@@ -64,6 +64,60 @@ describe('bundler transform', () => {
     assert.equal(instrument({ resourcePath: esmRoot, source: 'export default true\n' }), undefined)
   })
 
+  it('returns the publications and diagnostic-channel import of ESM files to intercept only', () => {
+    const projectDir = createProject()
+    const dual = createPackage(projectDir, 'dual-package', { type: 'module', version: '2.0.0' })
+    const root = write(dual, 'index.js', 'export default true\n')
+    const file = write(dual, 'lib/file.js', 'export default true\n')
+    const cjs = createPackage(projectDir, 'commonjs-package', { main: 'index.js', version: '2.0.0' })
+    const cjsRoot = write(cjs, 'index.js', 'module.exports = true\n')
+    const instrumentations = {}
+    const hooks = {
+      'commonjs-package': () => { instrumentations['commonjs-package'] = [{}] },
+      'dual-package': () => {
+        instrumentations['dual-package'] = [{ versions: ['>=2'] }, { file: 'lib/file.js', versions: ['>=2'] }]
+      },
+    }
+    const { getEsmInterception } = loadHelper({ hooks, instrumentations })
+    const dcModule = path.relative(path.dirname(fs.realpathSync(root)), require.resolve('dc-polyfill'))
+      .replaceAll('\\', '/')
+
+    assert.deepStrictEqual(getEsmInterception({ resourcePath: root, request: 'dual-package' }), {
+      dcModule,
+      publications: [{ package: 'dual-package', path: 'dual-package', version: '2.0.0' }],
+    })
+    assert.deepStrictEqual(getEsmInterception({ resourcePath: file, request: './file.js' })?.publications,
+      [{ package: 'dual-package', path: 'dual-package/lib/file.js', version: '2.0.0' }])
+    assert.equal(getEsmInterception({ resourcePath: root }), undefined)
+    assert.equal(getEsmInterception({ resourcePath: cjsRoot }), undefined)
+
+    const warn = sinon.spy()
+    assert.equal(getEsmInterception({ resourcePath: path.join(dual, 'missing.js'), warn }), undefined)
+    assert.equal(warn.firstCall.args[0].code, 'ENOENT')
+  })
+
+  it('generates ESM wrappers that only publish when there are publications', () => {
+    const { createEsmWrapper } = require('../../src/helpers/bundler-transform')
+    const options = { dcModule: '../dc-polyfill.js', resourcePath: '/app/node_modules/a/index.js', setters: ['x', 'y'] }
+
+    const silent = createEsmWrapper({ ...options, publications: [] })
+    assert.match(silent, /^import \* as namespace from "\/app\/node_modules\/a\/index\.js";\n/)
+    assert.ok(silent.includes('x;\ny;\n'))
+    assert.doesNotMatch(silent, /dc-polyfill|dd-trace:bundler:load/)
+
+    const publishing = createEsmWrapper({
+      ...options,
+      publications: [
+        { package: 'a', path: 'a', version: '1.0.0' },
+        { package: 'a', path: 'a/index.js', version: '1.0.0' },
+      ],
+    })
+    assert.equal(publishing.slice(0, silent.length), silent)
+    assert.match(publishing, /import ddTraceBundlerDc from "\.\.\/dc-polyfill\.js";/)
+    assert.equal(publishing.match(/channel\.publish\(\{\n {6}esm: true,\n {6}module: proxy,/g)?.length, 2)
+    assert.match(publishing, /path: "a\/index\.js"/)
+  })
+
   it('classifies rewrites first while preserving matching CJS publications', () => {
     const projectDir = createProject()
     const cjs = createPackage(projectDir, 'rewrite-package', { main: 'index.js', version: '1.0.0' })

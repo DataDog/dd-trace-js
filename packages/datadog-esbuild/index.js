@@ -5,6 +5,10 @@ const path = require('node:path')
 const { pathToFileURL, fileURLToPath } = require('node:url')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
+const {
+  createEsmResolver,
+  processModule,
+} = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
 const { getGitMetadata } = require('../datadog-instrumentations/src/helpers/bundler-git-metadata')
 const { isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
@@ -13,8 +17,6 @@ const { createBundlerRewriter } = require('../datadog-instrumentations/src/helpe
 const { getRewriteTarget, isRewriteTargetName } = require('../datadog-instrumentations/src/helpers/rewriter/targets')
 const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
-const { createEsmResolver } = require('./src/resolver')
-const { processModule } = require('./src/utils')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
