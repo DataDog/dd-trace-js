@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const path = require('path')
 
 const { satisfies } = require('semver')
@@ -72,42 +73,41 @@ describe('Plugin', () => {
           delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
         })
 
-        it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
+        it('emits OpenTelemetry client attributes and omits the Datadog ones', async () => {
           const app = express()
           app.get('/user', (req, res) => {
             res.status(200).send()
           })
 
-          appListener = server(app, port => {
-            agent.assertFirstTraceSpan(span => {
-              // OpenTelemetry attribute names are present...
-              assertObjectContains(span, {
-                type: 'http',
-                resource: 'GET',
-                meta: {
-                  'span.kind': 'client',
-                  'http.request.method': 'GET',
-                  'url.full': `${protocol}://localhost:${port}/user`,
-                  'server.address': 'localhost',
-                },
-                metrics: {
-                  'http.response.status_code': 200,
-                  'server.port': port,
-                },
-              })
-              // ...and the Datadog ones are absent.
-              assert.ok(!Object.hasOwn(span.meta, 'http.method'))
-              assert.ok(!Object.hasOwn(span.meta, 'http.url'))
-              assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
-              assert.ok(!Object.hasOwn(span.meta, 'out.host'))
-              assert.ok(!Object.hasOwn(span.meta, 'error.type'))
-            }).then(done).catch(done)
-
-            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-              res.on('data', () => {})
+          appListener = server(app, () => {})
+          await once(appListener, 'listening')
+          const { port } = appListener.address()
+          const traceReceived = agent.assertFirstTraceSpan(span => {
+            // OpenTelemetry attribute names are present...
+            assertObjectContains(span, {
+              resource: 'GET',
+              meta: {
+                'span.kind': 'client',
+                'http.request.method': 'GET',
+                'url.full': `${protocol}://localhost:${port}/user`,
+                'server.address': 'localhost',
+              },
+              metrics: {
+                'http.response.status_code': 200,
+                'server.port': port,
+              },
             })
-            req.end()
+            // ...and the Datadog ones are absent.
+            assert.ok(!Object.hasOwn(span.meta, 'http.method'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.url'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
+            assert.ok(!Object.hasOwn(span.meta, 'out.host'))
+            assert.ok(!Object.hasOwn(span.meta, 'error.type'))
+            assert.ok(!Object.hasOwn(span.meta, 'operation.name'))
+            assert.strictEqual(span.type, undefined)
           })
+          const request = http.get(`${protocol}://localhost:${port}/user`, response => response.resume())
+          await Promise.all([traceReceived, once(request, 'close')])
         })
 
         it('sets error.type to the status code on a 4xx client response', done => {

@@ -401,13 +401,13 @@ describe('otlp export flags', () => {
     }
   })
 
-  it('otlp_traces_export_enabled should be false when Lambda semantics lacks an explicit endpoint', () => {
+  it('otlp_traces_export_enabled should be true when Lambda semantics uses the default endpoint', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
     process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
     const existsSync = sinon.stub(fs, 'existsSync').returns(true)
 
     try {
-      assert.strictEqual(startupLogObj().otlp_traces_export_enabled, false)
+      assert.strictEqual(startupLogObj().otlp_traces_export_enabled, true)
     } finally {
       existsSync.restore()
       delete process.env.AWS_LAMBDA_FUNCTION_NAME

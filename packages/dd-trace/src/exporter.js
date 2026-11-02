@@ -37,7 +37,8 @@ module.exports = function getExporter (name) {
 }
 
 function usesLambdaLogExporter () {
-  return getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined &&
+  const { IS_AWS_LAMBDA } = require('./serverless')
+  return IS_AWS_LAMBDA &&
     !fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) &&
     !fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
 }

@@ -506,13 +506,13 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
-  it('should keep the real proxy when OTel semantics overrides OTEL_TRACES_EXPORTER=none', () => {
+  it('should keep the no-op proxy when OTel semantics and OTEL_TRACES_EXPORTER=none are set', () => {
     process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')
-    const proxy = require('../../src/proxy')
+    const proxy = require('../../src/noop/proxy')
     assert.strictEqual(indexFile, proxy)
   })
 
@@ -560,7 +560,7 @@ describe('Config', () => {
     assert.strictEqual(indexFile, noop)
   })
 
-  it('should keep the real proxy when Lambda OTel semantics has an explicit OTLP endpoint', () => {
+  it('should keep the no-op proxy when Lambda OTel semantics has an explicit OTLP endpoint', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
     process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'
@@ -569,7 +569,7 @@ describe('Config', () => {
       process.env[key] = 'http://collector:4318'
       delete require.cache[require.resolve('../../src/index')]
       const indexFile = require('../../src/index')
-      const proxy = require('../../src/proxy')
+      const proxy = require('../../src/noop/proxy')
       assert.strictEqual(indexFile, proxy, key)
       delete process.env[key]
     }
@@ -1136,15 +1136,32 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
   })
 
-  it('should force OTLP traces export over explicit exporter and agent protocol settings with OTel semantics', () => {
+  it('should disable OTel semantics when the trace exporter is explicitly none', () => {
     process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'
-    process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
 
     const config = getConfig()
 
-    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+    assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'DD_TRACE_OTEL_SEMANTICS_ENABLED is deactivated due to OTEL_TRACES_EXPORTER set to "none"'
+    )
   })
+
+  for (const exporter of [undefined, 'otlp']) {
+    it(`should respect the Datadog agent protocol with OTel semantics and exporter=${exporter}`, () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+      if (exporter) process.env.OTEL_TRACES_EXPORTER = exporter
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+    })
+  }
 
   for (const [key, value] of [
     ['DD_AGENTLESS_ENABLED', 'true'],
@@ -1161,7 +1178,9 @@ describe('Config', () => {
       assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
       assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
       assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
-      sinon.assert.calledWith(log.warn, 'Agentless tracing overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false')
+      sinon.assert.calledWith(log.warn,
+        'Agentless tracing is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+        'DD_TRACE_OTEL_SEMANTICS_ENABLED deactivated')
     })
   }
 
@@ -1183,7 +1202,8 @@ describe('Config', () => {
     assert.strictEqual(config.spanComputePeerService, true)
     sinon.assert.calledOnceWithExactly(
       log.warn,
-      'Test Optimization overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      'Test Optimization is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+      'Deactivating DD_TRACE_OTEL_SEMANTICS_ENABLED'
     )
     assertConfigUpdateContains(updateConfig.firstCall.args[0], [
       { name: 'DD_TRACE_OTEL_SEMANTICS_ENABLED', value: false, origin: 'calculated' },
@@ -1206,89 +1226,28 @@ describe('Config', () => {
     assert.strictEqual(config.spanComputePeerService, true)
     sinon.assert.calledOnceWithExactly(
       log.warn,
-      'DD_TRACE_EXPERIMENTAL_EXPORTER=electron overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      'DD_TRACE_EXPERIMENTAL_EXPORTER=electron is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+      'DD_TRACE_OTEL_SEMANTICS_ENABLED deactivated'
     )
     assertConfigUpdateContains(updateConfig.firstCall.args[0], [
       { name: 'DD_TRACE_OTEL_SEMANTICS_ENABLED', value: false, origin: 'calculated' },
     ])
   })
 
-  it('should disable OTel semantics in Lambda without an explicit OTLP endpoint', () => {
-    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
-    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
-    process.env.OTEL_TRACES_EXPORTER = 'none'
-    process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
-    process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
-
-    const config = getConfig()
-
-    assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
-    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
-    assert.strictEqual(config.spanAttributeSchema, 'v1')
-    assert.strictEqual(config.spanComputePeerService, true)
-    sinon.assert.calledOnceWithExactly(
-      log.warn,
-      'AWS Lambda without an explicit OTLP endpoint overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
-    )
-    assertConfigUpdateContains(updateConfig.firstCall.args[0], [
-      { name: 'DD_TRACE_OTEL_SEMANTICS_ENABLED', value: false, origin: 'calculated' },
-    ])
-  })
-
-  it('should not infer Lambda OTLP support from the Extension or mini-agent markers', () => {
-    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
-    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
-
-    for (const marker of ['/opt/extensions/datadog-agent', '/tmp/datadog/mini_agent_ready']) {
-      fs.existsSync = path => path === marker
+  for (const endpoint of [undefined, '', 'http://collector:4318']) {
+    it(`should use OTLP in Lambda with endpoint=${endpoint}`, () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      if (endpoint !== undefined) process.env.OTEL_EXPORTER_OTLP_ENDPOINT = endpoint
 
       const config = getConfig()
 
-      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false, marker)
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined, marker)
-      sinon.assert.calledOnceWithExactly(
-        log.warn,
-        'AWS Lambda without an explicit OTLP endpoint overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
-      )
-    }
-  })
-
-  it('should enable OTel semantics in Lambda with either explicit OTLP endpoint', () => {
-    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
-    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
-
-    for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
-      process.env[key] = 'http://collector:4318'
-
-      const config = getConfig()
-
-      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true, key)
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp', key)
-      assert.strictEqual(config.spanAttributeSchema, 'v0', key)
-      assert.strictEqual(config.spanComputePeerService, false, key)
-      sinon.assert.neverCalledWithMatch(
-        log.warn,
-        'AWS Lambda without an explicit OTLP endpoint overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
-      )
-      delete process.env[key]
-    }
-  })
-
-  it('should disable OTel semantics in Lambda when explicit OTLP endpoints are empty', () => {
-    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
-    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
-    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = ''
-    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = ''
-
-    const config = getConfig()
-
-    assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
-    assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
-    sinon.assert.calledWithExactly(
-      log.warn,
-      'AWS Lambda without an explicit OTLP endpoint overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
-    )
-  })
+      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+        `${endpoint || 'http://127.0.0.1:4318'}/v1/traces`)
+    })
+  }
 
   it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
@@ -1413,15 +1372,6 @@ describe('Config', () => {
       assertConfigUpdateContains(updateConfig.firstCall.args[0], [
         { name: 'DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', value: '500-599', origin: 'env_var' },
       ])
-    })
-
-    it('should retain the env_var origin when explicitly configured to the default value', () => {
-      process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '400-499'
-
-      const config = getConfig()
-
-      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '400-499')
-      assert.strictEqual(config.getOrigin('DD_TRACE_HTTP_CLIENT_ERROR_STATUSES'), 'env_var')
     })
   })
 
@@ -3131,10 +3081,10 @@ describe('Config', () => {
       assert.strictEqual(config.spanAttributeSchema, 'v0')
       assert.strictEqual(config.spanComputePeerService, false)
       assert(log.warn.calledWith(
-        'Enabling DD_TRACE_OTEL_SEMANTICS_ENABLED overrode DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to v0'
+        'DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to be "v0". Resetting'
       ))
       assert(log.warn.calledWith(
-        'Enabling DD_TRACE_OTEL_SEMANTICS_ENABLED overrode DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to false'
+        'DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to be false. Resetting'
       ))
     })
   })
@@ -5989,95 +5939,36 @@ rules:
   })
 
   describe('remote config application', () => {
-    it('should ignore OTel semantics changes because the export pipeline is configured at startup', () => {
+    it('should apply and restore remote OTel semantics through the normal config layer', () => {
       const config = getConfig()
 
       config.setRemoteConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true' })
-
-      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
-      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_SEMANTICS_ENABLED'), 'default')
-    })
-
-    it('should not disable startup OTel semantics through remote config', () => {
-      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
-      const config = getConfig()
-
-      config.setRemoteConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: 'false' })
-
       assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true)
-      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_SEMANTICS_ENABLED'), 'env_var')
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_SEMANTICS_ENABLED'), 'remote_config')
+
+      config.setRemoteConfig(null)
+      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
     })
 
-    for (const scenario of [
-      { name: 'supported runtime', enabled: true },
-      { name: 'Electron', exporter: 'electron', enabled: false },
-      { name: 'agentless exporter', exporter: 'agentless', enabled: false },
-      { name: 'agentless tracing', agentless: true, enabled: false },
-      { name: 'Lambda without an endpoint', lambda: true, enabled: false },
-      { name: 'Lambda with an endpoint', lambda: true, endpoint: 'http://collector:4318', enabled: true },
-      { name: 'Lambda with a traces endpoint', lambda: true, tracesEndpoint: 'http://collector/v1/traces', enabled: true },
+    for (const options of [
+      { DD_TRACE_EXPERIMENTAL_EXPORTER: 'electron' },
+      { DD_AGENTLESS_ENABLED: 'true' },
+      { DD_TRACE_OTEL_SEMANTICS_ENABLED: 'false' },
     ]) {
-      it(`should keep startup OTel applicability after remote transport updates in ${scenario.name}`, () => {
+      it(`should recalculate OTel compatibility for remote ${Object.keys(options)[0]}`, () => {
         process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
-        if (scenario.exporter) process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = scenario.exporter
-        if (scenario.agentless) process.env.DD_AGENTLESS_ENABLED = 'true'
-        if (scenario.lambda) process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
-        if (scenario.endpoint) process.env.OTEL_EXPORTER_OTLP_ENDPOINT = scenario.endpoint
-        if (scenario.tracesEndpoint) process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = scenario.tracesEndpoint
         const config = getConfig()
-        const exporter = config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER
-        const agentless = config.DD_AGENTLESS_ENABLED
-        const endpoint = config.OTEL_EXPORTER_OTLP_ENDPOINT
-        const tracesEndpoint = config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-        const origins = [
-          config.getOrigin('DD_TRACE_OTEL_SEMANTICS_ENABLED'),
-          config.getOrigin('tracing.DD_TRACE_EXPERIMENTAL_EXPORTER'),
-          config.getOrigin('OTEL_EXPORTER_OTLP_ENDPOINT'),
-          config.getOrigin('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'),
-        ]
-        const options = {
-          DD_TRACE_EXPERIMENTAL_EXPORTER: scenario.exporter ? 'datadog' : 'electron',
-          DD_AGENTLESS_ENABLED: scenario.agentless ? 'false' : 'true',
-          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://remote:4318',
-          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://remote:4318/v1/traces',
-          DD_LOGS_INJECTION: 'false',
-        }
-        const originalOptions = { ...options }
 
-        for (const update of [options, {}, options, null]) {
-          config.setRemoteConfig(update)
+        config.setRemoteConfig(options)
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
 
-          assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, scenario.enabled)
-          assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, exporter)
-          assert.strictEqual(config.DD_AGENTLESS_ENABLED, agentless)
-          assert.strictEqual(config.OTEL_EXPORTER_OTLP_ENDPOINT, endpoint)
-          assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, tracesEndpoint)
-          assert.deepStrictEqual([
-            config.getOrigin('DD_TRACE_OTEL_SEMANTICS_ENABLED'),
-            config.getOrigin('tracing.DD_TRACE_EXPERIMENTAL_EXPORTER'),
-            config.getOrigin('OTEL_EXPORTER_OTLP_ENDPOINT'),
-            config.getOrigin('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'),
-          ], origins)
-          assert.strictEqual(config.logInjection, update !== options)
-          if (scenario.enabled) {
-            assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
-            assert.strictEqual(config.spanAttributeSchema, 'v0')
-            assert.strictEqual(config.spanComputePeerService, false)
-          }
-        }
-        assert.deepStrictEqual(options, originalOptions)
+        config.setRemoteConfig(null)
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true)
+        assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       })
     }
-
-    it('should still apply remote transport options when OTel semantics was not requested', () => {
-      const config = getConfig()
-
-      config.setRemoteConfig({ DD_TRACE_EXPERIMENTAL_EXPORTER: 'electron' })
-
-      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'electron')
-      assert.strictEqual(config.getOrigin('tracing.DD_TRACE_EXPERIMENTAL_EXPORTER'), 'remote_config')
-      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
-    })
 
     it('should restore tracked origins when an individual RC option falls back to code', () => {
       const config = getConfig({ sampleRate: 0.5, logInjection: true })

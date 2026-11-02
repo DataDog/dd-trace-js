@@ -14,6 +14,7 @@ const semifies = require('semifies')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
 const { httpAgent } = require('../../src/exporters/common/agents')
+const { usesOtlpTraceExporter } = require('../../src/exporter')
 
 // Modules that close over the previous `Config` / `TracerProxy` singletons.
 // Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
@@ -316,24 +317,68 @@ function unformatSpanEvents (span) {
 }
 
 /**
- * Plugin tests inspect spans through the mock Datadog Agent, which cannot decode OTLP payloads.
- * Replace only the exporter; `SpanProcessor` still applies OTel semantics. Call before `setUrl`.
- *
- * @param {import('../../src/index')} initializedTracer
+ * @typedef {object} OtlpAttribute
+ * @property {string} key
+ * @property {{ stringValue?: string, intValue?: number|string, doubleValue?: number, boolValue?: boolean }} value
+ * @typedef {object} OtlpSpan
+ * @property {string} traceId
+ * @property {string} spanId
+ * @property {string} [parentSpanId]
+ * @property {string} name
+ * @property {number} kind
+ * @property {number|string} startTimeUnixNano
+ * @property {number|string} endTimeUnixNano
+ * @property {OtlpAttribute[]} attributes
+ * @property {{ code: number }} status
+ * @typedef {object} OtlpTraceRequest
+ * @property {{ resource: { attributes: OtlpAttribute[] }, scopeSpans: { spans: OtlpSpan[] }[] }[]} resourceSpans
  */
-function useAgentExporterForOtelSemantics (initializedTracer) {
-  const datadogTracer = initializedTracer._tracer
-  const { _config: config, _processor: processor } = datadogTracer
 
-  // Mirrors `opentracing/tracer.js`; any other exporter already posts to the mock agent.
-  const getExporter = require('../../src/exporter')
-  if (!getExporter.usesOtlpTraceExporter(config)) return
+/** @param {OtlpTraceRequest} payload */
+function decodeOtlpTraces (payload) {
+  const traces = new Map()
+  const kinds = ['', 'internal', 'server', 'client', 'producer', 'consumer']
 
-  const Exporter = getExporter(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
-  const exporter = new Exporter(config, datadogTracer._prioritySampler)
+  for (const { resource, scopeSpans } of payload.resourceSpans) {
+    for (const { spans } of scopeSpans) {
+      for (const span of spans) {
+        const meta = {}
+        const metrics = {}
+        for (const { key, value } of [...resource.attributes, ...span.attributes]) {
+          if (value.stringValue !== undefined) {
+            meta[key] = value.stringValue
+          } else if (value.boolValue !== undefined) {
+            meta[key] = String(value.boolValue)
+          } else if (value.intValue !== undefined || value.doubleValue !== undefined) {
+            metrics[key] = Number(value.intValue ?? value.doubleValue)
+          }
+        }
+        if (kinds[span.kind]) meta['span.kind'] = kinds[span.kind]
+        const decoded = {
+          trace_id: BigInt(`0x${span.traceId.slice(-16)}`),
+          span_id: BigInt(`0x${span.spanId}`),
+          parent_id: span.parentSpanId ? BigInt(`0x${span.parentSpanId}`) : 0n,
+          name: meta['operation.name'] ?? span.name,
+          resource: span.name,
+          service: meta['service.name'],
+          type: meta['span.type'],
+          error: span.status.code === 2 ? 1 : 0,
+          meta,
+          metrics,
+          start: Number(span.startTimeUnixNano),
+          duration: Number(span.endTimeUnixNano) - Number(span.startTimeUnixNano),
+        }
+        let trace = traces.get(span.traceId)
+        if (!trace) {
+          trace = []
+          traces.set(span.traceId, trace)
+        }
+        trace.push(decoded)
+      }
+    }
+  }
 
-  datadogTracer._exporter = exporter
-  processor._exporter = exporter
+  return [...traces.values()]
 }
 
 /**
@@ -341,9 +386,10 @@ function useAgentExporterForOtelSemantics (initializedTracer) {
  * @param {express.Response} res
  */
 function handleTraceRequest (req, res) {
-  res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+  const otlp = req.is('application/json')
+  const trace = otlp ? decodeOtlpTraces(JSON.parse(req.body)) : req.body
+  res.status(200).send(otlp ? {} : { rate_by_service: { 'service:,env:': 1 } })
   for (const { handler, spanResourceMatch } of traceHandlers) {
-    const trace = req.body
     const spans = trace.flatMap(span => span)
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(trace)
@@ -713,6 +759,7 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', handleTraceRequest)
+    agent.post('/v1/traces', handleTraceRequest)
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 
@@ -759,9 +806,9 @@ module.exports = {
           ...tracerConfig,
         })
 
-        useAgentExporterForOtelSemantics(tracer)
-
-        tracer.setUrl(`http://127.0.0.1:${port}`)
+        const createConfig = require('../../src/config')
+        const path = usesOtlpTraceExporter(createConfig()) ? '/v1/traces' : ''
+        tracer.setUrl(`http://127.0.0.1:${port}${path}`)
 
         for (const [name, pluginConfig] of loadedPlugins) {
           tracer.use(name, pluginConfig)

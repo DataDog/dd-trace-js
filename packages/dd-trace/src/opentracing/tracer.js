@@ -55,8 +55,7 @@ class DatadogTracer {
       this._exporter,
       this._prioritySampler,
       config,
-      otlpStatsExporter,
-      exportOtlpTraces
+      otlpStatsExporter
     )
     this._url = this._exporter._url
     this._enableGetRumData = config.rum.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED

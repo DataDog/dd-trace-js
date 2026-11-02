@@ -19,6 +19,7 @@ describe('exporter', () => {
   beforeEach(() => {
     env = process.env
     process.env = {}
+    delete require.cache[require.resolve('../src/serverless')]
   })
 
   afterEach(() => {

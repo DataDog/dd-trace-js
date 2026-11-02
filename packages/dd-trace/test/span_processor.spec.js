@@ -69,6 +69,7 @@ describe('SpanProcessor', () => {
         DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
       appsec: {},
+      tracing: {},
     }
     spanFormat = sinon.stub().callsFake(() => ({ formatted: true, meta: {} }))
     updateOtelTraceState = sinon.stub().callsFake((context, traceState) => {
@@ -260,6 +261,7 @@ describe('SpanProcessor', () => {
     const config = {
       stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
       appsec: {},
+      tracing: {},
       sampler: {
         sampleRate: 0,
         spanSamplingRules: [
@@ -286,6 +288,7 @@ describe('SpanProcessor', () => {
         DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
       appsec: {},
+      tracing: {},
     }
 
     const processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -381,7 +384,7 @@ describe('SpanProcessor', () => {
   it('should not add the native export marker when traces are exported over OTLP', () => {
     config.flushMinSpans = 1
     config.OTEL_TRACES_EXPORTER = 'otlp'
-    const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, true)
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
     processor.process(finishedSpan)
@@ -393,7 +396,8 @@ describe('SpanProcessor', () => {
   it('should add the native export marker when a native transport overrides OTLP', () => {
     config.flushMinSpans = 1
     config.OTEL_TRACES_EXPORTER = 'otlp'
-    const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, false)
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'electron'
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
     processor.process(finishedSpan)
@@ -410,7 +414,7 @@ describe('SpanProcessor', () => {
     trace.finished = [finishedSpan]
     const context = finishedSpan.context()
     context._tracestate = TraceState.fromString('dd=s:1,congo=value')
-    const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, true)
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
 
     processor.process(finishedSpan)
 
@@ -434,6 +438,7 @@ describe('SpanProcessor', () => {
 
   for (const priority of [AUTO_REJECT, USER_REJECT]) {
     it(`should retain stats without building OTLP tracestate for priority ${priority}`, () => {
+      config.OTEL_TRACES_EXPORTER = 'otlp'
       config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
       const stats = { onSpanFinished: sinon.stub() }
       SpanStatsProcessor.returns(stats)
@@ -442,7 +447,7 @@ describe('SpanProcessor', () => {
       trace.started = [finishedSpan]
       trace.finished = [finishedSpan]
       finishedSpan.context()._sampling.priority = priority
-      const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, true)
+      const processor = new SpanProcessor(exporter, prioritySampler, config)
 
       processor.process(finishedSpan)
 
@@ -534,6 +539,7 @@ describe('SpanProcessor', () => {
         flushMinSpans: 3,
         stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
         appsec: {},
+        tracing: {},
         DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
       }
       const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
@@ -557,6 +563,7 @@ describe('SpanProcessor', () => {
         flushMinSpans: 3,
         stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
         appsec: {},
+        tracing: {},
         DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
       }
       const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
