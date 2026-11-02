@@ -135,40 +135,28 @@ function wrapSendToFrame (send) {
   }
 }
 
-function wrapBrowserWindow (electron) {
-  const moduleExports = {}
+const preloadSessions = new WeakSet()
 
-  class DatadogBrowserWindow extends electron.BrowserWindow {
-    constructor (options = {}) {
-      const win = super(options)
+function registerPreload (session) {
+  if (preloadSessions.has(session)) return
 
-      win.webContents.session.registerPreloadScript({
-        type: 'frame', // TODO: service-worker
-        filePath: join(__dirname, 'electron', 'preload.js'),
-      })
+  preloadSessions.add(session)
 
-      // BrowserWindow doesn't support subclassing because it's all native code
-      // so we return an instance of it instead of the subclass.
-      // eslint-disable-next-line no-constructor-return
-      return win
-    }
-  }
-
-  Object.defineProperty(moduleExports, 'BrowserWindow', {
-    enumerable: true,
-    get: () => DatadogBrowserWindow,
-    configurable: false,
+  session.registerPreloadScript({
+    type: 'frame', // TODO: service-worker
+    filePath: join(__dirname, 'electron', 'preload.js'),
   })
+}
 
-  for (const key of Reflect.ownKeys(electron)) {
-    const descriptor = Reflect.getOwnPropertyDescriptor(electron, key)
+// Registering on sessions rather than replacing BrowserWindow keeps the exports untouched, so the preload also
+// reaches windows created from an exports object cached before instrumentation, as bundles do with `electron`.
+function registerPreloads ({ app, webContents }) {
+  app.on('web-contents-created', (event, contents) => registerPreload(contents.session))
 
-    if (key === 'BrowserWindow') continue
-
-    Object.defineProperty(moduleExports, key, descriptor)
+  // Pages already loaded only receive the preload on their next navigation.
+  for (const contents of webContents.getAllWebContents()) {
+    registerPreload(contents.session)
   }
-
-  return moduleExports
 }
 
 function wrapWebContents (proto) {
@@ -233,8 +221,7 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
     ipcMain.once('datadog:apm:renderer:patched', event => rendererPatchedCh.publish(event))
 
     wrapWebContents(BrowserWindow.prototype)
-
-    electron = wrapBrowserWindow(electron)
+    registerPreloads(electron)
   }
 
   return electron

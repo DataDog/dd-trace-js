@@ -7,7 +7,7 @@ const http = require('http')
 const path = require('path')
 
 const { useSandbox, sandboxCwd } = require('../helpers')
-const { assertTraceReceived } = require('./helpers')
+const { assertTraceReceived, waitForMessage } = require('./helpers')
 
 describe('Electron integration', function () {
   let httpServer
@@ -18,7 +18,7 @@ describe('Electron integration', function () {
   // Create a sandbox with electron and @electron/packager installed alongside dd-trace.
   // The app source files are copied in; dd-trace is then installed into the app directory
   // from the pre-packed sandbox tgz so electron-packager bundles it inside the binary.
-  useSandbox(['electron', '@electron/packager'], false, [path.join(__dirname, 'app')])
+  useSandbox(['electron', '@electron/packager', 'esbuild'], false, [path.join(__dirname, 'app')])
 
   before(async function () {
     this.timeout(30_000)
@@ -44,6 +44,18 @@ describe('Electron integration', function () {
 
     // Install dd-trace and its transitive dependencies into the app directory.
     execFileSync('npm', ['install'], { cwd: appDir, stdio: 'pipe' })
+
+    // Bundle the tracer into the late-start entry point, which loads electron before the tracer.
+    const esbuild = require(path.join(sandboxFolder, 'node_modules', 'esbuild'))
+    await esbuild.build({
+      entryPoints: [path.join(appDir, 'late-start.js')],
+      bundle: true,
+      outfile: path.join(appDir, 'late-start.bundle.js'),
+      platform: 'node',
+      external: ['electron'],
+      plugins: [require(path.join(appDir, 'node_modules', 'dd-trace', 'esbuild'))],
+      logLevel: 'error',
+    })
 
     // Use the electron version already installed in the sandbox so that
     // electron-packager finds the cached binary and does not re-download it.
@@ -99,107 +111,124 @@ describe('Electron integration', function () {
     if (httpServer) await new Promise(resolve => httpServer.close(resolve))
   })
 
-  beforeEach(function (done) {
-    this.timeout(30_000)
+  const variants = [
+    { title: 'with the tracer started first', env: {}, bundled: false },
+    // Rollup and Rolldown (Vite) hoist external modules such as electron above a bundled tracer.
+    {
+      title: 'with electron loaded before a bundled tracer',
+      env: { DD_ELECTRON_TEST_LATE_START: '1' },
+      bundled: true,
+    },
+  ]
 
-    child = spawn(binaryPath, process.platform === 'linux' ? ['--no-sandbox'] : [], {
-      stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
-      windowsHide: true,
-    })
-    child.on('error', done)
-    // 'ready' is sent by main.js only after the renderer window has finished
-    // loading, so IPC commands can be issued as soon as this fires.
-    child.on('message', msg => { if (msg === 'ready') done() })
-  })
+  for (const variant of variants) {
+    describe(variant.title, () => {
+      beforeEach(function (done) {
+        this.timeout(30_000)
 
-  afterEach(done => {
-    const proc = child
-    child = null
-    // Sending on a closed IPC channel emits an unhandled ERR_IPC_CHANNEL_CLOSED 'error' that masks the real
-    // failure, so only quit a still-connected child and let the send callback absorb a channel that races closed.
-    if (!proc?.connected) return done()
-    proc.once('close', done)
-    proc.send({ name: 'quit' }, () => {})
-  })
+        child = spawn(binaryPath, process.platform === 'linux' ? ['--no-sandbox'] : [], {
+          env: { ...process.env, ...variant.env },
+          stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+          windowsHide: true,
+        })
+        child.on('error', done)
+        // 'ready' is sent by main.js only after the renderer window has finished
+        // loading, so IPC commands can be issued as soon as this fires.
+        child.on('message', msg => { if (msg === 'ready') done() })
+      })
 
-  it('should create an http.request span for net.fetch calls', done => {
-    assertTraceReceived(child, ({ payload }) => {
-      const spans = payload.flat()
-      const span = spans.find(s => s.name === 'http.request')
-      if (!span) throw new Error('No http.request span found')
+      afterEach(done => {
+        const proc = child
+        child = null
+        // Sending on a closed IPC channel emits an unhandled ERR_IPC_CHANNEL_CLOSED 'error' that masks the real
+        // failure, so only quit a still-connected child and let the send callback absorb a channel that races closed.
+        if (!proc?.connected) return done()
+        proc.once('close', done)
+        proc.send({ name: 'quit' }, () => {})
+      })
 
-      assert.strictEqual(span.type, 'http')
-      assert.strictEqual(span.resource, 'GET')
-      assert.strictEqual(span.service, 'electron-integration-test')
-      assert.strictEqual(span.error, 0)
-      assert.strictEqual(span.meta.component, 'electron')
-      assert.strictEqual(span.meta['span.kind'], 'client')
-      assert.strictEqual(span.meta['http.method'], 'GET')
-      assert.strictEqual(span.meta['http.status_code'], '200')
-      assert.strictEqual(span.meta['http.url'], `http://127.0.0.1:${httpPort}/`)
-    }).then(done, done)
+      it('should create an http.request span for net.fetch calls', done => {
+        assertTraceReceived(child, ({ payload }) => {
+          const spans = payload.flat()
+          const span = spans.find(s => s.name === 'http.request')
+          if (!span) throw new Error('No http.request span found')
 
-    child.send({ name: 'http', url: `http://127.0.0.1:${httpPort}/` })
-  })
+          assert.strictEqual(span.type, 'http')
+          assert.strictEqual(span.resource, 'GET')
+          assert.strictEqual(span.service, 'electron-integration-test')
+          assert.strictEqual(span.error, 0)
+          assert.strictEqual(span.meta.component, 'electron')
+          assert.strictEqual(span.meta['span.kind'], 'client')
+          assert.strictEqual(span.meta['http.method'], 'GET')
+          assert.strictEqual(span.meta['http.status_code'], '200')
+          assert.strictEqual(span.meta['http.url'], `http://127.0.0.1:${httpPort}/`)
+        }).then(done, done)
 
-  it('should create an electron.main.send span for IPC send from main to renderer', done => {
-    assertTraceReceived(child, ({ payload }) => {
-      const spans = payload.flat()
-      const span = spans.find(s => s.name === 'electron.main.send')
-      if (!span) throw new Error('No electron.main.send span found')
+        child.send({ name: 'http', url: `http://127.0.0.1:${httpPort}/` })
+      })
 
-      assert.strictEqual(span.resource, 'ping')
-      assert.strictEqual(span.service, 'electron-integration-test')
-      assert.strictEqual(span.error, 0)
-      assert.strictEqual(span.meta.component, 'electron')
-      assert.strictEqual(span.meta['span.kind'], 'producer')
-    }).then(done, done)
+      it('should create an electron.main.send span for IPC send from main to renderer', done => {
+        assertTraceReceived(child, ({ payload }) => {
+          const spans = payload.flat()
+          const span = spans.find(s => s.name === 'electron.main.send')
+          if (!span) throw new Error('No electron.main.send span found')
 
-    child.send({ name: 'ipc' })
-  })
+          assert.strictEqual(span.resource, 'ping')
+          assert.strictEqual(span.service, 'electron-integration-test')
+          assert.strictEqual(span.error, 0)
+          assert.strictEqual(span.meta.component, 'electron')
+          assert.strictEqual(span.meta['span.kind'], 'producer')
+        }).then(done, done)
 
-  it('should inject DatadogEventBridge in the renderer process', async () => {
-    const messagePromise = new Promise(resolve => {
-      child.on('message', function onMessage (message) {
-        if (!message || message.name !== 'bridge-result') return
-        child.removeListener('message', onMessage)
-        resolve(message)
+        child.send({ name: 'ipc' })
+      })
+
+      it('should register the Datadog preload once on the session of the window', async () => {
+        const message = await waitForMessage(child, 'preloads', { name: 'preloads' })
+
+        assert.deepStrictEqual(message.result.map(({ type }) => type), ['frame'])
+        assert.match(message.result[0].filePath, /[/\\]electron[/\\]preload\.js$/)
+      })
+
+      // A bundled tracer resolves the preload next to the bundle, where the file does not exist.
+      if (!variant.bundled) {
+        it('should inject DatadogEventBridge in the renderer process', async () => {
+          const message = await waitForMessage(child, 'bridge-result', { name: 'bridge' })
+
+          assert.strictEqual(message.result.exists, true, 'DatadogEventBridge should exist on window')
+          assert.strictEqual(message.result.capabilities, '[]')
+          assert.ok(message.result.privacyLevel, 'privacyLevel should be set')
+          assert.ok(message.result.sendSuccess, 'bridge.send() should not throw')
+        })
+      }
+
+      it('should produce spans for both HTTP and IPC when both operations are triggered', done => {
+        // Register both assertions before triggering anything so no message is missed.
+        const httpSpanSeen = assertTraceReceived(child, ({ payload }) => {
+          const spans = payload.flat()
+          const span = spans.find(s => s.name === 'http.request')
+          if (!span) throw new Error('No http.request span found')
+
+          assert.strictEqual(span.type, 'http')
+          assert.strictEqual(span.meta.component, 'electron')
+          assert.strictEqual(span.meta['http.status_code'], '200')
+          assert.strictEqual(span.meta['http.url'], `http://127.0.0.1:${httpPort}/`)
+        })
+
+        const ipcSpanSeen = assertTraceReceived(child, ({ payload }) => {
+          const spans = payload.flat()
+          const span = spans.find(s => s.name === 'electron.main.send')
+          if (!span) throw new Error('No electron.main.send span found')
+
+          assert.strictEqual(span.meta.component, 'electron')
+          assert.strictEqual(span.meta['span.kind'], 'producer')
+        })
+
+        Promise.all([httpSpanSeen, ipcSpanSeen]).then(() => done(), done)
+
+        child.send({ name: 'http', url: `http://127.0.0.1:${httpPort}/` })
+        child.send({ name: 'ipc' })
       })
     })
-    child.send({ name: 'bridge' })
-
-    const message = await messagePromise
-    assert.strictEqual(message.result.exists, true, 'DatadogEventBridge should exist on window')
-    assert.strictEqual(message.result.capabilities, '[]')
-    assert.ok(message.result.privacyLevel, 'privacyLevel should be set')
-    assert.ok(message.result.sendSuccess, 'bridge.send() should not throw')
-  })
-
-  it('should produce spans for both HTTP and IPC when both operations are triggered', done => {
-    // Register both assertions before triggering anything so no message is missed.
-    const httpSpanSeen = assertTraceReceived(child, ({ payload }) => {
-      const spans = payload.flat()
-      const span = spans.find(s => s.name === 'http.request')
-      if (!span) throw new Error('No http.request span found')
-
-      assert.strictEqual(span.type, 'http')
-      assert.strictEqual(span.meta.component, 'electron')
-      assert.strictEqual(span.meta['http.status_code'], '200')
-      assert.strictEqual(span.meta['http.url'], `http://127.0.0.1:${httpPort}/`)
-    })
-
-    const ipcSpanSeen = assertTraceReceived(child, ({ payload }) => {
-      const spans = payload.flat()
-      const span = spans.find(s => s.name === 'electron.main.send')
-      if (!span) throw new Error('No electron.main.send span found')
-
-      assert.strictEqual(span.meta.component, 'electron')
-      assert.strictEqual(span.meta['span.kind'], 'producer')
-    })
-
-    Promise.all([httpSpanSeen, ipcSpanSeen]).then(() => done(), done)
-
-    child.send({ name: 'http', url: `http://127.0.0.1:${httpPort}/` })
-    child.send({ name: 'ipc' })
-  })
+  }
 })

@@ -39,4 +39,24 @@ function assertTraceReceived (child, fn, timeout = 2000) {
   return promise
 }
 
-module.exports = { assertTraceReceived }
+/**
+ * Send `command` to the child process and resolve with its first `{ name }` IPC reply.
+ *
+ * @param {import('child_process').ChildProcess} child
+ * @param {string} name
+ * @param {object} command
+ * @returns {Promise<{ name: string, result: unknown }>}
+ */
+function waitForMessage (child, name, command) {
+  const promise = new Promise(resolve => {
+    child.on('message', function onMessage (message) {
+      if (message?.name !== name) return
+      child.removeListener('message', onMessage)
+      resolve(message)
+    })
+  })
+  child.send(command)
+  return promise
+}
+
+module.exports = { assertTraceReceived, waitForMessage }
