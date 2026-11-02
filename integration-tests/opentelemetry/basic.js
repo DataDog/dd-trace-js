@@ -33,12 +33,13 @@ otelTracer.startActiveSpan('otel-sub', {
   const extractedSpanContext = ot.trace.getSpanContext(extractedContext)
 
   assert.ok(carrier.traceparent)
-  assert.strictEqual(activeTraceState.serialize(), '')
+  assert.strictEqual(activeTraceState.serialize(), carrier.tracestate)
   assert.strictEqual(Object.getPrototypeOf(activeTraceState), Object.getPrototypeOf(ot.createTraceState()))
   assert.ok(extractedSpanContext)
   assert.strictEqual(extractedSpanContext.traceId, activeSpanContext.traceId)
   assert.strictEqual(extractedSpanContext.spanId, activeSpanContext.spanId)
   assert.strictEqual(extractedSpanContext.traceFlags, activeSpanContext.traceFlags)
+  assert.strictEqual(extractedSpanContext.traceState.serialize(), activeTraceState.serialize())
 
   setImmediate(() => {
     otelSpan.end(startTime + 50)
