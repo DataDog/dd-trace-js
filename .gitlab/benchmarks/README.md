@@ -24,6 +24,15 @@ GitLab CI configuration for the benchmarks that run on the
   [apm-sdks-benchmarks](https://github.com/DataDog/apm-sdks-benchmarks/tree/main/.gitlab).
     - Change them there.
 
+## Merge queue baseline
+
+On `mq-working-branch-master-*` branches, `.benchmarks` sets `MANUAL_BASELINE_BRANCH: master`.
+bp-runner otherwise finds the baseline by searching for the branch's PR, and merge queue
+branches have none. The search pages through every PR in the repository, which takes minutes,
+can exhaust the shared GitHub App rate limit, and leaves the run without a baseline. With the
+override, the baseline is the merge-base with `master`, and `check-big-regressions` applies to
+merge queue runs the same way it does to PRs.
+
 ## Marking a benchmark as flaky
 
 Add it to `FLAKY_BENCHMARKS_REGEX` in `.benchmarks` (the shared template in `gitlab-ci.yml`).
