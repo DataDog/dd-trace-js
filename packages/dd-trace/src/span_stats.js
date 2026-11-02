@@ -101,16 +101,16 @@ class SpanAggStats {
 }
 
 /**
- * Convert decimal strings unchanged by numeric round-trip, or numbers, without precision loss.
+ * Accept canonical decimal strings or numbers in the non-negative int32 range.
  *
  * @param {unknown} value
  */
-function toSafeInteger (value) {
-  if (typeof value === 'number') return Number.isSafeInteger(value) ? value : undefined
+function toStatusCode (value) {
+  if (typeof value === 'number') return value === (value | 0) && value >= 0 ? value : undefined
   if (typeof value !== 'string') return
 
-  const integer = Number(value)
-  return Number.isSafeInteger(integer) && String(integer) === value ? integer : undefined
+  const integer = Number(value) | 0
+  return integer >= 0 && String(integer) === value ? integer : undefined
 }
 
 /**
@@ -120,10 +120,10 @@ function httpStatusCode (span) {
   const datadogStatus = span.meta[HTTP_STATUS_CODE]
   if (datadogStatus) return datadogStatus
 
-  const otelMetaStatus = toSafeInteger(span.meta['http.response.status_code'])
+  const otelMetaStatus = toStatusCode(span.meta['http.response.status_code'])
   if (otelMetaStatus !== undefined) return otelMetaStatus
 
-  return toSafeInteger(span.metrics?.['http.response.status_code']) ?? 0
+  return toStatusCode(span.metrics?.['http.response.status_code']) ?? 0
 }
 
 class SpanAggKey {

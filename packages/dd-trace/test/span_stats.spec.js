@@ -178,19 +178,42 @@ describe('SpanAggKey', () => {
     assert.strictEqual(key.statusCode, 500)
   })
 
-  it('should skip statuses only a coercion would accept', () => {
-    const statuses = ['1e2', '0x10', ' 200 ', '1.5', '0200', '+1', '-0', NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]
-    for (const status of statuses) {
-      const key = new SpanAggKey({ ...basicSpan, meta: { 'http.response.status_code': status }, metrics: {} })
+  for (const source of ['meta', 'metrics']) {
+    it(`should preserve non-negative int32 OTel statuses from ${source}`, () => {
+      for (const status of [0, 200, 0x7fffffff]) {
+        for (const value of [status, String(status)]) {
+          const span = { ...basicSpan, meta: {}, metrics: {}, [source]: { 'http.response.status_code': value } }
 
-      assert.strictEqual(key.statusCode, 0, `status ${JSON.stringify(status)} must not be aggregated`)
+          assert.strictEqual(new SpanAggKey(span).statusCode, status)
+        }
+      }
+    })
+
+    it(`should reject invalid OTel statuses from ${source}`, () => {
+      const statuses = [
+        '1e2', '0x10', ' 200 ', '1.5', '0200', '+1', '-0', '',
+        -1, 1.5, 0x80000000, 0xffffffff, 0x100000000, 0x1000000c8,
+        NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1,
+        undefined, null, true, {}, [], Symbol('status'), 200n,
+      ]
+      for (const status of statuses) {
+        for (const value of typeof status === 'number' ? [status, String(status)] : [status]) {
+          const span = { ...basicSpan, meta: {}, metrics: {}, [source]: { 'http.response.status_code': value } }
+
+          assert.strictEqual(new SpanAggKey(span).statusCode, 0, `status ${String(value)} must not be aggregated`)
+        }
+      }
+    })
+  }
+
+  it('should use the metric fallback when the OTel meta status is outside the wire range', () => {
+    const span = {
+      ...basicSpan,
+      meta: { 'http.response.status_code': '-1' },
+      metrics: { 'http.response.status_code': 204 },
     }
-  })
 
-  it('should preserve a signed integer status without applying HTTP range validation', () => {
-    const span = { ...basicSpan, meta: { 'http.response.status_code': '-1' }, metrics: {} }
-
-    assert.strictEqual(new SpanAggKey(span).statusCode, -1)
+    assert.strictEqual(new SpanAggKey(span).statusCode, 204)
   })
 
   it('should preserve Datadog-first HTTP status precedence', () => {
