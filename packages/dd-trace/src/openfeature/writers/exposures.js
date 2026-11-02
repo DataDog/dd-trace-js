@@ -12,6 +12,7 @@ const {
 } = require('../../evp_proxy/constants')
 const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const log = require('../../log')
+const { snapshotFeatures } = require('./split-features')
 const BaseFFEWriter = require('./base')
 
 // Disabled-state cap. Drops invalidate experiment results because the provider's
@@ -39,6 +40,7 @@ const PENDING_MAX_EVENTS = 1000
  * @property {string} flag.key - Flag key
  * @property {object} variant - Variant information
  * @property {string} variant.key - Variant key
+ * @property {Record<string, string | number | boolean>} [features]
  * @property {number} [serial_id] - Serial id of the split the subject landed in
  * @property {object} subject - Subject (user/entity) information
  * @property {string} subject.id - Subject identifier
@@ -221,6 +223,9 @@ class ExposuresWriter extends BaseFFEWriter {
           attributes: event.subject?.attributes,
         },
       }
+
+      const features = snapshotFeatures(event.features)
+      if (features !== undefined) formatted.features = features
 
       if (typeof event.serial_id === 'number') {
         formatted.serial_id = event.serial_id
