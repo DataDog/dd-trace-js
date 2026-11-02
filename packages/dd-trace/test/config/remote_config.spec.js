@@ -39,6 +39,11 @@ describe('Tracing Remote Config', () => {
       enable(rc, config, onConfigUpdated)
 
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
+      sinon.assert.calledWithExactly(
+        rc.updateCapabilities,
+        RemoteConfigCapabilities.APM_TRACING_MULTICONFIG_MERGE,
+        true
+      )
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)

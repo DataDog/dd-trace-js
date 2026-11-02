@@ -150,6 +150,9 @@ function enable (rc, config, onConfigUpdated) {
   // This tracer supports receiving multiple simultaneous targeted sdk_config payloads under the
   // APM_TRACING product (e.g. an org-level and a service-level config) and merges them by priority.
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
+  // Same-priority configs are merged by revision, so the backend can safely add a config next to an
+  // existing one for the same target.
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_MULTICONFIG_MERGE, true)
 
   // Keep advertising the legacy per-setting capabilities while the backend and UI still use them
   // to determine which settings are editable. Values are delivered through sdk_config below.
