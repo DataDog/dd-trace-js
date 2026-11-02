@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
 
 require('../../setup/core')
 const { ddBasePath } = require('../../../src/util')
@@ -173,6 +174,29 @@ describe('telemetry log collector', () => {
           '    at node:events:518:28',
           '    at node:internal/main/worker_thread:206:26',
         ].join(EOL),
+      }])
+    })
+
+    it('should keep only runtime frames when the dd-trace location is unknown', () => {
+      const collector = proxyquire('../../../src/telemetry/logs/log-collector', {
+        '../../util': { ddBasePath: undefined },
+      })
+      collector.add({
+        message: 'failure',
+        level: 'ERROR',
+        errorType: 'Error',
+        stack_trace: [
+          'Error: secret',
+          '    at customerFunction (/customer/undefined/app.js:10:2)',
+          '    at Object.undefined (/customer/app.js:1:2)',
+          '    at node:internal/main/worker_thread:206:26',
+        ].join(EOL),
+      })
+
+      assert.deepStrictEqual(collector.drain(), [{
+        message: 'failure',
+        level: 'ERROR',
+        stack_trace: 'Error: redacted\n    at node:internal/main/worker_thread:206:26',
       }])
     })
 

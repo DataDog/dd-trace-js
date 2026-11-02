@@ -294,6 +294,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@typesafe-ai/sdk",
+    "integration": "typesafe",
+    "minimum_tracer_supported": "0.6.0",
+    "max_tracer_supported": "0.7.0",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@wdio/local-runner",
     "integration": "mocha",
     "minimum_tracer_supported": "9.0.0",
