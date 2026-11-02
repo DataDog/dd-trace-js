@@ -230,7 +230,7 @@ function sanitizeConsoleText (value) {
  * @param {string} name key or environment variable name
  */
 function isSensitiveName (name) {
-  const normalized = String(name).replaceAll(/[-.]/g, '_')
+  const normalized = name.replaceAll(/[-.]/g, '_')
   return SENSITIVE_NAME_PATTERN.test(normalized) ||
     SENSITIVE_AUTH_NAME_PATTERN.test(normalized) ||
     SENSITIVE_COOKIE_NAME_PATTERN.test(normalized) ||

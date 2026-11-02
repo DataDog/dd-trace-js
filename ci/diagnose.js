@@ -1273,7 +1273,7 @@ function getProjectPreferenceScores (root, manifests) {
 /**
  * Normalizes repository and package names for conservative identity comparison.
  *
- * @param {string} value repository or package name
+ * @param {unknown} value repository or package name from manifest metadata
  * @returns {Set<string>} normalized identity tokens
  */
 function getIdentityTokens (value) {
@@ -1332,7 +1332,7 @@ function isIneligibleFrameworkCommand (frameworkId, command) {
  * @param {string} command package script command
  */
 function isCucumberRunnerCommand (command) {
-  return CUCUMBER_RUNNER_COMMAND_RE.test(String(command))
+  return CUCUMBER_RUNNER_COMMAND_RE.test(command)
 }
 
 /**
@@ -2009,7 +2009,7 @@ function coerceVersion (rawVersion) {
  * @param {string} rawVersion package manifest version/range
  */
 function isAmbiguousRange (rawVersion) {
-  const version = String(rawVersion || '').trim()
+  const version = rawVersion.trim()
   if (!version || version.includes('||')) return true
   return /<=?\s*\d/.test(version)
 }
