@@ -3,7 +3,7 @@
 const assert = require('node:assert')
 
 const dc = require('dc-polyfill')
-const { after, before, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const ddpv = require('mocha/package.json').version
@@ -423,11 +423,13 @@ describe('Plugin', () => {
         })
 
         describe('with service function', () => {
+          let currentService
+
           before(async () => {
             await agent.load('oracledb', {
               service (connAttrs) {
                 assert.strictEqual(connAttrs.connectString, config.connectString)
-                return connAttrs.connectString
+                return currentService ?? connAttrs.connectString
               },
             })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
@@ -445,6 +447,11 @@ describe('Plugin', () => {
           after(async () => {
             await agent.close()
           })
+
+          afterEach(() => {
+            currentService = undefined
+          })
+
           withNamingSchema(
             () => connection.execute(dbQuery),
             {
@@ -467,6 +474,16 @@ describe('Plugin', () => {
               }),
               connection.execute(dbQuery),
             ])
+          })
+
+          it('resolves the service function for every query', async () => {
+            for (const service of ['first', 'second']) {
+              currentService = service
+              await Promise.all([
+                agent.assertFirstTraceSpan({ service }),
+                connection.execute(dbQuery),
+              ])
+            }
           })
         })
 
@@ -497,72 +514,6 @@ describe('Plugin', () => {
               connection.execute(dbQuery),
             ])
             await connection.close()
-          })
-        })
-
-        describe('with cached query service function', () => {
-          let firstConnection
-          let firstConfig
-          let secondConnection
-          let secondConfig
-          let serviceCalls
-
-          before(async () => {
-            firstConfig = { ...config }
-            secondConfig = { ...config }
-            serviceCalls = 0
-            tracer = await agent.load('oracledb', {
-              poolAcquire: false,
-              service (connAttrs) {
-                serviceCalls++
-                if (connAttrs === firstConfig) return 'first'
-                if (connAttrs === secondConfig) return 'second'
-                return 'unexpected'
-              },
-            })
-            oracledb = require(`../../../versions/oracledb@${version}`).get()
-            firstConnection = await oracledb.getConnection(firstConfig)
-            secondConnection = await oracledb.getConnection(secondConfig)
-          })
-
-          after(async () => {
-            await Promise.all([
-              firstConnection.close(),
-              secondConnection.close(),
-            ])
-            await agent.close()
-          })
-
-          it('caches each connection service until configuration changes', async () => {
-            for (const [currentConnection, service] of [
-              [firstConnection, 'first'],
-              [firstConnection, 'first'],
-              [secondConnection, 'second'],
-              [secondConnection, 'second'],
-            ]) {
-              await Promise.all([
-                agent.assertFirstTraceSpan({ service }),
-                currentConnection.execute(dbQuery),
-              ])
-            }
-            assert.strictEqual(serviceCalls, 2)
-
-            serviceCalls = 0
-            tracer.use('oracledb', {
-              poolAcquire: false,
-              service () {
-                serviceCalls++
-                return 'updated'
-              },
-            })
-
-            for (let count = 0; count < 2; count++) {
-              await Promise.all([
-                agent.assertFirstTraceSpan({ service: 'updated' }),
-                firstConnection.execute(dbQuery),
-              ])
-            }
-            assert.strictEqual(serviceCalls, 1)
           })
         })
 
