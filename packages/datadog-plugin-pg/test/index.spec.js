@@ -340,10 +340,10 @@ describe('Plugin', () => {
           // pg.Query is the JavaScript client's query class; pg.native uses its own.
           if (implementation !== 'pg.native') {
             it('should run the callback of a reused query object in the current parent context', async () => {
-              const actives = []
+              const activeSpanIds = []
               let resolveCallback
               const query = new pg.Query('SELECT 1', undefined, () => {
-                actives.push(tracer.scope().active())
+                activeSpanIds.push(tracer.scope().active()?.context().toSpanId())
                 resolveCallback()
               })
               const parents = [tracer.startSpan('first'), tracer.startSpan('second')]
@@ -361,7 +361,7 @@ describe('Plugin', () => {
                 await spanFinished
               }
 
-              assert.deepStrictEqual(actives, parents)
+              assert.deepStrictEqual(activeSpanIds, parents.map(parent => parent.context().toSpanId()))
             })
           }
 
@@ -563,13 +563,13 @@ describe('Plugin', () => {
           const spanFinished = assertErroredQuerySpan(/timeout/i)
           const parent = tracer.startSpan('test')
 
-          const active = await new Promise(resolve => {
+          const activeSpanId = await new Promise(resolve => {
             tracer.scope().activate(parent, () => {
-              runQuery(() => resolve(tracer.scope().active()))
+              runQuery(() => resolve(tracer.scope().active()?.context().toSpanId()))
             })
           })
 
-          assert.strictEqual(active, parent)
+          assert.strictEqual(activeSpanId, parent.context().toSpanId())
           parent.finish()
           await spanFinished
         }
@@ -581,10 +581,10 @@ describe('Plugin', () => {
         })
 
         it('should run the callback of a reused query config in the current parent context', async () => {
-          const actives = []
+          const activeSpanIds = []
           let resolveCallback
           const callback = () => {
-            actives.push(tracer.scope().active())
+            activeSpanIds.push(tracer.scope().active()?.context().toSpanId())
             resolveCallback()
           }
           const config = { text: 'SELECT 1', callback }
@@ -607,7 +607,7 @@ describe('Plugin', () => {
             await spanFinished
           }
 
-          assert.deepStrictEqual(actives, parents)
+          assert.deepStrictEqual(activeSpanIds, parents.map(parent => parent.context().toSpanId()))
         })
 
         it('should wrap the callback pg selects for a query object that already has one', async () => {
@@ -635,13 +635,13 @@ describe('Plugin', () => {
           const spanFinished = assertErroredQuerySpan(/timeout/i)
           const parent = tracer.startSpan('test')
 
-          const active = await new Promise(resolve => {
+          const activeSpanId = await new Promise(resolve => {
             tracer.scope().activate(parent, () => {
-              client.query('SELECT 1', () => resolve(tracer.scope().active()))
+              client.query('SELECT 1', () => resolve(tracer.scope().active()?.context().toSpanId()))
             })
           })
 
-          assert.strictEqual(active, parent)
+          assert.strictEqual(activeSpanId, parent.context().toSpanId())
           parent.finish()
           await spanFinished
         })
@@ -652,13 +652,13 @@ describe('Plugin', () => {
           const spanFinished = assertErroredQuerySpan(/closed/i)
           const parent = tracer.startSpan('test')
 
-          const active = await new Promise(resolve => {
+          const activeSpanId = await new Promise(resolve => {
             tracer.scope().activate(parent, () => {
-              client.query('SELECT 1', () => resolve(tracer.scope().active()))
+              client.query('SELECT 1', () => resolve(tracer.scope().active()?.context().toSpanId()))
             })
           })
 
-          assert.strictEqual(active, parent)
+          assert.strictEqual(activeSpanId, parent.context().toSpanId())
           parent.finish()
           await spanFinished
         })
