@@ -4,9 +4,11 @@ const assert = require('node:assert/strict')
 
 const proxyquire = require('proxyquire')
 
-const benchmark = require('./benchmark')
+const guard = require('../startup-guard')
+const StatsD = require('../statsd')
 
-const LLMObsExporter = proxyquire('../packages/dd-trace/src/exporters/llmobs', {
+// Keep discovery pending to measure only the buffer, without network requests.
+const LLMObsExporter = proxyquire('../../../packages/dd-trace/src/exporters/llmobs', {
   '../../agent/info': { fetchAgentInfo () {} },
   '../../config/helper': { getValueFromEnvSources () {} },
   '../../log': { warn () {} },
@@ -19,6 +21,7 @@ const exporter = new LLMObsExporter({
 
 assert.ok(global.gc, 'run this benchmark with --expose-gc')
 
+/** @param {number} index */
 function createSpan (index) {
   const input = Buffer.alloc(11_250)
   input.writeUInt32LE(index)
@@ -66,40 +69,20 @@ function memoryUsage () {
   return { heapUsed, external, rss }
 }
 
-function difference (after, before) {
-  return {
-    heapUsed: after.heapUsed - before.heapUsed,
-    external: after.external - before.external,
-    rss: after.rss - before.rss,
-  }
-}
-
+const operations = Number(process.env.OPERATIONS)
+assert.ok(Number.isInteger(operations) && operations >= 1000)
+const statsd = new StatsD({ prefix: 'llmobs-exporter-buffer.' })
 const before = memoryUsage()
-let spanSizeBytes
-for (let i = 0; i < 1000; i++) {
-  const span = createSpan(i)
-  spanSizeBytes ??= Buffer.byteLength(JSON.stringify(span))
-  exporter.export([span])
-}
-const atLimit = memoryUsage()
-
-for (let i = 1000; i < 2000; i++) exporter.export([createSpan(i)])
-const afterEviction = memoryUsage()
+guard.loopStart()
+for (let i = 0; i < operations; i++) exporter.export([createSpan(i)])
+guard.done()
+const after = memoryUsage()
 
 const bufferedSpans = exporter.getUncodedTraces().reduce((count, trace) => count + trace.length, 0)
 assert.strictEqual(bufferedSpans, 1000)
 
-process.stdout.write(`${JSON.stringify({
-  spanSizeBytes,
-  bufferedSpans,
-  retainedAtLimit: difference(atLimit, before),
-  retainedAfterEviction: difference(afterEviction, before),
-})}\n`)
-
-const trace = [createSpan(2000)]
-
-benchmark('LLMObs exporter buffer')
-  .add('evict oldest trace from a full 1,000-span buffer', () => {
-    exporter.export(trace)
-  })
-  .run()
+for (const key of ['heapUsed', 'external', 'rss']) {
+  statsd.gauge(`retained_${key}_bytes`, after[key] - before[key])
+}
+statsd.gauge('buffered_spans', bufferedSpans)
+statsd.flush()
