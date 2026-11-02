@@ -34,10 +34,7 @@ describe('generate supported integrations', () => {
       versions: nodeAliases,
       nodeRange: '>=24',
       plugins: new Map([['http', 'http']]),
-      instrumentations: new Map([
-        ['24.16.0', new Map()],
-        ['26.2.0', new Map()],
-      ]),
+      instrumentations: new Map(),
       getPackageVersions: () => Promise.reject(new Error('Node.js built-ins do not use npm metadata')),
     })
 
@@ -60,11 +57,7 @@ describe('generate supported integrations', () => {
       packageInfo: { engines: { node: '>=24' } },
       versions: nodeAliases,
       plugins: new Map([['http', 'http']]),
-      instrumentations: new Map([
-        ['24.16.0', new Map()],
-        ['26.2.0', new Map()],
-        ['28.0.0', new Map()],
-      ]),
+      instrumentations: new Map(),
       getPackageVersions: () => Promise.reject(new Error('Node.js built-ins do not use npm metadata')),
     })
 
@@ -73,9 +66,9 @@ describe('generate supported integrations', () => {
 
   it('uses the tested package versions active on each Node.js line', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [
-        { key: '18', version: '18.20.8' },
-        { key: '26', version: '26.2.0' },
+      nodeVersions: [
+        '18.20.8',
+        '26.2.0',
       ],
       plugins: new Map([['express', 'express']]),
       instrumentations: new Map([
@@ -109,20 +102,20 @@ describe('generate supported integrations', () => {
   })
 
   it('includes versioned integration tests without capping declared support', async () => {
-    const profiles = [
-      { key: '20', version: '20.20.2' },
-      { key: '24', version: '24.16.0' },
-      { key: '26', version: '26.2.0' },
+    const nodeVersions = [
+      '20.20.2',
+      '24.16.0',
+      '26.2.0',
     ]
     const plugins = new Map([
       ['@azure/event-hubs', 'azure-event-hubs'],
       ['@azure/service-bus', 'azure-service-bus'],
     ])
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: profiles,
+      nodeVersions,
       plugins,
-      instrumentations: new Map(profiles.map(profile =>
-        [profile.version, new Map([...plugins.keys()].map(name =>
+      instrumentations: new Map(nodeVersions.map(nodeVersion =>
+        [nodeVersion, new Map([...plugins.keys()].map(name =>
           [name, [{ versions: [name === '@azure/service-bus' ? '>=7.0.0' : '>=6.0.0'] }]]
         ))]
       )),
@@ -144,7 +137,7 @@ describe('generate supported integrations', () => {
 
   it('removes ranges covered by another active declaration', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [{ key: '26', version: '26.2.0' }],
+      nodeVersions: ['26.2.0'],
       plugins: new Map([['express', 'express']]),
       instrumentations: new Map([
         ['26.2.0', new Map([['express', [
@@ -163,7 +156,7 @@ describe('generate supported integrations', () => {
 
   it('keeps the first of two equivalent active ranges', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [{ key: '26', version: '26.2.0' }],
+      nodeVersions: ['26.2.0'],
       plugins: new Map([['express', 'express']]),
       instrumentations: new Map([
         ['26.2.0', new Map([['express', [
@@ -179,9 +172,9 @@ describe('generate supported integrations', () => {
 
   it('omits dependencies without instrumentation on a tested runtime', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [{ key: '26', version: '26.2.0' }],
+      nodeVersions: ['26.2.0'],
       plugins: new Map([['express', 'express']]),
-      instrumentations: new Map([['26.2.0', new Map()]]),
+      instrumentations: new Map(),
       getPackageVersions: () => Promise.reject(new Error('Dependencies without hooks do not use npm metadata')),
     })
 
@@ -191,35 +184,69 @@ describe('generate supported integrations', () => {
   it('omits Node.js lines outside an instrumentation declaration gate', async () => {
     const declarations = [{ versions: ['>=4 <5'], node: '>=26' }]
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [
-        { key: '18', version: '18.20.8' },
-        { key: '26', version: '26.2.0' },
+      nodeVersions: [
+        '18.20.8',
+        '26.2.0',
       ],
       plugins: new Map([['express', 'express']]),
-      instrumentations: new Map([
-        ['18.20.8', new Map([['express', declarations]])],
-        ['26.2.0', new Map([['express', declarations]])],
-      ]),
+      instrumentations: testInstrumentations(['18.20.8', '26.2.0'], { express: declarations }),
       getPackageVersions: () => Promise.resolve(['4.0.0', '4.22.1']),
     })
 
     assert.deepStrictEqual(rows[0].versions[0].testedRuntimes.node, ['26.2.0'])
   })
 
+  it('applies runtime-specific test exclusions to each simulated Node.js version', async () => {
+    await withTestWorkflow({
+      jobs: {
+        selected: {
+          env: { PLUGINS: 'avsc|grpc' },
+          steps: [{ uses: './.github/actions/node', with: { version: '>=24 <26' } }, {
+            run: 'npm run test:plugins:ci',
+          }],
+        },
+      },
+    }, async () => {
+      const nodeVersions = ['24.16.0', '25.0.0']
+      const { rows } = await generateSupportedIntegrations({
+        nodeVersions,
+        plugins: new Map([['avsc', 'avsc'], ['@grpc/grpc-js', 'grpc']]),
+        instrumentations: testInstrumentations(nodeVersions, {
+          avsc: [{ versions: ['>=5.0.0'] }],
+          '@grpc/grpc-js': [{ versions: ['>=1.0.3'] }],
+        }),
+        getPackageVersions: dependency => Promise.resolve(dependency === 'avsc'
+          ? ['5.0.0', '5.7.9']
+          : ['1.0.3', '1.1.3', '1.1.4', '1.14.7']),
+      })
+
+      assert.deepStrictEqual(rows[0].versions, [
+        { testedRuntimes: { node: ['25.0.0'] }, supportedRange: '>=5.0.0', tested: ['5.7.9'] },
+        { testedRuntimes: { node: ['24.16.0'] }, supportedRange: '>=5.0.0', tested: ['5.0.0', '5.7.9'] },
+      ])
+      assert.deepStrictEqual(rows[1].versions, [
+        { testedRuntimes: { node: ['25.0.0'] }, supportedRange: '>=1.0.3', tested: ['1.14.7'] },
+        {
+          testedRuntimes: { node: ['24.16.0'] },
+          supportedRange: '>=1.0.3',
+          tested: ['1.0.3', '1.14.7'],
+        },
+      ])
+    })
+  })
+
   it('uses the Kafka CI runtime and package ranges without narrowing declared support', async () => {
     const declarations = [{ versions: ['>=1.0.0'] }]
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [
-        { key: '22', version: '22.22.3' },
-        { key: '24', version: '24.16.0' },
-        { key: '26', version: '26.2.0' },
+      nodeVersions: [
+        '22.22.3',
+        '24.16.0',
+        '26.2.0',
       ],
       plugins: new Map([['@confluentinc/kafka-javascript', 'confluentinc-kafka-javascript']]),
-      instrumentations: new Map([
-        ['22.22.3', new Map([['@confluentinc/kafka-javascript', declarations]])],
-        ['24.16.0', new Map([['@confluentinc/kafka-javascript', declarations]])],
-        ['26.2.0', new Map([['@confluentinc/kafka-javascript', declarations]])],
-      ]),
+      instrumentations: testInstrumentations(['22.22.3', '24.16.0', '26.2.0'], {
+        '@confluentinc/kafka-javascript': declarations,
+      }),
       getPackageVersions: () => Promise.resolve(['1.0.0', '1.3.2', '1.4.0', '1.11.0']),
     })
 
@@ -236,17 +263,15 @@ describe('generate supported integrations', () => {
 
   it('uses alias matrices and included ranges instead of advertising untested runtimes', async () => {
     const declarations = [{ versions: ['>=4.0.0'] }]
-    const profiles = [
-      { key: '22', version: '22.22.3' },
-      { key: '24', version: '24.16.0' },
-      { key: '26', version: '26.2.0' },
+    const nodeVersions = [
+      '22.22.3',
+      '24.16.0',
+      '26.2.0',
     ]
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: profiles,
+      nodeVersions,
       plugins: new Map([['aerospike', 'aerospike']]),
-      instrumentations: new Map(profiles.map(profile =>
-        [profile.version, new Map([['aerospike', declarations]])]
-      )),
+      instrumentations: testInstrumentations(nodeVersions, { aerospike: declarations }),
       getPackageVersions: () => Promise.resolve([
         '4.0.0', '4.0.5', '5.0.0', '5.12.1', '5.13.2', '6.0.0', '6.7.1', '7.0.1',
       ]),
@@ -259,17 +284,15 @@ describe('generate supported integrations', () => {
   })
 
   it('does not advertise Couchbase on runtimes absent from either test workflow', async () => {
-    const profiles = [
-      { key: '22', version: '22.22.3' },
-      { key: '24', version: '24.16.0' },
-      { key: '26', version: '26.2.0' },
+    const nodeVersions = [
+      '22.22.3',
+      '24.16.0',
+      '26.2.0',
     ]
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: profiles,
+      nodeVersions,
       plugins: new Map([['couchbase', 'couchbase']]),
-      instrumentations: new Map(profiles.map(profile =>
-        [profile.version, new Map([['couchbase', [{ versions: ['>=4.2.0'] }]]])]
-      )),
+      instrumentations: testInstrumentations(nodeVersions, { couchbase: [{ versions: ['>=4.2.0'] }] }),
       getPackageVersions: () => Promise.resolve(['4.2.0', '4.6.0']),
     })
 
@@ -277,18 +300,18 @@ describe('generate supported integrations', () => {
   })
 
   it('uses include-only matrices and resolves composite action inputs', async () => {
-    const profiles = [
-      { key: '18', version: '18.20.8' },
-      { key: '20', version: '20.20.2' },
-      { key: '24', version: '24.16.0' },
-      { key: '26', version: '26.2.0' },
+    const nodeVersions = [
+      '18.20.8',
+      '20.20.2',
+      '24.16.0',
+      '26.2.0',
     ]
     const plugins = new Map([['@prisma/client', 'prisma'], ['mariadb', 'mariadb'], ['pino', 'pino']])
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: profiles,
+      nodeVersions,
       plugins,
-      instrumentations: new Map(profiles.map(profile =>
-        [profile.version, new Map([...plugins.keys()].map(name =>
+      instrumentations: new Map(nodeVersions.map(nodeVersion =>
+        [nodeVersion, new Map([...plugins.keys()].map(name =>
           [name, [{ versions: [name === 'mariadb' ? '>=3.0.0' : '6.1.0'] }]]
         ))]
       )),
@@ -389,15 +412,20 @@ describe('generate supported integrations', () => {
         assert.strictEqual(result.status, 0, String(result.stderr))
         assert.ok(readFileSync(output, 'utf8').endsWith(`version=${expected}\n`))
       }
-      const script = path.join(repositoryDirectory, '.github/actions/node/setup/resolve-version.sh')
-      const sparse = spawnSync('bash', [script], {
-        cwd: directory, env: { ...process.env, VERSION: 'maintenance' }, encoding: 'utf8',
+      const sparse = spawnSync('bash', ['-c', command], {
+        cwd: directory, env: { ...process.env, VERSION: 'maintenance', GITHUB_OUTPUT: '/dev/stdout' }, encoding: 'utf8',
       })
       assert.strictEqual(sparse.status, 0)
       assert.strictEqual(sparse.stdout, 'version=20\n')
-      const custom = spawnSync('bash', [script], {
+      const custom = spawnSync('bash', ['-c', command], {
         cwd: repositoryDirectory,
-        env: { ...process.env, VERSION: 'latest', LATEST_VERSION: '27.0.0-nightly', GITHUB_ENV: envOutput },
+        env: {
+          ...process.env,
+          VERSION: 'latest',
+          LATEST_VERSION: '27.0.0-nightly',
+          GITHUB_ENV: envOutput,
+          GITHUB_OUTPUT: '/dev/stdout',
+        },
         encoding: 'utf8',
       })
       assert.strictEqual(custom.status, 0)
@@ -411,15 +439,12 @@ describe('generate supported integrations', () => {
   it('merges matching test externals and applies their runtime gates only to tested coverage', async () => {
     const declarations = [{ versions: ['>=3.0.0'] }]
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [
-        { key: '18', version: '18.20.8' },
-        { key: '26', version: '26.2.0' },
+      nodeVersions: [
+        '18.20.8',
+        '26.2.0',
       ],
       plugins: new Map([['mariadb', 'mariadb']]),
-      instrumentations: new Map([
-        ['18.20.8', new Map([['mariadb', declarations]])],
-        ['26.2.0', new Map([['mariadb', declarations]])],
-      ]),
+      instrumentations: testInstrumentations(['18.20.8', '26.2.0'], { mariadb: declarations }),
       getPackageVersions: () => Promise.resolve([
         '2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.3', '3.5.4',
       ]),
@@ -439,11 +464,9 @@ describe('generate supported integrations', () => {
   it('does not let test externals enable an inactive instrumentation declaration', async () => {
     const declarations = [{ versions: ['>=3.0.0'], node: '>=20' }]
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [{ key: '18', version: '18.20.8' }],
+      nodeVersions: ['18.20.8'],
       plugins: new Map([['mariadb', 'mariadb']]),
-      instrumentations: new Map([
-        ['18.20.8', new Map([['mariadb', declarations]])],
-      ]),
+      instrumentations: testInstrumentations(['18.20.8'], { mariadb: declarations }),
       getPackageVersions: () => Promise.resolve([
         '2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.3', '3.5.4',
       ]),
@@ -461,7 +484,7 @@ describe('generate supported integrations', () => {
 
     try {
       await assert.rejects(generateSupportedIntegrations({
-        nodeProfiles: [{ key: '22', version: '22.22.3' }],
+        nodeVersions: ['22.22.3'],
         plugins: new Map([['missing-package', 'missing-package']]),
         instrumentations: new Map([
           ['22.22.3', new Map([['missing-package', [{ versions: ['1.0.0'] }]]])],
@@ -480,7 +503,7 @@ describe('generate supported integrations', () => {
 
     try {
       await assert.rejects(generateSupportedIntegrations({
-        nodeProfiles: [{ key: '26', version: '26.2.0' }],
+        nodeVersions: ['26.2.0'],
         plugins: new Map([['express', 'express']]),
         instrumentations: new Map([
           ['26.2.0', new Map([['express', [{ versions: ['1.0.0'] }]]])],
@@ -520,9 +543,9 @@ describe('generate supported integrations', () => {
     const directory = mkdtempSync(path.join(tmpdir(), 'dd-supported-versions-'))
     const outputPath = path.join(directory, 'supported_versions.json')
     const options = {
-      nodeProfiles: [{ key: '26', version: '26.2.0' }],
+      nodeVersions: ['26.2.0'],
       plugins: new Map([['fs', 'fs']]),
-      instrumentations: new Map([['26.2.0', new Map()]]),
+      instrumentations: new Map(),
       getPackageVersions: () => Promise.reject(new Error('Node.js built-ins do not use npm metadata')),
       outputPath,
     }
@@ -536,6 +559,15 @@ describe('generate supported integrations', () => {
     }
   })
 })
+
+/**
+ * @param {string[]} nodeVersions
+ * @param {Record<string, import('./generate-supported-integrations').InstrumentationDeclaration[]>} declarations
+ */
+function testInstrumentations (nodeVersions, declarations) {
+  const byDependency = new Map(Object.entries(declarations))
+  return new Map(nodeVersions.map(version => [version, byDependency]))
+}
 
 /**
  * @param {object} workflow
@@ -555,12 +587,9 @@ async function withTestWorkflow (workflow, check) {
 function workflowOptions () {
   const declarations = [{ versions: ['>=4 <6'] }]
   return {
-    nodeProfiles: [{ key: '22', version: '22.22.3' }, { key: '24', version: '24.16.0' }],
+    nodeVersions: ['22.22.3', '24.16.0'],
     plugins: new Map([['express', 'express']]),
-    instrumentations: new Map([
-      ['22.22.3', new Map([['express', declarations]])],
-      ['24.16.0', new Map([['express', declarations]])],
-    ]),
+    instrumentations: testInstrumentations(['22.22.3', '24.16.0'], { express: declarations }),
     getPackageVersions: () => Promise.resolve(['4.0.0', '4.22.1', '5.0.0', '5.2.1']),
   }
 }

@@ -27,8 +27,10 @@ const ROOT_PACKAGE = path.join(ROOT, 'package.json')
 const ROOT_VERSION = path.join(ROOT, 'version.js')
 const VERSIONS_PACKAGE = path.join(ROOT, 'packages/dd-trace/test/plugins/versions/package.json')
 const TEST_EXTERNALS = path.join(ROOT, 'packages/dd-trace/test/plugins/externals.js')
-const INSTRUMENTATION_HOOKS = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/hooks.js')
-const INSTRUMENTATION_REGISTRY = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/instrumentations.js')
+const INSTRUMENTATION_SOURCE = path.join(ROOT, 'packages/datadog-instrumentations/src') + path.sep
+const INSTRUMENTATION_HELPERS = path.join(INSTRUMENTATION_SOURCE, 'helpers') + path.sep
+const INSTRUMENTATION_HOOKS = path.join(INSTRUMENTATION_HELPERS, 'hooks.js')
+const INSTRUMENTATION_REGISTRY = path.join(INSTRUMENTATION_HELPERS, 'instrumentations.js')
 const {
   isRewriteActivationEnabled,
   instrumentations: rewriterInstrumentations,
@@ -57,12 +59,6 @@ const PLUGIN_GETTER =
   /get\s+(?:'((?!\.{1,2}\/|global:)[^']+)'|((?!\.{1,2}\/|global:)[\w$]+))\s*\(\s*\)\s*\{\s*return\s+require\([^)]*datadog-plugin-([^'")]+?)\/src/g
 
 /**
- * @typedef {object} NodeProfile
- * @property {string} key
- * @property {string} version
- */
-
-/**
  * @typedef {object} PackageInfo
  * @property {{ node?: string }} [engines]
  * @property {number} [nodeMaxMajor]
@@ -80,7 +76,7 @@ const PLUGIN_GETTER =
  * @property {Map<string, string>} [plugins]
  * @property {PackageInfo} [packageInfo]
  * @property {Record<string, string>} [versions]
- * @property {NodeProfile[]} [nodeProfiles]
+ * @property {string[]} [nodeVersions]
  * @property {Map<string, Map<string, InstrumentationDeclaration[]>>} [instrumentations]
  * @property {(dependency: string) => Promise<string[]>} [getPackageVersions]
  * @property {string} [outputPath]
@@ -119,15 +115,15 @@ function readPluginMap () {
  * @param {string} cached
  */
 function isRuntimeSpecificInstrumentation (cached) {
-  return (cached.includes('/datadog-instrumentations/src/') && !cached.includes('/helpers/')) ||
+  return (cached.startsWith(INSTRUMENTATION_SOURCE) && !cached.startsWith(INSTRUMENTATION_HELPERS)) ||
     cached === ROOT_VERSION
 }
 
 /**
- * @param {NodeProfile[]} nodeProfiles
+ * @param {string[]} nodeVersions
  * @returns {Map<string, Map<string, InstrumentationDeclaration[]>>}
  */
-function readInstrumentations (nodeProfiles) {
+function readInstrumentations (nodeVersions) {
   const registry = require(INSTRUMENTATION_REGISTRY)
   const hookFactories = Object.values(require(INSTRUMENTATION_HOOKS))
   const originalNodeVersion = Object.getOwnPropertyDescriptor(process.versions, 'node')
@@ -140,8 +136,8 @@ function readInstrumentations (nodeProfiles) {
   }
 
   try {
-    for (const { version } of nodeProfiles) {
-      Object.defineProperty(process.versions, 'node', { value: version, configurable: true })
+    for (const nodeVersion of nodeVersions) {
+      Object.defineProperty(process.versions, 'node', { value: nodeVersion, configurable: true })
 
       // Hook modules evaluate their Node.js gates at load time, while addHook closes over this registry object.
       for (const key of Object.keys(registry)) delete registry[key]
@@ -165,7 +161,7 @@ function readInstrumentations (nodeProfiles) {
         declarations.push({ versions: [module.versionRange] })
         byDependency.set(module.name, declarations)
       }
-      instrumentations.set(version, byDependency)
+      instrumentations.set(nodeVersion, byDependency)
     }
   } finally {
     for (const key of Object.keys(registry)) delete registry[key]
@@ -225,9 +221,9 @@ function addPackageAliases (plugins, instrumentations, aliases = PACKAGE_ALIASES
  * @param {PackageInfo} packageInfo
  * @param {Record<string, string>} versions
  * @param {string} nodeRange
- * @returns {NodeProfile[]}
+ * @returns {string[]}
  */
-function readNodeProfiles (packageInfo, versions, nodeRange) {
+function readNodeVersions (packageInfo, versions, nodeRange) {
   const releaseRange = [
     packageInfo.engines?.node,
     packageInfo.nodeMaxMajor === undefined ? undefined : `<${packageInfo.nodeMaxMajor}`,
@@ -237,26 +233,20 @@ function readNodeProfiles (packageInfo, versions, nodeRange) {
 
   if (!semver.validRange(nodeRange)) throw new Error(`Invalid Node.js version range: ${nodeRange}`)
 
-  const profiles = new Map()
+  const nodeVersions = []
   for (const [name, alias] of Object.entries(versions)) {
-    const nameMatch = name.match(/^node-(\d+)$/)
-    const aliasMatch = alias.match(/^npm:node@(\d+\.\d+\.\d+)$/)
-    if (!nameMatch || !aliasMatch) continue
+    const match = alias.match(/^npm:node@(\d+\.\d+\.\d+)$/)
+    if (!/^node-\d+$/.test(name) || !match) continue
 
-    const version = aliasMatch[1]
+    const version = match[1]
     if (releaseRange && !semver.satisfies(version, releaseRange)) continue
-    if (!semver.satisfies(version, nodeRange)) continue
-    profiles.set(nameMatch[1], version)
+    if (semver.satisfies(version, nodeRange)) nodeVersions.push(version)
   }
 
-  const result = []
-  for (const [key, version] of profiles) result.push({ key, version })
-  result.sort((left, right) => Number(left.key) - Number(right.key))
-
-  if (result.length === 0) {
+  if (nodeVersions.length === 0) {
     throw new Error(`No tested Node.js versions satisfy '${releaseRange}' and '${nodeRange}'`)
   }
-  return result
+  return nodeVersions.sort(semver.compare)
 }
 
 /**
@@ -280,28 +270,11 @@ async function fetchPackageVersions (dependency) {
  * @param {string} supportedRange
  */
 function simplifySupportedRange (supportedRange) {
-  const ranges = [...new Set(supportedRange.split(' || '))]
-  let result = ''
-
-  for (let index = 0; index < ranges.length; index++) {
-    const range = ranges[index]
-    let covered = false
-
-    for (let otherIndex = 0; otherIndex < ranges.length; otherIndex++) {
-      if (otherIndex === index) continue
-      const otherRange = ranges[otherIndex]
-      if (!semver.subset(range, otherRange)) continue
-
-      if (!semver.subset(otherRange, range) || otherIndex < index) {
-        covered = true
-        break
-      }
-    }
-
-    if (!covered) result += result ? ` || ${range}` : range
-  }
-
-  return result
+  const ranges = supportedRange.split(' || ')
+  return ranges.filter((range, index) => !ranges.some((other, otherIndex) =>
+    otherIndex !== index && semver.subset(range, other) &&
+    (!semver.subset(other, range) || otherIndex < index)
+  )).join(' || ')
 }
 
 /**
@@ -377,6 +350,8 @@ function readTestRuns () {
   const runs = []
   const actions = new Map()
   const nodeRanges = new Map()
+  const setup = YAML.parse(readFileSync(path.join(ROOT, '.github/actions/node/setup/action.yml'), 'utf8'))
+  const nodeVersionCommand = setup.runs.steps.find(step => step.id === 'node-version').run
 
   /**
    * @param {WorkflowStep[]} steps
@@ -394,9 +369,9 @@ function readTestRuns () {
       if (nodeAction) {
         const version = expandTestValue(step.with?.version ?? 'latest', context)
         if (!nodeRanges.has(version)) {
-          const output = execFileSync('bash', ['.github/actions/node/setup/resolve-version.sh'], {
+          const output = execFileSync('bash', ['-c', nodeVersionCommand], {
             cwd: ROOT,
-            env: { ...process.env, VERSION: version, LATEST_VERSION: '' },
+            env: { ...process.env, VERSION: version, LATEST_VERSION: '', GITHUB_OUTPUT: '/dev/stdout' },
             encoding: 'utf8',
           })
           const range = output.trim().replace(/^version=/, '')
@@ -442,13 +417,13 @@ function readTestRuns () {
 /**
  * @param {string} dependency
  * @param {string} integration
- * @param {NodeProfile} profile
+ * @param {string} nodeVersion
  * @param {TestRun[]} runs
  */
-function readTestEnvironments (dependency, integration, profile, runs) {
+function readTestEnvironments (dependency, integration, nodeVersion, runs) {
   const environments = []
   for (const { nodeRange, env } of runs) {
-    if (!semver.satisfies(profile.version, nodeRange)) continue
+    if (!semver.satisfies(nodeVersion, nodeRange)) continue
     const plugins = env.PLUGINS?.split('|')
     if (!plugins?.includes(integration) && !plugins?.includes(dependency.replace(/^node:/, ''))) continue
     if (env.PACKAGE_NAMES && !env.PACKAGE_NAMES.split(',').includes(dependency)) continue
@@ -513,7 +488,7 @@ function resolveDependencyVersions (
       const range = getCappedRange(dependency, versionKey)
       const version = semver.maxSatisfying(packageVersions, range)
       if (!version) throw new Error(`Could not resolve '${dependency}@${range}' from npm metadata`)
-      if (!brokenVersionReason(dependency, version)) testedVersions.add(version)
+      if (!brokenVersionReason(dependency, version, nodeVersion)) testedVersions.add(version)
     }
   }
 
@@ -525,17 +500,17 @@ function resolveDependencyVersions (
 
 /**
  * @param {Map<string, string>} plugins
- * @param {NodeProfile[]} nodeProfiles
+ * @param {string[]} nodeVersions
  * @param {Map<string, Map<string, InstrumentationDeclaration[]>>} instrumentations
  * @param {(dependency: string) => Promise<string[]>} getPackageVersions
  * @returns {Promise<object[]>}
  */
-async function buildRows (plugins, nodeProfiles, instrumentations, getPackageVersions) {
+async function buildRows (plugins, nodeVersions, instrumentations, getPackageVersions) {
   const dependencies = new Set()
   for (const [dependency] of plugins) {
     if (isBuiltin(dependency)) continue
-    for (const { version } of nodeProfiles) {
-      if (instrumentations.get(version)?.has(dependency)) {
+    for (const nodeVersion of nodeVersions) {
+      if (instrumentations.get(nodeVersion)?.has(dependency)) {
         dependencies.add(dependency)
         break
       }
@@ -554,10 +529,9 @@ async function buildRows (plugins, nodeProfiles, instrumentations, getPackageVer
     const versionsBySupport = new Map()
     const testDeclarations = readTestDeclarations(dependency, integration, plugins)
 
-    for (const profile of nodeProfiles) {
-      const testEnvironments = readTestEnvironments(dependency, integration, profile, runs)
+    for (const nodeVersion of nodeVersions) {
+      const testEnvironments = readTestEnvironments(dependency, integration, nodeVersion, runs)
       if (testEnvironments.length === 0) continue
-      const nodeVersion = profile.version
       let supportedRange = '*'
       let tested = []
 
@@ -622,9 +596,9 @@ async function generateSupportedIntegrations (options = {}) {
   const packageInfo = options.packageInfo ?? JSON.parse(readFileSync(ROOT_PACKAGE, 'utf8'))
   const versions = options.versions ??
     JSON.parse(readFileSync(VERSIONS_PACKAGE, 'utf8')).dependencies
-  const nodeProfiles = options.nodeProfiles ?? readNodeProfiles(packageInfo, versions, options.nodeRange ?? '*')
+  const nodeVersions = options.nodeVersions ?? readNodeVersions(packageInfo, versions, options.nodeRange ?? '*')
   const plugins = options.plugins ?? readPluginMap()
-  const instrumentations = options.instrumentations ?? readInstrumentations(nodeProfiles)
+  const instrumentations = options.instrumentations ?? readInstrumentations(nodeVersions)
   if (!options.instrumentations) {
     const integrations = new Set(plugins.values())
     // A custom plugin map can select a subset of integrations; only add aliases for that subset.
@@ -635,7 +609,7 @@ async function generateSupportedIntegrations (options = {}) {
   }
   const rows = await buildRows(
     plugins,
-    nodeProfiles,
+    nodeVersions,
     instrumentations,
     options.getPackageVersions ?? fetchPackageVersions
   )
@@ -680,7 +654,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-  JSON_OUTPUT_PATH,
   generateSupportedIntegrations,
   writeSupportedIntegrations,
 }

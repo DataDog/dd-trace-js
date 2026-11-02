@@ -24,7 +24,7 @@ describe('generate supported integrations', () => {
     ])
 
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [{ key: '26', version: '26.2.0' }],
+      nodeVersions: ['26.2.0'],
       plugins,
       getPackageVersions: async dependency => packageVersions[dependency],
     })
@@ -54,27 +54,45 @@ describe('generate supported integrations', () => {
     ]
     const plugins = new Map(dependencies.slice(0, -1).map(dependency => [dependency, 'supabase']))
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [{ key: '24', version: nodeVersion }],
+      nodeVersions: [nodeVersion],
       plugins,
       getPackageVersions: async dependency => ['2.112.2', latestVersions[dependency]],
     })
 
     assert.deepStrictEqual(rows, dependencies.map(dependency =>
-      supportedIntegration(dependency, 'supabase', '>=2.112.2', ['2.112.2', latestVersions[dependency]])
+      supportedIntegration(dependency, 'supabase', '>=2.112.2', ['2.112.2', latestVersions[dependency]], nodeVersion)
     ))
   })
 
   it('includes explicitly exercised AI SDK versions and excludes known-broken versions', async () => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { rows } = await generateSupportedIntegrations({
+        nodeVersions: ['24.16.0', '26.2.0'],
+        plugins: new Map([['ai', 'ai']]),
+        getPackageVersions: async () => ['1.0.0', '2.0.0', '3.0.0', '4.0.0', '4.0.2', '4.3.19',
+          '5.0.0', '6.0.0', '7.0.0', latestVersions.ai],
+      })
+
+      assert.strictEqual(rows.length, 1)
+      assert(!rows[0].versions[0].tested.includes('4.3.19'))
+      assert(rows[0].versions[0].tested.includes('4.0.2'))
+      assert.strictEqual(rows[0].versions[0].supportedRange, '>=4.0.0 <7.0.0 || >=6.0.0')
+    }
+  })
+
+  it('excludes runtime-specific broken versions without narrowing declared support', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [{ key: '26', version: '26.2.0' }],
-      plugins: new Map([['ai', 'ai']]),
-      getPackageVersions: async () => ['1.0.0', '2.0.0', '3.0.0', '4.0.0', '4.0.2', '4.3.19',
-        '5.0.0', '6.0.0', '7.0.0', latestVersions.ai],
+      nodeVersions: ['26.2.0'],
+      plugins: new Map([['avsc', 'avsc'], ['@grpc/grpc-js', 'grpc']]),
+      getPackageVersions: async dependency => dependency === 'avsc'
+        ? ['5.0.0', '5.7.9']
+        : ['1.0.3', '1.1.3', '1.1.4', '1.14.7'],
     })
 
-    assert(!rows[0].versions[0].tested.includes('4.3.19'))
-    assert(rows[0].versions[0].tested.includes('4.0.2'))
-    assert.strictEqual(rows[0].versions[0].supportedRange, '>=4.0.0 <7.0.0 || >=6.0.0')
+    assert.deepStrictEqual(rows, [
+      supportedIntegration('avsc', 'avsc', '>=5.0.0', ['5.7.9']),
+      supportedIntegration('@grpc/grpc-js', 'grpc', '>=1.0.3', ['1.14.7']),
+    ])
   })
 
   it('keeps umbrella package aliases out of the runtime hooks and plugin registry', () => {
@@ -92,16 +110,17 @@ describe('generate supported integrations', () => {
  * @param {string} integration
  * @param {string} supportedRange
  * @param {string[]} testedVersions
+ * @param {string} [nodeVersion]
  * @returns {{ dependencyName: string, integrationName: string, autoInstrumented: boolean,
  *   versions: Array<{ testedRuntimes: { node: string[] }, supportedRange: string, tested: string[] }> }}
  */
-function supportedIntegration (dependency, integration, supportedRange, testedVersions) {
+function supportedIntegration (dependency, integration, supportedRange, testedVersions, nodeVersion = '26.2.0') {
   return {
     dependencyName: dependency,
     integrationName: integration,
     autoInstrumented: true,
     versions: [{
-      testedRuntimes: { node: [dependency.includes('supabase') ? '24.16.0' : '26.2.0'] },
+      testedRuntimes: { node: [nodeVersion] },
       supportedRange,
       tested: testedVersions,
     }],

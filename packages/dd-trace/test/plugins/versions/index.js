@@ -13,11 +13,12 @@ const nonConsecutiveMajorPackages = new Map([
   ['oracledb', '>=8 <26'],
 ])
 
-// Versions the matrix installs but must not run, keyed by module name. `withVersions()` skips any resolved
-// version matching a range here and surfaces the reason as a pending test. Each entry is a stop-gap: keep the reason
-// a TODO so a fixed version drops the entry instead of rotting, and scope the range as narrowly as the break warrants.
-/** @type {Record<string, Array<{ range: string, reason: string }>>} */
+/** @typedef {Record<string, Array<{ range: string, reason: string, node?: string }>>} BrokenVersions */
+/** @type {BrokenVersions} */
 const brokenVersions = {
+  avsc: [{ range: '5.0.0', node: '>=25', reason: 'avsc 5.0.0 is not tested on Node.js >=25' }],
+  '@grpc/grpc-js': [{ range: '<1.3.0', node: '>=25', reason: 'grpc-js <1.3.0 is not tested on Node.js >=25' }],
+  undici: [{ range: '>=7.11.0', node: '<20', reason: 'undici >=7.11.0 is not tested on Node.js <20' }],
   // TODO: record VCR cassettes for the ai 4.x line; `versions/ai@4` resolves to the newest 4.x, which has no cassette,
   // so the test would hit the live API. 4.0.x (cassetted) and 5.x/6.x stay covered.
   ai: [{ range: '>=4.1.0 <5.0.0', reason: 'no VCR cassette for the ai 4.x latest (TODO: record cassettes)' }],
@@ -270,12 +271,12 @@ function resolvePluginVersions ({
  *
  * @param {string} name
  * @param {string} version A concrete, resolved version.
- * @param {Record<string, Array<{ range: string, reason: string }>>} [broken] Injectable for testing.
- * @returns {string|undefined}
+ * @param {string} [nodeVersion]
+ * @param {BrokenVersions} [broken]
  */
-function brokenVersionReason (name, version, broken = brokenVersions) {
-  for (const { range, reason } of broken[name] ?? []) {
-    if (satisfies(version, range)) return reason
+function brokenVersionReason (name, version, nodeVersion = process.versions.node, broken = brokenVersions) {
+  for (const { range, reason, node } of broken[name] ?? []) {
+    if (satisfies(version, range) && (!node || satisfies(coerce(nodeVersion), node))) return reason
   }
 }
 

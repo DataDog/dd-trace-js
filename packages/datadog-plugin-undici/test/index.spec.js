@@ -7,7 +7,6 @@ const { channel } = require('dc-polyfill')
 const semver = require('semver')
 const satisfies = require('../../../vendor/dist/semifies')
 const tags = require('../../../ext/tags')
-const { NODE_MAJOR } = require('../../../version')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -43,7 +42,7 @@ describe('Plugin', () => {
   let appListener
 
   describe('undici-fetch', () => {
-    withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', (version, moduleName, resolvedVersion) => {
+    withVersions('undici', 'undici', (version, moduleName, resolvedVersion) => {
       const hasNativeDiagnostics = satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')
       const hasNativeUpgradeCompletion = satisfies(resolvedVersion, '>=6.29.0 <7.0.0 || >=7.30.0 <8.0.0 || >=8.11.0')
 
