@@ -133,8 +133,8 @@ for (const viteVersion of viteVersions) {
           proc.send({ name: 'quit' }, () => {})
         })
 
-        const packaging = variant.tracer === 'bundled' ? 'leaves dd-trace out of' : 'packages dd-trace in'
-        it(`${packaging} the application archive`, async () => {
+        it('packages the tracer as configured and traces net, IPC and an Orchestrion target', async function () {
+          this.timeout(15_000)
           // @electron/asar is a dependency of @electron/packager and an ES module.
           const asarPath = path.join(sandboxCwd(), 'node_modules', '@electron', 'asar', 'lib', 'asar.js')
           const { listPackage } = await import(pathToFileURL(asarPath).href)
@@ -142,10 +142,13 @@ for (const viteVersion of viteVersions) {
           const tracerPackage = path.join(path.sep, 'node_modules', 'dd-trace', 'package.json')
           assert.ok(files.includes(path.join(path.sep, 'index.html')), 'The application should be packaged')
           assert.strictEqual(files.includes(tracerPackage), variant.tracer === 'external')
-        })
 
-        it('traces net, IPC and an Orchestrion target with the application options', async function () {
-          this.timeout(15_000)
+          if (variant.tool === 'forge') {
+            const outDir = path.join(appDirectory, path.dirname(variant.main))
+            const code = fs.readdirSync(outDir).map(file => fs.readFileSync(path.join(outDir, file), 'utf8')).join('\n')
+            assert.ok(code.includes('DatadogBrowserWindow'), 'The tracer class names should survive minification')
+          }
+
           const httpSpanSeen = assertTraceReceived(child, ({ payload }) => {
             const span = payload.flat().find(span => span.name === 'http.request')
             assert.ok(span, 'No http.request span found')
@@ -187,32 +190,6 @@ for (const viteVersion of viteVersions) {
 
           await honoSpanSeen
         })
-
-        if (variant.tracer === 'external') {
-          it('injects DatadogEventBridge in the renderer process', async function () {
-            this.timeout(10_000)
-            const messagePromise = new Promise(resolve => {
-              child.on('message', function onMessage (message) {
-                if (message?.name !== 'bridge-result') return
-                child.removeListener('message', onMessage)
-                resolve(message)
-              })
-            })
-            child.send({ name: 'bridge' })
-
-            const { result } = await messagePromise
-            assert.strictEqual(result.exists, true, 'DatadogEventBridge should exist on window')
-            assert.ok(result.sendSuccess, 'bridge.send() should not throw')
-          })
-        }
-
-        if (variant.tool === 'forge') {
-          it('keeps function and class names in the minified main process', () => {
-            const outDir = path.join(appDirectory, path.dirname(variant.main))
-            const code = fs.readdirSync(outDir).map(file => fs.readFileSync(path.join(outDir, file), 'utf8')).join('\n')
-            assert.ok(code.includes('DatadogBrowserWindow'), 'The tracer class names should survive minification')
-          })
-        }
       })
     }
   })

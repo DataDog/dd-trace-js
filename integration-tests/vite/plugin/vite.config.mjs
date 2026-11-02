@@ -4,9 +4,6 @@ import { defineConfig, version } from 'vite'
 
 import { datadogVite } from 'dd-trace/vite.js'
 
-// ssr: an SSR build (server consumer). lib: a Node.js library build (client consumer), shaped like the main process
-// build of Electron Forge, minified.
-const shape = process.env.VITE_SHAPE ?? 'ssr'
 // bundled: every dependency, dd-trace included, is bundled. list: only the instrumented packages are bundled.
 // external: Vite's default externalization of node_modules.
 const dependencies = process.env.VITE_DEPENDENCIES ?? 'bundled'
@@ -27,15 +24,10 @@ export default defineConfig({
   build: {
     outDir: process.env.VITE_OUT_DIR,
     emptyOutDir: true,
-    ...(shape === 'lib'
-      ? {
-          minify: true,
-          lib: { entry: 'server.mjs', formats: [format], fileName: () => `server.${extension}` },
-        }
-      : { ssr: split ? true : 'server.mjs' }),
+    ssr: split ? true : 'server.mjs',
     rollupOptions: {
       // Vite 6 cannot bundle built-ins with `ssr.noExternal: true` unless they are external.
-      external: shape === 'lib' || version.startsWith('6.') ? builtins : undefined,
+      external: version.startsWith('6.') ? builtins : undefined,
       ...(split ? { input: { server: 'server.mjs', worker: 'worker.mjs' } } : {}),
       output: {
         format,
@@ -44,7 +36,5 @@ export default defineConfig({
       },
     },
   },
-  ...(shape === 'lib'
-    ? { resolve: { conditions: ['node'], mainFields: ['module', 'jsnext:main', 'jsnext'] } }
-    : { ssr: { noExternal } }),
+  ssr: { noExternal },
 })

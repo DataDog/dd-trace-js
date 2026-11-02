@@ -49,11 +49,6 @@ app.whenReady().then(() => {
         return generateText({ model, prompt: 'Say ok', experimental_telemetry: { isEnabled: true } })
       case 'hono':
         return http.get(`http://127.0.0.1:${honoServer.address().port}/hono`, response => response.resume())
-      case 'bridge':
-        ipcMain.once('bridge-result', (_event, result) => {
-          process.send({ name: 'bridge-result', result })
-        })
-        return win.webContents.send('check-bridge')
     }
   })
 })

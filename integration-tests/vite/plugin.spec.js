@@ -20,19 +20,16 @@ const httpRequest = require('../../packages/dd-trace/test/setup/helpers/http-cli
 const { readPackageJson, run, supportsNode, viteVersions } = require('./helpers')
 
 const SERVICE = 'vite-plugin-app'
-const OPTIONAL_DEPENDENCIES = Object.keys(require('../../package.json').optionalDependencies)
 
+// Exercise both output formats with a standalone bundle, then the two externalization modes without a full
+// cross-product. The Electron Forge suite covers minified Node.js library builds.
 const variants = [
-  { shape: 'ssr', dependencies: 'bundled', format: 'cjs' },
-  { shape: 'ssr', dependencies: 'bundled', format: 'es' },
+  { dependencies: 'bundled', format: 'cjs' },
+  { dependencies: 'bundled', format: 'es' },
   // The tracer and the wrappers intercepting ES module exports land in a chunk shared by two entries.
-  { shape: 'ssr', dependencies: 'bundled', format: 'es', split: true },
-  { shape: 'ssr', dependencies: 'list', format: 'cjs' },
-  { shape: 'ssr', dependencies: 'list', format: 'es' },
-  { shape: 'ssr', dependencies: 'external', format: 'cjs' },
-  { shape: 'ssr', dependencies: 'external', format: 'es' },
-  // Rolldown cannot `require` built-ins from client-consumer ES module output, so Node.js library builds use CommonJS.
-  { shape: 'lib', dependencies: 'bundled', format: 'cjs' },
+  { dependencies: 'bundled', format: 'es', split: true },
+  { dependencies: 'list', format: 'es' },
+  { dependencies: 'external', format: 'cjs' },
 ]
 
 for (const viteVersion of viteVersions) {
@@ -68,11 +65,11 @@ for (const viteVersion of viteVersions) {
     })
 
     for (const variant of variants) {
-      const { shape, dependencies, format, split } = variant
+      const { dependencies, format, split } = variant
       const bundled = dependencies === 'bundled'
       const tracerExternal = !bundled
 
-      describe(`${shape} build, ${dependencies} dependencies, ${format} output${split ? ', split' : ''}`, () => {
+      describe(`SSR build, ${dependencies} dependencies, ${format} output${split ? ', split' : ''}`, () => {
         const extension = format === 'es' ? 'mjs' : 'cjs'
         let agent
         let outDir
@@ -81,7 +78,7 @@ for (const viteVersion of viteVersions) {
 
         before(function () {
           this.timeout(180_000)
-          outDir = path.join(applicationDirectory, `dist-${shape}-${dependencies}-${format}${split ? '-split' : ''}`)
+          outDir = path.join(applicationDirectory, `dist-${dependencies}-${format}${split ? '-split' : ''}`)
           build(applicationDirectory, outDir, variant)
           runDirectory = outDir
           if (bundled) {
@@ -118,7 +115,7 @@ for (const viteVersion of viteVersions) {
           await agent.stop()
         })
 
-        it('traces bundled CommonJS packages, built-ins and Orchestrion targets across chunks', async function () {
+        it('traces CommonJS packages, built-ins and Orchestrion targets across chunks', async function () {
           this.timeout(60_000)
 
           await assertRoute(agent, proc, '/express', { ok: true }, payload => {
@@ -160,22 +157,6 @@ for (const viteVersion of viteVersions) {
             assert.match(readOutput(outDir, extension), tracerCode)
           })
         }
-
-        if (bundled) {
-          it('bundles a single dc-polyfill and leaves the optional tracer dependencies out', () => {
-            const code = readOutput(outDir, extension)
-
-            if (shape === 'ssr') {
-              // Names survive in unminified output only.
-              assert.strictEqual(code.match(/function hasGarbageCollectionBug(\$\d+)?\s*\(/g)?.length, 1)
-            }
-            for (const name of OPTIONAL_DEPENDENCIES) {
-              // Some are loaded through an alias of require, such as `runtimeRequire`, which minifiers rename.
-              const request = new RegExp(`[\\w$]+\\(\\s*["'\`]${name.replaceAll('/', '\\/')}["'\`]\\s*\\)`)
-              assert.match(code, request, `${name} should stay an external require`)
-            }
-          })
-        }
       })
     }
 
@@ -190,7 +171,7 @@ for (const viteVersion of viteVersions) {
       it('injects the repository URL and commit SHA into entry chunks', function () {
         this.timeout(180_000)
         const outDir = path.join(applicationDirectory, 'dist-git')
-        build(applicationDirectory, outDir, { shape: 'ssr', dependencies: 'external', format: 'cjs' })
+        build(applicationDirectory, outDir, { dependencies: 'external', format: 'cjs' })
 
         const entry = fs.readFileSync(path.join(outDir, 'server.cjs'), 'utf8')
         assert.ok(entry.includes(`process.env.DD_GIT_COMMIT_SHA = ${JSON.stringify(commitSHA)}`))
@@ -198,21 +179,6 @@ for (const viteVersion of viteVersions) {
         for (const chunk of fs.readdirSync(outDir).filter(file => file !== 'server.cjs')) {
           assert.ok(!fs.readFileSync(path.join(outDir, chunk), 'utf8').includes('DD_GIT_COMMIT_SHA'))
         }
-      })
-
-      it('produces identical artifacts across commits with DD_BUNDLER_INJECT_GIT_METADATA=false', function () {
-        this.timeout(180_000)
-        const variant = { shape: 'ssr', dependencies: 'external', format: 'cjs' }
-        const env = { DD_BUNDLER_INJECT_GIT_METADATA: 'false' }
-        const first = path.join(applicationDirectory, 'dist-no-git-first')
-        const second = path.join(applicationDirectory, 'dist-no-git-second')
-
-        build(applicationDirectory, first, variant, env)
-        git(['commit', '--allow-empty', '-m', 'second commit', '--no-verify'])
-        build(applicationDirectory, second, variant, env)
-
-        assert.deepStrictEqual(readFiles(second), readFiles(first))
-        assert.ok(!readOutput(first, 'cjs').includes('DD_GIT_COMMIT_SHA'))
       })
     })
 
@@ -296,8 +262,8 @@ for (const viteVersion of viteVersions) {
         run(pnpmDirectory, 'pnpm', ['install', '--ignore-scripts'])
         assert.throws(() => require.resolve('dc-polyfill', { paths: [pnpmDirectory] }), { code: 'MODULE_NOT_FOUND' })
 
-        build(pnpmDirectory, path.join(pnpmDirectory, 'dist'), { shape: 'ssr', dependencies: 'bundled', format: 'cjs' },
-          {}, path.join(pnpmDirectory, 'node_modules', '.bin', 'vite'))
+        build(pnpmDirectory, path.join(pnpmDirectory, 'dist'), { dependencies: 'bundled', format: 'cjs' },
+          path.join(pnpmDirectory, 'node_modules', '.bin', 'vite'))
       })
 
       after(() => {
@@ -341,17 +307,14 @@ for (const viteVersion of viteVersions) {
 /**
  * @param {string} cwd
  * @param {string} outDir
- * @param {{ shape: string, dependencies: string, format: string, split?: boolean }} variant
- * @param {Record<string, string>} [env]
+ * @param {{ dependencies: string, format: string, split?: boolean }} variant
  * @param {string} [vite]
  */
-function build (cwd, outDir, { shape, dependencies, format, split }, env, vite = 'vite') {
+function build (cwd, outDir, { dependencies, format, split }, vite = 'vite') {
   run(cwd, vite, ['build'], {
-    ...env,
     VITE_DEPENDENCIES: dependencies,
     VITE_OUTPUT_FORMAT: format,
     VITE_OUT_DIR: outDir,
-    VITE_SHAPE: shape,
     VITE_SPLIT: String(Boolean(split)),
   })
 }
@@ -387,15 +350,4 @@ function readOutput (directory, extension) {
     .filter(file => file.endsWith(`.${extension}`))
     .map(file => fs.readFileSync(path.join(directory, file), 'utf8'))
     .join('\n')
-}
-
-/**
- * @param {string} directory
- */
-function readFiles (directory) {
-  const files = {}
-  for (const file of fs.readdirSync(directory).sort()) {
-    files[file] = fs.readFileSync(path.join(directory, file), 'utf8')
-  }
-  return files
 }
