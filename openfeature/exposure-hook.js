@@ -1,3 +1,5 @@
 'use strict'
 
-module.exports = require('../packages/dd-trace/src/openfeature/exposure-hook')
+const { ExposureHook } = require('../packages/dd-trace/src/openfeature/exposure-hook')
+
+module.exports = { ExposureHook }

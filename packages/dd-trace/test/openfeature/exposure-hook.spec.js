@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -183,6 +184,40 @@ describe('ExposureHook', () => {
     }
   })
 
+  it('keeps the process alive when the configured logger throws on a callback failure', () => {
+    const repoRoot = path.join(__dirname, '..', '..', '..', '..')
+    const script = `
+      const log = require('./packages/dd-trace/src/log')
+      const thrower = () => { throw new Error('configured logger failed') }
+      log.configure({ logger: { debug: thrower, info: thrower, warn: thrower, error: thrower }, logLevel: 'debug' })
+      const { OpenFeature } = require('@openfeature/server-sdk')
+      const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
+      const { ExposureHook } = require('./openfeature/exposure-hook')
+      ;(async () => {
+        const provider = new DatadogNodeServerProvider({ exposureChannel: { hasSubscribers: false, publish () {} } })
+        provider.setConfiguration(${JSON.stringify(configuration)})
+        await OpenFeature.setProviderAndWait(provider)
+        const client = OpenFeature.getClient()
+        client.addHooks(new ExposureHook(() => { throw new Error('callback failed') }))
+        client.addHooks(new ExposureHook(async () => { throw new Error('callback failed') }))
+        const details = await client.getBooleanDetails('holdout-flag', true, { targetingKey: 'subject-1' })
+        await new Promise(resolve => setTimeout(resolve, 50))
+        process.stdout.write(JSON.stringify({ value: details.value, errorCode: details.errorCode ?? null }))
+      })()
+    `
+
+    const result = spawnSync(process.execPath, ['-e', script], {
+      cwd: repoRoot,
+      env: { ...process.env, DD_TRACE_DEBUG: 'true' },
+      encoding: 'utf8',
+      timeout: 20_000,
+    })
+
+    assert.ifError(result.error)
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.deepStrictEqual(JSON.parse(result.stdout), { value: false, errorCode: null })
+  })
+
   it('contains a failure to log the callback error', async () => {
     log.warn = sinon.stub().throws(new Error('formatting the callback error failed'))
     const unhandled = []
@@ -279,6 +314,7 @@ describe('ExposureHook', () => {
 
   it('is reachable from the public entrypoint', () => {
     const publicHook = require('../../../../openfeature/exposure-hook')
+    assert.deepStrictEqual(Object.keys(publicHook), ['ExposureHook'])
     assert.strictEqual(typeof publicHook.ExposureHook, 'function')
   })
 })
