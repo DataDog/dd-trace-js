@@ -28,6 +28,23 @@ const emptyConnectionContext = { currentStore: {} }
 const emptyOptions = {}
 const wrappedClients = new WeakSet()
 const wrappedConnections = new WeakSet()
+/** @type {WeakMap<object, { sql: unknown }>} */
+const poolCommandSql = new WeakMap()
+const wrappedPoolCommandMethods = new WeakSet()
+const poolSqlMethods = ['prepareExecute', 'batch', 'addCommand']
+const poolOptionsHandler = {
+  /**
+   * @param {object} target
+   * @param {string | symbol} key
+   */
+  get (target, key) { return Reflect.get(target, key, target) },
+  /**
+   * @param {object} target
+   * @param {string | symbol} key
+   * @param {unknown} value
+   */
+  set (target, key, value) { return Reflect.set(target, key, value, target) },
+}
 const IMPORT_FILE_RESOURCE = 'IMPORT FILE'
 const noop = () => {}
 const POOL_ACQUISITION_COMPACTION_THRESHOLD = 1024
@@ -147,6 +164,43 @@ function runSqlCommand (ctx, command, args, originalSql, preparedSql, mirrorOpti
     args[0] = withInjectedSql(args[0], ctx.sql, originalSql, mirrorOptions)
   }
   return command.apply(this, args)
+}
+
+/**
+ * @param {{ sql: unknown }} ctx
+ * @param {ArgumentsLike} args
+ */
+function bindPoolCommandSql (ctx, args) {
+  if (typeof ctx.sql !== 'string' || !ctx.sql) return
+
+  // Native option reads and callback mutations occur after acquisition, so a snapshot would change their behavior.
+  const options = typeof args[0] === 'string' ? { sql: args[0] } : new Proxy(args[0], poolOptionsHandler)
+  poolCommandSql.set(options, ctx)
+  args[0] = options
+}
+
+/** @typedef {{ sql: unknown, opts?: object }} PoolCommandParameters */
+/** @typedef {{ sql: unknown, cmdParam: PoolCommandParameters }} QueuedPoolCommand */
+
+/**
+ * @param {Function} command
+ * @param {string} method
+ */
+function wrapPoolCommandSql (command, method) {
+  const queued = method === 'addCommand'
+  /** @param {PoolCommandParameters | QueuedPoolCommand} parameter */
+  function wrappedCommand (parameter) {
+    const cmdParam = queued ? parameter.cmdParam : parameter
+    const ctx = poolCommandSql.get(cmdParam?.opts)
+    if (ctx !== undefined) {
+      poolCommandSql.delete(cmdParam.opts)
+      cmdParam.sql = ctx.sql
+      if (queued) parameter.sql = ctx.sql
+    }
+    return command.apply(this, arguments)
+  }
+  wrappedPoolCommandMethods.add(wrappedCommand)
+  return wrappedCommand
 }
 
 /**
@@ -443,8 +497,17 @@ function restorePoolAcquisitionObserver (pool, observer) {
  * @param {object} pool
  */
 function observePoolAcquisitions (pool) {
-  const observer = () => {
-    if (connectionStartCh.hasSubscribers) recordPoolAcquisition(pool)
+  /** @param {object} connection */
+  const observer = connection => {
+    if (!connectionStartCh.hasSubscribers) return
+
+    // Bundle names are minified, and addCommand is replaced at runtime, so static rewriting cannot hook this handoff.
+    for (const method of poolSqlMethods) {
+      if (!wrappedPoolCommandMethods.has(connection[method])) {
+        shimmer.wrap(connection, method, command => wrapPoolCommandSql(command, method))
+      }
+    }
+    recordPoolAcquisition(pool)
   }
   pool.prependListener('acquire', observer)
 
@@ -637,6 +700,7 @@ function createWrapPromiseCommand (
 
       let result
       try {
+        if (acquisition !== undefined && preparedSql === undefined) bindPoolCommandSql(ctx, arguments)
         result = acquisition === undefined
           ? startCh.runStores(ctx, runSqlCommand, this, ctx, command, arguments, originalSql, preparedSql)
           : runPoolAcquisition(acquisition, command, this, arguments)
@@ -717,6 +781,7 @@ function createWrapCallbackCommand (
       startCommand(owner)
 
       try {
+        if (acquisition !== undefined && preparedSql === undefined) bindPoolCommandSql(ctx, arguments)
         return acquisition === undefined
           ? startCh.runStores(
             ctx, runSqlCommand, this, ctx, command, arguments, originalSql, preparedSql, mirrorOptions

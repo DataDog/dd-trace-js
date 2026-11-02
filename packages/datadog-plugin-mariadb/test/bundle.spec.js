@@ -41,6 +41,20 @@ function callbackResult (invoke) {
 }
 
 /**
+ * @param {import('mariadb').Pool | import('mariadb/callback').Pool} pool
+ * @param {'promise' | 'callback'} api
+ * @param {'query' | 'execute' | 'batch' | 'getConnection' | 'end'} method
+ * @param {...unknown} args
+ */
+async function callPool (pool, api, method, ...args) {
+  if (api === 'callback') {
+    const [result] = await callbackResult(callback => pool[method](...args, callback))
+    return result
+  }
+  return pool[method](...args)
+}
+
+/**
  * Collects the rows from a MariaDB result stream.
  *
  * @param {import('node:stream').Readable} stream
@@ -68,16 +82,20 @@ async function getClosedPort () {
  *
  * @param {string} rootName
  * @param {Array<string>} expectedResources
+ * @param {(span: import('../../dd-trace/test/plugins/agent').SerializedSpan) => void} [onSpan]
  * @returns {Promise<void>}
  */
-function assertTraceResources (rootName, expectedResources) {
+function assertTraceResources (rootName, expectedResources, onSpan) {
   return agent.assertSomeTraces(traces => {
     const trace = traces.find(trace => trace.some(span => span.name === rootName))
     assert.ok(trace, `${rootName} trace has not flushed yet`)
 
     const resources = []
     for (const span of trace) {
-      if (span.meta.component === 'mariadb') resources.push(span.resource)
+      if (span.meta.component === 'mariadb') {
+        resources.push(span.resource)
+        onSpan?.(span)
+      }
     }
 
     assert.deepStrictEqual(resources.sort(), expectedResources.sort())
@@ -139,9 +157,10 @@ describe('Plugin', () => {
 
         /**
          * @param {(connection: import('mariadb').Connection) => Promise<void>} run
+         * @param {'service' | 'full'} [dbmPropagationMode]
          */
-        async function withPromiseLog (run) {
-          await agent.load('mariadb', { dbmPropagationMode: 'service', service: 'serviced' })
+        async function withPromiseLog (run, dbmPropagationMode = 'service') {
+          await agent.load('mariadb', { dbmPropagationMode, service: 'serviced' })
           const mariadb = require(versionModule).get('mariadb')
           const connection = await mariadb.createConnection(connectionOptions)
 
@@ -174,6 +193,212 @@ describe('Plugin', () => {
             await callbackResult(callback => connection.end(callback))
             await agent.close()
           }
+        }
+
+        for (const api of ['promise', 'callback']) {
+          for (const method of ['query', 'execute', 'batch']) {
+            for (const mode of ['service', 'full']) {
+              it(`sends ${mode} SQL through the ${api} pool ${method}`, async () => {
+                await withPromiseLog(async oracle => {
+                  const driver = require(versionModule).get(api === 'callback' ? 'mariadb/callback' : 'mariadb')
+                  const pool = driver.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+                  const call = callPool.bind(undefined, pool, api)
+                  const table = `${marker}_pool_${api}_${method}_${mode}`
+                  try {
+                    if (method === 'batch') await call('query', `CREATE TEMPORARY TABLE ${table} (value INT)`)
+                    const sql = method === 'batch'
+                      ? `INSERT INTO ${table} (value) VALUES (?)`
+                      : `SELECT ? AS ${table}`
+                    for (const object of [false, true]) {
+                      for (const value of [61, 62]) {
+                        const command = object
+                          ? (api === 'callback' && method === 'query' ? { sql } : Object.freeze({ sql }))
+                          : sql
+                        const root = `${table}_${object}_${value}`
+                        let spanId
+                        const [, result] = await Promise.all([
+                          assertTraceResources(root, [sql], span => {
+                            spanId = span.span_id.toString(16).padStart(16, '0')
+                          }),
+                          global._ddtrace.trace(root, () => call(method, command,
+                            method === 'batch' ? [[value]] : [value])),
+                        ])
+                        if (method === 'batch') assert.strictEqual(result.affectedRows, 1)
+                        else assert.strictEqual(Number(result[0][table]), value)
+                        if (object) assert.strictEqual(command.sql, sql)
+                        if (object && api === 'callback') {
+                          assert.strictEqual(command.metaAsArray, method === 'query' ? true : undefined)
+                        }
+                        const match = `${mode === 'full' ? spanId : ''}%${sql.replace('?', '%')}`
+                        const logged = await oracle.query(logQuery, [`%${match}%`])
+                        assert.strictEqual(logged.length, 1, `missing SQL receipt for ${root}`)
+                        const received = logged[0].argument.toString()
+                        assert.match(received, /^\/\*dddb='db',dddbs='serviced',/)
+                        if (mode === 'full') {
+                          const [, traceparent] = received.match(/traceparent='([^']+)'/) ?? []
+                          assert.match(traceparent, /^00-[\da-f]{32}-[\da-f]{16}-01$/)
+                          assert.strictEqual(traceparent.split('-')[2], spanId, `${root}: ${received}`)
+                        }
+                      }
+                    }
+                    if (mode === 'full') {
+                      const command = { sql }
+                      const spanIds = new Set()
+                      await Promise.all([71, 72].map(value => {
+                        const root = `${table}_concurrent_${value}`
+                        return Promise.all([
+                          assertTraceResources(root, [sql], span => {
+                            spanIds.add(span.span_id.toString(16).padStart(16, '0'))
+                          }),
+                          global._ddtrace.trace(root, async () => {
+                            const result = await call(method, command, method === 'batch' ? [[value]] : [value])
+                            if (method === 'batch') assert.strictEqual(result.affectedRows, 1)
+                            else assert.strictEqual(Number(result[0][table]), value)
+                          }),
+                        ])
+                      }))
+                      assert.strictEqual(spanIds.size, 2)
+                      for (const spanId of spanIds) {
+                        const logged = await oracle.query(logQuery, [`%${spanId}%${sql.replace('?', '%')}%`])
+                        assert.strictEqual(logged.length, 1)
+                        assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+                      }
+                      assert.strictEqual(command.sql, sql)
+                    }
+                  } finally {
+                    await call('end')
+                  }
+                }, mode)
+              })
+            }
+          }
+
+          it(`preserves options while the ${api} pool command waits`, async () => {
+            await withPromiseLog(async oracle => {
+              const driver = require(versionModule).get(api === 'callback' ? 'mariadb/callback' : 'mariadb')
+              const pool = driver.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+              const call = callPool.bind(undefined, pool, api)
+              const connection = await call('getConnection')
+              const root = `${marker}_waiting_${api}`
+              const sql = `SELECT ? AS ${root}`
+              const command = { sql, rowsAsArray: false }
+              let query
+              let released = false
+              try {
+                const trace = assertTraceResources(root, [sql])
+                query = global._ddtrace.trace(root, () => call('query', command, [63]))
+                const completion = Promise.all([trace, query])
+                command.rowsAsArray = true
+                const release = api === 'callback'
+                  ? callbackResult(callback => connection.release(callback))
+                  : connection.release()
+                await release
+                released = true
+                const [, rows] = await completion
+                assert.strictEqual(Number(rows[0][0]), 63)
+                assert.strictEqual(command.sql, sql)
+                assert.strictEqual(command.metaAsArray, api === 'callback' ? true : undefined)
+                const logged = await oracle.query(logQuery, [`%${root}%`])
+                assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+              } finally {
+                if (!released) {
+                  if (api === 'callback') await callbackResult(callback => connection.release(callback))
+                  else await connection.release()
+                }
+                await query?.catch(noop)
+                await call('end')
+              }
+            })
+          })
+        }
+
+        for (const method of ['query', 'execute', 'batch']) {
+          it(`preserves object getters through the callback pool ${method}`, async () => {
+            await withPromiseLog(async oracle => {
+              const driver = require(versionModule).get('mariadb/callback')
+              const pool = driver.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+              const table = `${marker}_getter_${method}`
+              class Command {
+                /** @type {string} */
+                #sql
+                rowsAsArray = true
+                values = method === 'batch' ? [[64]] : [64]
+
+                /** @param {string} sql */
+                constructor (sql) { this.#sql = sql }
+
+                get sql () { return this.#sql }
+              }
+              try {
+                if (method === 'batch') {
+                  await callPool(pool, 'callback', 'query', `CREATE TEMPORARY TABLE ${table} (value INT)`)
+                }
+                const sql = method === 'batch'
+                  ? `INSERT INTO ${table} (value) VALUES (?)`
+                  : `SELECT ? AS ${table}`
+                const command = new Command(sql)
+                const [, result] = await Promise.all([
+                  assertTraceResources(table, [sql]),
+                  global._ddtrace.trace(table, () => callPool(pool, 'callback', method, command)),
+                ])
+                if (method === 'batch') assert.strictEqual(result.affectedRows, 1)
+                else assert.strictEqual(Number(result[0][0]), 64)
+                assert.strictEqual(command.sql, sql)
+                const logged = await oracle.query(logQuery, [`%${sql.replace('?', '%')}%`])
+                assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+              } finally {
+                await callPool(pool, 'callback', 'end')
+              }
+            })
+          })
+
+          it(`completes callback pool ${method} without an application callback`, async () => {
+            await withPromiseLog(async oracle => {
+              const driver = require(versionModule).get('mariadb/callback')
+              const pool = driver.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+              const table = `${marker}_no_callback_${method}`
+              try {
+                if (method === 'batch') {
+                  await callPool(pool, 'callback', 'query', `CREATE TEMPORARY TABLE ${table} (value INT)`)
+                }
+                const sql = method === 'batch'
+                  ? `INSERT INTO ${table} (value) VALUES (?)`
+                  : `SELECT ? AS ${table}`
+                const barrier = 'SELECT 1 AS callback_barrier'
+                await Promise.all([
+                  assertTraceResources(table, [sql, barrier]),
+                  global._ddtrace.trace(table, async () => {
+                    const result = pool[method](sql, method === 'batch' ? [[65]] : [65])
+                    assert.strictEqual(result, undefined)
+                    await callPool(pool, 'callback', 'query', barrier)
+                  }),
+                ])
+                const logged = await oracle.query(logQuery, [`%${sql.replace('?', '%')}%`])
+                assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+              } finally {
+                await callPool(pool, 'callback', 'end')
+              }
+            })
+          })
+        }
+
+        for (const api of ['promise', 'callback']) {
+          it(`preserves invalid SQL through the ${api} pool`, async () => {
+            await withPromiseLog(async () => {
+              const driver = require(versionModule).get(api === 'callback' ? 'mariadb/callback' : 'mariadb')
+              const pool = driver.createPool({ ...connectionOptions, connectionLimit: 1, minimumIdle: 0 })
+              try {
+                for (const method of ['query', 'execute', 'batch']) {
+                  const errno = api === 'callback' && method === 'query' ? 1065 : 45049
+                  await assert.rejects(callPool(pool, api, method, '', method === 'batch' ? [[1]] : [1]), { errno })
+                }
+                await assert.rejects(callPool(pool, api, 'execute', undefined), { errno: 45049 })
+                await assert.rejects(callPool(pool, api, 'execute', null), TypeError)
+              } finally {
+                await callPool(pool, api, 'end')
+              }
+            })
+          })
         }
 
         it('sends injected SQL through the promise connection', async () => {
