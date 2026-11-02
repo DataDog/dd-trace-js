@@ -368,6 +368,7 @@ interface Plugins {
   "sharedb": tracer.plugins.sharedb;
   "supabase": tracer.plugins.supabase;
   "tedious": tracer.plugins.tedious;
+  "trpc": tracer.plugins.trpc;
   "typesafe": tracer.plugins.typesafe;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
@@ -3551,6 +3552,12 @@ declare namespace tracer {
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
     interface tedious extends Instrumentation {}
+
+    /**
+     * Traces tRPC server queries and mutations. Express requests with one resolved procedure
+     * use its route as the HTTP resource; batches retain the Express mount route.
+     */
+    interface trpc extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
