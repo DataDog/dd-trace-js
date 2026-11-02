@@ -40,18 +40,18 @@ function promisifiedHandler (handler) {
 
     const callbackPromise = new Promise(function (resolve, reject) {
       modifiedCallback = function (error, result) {
-        if (error !== undefined && error !== null) {
-          reject(error)
-        } else {
+        if (error === undefined || error === null) {
           resolve(result)
+        } else {
+          reject(error)
         }
       }
       modifiedLegacyDoneCallback = function (error, result) {
         context.callbackWaitsForEmptyEventLoop = false
-        if (error !== undefined && error !== null) {
-          reject(error)
-        } else {
+        if (error === undefined || error === null) {
           resolve(result)
+        } else {
+          reject(error)
         }
       }
       modifiedLegacySucceedCallback = function (result) {
