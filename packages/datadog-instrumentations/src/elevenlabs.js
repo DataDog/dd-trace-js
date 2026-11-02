@@ -7,6 +7,7 @@ const shimmer = require('../../datadog-shimmer')
 const Session = require('./elevenlabs/session')
 
 const spanCh = dc.tracingChannel('apm:elevenlabs:span')
+const toolAsyncCh = dc.tracingChannel('apm:elevenlabs:tool-async')
 const finishCh = dc.channel('apm:elevenlabs:finish')
 const captureCh = dc.channel('dd-trace:elevenlabs:capture-context')
 const audioCh = dc.channel('dd-trace:elevenlabs:audio')
@@ -65,6 +66,7 @@ function finish (session, turn) {
     for (const ctx of turn.tools) {
       turn.metadata.tool_execution_incomplete = true
       ctx.finishTime = Date.now()
+      turn.toolEnd = Math.max(turn.toolEnd, ctx.finishTime)
       finishCh.publish(ctx)
     }
     turn.tools.clear()
@@ -151,7 +153,7 @@ function attach (session, socket) {
   shimmer.wrap(socket, 'send', send => function (data) {
     const result = send.apply(this, arguments)
     observe(() => {
-      if (typeof data === 'string') session.send(JSON.parse(data), Date.now())
+      if (typeof data === 'string') session.sendRaw(data, Date.now())
     })
     return result
   })
@@ -203,11 +205,9 @@ channel('_handleMessage').subscribe({
 channel('endSession').end.subscribe(ctx => {
   observe(() => sessions.get(ctx.self)?.finalize(Boolean(ctx.error)))
 })
-for (const method of ['_onWebSocketOpen', '_handleMessage']) {
-  channel(method).error.subscribe(ctx => {
-    observe(() => sessions.get(ctx.self)?.finalize(true))
-  })
-}
+channel('_onWebSocketOpen').error.subscribe(ctx => {
+  observe(() => sessions.get(ctx.self)?.finalize(true))
+})
 channel('_onWebSocketClose').start.subscribe(ctx => {
   const code = ctx.arguments[0]
   observe(() => sessions.get(ctx.self)?.finalize(!ctx.self.shouldStop && ![1000, 1001, 1005].includes(code)))
@@ -219,7 +219,7 @@ channel('executeToolAsync').start.subscribe(ctx => {
 })
 channel('register').start.subscribe(ctx => {
   const handler = ctx.arguments[1]
-  if (typeof handler !== 'function' || !spanCh.start.hasSubscribers) return
+  if (typeof handler !== 'function') return
   if (ctx.arguments[2] === undefined) ctx.arguments[2] = handler.constructor.name === 'AsyncFunction'
   // Customer handlers are created at runtime and have no matchable SDK source function.
   ctx.arguments[1] = shimmer.wrapCallback(handler, original => function (parameters) {
@@ -243,31 +243,35 @@ channel('register').start.subscribe(ctx => {
       promise: true,
     }
     turn.tools.add(tool)
-    return run(turn.scope, () => spanCh.tracePromise(original, tool, this, ...arguments))
+    return run(turn.scope, () => {
+      const result = spanCh.traceSync(() => {
+        const value = original.apply(this, arguments)
+        // Node's native tracePromise does not emit asyncEnd for primitives on newer runtimes.
+        // Classify inside traceSync so a throwing then getter follows the SDK's error path too.
+        tool.promise = value != null && typeof value.then === 'function'
+        return value
+      }, tool)
+      return tool.promise ? toolAsyncCh.tracePromise(() => result, tool) : result
+    })
   })
 })
 spanCh.error.subscribe(ctx => {
   if (ctx.kind === 'tool') ctx.promise = false
 })
-spanCh.end.subscribe(ctx => {
-  if (ctx.kind !== 'tool' || !ctx.error || ctx.finished) return
-  observe(() => {
-    ctx.output = ctx.session.toolResult(ctx.turn, ctx.id, String(ctx.error))
-    ctx.finishTime = Date.now()
-    ctx.turn.toolEnd = Math.max(ctx.turn.toolEnd, ctx.finishTime)
-    ctx.turn.tools.delete(ctx)
-  })
-})
-// Registered before product subscribers, so annotations observe the bounded result and duration.
-spanCh.asyncEnd.subscribe(ctx => {
+/** @param {object} ctx */
+function settleTool (ctx) {
   if (ctx.kind !== 'tool' || ctx.finished) return
-  observe(() => {
-    ctx.output = ctx.session.toolResult(ctx.turn, ctx.id, ctx.error ? String(ctx.error) : ctx.result)
-    ctx.finishTime = Date.now()
-    ctx.turn.toolEnd = Math.max(ctx.turn.toolEnd, ctx.finishTime)
-    ctx.turn.tools.delete(ctx)
-  })
-})
+  ctx.output = ctx.session.toolResult(ctx.turn, ctx.id, ctx.error ? String(ctx.error) : ctx.result)
+  ctx.finishTime = Date.now()
+  ctx.turn.toolEnd = Math.max(ctx.turn.toolEnd, ctx.finishTime)
+  ctx.turn.tools.delete(ctx)
+}
+
+// Registered before product subscribers, so annotations observe the bounded result and duration.
+spanCh.end.subscribe(ctx => { if (!ctx.promise) observe(() => settleTool(ctx)) })
+spanCh.asyncEnd.subscribe(ctx => observe(() => settleTool(ctx)))
+toolAsyncCh.error.subscribe(ctx => { if (!ctx.finished) spanCh.error.publish(ctx) })
+toolAsyncCh.asyncEnd.subscribe(ctx => { if (!ctx.finished) spanCh.asyncEnd.publish(ctx) })
 
 const beforeExitHandlers = globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers
 beforeExitHandlers?.add(() => {

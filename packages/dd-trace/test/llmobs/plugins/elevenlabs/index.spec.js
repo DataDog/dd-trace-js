@@ -143,6 +143,46 @@ describe('integrations', () => {
         assert.equal(byName(llmobsSpans, 'agent speech').duration, 300e6)
       })
 
+      const rawAudioFrames = [
+        ['canonical', '{"user_audio_chunk":"BwcHBw=="}'],
+        ['leading whitespace', ' {"user_audio_chunk":"BwcHBw=="}'],
+        ['extra field', '{"user_audio_chunk":"BwcHBw==","other":true}'],
+        ['second key', '{"other":true,"user_audio_chunk":"BwcHBw=="}'],
+        ['escaped value', '{"user_audio_chunk":"\\u0042wcHBw=="}'],
+      ]
+      for (const [label, raw] of rawAudioFrames) {
+        it(`captures equivalent microphone samples from ${label} JSON`, async () => {
+          await start()
+          socket.send(raw)
+          response(); close()
+          const { llmobsSpans } = await getEvents(3)
+          wav(byName(llmobsSpans, 'elevenlabs response').meta.input.messages[0].audio_parts[0],
+            16000, Buffer.alloc(4, 7))
+        })
+      }
+
+      it('keeps multiple protocol response IDs, streaming parts, and corrections within a turn', async () => {
+        await start()
+        event('agent_response', 'agent_response_event', 1, { response_id: 'a', agent_response: 'Same' })
+        event('agent_chat_response_part', 'text_response_part', 1,
+          { response_id: 'b', type: 'start', text: 'Second ' })
+        event('agent_chat_response_part', 'text_response_part', 1,
+          { response_id: 'b', type: 'delta', text: 'answer' })
+        event('agent_chat_response_part', 'text_response_part', 1,
+          { response_id: 'b', type: 'stop', text: '.' })
+        event('agent_response_correction', 'agent_response_correction_event', 1,
+          { response_id: 'a', original_agent_response: 'Same', corrected_agent_response: 'Corrected' })
+        event('agent_response', 'agent_response_event', 1, { response_id: 'c', agent_response: 'Same' })
+        event('agent_response', 'agent_response_event', 1, { response_id: 'd', agent_response: 'Same' })
+        clock.tick(100)
+        event('agent_chat_response_part', 'text_response_part', 1,
+          { response_id: 'a', type: 'delta', text: 'late part' })
+        close()
+        const { llmobsSpans } = await getEvents(2)
+        assert.equal(byName(llmobsSpans, 'elevenlabs response').meta.output.messages[0].content,
+          'Corrected\nSecond answer.\nSame\nSame')
+      })
+
       it('keeps repeated identical text in separate turns without completion events', async () => {
         await start()
         for (let id = 1; id <= 3; id++) { input(20, id); response(id, 'Same'); output(id, 30); clock.tick(40) }
@@ -281,6 +321,58 @@ describe('integrations', () => {
         assert.equal(tool.meta['span.kind'], 'tool')
       })
 
+      for (const mode of ['sync', 'promise', 'thenable']) {
+        it(`finishes a ${mode} tool with its output and execution duration`, async () => {
+          await start()
+          tools.register('completion', () => {
+            if (mode === 'thenable') return { then (resolve) { clock.tick(7); resolve('tool result') } }
+            clock.tick(7)
+            return mode === 'promise' ? Promise.resolve('tool result') : 'tool result'
+          })
+          event('client_tool_call', 'client_tool_call', 1,
+            { tool_name: 'completion', tool_call_id: 'completion-call', parameters: {} })
+          for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+          response(); close()
+          const { llmobsSpans } = await getEvents(3)
+          const tool = byName(llmobsSpans, 'completion')
+          assert.equal(tool.meta.output.value, 'tool result')
+          assert.equal(tool.duration, 7e6)
+          assert.equal(tool.status, 'ok')
+          assert.equal(byName(llmobsSpans, 'elevenlabs audio turn').meta.metadata.tool_execution_incomplete, undefined)
+          assert.equal(socket.sent.at(-1).result, 'tool result')
+        })
+      }
+
+      it('records rejected async tools and preserves the SDK error response', async () => {
+        await start()
+        tools.register('rejecting', async () => { clock.tick(9); throw new RangeError('tool rejected') })
+        event('client_tool_call', 'client_tool_call', 1,
+          { tool_name: 'rejecting', tool_call_id: 'rejecting-call', parameters: {} })
+        for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+        response(); close()
+        const { llmobsSpans } = await getEvents(3)
+        const tool = byName(llmobsSpans, 'rejecting')
+        assert.equal(tool.status, 'error')
+        assert.equal(tool.meta['error.message'], 'tool rejected')
+        assert.equal(tool.duration, 9e6)
+        assert.equal(socket.sent.at(-1).is_error, true)
+      })
+
+      for (const disabled of [false, true]) {
+        it(`traces tools registered before a session while disabled=${disabled}`, async () => {
+          const tracer = require('../../../../../..')
+          if (disabled) tracer.use('elevenlabs', false)
+          try { tools.register('early-tool', () => 'registered early') } finally { tracer.use('elevenlabs', {}) }
+          await start()
+          event('client_tool_call', 'client_tool_call', 1,
+            { tool_name: 'early-tool', tool_call_id: 'early-tool-call', parameters: {} })
+          for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+          response(); close()
+          const { llmobsSpans } = await getEvents(3)
+          assert.equal(byName(llmobsSpans, 'early-tool').meta.output.value, 'registered early')
+        })
+      }
+
       it('reports thrown tools without changing the SDK error result', async () => {
         await start()
         tools.register('broken', () => { throw new TypeError('tool failed') })
@@ -325,6 +417,29 @@ describe('integrations', () => {
         } finally { appended.restore() }
       })
 
+      for (const mode of ['shutdown', 'eviction']) {
+        it(`encloses a pending tool in its turn when forced by ${mode}`, async () => {
+          await start()
+          let complete
+          tools.register('forced', () => new Promise(resolve => { complete = resolve }))
+          event('client_tool_call', 'client_tool_call', 1,
+            { tool_name: 'forced', tool_call_id: 'forced-call', parameters: {} })
+          for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+          clock.tick(125)
+          if (mode === 'eviction') { response(2); response(3) }
+          close()
+          const { llmobsSpans } = await getEvents(mode === 'eviction' ? 7 : 3)
+          const tool = byName(llmobsSpans, 'forced')
+          const root = llmobsSpans.find(span => span.span_id === tool.parent_id)
+          assert.ok(root)
+          assert.ok(root.start_ns + root.duration >= tool.start_ns + tool.duration)
+          assert.equal(root.meta.metadata.tool_execution_incomplete, true)
+          assert.ok(complete)
+          complete('after forced finish')
+          for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+        })
+      }
+
       it('observes errors through a custom transport without adding error listeners', async () => {
         conversation.webSocketFactory = {
           create: () => ({
@@ -355,21 +470,31 @@ describe('integrations', () => {
         assert.ok(llmobsSpans.every(span => span.status === 'error'))
       })
 
-      it('fails unfinished work on SDK dispatch errors while preserving SDK error handling', async () => {
-        await start()
-        response()
-        const error = new Error('output interface failed')
-        audio.output = () => { throw error }
-        const logged = sinon.stub(console, 'error')
-        try {
-          output(1, 20)
-          assert.equal(logged.firstCall.args[1], error)
-          const { llmobsSpans } = await getEvents(2)
-          const llm = byName(llmobsSpans, 'elevenlabs response')
-          assert.equal(llm.status, 'error')
-          assert.equal(llm.meta.output.messages[0].audio_parts, undefined)
-        } finally { logged.restore() }
-      })
+      for (const target of ['callbackAgentResponse', 'callbackMessageReceived', 'output']) {
+        it(`keeps tracing after a caught ${target} exception`, async () => {
+          await start()
+          const holder = target === 'output' ? audio : conversation
+          const previous = holder[target]
+          const error = new Error(`${target} failed`)
+          holder[target] = () => { throw error }
+          const logged = sinon.stub(console, 'error')
+          try {
+            response(1, 'First answer')
+            if (target === 'output') output(1, 20)
+            assert.equal(logged.firstCall.args[1], error)
+            holder[target] = previous
+            if (target !== 'output') output(1, 20)
+            clock.tick(100)
+            response(2, 'Second answer')
+            output(2, 20)
+            close()
+            const { llmobsSpans } = await getEvents(6)
+            const llms = llmobsSpans.filter(span => span.name === 'elevenlabs response')
+            assert.deepEqual(llms.map(llm => llm.meta.output.messages[0].content), ['First answer', 'Second answer'])
+            assert.ok(llmobsSpans.every(span => span.status === 'ok'))
+          } finally { holder[target] = previous; logged.restore() }
+        })
+      }
 
       it('preserves shutdown exceptions and fails unfinished work exactly once', async () => {
         await start()
@@ -488,6 +613,38 @@ describe('integrations', () => {
         assert.equal(llm.meta.metadata.audio_omitted, true)
       })
 
+      for (const excess of [0, 1]) {
+        it(`applies the argument budget at the exact limit plus ${excess}`, async () => {
+          await start()
+          const size = 100_000 - JSON.stringify({ text: '' }).length + excess
+          event('client_tool_call', 'client_tool_call', 1,
+            { tool_name: 'remote', tool_call_id: 'argument-limit', parameters: { text: 'x'.repeat(size) } })
+          response(); close()
+          const { llmobsSpans } = await getEvents(2)
+          const llm = byName(llmobsSpans, 'elevenlabs response')
+          const args = llm.meta.output.messages[0].tool_calls[0].arguments
+          if (excess) assert.deepEqual(args, {})
+          else assert.equal(args.text.length, size)
+          assert.equal(llm.meta.metadata.tool_arguments_truncated, excess ? true : undefined)
+        })
+      }
+
+      it('accounts for argument replacements and preserves the shared argument limit', async () => {
+        await start()
+        const call = (id, size) => event('client_tool_call', 'client_tool_call', 1,
+          { tool_name: 'remote', tool_call_id: id, parameters: { text: 'x'.repeat(size) } })
+        call('a', 70_000)
+        call('a', 70_001) // replaces its prior argument size, rather than counting it twice
+        call('b', 40_000) // exceeds the remaining shared budget
+        response(); close()
+        const { llmobsSpans } = await getEvents(2)
+        const llm = byName(llmobsSpans, 'elevenlabs response')
+        const calls = llm.meta.output.messages[0].tool_calls
+        assert.equal(calls[0].arguments.text.length, 70_001)
+        assert.deepEqual(calls[1].arguments, {})
+        assert.equal(llm.meta.metadata.tool_arguments_truncated, true)
+      })
+
       it('shares one tool-result budget across calls and duplicate result events', async () => {
         await start()
         for (const id of ['a', 'b']) {
@@ -504,6 +661,44 @@ describe('integrations', () => {
         assert.equal(results.reduce((size, result) => size + result.result.length, 0), 100_000)
         assert.equal(llm.meta.metadata.tool_results_truncated, true)
         assert.equal(llmobsSpans.some(span => span.meta['span.kind'] === 'tool'), false)
+      })
+
+      for (const early of [false, true]) {
+        for (const format of ['ulaw_8000', 'opus_48000']) {
+          it(`marks unsupported ${format} input omitted when early=${early}`, async () => {
+            const started = conversation.startSession()
+            socket.emit('open'); await started
+            if (early) input(20)
+            socket.deliver({
+              type: 'conversation_initiation_metadata',
+              conversation_initiation_metadata_event: {
+                conversation_id: 'conv-test', user_input_audio_format: format, agent_output_audio_format: 'pcm_24000',
+              },
+            })
+            if (!early) input(20)
+            response(); close()
+            const { llmobsSpans } = await getEvents(2)
+            const llm = byName(llmobsSpans, 'elevenlabs response')
+            assert.equal(llm.meta.input.messages[0].content, '[audio]')
+            assert.equal(llm.meta.input.messages[0].audio_parts, undefined)
+            assert.equal(llm.meta.metadata.audio_omitted, true)
+          })
+        }
+      }
+
+      it('does not claim omitted input when unsupported negotiation has no microphone audio', async () => {
+        await start()
+        socket.deliver({
+          type: 'conversation_initiation_metadata',
+          conversation_initiation_metadata_event: {
+            conversation_id: 'conv-test', user_input_audio_format: 'ulaw_8000', agent_output_audio_format: 'pcm_24000',
+          },
+        })
+        conversation.sendUserMessage('Typed only'); response(); close()
+        const { llmobsSpans } = await getEvents(2)
+        const llm = byName(llmobsSpans, 'elevenlabs response')
+        assert.equal(llm.meta.input.messages[0].content, 'Typed only')
+        assert.equal(llm.meta.metadata.audio_omitted, undefined)
       })
 
       it('keeps unknown audio formats as transcript fallback', async () => {

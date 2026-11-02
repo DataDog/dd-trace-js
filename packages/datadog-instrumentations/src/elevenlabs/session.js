@@ -4,6 +4,8 @@ const { randomUUID } = require('node:crypto')
 
 const { AudioBuffer, RAW_LIMIT } = require('./audio')
 
+const AUDIO_PREFIX = '{"user_audio_chunk":"'
+
 const EVENT_FIELDS = {
   user_transcript: 'user_transcription_event',
   audio: 'audio_event',
@@ -44,7 +46,7 @@ function textOf (value) {
  * responseTime: number, toolEnd: number, responseComplete: boolean, interrupted: boolean,
  * failed: boolean, metadata: Record<string, unknown>, scope: Scope, root?: object, llm?: object,
  * boundaryResponse?: boolean, closed?: boolean, text?: string, sessionId?: string,
- * inputRate?: number, outputRate?: number,
+ * inputRate?: number, outputRate?: number, argumentsSize: number, argumentSizes: Map<string, number>,
  * }} Turn
  * @typedef {{
  * begin: (turn: Turn) => void, finish: (turn: Turn) => void,
@@ -66,6 +68,7 @@ class Session {
   early = []
   earlySize = 0
   earlyOverflow = false
+  negotiated = false
   inputRate = 0
   outputRate = 0
   /** @type {string} */
@@ -101,6 +104,8 @@ class Session {
       input,
       output: new AudioBuffer(),
       userText: this.pendingText,
+      argumentsSize: 0,
+      argumentSizes: new Map(),
       responses: new Map(),
       completed: new Set(),
       calls: new Map(),
@@ -134,6 +139,22 @@ class Session {
   }
 
   /**
+   * @param {string} raw
+   * @param {number} now
+   */
+  sendRaw (raw, now) {
+    // The SDK emits this single-field envelope for every microphone frame. Other JSON shapes,
+    // additional fields, and escaped values still use the normal parser.
+    if (raw.startsWith(AUDIO_PREFIX) && raw.endsWith('"}') &&
+        raw.indexOf('"', AUDIO_PREFIX.length) === raw.length - 2 &&
+        !raw.includes('\\', AUDIO_PREFIX.length)) {
+      this.send({ user_audio_chunk: raw.slice(AUDIO_PREFIX.length, -2) }, now)
+    } else {
+      this.send(JSON.parse(raw), now)
+    }
+  }
+
+  /**
    * @param {object} event
    * @param {number} now
    */
@@ -142,7 +163,10 @@ class Session {
     if (typeof event.user_audio_chunk === 'string') {
       const encoded = event.user_audio_chunk
       if (this.inputRate) this.pending.append(encoded, now, this.inputRate, true, this.options.retain())
-      else if (!this.earlyOverflow) {
+      else if (this.negotiated) {
+        this.pending.present = true
+        this.pending.omit()
+      } else if (!this.earlyOverflow) {
         this.earlySize += encoded.length
         if (this.early.length < 256 && this.earlySize <= RAW_LIMIT * 4 / 3 && this.options.retain()) {
           this.early.push([encoded, now])
@@ -172,9 +196,13 @@ class Session {
       const data = event.conversation_initiation_metadata_event
       if (!data || typeof data !== 'object') return
       this.sessionId = textOf(data.conversation_id) || this.sessionId
+      this.negotiated = true
       this.inputRate = rateOf(data.user_input_audio_format)
       this.outputRate = rateOf(data.agent_output_audio_format)
-      if (this.earlyOverflow) this.pending.omit()
+      if (this.earlyOverflow || (!this.inputRate && this.early.length)) {
+        this.pending.present = true
+        this.pending.omit()
+      }
       for (const [encoded, sent] of this.early) {
         this.pending.append(encoded, sent, this.inputRate, true, this.options.retain())
       }
@@ -239,11 +267,14 @@ class Session {
         turn.responseComplete = true
         break
       case 'client_tool_call':
-        if (typeof data.tool_call_id === 'string' && turn.calls.size < 64) {
+        if (typeof data.tool_call_id === 'string' && (turn.calls.has(data.tool_call_id) || turn.calls.size < 64)) {
           const argumentsJson = JSON.stringify(data.parameters || {})
-          const used = [...turn.calls.values()].reduce((size, call) => size + JSON.stringify(call.arguments).length, 0)
+          const used = turn.argumentsSize - (turn.argumentSizes.get(data.tool_call_id) || 0)
           const argumentsFit = argumentsJson.length + used <= 100_000
           if (!argumentsFit) turn.metadata.tool_arguments_truncated = true
+          const size = argumentsFit ? argumentsJson.length : 2 // omitted arguments retain the empty object
+          turn.argumentSizes.set(data.tool_call_id, size)
+          turn.argumentsSize = used + size
           turn.calls.set(data.tool_call_id, {
             name: textOf(data.tool_name),
             arguments: argumentsFit ? data.parameters || {} : {},
@@ -267,7 +298,7 @@ class Session {
    * @param {number} now
    */
   response (turn, kind, data, now) {
-    const key = textOf(data.text_response_id)
+    const key = textOf(data.response_id)
     if (!turn.responses.has(key) && turn.responses.size >= 64) return
     if (kind === 'agent_chat_response_part') {
       if (turn.completed.has(key)) return
