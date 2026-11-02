@@ -892,7 +892,7 @@ function findPreferredRepresentativeRoot (projectRoot, repositoryRoot) {
 /**
  * Normalizes repository and package names for exact identity comparison.
  *
- * @param {string} value package identity
+ * @param {unknown} value package identity from manifest metadata
  */
 function normalizeProjectIdentity (value) {
   const unscoped = String(value || '').toLowerCase().replace(/^@[^/]+\//, '')

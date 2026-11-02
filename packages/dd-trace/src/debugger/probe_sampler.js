@@ -152,7 +152,7 @@ function installProbeSampler (guardrailMetrics, config) {
       if (elapsedNs > evaluationTimeoutNs) {
         return recordConditionError(probeIndex, probeId, now, describeTimeout(elapsedNs), true)
       }
-      return matched === true && sample(probeIndex, probeId, now, nsBetweenSampling, isSnapshotProducingProbe)
+      return matched && sample(probeIndex, probeId, now, nsBetweenSampling, isSnapshotProducingProbe)
     },
 
     /**
@@ -235,7 +235,7 @@ function installProbeSampler (guardrailMetrics, config) {
     if (state.timedOut) {
       guardrailMetrics.eventSkipped(
         SKIPPED_REASON.EVALUATION_TIMEOUT,
-        isSnapshotProducingProbe === true ? EVENT_TYPE.SNAPSHOT : EVENT_TYPE.LOG
+        isSnapshotProducingProbe ? EVENT_TYPE.SNAPSHOT : EVENT_TYPE.LOG
       )
     }
     return true
@@ -254,7 +254,7 @@ function installProbeSampler (guardrailMetrics, config) {
    * @param {boolean} isSnapshotProducingProbe - Whether this probe counts toward the global snapshot sample limit.
    */
   function sample (probeIndex, probeId, now, nsBetweenSampling, isSnapshotProducingProbe) {
-    if (isSnapshotProducingProbe === true) {
+    if (isSnapshotProducingProbe) {
       const span = /** @type {ActiveSpan | null | undefined} */ (legacyStorage.getStore()?.span)
       const trace = span?.context()._trace
       // The span processor empties `started` once all spans of a trace have finished. A probe hit under such a trace
@@ -320,12 +320,12 @@ function installProbeSampler (guardrailMetrics, config) {
     if (lastCaptureNs !== undefined && now - lastCaptureNs < nsBetweenSampling) {
       guardrailMetrics.eventSkipped(
         SKIPPED_REASON.RATE_LIMIT_PROBE,
-        isSnapshotProducingProbe === true ? EVENT_TYPE.SNAPSHOT : EVENT_TYPE.LOG
+        isSnapshotProducingProbe ? EVENT_TYPE.SNAPSHOT : EVENT_TYPE.LOG
       )
       return true
     }
 
-    if (isSnapshotProducingProbe === true &&
+    if (isSnapshotProducingProbe &&
         now - globalSnapshotSamplingRateWindowStart <= oneSecondNs &&
         snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
       guardrailMetrics.eventSkipped(SKIPPED_REASON.RATE_LIMIT_GLOBAL, EVENT_TYPE.SNAPSHOT)
@@ -346,7 +346,7 @@ function installProbeSampler (guardrailMetrics, config) {
   function commitSample (probeIndex, probeId, now, isSnapshotProducingProbe) {
     if (!storeSampledProbeIndex(probeIndex)) return false
 
-    if (isSnapshotProducingProbe === true) {
+    if (isSnapshotProducingProbe) {
       if (now - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
         snapshotsSampledWithinTheLastSecond = 1
         globalSnapshotSamplingRateWindowStart = now

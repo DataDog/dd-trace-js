@@ -69,6 +69,15 @@ describe('flag evaluation worker producer', () => {
     }
   }
 
+  it('snapshots split features before worker handoff', () => {
+    const features = { 'holdout.assignment_group': 'control', included: false }
+    writer.enqueue({ flagKey: 'flag', timestamp: 100, features })
+    features['holdout.assignment_group'] = 'treatment'
+    writer.setEnabled(true)
+    const events = workers[0].messages.filter(message => message.type === 'batch').flatMap(message => message.events)
+    assert.deepStrictEqual(events[0].features, { 'holdout.assignment_group': 'control', included: false })
+  })
+
   it('passes effective logging settings without cloning the custom logger', () => {
     writer.destroy()
     writer = new Writer({

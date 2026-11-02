@@ -51,6 +51,10 @@ const registry = [
     instrumentations: require('./instrumentations/aws-durable-execution-sdk-js'),
   },
   { activate: true, instrumentations: require('./instrumentations/supabase') },
+  {
+    activate: { setup: () => require('../../typesafe') },
+    instrumentations: require('./instrumentations/typesafe'),
+  },
 ]
 
 const activatedModules = new Set()
