@@ -294,6 +294,11 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="openai-agents"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
+
+Calls to `Pool#getConnection()` create an `oracle.pool.acquire` span for the complete acquisition, including connection
+creation and session callbacks. Queries create separate spans. OracleDB does not expose exact queue time for each call,
+so acquisition spans have no wait-time metric. Set `tracer.use('oracledb', { poolAcquire: false })` to disable them.
+
 <h5 id="pg"></h5>
 <h5 id="pino"></h5>
 <h5 id="playwright"></h5>

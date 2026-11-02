@@ -20,18 +20,6 @@ function setResolvedUser (message) {
   ctx.currentStore?.span.setTag('db.user', ctx.user)
 }
 
-/**
- * @typedef {{
- *   dbInfo: { dbInstance?: string, hostname?: string, port?: string },
- *   naming?: {
- *     config: object,
- *     nomenclatureConfig: object,
- *     operationName: string,
- *     service: { name: string, source: string | undefined }
- *   }
- * }} PoolMetadata
- */
-
 class OracledbPoolAcquirePlugin extends StoragePlugin {
   static id = 'oracledb'
   static operation = 'pool.acquire'
@@ -39,7 +27,7 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
   static system = 'oracle'
   static peerServicePrecursors = ['db.instance', 'db.hostname']
 
-  /** @type {WeakMap<object, PoolMetadata>} */
+  /** @type {WeakMap<object, { dbInstance?: string, hostname?: string, port?: string }>} */
   #poolMetadata = new WeakMap()
 
   /**
@@ -64,22 +52,13 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
     let metadata = this.#poolMetadata.get(pool)
     if (metadata === undefined) {
       parser ??= require('./connection-parser')
-      metadata = { dbInfo: parser(connectionAttrs) }
+      metadata = parser(connectionAttrs)
       this.#poolMetadata.set(pool, metadata)
     }
 
-    const nomenclatureConfig = this._tracer._nomenclature.config
-    if (metadata.naming?.config !== this.config || metadata.naming.nomenclatureConfig !== nomenclatureConfig) {
-      metadata.naming = {
-        config: this.config,
-        nomenclatureConfig,
-        operationName: this.operationName({ operation: this.operation }),
-        service: this.serviceName({ pluginConfig: this.config, params: poolAttrs }),
-      }
-    }
-
-    const { hostname, port, dbInstance } = metadata.dbInfo
-    const { operationName, service } = metadata.naming
+    const { hostname, port, dbInstance } = metadata
+    const operationName = this.operationName({ operation: this.operation })
+    const service = this.serviceName({ pluginConfig: this.config, params: poolAttrs })
 
     this.startSpan(operationName, {
       service,

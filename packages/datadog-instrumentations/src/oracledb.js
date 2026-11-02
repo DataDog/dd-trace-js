@@ -44,10 +44,9 @@ const poolSessionFinishChannel = channel('apm:oracledb:pool:session:finish')
  * @returns {string | undefined}
  */
 function getAcquireUser (connectionAttrs, options) {
-  if (connectionAttrs.homogeneous || typeof options !== 'object' || options === null) {
+  if (connectionAttrs.homogeneous || typeof options !== 'object' || options === null || isProxy(options)) {
     return connectionAttrs.user
   }
-  if (isProxy(options)) return connectionAttrs.user
   const user = Object.getOwnPropertyDescriptor(options, 'user')?.value
   const username = Object.getOwnPropertyDescriptor(options, 'username')?.value
   return user ?? username ?? connectionAttrs.user
@@ -195,20 +194,6 @@ function wrapPoolGetConnection (getConnection) {
           arguments
         )
       })
-
-      return sessionCtx === undefined
-        ? callGetConnection(acquireCtx, getConnection, pool, args, requestState, requestCtx)
-        : poolSessionStartChannel.runStores(
-          sessionCtx,
-          callGetConnection,
-          undefined,
-          acquireCtx,
-          getConnection,
-          pool,
-          args,
-          requestState,
-          requestCtx
-        )
     }
 
     const promise = sessionCtx === undefined
@@ -224,6 +209,8 @@ function wrapPoolGetConnection (getConnection) {
         requestState,
         requestCtx
       )
+
+    if (callback) return promise
 
     if (acquireCtx === undefined) {
       return promise.then(connection => {
