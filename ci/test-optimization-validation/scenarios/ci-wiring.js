@@ -595,7 +595,7 @@ function readProjectSource (filename, projectFileSources) {
  */
 function containsLiteral (source, value) {
   const normalizedSource = source.replaceAll('\r\n', '\n')
-  const normalizedValue = String(value).replaceAll('\r\n', '\n').trim()
+  const normalizedValue = value.replaceAll('\r\n', '\n').trim()
   return normalizedValue !== '' && normalizedSource.includes(normalizedValue)
 }
 

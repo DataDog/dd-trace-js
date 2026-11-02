@@ -226,6 +226,17 @@ describe('OpenFeature Exposures Writer', () => {
     })
   })
 
+  it('preserves scalar exposure features, including false, zero, and prototype-like keys', () => {
+    const features = JSON.parse('{"holdout.key":"holdout","included":false,"weight":0,"__proto__":"value"}')
+    features.invalid = { nested: 'omit' }
+    features.nonfinite = Infinity
+    Object.defineProperty(features, 'accessor', { enumerable: true, get () { throw new Error('must not read') } })
+    const payload = JSON.parse(JSON.stringify(writer.makePayload([{ ...exposureEvent, features }])))
+    assert.deepStrictEqual(payload.exposures[0].features,
+      JSON.parse('{"holdout.key":"holdout","included":false,"weight":0,"__proto__":"value"}'))
+    assert.strictEqual(writer.makePayload([{ ...exposureEvent, features: {} }]).exposures[0].features, undefined)
+  })
+
   describe('makePayload', () => {
     it('should return context wrapper with exposures array', () => {
       const events = [exposureEvent]
@@ -642,16 +653,62 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(writer._bufferSize, 0)
     })
 
-    it('should log errors on request failure', (done) => {
-      request.yieldsAsync(new Error('Network error'))
+    for (const [statusCode, code, expectedCode] of [
+      [undefined, undefined, 'UNKNOWN'],
+      [undefined, 'ECONNRESET', 'ECONNRESET'],
+      [500, undefined, 'none'],
+    ]) {
+      it(`logs request failure with status=${statusCode} and code=${code}`, async () => {
+        request.yieldsAsync(Object.assign(new Error('Request failed'), { code }), '', statusCode)
+        writer.append(exposureEvent)
+
+        writer.flush()
+        await clock.tickAsync(0)
+
+        sinon.assert.calledOnceWithExactly(log.error,
+          '%s failed to send %d events to %s (status=%s, cause=%s); events dropped',
+          'ExposuresWriter', 1, 'http://localhost:8126', statusCode ?? 'none', expectedCode)
+      })
+    }
+
+    it('logs the writer, event count, and route of a successful delivery', async () => {
       writer.append(exposureEvent)
 
       writer.flush()
+      await clock.tickAsync(0)
 
-      clock.tickAsync(0).then(() => {
-        sinon.assert.calledOnce(log.error)
-        done()
+      sinon.assert.calledWithExactly(log.debug,
+        '%s accepted %d events at %s (%s, status %d); downstream delivery is not observed',
+        'ExposuresWriter', 1, 'http://localhost:8126', 'Agent/local EVP handoff', 200)
+    })
+
+    for (const basePath of ['/prefix/evp_proxy/v2', '/evp_proxy/v2']) {
+      it(`labels an Agent route with base path ${basePath} as an Agent handoff`, async () => {
+        writer.setEnabled(true, { url: new URL('http://agent.test:8126/prefix'), basePath })
+        writer.append(exposureEvent)
+
+        writer.flush()
+        await clock.tickAsync(0)
+
+        sinon.assert.calledWithExactly(log.debug,
+          '%s accepted %d events at %s (%s, status %d); downstream delivery is not observed',
+          'ExposuresWriter', 1, 'http://agent.test:8126', 'Agent/local EVP handoff', 200)
       })
+    }
+
+    it('omits URL credentials and echoed response bodies from delivery logs', async () => {
+      writer.setEnabled(true, { url: new URL('https://user:secret@example.test/token?key=secret'), basePath: '' })
+      for (const error of [null, new Error('response echoed secret')]) {
+        request.yieldsAsync(error, '', error ? 403 : 202)
+        writer.append(exposureEvent)
+        writer.flush()
+        await clock.tickAsync(0)
+      }
+      const lines = [...log.debug.args, ...log.error.args].filter(args => typeof args[0] === 'string')
+        .map(args => format(...args)).join('\n')
+      assert.match(lines, /accepted 1 events at https:\/\/example.test \(HTTP receiver, status 202\)/)
+      assert.match(lines, /failed to send 1 events to https:\/\/example.test \(status=403, cause=none\); events dropped/)
+      assert.doesNotMatch(lines, /secret|user:|token|key=/)
     })
 
     it('should log success on 2xx response', () => {
@@ -669,7 +726,9 @@ describe('OpenFeature Exposures Writer', () => {
       writer.flush()
 
       clock.tickAsync(0).then(() => {
-        sinon.assert.calledOnce(log.warn)
+        sinon.assert.calledOnceWithExactly(log.warn,
+          '%s events request to %s returned status %d; %d events were dropped',
+          'ExposuresWriter', 'http://localhost:8126', 400, 1)
         done()
       })
     })
@@ -723,6 +782,8 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.destroy()
 
+      sinon.assert.calledWithExactly(log.debug,
+        '%s stopping with %d buffered events; final flush requested without awaiting delivery', 'ExposuresWriter', 0)
       sinon.assert.calledOnce(clearIntervalSpy)
       clearIntervalSpy.restore()
     })
@@ -733,7 +794,40 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.destroy()
 
+      sinon.assert.calledWithExactly(log.debug,
+        '%s stopping with %d buffered events; final flush requested without awaiting delivery', 'ExposuresWriter', 1)
       sinon.assert.calledOnce(request)
+    })
+
+    it('logs how many held exposure events are queued once delivery is enabled', () => {
+      writer.append([exposureEvent, exposureEvent, exposureEvent])
+
+      writer.setEnabled(true)
+
+      sinon.assert.calledWithExactly(log.debug, '%s exposure delivery enabled; queueing %d pending exposure event(s)',
+        'ExposuresWriter', 3)
+    })
+
+    it('reports pending exposures that shutdown cannot deliver, once', () => {
+      writer.append([exposureEvent, exposureEvent])
+
+      writer.destroy()
+      writer.destroy()
+
+      sinon.assert.notCalled(request)
+      sinon.assert.calledOnceWithExactly(log.warn,
+        '%s dropped %d exposure event(s) at shutdown because exposure delivery was not enabled',
+        'ExposuresWriter', 2)
+    })
+
+    it('does not report a shutdown drop when delivery is enabled', () => {
+      writer.setEnabled(true)
+      writer.append(exposureEvent)
+
+      writer.destroy()
+
+      sinon.assert.calledOnce(request)
+      sinon.assert.notCalled(log.warn)
     })
 
     it('should log dropped events count', () => {

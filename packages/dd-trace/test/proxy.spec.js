@@ -62,6 +62,7 @@ describe('TracerProxy', () => {
   let initializeServerlessTelemetry
   let supportsServerlessTelemetryRetention
   let flushServerlessTelemetry
+  let otelThreadCtx
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
@@ -266,6 +267,10 @@ describe('TracerProxy', () => {
       cleanup: sinon.spy(),
     }
 
+    otelThreadCtx = {
+      start: sinon.stub().returns(true),
+    }
+
     handlers = new Map()
     rc = {
       setProductHandler (product, handler) { handlers.set(product, handler) },
@@ -312,6 +317,7 @@ describe('TracerProxy', () => {
       './flare': flare,
       './openfeature': openfeature,
       './openfeature/flagging_provider': OpenFeatureProvider,
+      './otel-thread-ctx': otelThreadCtx,
       './serverless': {
         IS_SERVERLESS: false,
         initializeServerlessTelemetry,
@@ -913,6 +919,22 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.notCalled(appsec.enable)
+      })
+
+      it('should start the thread context writer when enabled', () => {
+        config.DD_TRACE_OTEL_CTX_ENABLED = true
+
+        proxy.init()
+
+        sinon.assert.calledOnce(otelThreadCtx.start)
+      })
+
+      it('should not start the thread context writer when disabled', () => {
+        config.DD_TRACE_OTEL_CTX_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(otelThreadCtx.start)
       })
 
       it('should enable iast when configured', () => {

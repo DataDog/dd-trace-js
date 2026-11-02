@@ -7,6 +7,7 @@ const {
   FLAG_EVALUATION_GLOBAL_CAP,
   FLAG_EVALUATION_PER_FLAG_CAP,
 } = require('../constants/constants')
+const { snapshotFeatures } = require('./split-features')
 const { validatedContextEntries, snapshotFromEntries } = require('./flag-evaluation-context')
 const { normalizeTargetingKey, optionalKey, protectedErrorCode } =
   require('./flag-evaluation-pii')
@@ -20,6 +21,7 @@ const MAX_DIRECT_IDENTITY_LENGTH = 16_383
  * @typedef {object} FlagEvaluationEvent
  * @property {string} flagKey
  * @property {string} [variant]
+ * @property {Record<string, string | number | boolean>} [features]
  * @property {string} [allocationKey]
  * @property {boolean} runtimeDefault
  * @property {unknown} [errorCode]
@@ -32,6 +34,7 @@ const MAX_DIRECT_IDENTITY_LENGTH = 16_383
  * @typedef {object} AggregationDimensions
  * @property {string} flagKey
  * @property {string} [variant]
+ * @property {Record<string, string | number | boolean>} [features]
  * @property {string} [allocation]
  * @property {string} [error]
  */
@@ -94,10 +97,11 @@ class FlagEvaluationAggregator {
     const error = protectedErrorCode(event.errorCode)
     const variant = optionalKey(event.variant)
     const allocation = optionalKey(event.allocationKey)
+    const features = snapshotFeatures(event.features)
     // Group by the raw key; the serializer independently hashes protected rows once per output bucket.
     const identity = JSON.stringify([
       flagKey, variant, allocation, event.runtimeDefault === true, error,
-      targetingKey, contextEntries, consent,
+      targetingKey, contextEntries, consent, features,
     ])
     // Keep digest keys separate from short JSON identities, which always start with '['.
     const fullKey = identity.length > MAX_DIRECT_IDENTITY_LENGTH
@@ -111,11 +115,11 @@ class FlagEvaluationAggregator {
 
     const perFlag = this.#perFlag.get(flagKey) ?? 0
     if (perFlag >= FLAG_EVALUATION_PER_FLAG_CAP) {
-      this.#addDegraded(event, { flagKey, variant, allocation, error })
+      this.#addDegraded(event, { flagKey, variant, allocation, error, features })
       return
     }
     if (this.#full.size >= FLAG_EVALUATION_GLOBAL_CAP) {
-      this.#addDegraded(event, { flagKey, variant, allocation, error })
+      this.#addDegraded(event, { flagKey, variant, allocation, error, features })
       return
     }
 
@@ -124,6 +128,7 @@ class FlagEvaluationAggregator {
       flagKey,
       variant,
       allocation,
+      features,
       runtimeDefault: event.runtimeDefault === true,
       error,
       rawTargetingKey: targetingKey,
@@ -165,7 +170,7 @@ class FlagEvaluationAggregator {
     recordDegraded('cardinality_cap')
     const key = JSON.stringify([
       dimensions.flagKey, dimensions.variant, dimensions.allocation,
-      event.runtimeDefault === true, dimensions.error,
+      event.runtimeDefault === true, dimensions.error, dimensions.features,
     ])
     const existing = this.#degraded.get(key)
     if (existing) {
