@@ -286,7 +286,8 @@ function wrapQuery (query) {
       const queryQueue = deperecated ? this._queryQueue : this.queryQueue
       const activeQuery = deperecated ? this._activeQuery : this.activeQuery
 
-      const newQuery = queryQueue.at(-1) || activeQuery
+      // In pipeline mode, _sentQueryQueue contains submitted queries waiting behind activeQuery.
+      const newQuery = queryQueue.at(-1) || this._sentQueryQueue?.at(-1) || activeQuery
 
       if (!newQuery) {
         return retval

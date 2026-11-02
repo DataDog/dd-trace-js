@@ -81,6 +81,26 @@ describe('FlagEvalEVPHook', () => {
     selectRoute.firstCall.args[1](true, route)
   }
 
+  it('captures only evaluation-routed split features, independently of context consent', () => {
+    const result = details(false, {
+      __dd_has_evaluation_features: true,
+      '__dd_evaluation_feature.holdout.key': 'holdout',
+      '__dd_evaluation_feature.holdout.should_include_in_holdout_analysis': false,
+      '__dd_evaluation_feature.weight': 0,
+      '__dd_feature.secret': 'hook-only',
+      '__dd_exposure_feature.secret': 'exposure-only',
+    })
+    hook.finally({ flagKey: 'flag', context: {} }, result)
+    result.flagMetadata['__dd_evaluation_feature.holdout.key'] = 'changed'
+    assert.deepStrictEqual({ ...writer.enqueue.firstCall.args[0].features }, {
+      'holdout.key': 'holdout',
+      'holdout.should_include_in_holdout_analysis': false,
+      weight: 0,
+    })
+    hook.finally({ flagKey: 'flag', context: {} }, details())
+    assert.strictEqual(writer.enqueue.secondCall.args[0].features, undefined)
+  })
+
   it('captures an evaluation-time snapshot while route discovery is still pending', () => {
     const context = { targetingKey: 'customer', nested: { plan: 'pro' } }
     hook.finally({ flagKey: 'flag', context }, details())

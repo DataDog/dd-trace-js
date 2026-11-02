@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
+const { promisify } = require('node:util')
 
 const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -16,6 +18,7 @@ if (process.env.PG_TEST_NATIVE === 'true') {
 describe('pg instrumentation', () => {
   withVersions('pg', 'pg', version => {
     const queryClientStartChannel = dc.channel('apm:pg:query:start')
+    const queryClientFinishChannel = dc.channel('apm:pg:query:finish')
     const queryPoolStartChannel = dc.channel('datadog:pg:pool:query:start')
     const poolAcquireStartChannel = dc.channel('apm:pg:pool:acquire:start')
 
@@ -56,6 +59,56 @@ describe('pg instrumentation', () => {
 
           afterEach(() => {
             client.end()
+          })
+
+          describe('pipeline mode', () => {
+            let finished
+
+            /**
+             * @param {object} context
+             */
+            function onFinish (context) {
+              finished.add(context)
+            }
+
+            beforeEach(function () {
+              if (implementation !== 'pg' || !Object.hasOwn(client, '_sentQueryQueue')) {
+                // Older pg releases and the native client do not have the JavaScript pipeline queue.
+                this.skip()
+              }
+              client.pipeline = true
+              // Callback completion is published again by runStores; track completed operations by context.
+              finished = new Set()
+              queryClientFinishChannel.subscribe(onFinish)
+            })
+
+            afterEach(() => {
+              queryClientFinishChannel.unsubscribe(onFinish)
+            })
+
+            for (const api of ['promises', 'callbacks', 'query events']) {
+              it(`finishes each query with its own result or error using ${api}`, async () => {
+                const query = {
+                  promises: text => client.query(text),
+                  callbacks: promisify(client.query.bind(client)),
+                  'query events': text => once(client.query(new Query(text)), 'end'),
+                }[api]
+
+                await Promise.all([
+                  query('SELECT 1 AS value'),
+                  assert.rejects(query('INVALID'), { code: '42601' }),
+                  query('SELECT 3 AS value'),
+                ])
+
+                assert.deepStrictEqual(Array.from(finished, context => ({
+                  text: context.originalText, rows: context.result, code: context.error?.code,
+                })), [
+                  { text: 'SELECT 1 AS value', rows: [{ value: 1 }], code: undefined },
+                  { text: 'INVALID', rows: undefined, code: '42601' },
+                  { text: 'SELECT 3 AS value', rows: [{ value: 3 }], code: undefined },
+                ])
+              })
+            }
           })
 
           describe('abortController', () => {
