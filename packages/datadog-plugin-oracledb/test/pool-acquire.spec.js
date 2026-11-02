@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { promisify } = require('node:util')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const Nomenclature = require('../../dd-trace/src/service-naming')
@@ -130,16 +131,19 @@ describe('oracledb pool acquisition without a database service', () => {
       await agent.close()
     })
 
-    it('caches the service for the pool until configuration changes', async () => {
-      for (const current of ['first', 'second']) {
-        service = current
-        await Promise.all([
-          agent.assertFirstTraceSpan({
-            name: 'oracle.pool.acquire',
-            service: 'first',
-          }, { spanResourceMatch: /^oracle\.pool\.acquire$/ }),
-          assert.rejects(pool.getConnection(null), { code: 'NJS-005' }),
-        ])
+    it('resolves a dynamic service for each acquisition', async () => {
+      for (const useCallback of [false, true]) {
+        const acquire = useCallback ? promisify(pool.getConnection).bind(pool) : pool.getConnection.bind(pool)
+        for (const current of ['first', 'second']) {
+          service = current
+          await Promise.all([
+            agent.assertFirstTraceSpan({
+              name: 'oracle.pool.acquire',
+              service: current,
+            }, { spanResourceMatch: /^oracle\.pool\.acquire$/ }),
+            assert.rejects(acquire(null), { code: 'NJS-005' }),
+          ])
+        }
       }
 
       tracer.use('oracledb', { service: () => 'third' })
