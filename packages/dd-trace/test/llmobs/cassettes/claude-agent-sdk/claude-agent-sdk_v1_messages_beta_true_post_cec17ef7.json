@@ -6,7 +6,7 @@
       "Accept": "application/json",
       "Content-Type": "application/json",
       "User-Agent": "claude-cli/2.1.289 (external, sdk-ts, agent-sdk/0.3.289)",
-      "X-Claude-Code-Session-Id": "7c77c409-50ae-462c-94c9-138c188dd293",
+      "X-Claude-Code-Session-Id": "79ea14fa-1f5f-4f5b-9f2a-89fb2dbf510a",
       "X-Stainless-Arch": "arm64",
       "X-Stainless-Lang": "js",
       "X-Stainless-OS": "MacOS",
@@ -15,15 +15,15 @@
       "X-Stainless-Runtime": "node",
       "X-Stainless-Runtime-Version": "v26.3.0",
       "X-Stainless-Timeout": "600",
-      "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advisor-tool-2026-03-01,effort-2025-11-24,thinking-display-updates-2026-08-18",
+      "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,effort-2025-11-24,thinking-display-updates-2026-08-18",
       "anthropic-dangerous-direct-browser-access": "true",
       "anthropic-version": "2023-06-01",
       "x-app": "cli",
       "Connection": "keep-alive",
       "Accept-Encoding": "gzip, deflate, br, zstd",
-      "Content-Length": "1455"
+      "Content-Length": "1569"
     },
-    "body": "{\"model\":\"claude-sonnet-4-6\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"<system-reminder>\\n# Environment\\nYou have been invoked in the following environment: \\n - Primary working directory: /private/tmp\\n - Is a git repository: false\\n - Platform: darwin\\n - Shell: unknown\\n - OS Version: Darwin 25.6.0\\n</system-reminder>\"},{\"type\":\"text\",\"text\":\"<system-reminder>\\nYou are powered by the model named Sonnet 4.6. The exact model ID is claude-sonnet-4-6. Assistant knowledge cutoff is August 2025.\\n</system-reminder>\"},{\"type\":\"text\",\"text\":\"<system-reminder>\\nToday's date is 2026-10-05.\\n</system-reminder>\\n\"},{\"type\":\"text\",\"text\":\"Say hi in three words.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"system\":[{\"type\":\"text\",\"text\":\"x-anthropic-billing-header: cc_version=2.1.289.739; cc_entrypoint=sdk-ts;\"},{\"type\":\"text\",\"text\":\"You are a Claude agent, built on Anthropic's Claude Agent SDK.\",\"cache_control\":{\"type\":\"ephemeral\"}},{\"type\":\"text\",\"text\":\"Follow instructions\\n\\nReply briefly\",\"cache_control\":{\"type\":\"ephemeral\"}}],\"tools\":[],\"metadata\":{\"user_id\":\"{\\\"device_id\\\":\\\"263ef7a90f3056f6e9b785fddaa75fe9ab978f9dc956651f1c1c3d7ac0973810\\\",\\\"account_uuid\\\":\\\"\\\",\\\"session_id\\\":\\\"7c77c409-50ae-462c-94c9-138c188dd293\\\"}\"},\"max_tokens\":32000,\"thinking\":{\"type\":\"adaptive\",\"display\":\"updates\"},\"context_management\":{\"edits\":[{\"type\":\"clear_thinking_20251015\",\"keep\":\"all\"}]},\"output_config\":{\"effort\":\"medium\"},\"stream\":true}"
+    "body": "{\"model\":\"claude-sonnet-4-6\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"<system-reminder>\\n# Environment\\nYou have been invoked in the following environment: \\n - Primary working directory: /private/tmp\\n - Is a git repository: false\\n - Platform: darwin\\n - Shell: unknown\\n - OS Version: Darwin 25.6.0\\n</system-reminder>\"},{\"type\":\"text\",\"text\":\"<system-reminder>\\nYou are powered by the model named Sonnet 4.6. The exact model ID is claude-sonnet-4-6. Assistant knowledge cutoff is August 2025.\\n</system-reminder>\"},{\"type\":\"text\",\"text\":\"<system-reminder>\\n<total_tokens>15000000 tokens left</total_tokens>\\n</system-reminder>\"},{\"type\":\"text\",\"text\":\"<system-reminder>\\nToday's date is 2026-10-09.\\n</system-reminder>\\n\"},{\"type\":\"text\",\"text\":\"Say hi in three words.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"system\":[{\"type\":\"text\",\"text\":\"x-anthropic-billing-header: cc_version=2.1.289.739; cc_entrypoint=sdk-ts;\"},{\"type\":\"text\",\"text\":\"You are a Claude agent, built on Anthropic's Claude Agent SDK.\",\"cache_control\":{\"type\":\"ephemeral\"}},{\"type\":\"text\",\"text\":\"Follow instructions\\n\\nReply briefly\",\"cache_control\":{\"type\":\"ephemeral\"}}],\"tools\":[],\"metadata\":{\"user_id\":\"{\\\"device_id\\\":\\\"94b84dddc9400263d3a6713cf609f5507782dc91bb8676f254e963b78aaa86c0\\\",\\\"account_uuid\\\":\\\"\\\",\\\"session_id\\\":\\\"79ea14fa-1f5f-4f5b-9f2a-89fb2dbf510a\\\"}\"},\"max_tokens\":32000,\"thinking\":{\"type\":\"adaptive\",\"display\":\"updates\"},\"context_management\":{\"edits\":[{\"type\":\"clear_thinking_20251015\",\"keep\":\"all\"}]},\"output_config\":{\"effort\":\"medium\"},\"stream\":true}"
   },
   "response": {
     "status": {
@@ -31,26 +31,26 @@
       "message": "OK"
     },
     "headers": {
-      "Date": "Mon, 05 Oct 2026 14:49:32 GMT",
+      "Date": "Fri, 09 Oct 2026 19:02:21 GMT",
       "Content-Type": "text/event-stream; charset=utf-8",
       "Transfer-Encoding": "chunked",
       "Connection": "keep-alive",
       "Cache-Control": "no-cache",
       "anthropic-ratelimit-input-tokens-limit": "40000000",
       "anthropic-ratelimit-input-tokens-remaining": "40000000",
-      "anthropic-ratelimit-input-tokens-reset": "2026-10-05T14:49:31Z",
+      "anthropic-ratelimit-input-tokens-reset": "2026-10-09T19:02:19Z",
       "anthropic-ratelimit-output-tokens-limit": "6000000",
       "anthropic-ratelimit-output-tokens-remaining": "6000000",
-      "anthropic-ratelimit-output-tokens-reset": "2026-10-05T14:49:31Z",
+      "anthropic-ratelimit-output-tokens-reset": "2026-10-09T19:02:19Z",
       "anthropic-ratelimit-requests-limit": "20000",
       "anthropic-ratelimit-requests-remaining": "19998",
-      "anthropic-ratelimit-requests-reset": "2026-10-05T14:49:31Z",
+      "anthropic-ratelimit-requests-reset": "2026-10-09T19:02:19Z",
       "anthropic-ratelimit-tokens-limit": "46000000",
       "anthropic-ratelimit-tokens-remaining": "46000000",
-      "anthropic-ratelimit-tokens-reset": "2026-10-05T14:49:31Z",
+      "anthropic-ratelimit-tokens-reset": "2026-10-09T19:02:19Z",
       "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-      "request-id": "req_011CfjGx2ydef1BELR3eLCP6",
-      "traceresponse": "00-de70db7092d15a31ef282d7991452c55-8d7e571499c52a8d-01",
+      "request-id": "req_011CfsBTo6cuEzGe2a8rALRA",
+      "traceresponse": "00-356bb1b85a64ee5c3b822bca12dbea3d-7ba373ebffe5cdb7-01",
       "anthropic-organization-id": "4257e925-ee99-4ee8-9c62-8e53716d5203",
       "anthropic-workspace-id": "wrkspc_016aTU2q5hNGVxQMc7MKHPqm",
       "Content-Encoding": "gzip",
@@ -59,8 +59,8 @@
       "cf-cache-status": "DYNAMIC",
       "X-Robots-Tag": "none",
       "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
-      "CF-RAY": "a45d3bc3fa29acc5-EWR"
+      "CF-RAY": "a47fa393ee1960c8-EWR"
     },
-    "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CfjGx3CXLbkFD1TUcmF2X\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":180,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\"},\"diagnostics\":null,\"context_management\":null}              }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}    }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}     }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" there\"}    }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\",\"}        }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" friend\"}     }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"!\"}         }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0            }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":180,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":8,\"output_tokens_details\":{\"thinking_tokens\":0},\"iterations\":[{\"input_tokens\":180,\"output_tokens\":8,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"type\":\"message\"}]},\"context_management\":{\"applied_edits\":[]}       }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"        }\n\n"
+    "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CfsBToKGgi28d3ZLjFitN\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":207,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\"},\"diagnostics\":null,\"context_management\":null}      }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}          }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" there,\"}   }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" friend\"}   }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"!\"}  }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0 }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":207,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":8,\"output_tokens_details\":{\"thinking_tokens\":0}},\"context_management\":{\"applied_edits\":[]}        }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"      }\n\n"
   }
 }

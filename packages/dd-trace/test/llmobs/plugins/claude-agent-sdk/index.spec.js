@@ -64,6 +64,7 @@ describe('Plugin', () => {
         options: {
           model: 'claude-sonnet-4-6',
           title: 'Claude Agent SDK test',
+          permissionMode: 'default',
           mcpServers: { local: localToolsServer },
           // Strip Claude Code built-in tools from the request payload so cassette hashes
           // stay stable across SDK versions (built-in tool descriptions change patch-to-patch).
@@ -90,6 +91,7 @@ describe('Plugin', () => {
           env: {
             ANTHROPIC_BASE_URL: 'http://127.0.0.1:9126/vcr/claude-agent-sdk',
             CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: true,
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
             ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
           },
         },
@@ -108,9 +110,9 @@ describe('Plugin', () => {
 
       // Subagent prompt is determined by the LLM at the previous step.
       const subagentPrompt = is03
-        ? 'Please fetch the current weather for New York (state code: NY) in fahrenheit.'
-        : 'Please fetch the current weather for New York state (NY) in fahrenheit ' +
-          'using the weather tool available to you.'
+        ? 'Fetch the current weather for New York (state code: NY) in fahrenheit ' +
+          'using the fetch_weather tool and report the result.'
+        : 'Fetch the current weather for New York state (NY) in fahrenheit.'
 
       const subagentNYResult = is03
         ? 'The current weather in New York (NY) is 72 degrees Fahrenheit.'
@@ -129,22 +131,18 @@ describe('Plugin', () => {
         '1. Spawn a subagent to get the weather in New York (fahrenheit)\n' +
         '2. After that, get the weather in California myself (fahrenheit)\n' +
         '\n' +
-        'Let me start with the subagent for New York.'
+        "Let me spawn the subagent for New York first, wait for it to complete, then get California's weather myself."
 
       // The assistant's text preamble before issuing the Agent tool call
       const outerAgentPreamble = is03
-        ? "Sure! Let me start by spawning a subagent to fetch New York's weather first."
-        : "Sure! Let me first spawn a subagent to get the New York weather, and then I'll fetch " +
-          "California's weather myself after!\n\n**Step 1: Spawning a subagent for New York weather...**"
+        ? "Sure! I'll spawn a subagent for New York's weather first, then fetch California's myself. " +
+          "Let me kick off the subagent now — I'll wait for it to finish before moving on!"
+        : "Sure! Let me start by spawning a subagent to fetch New York's weather first!"
 
       // The assistant's text preamble before fetching CA weather directly
-      const outerCaPreamble = hasSubagentHandback
-        ? "The subagent reports that New York is currently **72°F**. Now let me fetch California's weather directly!"
-        : is03
-          ? 'The subagent returned: **New York is currently 72°F.**\n\n' +
-          "**Step 2: Now fetching California's weather myself...**"
-          : 'The subagent returned: **New York is currently 72°F**. Now let me fetch ' +
-            "California's weather myself!\n\n**Step 2: Fetching California weather directly...**"
+      const outerCaPreamble = is03
+        ? "The subagent reports **72°F in New York**. Now let me fetch California's weather myself!"
+        : "The subagent returned **72°F** for New York. Now let me fetch California's weather myself!"
 
       // The Agent tool's `description` argument is chosen by the LLM at outer step-0.
       const agentDescription = 'Fetch NY weather'
@@ -478,6 +476,7 @@ describe('Plugin', () => {
           options: {
             model: 'claude-sonnet-4-6',
             title: 'Claude Agent SDK system prompt test',
+            permissionMode: 'default',
             systemPrompt,
             tools: [],
             allowedTools: [],
@@ -490,6 +489,7 @@ describe('Plugin', () => {
             env: {
               ANTHROPIC_BASE_URL: 'http://127.0.0.1:9126/vcr/claude-agent-sdk',
               CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: true,
+              CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
               ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
               // Keep the preset's memory path stable across machines.
               CLAUDE_CONFIG_DIR: '/tmp/claude-agent-sdk-config',
