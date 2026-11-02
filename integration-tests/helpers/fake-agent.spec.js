@@ -7,29 +7,33 @@ const http = require('node:http')
 const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const FakeAgent = require('./fake-agent')
 
-describe('FakeAgent', () => {
-  let agent
+for (const Agent of [FakeAgent, FakeCiVisIntake]) {
+  describe(Agent.name, () => {
+    let agent
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
-
-  afterEach(() => agent.stop())
-
-  for (const method of ['PUT', 'POST']) {
-    it(`accepts ${method} trace requests`, async () => {
-      const message = once(agent, 'message')
-      const body = msgpack.encode([[{ resource: `fixture.${method.toLowerCase()}` }]])
-      const response = await postTrace(agent.port, method, body)
-
-      assert.strictEqual(response.statusCode, 200)
-      const [{ payload }] = await message
-      assert.strictEqual(payload[0][0].resource, `fixture.${method.toLowerCase()}`)
+    beforeEach(async () => {
+      agent = await new Agent().start()
     })
-  }
-})
+
+    afterEach(() => agent.stop())
+
+    for (const method of ['PUT', 'POST']) {
+      it(`accepts ${method} trace requests`, async () => {
+        const message = once(agent, 'message')
+        const body = msgpack.encode([[{ resource: `fixture.${method.toLowerCase()}` }]])
+        const response = await postTrace(agent.port, method, body)
+
+        assert.strictEqual(response.statusCode, 200)
+        const [{ payload, url }] = await message
+        assert.strictEqual(payload[0][0].resource, `fixture.${method.toLowerCase()}`)
+        if (Agent === FakeCiVisIntake) assert.strictEqual(url, '/v0.4/traces')
+      })
+    }
+  })
+}
 
 /**
  * @param {number} port
