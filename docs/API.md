@@ -408,8 +408,6 @@ Playback with missing per-response start events remains a live validation gap.
 <h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
 <h5 id="trpc"></h5>
-
-Set `DD_TRACE_TRPC_ENABLED=false` to disable tRPC procedure spans and its Express request naming.
 <h5 id="typesafe"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
