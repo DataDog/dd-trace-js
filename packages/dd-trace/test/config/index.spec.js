@@ -142,6 +142,18 @@ describe('Config', () => {
   })
 
   describe('config-helper', () => {
+    it('enables tRPC tracing by default', () => {
+      assert.strictEqual(getConfig().DD_TRACE_TRPC_ENABLED, true)
+    })
+
+    for (const value of ['false', '0', 'true', '1']) {
+      it(`reads DD_TRACE_TRPC_ENABLED=${value}`, () => {
+        process.env.DD_TRACE_TRPC_ENABLED = value
+
+        assert.strictEqual(getConfig().DD_TRACE_TRPC_ENABLED, value === 'true' || value === '1')
+      })
+    }
+
     it('should throw when accessing unknown configuration', () => {
       assert.throws(
         () => getEnvironmentVariable('DD_UNKNOWN_CONFIG'),

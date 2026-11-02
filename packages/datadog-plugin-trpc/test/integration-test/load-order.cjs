@@ -6,8 +6,11 @@ const path = require('node:path')
 
 const agent = require('../../../dd-trace/test/plugins/agent')
 
-/** @param {'trpc-first'|'http-first'} order */
-async function main (order) {
+/**
+ * @param {'trpc-first'|'http-first'} order
+ * @param {boolean} enabled
+ */
+async function main (order, enabled) {
   const plugins = order === 'trpc-first'
     ? ['trpc', 'http', 'express', 'router']
     : ['http', 'express', 'router', 'trpc']
@@ -31,10 +34,14 @@ async function main (order) {
       assert.ok(trace)
       const httpSpan = trace.find(span => span.name === 'express.request')
       const procedures = trace.filter(span => span.name === 'trpc.procedure')
-      assert.strictEqual(procedures.length, 1)
-      assert.strictEqual(procedures[0].resource, 'query getValue')
-      assert.match(httpSpan.resource, /\/tenant\/:tenantId\/trpc\/getValue$/)
-      assert.strictEqual(String(procedures[0].parent_id), String(httpSpan.span_id))
+      assert.strictEqual(procedures.length, enabled ? 1 : 0)
+      assert.strictEqual(httpSpan.resource, enabled
+        ? 'GET /tenant/:tenantId/trpc/getValue'
+        : 'GET /tenant/:tenantId/trpc')
+      if (enabled) {
+        assert.strictEqual(procedures[0].resource, 'query getValue')
+        assert.strictEqual(String(procedures[0].parent_id), String(httpSpan.span_id))
+      }
     })
     const response = await fetch(`http://127.0.0.1:${server.address().port}/tenant/acme/trpc/getValue`)
     assert.strictEqual(response.status, 200)
@@ -50,7 +57,7 @@ async function main (order) {
   }
 }
 
-main(process.argv[2]).catch(error => {
+main(process.argv[2], process.argv[3] !== 'disabled').catch(error => {
   process.stderr.write(`${error.stack}\n`)
   process.exitCode = 1
 })
