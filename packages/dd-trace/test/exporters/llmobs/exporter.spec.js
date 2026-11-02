@@ -50,6 +50,7 @@ describe('LLMObsExporter', () => {
 
   function getConfig () {
     return {
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: undefined },
       llmobs: { DD_LLMOBS_AGENTLESS_ENABLED: undefined },
       url: new URL('http://agent:8126'),
     }
@@ -175,6 +176,25 @@ describe('LLMObsExporter', () => {
     sinon.assert.notCalled(fetchAgentInfo)
     sinon.assert.notCalled(AgentExporter)
   })
+
+  for (const globalAgentless of [undefined, false, true]) {
+    it(`honors the agentless exporter when global agentless is ${globalAgentless}`, () => {
+      getValueFromEnvSources.returns(globalAgentless)
+      const config = getConfig()
+      config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agentless'
+      config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = false
+
+      const exporter = new Exporter(config, {})
+      const trace = [{ name: 'llm.request' }]
+
+      exporter.export(trace)
+
+      sinon.assert.calledOnce(AgentlessExporter)
+      sinon.assert.calledOnceWithExactly(agentlessExporter.export, trace)
+      sinon.assert.notCalled(AgentExporter)
+      sinon.assert.notCalled(fetchAgentInfo)
+    })
+  }
 
   it('uses the LLMObs-specific Agent setting when global agentless mode is not configured', () => {
     const config = getConfig()

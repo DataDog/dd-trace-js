@@ -3109,7 +3109,7 @@ describe('Config', () => {
         DD_AI_GUARD_TIMEOUT: 2000,
       },
       rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
-      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'llmobs' },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agent' },
       flushMinSpans: 500,
       flushInterval: 500,
       iast: {
@@ -5724,7 +5724,7 @@ rules:
       assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
     })
 
-    it('should use the LLMObs exporter without enabling global agentless mode', () => {
+    it('should preserve the exporter configuration without enabling global agentless mode', () => {
       process.env.DD_LLMOBS_ENABLED = 'true'
       process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
       process.env.DD_API_KEY = 'api-key'
@@ -5732,19 +5732,31 @@ rules:
       const config = getConfig()
 
       assert.strictEqual(config.DD_AGENTLESS_ENABLED, false)
-      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'llmobs')
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, '')
       assert.strictEqual(config.protocolVersion, '0.4')
     })
 
-    it('should use the LLMObs exporter with the default Agent configuration', () => {
+    it('should preserve the default exporter configuration when LLMObs is enabled', () => {
       process.env.DD_LLMOBS_ENABLED = 'true'
 
       const config = getConfig()
 
-      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'llmobs')
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, '')
     })
 
-    for (const exporter of ['electron', 'log']) {
+    for (const name of ['DD_AGENTLESS_ENABLED', '_DD_APM_TRACING_AGENTLESS_ENABLED']) {
+      it(`should retain the agentless exporter selected by ${name} with LLMObs enabled`, () => {
+        process.env[name] = 'true'
+        process.env.DD_LLMOBS_ENABLED = 'true'
+        process.env.DD_API_KEY = 'api-key'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+      })
+    }
+
+    for (const exporter of ['agent', 'agentless', 'electron', 'log']) {
       it(`should preserve an explicitly configured ${exporter} exporter when LLMObs is enabled`, () => {
         process.env.DD_LLMOBS_ENABLED = 'true'
 

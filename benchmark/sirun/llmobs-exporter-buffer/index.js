@@ -15,6 +15,7 @@ const LLMObsExporter = proxyquire('../../../packages/dd-trace/src/exporters/llmo
 })
 
 const exporter = new LLMObsExporter({
+  tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: undefined },
   llmobs: { DD_LLMOBS_AGENTLESS_ENABLED: undefined },
   url: new URL('http://127.0.0.1:8126'),
 }, {})

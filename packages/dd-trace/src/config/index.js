@@ -703,14 +703,6 @@ class Config extends ConfigBase {
       }
     }
 
-    if (this.llmobs.DD_LLMOBS_ENABLED) {
-      const exporter = this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER
-      const supportsLlmobs = !exporter || exporter === exporters.AGENT || exporter === exporters.AGENTLESS
-      if (!this.isCiVisibility && this.OTEL_TRACES_EXPORTER !== 'otlp' && supportsLlmobs) {
-        setAndTrack(this, 'tracing.DD_TRACE_EXPERIMENTAL_EXPORTER', exporters.LLMOBS)
-      }
-    }
-
     // Disable log injection when OTEL logs are enabled
     // OTEL logs and DD log injection are mutually exclusive
     if (this.DD_LOGS_OTEL_ENABLED) {
