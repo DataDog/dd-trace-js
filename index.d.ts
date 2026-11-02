@@ -2024,6 +2024,48 @@ declare namespace tracer {
        *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
        */
       evaluate (messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
+
+      /**
+       * Creates an AI Guard client with its own settings, for example to evaluate conversations on behalf of
+       * different tenants in the same process. The evaluation requests, the `ai_guard` spans and the
+       * evaluation metadata of the client use these settings. Unset options use the global configuration.
+       * The client has no effect when AI Guard is not enabled.
+       *
+       * @param options - Settings of the client.
+       * @returns A new AI Guard client.
+       */
+      createClient (options?: ClientOptions): AIGuard;
+    }
+
+    /**
+     * Settings of an AI Guard client created with `createClient`. Each unset option uses the global configuration.
+     */
+    export interface ClientOptions {
+      /**
+       * Datadog API key used to call the AI Guard service.
+       * @default the value of DD_API_KEY
+       */
+      apiKey?: string;
+      /**
+       * Datadog application key used to call the AI Guard service.
+       * @default the value of DD_APP_KEY
+       */
+      appKey?: string;
+      /**
+       * Datadog site of the AI Guard service (e.g. `datadoghq.eu`). When set, it also replaces `aiguard.endpoint`.
+       * @default the value of DD_SITE
+       */
+      site?: string;
+      /**
+       * Service name sent with the evaluations and set on the `ai_guard` spans.
+       * @default the value of DD_SERVICE
+       */
+      service?: string;
+      /**
+       * Environment sent with the evaluations and set on the `ai_guard` spans.
+       * @default the value of DD_ENV
+       */
+      env?: string;
     }
   }
 

@@ -69,16 +69,20 @@ class AIGuardClient {
 
   /**
    * @param {import('../config/config-base')} config
+   * @param {{ apiKey?: string, appKey?: string, site?: string }} [settings] - Values that replace the global
+   *   configuration. A custom site replaces DD_AI_GUARD_ENDPOINT too, because that endpoint targets the global site.
    */
-  constructor (config) {
+  constructor (config, settings = {}) {
     this.#headers = {
-      'DD-API-KEY': config.DD_API_KEY,
-      'DD-APPLICATION-KEY': config.DD_APP_KEY,
+      'DD-API-KEY': settings.apiKey ?? config.DD_API_KEY,
+      'DD-APPLICATION-KEY': settings.appKey ?? config.DD_APP_KEY,
       'DD-AI-GUARD-VERSION': tracerVersion,
       'DD-AI-GUARD-SOURCE': 'SDK',
       'DD-AI-GUARD-LANGUAGE': 'nodejs',
     }
-    const endpoint = config.aiguard.DD_AI_GUARD_ENDPOINT || `https://${aiGuardHost(config.site)}/api/v2/ai-guard`
+    const endpoint = settings.site
+      ? `https://${aiGuardHost(settings.site)}/api/v2/ai-guard`
+      : config.aiguard.DD_AI_GUARD_ENDPOINT || `https://${aiGuardHost(config.site)}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
     this.#timeout = config.aiguard.DD_AI_GUARD_TIMEOUT
   }
