@@ -337,6 +337,34 @@ describe('Plugin', () => {
             })
           })
 
+          // pg.Query is the JavaScript client's query class; pg.native uses its own.
+          if (implementation !== 'pg.native') {
+            it('should run the callback of a reused query object in the current parent context', async () => {
+              const actives = []
+              let resolveCallback
+              const query = new pg.Query('SELECT 1', undefined, () => {
+                actives.push(tracer.scope().active())
+                resolveCallback()
+              })
+              const parents = [tracer.startSpan('first'), tracer.startSpan('second')]
+
+              for (const parent of parents) {
+                const spanFinished = agent.assertSomeTraces(traces => {
+                  const span = traces[0].find(span => span.name === expectedSchema.outbound.opName)
+                  assert.strictEqual(span.parent_id.toString(), parent.context().toSpanId())
+                })
+                await new Promise(resolve => {
+                  resolveCallback = resolve
+                  tracer.scope().activate(parent, () => client.query(query))
+                })
+                parent.finish()
+                await spanFinished
+              }
+
+              assert.deepStrictEqual(actives, parents)
+            })
+          }
+
           withNamingSchema(
             done => client.query('SELECT $1::text as message', ['Hello world!'])
               .then(() => client.end())
@@ -480,11 +508,17 @@ describe('Plugin', () => {
 
           // Authenticates every client and then never answers a query.
           server = net.createServer(socket => {
+            let startup = Buffer.alloc(0)
             sockets.add(socket)
             socket.on('close', () => sockets.delete(socket))
             socket.on('error', () => {})
-            socket.on('data', data => {
-              if (data.length > 8 && data.readInt32BE(4) === 196_608) {
+            socket.on('data', function onStartupData (data) {
+              // TCP can split the startup packet, so wait for its declared length before reading it.
+              startup = Buffer.concat([startup, data])
+              if (startup.length < 8 || startup.length < startup.readInt32BE(0)) return
+
+              socket.off('data', onStartupData)
+              if (startup.readInt32BE(4) === 196_608) {
                 socket.write(Buffer.from([0x52, 0, 0, 0, 8, 0, 0, 0, 0]))
                 socket.write(Buffer.from([0x5A, 0, 0, 0, 5, 0x49]))
               }
@@ -520,6 +554,82 @@ describe('Plugin', () => {
             assert.match(span.meta[ERROR_MESSAGE], message)
           })
         }
+
+        /**
+         * @param {(callback: () => void) => void} runQuery
+         * @returns {Promise<void>}
+         */
+        async function assertCallbackRunsInParent (runQuery) {
+          const spanFinished = assertErroredQuerySpan(/timeout/i)
+          const parent = tracer.startSpan('test')
+
+          const active = await new Promise(resolve => {
+            tracer.scope().activate(parent, () => {
+              runQuery(() => resolve(tracer.scope().active()))
+            })
+          })
+
+          assert.strictEqual(active, parent)
+          parent.finish()
+          await spanFinished
+        }
+
+        it('should wrap the callback of a frozen query config', async () => {
+          await assertCallbackRunsInParent(callback => {
+            client.query(Object.freeze({ text: 'SELECT 1', callback }))
+          })
+        })
+
+        it('should run the callback of a reused query config in the current parent context', async () => {
+          const actives = []
+          let resolveCallback
+          const callback = () => {
+            actives.push(tracer.scope().active())
+            resolveCallback()
+          }
+          const config = { text: 'SELECT 1', callback }
+          const parents = [tracer.startSpan('first'), tracer.startSpan('second'), tracer.startSpan('third')]
+
+          for (const [index, parent] of parents.entries()) {
+            const spanFinished = assertErroredQuerySpan(/timeout/i)
+            await new Promise(resolve => {
+              resolveCallback = resolve
+              tracer.scope().activate(parent, () => {
+                if (index === 1) {
+                  client.query(config, callback)
+                } else {
+                  client.query(config)
+                }
+              })
+            })
+            assert.strictEqual(config.callback, callback)
+            parent.finish()
+            await spanFinished
+          }
+
+          assert.deepStrictEqual(actives, parents)
+        })
+
+        it('should wrap the callback pg selects for a query object that already has one', async () => {
+          await assertCallbackRunsInParent(callback => {
+            client.query(new pg.Query('SELECT 1', undefined, callback), callback)
+          })
+        })
+
+        it('should finish the span of a promise query on query timeout', async () => {
+          const spanFinished = assertErroredQuerySpan(/timeout/i)
+
+          await assert.rejects(client.query('SELECT 1'), /timeout/i)
+          await spanFinished
+        })
+
+        it('should finish the span of a promise query on a closed client', async () => {
+          await client.end()
+          const spanFinished = assertErroredQuerySpan(/closed/i)
+
+          await assert.rejects(client.query('SELECT 1'), /closed/i)
+          await spanFinished
+        })
 
         it('should run the callback in the parent context and finish the span on query timeout', async () => {
           const spanFinished = assertErroredQuerySpan(/timeout/i)
