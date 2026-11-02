@@ -158,12 +158,36 @@ describe('register', () => {
       assert.deepStrictEqual(registeredBuiltinNames, ['fs', 'http', 'dns'])
     })
 
-    it('lists electron, which Electron provides as a built-in', () => {
-      hooksMock.electron = sinon.stub()
+    describe('electron', () => {
+      const originalElectron = process.versions.electron
 
-      const { registeredBuiltinNames } = loadRegisterWithEnv()
+      beforeEach(() => {
+        hooksMock.electron = sinon.stub()
+      })
 
-      assert.deepStrictEqual(registeredBuiltinNames, ['fs', 'http', 'dns', 'electron'])
+      afterEach(() => {
+        if (originalElectron === undefined) {
+          delete process.versions.electron
+        } else {
+          process.versions.electron = originalElectron
+        }
+      })
+
+      it('lists electron inside Electron, which provides it as a built-in', () => {
+        process.versions.electron = '45.0.0'
+
+        const { registeredBuiltinNames } = loadRegisterWithEnv()
+
+        assert.deepStrictEqual(registeredBuiltinNames, ['fs', 'http', 'dns', 'electron'])
+      })
+
+      it('omits the electron npm package outside of Electron', () => {
+        delete process.versions.electron
+
+        const { registeredBuiltinNames } = loadRegisterWithEnv()
+
+        assert.deepStrictEqual(registeredBuiltinNames, ['fs', 'http', 'dns'])
+      })
     })
 
     for (const disabledName of ['http', 'node:http']) {

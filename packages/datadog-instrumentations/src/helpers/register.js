@@ -130,7 +130,10 @@ for (const name of names) {
     hook = hook.fn
   }
 
-  if (isBuiltinModuleName(name)) registeredBuiltinNames.push(name)
+  // Outside Electron, `electron` is the npm package that downloads the binary, not a built-in.
+  if (isBuiltinModuleName(name) && (name !== 'electron' || process.versions.electron)) {
+    registeredBuiltinNames.push(name)
+  }
 
   Hook([name], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     // All loaded versions are first expected to fail instrumentation.

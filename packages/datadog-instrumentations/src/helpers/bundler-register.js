@@ -14,14 +14,14 @@ const {
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const { isRewriteActivationEnabled } = require('./rewriter/targets')
+const { isNodeBuiltinModuleName } = require('./shared-utils')
 const disabledInstrumentations = getDisabledInstrumentations()
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
-// environments (webpack, esbuild, Turbopack), Node.js built-ins and
-// Electron's `electron` module required by the application or by dd-trace itself
-// may have been loaded and cached by the bundle before ritm was active, bypassing
-// it. Re-requiring them via the real Module.prototype.require lets ritm apply
-// their hooks to the shared exports.
+// environments (webpack, esbuild, Turbopack), Node.js built-ins required by the
+// application or by dd-trace itself may have been loaded and cached by the
+// bundle before ritm was active, bypassing it. Re-requiring them via the real
+// Module.prototype.require lets ritm apply their hooks to the shared exports.
 //
 // In regular Node.js, `module` is an instance of Module. In bundlers, the
 // module wrapper object is a plain object (not a Module instance), so we use
@@ -34,18 +34,14 @@ if (!(module instanceof Module)) {
 function patchLoadedBuiltins () {
   // A built-in nobody has loaded cannot be cached by the bundle yet, and a later require reaches ritm, so it is
   // skipped. moduleLoadList is undocumented: if it ever disappears, every registered built-in is loaded instead.
+  // It only lists Node.js built-ins, so runtime-provided ones such as Electron's are always re-required.
   // @ts-expect-error - process.moduleLoadList is not typed
   const { moduleLoadList } = process
   const loadedBuiltins = Array.isArray(moduleLoadList) ? moduleLoadList : undefined
 
   let patched = false
   for (const name of registeredBuiltinNames) {
-    if (name === 'electron') {
-      // Outside Electron, `electron` is the npm package that downloads the binary, not the runtime module.
-      if (process.versions.electron) patchElectron()
-      continue
-    }
-    if (loadedBuiltins?.includes(`NativeModule ${name}`) === false) continue
+    if (isNodeBuiltinModuleName(name) && loadedBuiltins?.includes(`NativeModule ${name}`) === false) continue
 
     try {
       Module.prototype.require.call(module, name)
@@ -60,16 +56,6 @@ function patchLoadedBuiltins () {
     Module.syncBuiltinESMExports()
   } catch (error) {
     log.error('Error synchronizing bundled built-in ESM exports: %s', String(error?.message ?? error), error)
-  }
-}
-
-// The hook patches `net`, `ipcMain` and `BrowserWindow.prototype` in place, so the exports the bundle already holds
-// are traced. Only the preload injection relies on the replaced exports, and is not applied to them.
-function patchElectron () {
-  try {
-    Module.prototype.require.call(module, 'electron')
-  } catch (error) {
-    log.error('Error patching the bundled electron module: %s', String(error?.message ?? error), error)
   }
 }
 

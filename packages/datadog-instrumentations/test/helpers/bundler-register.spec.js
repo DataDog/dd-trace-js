@@ -8,6 +8,7 @@ const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
 
 const instrumentationUtils = require('../../src/helpers/instrumentation-utils')
+const sharedUtils = require('../../src/helpers/shared-utils')
 const CHANNEL = 'dd-trace:bundler:load'
 const registerPath = require.resolve('../../src/helpers/bundler-register')
 const registerSource = fs.readFileSync(registerPath, 'utf8')
@@ -94,43 +95,10 @@ describe('bundler register', () => {
       sinon.assert.notCalled(log.error)
     })
 
-    describe('electron', () => {
-      const originalElectron = process.versions.electron
+    it('re-requires registered built-ins that moduleLoadList does not track', () => {
+      const { requireBuiltin } = loadBuiltinRegister({ bundled: true, registered: ['electron', 'http'], loaded: [] })
 
-      afterEach(() => {
-        if (originalElectron === undefined) {
-          delete process.versions.electron
-        } else {
-          process.versions.electron = originalElectron
-        }
-      })
-
-      it('re-requires electron in Electron, without syncing built-in ESM exports for it', () => {
-        process.versions.electron = '45.0.0'
-
-        const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, registered: ['electron'], loaded: [] })
-
-        assert.deepStrictEqual(requireBuiltin.args, [['electron']])
-        sinon.assert.notCalled(sync)
-      })
-
-      it('does not require the electron npm package outside of Electron', () => {
-        delete process.versions.electron
-
-        const { requireBuiltin } = loadBuiltinRegister({ bundled: true, registered: ['electron', 'http'] })
-
-        assert.deepStrictEqual(requireBuiltin.args, [['http']])
-      })
-
-      it('logs a failing electron require instead of throwing', () => {
-        process.versions.electron = '45.0.0'
-        const error = new Error('electron failed')
-
-        const { log } = loadBuiltinRegister({ bundled: true, registered: ['electron'], failing: { electron: error } })
-
-        sinon.assert.calledWithExactly(log.error, 'Error patching the bundled electron module: %s', error.message,
-          error)
-      })
+      assert.deepStrictEqual(requireBuiltin.args, [['electron']])
     })
 
     it('logs a failing ESM synchronization instead of throwing', () => {
@@ -473,6 +441,7 @@ function loadBuiltinRegister ({
     './hooks': {},
     './instrumentations': {},
     './rewriter/targets': {},
+    './shared-utils': sharedUtils,
   }
   // Naming the script after the real file attributes its coverage to that file.
   const wrapped = vm.runInThisContext(Module.wrap(registerSource), { filename: registerPath })
