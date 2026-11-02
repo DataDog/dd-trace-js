@@ -20,7 +20,7 @@ class RCClientManager {
    * @param {string} currentEnv - Current environment name
    */
   constructor (currentService, currentEnv) {
-    this.configs = new Map() // config_id -> { priority, sdkConfig }
+    this.configs = new Map() // config_id -> { priority, revision, sdkConfig }
     this.currentService = currentService
     this.currentEnv = currentEnv
   }
@@ -96,9 +96,10 @@ class RCClientManager {
     const sdkConfig = conf.sdk_config?.config
 
     const priority = this.calculatePriority(conf)
-    this.configs.set(configId, { priority, sdkConfig })
+    const revision = Number.isFinite(conf.revision) ? conf.revision : 0
+    this.configs.set(configId, { priority, revision, sdkConfig })
 
-    log.debug('[config/remote_config] Added config %s with priority %d', configId, priority)
+    log.debug('[config/remote_config] Added config %s with priority %d and revision %d', configId, priority, revision)
   }
 
   /**
@@ -114,7 +115,9 @@ class RCClientManager {
   }
 
   /**
-   * Get merged config with higher priority configs overriding lower priority ones
+   * Get merged config with higher priority configs overriding lower priority ones. Among configs of
+   * the same priority, the one with the newer revision (its write time) wins, so the result does not
+   * depend on the order the configs were received in.
    *
    * @returns {Partial<Record<import('./helper').SupportedEnvKey, string>>|null} Merged config object or
    *   null if no configs present
@@ -125,7 +128,7 @@ class RCClientManager {
     let hasConfig = false
 
     const merged = [...this.configs.values()]
-      .sort((a, b) => a.priority - b.priority)
+      .sort((a, b) => a.priority - b.priority || a.revision - b.revision)
       .reduce((merged, { sdkConfig }) => {
         if (sdkConfig == null) return merged
         hasConfig = true

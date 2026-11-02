@@ -302,6 +302,57 @@ describe('Tracing Remote Config', () => {
         DD_LOGS_INJECTION: 'true',
       })
     })
+
+    for (const order of ['newer first', 'newer last']) {
+      it(`should let the newer revision win among same-priority configs (${order})`, () => {
+        enable(rc, config, onConfigUpdated)
+        const handler = batchHandlers.get('APM_TRACING')
+
+        const older = {
+          id: 'config-customer',
+          file: {
+            revision: 1700000000000,
+            service_target: { service: 'test-service', env: 'test-env' },
+            sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.9', DD_TAGS: 'owner:customer' }),
+          },
+        }
+        const newer = {
+          id: 'config-overlay',
+          file: {
+            revision: 1700000001000,
+            service_target: { service: 'test-service', env: 'test-env' },
+            sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.5' }),
+          },
+        }
+
+        handler(createTransaction(order === 'newer first' ? [newer, older] : [older, newer]))
+
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, {
+          DD_TRACE_SAMPLE_RATE: '0.5',
+          DD_TAGS: 'owner:customer',
+        })
+      })
+    }
+
+    it('should let a newer revision of a config received earlier win over a later config', () => {
+      enable(rc, config, onConfigUpdated)
+      const handler = batchHandlers.get('APM_TRACING')
+      const file = (revision, sampleRate) => ({
+        revision,
+        service_target: { service: 'test-service', env: 'test-env' },
+        sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: sampleRate }),
+      })
+
+      handler(createTransaction([
+        { id: 'config-customer', file: file(1, '0.9') },
+        { id: 'config-overlay', file: file(2, '0.5') },
+      ]))
+      config.setRemoteConfig.resetHistory()
+
+      handler(createTransaction([], [{ id: 'config-customer', file: file(3, '0.7') }]))
+
+      sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.7' })
+    })
   })
 })
 
