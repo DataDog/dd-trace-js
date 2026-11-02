@@ -284,7 +284,7 @@ function configureGraphqlJitCompileObject (_state, node) {
         DD_FIELD_NODES,
         originPaths,
         ddTraceArguments,
-        objectStringify(ddTraceArguments.values),
+        objectStringify,
         DD_COMPILED
       )
       : undefined
