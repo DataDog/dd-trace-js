@@ -430,7 +430,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
-    const awsLambdaFuncName = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
       isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
 
@@ -597,7 +596,7 @@ class Config extends ConfigBase {
       if (!this.service) {
         const serverlessName = IS_SERVERLESS
           ? (
-              awsLambdaFuncName ||
+              getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') ||
               getEnvironmentVariable('FUNCTION_NAME') || // Google Cloud Function Name set by deprecated runtimes
               getEnvironmentVariable('K_SERVICE') || // Google Cloud Function Name set by newer runtimes
               getEnvironmentVariable('WEBSITE_SITE_NAME') // set by Azure Functions
