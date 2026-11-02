@@ -25,6 +25,8 @@ const OPTIONAL_DEPENDENCIES = Object.keys(require('../../package.json').optional
 const variants = [
   { shape: 'ssr', dependencies: 'bundled', format: 'cjs' },
   { shape: 'ssr', dependencies: 'bundled', format: 'es' },
+  // The tracer and the wrappers intercepting ES module exports land in a chunk shared by two entries.
+  { shape: 'ssr', dependencies: 'bundled', format: 'es', split: true },
   { shape: 'ssr', dependencies: 'list', format: 'cjs' },
   { shape: 'ssr', dependencies: 'list', format: 'es' },
   { shape: 'ssr', dependencies: 'external', format: 'cjs' },
@@ -42,9 +44,11 @@ for (const viteVersion of viteVersions) {
       '@react-router/dev',
       '@react-router/express',
       '@react-router/node',
+      '@hono/node-server',
       '@types/node',
       'ai',
       'express',
+      'hono',
       'isbot',
       'pnpm',
       'react',
@@ -64,11 +68,11 @@ for (const viteVersion of viteVersions) {
     })
 
     for (const variant of variants) {
-      const { shape, dependencies, format } = variant
+      const { shape, dependencies, format, split } = variant
       const bundled = dependencies === 'bundled'
       const tracerExternal = !bundled
 
-      describe(`${shape} build, ${dependencies} dependencies, ${format} output`, () => {
+      describe(`${shape} build, ${dependencies} dependencies, ${format} output${split ? ', split' : ''}`, () => {
         const extension = format === 'es' ? 'mjs' : 'cjs'
         let agent
         let outDir
@@ -77,7 +81,7 @@ for (const viteVersion of viteVersions) {
 
         before(function () {
           this.timeout(180_000)
-          outDir = path.join(applicationDirectory, `dist-${shape}-${dependencies}-${format}`)
+          outDir = path.join(applicationDirectory, `dist-${shape}-${dependencies}-${format}${split ? '-split' : ''}`)
           build(applicationDirectory, outDir, variant)
           runDirectory = outDir
           if (bundled) {
@@ -135,6 +139,27 @@ for (const viteVersion of viteVersions) {
           const chunks = fs.readdirSync(outDir).filter(file => file.endsWith(`.${extension}`))
           assert.ok(chunks.length > 1, `Expected a code-split output, got ${chunks.join(', ')}`)
         })
+
+        it('traces an ES module package instrumented by hooks', async function () {
+          this.timeout(60_000)
+
+          await assertRoute(agent, proc, '/hono', { ok: true }, payload => {
+            const span = payload.flat().find(span => span.name === 'hono.request')
+            assert.ok(span, 'hono.request span not found')
+            assert.strictEqual(span.resource, 'GET /hono')
+            assert.strictEqual(span.service, SERVICE)
+          })
+        })
+
+        if (split) {
+          it('moves the tracer into a chunk shared by the entries', () => {
+            const tracerCode = /function hasGarbageCollectionBug(\$\d+)?\s*\(/
+            for (const entry of [`server.${extension}`, `worker.${extension}`]) {
+              assert.doesNotMatch(fs.readFileSync(path.join(outDir, entry), 'utf8'), tracerCode, entry)
+            }
+            assert.match(readOutput(outDir, extension), tracerCode)
+          })
+        }
 
         if (bundled) {
           it('bundles a single dc-polyfill and leaves the optional tracer dependencies out', () => {
@@ -254,12 +279,13 @@ for (const viteVersion of viteVersions) {
         this.timeout(300_000)
         // Outside the sandbox, whose hoisted node_modules would otherwise be reachable from parent directories.
         pnpmDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-vite-pnpm-'))
-        for (const file of ['server.mjs', 'tracer.mjs', 'model.mjs', 'graph.mjs', 'vite.config.mjs']) {
+        for (const file of ['server.mjs', 'tracer.mjs', 'model.mjs', 'graph.mjs', 'worker.mjs', 'vite.config.mjs']) {
           fs.copyFileSync(path.join(applicationDirectory, file), path.join(pnpmDirectory, file))
         }
         const tarball = path.join(path.dirname(sandboxCwd()), 'dd-trace.tgz')
         const dependencies = {}
-        for (const name of ['vite', 'express', 'ai', '@langchain/langgraph', '@langchain/core']) {
+        for (const name of ['vite', 'express', 'ai', '@langchain/langgraph', '@langchain/core', 'hono',
+          '@hono/node-server']) {
           dependencies[name] = readPackageJson(name).version
         }
         dependencies['dd-trace'] = `file:${tarball}`
@@ -304,6 +330,9 @@ for (const viteVersion of viteVersions) {
         await assertRoute(agent, proc, '/ai', { text: 'ok' }, payload => {
           assert.strictEqual(checkSpansForServiceName(payload, 'generateText'), true)
         })
+        await assertRoute(agent, proc, '/hono', { ok: true }, payload => {
+          assert.strictEqual(checkSpansForServiceName(payload, 'hono.request'), true)
+        })
       })
     })
   })
@@ -312,17 +341,18 @@ for (const viteVersion of viteVersions) {
 /**
  * @param {string} cwd
  * @param {string} outDir
- * @param {{ shape: string, dependencies: string, format: string }} variant
+ * @param {{ shape: string, dependencies: string, format: string, split?: boolean }} variant
  * @param {Record<string, string>} [env]
  * @param {string} [vite]
  */
-function build (cwd, outDir, { shape, dependencies, format }, env, vite = 'vite') {
+function build (cwd, outDir, { shape, dependencies, format, split }, env, vite = 'vite') {
   run(cwd, vite, ['build'], {
     ...env,
     VITE_DEPENDENCIES: dependencies,
     VITE_OUTPUT_FORMAT: format,
     VITE_OUT_DIR: outDir,
     VITE_SHAPE: shape,
+    VITE_SPLIT: String(Boolean(split)),
   })
 }
 

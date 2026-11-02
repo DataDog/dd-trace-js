@@ -402,14 +402,224 @@ describe('datadogVite', () => {
     })
   })
 
+  describe('ESM export interception', () => {
+    const HONO_SOURCE = 'export * from "./star.js";\n' +
+      'export class Hono { name () { return "original" } }\n' +
+      'export default { kind: "default" };\n'
+
+    /**
+     * hono's ES module files are instrumented by hooks: `dist/hono.js` and `dist/compose.js`.
+     */
+    function createHono () {
+      const projectDir = createProject()
+      const packageDir = createPackage(projectDir, 'hono', { type: 'module', version: '4.13.14' })
+      write(packageDir, 'dist/star.js', 'export const star = "star";\n')
+      write(packageDir, 'dist/index.js', 'export { Hono } from "./hono.js";\n')
+      return {
+        honoPath: write(packageDir, 'dist/hono.js', HONO_SOURCE),
+        indexPath: path.join(packageDir, 'dist/index.js'),
+        packageDir,
+        projectDir,
+      }
+    }
+
+    it('redirects importers of ES modules instrumented by hooks to a wrapper', async () => {
+      const { honoPath, indexPath } = createHono()
+      const plugin = datadogVite()
+      const wrapperId = `\0dd-trace-vite:${honoPath}`
+
+      const { context, result } = await runResolveId(plugin, './hono.js', indexPath, honoPath)
+
+      assert.deepStrictEqual(result, { id: wrapperId, moduleSideEffects: true })
+      sinon.assert.calledOnceWithExactly(context.resolve, './hono.js', indexPath, { skipSelf: true })
+      sinon.assert.notCalled(context.warn)
+
+      // The wrapper reaches the wrapped module, and the diagnostic channel module relative to it.
+      const wrapper = await runResolveId(plugin, honoPath, wrapperId, honoPath, { attributes: {} })
+      assert.deepStrictEqual(wrapper.result, { id: honoPath })
+      sinon.assert.calledOnceWithExactly(wrapper.context.resolve, honoPath, honoPath, {
+        attributes: {},
+        skipSelf: true,
+      })
+      const dc = await runResolveId(plugin, '../../dc-polyfill/index.js', wrapperId, '/dc-polyfill/index.js')
+      sinon.assert.calledOnceWithExactly(dc.context.resolve, '../../dc-polyfill/index.js', honoPath, { skipSelf: true })
+
+      // A module importing itself reaches itself.
+      assert.deepStrictEqual((await runResolveId(plugin, './hono.js', honoPath, honoPath)).result, { id: honoPath })
+    })
+
+    it('leaves imports that cannot reach an ES module instrumented by hooks to the bundler', async () => {
+      const { honoPath, indexPath, packageDir, projectDir } = createHono()
+      const plugin = datadogVite()
+      const application = path.join(projectDir, 'src/server.mjs')
+
+      for (const [source, importer, options] of [
+        ['./hono.js', application, {}],
+        ['./hono.js', undefined, {}],
+        ['./hono.js', indexPath, { isEntry: true }],
+        ['unrelated', application, {}],
+        ['./hono.js?raw', indexPath, {}],
+        [`\0${honoPath}`, indexPath, {}],
+        ['./hono.js', `\0${indexPath}`, {}],
+      ]) {
+        const { context, result } = await runResolveId(plugin, source, importer, honoPath, options)
+        assert.equal(result, undefined, `${source} from ${importer}`)
+        sinon.assert.notCalled(context.resolve)
+      }
+
+      for (const resolved of [
+        null,
+        { id: 'hono', external: true },
+        { id: `${honoPath}?query` },
+        { id: path.join(packageDir, 'dist/index.js') },
+        { id: path.join(packageDir, 'dist/star.js') },
+      ]) {
+        const { result } = await runResolveId(plugin, 'hono', application, resolved)
+        assert.deepStrictEqual(result, resolved)
+      }
+    })
+
+    it('generates a wrapper whose exports hooks replace through the published proxy', async () => {
+      const { honoPath, indexPath } = createHono()
+      const plugin = datadogVite()
+      const wrapperId = `\0dd-trace-vite:${honoPath}`
+      await runResolveId(plugin, './hono.js', indexPath, honoPath)
+      const code = await plugin.load.handler.call(createResolveContext(), wrapperId)
+
+      assert.equal(plugin.load.filter.id.test(wrapperId), true)
+      const payloads = []
+      let proxy
+      const importerSource = 'import { Hono } from "./wrapper.mjs";\nexport const getHono = () => Hono;\n'
+      const { exports, importer } = await importWrapper(honoPath, code, importerSource, payload => {
+        const { module, ...rest } = payload
+        payloads.push(rest)
+        proxy = module
+        assert.equal(Object.prototype.toString.call(module), '[object Module]')
+        assert.deepStrictEqual(Object.keys(module).sort(), ['Hono', 'default', 'star'])
+        assert.equal(new module.Hono().name(), 'original')
+        module.Hono = class Instrumented extends module.Hono {}
+        Object.defineProperty(module, 'star', { value: 'replaced' })
+        module.unknown = true
+        assert.throws(() => Object.defineProperty(module, 'star', { get: () => 'star' }), /Getters\/setters are not supported/)
+      })
+
+      assert.deepStrictEqual(payloads, [{ esm: true, package: 'hono', path: 'hono/dist/hono.js', version: '4.13.14' }])
+      assert.equal(exports.Hono.name, 'Instrumented')
+      assert.equal(importer.getHono(), exports.Hono)
+      assert.equal(exports.star, 'replaced')
+      assert.deepStrictEqual(exports.default, { kind: 'default' })
+      assert.equal('unknown' in exports, false)
+
+      // Replacements stay live for every importer.
+      proxy.default = { kind: 'replaced' }
+      assert.deepStrictEqual(exports.default, { kind: 'replaced' })
+      assert.deepStrictEqual(proxy.default, { kind: 'replaced' })
+      assert.equal(new proxy.Hono().name(), 'original')
+    })
+
+    it('publishes package root hooks only for imports of the package name, merging publications', async () => {
+      const projectDir = createProject()
+      const packageDir = createPackage(projectDir, 'connect', { main: 'index.js', type: 'module', version: '3.7.0' })
+      const indexPath = write(packageDir, 'index.js', 'export default function connect () { return "app" }\n')
+      const application = path.join(projectDir, 'src/server.mjs')
+      const plugin = datadogVite()
+      const wrapperId = `\0dd-trace-vite:${indexPath}`
+
+      const internal = await runResolveId(plugin, '../index.js', path.join(packageDir, 'lib/router.js'), indexPath)
+      assert.deepStrictEqual(internal.result, { id: indexPath })
+      assert.deepStrictEqual((await runResolveId(plugin, 'connect', application, indexPath)).result,
+        { id: wrapperId, moduleSideEffects: true })
+      await runResolveId(plugin, 'connect', path.join(projectDir, 'src/other.mjs'), indexPath)
+
+      const payloads = []
+      const code = await plugin.load.handler.call(createResolveContext(), wrapperId)
+      const { exports } = await importWrapper(indexPath, code, '', payload => {
+        const { module, ...rest } = payload
+        payloads.push(rest)
+        // Hooks returning a new object replace the default export through the proxy.
+        module.default = () => 'instrumented'
+      })
+
+      assert.deepStrictEqual(payloads, [{ esm: true, package: 'connect', path: 'connect', version: '3.7.0' }])
+      assert.equal(exports.default(), 'instrumented')
+    })
+
+    it('leaves Orchestrion targets to the transform and fails open when exports cannot be analyzed', async () => {
+      const projectDir = createProject()
+      const bullmq = createPackage(projectDir, 'bullmq', { type: 'module', version: '5.66.0' })
+      const queuePath = write(bullmq, 'dist/esm/classes/queue.js', 'export class Queue {}\n')
+      const { honoPath, indexPath } = createHono()
+      fs.writeFileSync(honoPath, 'export class Hono {\n')
+      const plugin = datadogVite()
+
+      const rewritten = await runResolveId(plugin, './queue.js', path.join(path.dirname(queuePath), 'index.js'),
+        queuePath)
+      assert.deepStrictEqual(rewritten.result, { id: queuePath })
+
+      const invalid = await runResolveId(plugin, './hono.js', indexPath, honoPath)
+      assert.deepStrictEqual(invalid.result, { id: honoPath })
+      sinon.assert.calledOnceWithMatch(invalid.context.warn, `Skipped intercepting the exports of ${honoPath}`)
+
+      // The analysis is cached for the build.
+      const cached = await runResolveId(plugin, './hono.js', indexPath, honoPath)
+      sinon.assert.notCalled(cached.context.warn)
+      await assert.rejects(plugin.load.handler.call(createResolveContext(), `\0dd-trace-vite:${honoPath}`),
+        { message: `Could not analyze the exports of ${honoPath}` })
+    })
+
+    it('keeps interception state per environment and closes the ESM resolver after each build', async () => {
+      const { honoPath, indexPath } = createHono()
+      write(path.dirname(honoPath), 'star.js', 'export * from "./nested.js";\n')
+      write(path.dirname(honoPath), 'nested.js', 'export const star = "nested";\n')
+      const resolvers = []
+      const { datadogVite } = proxyquire('../index', {
+        '../datadog-instrumentations/src/helpers/bundler-esm-exports': {
+          createEsmResolver: () => {
+            const resolver = {
+              close: sinon.stub().rejects(new Error('closed')),
+              resolve: sinon.stub().callsFake((specifier, parent) => Promise.resolve(new URL(specifier, parent).href)),
+            }
+            resolvers.push(resolver)
+            return resolver
+          },
+        },
+      })
+      const plugin = datadogVite()
+      const ssr = { name: 'ssr' }
+      const main = { name: 'main' }
+      const wrapperId = `\0dd-trace-vite:${honoPath}`
+
+      await runResolveId(plugin, './hono.js', indexPath, honoPath, {}, ssr)
+      const ssrCode = await plugin.load.handler.call(createResolveContext(ssr), wrapperId)
+      // Another environment that never resolved the module loads a wrapper without publications.
+      const mainCode = await plugin.load.handler.call(createResolveContext(main), wrapperId)
+
+      assert.match(ssrCode, /dd-trace:bundler:load/)
+      assert.doesNotMatch(mainCode, /dd-trace:bundler:load/)
+      assert.match(mainCode, /export \{ \$dd\w+ as "star" \}/)
+      assert.equal(resolvers.length, 2)
+
+      await plugin.buildEnd.call({ environment: ssr })
+      await plugin.buildEnd.call({ environment: ssr })
+      await plugin.buildEnd.call({ environment: { name: 'client' } })
+      sinon.assert.calledOnce(resolvers[0].close)
+      sinon.assert.notCalled(resolvers[1].close)
+
+      // Rebuilds in watch mode load cached modules without resolving them again, and keep their publications.
+      assert.match(await plugin.load.handler.call(createResolveContext(ssr), wrapperId), /dd-trace:bundler:load/)
+      assert.equal(resolvers.length, 3)
+    })
+  })
+
   describe('first import', () => {
     it('resolves the virtual module to the tracer package', () => {
       for (const name of ['dd-trace', 'dd-trace-electron']) {
         const { resolveId, load } = loadPlugin({ name }).datadogVite()
 
         assert.equal(resolveId.filter.id.test('virtual:dd-trace-vite/init'), true)
-        assert.equal(resolveId.handler('virtual:dd-trace-vite/init'), '\0dd-trace-vite:init')
-        assert.equal(resolveId.handler('virtual:other'), undefined)
+        assert.equal(resolveId.handler.call(createResolveContext(), 'virtual:dd-trace-vite/init'),
+          '\0dd-trace-vite:init')
+        assert.equal(resolveId.handler.call(createResolveContext(), 'virtual:other'), undefined)
         assert.equal(load.filter.id.test('\0dd-trace-vite:init'), true)
         assert.equal(load.handler('\0dd-trace-vite:init'), `import ${JSON.stringify(name)}\n`)
         assert.equal(load.handler('/app/src/main.js'), undefined)
@@ -437,6 +647,21 @@ describe('datadogVite', () => {
       assert.equal(runTransform(plugin, 'export const value = 1\n', '/app/src/other.ts').result, undefined)
       assert.equal(runTransform(plugin, 'import "dd-trace"\n', '\0dd-trace-vite:init', { isEntry: true }).result,
         undefined)
+      assert.equal(runTransform(plugin, 'export {}\n', '\0dd-trace-vite:/app/node_modules/hono/dist/hono.js',
+        { isEntry: true }).result, undefined)
+    })
+
+    it('only resolves specifiers that may reach generated or instrumented modules', () => {
+      const { filter } = datadogVite().resolveId
+
+      for (const source of ['virtual:dd-trace-vite/init', './hono.js', '../index.js', '/app/node_modules/hono/x.js',
+        '#internal', 'C:/app/node_modules/hono/x.js', String.raw`C:\app\x.js`, 'hono', 'hono/dist/hono.js',
+        '@langchain/core/runnables']) {
+        assert.equal(filter.id.test(source), true, source)
+      }
+      for (const source of ['unrelated', 'virtual:other', '\0virtual:other', 'my-hono', 'node:http']) {
+        assert.equal(filter.id.test(source), false, source)
+      }
     })
 
     it('instruments a target entry module before prepending the virtual import', () => {
@@ -565,6 +790,56 @@ function configureEnvironment (context, config, name = 'ssr') {
 function isExternal (external, id) {
   if (typeof external === 'function') return Boolean(external(id, '/app/main.js', false))
   return [external].flat().some(entry => typeof entry === 'string' ? entry === id : entry.test(id))
+}
+
+/**
+ * @param {object} [environment]
+ */
+function createResolveContext (environment) {
+  return { environment, resolve: sinon.stub(), warn: sinon.spy() }
+}
+
+/**
+ * @param {object} plugin
+ * @param {string} source
+ * @param {string | undefined} importer
+ * @param {string | object | null} resolved What the other plugins resolve the source to.
+ * @param {object} [options]
+ * @param {object} [environment]
+ */
+async function runResolveId (plugin, source, importer, resolved, options = {}, environment) {
+  const context = createResolveContext(environment)
+  context.resolve.resolves(typeof resolved === 'string' ? { id: resolved } : resolved)
+  const result = await plugin.resolveId.handler.call(context, source, importer, options)
+  return { context, result }
+}
+
+/**
+ * Imports a generated wrapper next to the wrapped module, so its diagnostic channel import resolves.
+ *
+ * @param {string} resourcePath
+ * @param {string} code
+ * @param {string} importerSource A module importing `./wrapper.mjs`.
+ * @param {(payload: { module: Record<string, unknown> }) => void} onPublish
+ */
+async function importWrapper (resourcePath, code, importerSource, onPublish) {
+  const directory = fs.mkdtempSync(path.join(path.dirname(resourcePath), 'wrapper-'))
+  const wrapperPath = write(directory, 'wrapper.mjs', code
+    .replace(JSON.stringify(resourcePath), JSON.stringify(pathToFileURL(resourcePath).href))
+    .replace(/from "\.\.?\//, match => `${match}../`))
+  const importerPath = write(directory, 'importer.mjs', importerSource)
+  const onLoad = payload => {
+    if (payload.esm) onPublish(payload)
+  }
+  dc.channel('dd-trace:bundler:load').subscribe(onLoad)
+  try {
+    return {
+      exports: await import(pathToFileURL(wrapperPath).href),
+      importer: await import(pathToFileURL(importerPath).href),
+    }
+  } finally {
+    dc.channel('dd-trace:bundler:load').unsubscribe(onLoad)
+  }
 }
 
 /**

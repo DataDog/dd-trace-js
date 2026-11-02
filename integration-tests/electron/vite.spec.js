@@ -7,8 +7,12 @@ const http = require('node:http')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
-const { ai: AI_VERSION, zod: ZOD_VERSION } = require('../../packages/dd-trace/test/plugins/versions/package.json')
-  .dependencies
+const {
+  '@hono/node-server': HONO_NODE_SERVER_VERSION,
+  ai: AI_VERSION,
+  hono: HONO_VERSION,
+  zod: ZOD_VERSION,
+} = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { sandboxCwd, useSandbox } = require('../helpers')
 const { readPackageJson, run, supportsNode, viteVersions } = require('../vite/helpers')
 const { assertTraceReceived } = require('./helpers')
@@ -170,6 +174,20 @@ for (const viteVersion of viteVersions) {
           await Promise.all([httpSpanSeen, ipcSpanSeen, aiSpanSeen])
         })
 
+        it('traces an ES module package instrumented by hooks', async function () {
+          this.timeout(15_000)
+          const honoSpanSeen = assertTraceReceived(child, ({ payload }) => {
+            const span = payload.flat().find(span => span.name === 'hono.request')
+            assert.ok(span, 'No hono.request span found')
+            assert.strictEqual(span.resource, 'GET /hono')
+            assert.strictEqual(span.service, SERVICE)
+          }, 10_000)
+
+          child.send({ name: 'hono' })
+
+          await honoSpanSeen
+        })
+
         if (variant.tracer === 'external') {
           it('injects DatadogEventBridge in the renderer process', async function () {
             this.timeout(10_000)
@@ -215,7 +233,13 @@ function writePackageJson (appDirectory, field, main) {
     version: '1.0.0',
     main,
     // The packager only copies listed dependencies, so the peer dependency of ai is listed too.
-    [field]: { ai: AI_VERSION, 'dd-trace': `file:${tarball}`, zod: ZOD_VERSION },
+    [field]: {
+      '@hono/node-server': HONO_NODE_SERVER_VERSION,
+      ai: AI_VERSION,
+      'dd-trace': `file:${tarball}`,
+      hono: HONO_VERSION,
+      zod: ZOD_VERSION,
+    },
   }))
 }
 

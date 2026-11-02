@@ -11,11 +11,13 @@ const shape = process.env.VITE_SHAPE ?? 'ssr'
 // external: Vite's default externalization of node_modules.
 const dependencies = process.env.VITE_DEPENDENCIES ?? 'bundled'
 const format = process.env.VITE_OUTPUT_FORMAT ?? 'cjs'
+// A second SSR entry initializing the tracer moves the tracer into a chunk shared by both entries.
+const split = process.env.VITE_SPLIT === 'true'
 const extension = format === 'es' ? 'mjs' : 'cjs'
 const builtins = builtinModules.flatMap(name => [name, `node:${name}`])
 const noExternal = {
   bundled: true,
-  list: ['ai', '@langchain/langgraph', 'express'],
+  list: ['ai', '@langchain/langgraph', 'express', 'hono'],
   external: undefined,
 }[dependencies]
 
@@ -30,13 +32,14 @@ export default defineConfig({
           minify: true,
           lib: { entry: 'server.mjs', formats: [format], fileName: () => `server.${extension}` },
         }
-      : { ssr: 'server.mjs' }),
+      : { ssr: split ? true : 'server.mjs' }),
     rollupOptions: {
       // Vite 6 cannot bundle built-ins with `ssr.noExternal: true` unless they are external.
       external: shape === 'lib' || version.startsWith('6.') ? builtins : undefined,
+      ...(split ? { input: { server: 'server.mjs', worker: 'worker.mjs' } } : {}),
       output: {
         format,
-        entryFileNames: `server.${extension}`,
+        entryFileNames: `[name].${extension}`,
         chunkFileNames: `[name]-[hash].${extension}`,
       },
     },

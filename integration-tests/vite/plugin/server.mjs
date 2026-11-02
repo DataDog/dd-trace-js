@@ -3,8 +3,10 @@ import './tracer.mjs'
 
 import http from 'node:http'
 
+import { getRequestListener } from '@hono/node-server'
 import { generateText } from 'ai'
 import express from 'express'
+import { Hono } from 'hono'
 
 import model from './model.mjs'
 
@@ -32,6 +34,19 @@ app.get('/langgraph', async (req, res) => {
   res.json(await runGraph())
 })
 
-const server = app.listen(0, () => {
+// hono is an ES module package instrumented by hooks, so it is only traced when bundled if its exports are intercepted.
+const hono = new Hono()
+hono.get('/hono', context => context.json({ ok: true }))
+const honoListener = getRequestListener(hono.fetch)
+
+const server = http.createServer((req, res) => {
+  if (req.url.startsWith('/hono')) {
+    honoListener(req, res)
+  } else {
+    app(req, res)
+  }
+})
+
+server.listen(0, () => {
   process.send?.({ port: server.address().port })
 })
