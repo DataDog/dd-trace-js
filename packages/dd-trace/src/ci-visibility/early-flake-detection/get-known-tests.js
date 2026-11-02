@@ -1,5 +1,7 @@
 'use strict'
 
+const { performance } = require('node:perf_hooks')
+
 const getConfig = require('../../config')
 const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
 const { joinEVPProxyPath } = require('../../evp_proxy/path')
@@ -13,6 +15,9 @@ const {
   TELEMETRY_KNOWN_TESTS_ERRORS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES,
+  TELEMETRY_KNOWN_TESTS_PAGES_FETCHED,
+  TELEMETRY_KNOWN_TESTS_TOTAL_FETCH_MS,
+  TELEMETRY_KNOWN_TESTS_TOTAL_REQUEST_MS,
 } = require('../../ci-visibility/telemetry')
 const { getNumFromKnownTests } = require('../../plugins/util/test')
 const request = require('../requests/request')
@@ -185,9 +190,11 @@ function fetchFromApi ({
   incrementCountMetric(TELEMETRY_KNOWN_TESTS)
 
   const startTime = Date.now()
+  const totalFetchStartTime = performance.now()
   let aggregateTests = null
   let totalResponseBytes = 0
   let pageNumber = 0
+  let totalRequestMs = 0
 
   function fetchPage (pageState) {
     pageNumber++
@@ -215,7 +222,9 @@ function fetchFromApi ({
       },
     })
 
+    const pageStartTime = performance.now()
     request(data, options, (err, res, statusCode) => {
+      totalRequestMs += performance.now() - pageStartTime
       if (err) {
         distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
         incrementCountMetric(TELEMETRY_KNOWN_TESTS_ERRORS, { statusCode })
@@ -245,8 +254,12 @@ function fetchFromApi ({
 
         // Done — no more pages
         distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
-
         const numTests = getNumFromKnownTests(aggregateTests)
+
+        // Request time includes transport retries and backoff, but excludes parsing and merging pages.
+        distributionMetric(TELEMETRY_KNOWN_TESTS_PAGES_FETCHED, {}, pageNumber)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_TOTAL_FETCH_MS, {}, performance.now() - totalFetchStartTime)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_TOTAL_REQUEST_MS, {}, totalRequestMs)
 
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, totalResponseBytes)
