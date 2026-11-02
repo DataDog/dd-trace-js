@@ -41,8 +41,6 @@ Prefer composition and explicit contracts. Avoid new public APIs unless the use 
 Do not expose internals or bend production code solely to make a test possible. Fix upstream issues upstream rather
 than maintaining a local workaround when practical.
 
-Every change in a PR must serve that PR's title. See "Scope discipline".
-
 ## Testing
 
 Run individual tests with:
@@ -165,35 +163,20 @@ never weaken or delete assertions to make them pass.
 
 ### Scope discipline
 
-**Every line in a PR must serve the PR title.** The title is the contract: a reviewer reading only the
-title should be able to predict the diff. If a hunk can't be justified by pointing at the title, it does
-not belong in this PR.
+**Every line in a PR must serve the PR title.** If a hunk can't be justified by pointing at the
+title, it does not belong in this PR. Defer these to a follow-up PR even when obviously
+correct: refactors, renames, and file moves not required by the change; typo, comment,
+formatting, lint, and style fixes in untouched code; unrelated bug fixes; dependency and
+tooling changes unrelated to the title; test coverage for behaviour this PR doesn't touch;
+JSDoc outside the changed functions; and leftover debug logging and scratch files. Two focused
+PRs always beat one mixed PR.
 
-Defer to a follow-up PR, even when the change is obviously correct:
-
-- Refactors, renames, and file moves not required by the fix or feature
-- Drive-by typo, comment, formatting, lint, and style fixes in untouched code
-- Unrelated bug fixes noticed while reading nearby code
-- Dependency bumps, config tweaks, and tooling changes unrelated to the title
-- Test cleanup or added coverage for behaviour this PR doesn't touch
-- Type/JSDoc improvements outside the changed functions
-- Debug logging, scratch scripts, benchmark files kept from development
-
-When you notice one of these, do not fix it inline. Finish the scoped change, then land the deferred
-work as its own PR. Two focused PRs always beat one mixed PR — never bundle to "save a round trip".
-
-Exceptions, each narrow:
-
-- A prerequisite refactor the change genuinely cannot be built on. Land it as a **separate preparatory PR**
-  first; only inline it when splitting is truly impossible, and then say so explicitly in the PR description.
-- Mechanical fallout that must move with the change to keep the tree green (call sites of a renamed
-  internal, updated snapshots, a lint fix on a line you already had to edit).
-- A repeating shape being fixed across siblings, per "Debugging Failures" — grep for all instances of the
-  *same* bug and fix them together. That is one purpose, not several.
-
-Before opening or updating a PR, re-read the diff (`git diff <base>...HEAD` / `jj diff -r <base>::@`) and
-drop or split out anything the title doesn't cover. If the title needs "and" to describe the diff, the PR
-needs splitting — don't broaden the title to fit the diff.
+Exceptions, each narrow: a prerequisite refactor lands as its own preparatory PR (inline it
+only when splitting is truly impossible, and say so in the description); mechanical fallout
+needed to keep the tree green moves with the change; and every sibling instance of the same
+bug is fixed together (per "Debugging Failures"). Before opening or updating a PR, re-read
+the diff (`git diff <base>...HEAD`) and drop anything the title doesn't cover. If the title
+needs "and" to describe the diff, the PR needs splitting.
 
 ## Specialized Workflows
 
