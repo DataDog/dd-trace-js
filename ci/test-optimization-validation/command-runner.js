@@ -615,10 +615,9 @@ function serializeApprovalCommand (command) {
 /**
  * Quotes arguments whose boundaries would otherwise be ambiguous in an approval plan.
  *
- * @param {string} value argument value
+ * @param {string} argument argument value
  */
-function formatApprovalArgument (value) {
-  const argument = String(value)
+function formatApprovalArgument (argument) {
   if (/^[A-Za-z0-9_@%+=:,./\\-]+$/.test(argument)) return argument
   if (process.platform === 'win32') return JSON.stringify(argument)
   return `'${argument.replaceAll('\'', '\'"\'"\'')}'`

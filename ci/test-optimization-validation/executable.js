@@ -137,7 +137,7 @@ function splitNodeOptions (source) {
   let started = false
   let quote
 
-  for (let index = 0; index < String(source).length; index++) {
+  for (let index = 0; index < source.length; index++) {
     const character = source[index]
     if (character === '\0') throw new Error('NODE_OPTIONS contains a null byte.')
     if (!quote && /\s/.test(character)) {
