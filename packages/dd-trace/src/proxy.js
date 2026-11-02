@@ -261,7 +261,7 @@ class Tracer extends NoopProxy {
 
       // Experimental: mirror the active trace ID, span ID and endpoint into
       // an OTEP-4947 thread-local context record an out-of-process eBPF
-      // reader can consume.
+      // reader can consume. On by default when appsec is enabled.
       if (config.DD_TRACE_OTEL_CTX_ENABLED) {
         try {
           require('./otel-thread-ctx').start()
