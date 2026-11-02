@@ -280,6 +280,7 @@ async function generateSupportedIntegrations () {
 
   return {
     rows,
+    nodeRange: { min: engines.min, max },
     json: JSON.stringify(rows, null, 2) + '\n',
     csv: toCsv(rows),
   }
