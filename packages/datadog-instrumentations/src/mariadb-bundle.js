@@ -111,16 +111,22 @@ function normalizeSql (command) {
  * @param {unknown} injected
  * @param {unknown} originalSql
  * @param {boolean} [mirrorOptions]
+ * @param {boolean} [forceOptions]
  * @returns {unknown}
  */
-function withInjectedSql (original, injected, originalSql, mirrorOptions) {
+function withInjectedSql (original, injected, originalSql, mirrorOptions, forceOptions) {
   if (typeof originalSql !== 'string' || !originalSql || typeof injected !== 'string') {
     return original
   }
 
-  if (typeof original === 'string') return injected
+  if (typeof original === 'string') return forceOptions ? { sql: injected } : injected
 
   const command = { ...original, sql: injected }
+  if (!Object.hasOwn(command, 'values') && 'values' in original) {
+    Object.defineProperty(command, 'values', {
+      get () { return original.values },
+    })
+  }
   if (mirrorOptions) {
     const enumerable = Object.getOwnPropertyDescriptor(original, 'metaAsArray')?.enumerable ?? true
     Object.defineProperty(command, 'metaAsArray', {
@@ -141,10 +147,13 @@ function withInjectedSql (original, injected, originalSql, mirrorOptions) {
  * @param {unknown} originalSql
  * @param {unknown} [preparedSql]
  * @param {boolean} [mirrorOptions]
+ * @param {WeakSet<object>} [commandOptions]
  */
-function runSqlCommand (ctx, command, args, originalSql, preparedSql, mirrorOptions) {
-  if (preparedSql === undefined && ctx.sql !== originalSql) {
-    args[0] = withInjectedSql(args[0], ctx.sql, originalSql, mirrorOptions)
+function runSqlCommand (ctx, command, args, originalSql, preparedSql, mirrorOptions, commandOptions) {
+  if (preparedSql === undefined && (ctx.sql !== originalSql || commandOptions !== undefined)) {
+    const original = args[0]
+    args[0] = withInjectedSql(original, ctx.sql, originalSql, mirrorOptions, commandOptions !== undefined)
+    if (args[0] !== original && args[0] !== null && typeof args[0] === 'object') commandOptions?.add(args[0])
   }
   return command.apply(this, args)
 }

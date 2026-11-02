@@ -221,6 +221,54 @@ describe('Plugin', () => {
           })
         })
 
+        for (const method of ['query', 'execute']) {
+          for (const inherited of [false, true]) {
+            it(`preserves ${inherited ? 'inherited' : 'non-enumerable'} values through ${method}`, async () => {
+              await withPromiseLog(async connection => {
+                const name = `${marker}_${method}_${inherited}`
+                const sql = `SELECT ? AS ${name}`
+                const command = inherited ? Object.create({ values: [42] }) : {}
+                command.sql = sql
+                if (!inherited) Object.defineProperty(command, 'values', { value: [42] })
+                Object.freeze(command)
+                const [, rows] = await Promise.all([
+                  agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: new RegExp(name) }),
+                  connection[method](command, [99]),
+                ])
+                const logged = await connection.query(logQuery, [`%${name}%`])
+
+                assert.strictEqual(Number(rows[0][name]), 42)
+                assert.strictEqual(command.sql, sql)
+                assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+              })
+            })
+
+            const shape = inherited ? 'inherited' : 'non-enumerable'
+            it(`preserves callback ${shape} values through ${method}`, async () => {
+              await withCallbackLog(async connection => {
+                const name = `${marker}_callback_${method}_${inherited}`
+                const sql = `SELECT ? AS ${name}`
+                let reads = 0
+                const values = { get () { reads++; return [42] } }
+                const command = inherited ? Object.create(Object.defineProperty({}, 'values', values)) : {}
+                command.sql = sql
+                if (!inherited) Object.defineProperty(command, 'values', values)
+                const [, [rows]] = await Promise.all([
+                  agent.assertFirstTraceSpan({ resource: sql }, { spanResourceMatch: new RegExp(name) }),
+                  callbackResult(callback => connection[method](command, [99], callback)),
+                ])
+                const [logged] = await callbackResult(callback => connection.query(logQuery, [`%${name}%`], callback))
+
+                assert.strictEqual(Number(rows[0][name]), 42)
+                assert.strictEqual(reads, 2)
+                assert.strictEqual(command.sql, sql)
+                assert.strictEqual(command.metaAsArray, true)
+                assert.match(logged[0].argument.toString(), /^\/\*dddb='db',dddbs='serviced',/)
+              })
+            })
+          }
+        }
+
         it('sends injected SQL through promise batch', async () => {
           await withPromiseLog(async connection => {
             const table = `${marker}_promise_batch`

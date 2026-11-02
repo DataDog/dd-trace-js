@@ -21,7 +21,7 @@ const expectedResources = [
   'SELECT 3 AS connection_query',
   'SELECT 4 AS connection_execute',
   'SELECT 5 AS direct_query',
-  'SELECT 6 AS direct_execute',
+  'SELECT ? AS direct_execute',
 ]
 const expectedResourceSet = new Set(expectedResources)
 
