@@ -351,11 +351,11 @@ function resolvePhysicalPath (filename) {
 /**
  * Validates an approval digest before live validation executes project code.
  *
- * @param {string} digest supplied approval digest
+ * @param {string | undefined} digest supplied approval digest
  * @param {object} input approval inputs
  */
 function assertApprovalDigest (digest, input) {
-  if (!APPROVAL_DIGEST_PATTERN.test(String(digest || ''))) {
+  if (!APPROVAL_DIGEST_PATTERN.test(digest || '')) {
     throw new Error('Invalid approved plan SHA-256. Render a fresh plan with --print-plan.')
   }
 
