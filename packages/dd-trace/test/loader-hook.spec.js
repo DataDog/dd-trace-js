@@ -186,6 +186,74 @@ describe('loader hook', () => {
     })
   })
 
+  describe('unwrapped package reports', () => {
+    const appUrl = 'file:///app/'
+
+    /**
+     * @param {Array<[string, string?]>} loads [loaded URL, format]
+     * @param {boolean} withPort
+     */
+    function loadWithAsyncLoader (loads, withPort = true) {
+      const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
+        const { initialize, load, resolve } = await import(${JSON.stringify(loaderHookUrl)})
+        const reported = []
+        const moduleLoadPort = { unref () {}, postMessage (url) { reported.push(url) } }
+
+        await initialize(${withPort} ? { moduleLoadPort } : {})
+
+        const conditions = ['node', 'import']
+        // Resolving without loading, as import.meta.resolve() does, is not a load.
+        await resolve('resolved-only', { conditions, parentURL: '${appUrl}index.mjs' }, () => ({
+          url: '${appUrl}node_modules/resolved-only/index.js',
+          format: 'module',
+        }))
+        for (const [url, format = 'module'] of ${JSON.stringify(loads)}) {
+          await load(url, { conditions, format }, () => ({ format, source: '' }))
+        }
+
+        console.log(JSON.stringify(reported))
+      `], {
+        encoding: 'utf8',
+        env: { ...process.env, DD_IAST_SECURITY_CONTROLS_CONFIGURATION: undefined },
+      })
+
+      assert.strictEqual(result.status, 0, result.stderr)
+
+      return JSON.parse(result.stdout)
+    }
+
+    it('reports the first loaded file of each package from the asynchronous loader', () => {
+      const reported = loadWithAsyncLoader([
+        [`${appUrl}node_modules/nanoid/index.js`],
+        [`${appUrl}node_modules/nanoid/non-secure/index.js`],
+        [`${appUrl}node_modules/@scope/first/index.js`],
+        [`${appUrl}node_modules/@scope/second/dist/index.js`],
+        [`${appUrl}node_modules/parent/node_modules/nested/index.js`],
+        [`${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/index.js`],
+        [`${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/other.js`],
+        // A CommonJS package imported from ESM.
+        [`${appUrl}node_modules/cjs-package/index.js`, 'commonjs'],
+        // The import-in-the-middle wrapper of an instrumented module.
+        [`${appUrl}node_modules/express/index.js?iitm=true`],
+        [`${appUrl}local.mjs`],
+        ['node:path', 'builtin'],
+      ])
+
+      assert.deepStrictEqual(reported, [
+        `${appUrl}node_modules/nanoid/index.js`,
+        `${appUrl}node_modules/@scope/first/index.js`,
+        `${appUrl}node_modules/@scope/second/dist/index.js`,
+        `${appUrl}node_modules/parent/node_modules/nested/index.js`,
+        `${appUrl}node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package/index.js`,
+        `${appUrl}node_modules/cjs-package/index.js`,
+      ])
+    })
+
+    it('does not report without a port', () => {
+      assert.deepStrictEqual(loadWithAsyncLoader([[`${appUrl}node_modules/nanoid/index.js`]], false), [])
+    })
+  })
+
   function runPureLoaderPipeline ({ disabled = false, version }) {
     const packageDirectory = join(temporaryDirectory, 'node_modules', 'bullmq')
     const fixturePath = join(packageDirectory, 'dist', 'esm', 'classes', 'queue.js')

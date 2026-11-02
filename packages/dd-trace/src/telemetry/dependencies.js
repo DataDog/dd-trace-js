@@ -4,6 +4,7 @@ const path = require('path')
 const { fileURLToPath } = require('url')
 const dc = require('dc-polyfill')
 const parse = require('../../../../vendor/dist/module-details-from-path')
+const { setModuleLoadHandler } = require('../esm-module-load')
 const requirePackageJson = require('../require-package-json')
 const { isTrue } = require('../../src/util')
 const { sendData } = require('./send-data')
@@ -87,6 +88,13 @@ function loadAllTheLoadedModules () {
   }
 }
 
+/**
+ * @param {string} filename
+ */
+function onEsmModuleLoad (filename) {
+  onModuleLoad({ filename })
+}
+
 function onModuleLoad (data) {
   if (isFirstModule) {
     isFirstModule = false
@@ -138,6 +146,7 @@ function start (_config = {}, _application, _host, getRetryDataFunction, updateR
   getRetryData = getRetryDataFunction
   updateRetryData = updateRetryDatafunction
   moduleLoadStartChannel.subscribe(onModuleLoad)
+  setModuleLoadHandler(onEsmModuleLoad)
 
   // Try and capture initially loaded modules in the first tick
   // since, ideally, the tracer (and this module) should be loaded first,
@@ -161,6 +170,7 @@ function isDependencyWithSeparator (request, sep) {
 }
 
 function stop () {
+  setModuleLoadHandler(undefined)
   config = null
   application = null
   host = null

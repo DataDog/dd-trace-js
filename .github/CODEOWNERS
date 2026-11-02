@@ -318,6 +318,7 @@
 /integration-tests/remote_config.spec.js @DataDog/apm-sdk-capabilities
 /integration-tests/telemetry-forwarder.sh @DataDog/apm-sdk-capabilities
 /integration-tests/telemetry.spec.js @DataDog/apm-sdk-capabilities
+/integration-tests/telemetry/ @DataDog/apm-sdk-capabilities
 
 /packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-capabilities
@@ -503,6 +504,7 @@
 /packages/dd-trace/src/bootstrap.js @DataDog/lang-platform-js
 /packages/dd-trace/src/constants.js @DataDog/lang-platform-js
 /packages/dd-trace/src/dogstatsd.js @DataDog/lang-platform-js
+/packages/dd-trace/src/esm-module-load.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporter.js @DataDog/lang-platform-js
 /packages/dd-trace/src/feature-registry.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
