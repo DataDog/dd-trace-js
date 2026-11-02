@@ -76,11 +76,10 @@ function prepareRequestOptions (options, contentLength) {
   const sourceHeaders = options.headers ?? {}
   const headers = { ...sourceHeaders }
   const isSecure = connectionOptions.protocol === 'https:'
-  const canSendKey = canSendApiKey(connectionOptions.protocol, connectionOptions.hostname)
   const hasApiKey = sourceHeaders['dd-api-key'] !== undefined || sourceHeaders['DD-API-KEY'] !== undefined
 
   // Local agents proxy with their own key. Strip unsafe keys instead of dropping the request.
-  if (hasApiKey && !canSendKey) {
+  if (hasApiKey && !canSendApiKey(connectionOptions.protocol, connectionOptions.hostname)) {
     log.error(
       'Not sending the Datadog API key over a non-TLS connection to %s. Configure an https intake URL.',
       connectionOptions.hostname

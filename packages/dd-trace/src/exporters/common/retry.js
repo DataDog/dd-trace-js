@@ -1,5 +1,7 @@
 'use strict'
 
+const { parseUrl } = require('./url')
+
 const RATE_LIMIT_MAX_WAIT_MS = 30_000
 
 const SINGLE_RETRY_BASE_MS = 5000
@@ -29,6 +31,7 @@ const reachedEndpoints = new Set()
 
 /**
  * @typedef {object} EndpointOptions
+ * @property {string|URL|object} [url]
  * @property {string|null} [socketPath]
  * @property {string|null} [hostname]
  * @property {string|null} [host]
@@ -47,9 +50,7 @@ function singleJitteredDelay () {
 }
 
 /**
- * Stable key identifying the destination so the startup-phase gate is scoped
- * per endpoint. UDS path beats host:port because both can coexist on the same
- * options object after `parseUrl` runs.
+ * Stable destination key for prepared transport options.
  *
  * @param {EndpointOptions} options
  */
@@ -63,6 +64,10 @@ function getEndpointKey (options) {
  */
 function inStartupPhase (options) {
   if ((Date.now() - startedAtMs) >= STARTUP_GRACE_MS) return false
+  if (options.url) {
+    const url = parseUrl(options.url)
+    return !reachedEndpoints.has(url.protocol === 'unix:' ? url.pathname : getEndpointKey(url))
+  }
   return !reachedEndpoints.has(getEndpointKey(options))
 }
 
