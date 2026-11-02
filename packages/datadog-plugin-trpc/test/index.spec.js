@@ -18,6 +18,7 @@ describe('trpc server tracing', () => {
   let app
   let router
   let server
+  let trpcVersion
   let releaseConcurrent
   let concurrentStarted
   let concurrentCount = 0
@@ -36,11 +37,12 @@ describe('trpc server tracing', () => {
          */
         request (span, req) {
           if (req.headers['x-manual-resource']) span.setTag('resource.name', 'GET manual-resource')
+          if (req.headers['x-manual-route']) span.setTag('http.route', '/manual-route')
         },
       },
     }, { middleware: false }, {}])
     const express = require('../../../versions/express@5').get()
-    const trpcVersion = require('../../../versions/@trpc/server@11')
+    trpcVersion = require('../../../versions/@trpc/server@11')
     const { initTRPC, lazy } = trpcVersion.get()
     const trpc = initTRPC.create()
     const concurrentGate = new Promise(resolve => { releaseConcurrent = resolve })
@@ -78,6 +80,7 @@ describe('trpc server tracing', () => {
       }),
     })
     app = express()
+    app.get('/health', (req, res) => res.end('ok'))
     const trpcMiddleware = trpcVersion.get('@trpc/server/adapters/express').createExpressMiddleware({
       router,
       createContext: () => Object.freeze({}),
@@ -111,6 +114,7 @@ describe('trpc server tracing', () => {
       const procedureSpans = trace.filter(span => span.name === 'trpc.procedure')
       assert.strictEqual(procedureSpans.length, 1)
       assert.strictEqual(procedureSpans[0].resource, 'query getValue')
+      assert.strictEqual(procedureSpans[0].service, 'test')
       const httpSpans = trace.filter(span => span.name === 'express.request')
       assert.strictEqual(httpSpans.length, 1)
       assert.match(httpSpans[0].resource, /\/tenant\/:tenantId\/trpc\/getValue$/)
@@ -328,12 +332,98 @@ describe('trpc server tracing', () => {
     await traceAssertion
   })
 
+  it('preserves an explicit HTTP route override', async () => {
+    const traceAssertion = agent.assertSomeTraces(traces => {
+      const trace = traces.find(spans => spans.some(span => span.name === 'express.request'))
+      assert.ok(trace)
+      const requestSpan = trace.find(span => span.name === 'express.request')
+      assert.strictEqual(requestSpan.meta['http.route'], '/manual-route')
+      assert.strictEqual(trace.filter(span => span.name === 'trpc.procedure').length, 1)
+    })
+
+    const [response] = await Promise.all([
+      fetch(`http://127.0.0.1:${server.address().port}/tenant/acme/trpc/getValue`, {
+        headers: { 'x-manual-route': '1' },
+      }),
+      traceAssertion,
+    ])
+    assert.strictEqual(response.status, 200)
+    assert.deepStrictEqual(await response.json(), { result: { data: 7 } })
+  })
+
+  it('leaves ordinary Express requests independent of tRPC', async () => {
+    const traceAssertion = agent.assertSomeTraces(traces => {
+      const trace = traces.find(spans => spans.some(span => span.name === 'express.request'))
+      assert.ok(trace)
+      assert.strictEqual(trace.filter(span => span.name === 'trpc.procedure').length, 0)
+      assert.strictEqual(trace.find(span => span.name === 'express.request').resource, 'GET /health')
+    })
+
+    const [response] = await Promise.all([
+      fetch(`http://127.0.0.1:${server.address().port}/health`),
+      traceAssertion,
+    ])
+    assert.strictEqual(response.status, 200)
+    assert.strictEqual(await response.text(), 'ok')
+  })
+
+  it('traces fetch adapter procedures without a Node request carrier', async () => {
+    const { fetchRequestHandler } = trpcVersion.get('@trpc/server/adapters/fetch')
+    const traceAssertion = agent.assertSomeTraces(traces => {
+      const trace = traces.find(spans => spans.some(span => span.resource === 'query getValue'))
+      assert.ok(trace)
+      assert.strictEqual(trace.filter(span => span.name === 'http.request').length, 0)
+      assert.strictEqual(trace.filter(span => span.name === 'trpc.procedure').length, 1)
+    })
+
+    const [response] = await Promise.all([
+      fetchRequestHandler({
+        endpoint: '/trpc',
+        req: new Request('http://localhost/trpc/getValue'),
+        router,
+        createContext: () => Object.freeze({}),
+      }),
+      traceAssertion,
+    ])
+    assert.strictEqual(response.status, 200)
+    assert.deepStrictEqual(await response.json(), { result: { data: 7 } })
+  })
+
+  it('traces standalone HTTP procedures without an Express route', async () => {
+    const { createHTTPHandler } = trpcVersion.get('@trpc/server/adapters/standalone')
+    const standalone = http.createServer(createHTTPHandler({ router }))
+    standalone.listen(0, '127.0.0.1')
+    await once(standalone, 'listening')
+    try {
+      const traceAssertion = agent.assertSomeTraces(traces => {
+        const trace = traces.find(spans => spans.some(span => span.name === 'web.request'))
+        assert.ok(trace)
+        assert.strictEqual(trace.filter(span => span.name === 'express.request').length, 0)
+        const requestSpan = trace.find(span => span.name === 'web.request')
+        const procedureSpan = trace.find(span => span.resource === 'query getValue')
+        assert.ok(procedureSpan)
+        assert.strictEqual(String(procedureSpan.parent_id), String(requestSpan.span_id))
+      })
+      const [response] = await Promise.all([
+        fetch(`http://127.0.0.1:${standalone.address().port}/getValue`),
+        traceAssertion,
+      ])
+      assert.strictEqual(response.status, 200)
+      assert.deepStrictEqual(await response.json(), { result: { data: 7 } })
+    } finally {
+      const closed = once(standalone, 'close')
+      standalone.close()
+      await closed
+    }
+  })
+
   it('traces a direct mutation without an HTTP request', async () => {
     const traceAssertion = agent.assertSomeTraces(traces => {
       const trace = traces.find(spans => spans.some(span => span.resource === 'mutation setValue'))
       assert.ok(trace)
       assert.strictEqual(trace.filter(span => span.name === 'trpc.procedure').length, 1)
       assert.strictEqual(trace.filter(span => span.name === 'express.request').length, 0)
+      assert.strictEqual(trace.find(span => span.name === 'trpc.procedure').service, 'test')
     })
 
     assert.strictEqual(await router.createCaller(Object.freeze({})).setValue(), 9)
@@ -469,5 +559,40 @@ describe('trpc server tracing', () => {
     assert.strictEqual(enabledResponse.status, 200)
     assert.deepStrictEqual(await enabledResponse.json(), { result: { data: 7 } })
     await enabledTrace
+  })
+
+  describe('with a custom service', () => {
+    before(() => agent.reload('trpc', { service: 'trpc-service' }))
+    after(() => agent.reload('trpc', {}))
+
+    for (const [name, value] of [['getValue', 7], ['setValue', 9]]) {
+      it(`uses the configured service for direct ${name} calls`, async () => {
+        const traceAssertion = agent.assertSomeTraces(traces => {
+          const span = traces.flat().find(span => span.name === 'trpc.procedure')
+          assert.ok(span)
+          assert.strictEqual(span.service, 'trpc-service')
+        })
+        const [result] = await Promise.all([
+          router.createCaller(Object.freeze({}))[name](),
+          traceAssertion,
+        ])
+        assert.strictEqual(result, value)
+      })
+    }
+
+    it('keeps the HTTP service when overriding the procedure service', async () => {
+      const traceAssertion = agent.assertSomeTraces(traces => {
+        const trace = traces.find(spans => spans.some(span => span.name === 'express.request'))
+        assert.ok(trace)
+        assert.strictEqual(trace.find(span => span.name === 'trpc.procedure').service, 'trpc-service')
+        assert.strictEqual(trace.find(span => span.name === 'express.request').service, 'test')
+      })
+      const [response] = await Promise.all([
+        fetch(`http://127.0.0.1:${server.address().port}/tenant/acme/trpc/getValue`),
+        traceAssertion,
+      ])
+      assert.strictEqual(response.status, 200)
+      assert.deepStrictEqual(await response.json(), { result: { data: 7 } })
+    })
   })
 })

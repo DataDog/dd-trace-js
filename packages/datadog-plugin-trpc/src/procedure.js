@@ -27,6 +27,7 @@ class TrpcProcedurePlugin extends TracingPlugin {
     }
 
     this.startSpan('trpc.procedure', {
+      service: this.config.service,
       resource: `${type} ${path}`,
       kind: 'internal',
     }, ctx)
