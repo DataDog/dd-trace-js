@@ -620,6 +620,35 @@ describe('AgentlessConfigurationSource', () => {
     sinon.assert.calledOnceWithExactly(applyConfiguration, VALID_UFC)
   })
 
+  it('treats a 304 before any configuration was applied as a failed poll, not a recovery', async () => {
+    responses.push(
+      { statusCode: 503 },
+      { statusCode: 503 },
+      { statusCode: 503 },
+      { statusCode: 304 },
+      { statusCode: 200, body: responseBody() }
+    )
+
+    source().start()
+    await flush()
+    await tick(5000)
+    await tick(10_000)
+    await tick(30_000)
+
+    sinon.assert.calledWithExactly(log.debug,
+      'Feature Flags: agentless configuration poll failed (%s); no configuration has been applied yet, ' +
+      'so flag evaluations return their default values', 'HTTP 304 received before any configuration was applied')
+    sinon.assert.neverCalledWith(log.debug,
+      'Feature Flags: agentless configuration poll succeeded after %d failed poll(s)')
+    sinon.assert.notCalled(applyConfiguration)
+
+    await tick(30_000)
+
+    sinon.assert.calledWithExactly(log.debug,
+      'Feature Flags: agentless configuration poll succeeded after %d failed poll(s)', 2)
+    sinon.assert.calledOnceWithExactly(applyConfiguration, VALID_UFC)
+  })
+
   it('logs retry delays, the configuration state after a failed poll, and the later recovery', async () => {
     responses.push(
       { statusCode: 503 },

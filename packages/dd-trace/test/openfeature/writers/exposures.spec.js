@@ -772,7 +772,7 @@ describe('OpenFeature Exposures Writer', () => {
       writer.destroy()
 
       sinon.assert.calledWithExactly(log.debug,
-        '%s stopping with %d buffered events; final flush initiated without awaiting delivery', 'ExposuresWriter', 0)
+        '%s stopping with %d buffered events; final flush requested without awaiting delivery', 'ExposuresWriter', 0)
       sinon.assert.calledOnce(clearIntervalSpy)
       clearIntervalSpy.restore()
     })
@@ -784,7 +784,7 @@ describe('OpenFeature Exposures Writer', () => {
       writer.destroy()
 
       sinon.assert.calledWithExactly(log.debug,
-        '%s stopping with %d buffered events; final flush initiated without awaiting delivery', 'ExposuresWriter', 1)
+        '%s stopping with %d buffered events; final flush requested without awaiting delivery', 'ExposuresWriter', 1)
       sinon.assert.calledOnce(request)
     })
 

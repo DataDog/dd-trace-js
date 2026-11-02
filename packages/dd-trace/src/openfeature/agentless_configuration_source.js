@@ -201,7 +201,13 @@ class AgentlessConfigurationSource {
   #apply (response) {
     const statusCode = response.statusCode
     if (statusCode === 304) {
-      this.#logPollRecovery()
+      // A custom endpoint can answer 304 without having been sent an ETag, so it confirms nothing
+      // until a configuration has been applied.
+      if (this.#appliedCreatedAt === undefined) {
+        this.#logPollFailure('HTTP 304 received before any configuration was applied')
+      } else {
+        this.#logPollRecovery()
+      }
       return
     }
 

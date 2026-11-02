@@ -198,7 +198,7 @@ class BaseFFEWriter {
    */
   destroy () {
     if (this.#destroyer) {
-      log.debug('%s stopping with %d buffered events; final flush initiated without awaiting delivery',
+      log.debug('%s stopping with %d buffered events; final flush requested without awaiting delivery',
         this.constructor.name, this._buffer.length)
       clearInterval(this._periodic)
       this.flush()
