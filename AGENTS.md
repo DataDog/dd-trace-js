@@ -139,7 +139,8 @@ When adding configuration:
 3. Update public TypeScript definitions in both supported surfaces when applicable.
 4. Add the telemetry name mapping in `packages/dd-trace/src/telemetry/telemetry.js` when applicable.
 5. Update `packages/dd-trace/src/config/supported-configurations.json`.
-6. Document non-internal, non-experimental options in `docs/API.md`.
+6. Document configurations listed in `supported-configurations.json` in the documentation repository.
+   Do not document these configurations in `docs/API.md`; that file describes high-level APIs.
 7. Test the option in `packages/dd-trace/test/config/index.spec.js`.
 
 Use unit suffixes for size and time options, such as `timeoutMs`, `maxBytes`, and `intervalSeconds`.
