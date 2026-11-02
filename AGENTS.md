@@ -169,19 +169,18 @@ never weaken or delete assertions to make them pass.
 title should be able to predict the diff. If a hunk can't be justified by pointing at the title, it does
 not belong in this PR.
 
-Defer to a follow-up PR, even when the change is obviously correct and the diff is one line:
+Defer to a follow-up PR, even when the change is obviously correct:
 
 - Refactors, renames, and file moves not required by the fix or feature
 - Drive-by typo, comment, formatting, lint, and style fixes in untouched code
 - Unrelated bug fixes noticed while reading nearby code
-- Dependency bumps, config tweaks, and tooling changes the change doesn't need
+- Dependency bumps, config tweaks, and tooling changes unrelated to the title
 - Test cleanup or added coverage for behaviour this PR doesn't touch
 - Type/JSDoc improvements outside the changed functions
 - Debug logging, scratch scripts, benchmark files kept from development
 
-When you notice one of these, do not fix it inline. Note it in the PR description under a
-"Follow-ups" heading (or open an issue), finish the scoped change, then land the deferred work as its own
-PR. Two focused PRs always beat one mixed PR — never bundle to "save a round trip".
+When you notice one of these, do not fix it inline. Finish the scoped change, then land the deferred
+work as its own PR. Two focused PRs always beat one mixed PR — never bundle to "save a round trip".
 
 Exceptions, each narrow:
 
