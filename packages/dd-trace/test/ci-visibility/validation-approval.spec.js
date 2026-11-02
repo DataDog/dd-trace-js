@@ -39,6 +39,19 @@ describe('test optimization validation approval', () => {
 
   afterEach(() => removeFixture(fixture.root))
 
+  it('rejects missing and malformed approval digests before reading inputs', () => {
+    for (const digest of [undefined, '', 'a'.repeat(63), 'a'.repeat(65), 'g'.repeat(64)]) {
+      assert.throws(() => assertApprovalDigest(digest, input), {
+        name: 'Error',
+        message: 'Invalid approved plan SHA-256. Render a fresh plan with --print-plan.',
+      })
+      assert.throws(() => loadApprovedPlan(path.join(fixture.root, 'missing-approval.json'), digest), {
+        name: 'Error',
+        message: 'Invalid --sha256 value. Render a fresh plan with --print-plan.',
+      })
+    }
+  })
+
   it('binds only direct commands and every project-controlled input', () => {
     const json = serializeApprovalMaterial(input)
     const material = getApprovalMaterial(input)
