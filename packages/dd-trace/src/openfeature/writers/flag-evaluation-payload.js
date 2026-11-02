@@ -24,6 +24,7 @@ const { recordDegraded, recordDropped, recordPayloadSplit } = require('./flag-ev
  * @property {string} [targeting_key]
  * @property {{ evaluation: ContextSnapshot }} [context]
  * @property {{ key: string }} [variant]
+ * @property {Record<string, string | number | boolean>} [features]
  * @property {{ key: string }} [allocation]
  * @property {{ message: string }} [error]
  */
@@ -52,6 +53,7 @@ function makeRow (entry, timestamp, degraded) {
   const allocation = normalizeTargetingKey(entry.allocation)
   if (variant) row.variant = { key: variant }
   if (allocation) row.allocation = { key: allocation }
+  if (entry.features !== undefined) row.features = entry.features
   const error = protectedErrorCode(entry.error)
   if (error !== undefined) row.error = { message: error }
   if (!degraded) {

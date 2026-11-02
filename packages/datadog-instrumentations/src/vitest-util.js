@@ -182,6 +182,7 @@ function getProvidedContext () {
       _ddDynamicAtrBuckets: dynamicAtrBuckets,
       _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesIncludesUnnamedProject,
       _ddFlakyTestRetriesProjectNames: flakyTestRetriesProjectNames,
+      _ddFlakyTestRetriesUseRetryMarker: flakyTestRetriesUseRetryMarker,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
       _ddTestSessionId: testSessionId,
       _ddTestModuleId: testModuleId,
@@ -211,6 +212,7 @@ function getProvidedContext () {
       dynamicAtrBuckets,
       flakyTestRetriesIncludesUnnamedProject,
       flakyTestRetriesProjectNames,
+      flakyTestRetriesUseRetryMarker,
       isImpactedTestsEnabled,
       testSessionId,
       testModuleId,
@@ -254,8 +256,9 @@ function getProvidedContext () {
 }
 
 function isFlakyTestRetriesEnabledForTask (providedContext, task) {
-  if (!providedContext.isFlakyTestRetriesEnabled) return false
-  if (providedContext.isDynamicAtrEnabled && !task.retry?.__ddTestOptAtr) return false
+  if (!providedContext.isFlakyTestRetriesEnabled || task.meta?.__ddTestOptNativeRetry) return false
+  if ((providedContext.isDynamicAtrEnabled || providedContext.flakyTestRetriesUseRetryMarker) &&
+    !task.retry?.__ddTestOptAtr) return false
 
   const { flakyTestRetriesProjectNames } = providedContext
   if (!Array.isArray(flakyTestRetriesProjectNames)) return true

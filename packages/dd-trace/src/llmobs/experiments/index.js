@@ -115,7 +115,7 @@ class Experiments {
   // wait until that many records are readable. Pass `tags` to filter records by
   // dataset record tags.
   async pullDataset (name, options = {}) {
-    const { expectedRecordCount, maxWaitMs = 30_000, projectName, tags, version } = options
+    const { expectedRecordCount, maxWaitMs = 30_000, projectName, tags, version: datasetVersion = null } = options
     const filterTags = validateTagsList(tags)
     const client = this.#clientForOperation(projectName)
     const resolvedProjectName = projectName ?? this.#projectName
@@ -123,7 +123,6 @@ class Experiments {
 
     let pulledDataset = null
     let records = []
-    const datasetVersion = version ?? null
     let latestVersion = null
     let lastError = ''
 
@@ -247,7 +246,7 @@ function createExperiments (config, llmobs) {
   if (!config.llmobs?.DD_LLMOBS_ENABLED) {
     return new NoopExperiments('LLM Observability is not enabled')
   }
-  if (!(config.DD_API_KEY) || !config.DD_APP_KEY) {
+  if (config.DD_API_KEY === undefined || config.DD_APP_KEY === undefined) {
     log.warn('LLMObs experiments: missing api and/or app keys, set DD_API_KEY and DD_APP_KEY')
     return new NoopExperiments('DD_API_KEY and DD_APP_KEY are required for experiments')
   }

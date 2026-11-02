@@ -41,6 +41,7 @@ const plugins = {
   get '@redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@smithy/core' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
+  get '@typesafe-ai/sdk' () { return require('../../../datadog-plugin-typesafe/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
   get '@wdio/jasmine-framework' () { return require('../../../datadog-plugin-mocha/src') },
   get '@wdio/local-runner' () { return require('../../../datadog-plugin-mocha/src') },

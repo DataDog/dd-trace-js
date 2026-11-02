@@ -1664,6 +1664,7 @@ class CypressPlugin {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
           const isAtrRetry = attemptIndex > 0 &&
             this.isFlakyTestRetriesEnabled &&
+            (!finishedTest.hasNativeRetries || this.isDynamicAtrEnabled) &&
             !finishedTest.isAttemptToFix &&
             !finishedTest.isEfdRetry
           if (attemptIndex > 0) {
@@ -2154,6 +2155,7 @@ class CypressPlugin {
           isEfdRetry,
           isAttemptToFix,
           isModified,
+          hasNativeRetries,
           duration,
           isQuarantined: isQuarantinedFromSupport,
           isDisabled: isDisabledFromSupport,
@@ -2354,6 +2356,7 @@ class CypressPlugin {
           isEfdRetry,
           isEfdManagedTest,
           isAttemptToFix,
+          hasNativeRetries,
         }
         if (this.finishedTestsByFile[testSuite]) {
           this.finishedTestsByFile[testSuite].push(finishedTest)

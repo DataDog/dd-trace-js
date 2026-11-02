@@ -188,7 +188,7 @@ jobs:
       id-token: write
     services:
       redis:
-        image: redis@sha256:c9d92d840fd011c908f040592857c724ae6d877f2aba5c40ad963276507386b2 # 7.0-alpine
+        image: redis@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541 # 7-alpine
         ports:
           - 6379:6379
     env:
@@ -821,7 +821,7 @@ jobs:
       id-token: write
     services:
       memcached:
-        image: memcached@sha256:6627e971255440a1bd789ca709d8c6c767b98ad4ba0b29d49c7949ba3275cbf9 # 1.5-alpine
+        image: memcached@sha256:6d687bc26426d092694743054fc674fc54d3c161fefa1ad20b54192f8580a8c1 # 1.6-alpine
         ports:
           - 11211:11211
     env:
@@ -1285,7 +1285,7 @@ jobs:
       id-token: write
     services:
       redis:
-        image: redis@sha256:a0bb2f95a4672c5bbf3a01fcc2eb6dfb8fd898d83fc71cbf012c6b9479ab1607 # 6.2-alpine
+        image: redis@sha256:592b215e9287182f11ba9d7c229dc0ba312bb900a016ea65ae378b0127567319 # 6.2-alpine
         ports:
           - 6379:6379
     env:
@@ -1301,7 +1301,7 @@ jobs:
       id-token: write
     services:
       redis:
-        image: redis@sha256:a0bb2f95a4672c5bbf3a01fcc2eb6dfb8fd898d83fc71cbf012c6b9479ab1607 # 6.2-alpine
+        image: redis@sha256:592b215e9287182f11ba9d7c229dc0ba312bb900a016ea65ae378b0127567319 # 6.2-alpine
         ports:
           - 6379:6379
       redis-cluster:
@@ -1329,7 +1329,7 @@ jobs:
       id-token: write
     services:
       valkey:
-        image: valkey/valkey@sha256:1cb6b20b70d927560cc4cc5397b5f045e74aa603ff7696274778880bb6fadc75 # 8.1-alpine
+        image: valkey/valkey@sha256:640c5e62cea04b6d6f2084232651d0cc70362d31f4f805e7be94dbed6855e8f2 # 8.1
         ports:
           - 6379:6379
     env:

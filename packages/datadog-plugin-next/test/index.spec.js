@@ -367,8 +367,8 @@ describe('Plugin', function () {
                   meta: {
                     'span.kind': 'server',
                     'http.method': 'GET',
-                    // Next.js 16 surfaces a malformed request URL as a 500 instead of a 400.
-                    'http.status_code': satisfies(pkg.version, '>=16') ? '500' : '400',
+                    // Next.js 16 before 16.4.3 surfaces a malformed request URL as a 500 instead of a 400.
+                    'http.status_code': satisfies(pkg.version, '>=16 <16.4.3') ? '500' : '400',
                     component: 'next',
                   },
                 })

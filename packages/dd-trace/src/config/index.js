@@ -12,11 +12,13 @@ const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to 
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const log = require('../log')
+const { warn } = require('../log/writer')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
+  getServerlessPlatform,
   getServerlessPlatformTags,
   IS_SERVERLESS,
   getIsGCPFunction,
@@ -25,6 +27,7 @@ const {
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
+const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -124,6 +127,8 @@ const changeTracker = {
  */
 function undo (config, source) {
   for (const name of changeTracker[source]) {
+    if (trackedConfigOrigins.get(name) !== source) continue
+
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
@@ -197,6 +202,12 @@ class Config extends ConfigBase {
    * @type {Record<string, string>}
    */
   #parsedDdTags
+
+  /**
+   * Options already explained as deactivated, so recalculating the config doesn't repeat the explanation
+   * @type {Set<ConfigPath>}
+   */
+  #explainedDeactivations = new Set()
 
   /**
    * @type {Record<string, string>}
@@ -441,6 +452,17 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.DD_APPSEC_ENABLED ?? false)
     }
 
+    // Enable the thread context writer when appsec is enabled and only
+    // if DD_TRACE_OTEL_CTX_ENABLED is not explicitly set. The writer is started once
+    // at init, so appsec enabled later through remote config does not start it.
+    // Serverless functions and Vercel are left out: the eBPF reader cannot run there.
+    if (!trackedConfigOrigins.has('DD_TRACE_OTEL_CTX_ENABLED') &&
+        this.appsec.DD_APPSEC_ENABLED &&
+        !IS_SERVERLESS &&
+        !getServerlessPlatform().isVercel) {
+      setAndTrack(this, 'DD_TRACE_OTEL_CTX_ENABLED', true)
+    }
+
     if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
       setAndTrack(this, 'spanComputePeerService', true)
     }
@@ -637,6 +659,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
+    if (this.isCiVisibility) {
+      // Test Optimization reports its metrics through instrumentation telemetry, not DogStatsD.
+      set(this, 'dogstatsd', undefined)
+      setAndTrack(this, 'runtimeMetrics.enabled', false)
+    }
+
     const isTestOptimizationWorker = this.isCiVisibility &&
       TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (isTestOptimizationWorker) {
@@ -748,10 +776,41 @@ class Config extends ConfigBase {
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
     }
 
+    const unsupportedRuntime = getUnsupportedRuntime()
+    if (unsupportedRuntime !== undefined) {
+      this.#deactivateOnUnsupportedRuntime(
+        'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED',
+        `Live Debugger/Dynamic Instrumentation is disabled, because it is not supported on ${unsupportedRuntime}.`
+      )
+      this.#deactivateOnUnsupportedRuntime(
+        'testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED',
+        'Failed Test Replay is disabled, ' +
+          `because Live Debugger/Dynamic Instrumentation is not supported on ${unsupportedRuntime}.`
+      )
+    }
+
     // Single tags update is tracked as a calculated value.
     setAndTrack(this, 'tags', this.tags)
 
     telemetry.updateConfig([...configWithOrigin.values()], this)
+  }
+
+  /**
+   * Only explains the deactivation of an option that was explicitly set, since Failed Test Replay is enabled by
+   * default.
+   *
+   * @param {ConfigPath} name
+   * @param {string} reason
+   */
+  #deactivateOnUnsupportedRuntime (name, reason) {
+    if (!get(this, name)) return
+
+    if (this.startupLogs && trackedConfigOrigins.has(name) && !this.#explainedDeactivations.has(name)) {
+      this.#explainedDeactivations.add(name)
+      // `log.warn` only prints with debug logging enabled, so write the diagnostic like the startup logs do
+      warn(`DATADOG TRACER DIAGNOSTIC - ${reason}`)
+    }
+    setAndTrack(this, name, false)
   }
 }
 
@@ -809,7 +868,7 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
 function warnWrongOtelSettings () {
   // This mostly works for non-aliased environment variables only.
   // TODO: Adjust this to work across all sources.
-  for (const [otelEnvVar, ddEnvVar, key] of [
+  for (const [otelEnvVar, ddEnvVar, key = otelEnvVar] of [
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL', 'logLevel'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
@@ -826,7 +885,7 @@ function warnWrongOtelSettings () {
   ]) {
     // eslint-disable-next-line eslint-rules/eslint-process-env
     const envs = process.env
-    const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key ?? otelEnvVar))
+    const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key))
     const otelEnvValue = envs[otelEnvVar]
     if (otelEnvValue) {
       if (envs[ddEnvVar]) {
