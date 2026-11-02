@@ -31,7 +31,8 @@ bp-runner otherwise finds the baseline by searching for the branch's PR, and mer
 branches have none. The search pages through every PR in the repository, which takes minutes,
 can exhaust the shared GitHub App rate limit, and leaves the run without a baseline. With the
 override, the baseline is the merge-base with `master`, and `check-big-regressions` applies to
-merge queue runs the same way it does to PRs.
+merge queue runs the same way it does to PRs. `benchmarks-pr-comment` doesn't run on these
+branches, since there is no PR to comment on and its PR lookup would repeat the same search.
 
 ## Marking a benchmark as flaky
 

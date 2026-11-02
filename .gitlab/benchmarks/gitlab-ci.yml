@@ -72,6 +72,8 @@ benchmarks-pr-comment:
   rules:
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
+    - if: '$CI_COMMIT_REF_NAME =~ /^mq-working-branch-master-/'
+      when: never
     - when: on_success
   tags: ["arch:amd64"]
   image: $MICROBENCHMARKS_CI_IMAGE
