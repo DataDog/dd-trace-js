@@ -169,6 +169,31 @@ describe('Plugin', () => {
           assert.equal(spans.length, 1)
         })
 
+        describe('with reconnectOnError resending the failed command', () => {
+          let resending
+
+          afterEach(() => resending.quit())
+
+          it('should create a single span for the resent command', async () => {
+            let resent = false
+            resending = new Redis({
+              reconnectOnError: () => {
+                if (resent) return false
+                resent = true
+                return 2
+              },
+            })
+            await resending.set('not-a-number', 'value')
+
+            const spans = await commandSpansFor(resending, 'INCR not-a-number', async () => {
+              await assert.rejects(resending.incr('not-a-number'), { message: /not an integer/ })
+            })
+
+            assert.equal(resent, true)
+            assert.equal(spans.length, 1)
+          })
+        })
+
         describe('with enableAutoPipelining', () => {
           let autoPipelined
 
