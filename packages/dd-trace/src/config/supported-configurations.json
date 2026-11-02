@@ -143,6 +143,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "allowed": ".+",
         "default": null,
         "aliases": [
           "DATADOG_API_KEY"
@@ -497,6 +498,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "allowed": ".+",
         "default": null,
         "sensitive": true
       }
