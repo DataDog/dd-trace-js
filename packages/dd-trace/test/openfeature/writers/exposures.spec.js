@@ -671,6 +671,20 @@ describe('OpenFeature Exposures Writer', () => {
         'ExposuresWriter', 1, 'http://localhost:8126', 'Agent/local EVP handoff', 200)
     })
 
+    for (const basePath of ['/prefix/evp_proxy/v2', '/evp_proxy/v2']) {
+      it(`labels an Agent route with base path ${basePath} as an Agent handoff`, async () => {
+        writer.setEnabled(true, { url: new URL('http://agent.test:8126/prefix'), basePath })
+        writer.append(exposureEvent)
+
+        writer.flush()
+        await clock.tickAsync(0)
+
+        sinon.assert.calledWithExactly(log.debug,
+          '%s accepted %d events at %s (%s, status %d); downstream delivery is not observed',
+          'ExposuresWriter', 1, 'http://agent.test:8126', 'Agent/local EVP handoff', 200)
+      })
+    }
+
     it('omits URL credentials and echoed response bodies from delivery logs', async () => {
       writer.setEnabled(true, { url: new URL('https://user:secret@example.test/token?key=secret'), basePath: '' })
       for (const error of [null, new Error('response echoed secret')]) {

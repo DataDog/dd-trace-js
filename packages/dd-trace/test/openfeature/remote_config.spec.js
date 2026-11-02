@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { format } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -83,7 +84,7 @@ describe('OpenFeature Remote Config', () => {
       sinon.assert.calledOnceWithExactly(openfeatureProxy.setConfiguration, flagConfig)
       const debugCall = log.debug.getCalls().find((call) => typeof call.args[0] === 'function')
       assert.strictEqual(
-        debugCall.args[0](),
+        format(...debugCall.args[0]()),
         'Feature Flags: remote_config configuration apply applied successfully (2 flag(s) received; ' +
       'per-flag validity is checked at evaluation, ' +
         'configuration environment=undefined, createdAt=undefined, id=undefined)'
@@ -103,7 +104,7 @@ describe('OpenFeature Remote Config', () => {
 
       const debugCall = log.debug.getCalls().find((call) => typeof call.args[0] === 'function')
       assert.strictEqual(
-        debugCall.args[0](),
+        format(...debugCall.args[0]()),
         'Feature Flags: remote_config configuration apply applied successfully (1 flag(s) received; ' +
       'per-flag validity is checked at evaluation, ' +
         'configuration environment=Production, createdAt=2026-01-01T00:00:00.000Z, id=config-id)'
@@ -120,7 +121,7 @@ describe('OpenFeature Remote Config', () => {
 
         const debugCall = log.debug.getCalls().findLast((call) => typeof call.args[0] === 'function')
         assert.strictEqual(
-          debugCall.args[0](),
+          format(...debugCall.args[0]()),
           'Feature Flags: remote_config configuration apply applied successfully (0 flag(s) received; ' +
           'per-flag validity is checked at evaluation, ' +
           'configuration environment=undefined, createdAt=undefined, id=config-id)'
@@ -129,7 +130,7 @@ describe('OpenFeature Remote Config', () => {
     })
 
     describe('with malformed configuration metadata', () => {
-      // Objects whose toString is not callable throw when interpolated into a template literal.
+      // Objects whose toString is not callable, and symbols, throw when interpolated into a template literal.
       const malformedConfigs = [
         { flags: {}, createdAt: { toString: null }, environment: { name: 'Production' } },
         { flags: {}, createdAt: '2026-01-01T00:00:00.000Z', environment: { name: { toString: null } } },
@@ -146,10 +147,10 @@ describe('OpenFeature Remote Config', () => {
             sinon.assert.calledWithExactly(openfeatureProxy.setConfiguration, flagConfig)
 
             const debugCall = log.debug.getCalls().findLast((call) => typeof call.args[0] === 'function')
-            const message = debugCall.args[0]()
+            const message = format(...debugCall.args[0]())
             assert.match(message, /\(0 flag\(s\) received;/)
             assert.match(message, /id=config-id\)$/)
-            assert.doesNotMatch(message, /\[object Object\]|Symbol\(/)
+            assert.doesNotMatch(message, /\[object Object\]/)
           }
         })
       }

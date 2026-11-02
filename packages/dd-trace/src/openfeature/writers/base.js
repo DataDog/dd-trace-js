@@ -383,7 +383,8 @@ class BaseFFEWriter {
       if (delivered) {
         log.debug('%s accepted %d events at %s (%s, status %d); downstream delivery is not observed',
           this.constructor.name, eventCount, route.url.origin,
-          route.endpoint.startsWith('/evp_proxy/') ? 'Agent/local EVP handoff' : 'HTTP receiver', statusCode)
+          // An Agent URL path prefix precedes the EVP path, so the route type cannot be read from its start.
+          route.endpoint.includes('/evp_proxy/') ? 'Agent/local EVP handoff' : 'HTTP receiver', statusCode)
       } else {
         this.#logDropped(route, eventCount, error, errorMessage, statusCode)
       }
