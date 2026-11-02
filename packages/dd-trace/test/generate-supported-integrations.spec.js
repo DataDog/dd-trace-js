@@ -24,7 +24,7 @@ describe('generate supported integrations', () => {
     ])
 
     const { rows } = await generateSupportedIntegrations({
-      nodeProfiles: [{ key: '24', version: '24.16.0' }],
+      nodeProfiles: [{ key: '26', version: '26.2.0' }],
       plugins,
       getPackageVersions: async dependency => packageVersions[dependency],
     })
@@ -64,6 +64,19 @@ describe('generate supported integrations', () => {
     ))
   })
 
+  it('includes explicitly exercised AI SDK versions and excludes known-broken versions', async () => {
+    const { rows } = await generateSupportedIntegrations({
+      nodeProfiles: [{ key: '26', version: '26.2.0' }],
+      plugins: new Map([['ai', 'ai']]),
+      getPackageVersions: async () => ['1.0.0', '2.0.0', '3.0.0', '4.0.0', '4.0.2', '4.3.19',
+        '5.0.0', '6.0.0', '7.0.0', latestVersions.ai],
+    })
+
+    assert(!rows[0].versions[0].tested.includes('4.3.19'))
+    assert(rows[0].versions[0].tested.includes('4.0.2'))
+    assert.strictEqual(rows[0].versions[0].supportedRange, '>=4.0.0 <7.0.0 || >=6.0.0')
+  })
+
   it('keeps umbrella package aliases out of the runtime hooks and plugin registry', () => {
     const hooks = require('../../datadog-instrumentations/src/helpers/hooks')
     const plugins = require('../src/plugins')
@@ -88,7 +101,7 @@ function supportedIntegration (dependency, integration, supportedRange, testedVe
     integrationName: integration,
     autoInstrumented: true,
     versions: [{
-      testedRuntimes: { node: ['24.16.0'] },
+      testedRuntimes: { node: [dependency.includes('supabase') ? '24.16.0' : '26.2.0'] },
       supportedRange,
       tested: testedVersions,
     }],

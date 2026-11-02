@@ -610,3 +610,5 @@
 /.github/playwright/Dockerfile @DataDog/ci-app-libraries @dd-octo-sts
 /.github/browser-tools/Dockerfile @DataDog/ci-app-libraries @dd-octo-sts
 /benchmark/sirun/Dockerfile* @DataDog/lang-platform-js @dd-octo-sts
+
+/.github/actions/node/setup/resolve-version.sh @DataDog/lang-platform-js @dd-octo-sts

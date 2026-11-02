@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 'use strict'
 
-const { readFileSync, writeFileSync } = require('node:fs')
+const { execFileSync } = require('node:child_process')
+const { readFileSync, readdirSync, writeFileSync } = require('node:fs')
 const { builtinModules } = require('node:module')
 const path = require('node:path')
 
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
+const YAML = require('yaml')
 
 const {
   brokenVersionReason,
@@ -17,6 +19,7 @@ const {
 const NODE_RANGE_FLAG = '--node-range'
 const FETCH_TIMEOUT_MS = 10_000
 const FETCH_CONCURRENCY = 10
+const TEST_COMMAND = /\bnpm run test:(?:plugins:ci|instrumentations(?::ci)?|integration:plugins(?::coverage)?)(?:\s|$)/
 
 const ROOT = path.join(__dirname, '..')
 const PLUGINS_INDEX = path.join(ROOT, 'packages/dd-trace/src/plugins/index.js')
@@ -302,30 +305,220 @@ function simplifySupportedRange (supportedRange) {
 }
 
 /**
+ * @typedef {Record<string, string | number | boolean>} WorkflowValues
+ * @typedef {{ matrix: WorkflowValues, inputs: WorkflowValues }} WorkflowContext
+ * @typedef {{ uses?: string, run?: string, if?: string, with?: WorkflowValues,
+ *   env?: WorkflowValues }} WorkflowStep
+ * @typedef {{ nodeRange: string, env: typeof process.env }} TestRun
+ */
+
+/**
+ * @param {Record<string, Array<string | number | boolean | WorkflowValues>> | undefined} matrix
+ */
+function expandTestMatrix (matrix = {}) {
+  const axes = Object.entries(matrix).filter(([key]) => key !== 'include' && key !== 'exclude')
+  let rows = axes.length ? [{}] : []
+  for (const [key, values] of axes) {
+    rows = rows.flatMap(row => values.map(value => ({ ...row, [key]: value })))
+  }
+  if (matrix.exclude) {
+    rows = rows.filter(row => !matrix.exclude.some(excluded =>
+      Object.entries(excluded).every(([key, value]) => row[key] === value)
+    ))
+  }
+  const originals = rows.map(row => ({ ...row }))
+  if (matrix.include) {
+    for (const included of matrix.include) {
+      let matched = false
+      for (let index = 0; index < originals.length; index++) {
+        if (Object.entries(included).every(([key, value]) =>
+          originals[index][key] === undefined || originals[index][key] === value
+        )) {
+          Object.assign(rows[index], included)
+          matched = true
+        }
+      }
+      if (!matched) rows.push({ ...included })
+    }
+  }
+  if (!axes.length && !matrix.include) rows.push({})
+  return rows
+}
+
+/**
+ * @param {string | number | boolean} value
+ * @param {WorkflowContext} context
+ */
+function expandTestValue (value, context) {
+  const expanded = String(value).replaceAll(/\$\{\{\s*(matrix|inputs)\.([\w-]+)\s*\}\}/g,
+    (match, source, key) => String(context[source][key] ?? ''))
+  if (expanded.includes('${{')) throw new Error(`Unsupported test workflow expression: ${value}`)
+  return expanded
+}
+
+/**
+ * @param {string | undefined} condition
+ * @param {WorkflowContext} context
+ */
+function testStepEnabled (condition, context) {
+  if (condition === undefined) return true
+  const trimmed = condition.trim()
+  const expression = trimmed.startsWith('${{') && trimmed.endsWith('}}') ? trimmed.slice(3, -2).trim() : trimmed
+  return expression.split('||').some(alternative => alternative.split('&&').every(term => {
+    const match = term.trim().match(/^(matrix|inputs)\.([\w-]+)\s*(==|!=)\s*'([^']*)'$/)
+    if (!match) throw new Error(`Unsupported test workflow condition: ${condition}`)
+    const [, source, key, operator, expected] = match
+    const equal = String(context[source][key] ?? '') === expected
+    return operator === '==' ? equal : !equal
+  }))
+}
+
+function readTestRuns () {
+  const runs = []
+  const actions = new Map()
+  const nodeRanges = new Map()
+
+  /**
+   * @param {WorkflowStep[]} steps
+   * @param {WorkflowContext} context
+   * @param {WorkflowValues} inheritedEnv
+   * @param {{ nodeRange?: string }} state
+   */
+  function collect (steps, context, inheritedEnv, state) {
+    for (const step of steps) {
+      const nodeAction = step.uses === './.github/actions/node'
+      const localAction = /^\.\/\.github\/actions\/(?:node|plugins|instrumentations)\//.test(step.uses ?? '')
+      const test = TEST_COMMAND.test(step.run ?? '')
+      if ((!nodeAction && !localAction && !test) || !testStepEnabled(step.if, context)) continue
+      const env = { ...inheritedEnv, ...step.env }
+      if (nodeAction) {
+        const version = expandTestValue(step.with?.version ?? 'latest', context)
+        if (!nodeRanges.has(version)) {
+          const output = execFileSync('bash', ['.github/actions/node/setup/resolve-version.sh'], {
+            cwd: ROOT,
+            env: { ...process.env, VERSION: version, LATEST_VERSION: '' },
+            encoding: 'utf8',
+          })
+          const range = output.trim().replace(/^version=/, '')
+          if (!semver.validRange(range)) throw new Error(`Invalid test Node.js version: ${range}`)
+          nodeRanges.set(version, range)
+        }
+        state.nodeRange = nodeRanges.get(version)
+      } else if (localAction) {
+        if (!actions.has(step.uses)) {
+          actions.set(step.uses, YAML.parse(readFileSync(path.join(ROOT, step.uses, 'action.yml'), 'utf8')))
+        }
+        const action = actions.get(step.uses)
+        const inputs = {}
+        for (const name of ['version', 'node-floor']) {
+          const value = step.with?.[name] ?? action.inputs?.[name]?.default
+          if (value !== undefined) inputs[name] = expandTestValue(value, context)
+        }
+        collect(action.runs.steps, { ...context, inputs }, env, state)
+      } else {
+        if (!state.nodeRange) throw new Error('Test workflow runs without an explicit Node.js version')
+        const testEnv = {}
+        for (const name of ['PLUGINS', 'PACKAGE_NAMES', 'PACKAGE_VERSION_RANGE']) {
+          if (env[name] !== undefined) testEnv[name] = expandTestValue(env[name], context)
+        }
+        runs.push({ nodeRange: state.nodeRange, env: testEnv })
+      }
+    }
+  }
+
+  for (const file of readdirSync(path.join(ROOT, '.github/workflows')).sort()) {
+    if (!file.endsWith('.yml')) continue
+    const workflow = YAML.parse(readFileSync(path.join(ROOT, '.github/workflows', file), 'utf8'))
+    for (const job of Object.values(workflow.jobs)) {
+      if (!job.env?.PLUGINS && !job.steps?.some(step => step.env?.PLUGINS)) continue
+      for (const matrix of expandTestMatrix(job.strategy?.matrix)) {
+        collect(job.steps, { matrix, inputs: {} }, { ...workflow.env, ...job.env }, {})
+      }
+    }
+  }
+  return runs
+}
+
+/**
+ * @param {string} dependency
+ * @param {string} integration
+ * @param {NodeProfile} profile
+ * @param {TestRun[]} runs
+ */
+function readTestEnvironments (dependency, integration, profile, runs) {
+  const environments = []
+  for (const { nodeRange, env } of runs) {
+    if (!semver.satisfies(profile.version, nodeRange)) continue
+    const plugins = env.PLUGINS?.split('|')
+    if (!plugins?.includes(integration) && !plugins?.includes(dependency.replace(/^node:/, ''))) continue
+    if (env.PACKAGE_NAMES && !env.PACKAGE_NAMES.split(',').includes(dependency)) continue
+    environments.push(env)
+  }
+  return environments
+}
+
+/**
+ * @param {string} dependency
+ * @param {string} integration
+ * @param {Map<string, string>} plugins
+ * @returns {InstrumentationDeclaration[]}
+ */
+function readTestDeclarations (dependency, integration, plugins) {
+  const names = new Set([integration])
+  for (const [name, plugin] of plugins) {
+    if (plugin === integration) names.add(name)
+  }
+
+  const externals = require(TEST_EXTERNALS)
+  const declarations = []
+  for (const name of names) {
+    if (externals[name]) {
+      for (const external of externals[name]) {
+        if (external.name === dependency) declarations.push(external)
+      }
+    }
+  }
+  return declarations
+}
+
+/**
  * @param {string} dependency
  * @param {InstrumentationDeclaration[]} declarations
  * @param {string} nodeVersion
  * @param {string[]} packageVersions
+ * @param {InstrumentationDeclaration[]} testDeclarations
+ * @param {Array<typeof process.env>} testEnvironments
  * @returns {{ supportedRange: string|undefined, tested: string[] }}
  */
-function resolveDependencyVersions (dependency, declarations, nodeVersion, packageVersions) {
-  const { versionList, unversioned: supportedRange } = resolvePluginVersions({
+function resolveDependencyVersions (
+  dependency, declarations, nodeVersion, packageVersions, testDeclarations, testEnvironments
+) {
+  const { unversioned: supportedRange } = resolvePluginVersions({
     name: dependency,
     declarations,
     nodeVersion,
     env: {},
   })
+  if (supportedRange === undefined) return { supportedRange, tested: [] }
   const testedVersions = new Set()
 
-  for (const { versionKey } of versionList) {
-    const range = getCappedRange(dependency, versionKey)
-    const version = semver.maxSatisfying(packageVersions, range)
-    if (!version) throw new Error(`Could not resolve '${dependency}@${range}' from npm metadata`)
-    if (!brokenVersionReason(dependency, version)) testedVersions.add(version)
+  for (const env of testEnvironments) {
+    const { versionList } = resolvePluginVersions({
+      name: dependency,
+      declarations: [...declarations, ...testDeclarations],
+      nodeVersion,
+      env,
+    })
+    for (const { versionKey } of versionList) {
+      const range = getCappedRange(dependency, versionKey)
+      const version = semver.maxSatisfying(packageVersions, range)
+      if (!version) throw new Error(`Could not resolve '${dependency}@${range}' from npm metadata`)
+      if (!brokenVersionReason(dependency, version)) testedVersions.add(version)
+    }
   }
 
   return {
-    supportedRange: supportedRange === undefined ? undefined : simplifySupportedRange(supportedRange),
+    supportedRange: simplifySupportedRange(supportedRange),
     tested: [...testedVersions].sort(semver.compare),
   }
 }
@@ -354,12 +547,17 @@ async function buildRows (plugins, nodeProfiles, instrumentations, getPackageVer
     availableVersions.set(dependency, await getPackageVersions(dependency))
   })
 
+  const runs = readTestRuns()
   const rows = []
   for (const [dependency, integration] of plugins) {
     const builtin = isBuiltin(dependency)
     const versionsBySupport = new Map()
+    const testDeclarations = readTestDeclarations(dependency, integration, plugins)
 
-    for (const { version: nodeVersion } of nodeProfiles) {
+    for (const profile of nodeProfiles) {
+      const testEnvironments = readTestEnvironments(dependency, integration, profile, runs)
+      if (testEnvironments.length === 0) continue
+      const nodeVersion = profile.version
       let supportedRange = '*'
       let tested = []
 
@@ -370,7 +568,9 @@ async function buildRows (plugins, nodeProfiles, instrumentations, getPackageVer
           dependency,
           declarations,
           nodeVersion,
-          availableVersions.get(dependency)
+          availableVersions.get(dependency),
+          testDeclarations,
+          testEnvironments
         )
         if (resolved.tested.length === 0) continue
         supportedRange = resolved.supportedRange
