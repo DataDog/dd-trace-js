@@ -24,15 +24,25 @@ GitLab CI configuration for the benchmarks that run on the
   [apm-sdks-benchmarks](https://github.com/DataDog/apm-sdks-benchmarks/tree/main/.gitlab).
     - Change them there.
 
-## Merge queue baseline
+## Merge queue
 
-On `mq-working-branch-master-*` branches, `.benchmarks` sets `MANUAL_BASELINE_BRANCH: master`.
-bp-runner otherwise finds the baseline by searching for the branch's PR, and merge queue
-branches have none. The search pages through every PR in the repository, which takes minutes,
-can exhaust the shared GitHub App rate limit, and leaves the run without a baseline. With the
-override, the baseline is the merge-base with `master`, and `check-big-regressions` applies to
-merge queue runs the same way it does to PRs. `benchmarks-pr-comment` doesn't run on these
-branches, since there is no PR to comment on and its PR lookup would repeat the same search.
+Merge queue runs (`mq-working-branch-master-*`) apply the same regression check as the queued PR,
+on top of the latest `master`.
+
+- `.benchmarks` sets `MANUAL_BASELINE_BRANCH: master`. bp-runner otherwise finds the baseline by
+  searching for the branch's PR, and merge queue branches have none. The search pages through
+  every PR in the repository, which takes minutes, can exhaust the shared GitHub App rate limit,
+  and leaves the run without a baseline. The baseline is now the merge-base with `master`.
+- `check-big-regressions` honors the queued PR's `performance/ignore-performance-regression`
+  label once `MICROBENCHMARKS_CI_IMAGE` is built with benchmarking-platform-tools #401, where
+  `github-should-ignore-regression` falls back to the PR in `DDCI_PULL_REQUEST_NUMBER` (the queued
+  PR) when the branch has no PR. The label check still looks up the branch's PR first, which costs
+  one request with benchmarking-platform-tools #399 and a full PR search without it.
+- `benchmarks-pr-comment` doesn't run, since there is no PR to comment on and its PR lookup would
+  repeat the same search.
+
+When several PRs are queued together, the baseline is still `master`, so the run also measures
+the PRs ahead of it, and only the last PR's label applies.
 
 ## Marking a benchmark as flaky
 

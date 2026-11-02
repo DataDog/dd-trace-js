@@ -41,8 +41,6 @@ variables:
       when: never
     - if: $CI_COMMIT_BRANCH == 'master'
       interruptible: false
-    # Merge queue branches have no PR, so bp-runner's baseline lookup would page through every
-    # PR in the repo (exhausting the shared GitHub App rate limit) and then run without a baseline.
     - if: '$CI_COMMIT_REF_NAME =~ /^mq-working-branch-master-/'
       interruptible: true
       variables:
