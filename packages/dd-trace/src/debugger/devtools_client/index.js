@@ -384,9 +384,9 @@ session.on('Debugger.paused', async ({ params }) => {
 
   if (captureDisabledProbes !== undefined) {
     // The breakpoint condition bakes in whether each probe produces snapshots, which decides if a hit counts against
-    // the global snapshot rate limit and how a skipped hit is classified. Rebuild the conditions now that this
-    // changed. The disabled probes can be spread over more than one breakpoint, but each affected location is only
-    // refreshed once.
+    // the global snapshot rate limit, how a skipped hit is classified, and the default per-probe sampling rate.
+    // Rebuild the conditions now that this changed. The disabled probes can be spread over more than one breakpoint,
+    // but each affected location is only refreshed once.
     refreshBreakpoints(captureDisabledProbes).catch((err) => {
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.error(() => {

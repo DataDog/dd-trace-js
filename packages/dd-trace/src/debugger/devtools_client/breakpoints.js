@@ -172,10 +172,7 @@ async function addBreakpoint (probe) {
   // snapshots and therefore default to the snapshot rate.
   //
   // Optimize for fast calculations when probe is hit
-  const snapshotsPerSecond = probe.sampling?.snapshotsPerSecond ?? (isSnapshotProducingProbe(probe)
-    ? MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
-    : MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE)
-  probe.nsBetweenSampling = BigInt(Math.trunc(1 / snapshotsPerSecond * 1e9))
+  probe.nsBetweenSampling = getNsBetweenSampling(probe)
 
   const locationKey = generateLocationKey(scriptId, lineNumber, columnNumber)
   const breakpoint = locationToBreakpoint.get(locationKey)
@@ -260,8 +257,9 @@ async function modifyBreakpoint (probe) {
  * attached to them.
  *
  * A breakpoint condition bakes in whether each probe produces snapshots, which decides if a hit counts against the
- * global snapshot rate limit and how a skipped hit is classified. That changes when the pause handler permanently
- * disables capture for a probe after a fatal capture error, so the conditions have to be recompiled.
+ * global snapshot rate limit and how a skipped hit is classified. It also bakes in the per-probe sampling interval,
+ * whose default depends on the same thing. That changes when the pause handler permanently disables capture for a
+ * probe after a fatal capture error, so the intervals have to be recalculated and the conditions recompiled.
  *
  * Probes sharing a location share a breakpoint, so each location is only refreshed once. A probe that has been removed
  * in the meantime is ignored: its location no longer needs the update.
@@ -287,8 +285,12 @@ async function refreshBreakpoints (probes) {
   let errors
   for (const locationKey of locationKeys) {
     try {
+      const breakpoint = locationToBreakpoint.get(locationKey)
+      for (const probe of breakpointToProbes.get(breakpoint.id).values()) {
+        probe.nsBetweenSampling = getNsBetweenSampling(probe)
+      }
       // eslint-disable-next-line no-await-in-loop
-      await updateBreakpointInternal(locationToBreakpoint.get(locationKey))
+      await updateBreakpointInternal(breakpoint)
     } catch (err) {
       // Keep going: the remaining locations would otherwise hold on to the condition this refresh exists to replace
       errors ??= []
@@ -405,4 +407,21 @@ async function removeProbeFromSampler (id) {
 
 function generateLocationKey (scriptId, lineNumber, columnNumber) {
   return `${scriptId}:${lineNumber}:${columnNumber}`
+}
+
+/**
+ * Calculate the minimum time between two samples of a probe. Unless the probe configures its own rate, it depends on
+ * whether the probe currently produces snapshots.
+ *
+ * @param {{
+ *   sampling?: { snapshotsPerSecond?: number },
+ *   captureSnapshot?: boolean,
+ *   compiledCaptureExpressions?: object[]
+ * }} probe - The probe to calculate the interval for.
+ */
+function getNsBetweenSampling (probe) {
+  const snapshotsPerSecond = probe.sampling?.snapshotsPerSecond ?? (isSnapshotProducingProbe(probe)
+    ? MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
+    : MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE)
+  return BigInt(Math.trunc(1 / snapshotsPerSecond * 1e9))
 }

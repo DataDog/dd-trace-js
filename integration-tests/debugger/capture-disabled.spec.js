@@ -6,10 +6,13 @@ const { setTimeout: sleep } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
 const { METRICS_FLUSH_INTERVAL_MS } = require('../../packages/dd-trace/src/debugger/constants')
+const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('../../packages/dd-trace/src/debugger/devtools_client/defaults')
 const { setup } = require('./utils')
 
 // The probe is limited to one event per second, so two hits in quick succession skip the second one
 const PER_PROBE_RATE_LIMIT_WINDOW_MS = 1_000
+// A snapshot probe without an explicit sampling rate gets this much time between events
+const DEFAULT_SNAPSHOT_RATE_LIMIT_WINDOW_MS = 1_000 / MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
 
 describe('Dynamic Instrumentation', function () {
   const t = setup({
@@ -62,6 +65,39 @@ describe('Dynamic Instrumentation', function () {
       assert.strictEqual(results.length, 2, `Expected two probe results, got ${inspect(results)}`)
       assert.strictEqual(results[1].debugger.snapshot.captures, undefined, 'should not capture anything anymore')
       assert.match(results[1].debugger.snapshot.evaluationErrors[0].message, /exceeds the maximum number/)
+    })
+
+    it('should switch the probe to the default sampling rate of probes without captures', async function () {
+      const results = []
+      /** @type {() => void} */
+      let resolveResults
+      const allResults = new Promise((resolve) => { resolveResults = resolve })
+      t.agent.on('debugger-input', ({ payload }) => {
+        results.push(...payload)
+        if (results.length === 3) resolveResults()
+      })
+
+      const rcConfig = t.generateRemoteConfig({ captureSnapshot: true })
+      // The probe config helper always sets a sampling rate, but this is about the rate a probe gets without one
+      delete rcConfig.config.sampling
+      t.agent.addRemoteConfig(rcConfig)
+      // The first hit trips the large object safety threshold, which disables capture for the probe
+      await t.triggerBreakpoint()
+
+      // Two hits in quick succession: the default snapshot rate would skip the second one, while the default rate of
+      // probes without captures lets both through. Waiting out the snapshot rate window first leaves the sampling
+      // rate the probe was refreshed with as the only thing deciding.
+      await sleep(DEFAULT_SNAPSHOT_RATE_LIMIT_WINDOW_MS + 100)
+      await Promise.all([t.request(t.breakpoint.url), t.request(t.breakpoint.url)])
+
+      await allResults
+
+      assert.strictEqual(results[0].debugger.snapshot.captures.lines[t.breakpoint.line].locals.huge.notCapturedReason,
+        'fieldCount')
+      for (const { debugger: { snapshot } } of results.slice(1)) {
+        assert.strictEqual(snapshot.captures, undefined, 'should not capture anything anymore')
+        assert.match(snapshot.evaluationErrors[0].message, /exceeds the maximum number/)
+      }
     })
   })
 })

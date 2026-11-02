@@ -1271,7 +1271,7 @@ describe('breakpoints', function () {
             columnNumber: 0,
           },
           condition: compileBreakpointCondition([
-            { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 1000000000n, captureSnapshot: false },
+            { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n, captureSnapshot: false },
           ]),
         })
         sinon.assert.calledTwice(sessionMock.post)
@@ -1302,7 +1302,7 @@ describe('breakpoints', function () {
       sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
         location: { scriptId: 'script-1', lineNumber: 9, columnNumber: 0 },
         condition: compileBreakpointCondition([
-          { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 1000000000n, captureSnapshot: false },
+          { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n, captureSnapshot: false },
         ]),
       })
       sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.removeBreakpoint', {
@@ -1311,7 +1311,7 @@ describe('breakpoints', function () {
       sinon.assert.calledWith(sessionMock.post.getCall(3), 'Debugger.setBreakpoint', {
         location: { scriptId: 'script-1', lineNumber: 19, columnNumber: 0 },
         condition: compileBreakpointCondition([
-          { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 1000000000n, captureSnapshot: false },
+          { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n, captureSnapshot: false },
         ]),
       })
       sinon.assert.callCount(sessionMock.post, 4)
@@ -1335,11 +1335,65 @@ describe('breakpoints', function () {
       sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
         location: { scriptId: 'script-1', lineNumber: 9, columnNumber: 0 },
         condition: compileBreakpointCondition([
-          { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 1000000000n, captureSnapshot: false },
-          { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 1000000000n, captureSnapshot: false },
+          { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n, captureSnapshot: false },
+          { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n, captureSnapshot: false },
         ]),
       })
       sinon.assert.calledTwice(sessionMock.post)
+    })
+
+    it('should keep the snapshot sampling rate of a probe at the location that still captures', async function () {
+      await addProbe({ captureSnapshot: true })
+      await addProbe({ id: 'probe-2', captureSnapshot: true })
+      const probe = getInstalledProbe()
+      sessionMock.post.resetHistory()
+
+      probe.captureSnapshot = false
+
+      await breakpoints.refreshBreakpoints([probe])
+
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+        location: { scriptId: 'script-1', lineNumber: 9, columnNumber: 0 },
+        condition: compileBreakpointCondition([
+          { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n, captureSnapshot: false },
+          { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 1000000000n, captureSnapshot: true },
+        ]),
+      })
+    })
+
+    it('should switch to the non-snapshot sampling rate once capture expressions are disabled', async function () {
+      await addProbe({
+        captureExpressions: [{ name: 'myVar', expr: { dsl: 'myVar', json: { ref: 'myVar' } } }],
+      })
+      const probe = getInstalledProbe()
+      sessionMock.post.resetHistory()
+
+      // What the pause handler does when it permanently disables the capture expressions of the probe
+      probe.compiledCaptureExpressions = undefined
+
+      await breakpoints.refreshBreakpoints([probe])
+
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+        location: { scriptId: 'script-1', lineNumber: 9, columnNumber: 0 },
+        condition: compileBreakpointCondition([{ id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n }]),
+      })
+    })
+
+    it('should keep an explicitly configured sampling rate', async function () {
+      await addProbe({ captureSnapshot: true, sampling: { snapshotsPerSecond: 0.5 } })
+      const probe = getInstalledProbe()
+      sessionMock.post.resetHistory()
+
+      probe.captureSnapshot = false
+
+      await breakpoints.refreshBreakpoints([probe])
+
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+        location: { scriptId: 'script-1', lineNumber: 9, columnNumber: 0 },
+        condition: compileBreakpointCondition([
+          { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 2000000000n, captureSnapshot: false },
+        ]),
+      })
     })
 
     it('should ignore a probe that has been removed in the meantime', async function () {
@@ -1395,7 +1449,7 @@ describe('breakpoints', function () {
       sinon.assert.calledWith(sessionMock.post, 'Debugger.setBreakpoint', {
         location: { scriptId: 'script-1', lineNumber: 19, columnNumber: 0 },
         condition: compileBreakpointCondition([
-          { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 1000000000n, captureSnapshot: false },
+          { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n, captureSnapshot: false },
         ]),
       })
       assert.strictEqual(stateMock.breakpointToProbes.get('bp-script-1:19:0')?.get('probe-2'), otherProbe)
