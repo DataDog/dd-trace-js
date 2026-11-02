@@ -420,6 +420,7 @@ describe('integrations', () => {
       for (const mode of ['shutdown', 'eviction']) {
         it(`encloses a pending tool in its turn when forced by ${mode}`, async () => {
           await start()
+          /** @type {((value: string) => void) | undefined} */
           let complete
           tools.register('forced', () => new Promise(resolve => { complete = resolve }))
           event('client_tool_call', 'client_tool_call', 1,
