@@ -32,6 +32,7 @@ const poolAcquireChannels = {
   acquireFinishCh,
 }
 const wrappedPools = new WeakSet()
+const executeCommands = new WeakSet()
 
 /**
  * @typedef {object} PoolAcquireTiming
@@ -81,12 +82,14 @@ function wrapCommandStart (start, ctx) {
   })
 }
 
-function wrapCommand (Command) {
+function wrapCommand (Command, execute) {
   return class extends Command {
     constructor (...args) {
       super(...args)
 
-      if (!this.start) return
+      if (!this.start || (execute && (
+        executeCommands.has(args[3]) || executeCommands.has(args[3]?.opts ?? args[2])
+      ))) return
 
       const ctx = { sql: this.sql, conf: this.opts }
 
@@ -97,7 +100,7 @@ function wrapCommand (Command) {
   }
 }
 
-function createWrapQuery (options) {
+function createWrapQuery (options, commandOptions) {
   return function wrapQuery (query) {
     return function (sql) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
@@ -107,27 +110,21 @@ function createWrapQuery (options) {
       const poolWaitTime = takePoolWaitTime(this)
       if (poolWaitTime !== undefined) ctx.poolWaitTime = poolWaitTime
 
-      return startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql)
-        .then(result => {
-          ctx.result = result
-          finishCh.publish(ctx)
-          return result
-        }, error => {
-          ctx.error = error
-          errorCh.publish(ctx)
-          finishCh.publish(ctx)
-          throw error
-        })
+      return finishPromiseQuery(ctx, startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql,
+        undefined, undefined, commandOptions))
     }
   }
 }
 
-function createWrapQueryCallback (options) {
+function createWrapQueryCallback (options, commandOptions) {
   return function wrapQuery (query) {
     return function (sql) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
-      const cb = arguments[arguments.length - 1]
+      const callbackIndex = commandOptions !== undefined && typeof arguments[1] === 'function'
+        ? 1
+        : arguments.length - 1
+      const cb = arguments[callbackIndex]
       const originalSql = normalizeSql(sql)
       const ctx = { sql: originalSql, conf: options }
       const wrapper = (cb) => function (err) {
@@ -142,15 +139,131 @@ function createWrapQueryCallback (options) {
       }
 
       if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrapCallback(cb, wrapper)
+        arguments[callbackIndex] = shimmer.wrapCallback(cb, wrapper)
+      } else if (commandOptions !== undefined && arguments.length >= 3 && arguments[2] == null) {
+        arguments[2] = wrapper()
       } else {
         arguments.length += 1
         arguments[arguments.length - 1] = wrapper()
       }
 
-      return startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql)
+      return startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql,
+        undefined, commandOptions !== undefined, commandOptions)
     }
   }
+}
+
+/**
+ * @param {Function} execute
+ */
+function wrapPreparedExecute (execute) {
+  const promise = execute.length === 1
+  /**
+   * @param {{ sql: unknown, opts?: Record<string, unknown> }} cmdParam
+   * @param {Function} [resolve]
+   * @param {(error: Error) => unknown} [reject]
+   */
+  return function (cmdParam, resolve, reject) {
+    if (!startCh.hasSubscribers) return execute.apply(this, arguments)
+
+    const ctx = {
+      sql: cmdParam.sql,
+      conf: cmdParam.opts ? { ...this.opts, ...cmdParam.opts } : this.opts,
+    }
+    const poolWaitTime = takePoolWaitTime(this.streamOut)
+    if (poolWaitTime !== undefined) ctx.poolWaitTime = poolWaitTime
+
+    commandAddCh.publish(ctx)
+    executeCommands.add(cmdParam)
+    if (!promise) {
+      arguments[1] = function () {
+        return finishCh.runStores(ctx, resolve, this, ...arguments)
+      }
+      /** @param {Error} error */
+      arguments[2] = function (error) {
+        ctx.error = error
+        errorCh.publish(ctx)
+        return finishCh.runStores(ctx, reject, this, ...arguments)
+      }
+    }
+
+    const result = startCh.runStores(ctx, runPreparedExecute, this, ctx, execute, arguments)
+    return promise ? finishPromiseQuery(ctx, result) : result
+  }
+}
+
+/**
+ * @param {Record<string, unknown>} ctx
+ * @param {Promise<unknown>} result
+ */
+function finishPromiseQuery (ctx, result) {
+  return result.then(result => {
+    ctx.result = result
+    finishCh.publish(ctx)
+    return result
+  }, error => {
+    ctx.error = error
+    errorCh.publish(ctx)
+    finishCh.publish(ctx)
+    throw error
+  })
+}
+
+/**
+ * @param {{ sql: unknown }} ctx
+ * @param {Function} execute
+ * @param {ArgumentsLike} args
+ */
+function runPreparedExecute (ctx, execute, args) {
+  if (typeof args[0].sql === 'string' && args[0].sql && typeof ctx.sql === 'string') args[0].sql = ctx.sql
+  return execute.apply(this, args)
+}
+
+/**
+ * @param {Function} Driver
+ * @param {boolean} callback
+ */
+function wrapLegacyExecute (Driver, callback) {
+  const commands = new WeakMap()
+  shimmer.wrap(Driver, '_EXECUTE_CMD', execute => {
+    const normalized = callback && execute.length === 2
+    /**
+     * @param {{ opts: object, prepareExecute?: Function }} connection
+     * @param {unknown} cmdParam
+     */
+    return function (connection, cmdParam) {
+      if (!startCh.hasSubscribers || (!normalized && cmdParam === null) || (!callback && connection.prepareExecute)) {
+        return execute.apply(this, arguments)
+      }
+
+      let command = commands.get(connection)
+      if (command === undefined) {
+        const forward = normalized
+          /**
+           * @param {unknown} sql
+           * @param {unknown} values
+           * @param {Function} callback
+           */
+          ? function (sql, values, callback) {
+            this.sql = normalizeSql(sql)
+            this.opts = sql
+            this.values = values
+            this.callback = callback
+            return execute.call(Driver, connection, this)
+          }
+          : function () { return execute.call(Driver, connection, ...arguments) }
+        const createWrapper = callback ? createWrapQueryCallback : createWrapQuery
+        const wrap = createWrapper(connection.opts, executeCommands)
+        command = wrap(forward)
+        commands.set(connection, command)
+      }
+
+      return normalized
+        ? command.call(cmdParam, cmdParam.opts ?? cmdParam.sql, cmdParam.values, cmdParam.callback)
+        : command.apply(Driver, Array.prototype.slice.call(arguments, 1))
+    }
+  })
+  return Driver
 }
 
 function wrapConnection (promiseMethod, Connection) {
@@ -425,8 +538,24 @@ function wrapPoolGetConnectionMethod (getConnection) {
 
 const name = 'mariadb'
 
-addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'], patchDefault: true }, wrapCommand)
-addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'], patchDefault: true }, wrapCommand)
+addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'], patchDefault: true }, Command => {
+  return wrapCommand(Command, false)
+})
+addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'], patchDefault: true }, Command => {
+  return wrapCommand(Command, true)
+})
+
+// Preparation must receive rewritten SQL before its cache lookup and before pipelined commands are created.
+addHook({ name, file: 'lib/connection.js', versions: ['>=3'], patchDefault: true }, Connection => {
+  shimmer.wrap(Connection.prototype, 'prepareExecute', wrapPreparedExecute)
+  return Connection
+})
+addHook({ name, file: 'lib/connection-promise.js', versions: ['>=3'], patchDefault: true }, Driver => {
+  return wrapLegacyExecute(Driver, false)
+})
+addHook({ name, file: 'lib/connection-callback.js', versions: ['>=3'], patchDefault: true }, Driver => {
+  return wrapLegacyExecute(Driver, true)
+})
 
 // mariadb 3.4.1 switched its internal getConnection from promises to callbacks. That exposes synchronous
 // recent-idle reuse without a clock read while still letting us time validation and queueing.
