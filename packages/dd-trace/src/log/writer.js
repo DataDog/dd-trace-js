@@ -17,7 +17,13 @@ let logger = defaultLogger
 let logChannel = new LogChannel()
 
 function withNoop (fn) {
-  legacyStorage.run({ noop: true }, fn)
+  legacyStorage.run({ noop: true }, () => {
+    // The diagnostics channel rethrows a subscriber error as an uncaught exception, so a
+    // throwing configured logger would otherwise terminate the application.
+    try {
+      fn()
+    } catch {}
+  })
 }
 
 function toggleSubscription (enable, level) {
