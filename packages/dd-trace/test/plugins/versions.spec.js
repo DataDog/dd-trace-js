@@ -328,6 +328,14 @@ describe('brokenVersionReason', () => {
   })
 
   for (const { name, brokenVersion, workingVersion, brokenNode, workingNode } of [
+    { name: 'hapi', brokenVersion: '17.0.0', workingVersion: '16.8.4', brokenNode: '15.0.0', workingNode: '14.21.3' },
+    {
+      name: '@hapi/hapi',
+      brokenVersion: '20.3.0',
+      workingVersion: '21.0.0',
+      brokenNode: '15.0.0',
+      workingNode: '14.21.3',
+    },
     { name: 'avsc', brokenVersion: '5.0.0', workingVersion: '5.0.1', brokenNode: '25.0.0', workingNode: '24.16.0' },
     {
       name: '@grpc/grpc-js',

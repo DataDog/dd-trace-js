@@ -2,8 +2,9 @@
 'use strict'
 
 const { execFileSync } = require('node:child_process')
-const { readFileSync, readdirSync, writeFileSync } = require('node:fs')
+const { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } = require('node:fs')
 const { builtinModules } = require('node:module')
+const { tmpdir } = require('node:os')
 const path = require('node:path')
 
 // eslint-disable-next-line n/no-restricted-require
@@ -16,10 +17,21 @@ const {
   resolvePluginVersions,
 } = require('../packages/dd-trace/test/plugins/versions')
 
+const { getLatestMochaSpecifier } = require('../integration-tests/mocha/versions')
+const { getLatestPlaywrightSpecifier } = require('../integration-tests/playwright/versions')
+
 const NODE_RANGE_FLAG = '--node-range'
 const FETCH_TIMEOUT_MS = 10_000
 const FETCH_CONCURRENCY = 10
 const TEST_COMMAND = /\bnpm run test:(?:plugins:ci|instrumentations(?::ci)?|integration:plugins(?::coverage)?)(?:\s|$)/
+
+const FRAMEWORK_COMMAND = /\bnpm run test:integration:(jest|mocha|playwright|cucumber):coverage(?:\s|$)/
+const FRAMEWORK_PACKAGES = {
+  jest: '@jest/core',
+  mocha: 'mocha',
+  playwright: '@playwright/test,playwright',
+  cucumber: '@cucumber/cucumber',
+}
 
 const ROOT = path.join(__dirname, '..')
 const PLUGINS_INDEX = path.join(ROOT, 'packages/dd-trace/src/plugins/index.js')
@@ -282,7 +294,7 @@ function simplifySupportedRange (supportedRange) {
  * @typedef {{ matrix: WorkflowValues, inputs: WorkflowValues }} WorkflowContext
  * @typedef {{ uses?: string, run?: string, if?: string, with?: WorkflowValues,
  *   env?: WorkflowValues }} WorkflowStep
- * @typedef {{ nodeRange: string, env: typeof process.env }} TestRun
+ * @typedef {{ nodeRange: string, env: typeof process.env, framework?: string }} TestRun
  */
 
 /**
@@ -352,6 +364,8 @@ function readTestRuns () {
   const nodeRanges = new Map()
   const setup = YAML.parse(readFileSync(path.join(ROOT, '.github/actions/node/setup/action.yml'), 'utf8'))
   const nodeVersionCommand = setup.runs.steps.find(step => step.id === 'node-version').run
+  const directory = mkdtempSync(path.join(tmpdir(), 'dd-supported-versions-'))
+  const output = path.join(directory, 'output')
 
   /**
    * @param {WorkflowStep[]} steps
@@ -363,18 +377,20 @@ function readTestRuns () {
     for (const step of steps) {
       const nodeAction = step.uses === './.github/actions/node'
       const localAction = /^\.\/\.github\/actions\/(?:node|plugins|instrumentations)\//.test(step.uses ?? '')
-      const test = TEST_COMMAND.test(step.run ?? '')
+      const framework = (step.run ?? '').match(FRAMEWORK_COMMAND)?.[1]
+      const test = framework || TEST_COMMAND.test(step.run ?? '')
       if ((!nodeAction && !localAction && !test) || !testStepEnabled(step.if, context)) continue
       const env = { ...inheritedEnv, ...step.env }
       if (nodeAction) {
         const version = expandTestValue(step.with?.version ?? 'latest', context)
         if (!nodeRanges.has(version)) {
-          const output = execFileSync('bash', ['-c', nodeVersionCommand], {
+          writeFileSync(output, '')
+          execFileSync('bash', ['-c', nodeVersionCommand], {
             cwd: ROOT,
-            env: { ...process.env, VERSION: version, LATEST_VERSION: '', GITHUB_OUTPUT: '/dev/stdout' },
+            env: { ...process.env, VERSION: version, LATEST_VERSION: '', GITHUB_OUTPUT: output },
             encoding: 'utf8',
           })
-          const range = output.trim().replace(/^version=/, '')
+          const range = readFileSync(output, 'utf8').trim().replace(/^version=/, '')
           if (!semver.validRange(range)) throw new Error(`Invalid test Node.js version: ${range}`)
           nodeRanges.set(version, range)
         }
@@ -396,22 +412,34 @@ function readTestRuns () {
         for (const name of ['PLUGINS', 'PACKAGE_NAMES', 'PACKAGE_VERSION_RANGE']) {
           if (env[name] !== undefined) testEnv[name] = expandTestValue(env[name], context)
         }
-        runs.push({ nodeRange: state.nodeRange, env: testEnv })
+        if (framework) {
+          testEnv.PLUGINS = framework
+          testEnv.PACKAGE_NAMES = FRAMEWORK_PACKAGES[framework]
+          const selector = `${framework.toUpperCase()}_VERSION`
+          testEnv[selector] = expandTestValue(env[selector] ?? 'latest', context)
+        }
+        runs.push({ nodeRange: state.nodeRange, env: testEnv, framework })
       }
     }
   }
 
-  for (const file of readdirSync(path.join(ROOT, '.github/workflows')).sort()) {
-    if (!file.endsWith('.yml')) continue
-    const workflow = YAML.parse(readFileSync(path.join(ROOT, '.github/workflows', file), 'utf8'))
-    for (const job of Object.values(workflow.jobs)) {
-      if (!job.env?.PLUGINS && !job.steps?.some(step => step.env?.PLUGINS)) continue
-      for (const matrix of expandTestMatrix(job.strategy?.matrix)) {
-        collect(job.steps, { matrix, inputs: {} }, { ...workflow.env, ...job.env }, {})
+  try {
+    for (const file of readdirSync(path.join(ROOT, '.github/workflows')).sort()) {
+      if (!file.endsWith('.yml')) continue
+      const workflow = YAML.parse(readFileSync(path.join(ROOT, '.github/workflows', file), 'utf8'))
+      for (const job of Object.values(workflow.jobs)) {
+        if (!job.env?.PLUGINS && !job.steps?.some(step =>
+          step.env?.PLUGINS || FRAMEWORK_COMMAND.test(step.run ?? '')
+        )) continue
+        for (const matrix of expandTestMatrix(job.strategy?.matrix)) {
+          collect(job.steps, { matrix, inputs: {} }, { ...workflow.env, ...job.env }, {})
+        }
       }
     }
+    return runs
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
   }
-  return runs
 }
 
 /**
@@ -422,12 +450,13 @@ function readTestRuns () {
  */
 function readTestEnvironments (dependency, integration, nodeVersion, runs) {
   const environments = []
-  for (const { nodeRange, env } of runs) {
+  for (const run of runs) {
+    const { nodeRange, env } = run
     if (!semver.satisfies(nodeVersion, nodeRange)) continue
     const plugins = env.PLUGINS?.split('|')
     if (!plugins?.includes(integration) && !plugins?.includes(dependency.replace(/^node:/, ''))) continue
     if (env.PACKAGE_NAMES && !env.PACKAGE_NAMES.split(',').includes(dependency)) continue
-    environments.push(env)
+    environments.push(run)
   }
   return environments
 }
@@ -462,7 +491,7 @@ function readTestDeclarations (dependency, integration, plugins) {
  * @param {string} nodeVersion
  * @param {string[]} packageVersions
  * @param {InstrumentationDeclaration[]} testDeclarations
- * @param {Array<typeof process.env>} testEnvironments
+ * @param {TestRun[]} testEnvironments
  * @returns {{ supportedRange: string|undefined, tested: string[] }}
  */
 function resolveDependencyVersions (
@@ -477,7 +506,25 @@ function resolveDependencyVersions (
   if (supportedRange === undefined) return { supportedRange, tested: [] }
   const testedVersions = new Set()
 
-  for (const env of testEnvironments) {
+  for (const { env, framework } of testEnvironments) {
+    if (framework) {
+      let range = env[`${framework.toUpperCase()}_VERSION`]
+      // These selectors have no shared resolver. Leave their versions unclaimed.
+      if (range === 'oldest' || (framework === 'cucumber' && range === 'latest')) continue
+      if (range === 'latest') {
+        if (framework === 'mocha') {
+          range = getLatestMochaSpecifier(nodeVersion)
+        } else if (framework === 'playwright') {
+          range = getLatestPlaywrightSpecifier(semver.major(nodeVersion))
+        }
+      }
+      const version = semver.maxSatisfying(packageVersions, range === 'latest' ? '*' : range)
+      if (!version) throw new Error(`Could not resolve '${dependency}@${range}' from npm metadata`)
+      if (semver.satisfies(version, supportedRange) && !brokenVersionReason(dependency, version, nodeVersion)) {
+        testedVersions.add(version)
+      }
+      continue
+    }
     const { versionList } = resolvePluginVersions({
       name: dependency,
       declarations: [...declarations, ...testDeclarations],

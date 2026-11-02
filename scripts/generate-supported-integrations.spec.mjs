@@ -412,11 +412,13 @@ describe('generate supported integrations', () => {
         assert.strictEqual(result.status, 0, String(result.stderr))
         assert.ok(readFileSync(output, 'utf8').endsWith(`version=${expected}\n`))
       }
+      rmSync(output)
       const sparse = spawnSync('bash', ['-c', command], {
-        cwd: directory, env: { ...process.env, VERSION: 'maintenance', GITHUB_OUTPUT: '/dev/stdout' }, encoding: 'utf8',
+        cwd: directory, env: { ...process.env, VERSION: 'maintenance', GITHUB_OUTPUT: output }, encoding: 'utf8',
       })
       assert.strictEqual(sparse.status, 0)
-      assert.strictEqual(sparse.stdout, 'version=20\n')
+      assert.strictEqual(readFileSync(output, 'utf8'), 'version=20\n')
+      rmSync(output)
       const custom = spawnSync('bash', ['-c', command], {
         cwd: repositoryDirectory,
         env: {
@@ -424,12 +426,12 @@ describe('generate supported integrations', () => {
           VERSION: 'latest',
           LATEST_VERSION: '27.0.0-nightly',
           GITHUB_ENV: envOutput,
-          GITHUB_OUTPUT: '/dev/stdout',
+          GITHUB_OUTPUT: output,
         },
         encoding: 'utf8',
       })
       assert.strictEqual(custom.status, 0)
-      assert.strictEqual(custom.stdout, 'version=27.0.0-nightly\n')
+      assert.strictEqual(readFileSync(output, 'utf8'), 'version=27.0.0-nightly\n')
       assert.strictEqual(readFileSync(envOutput, 'utf8'), 'DD_INJECT_FORCE=true\n')
     } finally {
       rmSync(directory, { recursive: true, force: true })

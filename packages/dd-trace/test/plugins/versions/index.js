@@ -14,8 +14,11 @@ const nonConsecutiveMajorPackages = new Map([
 ])
 
 /** @typedef {Record<string, Array<{ range: string, reason: string, node?: string }>>} BrokenVersions */
+const hapiBrokenVersions = [{ range: '>=17 <21', node: '>=15', reason: 'Hapi >=17 <21 is not tested on Node.js >=15' }]
 /** @type {BrokenVersions} */
 const brokenVersions = {
+  hapi: hapiBrokenVersions,
+  '@hapi/hapi': hapiBrokenVersions,
   avsc: [{ range: '5.0.0', node: '>=25', reason: 'avsc 5.0.0 is not tested on Node.js >=25' }],
   '@grpc/grpc-js': [{ range: '<1.3.0', node: '>=25', reason: 'grpc-js <1.3.0 is not tested on Node.js >=25' }],
   undici: [{ range: '>=7.11.0', node: '<20', reason: 'undici >=7.11.0 is not tested on Node.js <20' }],

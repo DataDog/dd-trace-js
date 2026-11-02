@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { generateSupportedIntegrations } = require('../../../scripts/generate-supported-integrations')
+const { DD_MAJOR } = require('../../../version')
 const latestVersions = require('./plugins/versions/package.json').dependencies
 
 describe('generate supported integrations', () => {
@@ -92,6 +93,60 @@ describe('generate supported integrations', () => {
     assert.deepStrictEqual(rows, [
       supportedIntegration('avsc', 'avsc', '>=5.0.0', ['5.7.9']),
       supportedIntegration('@grpc/grpc-js', 'grpc', '>=1.0.3', ['1.14.7']),
+    ])
+  })
+
+  it('excludes skipped Hapi majors without narrowing declared support', async () => {
+    const packageVersions = {
+      hapi: ['16.0.0', '16.8.4', '17.0.0', '18.1.0'],
+      '@hapi/hapi': ['17.9.0', '18.4.1', '19.2.0', '20.3.0', latestVersions['@hapi/hapi']],
+    }
+    const { rows } = await generateSupportedIntegrations({
+      nodeVersions: ['26.2.0'],
+      plugins: new Map([['hapi', 'hapi'], ['@hapi/hapi', 'hapi']]),
+      getPackageVersions: async dependency => packageVersions[dependency],
+    })
+
+    assert.deepStrictEqual(rows, [
+      supportedIntegration('@hapi/hapi', 'hapi', '>=17.9', [latestVersions['@hapi/hapi']]),
+      supportedIntegration('hapi', 'hapi', '>=16', ['16.0.0', '16.8.4']),
+    ])
+  })
+
+  it('includes framework integration jobs without inventing untested intermediate versions', async () => {
+    const packageVersions = {
+      '@jest/core': ['25.5.1', '28.0.0', '29.7.0', '30.2.0'],
+      mocha: ['8.0.0', '10.8.2', '11.7.5', '12.0.0'],
+      playwright: ['1.38.0', '1.61.0', '1.62.0'],
+      '@cucumber/cucumber': ['7.0.0', '8.0.0', '13.2.0'],
+    }
+    const { rows } = await generateSupportedIntegrations({
+      nodeVersions: ['18.20.8', '26.2.0'],
+      plugins: new Map([
+        ['@jest/core', 'jest'], ['mocha', 'mocha'],
+        ['playwright', 'playwright'], ['@cucumber/cucumber', 'cucumber'],
+      ]),
+      getPackageVersions: async dependency => packageVersions[dependency],
+    })
+
+    assert.deepStrictEqual(rows.map(row => [row.dependencyName, row.versions.map(version => ({
+      node: version.testedRuntimes.node, tested: version.tested,
+    }))]), [
+      ['@cucumber/cucumber', [{ node: ['26.2.0', '18.20.8'], tested: ['7.0.0'] }]],
+      ['@jest/core', DD_MAJOR >= 6
+        ? [{ node: ['26.2.0', '18.20.8'], tested: ['30.2.0'] }]
+        : [
+            { node: ['26.2.0'], tested: ['30.2.0'] },
+            { node: ['18.20.8'], tested: ['25.5.1', '30.2.0'] },
+          ]],
+      ['mocha', [
+        { node: ['26.2.0'], tested: ['12.0.0'] },
+        { node: ['18.20.8'], tested: ['11.7.5'] },
+      ]],
+      ['playwright', [
+        { node: ['26.2.0'], tested: ['1.62.0'] },
+        { node: ['18.20.8'], tested: ['1.61.0'] },
+      ]],
     ])
   })
 
