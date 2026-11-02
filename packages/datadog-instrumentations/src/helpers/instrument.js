@@ -91,12 +91,9 @@ exports.getHooks = function getHooks (names) {
     // for their own registration (the ai and
     // aws-durable-execution-sdk-js plugins set `hook.file = null`), which must
     // not leak into any other call.
-    const { name, versionRange, filePath } = module
-    const hook = filePath instanceof RegExp
-      ? { name, versions: [versionRange], filePattern: filePath }
-      : { name, versions: [versionRange], file: filePath }
+    const hook = { name: module.name, versions: [module.versionRange], file: module.filePath }
     sourceRewritePaths.set(hook, module.filePath)
-    hooks.set(`${name}|${versionRange}|${filePath}`, hook)
+    hooks.set(`${module.name}|${module.versionRange}|${module.filePath}`, hook)
   }
   return hooks
 }
@@ -106,7 +103,7 @@ exports.getHooks = function getHooks (names) {
  * @param {string} args.name module name
  * @param {string[]} [args.versions] array of semver range strings
  * @param {string} [args.file] path to file within package to instrument. Defaults to 'index.js'.
- * @param {string|RegExp} [args.filePattern] pattern to match files within package to instrument
+ * @param {string} [args.filePattern] pattern to match files within package to instrument
  * @param {boolean} [args.patchDefault] whether to patch the default export. Defaults to true.
  * @param {(moduleExports: unknown, version: string, isIitm?: boolean, hookMeta?: object) => unknown} [hook]
  * Patches module exports

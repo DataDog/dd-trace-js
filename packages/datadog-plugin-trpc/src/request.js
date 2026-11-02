@@ -35,9 +35,7 @@ class TrpcRequestPlugin extends Plugin {
 
     this.addBind('tracing:orchestrion:@trpc/server:request:start',
       /** @param {RequestContext} ctx */ ctx => {
-        const req = ctx.arguments[0]?.req
-        if (!req) return legacyStorage.getStore()
-
+        const { req } = ctx.arguments[0]
         const carrier = { req }
         this.#carriers.set(req, carrier)
         return { ...legacyStorage.getStore(), trpcCarrier: carrier }
