@@ -585,7 +585,7 @@ describe('OpenTelemetry Logs', () => {
               attributes: [
                 { key: 'service.name', value: { stringValue: 'test-service' } },
                 { key: 'service.version', value: { stringValue: 'testversion' } },
-                { key: 'deployment.environment', value: { stringValue: 'testenv' } },
+                { key: 'deployment.environment.name', value: { stringValue: 'testenv' } },
                 { key: 'testtag', value: { stringValue: 'testvalue' } },
                 { key: 'runtime-id', value: { stringValue: runtimeId } },
                 { key: '_dd.rc.client_id', value: { stringValue: clientId } },
@@ -780,7 +780,7 @@ describe('OpenTelemetry Logs', () => {
         assertObjectContains(resourceAttrs, {
           'service.name': 'my-service',
           'service.version': 'v1.2.3',
-          'deployment.environment': 'production',
+          'deployment.environment.name': 'production',
           'host.name': os.hostname(),
         })
         done()
@@ -788,7 +788,7 @@ describe('OpenTelemetry Logs', () => {
 
       process.env.DD_SERVICE = 'my-service'
       process.env.DD_VERSION = 'v1.2.3'
-      process.env.DD_ENV = 'production'
+      process.env.OTEL_RESOURCE_ATTRIBUTES = 'deployment.environment.name=production'
       process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
 
       const { logs } = setupLogs()

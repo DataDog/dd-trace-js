@@ -1,7 +1,25 @@
 'use strict'
 
 const log = require('../../log')
-const { ExternalExperiment } = require('./experiment')
+
+let ExternalExperiment
+let evaluatorTypes
+let remoteEvaluatorTypes
+
+function getExternalExperiment () {
+  ExternalExperiment ??= require('./experiment').ExternalExperiment
+  return ExternalExperiment
+}
+
+function getEvaluatorTypes () {
+  evaluatorTypes ??= require('./evaluator')
+  return evaluatorTypes
+}
+
+function getRemoteEvaluatorTypes () {
+  remoteEvaluatorTypes ??= require('./remote-evaluator')
+  return remoteEvaluatorTypes
+}
 
 const NOOP_EXPERIMENT_ID = '00000000-0000-0000-0000-000000000000'
 const NOOP_SPAN_ID = '0000000000000000'
@@ -238,12 +256,47 @@ class NoopExperiment {
 class NoopExperiments {
   #reason
 
-  constructor (reason) {
-    this.#reason = reason || 'LLMObs experiments are not available'
+  /**
+   * @param {string} [reason]
+   */
+  constructor (reason = 'LLMObs experiments are not available') {
+    this.#reason = reason
   }
 
   #warn () {
     log.warn('LLMObs experiments unavailable: %s', this.#reason)
+  }
+
+  get BaseEvaluator () {
+    return getEvaluatorTypes().BaseEvaluator
+  }
+
+  get BaseSummaryEvaluator () {
+    return getEvaluatorTypes().BaseSummaryEvaluator
+  }
+
+  get EvaluatorContext () {
+    return getEvaluatorTypes().EvaluatorContext
+  }
+
+  get SummaryEvaluatorContext () {
+    return getEvaluatorTypes().SummaryEvaluatorContext
+  }
+
+  get EvaluatorResult () {
+    return getEvaluatorTypes().EvaluatorResult
+  }
+
+  get MultiEvaluatorResult () {
+    return getEvaluatorTypes().MultiEvaluatorResult
+  }
+
+  get RemoteEvaluator () {
+    return getRemoteEvaluatorTypes().RemoteEvaluator
+  }
+
+  get RemoteEvaluatorError () {
+    return getRemoteEvaluatorTypes().RemoteEvaluatorError
   }
 
   createDataset (name, options = {}) {
@@ -267,7 +320,8 @@ class NoopExperiments {
    */
   startExperiment (options = {}) {
     this.#warn()
-    return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name, true)))
+    const NoopExternalExperiment = getExternalExperiment()
+    return Promise.resolve(new NoopExternalExperiment(new NoopExperiment(options.name, true)))
   }
 }
 

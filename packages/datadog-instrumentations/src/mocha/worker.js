@@ -416,7 +416,7 @@ function wrapMochaRun (Mocha, frameworkVersion) {
         })
       }
       filterSkippedFiles(runner, skippedFiles)
-      if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled) {
+      if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled || config.isTestFailureVideosEnabled) {
         patchFailedTestReplayHookUp(runner.constructor)
       }
       configurationReady = true
@@ -443,8 +443,7 @@ addHook({
   filePattern: String.raw`lib/runner\.(?:c?js)$`,
 }, function (runnerPackage) {
   const Runner = runnerPackage.Runner ?? runnerPackage.default ?? runnerPackage
-  if (typeof Runner !== 'function') return
-  if (patchedRunners.has(Runner)) return
+  if (typeof Runner !== 'function' || patchedRunners.has(Runner)) return
 
   patchedRunners.add(Runner)
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
@@ -453,7 +452,7 @@ addHook({
     if (!workerFinishCh.hasSubscribers) {
       return run.apply(this, args)
     }
-    if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled) {
+    if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled || config.isTestFailureVideosEnabled) {
       patchFailedTestReplayHookUp(Runner)
     }
     if (isWebdriverioWorker) {
@@ -469,7 +468,10 @@ addHook({
     const onRunDone = args[0]
     if (isWebdriverioWorker && typeof onRunDone === 'function') {
       args[0] = (...onRunDoneArgs) => {
-        finishWebdriverioWorker(this, () => onRunDone(...onRunDoneArgs))
+        const adjustedFailures = Number.isFinite(this.failures)
+          ? Math.max(0, this.failures)
+          : onRunDoneArgs[0]
+        finishWebdriverioWorker(this, () => onRunDone(adjustedFailures, ...onRunDoneArgs.slice(1)))
       }
     } else {
       // Flush after the worker finishes its Mocha run, including grouped spec files.

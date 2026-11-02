@@ -23,7 +23,10 @@ function create (config, applyConfiguration) {
     DD_FEATURE_FLAGS_ENABLED: enabled,
   } = config.featureFlags
 
-  if (!enabled || source !== 'agentless') {
+  if (!enabled) return
+
+  if (source !== 'agentless') {
+    log.debug('Feature Flags: configuration source is %s, not agentless; skipping agentless setup', source)
     return
   }
 
@@ -35,11 +38,14 @@ function create (config, applyConfiguration) {
     }
 
     const AgentlessConfigurationSource = require('./agentless_configuration_source')
+    const resolvedEndpoint = endpoint(config, baseUrl)
+    log.debug('Feature Flags: starting agentless configuration source at %s', redactedUrl(resolvedEndpoint))
     return new AgentlessConfigurationSource({
-      endpoint: endpoint(config, baseUrl),
+      endpoint: resolvedEndpoint,
       pollIntervalMs: Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS) * 1000,
       requestTimeoutMs: requestTimeoutSeconds * 1000,
       apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
+      env: config.env,
     }, applyConfiguration)
   } catch (error) {
     log.error('Unable to configure Feature Flagging configuration source', error)
@@ -83,6 +89,15 @@ function endpoint (config, configuredBaseUrl) {
   }
 
   return url
+}
+
+/**
+ * Drops everything but the origin; a custom base URL may embed a signed token in its path.
+ *
+ * @param {URL} url
+ */
+function redactedUrl (url) {
+  return `${url.protocol}//${url.host}`
 }
 
 module.exports = {

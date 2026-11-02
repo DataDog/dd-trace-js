@@ -3,7 +3,7 @@ import { afterEach, beforeAll, beforeEach, inject } from 'vitest'
 // Instrumentation-less setup for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
 // It applies Test Optimization execution changes without initializing dd-trace and also supports Browser Mode.
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
-const SERIALIZED_CONTEXT_PREFIX = '\u0000dd-vitest-context:'
+const SERIALIZED_CONTEXT_PREFIX = '\0dd-vitest-context:'
 const providedContext = getProvidedContext()
 const isNoWorkerInitActive = providedContext.isActive ?? getIsNoWorkerInitActive()
 const attemptToFixTests = providedContext.attemptToFixTests || {}
@@ -114,14 +114,12 @@ if (isNoWorkerInitActive) {
     onTestFinished(() => {
       recordTestAttemptTiming(task, attemptIndex, attemptStart)
       recordRetryErrorCount(task)
-      if (
-        (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt || isQuarantinedTest) &&
-        attemptIndex === getFinalAttemptIndex(task)
-      ) {
+      if (isEarlyFlakeDetectionTestAttempt || isQuarantinedTest ||
+        (isAttemptToFixTest && attemptIndex === getFinalAttemptIndex(task))) {
         if (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt) {
-          recordTestOptimizationStatus(task, attemptIndex, true)
+          recordTestOptimizationStatus(task, attemptIndex, attemptIndex === getFinalAttemptIndex(task))
         }
-        switchQuarantinedFinalFailure(task, attemptIndex)
+        switchQuarantinedFinalFailure(task)
       }
       finishRumCorrelation(task, attemptIndex)
     })
@@ -134,7 +132,7 @@ if (isNoWorkerInitActive) {
       recordTestOptimizationStatus(task, attemptIndex)
     }
     if (!restoredEarlyFlakeDetectionResult) {
-      switchQuarantinedFinalFailure(task, attemptIndex)
+      switchQuarantinedFinalFailure(task)
     }
   })
 }
@@ -222,9 +220,8 @@ function getNextAttemptIndex (task) {
  */
 function prepareRumCorrelation (task, attemptIndex) {
   // A per-origin cookie cannot identify overlapping attempts without racing.
-  if (!isRumCorrelationEnabled || isConcurrentTask(task)) return
-
   if (
+    !isRumCorrelationEnabled || isConcurrentTask(task) ||
     typeof window === 'undefined' ||
     typeof document === 'undefined' ||
     typeof rumTestExecutionIdCookieName !== 'string'
@@ -291,8 +288,7 @@ function getRum () {
  * @param {object|undefined} rum
  */
 function getIsRumActive (rum) {
-  if (!rum) return false
-  if (typeof rum.getInternalContext !== 'function') return false
+  if (!rum || typeof rum.getInternalContext !== 'function') return false
 
   try {
     return !!rum.getInternalContext()
@@ -433,7 +429,10 @@ function recordEarlyFlakeDetectionStatus (task, attemptIndex, onlyIfNewErrors) {
     return
   }
 
-  if (!earlyFlakeDetectionRetriesByTask.has(task)) {
+  // onTestFinished runs before aroundEach fixture teardown. Select the budget
+  // when the next attempt records the completed attempt instead.
+  const isCompletedAttempt = attemptIndex < task.meta.__ddTestOptCurrentAttemptIndex
+  if (isCompletedAttempt && !earlyFlakeDetectionRetriesByTask.has(task)) {
     const retryCount = getEarlyFlakeDetectionRetryCount(task)
     earlyFlakeDetectionRetriesByTask.set(task, retryCount)
     task.repeats = retryCount
@@ -452,9 +451,15 @@ function recordEarlyFlakeDetectionStatus (task, attemptIndex, onlyIfNewErrors) {
   )
   task.meta.__ddTestOptEfdErrorCounts[attemptIndex] = task.result?.errors?.length || 0
 
-  if (attemptIndex === getEarlyFlakeDetectionRetryCountForTask(task) &&
+  // Vitest 5.0.3 retains failures across repeats. Defer EFD's overall failure until
+  // the last attempt, while keeping each attempt's actual outcome in the metadata.
+  if (attemptIndex < getEarlyFlakeDetectionRetryCountForTask(task) ||
     task.meta.__ddTestOptEfdStatuses.includes('pass')) {
     task.result.state = 'pass'
+  } else if (isCompletedAttempt) {
+    // A zero retry budget cancels repeats after we suppressed the initial failure.
+    task.result.state = 'fail'
+    markQuarantinedFailure(task)
   }
 }
 
@@ -525,7 +530,7 @@ function wrapRetryCondition (task) {
         shouldRetry = condition(error)
       }
 
-      if (!shouldRetry && (task.result?.repeatCount || 0) >= (task.repeats || 0)) {
+      if (!shouldRetry) {
         const attemptIndex = task.meta.__ddTestOptCurrentAttemptIndex
         recordTestOptimizationStatus(task, attemptIndex)
         markQuarantinedFailure(task)
@@ -579,7 +584,7 @@ function getFinalAttemptIndex (task) {
   return attemptIndex + retriesRemaining + (repeatsRemaining * (retryLimit + 1))
 }
 
-function switchQuarantinedFinalFailure (task, attemptIndex) {
+function switchQuarantinedFinalFailure (task) {
   const testSuite = getTestSuite(task)
   const testName = getTestName(task)
   if (
@@ -590,7 +595,10 @@ function switchQuarantinedFinalFailure (task, attemptIndex) {
     return
   }
 
-  if (attemptIndex < getFinalAttemptIndex(task)) {
+  // Finish the retries in this repetition before suppressing its failure. A later
+  // repetition cannot undo a failure that Vitest has already aggregated.
+  const retryAttemptIndex = retryAttemptIndexByTask.get(task)?.index || 0
+  if (retryAttemptIndex < getRetryLimit(task)) {
     return
   }
 
@@ -760,8 +768,13 @@ function getEarlyFlakeDetectionSuiteCandidate (suite) {
 
     const testSuite = getTestSuite(task)
     const testName = getTestName(task)
-    if (attemptToFixTests[testSuite]?.[testName] || disabledTests[testSuite]?.[testName]) continue
-    if (!isEarlyFlakeDetectionTest(testSuite, testName)) continue
+    if (
+      attemptToFixTests[testSuite]?.[testName] ||
+      disabledTests[testSuite]?.[testName] ||
+      !isEarlyFlakeDetectionTest(testSuite, testName)
+    ) {
+      continue
+    }
 
     candidate ||= {
       hasNewTest: false,

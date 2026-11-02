@@ -262,6 +262,28 @@ describe('module', () => {
       )
     })
 
+    it('does not propagate partial LLMObs attribution when the tracestate budget is exceeded', () => {
+      const sessionId = 's'.repeat(200)
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'upstream-app', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+      store.span = {
+        context () {
+          return { toSpanId () { return 'parent-id' } }
+        },
+      }
+      LLMObsTagger.tagMap.set(store.span, { [SESSION_ID]: sessionId })
+
+      const config = getConfigFresh()
+      config.tracePropagationStyle.inject = ['datadog', 'tracecontext']
+      const carrier = {}
+      inject(carrier, undefined, config)
+
+      assert.doesNotMatch(carrier.tracestate ?? '', /(?:^|,)dd=/)
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        `_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=upstream-app,_dd.p.llmobs_sid=${sessionId}`
+      )
+    })
+
     it('converts the local LLMObs trace id to decimal for propagation', () => {
       llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
       store.span = {
@@ -612,6 +634,36 @@ describe('module', () => {
         })
 
         it('configures the agent-proxy writers', () => {
+          llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test' } })
+
+          sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
+          sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
+        })
+      })
+
+      describe('when the agent lists full proxy paths (Lambda extension)', () => {
+        beforeEach(() => {
+          fetchAgentInfoStub.callsFake((url, cb) => {
+            cb(null, { endpoints: ['/v0.4/traces', '/evp_proxy/v2/api/v2/llmobs'] })
+          })
+        })
+
+        it('configures the agent-proxy writers', () => {
+          llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test' } })
+
+          sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
+          sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
+        })
+      })
+
+      describe('when the agent lists non-string endpoints', () => {
+        beforeEach(() => {
+          fetchAgentInfoStub.callsFake((url, cb) => {
+            cb(null, { endpoints: [null, 42, '/evp_proxy/v2/api/v2/llmobs'] })
+          })
+        })
+
+        it('skips them and configures the agent-proxy writers', () => {
           llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test' } })
 
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)

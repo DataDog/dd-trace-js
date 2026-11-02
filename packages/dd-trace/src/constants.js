@@ -22,6 +22,8 @@ module.exports = {
   SPAN_SAMPLING_RULE_RATE: '_dd.span_sampling.rule_rate',
   SPAN_SAMPLING_MAX_PER_SECOND: '_dd.span_sampling.max_per_second',
   SVC_SRC_KEY: '_dd.svc_src',
+  SDK_OTLP_EXPORT_KEY: '_dd.sdk.otlp_export',
+  SDK_SEMANTICS_KEY: 'datadog.sdk.semantics',
   DATADOG_LAMBDA_EXTENSION_PATH: '/opt/extensions/datadog-agent',
   DATADOG_MINI_AGENT_PATH: '/tmp/datadog/mini_agent_ready',
   DECISION_MAKER_KEY: '_dd.p.dm',

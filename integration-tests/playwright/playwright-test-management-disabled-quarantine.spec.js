@@ -220,7 +220,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
         await runDisableTest(receiver, true, { FULLY_PARALLEL: true, PLAYWRIGHT_WORKERS: '3' })
       })
 
-      it('does not classify a shard with only disabled tests as empty', async (receiver, run) => {
+      it('reports a shard with only disabled tests as all skipped', async (receiver, run) => {
         receiver.setTestManagementTests(ALL_DISABLED_MANAGEMENT_TESTS)
         receiver.setSettings({ test_management: { enabled: true } })
 
@@ -250,9 +250,9 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
             for (const eventType of ['test_session_end', 'test_module_end']) {
               const event = events.find(({ type }) => type === eventType)
               assert.ok(event, `expected ${eventType}`)
-              assert.strictEqual(event.content.meta[TEST_STATUS], 'pass')
-              assert.strictEqual(event.content.meta[TEST_SKIP_REASON], undefined)
-              assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+              assert.strictEqual(event.content.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(event.content.meta[TEST_SKIP_REASON], 'All tests were skipped')
+              assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], 'all_tests_skipped')
             }
           }
         )

@@ -675,6 +675,28 @@ describe('OpenFeature Exposures Writer', () => {
     })
   })
 
+  it('does not invalidate a replacement route when an old request fails', () => {
+    request.resetBehavior()
+    const onUnavailable = sinon.spy()
+    writer.setEnabled(true, { url: config.url, basePath: '/old', onUnavailable })
+    writer.append(exposureEvent)
+    writer.flush()
+    sinon.assert.calledOnce(request)
+    assert.strictEqual(request.firstCall.args[1].path, '/old/api/v2/exposures')
+
+    writer.setEnabled(true, { url: config.url, basePath: '/new', onUnavailable })
+    const error = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+    request.firstCall.args[2](error)
+    sinon.assert.notCalled(onUnavailable)
+
+    writer.append(exposureEvent)
+    writer.flush()
+    sinon.assert.calledTwice(request)
+    assert.strictEqual(request.secondCall.args[1].path, '/new/api/v2/exposures')
+    request.secondCall.args[2](error)
+    sinon.assert.calledOnce(onUnavailable)
+  })
+
   describe('periodic flushing', () => {
     beforeEach(() => {
       writer.setEnabled(true)

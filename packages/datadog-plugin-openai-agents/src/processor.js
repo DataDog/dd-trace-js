@@ -64,8 +64,7 @@ class DDOpenAIAgentsProcessor {
 
   onSpanStart (oaiSpan) {
     const integration = this._getIntegration()
-    if (!integration?.enabled) return RESOLVED
-    if (!oaiSpan?.spanData) return RESOLVED // guard NoopSpan
+    if (!integration?.enabled || !oaiSpan?.spanData) return RESOLVED // guard NoopSpan
     const type = oaiSpan.spanData.type
     const kind = SPAN_KIND_BY_TYPE[type]
     try {
@@ -84,8 +83,7 @@ class DDOpenAIAgentsProcessor {
 
   onSpanEnd (oaiSpan) {
     const integration = this._getIntegration()
-    if (!integration?.enabled) return RESOLVED
-    if (!oaiSpan?.spanData) return RESOLVED
+    if (!integration?.enabled || !oaiSpan?.spanData) return RESOLVED
     const type = oaiSpan.spanData.type
     const kind = SPAN_KIND_BY_TYPE[type]
     try {

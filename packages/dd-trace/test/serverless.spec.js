@@ -15,6 +15,7 @@ require('./setup/core')
 
 const {
   enableGCPPubSubPushSubscription,
+  getIsAzureContainerApp,
 } = require('../src/serverless')
 const { registerVercelTelemetryRetention } = require('../src/serverless/vercel')
 const { flushServerlessTelemetry } = require('../src/flush')
@@ -149,6 +150,72 @@ describe('enableGCPPubSubPushSubscription', () => {
     process.env.K_SERVICE = 'svc'
     process.env.DD_TRACE_GCP_PUBSUB_PUSH_ENABLED = 'false'
     assert.strictEqual(enableGCPPubSubPushSubscription(), false)
+  })
+})
+
+describe('getIsAzureContainerApp', () => {
+  const originalContainerAppName = process.env.CONTAINER_APP_NAME
+
+  afterEach(() => {
+    if (originalContainerAppName === undefined) delete process.env.CONTAINER_APP_NAME
+    else process.env.CONTAINER_APP_NAME = originalContainerAppName
+  })
+
+  it('is false when CONTAINER_APP_NAME is not set', () => {
+    delete process.env.CONTAINER_APP_NAME
+    assert.strictEqual(getIsAzureContainerApp(), false)
+  })
+
+  it('is true when CONTAINER_APP_NAME is set', () => {
+    process.env.CONTAINER_APP_NAME = 'my-container-app'
+    assert.strictEqual(getIsAzureContainerApp(), true)
+  })
+
+  // Detection is presence-based (mirrors the agent's os.LookupEnv check), so an
+  // empty-but-present value still counts as running in a Container App.
+  it('is true when CONTAINER_APP_NAME is present but empty', () => {
+    process.env.CONTAINER_APP_NAME = ''
+    assert.strictEqual(getIsAzureContainerApp(), true)
+  })
+})
+
+describe('IS_STANDARD_AWS_LAMBDA', () => {
+  const originalInitType = process.env.AWS_LAMBDA_INITIALIZATION_TYPE
+  const originalMicroVm = process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+
+  beforeEach(() => {
+    delete process.env.AWS_LAMBDA_INITIALIZATION_TYPE
+    delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+  })
+
+  afterEach(() => {
+    if (originalInitType === undefined) delete process.env.AWS_LAMBDA_INITIALIZATION_TYPE
+    else process.env.AWS_LAMBDA_INITIALIZATION_TYPE = originalInitType
+    if (originalMicroVm === undefined) delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    else process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = originalMicroVm
+  })
+
+  for (const [initType, expected] of [
+    ['on-demand', true],
+    ['provisioned-concurrency', true],
+    ['snap-start', true],
+    ['native-http', false],
+    ['lambda-managed-instances', false],
+  ]) {
+    it(`is ${expected} for ${initType}`, () => {
+      process.env.AWS_LAMBDA_INITIALIZATION_TYPE = initType
+      assert.strictEqual(getServerlessFresh().IS_STANDARD_AWS_LAMBDA, expected)
+    })
+  }
+
+  it('is false outside Lambda', () => {
+    assert.strictEqual(getServerlessFresh().IS_STANDARD_AWS_LAMBDA, false)
+  })
+
+  it('is false in a MicroVM', () => {
+    process.env.AWS_LAMBDA_INITIALIZATION_TYPE = 'on-demand'
+    process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123456789012:function:test'
+    assert.strictEqual(getServerlessFresh().IS_STANDARD_AWS_LAMBDA, false)
   })
 })
 

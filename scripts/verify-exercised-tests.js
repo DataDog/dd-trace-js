@@ -26,6 +26,7 @@ const COVERAGE_ACTIONS = new Set([
 ])
 const COVERAGE_COLLECTORS = new Set([
   'integration-tests/coverage/run-suite.js',
+  'integration-tests/vitest/run-with-coverage.js',
   'scripts/c8-ci.js',
 ])
 
@@ -182,9 +183,8 @@ function expandEnvInString (s, env) {
  */
 function formatEnvValue (name, value) {
   const val = typeof value === 'string' && value.length ? value : ''
-  if (!val) return '*'
   // GitHub Actions expressions are not resolvable here; treat them as unknown.
-  if (val.includes('${{')) return '*'
+  if (!val || val.includes('${{')) return '*'
 
   if (name === 'PLUGINS') {
     const items = val.split(/[,\s|]+/g).map(x => x.trim()).filter(Boolean)
@@ -201,8 +201,7 @@ function formatEnvValue (name, value) {
  */
 function unwrapLiteralEnvValue (maybe) {
   const s = String(maybe ?? '').trim()
-  if (!s) return null
-  if (s.includes('${{')) return null
+  if (!s || s.includes('${{')) return null
   return stripOuterQuotes(s)
 }
 
@@ -521,8 +520,7 @@ const localActionFileCache = new Map()
  * @returns {string|null}
  */
 function resolveLocalActionFile (repoRoot, uses) {
-  if (typeof uses !== 'string') return null
-  if (!uses.startsWith('./')) return null
+  if (typeof uses !== 'string' || !uses.startsWith('./')) return null
 
   const cached = localActionFileCache.get(uses)
   if (cached !== undefined) return cached
@@ -986,9 +984,13 @@ function isCategoryCoveredByOtherScript (scriptPrefixes, category) {
   if (Array.isArray(extra)) keys.push(...extra)
 
   for (const key of keys) {
-    if (scriptPrefixes.has(`test:${key}`)) return true
-    if (scriptPrefixes.has(`test:trace:${key}`)) return true
-    if (scriptPrefixes.has(`test:integration:${key}`)) return true
+    if (
+      scriptPrefixes.has(`test:${key}`) ||
+      scriptPrefixes.has(`test:trace:${key}`) ||
+      scriptPrefixes.has(`test:integration:${key}`)
+    ) {
+      return true
+    }
   }
 
   return false
@@ -1191,11 +1193,16 @@ function main (repoRootArg) {
 
   // All test:integration* scripts should be referenced by CI (except test:integration:plugins).
   for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
-    if (!name.startsWith('test:integration')) continue
     // Skip test:integration:plugins (and its coverage sibling) - it's a convenience script for
     // running only plugin integration tests locally, but in CI these are already covered by
     // test:plugins:ci (which runs all plugin tests including integration tests).
-    if (name === 'test:integration:plugins' || name === 'test:integration:plugins:coverage') continue
+    if (
+      !name.startsWith('test:integration') ||
+      name === 'test:integration:plugins' ||
+      name === 'test:integration:plugins:coverage'
+    ) {
+      continue
+    }
     if (!isInvokedOrCoverageSibling(name)) {
       pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
     }

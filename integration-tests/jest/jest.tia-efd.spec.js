@@ -445,8 +445,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.ok(testSessionEvent, testOutput)
           const testSession = testSessionEvent.content
           assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
-          assert.strictEqual(testSession.meta[TEST_SKIP_REASON], 'No tests were found')
-          assert.strictEqual(testSession.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+          assert.strictEqual(testSession.meta[TEST_SKIP_REASON], 'All tests were skipped')
+          assert.strictEqual(testSession.meta[TEST_SESSION_EMPTY_REASON], 'all_tests_skipped')
         })
       childProcess = exec(
         runTestsCommand,
@@ -1126,6 +1126,39 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         eventsPromise,
         once(childProcess, 'exit'),
       ])
+      assert.strictEqual(exitCode, 0)
+    })
+
+    it('resolves helper mocks relative to their module while preserving native retry ownership', async () => {
+      receiver.setSettings({
+        itr_enabled: true, code_coverage: true, tests_skipping: false, flaky_test_retries_enabled: true,
+      })
+      const coveragePromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov').then(request => {
+        const files = request.payload.flatMap(coverage => coverage.content.coverages)
+          .flatMap(coverage => coverage.files).map(file => file.filename)
+        assert.ok(files.includes('ci-visibility/jest-relative-mock/helpers/dependency.js'), files.join(', '))
+        assert.ok(!files.includes('ci-visibility/jest-relative-mock/dependency.js'), files.join(', '))
+      })
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          ENABLE_CODE_COVERAGE: '1',
+          SHOULD_CHECK_RESULTS: '1',
+          TESTS_TO_RUN: 'jest-relative-mock/relative-mock-test.js',
+        },
+      })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]).sort(), ['fail', 'fail', 'pass'])
+          const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retries.length, 2)
+          assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext))
+        })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), coveragePromise, eventsPromise])
       assert.strictEqual(exitCode, 0)
     })
 
@@ -4551,6 +4584,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const tests = payloads.flatMap(({ payload }) => payload.events)
               .filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, Math.min(nativeRetries, 2) + 1)
+            const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, Math.min(nativeRetries, 2))
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
             const last = tests.at(-1)
             assert.strictEqual(last.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
             assert.strictEqual(last.meta[TEST_FINAL_STATUS], 'fail')

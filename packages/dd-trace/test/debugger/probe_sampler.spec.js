@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { beforeEach, describe, it } = require('mocha')
 require('../setup/mocha')
 
+const { storage } = require('../../../datadog-core')
 const { MAX_MESSAGE_LENGTH } = require('../../src/debugger/constants')
 const {
   CONDITION_ERROR_FLAG,
@@ -25,6 +26,7 @@ const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('../../src/debugger/devtoo
 
 const ddTraceSymbol = Symbol.for('dd-trace')
 const samplerSymbol = Symbol.for('dd-trace.debugger.probeSampler')
+const legacyStorage = storage('legacy')
 
 /**
  * @typedef {object} RuntimeSampler
@@ -32,8 +34,15 @@ const samplerSymbol = Symbol.for('dd-trace.debugger.probeSampler')
  * @property {Function} shouldEvaluateCondition
  * @property {Function} conditionError
  * @property {Function} takeConditionError
+ * @property {Function} conditionEvaluated
+ * @property {Function} evaluationTimedOut
  * @property {Function} remove
  */
+
+const EVALUATION_TIMEOUT_MS = 10
+const samplerConfig = {
+  dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: EVALUATION_TIMEOUT_MS },
+}
 
 /** @type {GuardrailMetrics} */
 let guardrailMetrics
@@ -59,7 +68,7 @@ describe('probe sampler', function () {
 
   describe('shared buffer', function () {
     it('should create a shared buffer with the expected layout', function () {
-      const buffer = installProbeSampler(guardrailMetrics)
+      const buffer = installProbeSampler(guardrailMetrics, samplerConfig)
       const sampledProbeIndexes = new Int32Array(buffer)
 
       assert(buffer instanceof SharedArrayBuffer)
@@ -67,7 +76,7 @@ describe('probe sampler', function () {
     })
 
     it('should initialize the shared buffer', function () {
-      const installedBuffer = installProbeSampler(guardrailMetrics)
+      const installedBuffer = installProbeSampler(guardrailMetrics, samplerConfig)
       const installedSampledProbeIndexes = new Int32Array(installedBuffer)
 
       assert.strictEqual(Atomics.load(installedSampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 0)
@@ -110,14 +119,12 @@ describe('probe sampler', function () {
     const $dd_sampler = globalThis[Symbol.for("dd-trace")]?.[Symbol.for("dd-trace.debugger.probeSampler")]
     if ($dd_sampler === undefined) return false
     let $dd_sampled = false
-    if ($dd_sampler.shouldEvaluateCondition("probe-1")) {
+    if ($dd_sampler.shouldEvaluateCondition("probe-1", true)) {
       try {
-        if (((foo) === (42)) === true) {
-          $dd_sampled = $dd_sampler.makeSampleDecision(0, "probe-1", 200000n, true) || $dd_sampled
-        }
+        $dd_sampled = $dd_sampler.conditionEvaluated(0, "probe-1", ((foo) === (42)) === true,
+          200000n, true) || $dd_sampled
       } catch ($dd_error) {
-        $dd_sampled = $dd_sampler.conditionError(0, "probe-1", $dd_error) ||
-          $dd_sampled
+        $dd_sampled = $dd_sampler.conditionError(0, "probe-1", $dd_error) || $dd_sampled
       }
     }
     return $dd_sampled
@@ -154,6 +161,88 @@ describe('probe sampler', function () {
 
       now += CONDITION_ERROR_THROTTLE_NS
       assert.strictEqual(evaluate(), true, 'should evaluate the condition again once the throttle window has passed')
+    })
+
+    it('should pause for a condition that exceeds the evaluation time budget and skip it afterwards', function () {
+      installSampler()
+      const sampler = getSampler()
+      const probes = [{ id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 0n, condition: 'slow()' }]
+      const breakpointCondition = compileBreakpointCondition(probes)
+      const evaluate = (elapsedNs) => {
+        // eslint-disable-next-line no-new-func
+        return new Function('slow', `return ${breakpointCondition}`)(() => {
+          now += elapsedNs
+          return true
+        })
+      }
+
+      assert.strictEqual(evaluate(BigInt(EVALUATION_TIMEOUT_MS) * 1_000_000n), true, 'should sample within budget')
+      assert.strictEqual(sampler.takeConditionError('probe-1'), undefined)
+
+      assert.strictEqual(evaluate(BigInt(EVALUATION_TIMEOUT_MS) * 1_000_000n + 1n), true, 'should pause for the error')
+      assert.strictEqual(
+        sampler.takeConditionError('probe-1'),
+        'Condition evaluation exceeded its time budget of 10ms (took 10.0ms)'
+      )
+      assert.strictEqual(evaluate(0n), false, 'should skip the condition while throttled')
+      assert.deepStrictEqual(drainGuardrailMetrics(), [
+        ['events.skipped', ['event_type:log', 'reason:evaluationTimeout'], 1],
+      ])
+    })
+
+    it('should report a condition that exceeds the evaluation time budget before throwing as a timeout', function () {
+      installSampler()
+      const sampler = getSampler()
+      const probes = [{ id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 0n, condition: 'slow().bar' }]
+      const breakpointCondition = compileBreakpointCondition(probes)
+      const evaluate = (elapsedNs) => {
+        // eslint-disable-next-line no-new-func
+        return new Function('slow', `return ${breakpointCondition}`)(() => {
+          now += elapsedNs
+        })
+      }
+
+      assert.strictEqual(evaluate(BigInt(EVALUATION_TIMEOUT_MS) * 1_000_000n), true, 'should pause for the error')
+      assert.strictEqual(
+        sampler.takeConditionError('probe-1'),
+        "TypeError: Cannot read properties of undefined (reading 'bar')"
+      )
+      assert.strictEqual(evaluate(0n), false, 'should skip the condition while throttled')
+      assert.deepStrictEqual(drainGuardrailMetrics(), [], 'should not count skips caused by a condition error')
+
+      now += CONDITION_ERROR_THROTTLE_NS
+      assert.strictEqual(evaluate(BigInt(EVALUATION_TIMEOUT_MS) * 1_000_000n + 1n), true, 'should pause for the error')
+      assert.strictEqual(
+        sampler.takeConditionError('probe-1'),
+        'Condition evaluation exceeded its time budget of 10ms (took 10.0ms)'
+      )
+      assert.strictEqual(evaluate(0n), false, 'should skip the condition while throttled')
+      assert.deepStrictEqual(drainGuardrailMetrics(), [
+        ['events.skipped', ['event_type:log', 'reason:evaluationTimeout'], 1],
+      ])
+    })
+
+    it('should time the conditions of probes at the same location separately', function () {
+      const sampledProbeIndexes = installSampler()
+      const sampler = getSampler()
+      const probes = [
+        { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 0n, condition: 'slow()' },
+        { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 0n, condition: 'slow()' },
+      ]
+      const breakpointCondition = compileBreakpointCondition(probes)
+
+      // Each condition takes the whole budget, so the second one only stays within it if timed on its own
+      // eslint-disable-next-line no-new-func
+      assert.strictEqual(new Function('slow', `return ${breakpointCondition}`)(() => {
+        now += BigInt(EVALUATION_TIMEOUT_MS) * 1_000_000n
+        return true
+      }), true)
+
+      assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 2)
+      assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START), 0)
+      assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START + 1), 1)
+      assert.strictEqual(sampler.takeConditionError('probe-1'), undefined)
+      assert.strictEqual(sampler.takeConditionError('probe-2'), undefined)
     })
   })
 
@@ -296,7 +385,310 @@ describe('probe sampler', function () {
       assert.deepStrictEqual(drainGuardrailMetrics(), [])
     })
 
+    describe('coordinated sampling', function () {
+      const oneSecondNs = 1_000_000_000n
+
+      it('should let the first snapshot-producing probe hit in a trace sample all probes in the trace', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+        // Probe 2 just emitted, so it would be rate limited on its own
+        assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), true)
+
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), true)
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), true)
+        })
+
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 3)
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START + 1), 1)
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START + 2), 2)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [])
+      })
+
+      it('should drop the probes of the whole trace if the first probe hit in it is rate limited', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+        assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), true)
+
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), false)
+          // Probe 2 has never emitted, so it would be sampled on its own
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), false)
+        })
+
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 1)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [
+          ['events.skipped', ['event_type:snapshot', 'reason:rateLimitProbe'], 2],
+        ])
+      })
+
+      it('should drop the probes of the whole trace if the global snapshot rate limit is reached', function () {
+        installSampler()
+        const sampler = getSampler()
+        for (let i = 0; i < MAX_SNAPSHOTS_PER_SECOND_GLOBALLY; i++) {
+          assert.strictEqual(sampler.makeSampleDecision(i, `snapshot-${i}`, 0n, true), true)
+        }
+
+        const trace = createTrace()
+        inTrace(trace, () => {
+          assert.strictEqual(sampler.makeSampleDecision(100, 'probe-1', 0n, true), false)
+        })
+        now += oneSecondNs + 1n
+        inTrace(trace, () => {
+          assert.strictEqual(sampler.makeSampleDecision(101, 'probe-2', 0n, true), false)
+        })
+
+        assert.deepStrictEqual(drainGuardrailMetrics(), [
+          ['events.skipped', ['event_type:snapshot', 'reason:rateLimitGlobal'], 1],
+          ['events.skipped', ['event_type:snapshot', 'reason:rateLimitProbe'], 1],
+        ])
+      })
+
+      it('should emit each probe at most once per sampled trace', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', 0n, true), true)
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', 0n, true), false)
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', 0n, true), true)
+          now += oneSecondNs * 60n
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', 0n, true), false)
+        })
+
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 2)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [
+          ['events.skipped', ['event_type:snapshot', 'reason:rateLimitProbe'], 2],
+        ])
+      })
+
+      it('should let a modified probe emit again in a sampled trace', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', 0n, true), true)
+          // A modified probe is re-added with a new sampling index
+          sampler.remove('probe-1')
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-1', 0n, true), true)
+        })
+      })
+
+      it('should make a separate sampling decision for each trace', function () {
+        installSampler()
+        const sampler = getSampler()
+        const trace1 = createTrace()
+        const trace2 = createTrace()
+
+        inTrace(trace1, () => {
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), true)
+        })
+        inTrace(trace2, () => {
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), false)
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), false)
+        })
+        inTrace(trace1, () => {
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), true)
+        })
+        now += oneSecondNs
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), true)
+        })
+      })
+
+      it('should share the sampling decision between the spans of a trace', function () {
+        installSampler()
+        const sampler = getSampler()
+        const trace = createTrace()
+
+        inTrace(trace, () => {
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', 0n, true), true)
+        })
+        // A different span of the same trace, e.g. a child span
+        legacyStorage.run({ span: createSpan(trace) }, () => {
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', 0n, true), false)
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', 0n, true), true)
+        })
+      })
+
+      it('should count snapshots emitted in a sampled trace toward the global rate limit without being limited by it',
+        function () {
+          const sampledProbeIndexes = installSampler()
+          const sampler = getSampler()
+          for (let i = 0; i < MAX_SNAPSHOTS_PER_SECOND_GLOBALLY - 2; i++) {
+            assert.strictEqual(sampler.makeSampleDecision(i, `snapshot-${i}`, 0n, true), true)
+          }
+
+          inTrace(createTrace(), () => {
+            assert.strictEqual(sampler.makeSampleDecision(100, 'probe-1', 0n, true), true)
+            assert.strictEqual(sampler.makeSampleDecision(101, 'probe-2', 0n, true), true)
+            // The global rate limit is reached, but the trace was sampled before it was
+            assert.strictEqual(sampler.makeSampleDecision(102, 'probe-3', 0n, true), true)
+          })
+          inTrace(createTrace(), () => {
+            assert.strictEqual(sampler.makeSampleDecision(103, 'probe-4', 0n, true), false)
+          })
+          assert.strictEqual(sampler.makeSampleDecision(104, 'probe-5', 0n, true), false)
+
+          assert.strictEqual(
+            Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX),
+            MAX_SNAPSHOTS_PER_SECOND_GLOBALLY + 1
+          )
+          assert.deepStrictEqual(drainGuardrailMetrics(), [
+            ['events.skipped', ['event_type:snapshot', 'reason:rateLimitGlobal'], 2],
+          ])
+
+          now += oneSecondNs + 1n
+          assert.strictEqual(sampler.makeSampleDecision(104, 'probe-5', 0n, true), true)
+        }
+      )
+
+      it('should count a snapshot emitted in a sampled trace toward the per-probe rate limit', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), true)
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), true)
+        })
+        now += oneSecondNs - 1n
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), false)
+        })
+        now += 1n
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), true)
+        })
+      })
+
+      it('should sample probes that do not produce snapshots independently of the trace', function () {
+        installSampler()
+        const sampler = getSampler()
+        assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), true)
+
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), false)
+          assert.strictEqual(sampler.makeSampleDecision(2, 'log-probe', 0n, false), true)
+          assert.strictEqual(sampler.makeSampleDecision(2, 'log-probe', 0n, false), true)
+        })
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.makeSampleDecision(3, 'log-probe-2', 0n, false), true)
+          // The log probe didn't make a decision for the trace
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), false)
+        })
+      })
+
+      it('should sample snapshot-producing probes independently without an active span', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        for (const store of [undefined, { noop: true }, { span: null }, { span: undefined }]) {
+          legacyStorage.run(/** @type {Record<string, unknown>} */ (store), () => {
+            now += oneSecondNs
+            assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), true)
+            assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), false)
+            assert.strictEqual(sampler.makeSampleDecision(2, `probe-2-${now}`, oneSecondNs, true), true)
+          })
+        }
+      })
+
+      it('should sample snapshot-producing probes independently in a trace whose spans have all finished',
+        function () {
+          installSampler()
+          const sampler = getSampler()
+          const sampledTrace = createTrace()
+          const droppedTrace = createTrace()
+          assert.strictEqual(sampler.makeSampleDecision(3, 'probe-3', oneSecondNs, true), true)
+
+          inTrace(sampledTrace, () => {
+            assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), true)
+          })
+          inTrace(droppedTrace, () => {
+            assert.strictEqual(sampler.makeSampleDecision(3, 'probe-3', oneSecondNs, true), false)
+          })
+
+          // The span processor empties `started` when it flushes a trace whose spans have all finished
+          sampledTrace.started = []
+          droppedTrace.started = []
+          now += oneSecondNs
+
+          inTrace(sampledTrace, () => {
+            assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), true)
+          })
+          inTrace(droppedTrace, () => {
+            assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), true)
+          })
+        }
+      )
+
+      it('should apply the trace decision to probes whose condition matched', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', true), true)
+          assert.strictEqual(sampler.conditionEvaluated(1, 'probe-1', false, oneSecondNs, true), false)
+          assert.strictEqual(sampler.shouldEvaluateCondition('probe-2', true), true)
+          assert.strictEqual(sampler.conditionEvaluated(2, 'probe-2', true, oneSecondNs, true), true)
+          assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', true), true)
+          assert.strictEqual(sampler.conditionEvaluated(1, 'probe-1', true, oneSecondNs, true), true)
+          assert.strictEqual(sampler.shouldEvaluateCondition('probe-2', true), true)
+          assert.strictEqual(sampler.conditionEvaluated(2, 'probe-2', true, oneSecondNs, true), false)
+        })
+      })
+
+      it('should not let a condition error make the trace decision', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+        assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), true)
+
+        inTrace(createTrace(), () => {
+          assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', true), true)
+          assert.strictEqual(sampler.conditionError(1, 'probe-1', new Error('boom')), true)
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), false)
+        })
+
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START + 1), 1 | CONDITION_ERROR_FLAG)
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 2)
+      })
+
+      it('should leave the trace decision to the next probe if the shared buffer is full', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+
+        inTrace(createTrace(), () => {
+          Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, MAX_SAMPLED_PROBES_PER_PAUSE)
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), false)
+
+          Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, 0)
+          assert.strictEqual(sampler.makeSampleDecision(2, 'probe-2', oneSecondNs, true), true)
+          assert.strictEqual(sampler.makeSampleDecision(1, 'probe-1', oneSecondNs, true), true)
+
+          Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, MAX_SAMPLED_PROBES_PER_PAUSE)
+          assert.strictEqual(sampler.makeSampleDecision(3, 'probe-3', oneSecondNs, true), false)
+          Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, 0)
+          assert.strictEqual(sampler.makeSampleDecision(3, 'probe-3', oneSecondNs, true), true)
+        })
+        assert.deepStrictEqual(drainGuardrailMetrics(), [])
+      })
+    })
+
     describe('condition errors', function () {
+      const budgetNs = BigInt(EVALUATION_TIMEOUT_MS) * 1_000_000n
+
+      /**
+       * Start evaluating a probe's condition the way a compiled breakpoint condition does, then let time pass until the
+       * condition returns or throws.
+       *
+       * @param {RuntimeSampler} sampler - The installed runtime sampler.
+       * @param {string} probeId - The probe id.
+       * @param {bigint} [elapsedNs] - How long evaluating the condition takes.
+       */
+      function startCondition (sampler, probeId, elapsedNs = 0n) {
+        assert.strictEqual(sampler.shouldEvaluateCondition(probeId), true)
+        now += elapsedNs
+      }
+
       it('should evaluate conditions of probes without a recorded error', function () {
         installSampler()
 
@@ -307,6 +699,7 @@ describe('probe sampler', function () {
         const sampledProbeIndexes = installSampler()
         const sampler = getSampler()
 
+        startCondition(sampler, 'probe-1')
         assert.strictEqual(sampler.conditionError(7, 'probe-1', new TypeError('boom')), true)
         assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 1)
         assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START), 7 | CONDITION_ERROR_FLAG)
@@ -316,6 +709,7 @@ describe('probe sampler', function () {
         installSampler()
         const sampler = getSampler()
 
+        startCondition(sampler, 'probe-1')
         sampler.conditionError(7, 'probe-1', new TypeError('boom'))
 
         assert.strictEqual(sampler.takeConditionError('probe-1'), 'TypeError: boom')
@@ -327,14 +721,17 @@ describe('probe sampler', function () {
         installSampler()
         const sampler = getSampler()
 
-        sampler.conditionError(7, 'probe-1', 'a string')
-        assert.strictEqual(sampler.takeConditionError('probe-1'), 'a string')
+        startCondition(sampler, 'string')
+        sampler.conditionError(7, 'string', 'a string')
+        assert.strictEqual(sampler.takeConditionError('string'), 'a string')
 
-        sampler.conditionError(7, 'probe-1', { not: 'an error' })
-        assert.strictEqual(sampler.takeConditionError('probe-1'), 'Unknown evaluation error')
+        startCondition(sampler, 'object')
+        sampler.conditionError(7, 'object', { not: 'an error' })
+        assert.strictEqual(sampler.takeConditionError('object'), 'Unknown evaluation error')
 
-        sampler.conditionError(7, 'probe-1', { name: 'CustomError', message: 'boom' })
-        assert.strictEqual(sampler.takeConditionError('probe-1'), 'CustomError: boom')
+        startCondition(sampler, 'error-like')
+        sampler.conditionError(7, 'error-like', { name: 'CustomError', message: 'boom' })
+        assert.strictEqual(sampler.takeConditionError('error-like'), 'CustomError: boom')
       })
 
       it('should not invoke error accessors or proxy traps when describing a condition error', function () {
@@ -347,6 +744,7 @@ describe('probe sampler', function () {
             get () { throw new Error(`${property} getter invoked`) },
           })
 
+          startCondition(sampler, `accessor-${property}`)
           assert.strictEqual(sampler.conditionError(7, `accessor-${property}`, error), true)
           assert.strictEqual(sampler.takeConditionError(`accessor-${property}`), property === 'name' ? 'boom' : 'Error')
         }
@@ -355,6 +753,7 @@ describe('probe sampler', function () {
           get () { throw new Error('get trap invoked') },
           getPrototypeOf () { throw new Error('getPrototypeOf trap invoked') },
         })
+        startCondition(sampler, 'proxy')
         assert.strictEqual(sampler.conditionError(7, 'proxy', proxy), true)
         assert.strictEqual(sampler.takeConditionError('proxy'), 'Unknown evaluation error')
       })
@@ -364,6 +763,7 @@ describe('probe sampler', function () {
         const sampler = getSampler()
         const error = 'x'.repeat(MAX_MESSAGE_LENGTH)
 
+        startCondition(sampler, 'probe-1')
         sampler.conditionError(7, 'probe-1', error)
 
         assert.strictEqual(sampler.takeConditionError('probe-1'), error)
@@ -374,6 +774,7 @@ describe('probe sampler', function () {
         const sampler = getSampler()
         const error = 'x'.repeat(MAX_MESSAGE_LENGTH + 1)
 
+        startCondition(sampler, 'probe-1')
         sampler.conditionError(7, 'probe-1', error)
 
         assert.strictEqual(sampler.takeConditionError('probe-1'), `${error.slice(0, MAX_MESSAGE_LENGTH)}…`)
@@ -384,6 +785,7 @@ describe('probe sampler', function () {
         const sampler = getSampler()
         const message = 'x'.repeat(MAX_MESSAGE_LENGTH)
 
+        startCondition(sampler, 'probe-1')
         sampler.conditionError(7, 'probe-1', new Error(message))
 
         assert.strictEqual(
@@ -396,6 +798,7 @@ describe('probe sampler', function () {
         installSampler()
         const sampler = getSampler()
 
+        startCondition(sampler, 'probe-1')
         sampler.conditionError(7, 'probe-1', new TypeError('boom'))
 
         assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), false)
@@ -415,6 +818,7 @@ describe('probe sampler', function () {
         }
         assert.strictEqual(sampler.makeSampleDecision(99, 'probe-1', 1_000_000_000n, true), false)
 
+        startCondition(sampler, 'probe-1')
         assert.strictEqual(sampler.conditionError(99, 'probe-1', new Error('boom')), true)
         assert.strictEqual(
           Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX),
@@ -427,6 +831,7 @@ describe('probe sampler', function () {
         const sampler = getSampler()
         Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, MAX_SAMPLED_PROBES_PER_PAUSE)
 
+        startCondition(sampler, 'probe-1')
         assert.strictEqual(sampler.conditionError(7, 'probe-1', new Error('boom')), false)
         assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX), 1)
         assert.strictEqual(sampler.takeConditionError('probe-1'), undefined)
@@ -437,10 +842,149 @@ describe('probe sampler', function () {
         assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), true)
       })
 
+      it('should sample a matching condition evaluated within the time budget', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+
+        startCondition(sampler, 'probe-1', budgetNs)
+        assert.strictEqual(sampler.conditionEvaluated(7, 'probe-1', true, 0n, false), true)
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START), 7)
+        startCondition(sampler, 'probe-2', budgetNs)
+        assert.strictEqual(sampler.conditionEvaluated(8, 'probe-2', false, 0n, false), false)
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 1)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [])
+      })
+
+      it('should apply the rate limits to matching conditions', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        startCondition(sampler, 'probe-1')
+        assert.strictEqual(sampler.conditionEvaluated(7, 'probe-1', true, 200000n, false), true)
+        startCondition(sampler, 'probe-1')
+        assert.strictEqual(sampler.conditionEvaluated(7, 'probe-1', true, 200000n, false), false)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [
+          ['events.skipped', ['event_type:log', 'reason:rateLimitProbe'], 1],
+        ])
+      })
+
+      it('should report a condition that exceeds the time budget as an error, even if it matched', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+
+        startCondition(sampler, 'probe-1', budgetNs + 500_000n)
+        assert.strictEqual(sampler.conditionEvaluated(7, 'probe-1', true, 0n, true), true)
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START), 7 | CONDITION_ERROR_FLAG)
+        assert.strictEqual(
+          sampler.takeConditionError('probe-1'),
+          'Condition evaluation exceeded its time budget of 10ms (took 10.5ms)'
+        )
+      })
+
+      it('should count hits skipped because of an exceeded time budget', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        startCondition(sampler, 'probe-1', budgetNs + 1n)
+        sampler.conditionEvaluated(7, 'probe-1', false, 0n, true)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [], 'the error result itself is not a skip')
+
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', true), false)
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', true), false)
+        assert.strictEqual(sampler.makeSampleDecision(7, 'probe-1', 0n, true), false)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [
+          ['events.skipped', ['event_type:snapshot', 'reason:evaluationTimeout'], 3],
+        ])
+
+        now += CONDITION_ERROR_THROTTLE_NS
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', true), true)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [])
+      })
+
+      it('should not count hits skipped because of a condition error', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        startCondition(sampler, 'probe-1')
+        sampler.conditionError(7, 'probe-1', new Error('boom'))
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', true), false)
+        assert.strictEqual(sampler.makeSampleDecision(7, 'probe-1', 0n, true), false)
+
+        assert.deepStrictEqual(drainGuardrailMetrics(), [])
+      })
+
+      it('should report a condition that throws at exactly the time budget as a condition error', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        startCondition(sampler, 'probe-1', budgetNs)
+        assert.strictEqual(sampler.conditionError(7, 'probe-1', new TypeError('boom')), true)
+        assert.strictEqual(sampler.takeConditionError('probe-1'), 'TypeError: boom')
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', true), false)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [])
+      })
+
+      it('should report a condition that throws after exceeding the time budget as a timeout', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+
+        startCondition(sampler, 'probe-1', budgetNs + 1n)
+        assert.strictEqual(sampler.conditionError(7, 'probe-1', new TypeError('boom')), true)
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START), 7 | CONDITION_ERROR_FLAG)
+        assert.strictEqual(
+          sampler.takeConditionError('probe-1'),
+          'Condition evaluation exceeded its time budget of 10ms (took 10.0ms)'
+        )
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', true), false)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [
+          ['events.skipped', ['event_type:snapshot', 'reason:evaluationTimeout'], 1],
+        ])
+      })
+
+      it('should throttle a probe whose evaluation timed out in the worker', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        sampler.evaluationTimedOut('probe-1')
+
+        assert.strictEqual(sampler.makeSampleDecision(7, 'probe-1', 0n, false), false)
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', false), false)
+        assert.strictEqual(sampler.takeConditionError('probe-1'), undefined, 'the worker already reported the error')
+        assert.deepStrictEqual(drainGuardrailMetrics(), [
+          ['events.skipped', ['event_type:log', 'reason:evaluationTimeout'], 2],
+        ])
+
+        now += CONDITION_ERROR_THROTTLE_NS
+        assert.strictEqual(sampler.makeSampleDecision(7, 'probe-1', 0n, false), true)
+      })
+
+      it('should keep a condition error recorded by a hit that raced the worker throttling the probe', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        startCondition(sampler, 'probe-1')
+        sampler.conditionError(7, 'probe-1', new TypeError('boom'))
+        startCondition(sampler, 'probe-2', budgetNs + 1n)
+        sampler.conditionError(8, 'probe-2', new TypeError('boom'))
+        sampler.evaluationTimedOut('probe-1')
+        sampler.evaluationTimedOut('probe-2')
+
+        assert.strictEqual(sampler.takeConditionError('probe-1'), 'TypeError: boom')
+        assert.strictEqual(
+          sampler.takeConditionError('probe-2'),
+          'Condition evaluation exceeded its time budget of 10ms (took 10.0ms)'
+        )
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', false), false)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [
+          ['events.skipped', ['event_type:log', 'reason:evaluationTimeout'], 1],
+        ])
+      })
+
       it('should forget the recorded error and throttle when a probe is removed', function () {
         installSampler()
         const sampler = getSampler()
 
+        startCondition(sampler, 'probe-1')
         sampler.conditionError(7, 'probe-1', new Error('boom'))
         sampler.remove('probe-1')
 
@@ -470,7 +1014,35 @@ describe('probe sampler', function () {
  * Install the runtime sampler for tests.
  */
 function installSampler () {
-  return new Int32Array(installProbeSampler(guardrailMetrics))
+  return new Int32Array(installProbeSampler(guardrailMetrics, samplerConfig))
+}
+
+/**
+ * Create a stand-in for the trace object shared by the spans of a trace that still has unfinished spans.
+ *
+ * @returns {{ started: object[] }}
+ */
+function createTrace () {
+  return { started: [{}] }
+}
+
+/**
+ * Create a stand-in for a span of the given trace.
+ *
+ * @param {{ started: object[] }} trace - The trace the span belongs to.
+ */
+function createSpan (trace) {
+  return { context: () => ({ _trace: trace }) }
+}
+
+/**
+ * Run a function with a span of the given trace active, the way the tracer activates spans.
+ *
+ * @param {{ started: object[] }} trace - The trace of the active span.
+ * @param {() => void} fn - The function to run.
+ */
+function inTrace (trace, fn) {
+  legacyStorage.run({ span: createSpan(trace) }, fn)
 }
 
 /**

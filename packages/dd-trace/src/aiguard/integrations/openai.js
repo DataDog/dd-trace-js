@@ -13,6 +13,7 @@ const {
 const { decode } = require('../messages/utils')
 const { SOURCE_AUTO } = require('../tags')
 const { evaluate } = require('./evaluate')
+const { interceptStream } = require('./stream')
 
 const chatCompletionsInterceptChannel = channel('dd-trace:openai:chat.completions:intercept')
 const responsesInterceptChannel = channel('dd-trace:openai:responses:intercept')
@@ -74,9 +75,16 @@ function onChatCompletions (ctx) {
 
     if (isStream) {
       outputEvaluation ??= interceptStream(body, chunks => {
-        return getStreamedChatCompletionsOutputMessages(chunks)
-          .map(message => [...inputMessages, message])
-      }, ctx)
+        if (!isEnabled) return
+        const conversations = decode(
+          () => getStreamedChatCompletionsOutputMessages(chunks)
+            .map(message => [...inputMessages, message]),
+          null,
+          'AIGuard: unable to decode the streamed OpenAI response: %s'
+        )
+        if (!conversations?.length) return
+        return evaluate(ctx, aiguard, conversations, opts)
+      })
       return outputEvaluation
     }
 
@@ -112,9 +120,15 @@ function onResponses (ctx) {
 
     if (isStream) {
       outputEvaluation ??= interceptStream(body, chunks => {
-        const outputMessages = getStreamedResponsesOutputMessages(chunks)
-        return outputMessages.length ? [[...inputMessages, ...outputMessages]] : []
-      }, ctx)
+        if (!isEnabled) return
+        const outputMessages = decode(
+          () => getStreamedResponsesOutputMessages(chunks),
+          null,
+          'AIGuard: unable to decode the streamed OpenAI response: %s'
+        )
+        if (!outputMessages?.length) return
+        return evaluate(ctx, aiguard, [[...inputMessages, ...outputMessages]], opts)
+      })
       return outputEvaluation
     }
 
@@ -128,56 +142,6 @@ function onResponses (ctx) {
     outputEvaluation ??= evaluate(ctx, aiguard, [[...inputMessages, ...outputMessages]], opts)
     return outputEvaluation.then(() => body)
   }
-}
-
-/**
- * Uses the OpenAI SDK's stream splitting support to evaluate one branch and return the other.
- *
- * @param {object} stream
- * @param {(chunks: Array<object>) => Array<Array<object>>} getConversations
- * @param {object} ctx
- * @returns {object|Promise<object>}
- */
-function interceptStream (stream, getConversations, ctx) {
-  if (typeof stream?.tee !== 'function') return stream
-
-  let branches
-  try {
-    branches = stream.tee()
-  } catch {
-    return stream
-  }
-
-  const [evaluationStream, resultStream] = branches
-  return drainStream(evaluationStream).then(chunks => {
-    if (!isEnabled) return resultStream
-    const conversations = decode(
-      () => getConversations(chunks),
-      null,
-      'AIGuard: unable to decode the streamed OpenAI response: %s'
-    )
-    if (!conversations?.length) return resultStream
-    return evaluate(ctx, aiguard, conversations, opts).then(() => resultStream)
-  }, () => resultStream)
-}
-
-/**
- * @param {object} stream
- * @returns {Promise<Array<object>>}
- */
-function drainStream (stream) {
-  const chunks = []
-  const iterator = stream[Symbol.asyncIterator]()
-
-  function readAll () {
-    return iterator.next().then(({ done, value }) => {
-      if (done) return chunks
-      chunks.push(value)
-      return readAll()
-    })
-  }
-
-  return readAll()
 }
 
 module.exports = { enable, disable }

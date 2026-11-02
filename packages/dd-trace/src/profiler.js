@@ -12,8 +12,21 @@ let activeSSIHeuristics
 /** @type {import('./profiling') | undefined} */
 let profilingModule
 
+/**
+ * Configuration published while the profiler was finishing a shutdown export, waiting for that
+ * export to settle before it is acted on.
+ *
+ * @type {import('./config/config-base') | undefined}
+ */
+let deferredConfig
+
 function getProfilingModule () {
-  profilingModule ??= require('./profiling')
+  if (profilingModule === undefined) {
+    profilingModule = require('./profiling')
+    // The profiling layer never restarts itself; it only reports that a shutdown export has
+    // settled, which is when a configuration deferred during that window gets its decision.
+    profilingModule.profiler.on('stopped', applyDeferredConfig)
+  }
   return profilingModule
 }
 
@@ -23,6 +36,12 @@ function getProfilingModule () {
 // to load just to read this.
 function isStarted () {
   return profilingModule !== undefined && profilingModule.profiler.enabled
+}
+
+// A stopped profiler still exports one final profile, and until that settles it reports neither
+// the state a decision would be based on nor any willingness to start again.
+function isStopping () {
+  return profilingModule !== undefined && profilingModule.profiler.isStopping()
 }
 
 /** @type {typeof import('./profiling/ssi-heuristics') | undefined} */
@@ -57,8 +76,11 @@ function start (config) {
 }
 
 function stop () {
-  // A stop command for a profiler that has never been loaded is already satisfied. Once loaded,
-  // always forward it so the profiling layer can also cancel a restart queued during shutdown.
+  // An explicit stop is the latest desired state, so it retracts a configuration still waiting
+  // for an in-flight shutdown to settle.
+  deferredConfig = undefined
+
+  // A stop command for a profiler that has never been loaded is already satisfied.
   if (profilingModule === undefined) return
 
   try {
@@ -93,7 +115,17 @@ function runWithLabels (labels, fn) {
   return getProfilingModule().profiler.runWithLabels(labels, fn)
 }
 
-configUpdateChannel.subscribe((config) => {
+function applyDeferredConfig () {
+  const config = deferredConfig
+  if (config === undefined) return
+  deferredConfig = undefined
+  applyConfig(config)
+}
+
+/**
+ * @param {import('./config/config-base')} config - Tracer configuration
+ */
+function applyConfig (config) {
   const enabled = config.profiling.DD_PROFILING_ENABLED
   if (enabled === 'true') {
     // A non-auto value means the SSI heuristics no longer get a say; disable them so a trigger that
@@ -118,7 +150,9 @@ configUpdateChannel.subscribe((config) => {
       heuristics.start()
       heuristics.onTriggered(() => {
         // Explicit true/false publishes disable the heuristics, so reaching this callback guarantees
-        // the latest valid published value is still 'auto'.
+        // the latest valid published value is still 'auto'. A heuristic is only ever created for a
+        // profiler that is neither running nor stopping, and nothing can start that profiler behind
+        // an active heuristic's back, so this start can not collide with a shutdown in flight.
         if (!isStarted()) start(config)
         // The heuristic has made its decision, so release all of its listeners and timer before
         // dropping the module-level reference. This does not stop the profiler that was just
@@ -132,6 +166,18 @@ configUpdateChannel.subscribe((config) => {
     // like 'auto' or crash the customer application.
     log.warn('Unexpected DD_PROFILING_ENABLED value: %o', enabled)
   }
+}
+
+configUpdateChannel.subscribe((config) => {
+  // A shutdown export in flight makes every decision here unsafe: the profiler can not be
+  // started, and it does not yet report the state the auto branch would branch on. Defer instead,
+  // keeping only the latest configuration, exactly as a sequence of updates outside such a window
+  // would have left it.
+  if (isStopping()) {
+    deferredConfig = config
+    return
+  }
+  applyConfig(config)
 })
 
 globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(stop)

@@ -26,11 +26,10 @@ const COMPILE_DEFERRED_FIELD = 'FunctionDeclaration[id.name="compileDeferredFiel
  */
 
 /**
- * @param {GraphqlJitInstrumentation[]} instrumentations
  * @param {string} versionRange
  * @param {string} filePath
  */
-function addInstrumentations (instrumentations, versionRange, filePath) {
+function addInstrumentations (versionRange, filePath) {
   const moduleDefinition = { name: 'graphql-jit', versionRange, filePath }
   instrumentations.push(
     {
@@ -75,9 +74,9 @@ function addInstrumentations (instrumentations, versionRange, filePath) {
 const instrumentations = []
 // graphql-jit 0.7 and 0.8.0 use this layout and remain compatible with GraphQL 15 and 16.
 // GraphQL 17 compatibility starts at 0.8.1.
-addInstrumentations(instrumentations, '>=0.7.0 <0.8.5 || >=0.8.7 <0.9.0', 'dist/execution.js')
-addInstrumentations(instrumentations, '>=0.8.5 <0.8.7', 'dist/cjs/execution.js')
-addInstrumentations(instrumentations, '>=0.8.5 <0.8.7', 'dist/esm/execution.js')
-addInstrumentations(instrumentations, '>=0.8.7 <0.9.0', 'dist/execution.mjs')
+addInstrumentations('>=0.7.0 <0.8.5 || >=0.8.7 <0.9.0', 'dist/execution.js')
+addInstrumentations('>=0.8.5 <0.8.7', 'dist/cjs/execution.js')
+addInstrumentations('>=0.8.5 <0.8.7', 'dist/esm/execution.js')
+addInstrumentations('>=0.8.7 <0.9.0', 'dist/execution.mjs')
 
 module.exports = instrumentations

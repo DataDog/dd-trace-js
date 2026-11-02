@@ -57,10 +57,13 @@ let loaded = false
 const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   // serverless / IS_SERVERLESS detection
   'AWS_LAMBDA_FUNCTION_NAME',
+  'AWS_LAMBDA_INITIALIZATION_TYPE',
   'FUNCTION_NAME',
   'FUNCTION_TARGET',
   'FUNCTIONS_EXTENSION_VERSION',
   'FUNCTIONS_WORKER_RUNTIME',
+  // azure container app detection (azure-functions plugin aas/aca prefix)
+  'CONTAINER_APP_NAME',
   'GCP_PROJECT',
   'K_SERVICE',
   'VERCEL',
@@ -81,8 +84,14 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'WEBSITE_OWNER_NAME',
   'WEBSITE_OS',
   'WEBSITE_RESOURCE_GROUP',
+  // LLM judge provider defaults
+  'AWS_DEFAULT_REGION',
+  'AWS_REGION',
+  'GCLOUD_PROJECT',
+  'GOOGLE_CLOUD_REGION',
   // CI-visibility runner detection (test plugins, ci-visibility exporters)
   'CUCUMBER_WORKER_ID',
+  'JEST_JASMINE',
   'JEST_WORKER_ID',
   'MOCHA_WORKER_ID',
   'TINYPOOL_WORKER_ID',

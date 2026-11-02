@@ -4,7 +4,13 @@ const createMutex = require('../../../../../vendor/dist/mutexify/promise')
 const mutex = createMutex()
 const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
-const { compile, compileSegments, templateRequiresEvaluation } = require('./condition')
+const {
+  compile,
+  compileSegments,
+  getRedactionError,
+  getSegmentRedactionErrors,
+  templateRequiresEvaluation,
+} = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
 const {
   compileBreakpointCondition,
@@ -78,6 +84,7 @@ async function addBreakpoint (probe) {
   probe.templateRequiresEvaluation = templateRequiresEvaluation(probe.segments)
   if (probe.templateRequiresEvaluation) {
     probe.template = compileSegments(probe.segments)
+    probe.templateRedactionErrors = getSegmentRedactionErrors(probe.segments)
   }
   delete probe.segments
 
@@ -96,14 +103,14 @@ async function addBreakpoint (probe) {
       file, lineNumber, columnNumber, probe.id, probe.version
     )
     const position = await getGeneratedPosition(url, source, lineNumber, sourceMapURL)
-    if (position.line !== null && position.column !== null) {
-      lineNumber = position.line
-      columnNumber = position.column
-    } else {
+    if (position.line === null || position.column === null) {
       throw new Error(
         // eslint-disable-next-line @stylistic/max-len
         `Could not find generated position for ${url}:${lineNumber}:${columnNumber} (probe: ${probe.id}, version: ${probe.version})`
       )
+    } else {
+      lineNumber = position.line
+      columnNumber = position.column
     }
   }
 
@@ -128,6 +135,12 @@ async function addBreakpoint (probe) {
   if (probe.captureExpressions?.length > 0) {
     probe.compiledCaptureExpressions = []
     for (const captureExpr of probe.captureExpressions) {
+      const redactionError = getRedactionError(captureExpr.name, captureExpr.expr.json)
+      if (redactionError !== undefined) {
+        probe.compiledCaptureExpressions.push({ name: captureExpr.name, redactionError })
+        continue
+      }
+
       let expression
       try {
         expression = compile(captureExpr.expr.json)
@@ -344,9 +357,10 @@ async function reEvaluateProbe (probe) {
 }
 
 async function start () {
-  sessionStarted = true
   log.debug('[debugger:devtools_client] Starting debugger')
   await session.post('Debugger.enable')
+  // Only flag the session as started once enabled, so the next probe retries a failed start and reports its cause
+  sessionStarted = true
 
   // Wait until there's a pause in script-loading to avoid accidentally adding probes to incorrect scripts. This is not
   // a guarantee, but best effort.

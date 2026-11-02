@@ -135,7 +135,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     sinon.assert.calledWith(exporter, 'electron')
-    sinon.assert.calledWith(SpanProcessor, agentExporter, prioritySampler, config)
+    sinon.assert.calledWithExactly(SpanProcessor, agentExporter, prioritySampler, config, undefined, false)
   })
 
   it('should use the OTLP exporter with a non-Electron trace exporter', () => {
@@ -145,7 +145,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     sinon.assert.calledWith(createOtlpTraceExporter, config)
-    sinon.assert.calledWith(SpanProcessor, otlpExporter, prioritySampler, config)
+    sinon.assert.calledWithExactly(SpanProcessor, otlpExporter, prioritySampler, config, undefined, true)
   })
 
   it('should allow to configure an alternative prioritySampler', () => {

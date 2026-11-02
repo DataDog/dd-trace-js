@@ -2098,7 +2098,7 @@ describe('CI Visibility Exporter', () => {
       assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
     })
 
-    it('should return false when the URL is set but the screenshots flag is absent (default off)', () => {
+    it('should return false when the URL is set but the exporter configuration is incomplete', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({ url })
       ciVisibilityExporter._testScreenshotUploadUrl = url
       assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
@@ -2115,7 +2115,7 @@ describe('CI Visibility Exporter', () => {
   })
 
   describe('canUploadTestVideos', () => {
-    it('is default off and controlled independently from screenshots', () => {
+    it('can be disabled independently from screenshots', () => {
       const exporter = new CiVisibilityExporter({
         url,
         testOptimization: {

@@ -27,4 +27,6 @@ function updateConfig (updates) {
   config.url = new URL(updates.url)
   config.dynamicInstrumentation.captureTimeoutNs =
     BigInt(updates.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS) * 1_000_000n
+  config.dynamicInstrumentation.evaluationTimeoutNs =
+    BigInt(updates.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS) * 1_000_000n
 }

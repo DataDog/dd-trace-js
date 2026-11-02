@@ -1,0 +1,12 @@
+_v: 1
+name: claude-agent-sdk
+display_name: Claude Agent SDK
+description: Instruments Claude Agent SDK agent queries, steps, model calls, tool executions, and subagent invocations
+  with APM tracing and LLM Observability.
+packages:
+- name: '@anthropic-ai/claude-agent-sdk'
+category:
+- gen_ai
+systems:
+- anthropic
+creation_date: '2026-07-07'

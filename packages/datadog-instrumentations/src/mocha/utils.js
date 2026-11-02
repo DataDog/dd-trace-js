@@ -26,6 +26,7 @@ const shimmer = require('../../../datadog-shimmer')
 const testStartCh = channel('ci:mocha:test:start')
 const testFinishCh = channel('ci:mocha:test:finish')
 const testDiWaitCh = channel('ci:mocha:test:di:wait')
+const testAfterEachFinishCh = channel('ci:mocha:after-each:finish')
 // after a test has failed, we'll publish to this channel
 const testRetryCh = channel('ci:mocha:test:retry')
 const errorCh = channel('ci:mocha:test:error')
@@ -42,6 +43,9 @@ const originalEfdFns = new WeakMap()
 const originalFns = new WeakMap()
 const originalPendingByTest = new WeakMap()
 const originalRetriesByTest = new WeakMap()
+let automaticRetryTests = new WeakSet()
+let automaticRetryAttempts = new WeakMap()
+let nativeRetryTests = new WeakSet()
 const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
 const datadogRetryOriginals = new WeakMap()
@@ -54,7 +58,8 @@ const testsQuarantined = new Set()
 const testsStatuses = new Map()
 const efdRetryCountByTestFullName = new Map()
 const efdSlowAbortedTests = new Set()
-const dynamicAtrRetryCountByTestFullName = new Map()
+const suiteHookFailureSuites = new Set()
+let dynamicAtrRetryCountByTest = new WeakMap()
 const attemptToFixExecutions = new Map()
 const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
 
@@ -343,7 +348,11 @@ function resetRunState (rootSuite) {
   testsStatuses.clear()
   efdRetryCountByTestFullName.clear()
   efdSlowAbortedTests.clear()
-  dynamicAtrRetryCountByTestFullName.clear()
+  suiteHookFailureSuites.clear()
+  automaticRetryTests = new WeakSet()
+  automaticRetryAttempts = new WeakMap()
+  nativeRetryTests = new WeakSet()
+  dynamicAtrRetryCountByTest = new WeakMap()
   attemptToFixExecutions.clear()
   loggedAttemptToFixTests.clear()
 
@@ -379,7 +388,9 @@ function resetRunState (rootSuite) {
       delete test._ddTestFinishPublished
       delete test._ddIsFinalAttempt
       delete test._ddHookFailed
+      delete test._ddSuppressSyntheticTestLifecycle
       delete test._ddPendingRetry
+      delete test._ddPendingHookFailureFinish
       delete test._ddReporterStartFailed
       delete test._ddReporterTerminalFailed
       originalTests.push(test)
@@ -418,7 +429,7 @@ function isMochaRetry (test) {
 }
 
 function getIsLastRetry (test) {
-  return test._currentRetry === test._retries
+  return test._currentRetry >= test._retries
 }
 
 function getTestFullName (test) {
@@ -436,6 +447,21 @@ function recordTestAttempt (testsByFullName, test) {
     testsByFullName[testFullName].push(test)
   } else {
     testsByFullName[testFullName] = [test]
+  }
+}
+
+function recordRetryTrackedAttempt (test) {
+  const {
+    _ddIsAttemptToFix: isAttemptToFix,
+    _ddIsModified: isModified,
+    _ddIsNew: isNew,
+  } = test
+
+  if (isNew) {
+    recordTestAttempt(newTests, test)
+  }
+  if (!isAttemptToFix && (isNew || isModified)) {
+    recordTestAttempt(efdTests, test)
   }
 }
 
@@ -476,6 +502,15 @@ function startTestFinish (test) {
   return true
 }
 
+function hasHandledHookFailure (test) {
+  return test._ddHookFailed && (test._ddTestFinishPublished || test._ddPendingHookFailureFinish)
+}
+
+function suppressSyntheticTestLifecycle (test) {
+  test._ddSuppressSyntheticTestLifecycle = true
+  test._ddTestFinishPublished = true
+}
+
 /**
  * Copies Test Management metadata from Mocha's original runnable to its native retry clone.
  * @param {{
@@ -505,6 +540,18 @@ function inheritDatadogPropertiesFromRetriedTest (test) {
 
 function runnableWrapper (RunnablePackage, libraryConfig) {
   const Runnable = RunnablePackage.Runnable ?? RunnablePackage
+  // Mocha 12 can load its ESM class through require() without the ESM rewriter.
+  // Intercept the exported prototype to observe setters in both injection modes.
+  shimmer.wrap(Runnable.prototype, 'retries', retries => function () {
+    if (arguments.length && automaticRetryTests.delete(this)) {
+      const originalTest = this._retriedTest || this
+      // afterEach can change this runnable after Mocha has already copied its budget into a queued clone.
+      if (!automaticRetryAttempts.get(originalTest)?.has(this._currentRetry + 1)) {
+        nativeRetryTests.add(originalTest)
+      }
+    }
+    return retries.apply(this, arguments)
+  })
   shimmer.wrap(Runnable.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, args)
@@ -530,16 +577,16 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
           return onRunnableFinished.apply(this, arguments)
         }
       }
-    } else if (libraryConfig?.isFlakyTestRetriesEnabled) {
+    } else if (libraryConfig?.isFlakyTestRetriesEnabled && !nativeRetryTests.has(test._retriedTest || test)) {
       if (!originalRetriesByTest.has(test)) {
         const originalRetries = originalRetriesByTest.get(test._retriedTest) ?? test.retries()
         originalRetriesByTest.set(test, originalRetries)
       }
+      automaticRetryTests.delete(test)
       if (libraryConfig.isDynamicAtrEnabled) {
         // Dynamic ATR: set the max possible retries initially.
         // The actual duration-based count is computed after the first attempt.
-        const testName = getTestFullName(test)
-        const dynamicCount = dynamicAtrRetryCountByTestFullName.get(testName)
+        const dynamicCount = dynamicAtrRetryCountByTest.get(test._retriedTest || test)
         if (dynamicCount === undefined) {
           const maxRetries = libraryConfig.dynamicAtrBuckets
             ? Math.max(...libraryConfig.dynamicAtrBuckets)
@@ -553,6 +600,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       } else {
         test.retries(libraryConfig.flakyTestRetriesCount)
       }
+      automaticRetryTests.add(test)
     }
 
     if (isTestHook || this.type === 'test') {
@@ -572,6 +620,14 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       }
     }
 
+    const failedTestReplayPromise = (isTestHook || this.type === 'test') &&
+      test._retriedTest?._ddFailedTestReplayPromise
+    if (failedTestReplayPromise) {
+      delete test._retriedTest._ddFailedTestReplayPromise
+      const runRunnable = () => run.apply(this, args)
+      return failedTestReplayPromise.then(runRunnable, runRunnable)
+    }
+
     return run.apply(this, args)
   })
   return RunnablePackage
@@ -579,6 +635,8 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
 
 function getOnTestHandler (isMain) {
   return function (test) {
+    if (test._ddSuppressSyntheticTestLifecycle || hasHandledHookFailure(test)) return
+
     const testStartLine = testToStartLine.get(test)
 
     // This may be a retry. If this is the case, `test.fn` is already wrapped,
@@ -586,6 +644,12 @@ function getOnTestHandler (isMain) {
     restoreRunnableFunction(test)
 
     inheritDatadogPropertiesFromRetriedTest(test)
+
+    if (isInFailedSuite(test.parent)) {
+      recordRetryTrackedAttempt(test)
+      suppressSyntheticTestLifecycle(test)
+      return
+    }
 
     const {
       file: testSuiteAbsolutePath,
@@ -637,13 +701,8 @@ function getOnTestHandler (isMain) {
         loggedAttemptToFixTests
       )
     }
-    // We want to store the result of the new tests
-    if (isNew) {
-      recordTestAttempt(newTests, test)
-    }
-    if (!isAttemptToFix && (isNew || isModified)) {
-      recordTestAttempt(efdTests, test)
-    }
+    // Keep retry accounting aligned with Mocha's runner failure counts.
+    recordRetryTrackedAttempt(test)
 
     if (!isAttemptToFix && isDisabled) {
       if (!originalPendingByTest.has(test)) {
@@ -656,6 +715,14 @@ function getOnTestHandler (isMain) {
     testToContext.set(test.fn, ctx)
     testStartCh.runStores(ctx, () => {})
   }
+}
+
+function isInFailedSuite (suite) {
+  while (suite) {
+    if (suiteHookFailureSuites.has(suite)) return true
+    suite = suite.parent
+  }
+  return false
 }
 
 function getFinalStatus ({
@@ -723,12 +790,14 @@ function getTestFinishInfo (test, status, config, error) {
   }
 
   // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
+  // Mocha's native retry clones point to the original test, independently of duplicate titles.
+  const originalTest = test._retriedTest || test
   if (
     config.isDynamicAtrEnabled &&
     config.isFlakyTestRetriesEnabled &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry &&
-    !dynamicAtrRetryCountByTestFullName.has(testName) &&
+    !dynamicAtrRetryCountByTest.has(originalTest) &&
     test._currentRetry === 0
   ) {
     const duration = test.duration > 0 ? test.duration : performance.now() - test._ddStartTime
@@ -737,7 +806,7 @@ function getTestFinishInfo (test, status, config, error) {
       config.earlyFlakeDetectionRetryPolicy,
       config.dynamicAtrBuckets
     )
-    dynamicAtrRetryCountByTestFullName.set(testName, dynamicCount)
+    dynamicAtrRetryCountByTest.set(originalTest, dynamicCount)
   }
 
   if (testsStatuses.get(testName)) {
@@ -784,6 +853,7 @@ function getTestFinishInfo (test, status, config, error) {
 
   const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
   const isAtrRetry = config.isFlakyTestRetriesEnabled &&
+    automaticRetryAttempts.get(test._retriedTest || test)?.has(test._currentRetry) &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry
   const isFinalAttempt = isTerminalHookFailure || status !== 'fail' || test._currentRetry >= test._retries
@@ -841,7 +911,7 @@ function getTestFinishInfo (test, status, config, error) {
 
 function getOnTestEndHandler (config, finalAttemptHandlers) {
   return async function (test) {
-    if (test._ddShouldSkipEfdRetry) {
+    if (test._ddShouldSkipEfdRetry || test._ddSuppressSyntheticTestLifecycle || hasHandledHookFailure(test)) {
       return
     }
     const shouldWaitForHitProbe = test._retriedTest?._ddShouldWaitForHitProbe
@@ -850,6 +920,7 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
     const shouldFinishTest = ctx && (
       test._ddReporterStartFailed ||
       test._ddReporterTerminalFailed ||
+      !test.fn ||
       !getAfterEachHooks(test).length ||
       (test._ddIsDisabled && !test._ddIsAttemptToFix)
     )
@@ -857,8 +928,8 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
     let testFinishInfo
     let isFinalAttempt = false
 
-    // If there are afterEach to be run, we don't finish the test yet.
-    // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
+    // If there are afterEach hooks to run, we don't finish the test yet.
+    // Static skips have no function and never execute hooks. Disabled tests also finish immediately.
     // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
     // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler
     // directly sets finalStatus without waiting for hooks
@@ -879,24 +950,33 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
       finalAttemptHandlers?.onStart?.(test)
     }
 
+    const finish = () => {
+      if (shouldFinishTest) {
+        test._ddTestFinishPublished = true
+        testFinishCh.publish({
+          status,
+          hasBeenRetried: isMochaRetry(test),
+          isLastRetry: getIsLastRetry(test),
+          ...testFinishInfo,
+          ...ctx.currentStore,
+        })
+      }
+
+      if (isFinalAttempt) {
+        finalAttemptHandlers?.onFinish?.(test)
+      }
+    }
+
     if (shouldWaitForHitProbe) {
-      await waitForHitProbe()
+      const waitForHitProbePromise = waitForHitProbe()
+      if (shouldFinishTest && config.isTestFailureVideosEnabled && !test.isPending()) {
+        // Mocha does not await test-end listeners. Its hookUp continuation must wait even without teardown hooks.
+        test._ddDeferredHookEnd = { waitForHitProbePromise, publishTestFinish: finish }
+        return
+      }
+      await waitForHitProbePromise
     }
-
-    if (shouldFinishTest) {
-      test._ddTestFinishPublished = true
-      testFinishCh.publish({
-        status,
-        hasBeenRetried: isMochaRetry(test),
-        isLastRetry: getIsLastRetry(test),
-        ...testFinishInfo,
-        ...ctx.currentStore,
-      })
-    }
-
-    if (isFinalAttempt) {
-      finalAttemptHandlers?.onFinish?.(test)
-    }
+    finish()
   }
 }
 
@@ -977,17 +1057,30 @@ function finishDeferredHookEnd (test) {
  * @returns {unknown}
  */
 function runFailedTestReplayHookUpCallback (fn, test, failedTestReplayPromise, hookThis, args) {
+  if (test._ddPendingHookFailureFinish) {
+    // Mocha restarts teardown at the failed suite's parent. Only the last hookUp completes the attempt.
+    const failedSuite = /** @type {import('mocha').Suite|undefined} */ (args[1])
+    if (args[0] && failedSuite?.parent) return fn.apply(hookThis, /** @type {unknown[]} */ (args))
+    const finish = test._ddPendingHookFailureFinish
+    delete test._ddPendingHookFailureFinish
+    finish()
+  }
   const pendingRetry = test._ddPendingRetry
   if (pendingRetry) {
     delete test._ddPendingRetry
     failedTestReplayPromise = pendingRetry()
   }
+  const continueAfterCapture = () => {
+    const context = { onDone: () => fn.apply(hookThis, args), isWaiting: false }
+    testAfterEachFinishCh.publish(context)
+    return context.isWaiting ? undefined : context.onDone()
+  }
   const continueAfterProbe = () => {
     const deferredHookEndPromise = finishDeferredHookEnd(test)
     if (deferredHookEndPromise) {
-      return deferredHookEndPromise.then(() => fn.apply(hookThis, args), () => fn.apply(hookThis, args))
+      return deferredHookEndPromise.then(continueAfterCapture, continueAfterCapture)
     }
-    return fn.apply(hookThis, args)
+    return continueAfterCapture()
   }
 
   if (failedTestReplayPromise) {
@@ -1036,15 +1129,23 @@ function getOnFailHandler (isMain, config) {
     const testFile = testOrHook.file
     let test = testOrHook
     const isHook = testOrHook.type === 'hook'
+    const isBeforeEachHook = isHook && testOrHook.parent?._beforeEach?.includes(testOrHook)
+    const isAfterEachHook = isHook && testOrHook.parent?._afterEach?.includes(testOrHook)
+    const isTestHook = isBeforeEachHook || isAfterEachHook
+    if (isHook && !isTestHook && testOrHook.parent) {
+      suiteHookFailureSuites.add(testOrHook.parent)
+    }
     if (isHook && testOrHook.ctx) {
       test = testOrHook.ctx.currentTest
     }
     let testContext
     if (test) {
+      if (!isHook && (test._ddSuppressSyntheticTestLifecycle || hasHandledHookFailure(test))) return
+
       testContext = getTestContext(test)
     }
     if (testContext) {
-      if (isHook && startTestFinish(test)) {
+      if (isTestHook && startTestFinish(test)) {
         delete test._ddPendingRetry
         const hookError = new Error(`${testOrHook.fullTitle()}: ${err.message}`, { cause: err })
         hookError.name = err.name
@@ -1053,17 +1154,27 @@ function getOnFailHandler (isMain, config) {
         errorCh.runStores(testContext, () => {})
         // Mocha marks the hook failed, so record the test failure before computing final metadata.
         test._ddHookFailed = true
-        const testFinishInfo = getTestFinishInfo(test, 'fail', config, hookError)
-        if (testFinishInfo.finalStatus !== undefined) {
-          test._ddIsFinalAttempt = true
+        if (isBeforeEachHook && testOrHook.parent) {
+          suiteHookFailureSuites.add(testOrHook.parent)
         }
-        test._ddTestFinishPublished = true
-        testFinishCh.publish({
-          status: 'fail',
-          hasBeenRetried: isMochaRetry(test),
-          ...testFinishInfo,
-          ...testContext.currentStore,
-        })
+        const finish = () => {
+          const testFinishInfo = getTestFinishInfo(test, 'fail', config, testContext.err)
+          if (testFinishInfo.finalStatus !== undefined) {
+            test._ddIsFinalAttempt = true
+          }
+          test._ddTestFinishPublished = true
+          testFinishCh.publish({
+            status: 'fail',
+            hasBeenRetried: isMochaRetry(test),
+            ...testFinishInfo,
+            ...testContext.currentStore,
+          })
+        }
+        if (config.isTestFailureVideosEnabled) {
+          test._ddPendingHookFailureFinish = finish
+        } else {
+          finish()
+        }
       } else {
         testContext.err = err
         errorCh.runStores(testContext, () => {})
@@ -1088,24 +1199,34 @@ function getOnFailHandler (isMain, config) {
 
 function getOnTestRetryHandler (config) {
   return function (test, err) {
+    if (automaticRetryTests.has(test)) {
+      // Mocha has already queued the clone; later budget changes cannot change its scheduling owner.
+      const originalTest = test._retriedTest || test
+      let attempts = automaticRetryAttempts.get(originalTest)
+      if (!attempts) {
+        attempts = new Set()
+        automaticRetryAttempts.set(originalTest, attempts)
+      }
+      attempts.add(test._currentRetry + 1)
+    }
     const isFirstAttempt = test._currentRetry === 0
     const isDynamicAtrTest = config.isDynamicAtrEnabled &&
       config.isFlakyTestRetriesEnabled &&
+      automaticRetryTests.has(test) &&
       !test._ddIsAttemptToFix &&
       !isEarlyFlakeDetectionTest(test, config)
     if (isDynamicAtrTest && isFirstAttempt) {
-      const testName = getTestFullName(test)
       const dynamicCount = getDynamicAtrRetryCount(
         test.duration > 0 ? test.duration : performance.now() - test._ddStartTime,
         config.earlyFlakeDetectionRetryPolicy,
         config.dynamicAtrBuckets
       )
-      dynamicAtrRetryCountByTestFullName.set(testName, dynamicCount)
+      dynamicAtrRetryCountByTest.set(test._retriedTest || test, dynamicCount)
       // Mocha emits retry before its next attempt starts; narrow its ceiling here.
       test._retries = dynamicCount
     }
 
-    if (config.isFlakyTestRetriesEnabled && getAfterEachHooks(test).length) {
+    if ((config.isFlakyTestRetriesEnabled || config.isTestFailureVideosEnabled) && getAfterEachHooks(test).length) {
       // Mocha queues retries before afterEach; a hook failure can still cancel the retry.
       test._ddPendingRetry = () => publishTestRetry(test, err, config)
       return
@@ -1128,6 +1249,7 @@ function publishTestRetry (test, err, config) {
     const willBeRetried = test._currentRetry < test._retries
     const isAtrRetry = !isFirstAttempt &&
       config.isFlakyTestRetriesEnabled &&
+      automaticRetryAttempts.get(test._retriedTest || test)?.has(test._currentRetry) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
     const promises = {}

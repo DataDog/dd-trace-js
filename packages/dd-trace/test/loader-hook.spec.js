@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
-const { mkdtempSync, rmSync, writeFileSync } = require('node:fs')
+const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
@@ -13,6 +13,47 @@ const configDefaultsPath = join(repositoryRoot, 'packages', 'dd-trace', 'src', '
 
 const securityControls = 'SANITIZER:COMMAND_INJECTION:sanitizer/index.js:sanitize'
 const sanitizerUrl = 'file:///app/sanitizer/index.js'
+
+describe('initialize.mjs', () => {
+  it('initializes ESM instrumentation without deprecated loader warnings', () => {
+    const result = initializeEsm()
+
+    assert.doesNotMatch(result.stderr, /\[DEP0205\]/)
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.match(result.stdout, /^true\n/)
+  })
+
+  it('initializes ESM instrumentation when require(esm) is disabled', function () {
+    if (!process.allowedNodeEnvironmentFlags.has('--no-experimental-require-module')) {
+      // Older runtimes do not expose require(esm) or its disabling flag.
+      this.skip()
+    }
+
+    const result = initializeEsm(['--no-experimental-require-module'])
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.match(result.stdout, /^true\n/)
+  })
+})
+
+/**
+ * @param {string[]} [execArgv]
+ */
+function initializeEsm (execArgv = []) {
+  return spawnSync(process.execPath, [
+    ...execArgv,
+    '--import', pathToFileURL(join(repositoryRoot, 'initialize.mjs')).href,
+    join(repositoryRoot, 'integration-tests/init/instrument.mjs'),
+  ], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      NODE_OPTIONS: '',
+      DD_INJECT_FORCE: 'true',
+      DD_TRACE_STARTUP_LOGS: 'false',
+    },
+  })
+}
 
 describe('loader hook', () => {
   let temporaryDirectory
@@ -41,6 +82,24 @@ describe('loader hook', () => {
       console.log(JSON.stringify({
         loadedConfigDefaults: require.cache[${JSON.stringify(configDefaultsPath)}] !== undefined,
         includesSecurityControl: data.shouldInclude(${JSON.stringify(sanitizerUrl)}, './sanitizer/index.js'),
+        includesHooklessOrchestrion: data.shouldInclude(
+          'file:///app/node_modules/bullmq/dist/esm/classes/queue.js',
+          'bullmq'
+        ),
+        includesHybridOrchestrion: data.shouldInclude(
+          'file:///app/node_modules/ai/dist/index.js',
+          'ai'
+        ),
+        pureIncludes: Object.fromEntries(${JSON.stringify([
+          '@azure/cosmos',
+          '@langchain/core',
+          '@langchain/langgraph',
+          'bullmq',
+          'mercurius',
+        ])}.map(name => [name, data.shouldInclude(
+          'file:///app/node_modules/' + name + '/dist/index.js',
+          name
+        )])),
       }))
     `], {
       encoding: 'utf8',
@@ -62,6 +121,15 @@ describe('loader hook', () => {
     assert.deepStrictEqual(initializeLoaderHook(), {
       loadedConfigDefaults: false,
       includesSecurityControl: false,
+      includesHooklessOrchestrion: false,
+      includesHybridOrchestrion: true,
+      pureIncludes: {
+        '@azure/cosmos': false,
+        '@langchain/core': false,
+        '@langchain/langgraph': false,
+        bullmq: false,
+        mercurius: false,
+      },
     })
   })
 
@@ -87,4 +155,96 @@ describe('loader hook', () => {
 
     assert.strictEqual(initializeLoaderHook().includesSecurityControl, true)
   })
+
+  it('activates pure modules across the asynchronous loader-worker boundary', () => {
+    assert.deepStrictEqual(runPureLoaderPipeline({ version: '5.66.0' }), {
+      activations: 1,
+      compatibility: ['rewritten'],
+      iitmCalls: 0,
+      result: 'added',
+      sequence: ['activation', 'start'],
+      starts: 1,
+    })
+  })
+
+  it('does not rewrite or activate disabled and unsupported pure modules in the asynchronous loader', () => {
+    assert.deepStrictEqual(runPureLoaderPipeline({ disabled: true, version: '5.66.0' }), {
+      activations: 0,
+      compatibility: [],
+      iitmCalls: 0,
+      result: 'added',
+      sequence: [],
+      starts: 0,
+    })
+    assert.deepStrictEqual(runPureLoaderPipeline({ version: '5.65.0' }), {
+      activations: 0,
+      compatibility: ['unsupported'],
+      iitmCalls: 0,
+      result: 'added',
+      sequence: [],
+      starts: 0,
+    })
+  })
+
+  function runPureLoaderPipeline ({ disabled = false, version }) {
+    const packageDirectory = join(temporaryDirectory, 'node_modules', 'bullmq')
+    const fixturePath = join(packageDirectory, 'dist', 'esm', 'classes', 'queue.js')
+    const mainPath = join(temporaryDirectory, `main-${disabled}-${version}.cjs`)
+    mkdirSync(join(packageDirectory, 'dist', 'esm', 'classes'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({ type: 'module', version }))
+    writeFileSync(fixturePath, 'export class Queue { async add () { return "added" } }\n')
+    writeFileSync(mainPath, `
+      const { register } = require('node:module')
+      const { pathToFileURL } = require('node:url')
+      const dc = require(${JSON.stringify(require.resolve('dc-polyfill'))})
+      const Hook = require(${JSON.stringify(join(
+        repositoryRoot,
+        'packages/datadog-instrumentations/src/helpers/hook.js'
+      ))})
+
+      require(${JSON.stringify(join(
+        repositoryRoot,
+        'packages/datadog-instrumentations/src/helpers/register.js'
+      ))})
+      let iitmCalls = 0
+      Hook(['bullmq'], { internals: true }, exports => {
+        iitmCalls++
+        return exports
+      })
+      register(${JSON.stringify(loaderHookUrl)}, pathToFileURL(__filename))
+
+      let activations = 0
+      const compatibility = []
+      let starts = 0
+      const sequence = []
+      dc.channel('dd-trace:instrumentation:load').subscribe(() => {
+        activations++
+        sequence.push('activation')
+      })
+      dc.channel('dd-trace:instrumentation:load:orchestrion').subscribe(({ result }) => {
+        compatibility.push(result)
+      })
+      dc.tracingChannel('orchestrion:bullmq:Queue_add').subscribe({
+        start () {
+          starts++
+          sequence.push('start')
+        }
+      })
+
+      import(${JSON.stringify(pathToFileURL(fixturePath).href)}).then(async ({ Queue }) => {
+        const result = await new Queue().add()
+        console.log(JSON.stringify({ activations, compatibility, iitmCalls, result, sequence, starts }))
+      })
+    `)
+
+    const result = spawnSync(process.execPath, [mainPath], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        DD_TRACE_DISABLED_INSTRUMENTATIONS: disabled ? 'bullmq' : undefined,
+      },
+    })
+    assert.strictEqual(result.status, 0, result.stderr)
+    return JSON.parse(result.stdout.trim())
+  }
 })

@@ -140,8 +140,7 @@ function awaitContextCallback (state, node, _parent, ancestry) {
     const generatedCallback = createAwaitedContextCallback(
       state,
       insertionTarget,
-      callbackAncestry,
-      'awaitContextCallback'
+      callbackAncestry
     )
     if (!generatedCallback) return
 
@@ -158,8 +157,7 @@ function awaitContextCallback (state, node, _parent, ancestry) {
   const generatedCallback = createAwaitedContextCallback(
     state,
     node.consequent,
-    ancestry,
-    'awaitContextCallback'
+    ancestry
   )
   if (!generatedCallback) return
 
@@ -181,18 +179,17 @@ function awaitContextCallback (state, node, _parent, ancestry) {
  * @param {Parameters<typeof awaitContextCallback>[0]} state
  * @param {import('estree').BlockStatement} insertionTarget
  * @param {import('estree').Node[]} ancestry
- * @param {string} transformName
  * @returns {{
  *   callbackStatements: import('estree').Statement[],
  *   callbackVariable: string
  * }|undefined}
  */
-function createAwaitedContextCallback (state, insertionTarget, ancestry, transformName) {
+function createAwaitedContextCallback (state, insertionTarget, ancestry) {
   const { callbackArgumentNames = [], callbackName, callbackThis = false } = state.transformOptions ?? {}
 
-  assert(identifierPattern.test(callbackName), `${transformName}: callbackName must be an identifier`)
+  assert(identifierPattern.test(callbackName), 'awaitContextCallback: callbackName must be an identifier')
   assert(Array.isArray(callbackArgumentNames) && callbackArgumentNames.every(name => identifierPattern.test(name)),
-    `${transformName}: callbackArgumentNames must be identifiers`)
+    'awaitContextCallback: callbackArgumentNames must be identifiers')
 
   let enclosingFunction
   let hasTraceWrapper = false
@@ -215,8 +212,8 @@ function createAwaitedContextCallback (state, insertionTarget, ancestry, transfo
     hasTraceWrapper ||= hasContextBinding && hasTracedBinding
   }
 
-  assert(enclosingFunction?.async, `${transformName}: expected an enclosing async function`)
-  assert(hasTraceWrapper, `${transformName}: expected an enclosing trace wrapper`)
+  assert(enclosingFunction?.async, 'awaitContextCallback: expected an enclosing async function')
+  assert(hasTraceWrapper, 'awaitContextCallback: expected an enclosing trace wrapper')
 
   const callbackVariable = `__apm$${callbackName}`
   if (query(insertionTarget, `[id.name="${callbackVariable}"]`).length > 0) return

@@ -215,6 +215,46 @@ describe('debugger -> devtools client -> snapshot incomplete capture reasons', f
       assert.deepStrictEqual(captured.skipped, { notCapturedReason: 'timeout' })
       assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.TIMEOUT)
     })
+
+    it('should report redacted expressions after a timeout as redacted, not timed out', async function () {
+      const redactionError = {
+        expr: 'pw',
+        message: "Could not evaluate the expression because 'password' was redacted",
+      }
+      const { processCaptureExpressions, evaluationErrors, incomplete } = await whilePaused((callFrame) => {
+        return evaluateCaptureExpressions(callFrame, [
+          { name: 'nested', expression: 'nested', limits: DEFAULT_CAPTURE_LIMITS },
+          { name: 'pw', redactionError },
+          { name: 'skipped', expression: 'nested', limits: DEFAULT_CAPTURE_LIMITS },
+        ], EXPIRED_DEADLINE_NS)
+      })
+
+      const captured = processCaptureExpressions()
+
+      assert.deepStrictEqual(Object.keys(captured), ['nested', 'skipped'])
+      assert.deepStrictEqual(captured.skipped, { notCapturedReason: 'timeout' })
+      assert.deepStrictEqual(evaluationErrors, [redactionError])
+      assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.TIMEOUT)
+    })
+
+    it('should not record a timeout if only redacted expressions remain', async function () {
+      const redactionError = {
+        expr: 'pw',
+        message: "Could not evaluate the expression because 'password' was redacted",
+      }
+      const { processCaptureExpressions, evaluationErrors, incomplete } = await whilePaused((callFrame) => {
+        return evaluateCaptureExpressions(callFrame, [
+          { name: 'wrapped', expression: '({ password: nested })', limits: DEFAULT_CAPTURE_LIMITS },
+          { name: 'pw', redactionError },
+        ], EXPIRED_DEADLINE_NS)
+      })
+
+      const captured = processCaptureExpressions()
+
+      assert.deepStrictEqual(Object.keys(captured), ['wrapped'])
+      assert.deepStrictEqual(evaluationErrors, [redactionError])
+      assert.strictEqual(incomplete.reasons, 0)
+    })
   })
 })
 

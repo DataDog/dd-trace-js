@@ -48,6 +48,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
     log = {
       debug: sinon.spy(),
       error: sinon.spy(),
+      errorWithoutTelemetry: sinon.spy(),
       warn: sinon.spy(),
     }
 
@@ -59,6 +60,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
       './configuration_source': {
         create: sinon.stub(),
       },
+      './writers/flag-eval-evp-hook': sinon.stub().returns({ destroy: sinon.spy() }),
       '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
     })
   })
@@ -108,6 +110,165 @@ describe('FlaggingProvider Initialization Timeout', () => {
     await initPromise.catch(() => {})
   })
 
+  it('returns the upstream initialization promise without adding a settlement handler', async () => {
+    const promise = Promise.resolve()
+    const then = sinon.spy(promise, 'then')
+    const initialize = sinon.stub(DatadogNodeServerProvider.prototype, 'initialize').returns(promise)
+    try {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      assert.strictEqual(provider.initialize(), promise)
+      sinon.assert.notCalled(then)
+      await promise
+    } finally {
+      initialize.restore()
+    }
+  })
+
+  it('logs configuration that arrived before initialization', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    const configuration = { flags: {} }
+    provider.setConfiguration(configuration)
+    log.debug.resetHistory()
+
+    await provider.initialize()
+
+    assert.strictEqual(provider.getConfiguration(), configuration)
+    sinon.assert.calledWith(log.debug, 'Feature Flags: initial configuration available')
+    assert.strictEqual(provider.initController, undefined)
+  })
+
+  it('does not log initialization outcomes for later configuration changes or errors', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    const promise = provider.initialize()
+    provider.setConfiguration({ flags: {} })
+    await promise
+    log.debug.resetHistory()
+
+    provider.setConfiguration({ flags: { updated: {} } })
+    provider.setError(new Error('later failure'))
+
+    sinon.assert.notCalled(log.debug)
+    sinon.assert.notCalled(log.errorWithoutTelemetry)
+  })
+
+  it('does not log errors before initialization starts', () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+    provider.setError(new Error('before initialization'))
+
+    sinon.assert.notCalled(log.errorWithoutTelemetry)
+  })
+
+  for (const configuration of [undefined, null]) {
+    it(`keeps waiting after a ${configuration} update and logs the first available configuration`, async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const initialized = sinon.spy()
+      const promise = provider.initialize().then(initialized)
+      log.debug.resetHistory()
+
+      provider.setConfiguration(configuration)
+      await clock.tickAsync(29999)
+
+      assert.strictEqual(provider.getConfiguration(), undefined)
+      sinon.assert.notCalled(initialized)
+      sinon.assert.notCalled(log.debug)
+      sinon.assert.notCalled(log.errorWithoutTelemetry)
+
+      provider.setConfiguration({ flags: {} })
+      await promise
+
+      sinon.assert.calledOnce(initialized)
+      sinon.assert.calledOnceWithExactly(log.debug, 'Feature Flags: initial configuration available')
+      await clock.tickAsync(1)
+      sinon.assert.notCalled(log.errorWithoutTelemetry)
+
+      log.debug.resetHistory()
+      provider.setConfiguration({ flags: {} })
+      sinon.assert.notCalled(log.debug)
+    })
+
+    it(`preserves the initialization timeout and diagnostic after repeated ${configuration} updates`, async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const rejection = assert.rejects(provider.initialize(), {
+        name: 'Error', message: 'Initialization timeout after 30000ms',
+      })
+      log.debug.resetHistory()
+
+      provider.setConfiguration(configuration)
+      await clock.tickAsync(10000)
+      provider.setConfiguration(configuration)
+      await clock.tickAsync(19999)
+      sinon.assert.notCalled(log.errorWithoutTelemetry)
+
+      await clock.tickAsync(1)
+      await rejection
+      sinon.assert.calledOnceWithExactly(
+        log.errorWithoutTelemetry,
+        'Feature Flags: provider failed to initialize: %s',
+        'Initialization timeout after 30000ms'
+      )
+
+      provider.setConfiguration({ flags: {} })
+      sinon.assert.notCalled(log.debug)
+    })
+  }
+
+  it('logs only the first configuration before the initialization promise settles', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    const promise = provider.initialize()
+    log.debug.resetHistory()
+
+    provider.setConfiguration({ flags: {} })
+    provider.setConfiguration({ flags: {} })
+    await promise
+
+    sinon.assert.calledOnceWithExactly(log.debug, 'Feature Flags: initial configuration available')
+  })
+
+  it('logs a new initialization attempt after an error', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    const promise = provider.initialize()
+    const error = new Error('first initialization failed')
+    const rejection = assert.rejects(promise, error)
+    provider.setError(error)
+    await rejection
+
+    const retry = provider.initialize()
+    log.debug.resetHistory()
+    provider.setConfiguration({ flags: {} })
+    await retry
+
+    sinon.assert.calledOnceWithExactly(log.debug, 'Feature Flags: initial configuration available')
+    sinon.assert.calledOnce(log.errorWithoutTelemetry)
+  })
+
+  it('preserves successful initialization if configuration logging throws', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    const promise = provider.initialize()
+    log.debug = sinon.stub().throws(new Error('logging failed'))
+    const configuration = { flags: {} }
+
+    provider.setConfiguration(configuration)
+    await promise
+
+    assert.strictEqual(provider.getConfiguration(), configuration)
+    sinon.assert.calledOnce(log.debug)
+  })
+
+  it('preserves the initialization rejection if error logging throws', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+    const promise = provider.initialize()
+    const error = new Error('initialization failed')
+    const rejection = assert.rejects(promise, error)
+    log.errorWithoutTelemetry = sinon.stub().throws(new Error('logging failed'))
+
+    provider.setError(error)
+
+    await rejection
+    sinon.assert.calledOnce(log.errorWithoutTelemetry)
+  })
+
   it('should not timeout if configuration is set before 30 seconds', async () => {
     const provider = new FlaggingProvider(mockTracer, mockConfig)
 
@@ -140,6 +301,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
     // Verify initialization completed successfully
     assert.strictEqual(provider.initController.isInitializing(), false)
     assert.strictEqual(provider.getConfiguration(), ufc)
+    sinon.assert.calledWith(log.debug, 'Feature Flags: initial configuration available')
   })
 
   it('should call setError with timeout message after 30 seconds', async () => {
@@ -165,6 +327,30 @@ describe('FlaggingProvider Initialization Timeout', () => {
     const errorArg = setErrorSpy.firstCall.args[0]
     assert.ok(errorArg instanceof Error)
     assert.strictEqual(errorArg.message, 'Initialization timeout after 30000ms')
+
+    sinon.assert.calledOnceWithExactly(
+      log.errorWithoutTelemetry,
+      'Feature Flags: provider failed to initialize: %s',
+      'Initialization timeout after 30000ms'
+    )
+  })
+
+  it('logs a non-Error rejection reason without throwing', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+    const initPromise = provider.initialize()
+    initPromise.catch(() => {})
+
+    // setError() is a public provider method; its argument is not guaranteed to be an Error.
+    provider.setError('plain string failure')
+
+    await initPromise.catch(() => {})
+
+    sinon.assert.calledOnceWithExactly(
+      log.errorWithoutTelemetry,
+      'Feature Flags: provider failed to initialize: %s',
+      'plain string failure'
+    )
   })
 
   it('should allow recovery if configuration is set after timeout', async () => {
@@ -189,6 +375,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
 
     // Configuration is still not set
     assert.strictEqual(provider.getConfiguration(), undefined)
+    log.debug.resetHistory()
 
     // Now set configuration after timeout
     const ufc = { flags: { 'recovery-flag': {} } }
@@ -197,6 +384,8 @@ describe('FlaggingProvider Initialization Timeout', () => {
     // Should emit READY event to signal recovery
     sinon.assert.calledOnce(readyEventSpy)
     assert.strictEqual(provider.getConfiguration(), ufc)
+    sinon.assert.notCalled(log.debug)
+    sinon.assert.calledOnce(log.errorWithoutTelemetry)
   })
 
   describe('custom timeout configuration', () => {

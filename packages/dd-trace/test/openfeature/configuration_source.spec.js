@@ -144,6 +144,19 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(resolved.apiKey, undefined)
   })
 
+  it('logs only the origin, dropping credentials, path, and query, when starting the agentless source', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+      'https://user:tok@example.com/signed-token-in-path/ufc?sig=super-secret-value'
+
+    createSourceConfig()
+
+    sinon.assert.calledOnceWithExactly(
+      log.debug,
+      'Feature Flags: starting agentless configuration source at %s',
+      'https://example.com'
+    )
+  })
+
   it('derives and creates the managed GovCloud endpoint without hard-coding availability', () => {
     config.site = 'DDOG-GOV.COM'
     config.env = 'prod'

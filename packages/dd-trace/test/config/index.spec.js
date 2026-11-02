@@ -29,6 +29,7 @@ const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
 
 describe('Config', () => {
   let log
+  let logWriter
   let pkg
   let env
   let fs
@@ -57,6 +58,17 @@ describe('Config', () => {
     }
   }
 
+  /**
+   * Telemetry keeps an entry per origin, and the entry with the highest `seq_id` is the reported value.
+   *
+   * @param {string} name
+   */
+  function getLatestConfigUpdate (name) {
+    return updateConfig.lastCall.args[0]
+      .filter(entry => entry.name === name)
+      .reduce((latest, entry) => entry.seq_id > latest.seq_id ? entry : latest)
+  }
+
   // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
   const getConfig = (options, overrides = {}) => {
     const {
@@ -67,6 +79,7 @@ describe('Config', () => {
     sinon.spy(log, 'info')
     sinon.spy(log, 'warn')
     sinon.spy(log, 'error')
+    logWriter = { warn: sinon.stub() }
     const loadParsers = proxyquire.noPreserveCache()
     const parsers = loadParsers('../../src/config/parsers', {})
     const loadSupportedConfigurations = proxyquire.noPreserveCache()
@@ -89,6 +102,7 @@ describe('Config', () => {
     const createConfig = loadConfig('../../src/config', {
       './defaults': configDefaults,
       '../log': log,
+      '../log/writer': logWriter,
       '../telemetry': { updateConfig },
       '../serverless': serverless,
       'node:fs': fs,
@@ -132,6 +146,22 @@ describe('Config', () => {
         () => getEnvironmentVariable('DD_UNKNOWN_CONFIG'),
         /Missing DD_UNKNOWN_CONFIG env\/configuration in "supported-configurations.json" file./
       )
+    })
+
+    it('leaves the private parallelization runtime parameters unset by default', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config._DD_TEST_PARALLELIZATION_METADATA_FILE, undefined)
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE'), undefined)
+      assert.strictEqual(config._DD_TEST_PARALLELIZATION_ENABLED, undefined)
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'), undefined)
+    })
+
+    it('reads the internal parallelization runtime parameters', () => {
+      process.env._DD_TEST_PARALLELIZATION_ENABLED = 'true'
+      process.env._DD_TEST_PARALLELIZATION_METADATA_FILE = '/tmp/plan-metadata.json'
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_METADATA_FILE'), '/tmp/plan-metadata.json')
+      assert.strictEqual(getEnvironmentVariable('_DD_TEST_PARALLELIZATION_ENABLED'), 'true')
     })
 
     it('should return aliased value', () => {
@@ -780,6 +810,28 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_BUNDLER_INJECT_GIT_METADATA', () => {
+    it('should default to true', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_BUNDLER_INJECT_GIT_METADATA, true)
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_BUNDLER_INJECT_GIT_METADATA', value: true, origin: 'default' },
+      ])
+    })
+
+    it('should initialize from the environment', () => {
+      process.env.DD_BUNDLER_INJECT_GIT_METADATA = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_BUNDLER_INJECT_GIT_METADATA, false)
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_BUNDLER_INJECT_GIT_METADATA', value: false, origin: 'env_var' },
+      ])
+    })
+  })
+
   describe('OTEL_RESOURCE_ATTRIBUTES mapping', () => {
     it('maps deployment.environment as a fallback', () => {
       process.env.OTEL_RESOURCE_ATTRIBUTES =
@@ -1176,6 +1228,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 50,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: undefined,
         DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
       },
@@ -1261,7 +1314,7 @@ describe('Config', () => {
     assert.deepStrictEqual(config.serviceMapping, {})
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
     assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
-    assert.strictEqual(config.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP.length, 626)
+    assert.strictEqual(config.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP.length, 837)
     assert.strictEqual(config.appsec.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP.length, 190)
     assert.strictEqual(config.appsec.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP.length, 578)
 
@@ -1305,6 +1358,7 @@ describe('Config', () => {
       { name: 'DD_APPSEC_MAX_STACK_TRACES', value: 2, origin: 'default' },
       { name: 'DD_APPSEC_WAF_TIMEOUT', value: 5e3, origin: 'default' },
       { name: 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_BUNDLER_INJECT_GIT_METADATA', value: true, origin: 'default' },
       { name: 'DD_TEST_SESSION_NAME', value: null, origin: 'default' },
       { name: 'DD_CODE_COVERAGE_FLAGS', value: null, origin: 'default' },
       { name: 'DD_TRACE_CLIENT_IP_ENABLED', value: false, origin: 'default' },
@@ -1316,6 +1370,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_PORT', value: 8125, origin: 'default' },
       { name: 'DD_DATA_STREAMS_ENABLED', value: false, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 50, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: null, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: '', origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: '', origin: 'default' },
@@ -1534,6 +1589,7 @@ describe('Config', () => {
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '20'
     process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
@@ -1669,6 +1725,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 20,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes.json',
         DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo', 'bar'],
         DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['a', 'b', 'c'],
@@ -1805,6 +1862,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_HOST', value: 'dsd-agent', origin: 'env_var' },
       { name: 'DD_DOGSTATSD_PORT', value: 5218, origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: true, origin: 'env_var' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 20, origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: 'probes.json', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: 'foo,bar', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'env_var' },
@@ -2030,6 +2088,41 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.pollInterval, -Infinity)
   })
 
+  it('should reject non-finite dynamic instrumentation evaluation timeouts', () => {
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = 'Infinity'
+
+    const config = getConfig({
+      dynamicInstrumentation: {
+        evaluationTimeoutMs: -Infinity,
+      },
+    })
+
+    assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 50)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: Infinity for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS (source: env_var), picked default'
+    )
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: -Infinity for dynamicInstrumentation.evaluationTimeoutMs (source: code), picked default'
+    )
+  })
+
+  it('should accept a zero dynamic instrumentation evaluation timeout and reject a negative one', () => {
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '0'
+
+    assert.strictEqual(getConfig().dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 0)
+    sinon.assert.notCalled(log.warn)
+
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '-1'
+
+    assert.strictEqual(getConfig().dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 50)
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'Invalid value: -1 for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS (source: env_var), picked default'
+    )
+  })
+
   it('should ignore undefined programmatic option values', () => {
     const config = getConfig({ startupLogs: undefined })
 
@@ -2209,6 +2302,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: true,
+        evaluationTimeoutMs: 30,
         probeFile: 'probes.json',
         redactedIdentifiers: ['foo', 'bar'],
         redactionExcludedIdentifiers: ['a', 'b', 'c'],
@@ -2322,6 +2416,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 30,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes.json',
         DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 0.1,
       },
@@ -2476,6 +2571,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_HOST', value: 'agent-dsd', origin: 'code' },
       { name: 'DD_DOGSTATSD_PORT', value: '5218', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: true, origin: 'code' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 30, origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: 'probes.json', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: 'foo,bar', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'code' },
@@ -2793,6 +2889,7 @@ describe('Config', () => {
     process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '20'
     process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
@@ -2887,6 +2984,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: false,
+        evaluationTimeoutMs: 30,
         probeFile: 'probes2.json',
         redactedIdentifiers: ['foo2', 'bar2'],
         redactionExcludedIdentifiers: ['a2', 'b2'],
@@ -2994,6 +3092,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 30,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes2.json',
         DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo2', 'bar2'],
         DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['a2', 'b2'],
@@ -3397,6 +3496,30 @@ describe('Config', () => {
       },
     })
   })
+
+  for (const exporter of [
+    exporters.AGENT_PROXY,
+    exporters.DATADOG,
+    exporters.CUCUMBER_WORKER,
+    exporters.JEST_WORKER,
+    exporters.MOCHA_WORKER,
+    exporters.PLAYWRIGHT_WORKER,
+    exporters.VITEST_WORKER,
+  ]) {
+    it(`should disable DogStatsD and runtime metrics for the ${exporter} Test Optimization exporter`, () => {
+      process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+
+      const config = getConfig({
+        isCiVisibility: true,
+        dogstatsd: { hostname: 'metrics.example', port: 8125 },
+        runtimeMetrics: true,
+        experimental: { exporter },
+      })
+
+      assert.strictEqual(config.dogstatsd, undefined)
+      assert.strictEqual(config.runtimeMetrics.enabled, false)
+    })
+  }
 
   for (const exporter of [
     exporters.CUCUMBER_WORKER,
@@ -4155,9 +4278,9 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, false)
       })
-      it('should disable test failure screenshots by default', () => {
+      it('should enable test failure screenshots by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, undefined)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, true)
       })
       it('should enable test failure screenshots if DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true', () => {
         process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'true'
@@ -4169,9 +4292,9 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
       })
-      it('should disable test failure videos by default', () => {
+      it('should enable test failure videos by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_VIDEOS_ENABLED, undefined)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_VIDEOS_ENABLED, true)
       })
       it('should enable test failure videos if DD_TEST_FAILURE_VIDEOS_ENABLED is true', () => {
         process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
@@ -5274,6 +5397,24 @@ rules:
   })
 
   describe('setRemoteConfig', () => {
+    it('should preserve remote configuration that overrides a calculated fallback', () => {
+      process.env.OTEL_PROPAGATORS = 'b3'
+      const config = getConfig(undefined, { ddMajor: 5 })
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
+
+      config.setRemoteConfig({ DD_TRACE_PROPAGATION_STYLE_INJECT: 'b3' })
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'remote_config')
+
+      config.setRemoteConfig(null)
+
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3'])
+      assert.strictEqual(config.getOrigin('tracePropagationStyle.inject'), 'calculated')
+    })
+
     it('should resolve deprecated AppSec env configs to canonical Remote Config fields', () => {
       const config = getConfig()
 
@@ -5847,7 +5988,165 @@ rules:
     })
   })
 
+  for (const [runtime, versions] of [
+    ['Bun', { bun: '1.4.3' }],
+    ['Deno', { deno: '2.9.6' }],
+  ]) {
+    context(`on ${runtime}`, () => {
+      const debuggerDiagnostic = 'DATADOG TRACER DIAGNOSTIC - Live Debugger/Dynamic Instrumentation is disabled, ' +
+        `because it is not supported on ${runtime}.`
+      const failedTestReplayDiagnostic = 'DATADOG TRACER DIAGNOSTIC - Failed Test Replay is disabled, ' +
+        `because Live Debugger/Dynamic Instrumentation is not supported on ${runtime}.`
+
+      let versionsStub
+
+      beforeEach(() => {
+        versionsStub = sinon.stub(process, 'versions').value({ ...process.versions, ...versions })
+        // Startup logs are disabled by default in v5
+        process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      })
+
+      afterEach(() => {
+        versionsStub.restore()
+      })
+
+      it('should disable Live Debugger/Dynamic Instrumentation enabled by an environment variable', () => {
+        process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        assert.strictEqual(config.getOrigin('dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED'), 'calculated')
+        assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+          { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: false, origin: 'calculated' },
+        ])
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should disable Live Debugger/Dynamic Instrumentation enabled programmatically', () => {
+        const config = getConfig({ dynamicInstrumentation: { enabled: true } })
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should disable Live Debugger/Dynamic Instrumentation enabled by Remote Config', () => {
+        const config = getConfig()
+
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+
+        // The rest of a later update still applies
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true', DD_TRACE_SAMPLE_RATE: '0.5' })
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        assert.strictEqual(config.sampleRate, 0.5)
+
+        config.setRemoteConfig(null)
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should keep reporting Live Debugger/Dynamic Instrumentation as calculated on Remote Config updates', () => {
+        const config = getConfig()
+
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        assert.strictEqual(config.getOrigin('dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED'), 'calculated')
+        assertObjectContains(getLatestConfigUpdate('DD_DYNAMIC_INSTRUMENTATION_ENABLED'), {
+          value: false,
+          origin: 'calculated',
+        })
+      })
+
+      it('should explain only once why Live Debugger/Dynamic Instrumentation is disabled', () => {
+        process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+
+        const config = getConfig()
+        // Recalculates the config, starting from the environment variable again
+        config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should not explain why Live Debugger/Dynamic Instrumentation is disabled without startup logs', () => {
+        process.env.DD_TRACE_STARTUP_LOGS = 'false'
+        process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        sinon.assert.notCalled(logWriter.warn)
+      })
+
+      it('should disable Failed Test Replay without explaining why when it is enabled by default', () => {
+        const config = getConfig()
+
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED, false)
+        sinon.assert.notCalled(logWriter.warn)
+      })
+
+      it('should disable Failed Test Replay enabled by an environment variable', () => {
+        process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED, false)
+        sinon.assert.calledOnceWithExactly(logWriter.warn, failedTestReplayDiagnostic)
+      })
+
+      it('should disable Failed Test Replay enabled by Remote Config', () => {
+        const config = getConfig()
+
+        config.setRemoteConfig({ DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'true' })
+
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED, false)
+        assert.strictEqual(config.getOrigin('testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED'), 'calculated')
+        sinon.assert.calledOnceWithExactly(logWriter.warn, failedTestReplayDiagnostic)
+      })
+    })
+  }
+
   context('Feature Flagging configuration source', () => {
+    it('enables Datadog exposure logging by default', () => {
+      assert.strictEqual(defaults['featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED'], true)
+      assert.strictEqual(getConfig().featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED, true)
+    })
+
+    for (const enabled of [false, true]) {
+      it(`sets Datadog exposure logging to ${enabled} independently of evaluation and counts`, () => {
+        process.env.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED = String(enabled)
+        const config = getConfig()
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED, enabled)
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, true)
+        assert.strictEqual(config.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED, true)
+        assert.strictEqual(
+          config.getOrigin('featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED'), 'env_var'
+        )
+      })
+    }
+
+    it('enables evaluation counts by default', () => {
+      assert.strictEqual(defaults['featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED'], true)
+      assert.strictEqual(getConfig().featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED, true)
+    })
+
+    for (const enabled of [false, true]) {
+      it(`sets evaluation counts to ${enabled} from the environment independently of Feature Flagging`, () => {
+        process.env.DD_FLAGGING_EVALUATION_COUNTS_ENABLED = String(enabled)
+        const config = getConfig()
+        assert.strictEqual(config.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED, enabled)
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, true)
+        assert.strictEqual(config.getOrigin('featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED'), 'env_var')
+      })
+    }
+
     it('uses agentless as the source default', () => {
       assert.strictEqual(defaults['featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'], 'agentless')
       assert.strictEqual(getConfig().featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
@@ -6033,6 +6332,45 @@ rules:
         },
       })
       assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'flaggingProvider'), false)
+    })
+
+    it('disables evaluation telemetry opt-out by default and accepts the provider option', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
+      assert.strictEqual(getConfig().featureFlags[name], false)
+      process.env[name] = 'true'
+      assert.strictEqual(getConfig().featureFlags[name], true)
+      const config = getConfig({
+        featureFlags: { enableEvaluationTelemetryOptOutParameter: false },
+      })
+      assert.strictEqual(config.featureFlags[name], false)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'code')
+      delete process.env[name]
+      assert.strictEqual(getConfig({
+        featureFlags: { enableEvaluationTelemetryOptOutParameter: true },
+      }).featureFlags[name], true)
+    })
+
+    it('reports the stable evaluation telemetry opt-out environment variable', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
+      process.env[name] = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags[name], true)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'env_var')
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name, value: true, origin: 'env_var' },
+      ])
+    })
+
+    it('accepts false for the stable evaluation telemetry opt-out environment variable', () => {
+      const name = 'DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED'
+      process.env[name] = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.featureFlags[name], false)
+      assert.strictEqual(config.getOrigin('featureFlags.' + name), 'env_var')
     })
 
     it('reads the configuration source environment variable', () => {

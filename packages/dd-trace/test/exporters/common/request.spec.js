@@ -454,6 +454,33 @@ describe('request', function () {
     })
   })
 
+  it('preserves HTTP error details when the global URL is mocked', async () => {
+    nock('http://localhost:8080').put('/path').reply(400, () => {
+      // Mock after Nock's own URL parsing so only the exporter's error handling sees the mock.
+      sinon.replace(globalThis, 'URL', () => {})
+      return 'bad request'
+    })
+
+    try {
+      const error = await new Promise(resolve => {
+        request(Buffer.from(''), {
+          path: '/path',
+          method: 'PUT',
+          port: 8080,
+          includeErrorResponseBody: true,
+        }, resolve)
+      })
+
+      assert.ok(error instanceof Error)
+      assert.strictEqual(error.status, 400)
+      assert.strictEqual(error.message,
+        'Error from http://localhost:8080/path: 400 Bad Request. Response from the endpoint: "bad request"')
+      assert.strictEqual(error.responseBody, 'bad request')
+    } finally {
+      sinon.restore()
+    }
+  })
+
   // Live timeout → abort → retry → 'socket hang up' is covered by
   // `should have a configurable timeout` below at timeout: 100. Here we only
   // need to pin the default constant, which is faster and avoids waiting

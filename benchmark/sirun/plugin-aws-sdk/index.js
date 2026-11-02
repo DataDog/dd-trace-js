@@ -1,12 +1,11 @@
 'use strict'
 
-const guard = require('../startup-guard')
-// eslint-disable-next-line import/order -- The startup guard must run before every other require.
 const assert = require('node:assert/strict')
 
 const BaseAwsSdkPlugin = require('../../../packages/datadog-plugin-aws-sdk/src/base')
 const EventBridge = require('../../../packages/datadog-plugin-aws-sdk/src/services/eventbridge')
 const Lambda = require('../../../packages/datadog-plugin-aws-sdk/src/services/lambda')
+const guard = require('../startup-guard')
 
 const { VARIANT } = process.env
 

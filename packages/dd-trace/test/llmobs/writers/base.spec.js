@@ -174,6 +174,22 @@ describe('BaseLLMObsWriter', () => {
     assert.strictEqual(writer._buffer.size, 16)
   })
 
+  describe('in standard AWS Lambda', () => {
+    useEnv({ AWS_LAMBDA_INITIALIZATION_TYPE: 'on-demand' })
+
+    it('sends each event on append', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+
+      writer.append({ foo: 'bar' })
+
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(request.getCall(0).args[0], '{"events":[{"foo":"bar"}]}')
+      assert.strictEqual(writer._buffer.events.length, 0)
+    })
+  })
+
   it('does not append an event if the buffer is full', () => {
     writer = new BaseLLMObsWriter(options)
     writer.setAgentless(true)
@@ -188,6 +204,31 @@ describe('BaseLLMObsWriter', () => {
   })
 
   describe('flush', () => {
+    it('sends valid ASCII JSON without changing escaped values in a batch', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(false)
+      writer.makePayload = (events) => ({ events })
+
+      const events = [
+        {
+          path: String.raw`C:\Users\test\Documents\unity project`,
+          unicodeEscape: String.raw`\u0041`,
+          control: 'line\n\t"quoted"',
+        },
+        { café: '😀', value: String.raw`\😀` },
+      ]
+
+      for (const event of events) writer.append(event)
+      writer.flush()
+
+      sinon.assert.calledOnce(request)
+      const body = request.firstCall.args[0]
+      assert.strictEqual(Buffer.byteLength(body), body.length)
+      assert.ok(body.includes(String.raw`\ud83d\ude00`))
+      assert.ok(body.includes(String.raw`caf\u00e9`))
+      assert.deepStrictEqual(JSON.parse(body), { events })
+    })
+
     it('flushes a buffer in agentless mode', () => {
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(true)

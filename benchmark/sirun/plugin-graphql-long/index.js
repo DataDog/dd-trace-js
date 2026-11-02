@@ -1,13 +1,12 @@
 'use strict'
 
 // Long-workload graphql bench. Runs a fixed number of sequential queries per
-// process so tracer and graphql startup stay a small fraction of the run.
+// process to exercise the steady-state query path.
 
-const guard = require('../startup-guard')
-// eslint-disable-next-line import/order -- The startup guard must run before every other require.
 const assert = require('node:assert/strict')
 
 const exporterPath = require.resolve('../../../packages/dd-trace/src/exporter')
+const guard = require('../startup-guard')
 const preflightTraces = []
 let capturePreflight = true
 
@@ -103,8 +102,8 @@ const OPERATIONS = Number(process.env.OPERATIONS)
     await graphql.graphql({ schema, source, variableValues })
   }
   // Node 26 runs this loop ~2x faster than Node 20. Per-Node operation counts
-  // keep the setup share below 12% without making slower releases overlong.
-  guard.done(0.12)
+  // keep slower releases within the runtime budget.
+  guard.done()
 })()
 
 function validatePreflightTrace () {

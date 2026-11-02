@@ -22,7 +22,13 @@ describe('Prompt caches', () => {
   })
 
   function prompt (id) {
-    return new ManagedPrompt({ id, version: '1', source: 'cache', template: 'x' })
+    return new ManagedPrompt({
+      id,
+      version: '1',
+      source: 'cache',
+      template: 'x',
+      config: { model: { temperature: 0.2 } },
+    })
   }
 
   it('enforces the 1024-entry LRU boundary', () => {
@@ -78,6 +84,7 @@ describe('Prompt caches', () => {
     cache.set(underscoreKey, prompt('a_b'))
 
     assert.strictEqual(cache.get(slashKey).prompt.id, 'a/b')
+    assert.deepStrictEqual(cache.get(slashKey).prompt.config, { model: { temperature: 0.2 } })
     assert.strictEqual(cache.get(underscoreKey).prompt.id, 'a_b')
     assert.strictEqual(fs.statSync(cacheDir).mode & 0o777, 0o700)
     const files = fs.readdirSync(cache.cacheDir).flatMap(directory => {
@@ -96,6 +103,27 @@ describe('Prompt caches', () => {
     assert.strictEqual(cache.get(slashKey), undefined)
     fs.writeFileSync(slashFile, JSON.stringify({ prompt: serializedPrompt }))
     assert.strictEqual(cache.get(slashKey), undefined)
+    serializedPrompt.template = [{ type: 'placeholder', name: 42 }]
+    fs.writeFileSync(slashFile, JSON.stringify({ prompt: serializedPrompt, timestamp: Date.now() }))
+    assert.strictEqual(cache.get(slashKey), undefined)
+  })
+
+  it('restores and formats message placeholders from the warm cache', () => {
+    cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-cache-'))
+    const cache = new WarmCache({ cacheDir, ...WARM_OPTIONS })
+    const key = cacheKey('chat', ['latest'])
+    const template = [
+      { role: 'system', content: 'Hello {name}' },
+      { type: 'placeholder', name: 'history' },
+    ]
+    cache.set(key, new ManagedPrompt({ id: 'chat', version: '1', source: 'registry', template }))
+
+    const restored = new WarmCache({ cacheDir, ...WARM_OPTIONS }).get(key).prompt
+    assert.deepStrictEqual(restored.template, template)
+    assert.deepStrictEqual(restored.format({ name: 'Ada', history: [{ role: 'user', content: 'Hi' }] }), [
+      { role: 'system', content: 'Hello Ada' },
+      { role: 'user', content: 'Hi' },
+    ])
   })
 
   it('uses a unique temporary file for each warm cache write', () => {

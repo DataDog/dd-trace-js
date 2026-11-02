@@ -1,0 +1,13 @@
+_v: 1
+name: modelcontextprotocol-sdk
+display_name: Model Context Protocol SDK
+description: Instruments Model Context Protocol SDK client and server tool, resource, and prompt operations, including
+  server tool execution, distributed trace propagation, and LLM Observability for client tool calls and tool discovery.
+packages:
+- name: '@modelcontextprotocol/sdk'
+category:
+- gen_ai
+- mcp.client
+- mcp.server
+systems: []
+creation_date: '2026-04-22'

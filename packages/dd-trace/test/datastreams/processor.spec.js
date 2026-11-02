@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
+const { DsmPathwayCodec } = require('../../src/datastreams/pathway')
 const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 const propagationHash = require('../../src/propagation-hash')
@@ -436,6 +437,41 @@ describe('DataStreamsProcessor', () => {
     const [, loop] = recorded
     assert.strictEqual(loop.edgeLatencyNs, 0)
     assert.strictEqual(loop.pathwayLatencyNs, 0)
+  })
+
+  it('does not record negative latencies when the producer clock is ahead of the consumer clock', () => {
+    // The producer host's clock runs 50ms ahead of the consumer host's, and the
+    // message really spends 5ms in the queue, so the consumer sees a start
+    // timestamp 45ms in its future.
+    const consumerNowMs = DEFAULT_TIMESTAMP
+    const producerNowMs = consumerNowMs - 5 + 50
+
+    const clock = sinon.useFakeTimers({ now: producerNowMs, toFake: ['Date'] })
+    let consumeCtx
+    try {
+      const produceCtx = processor.setCheckpoint(['direction:out', 'topic:skew', 'type:kafka'], null, null)
+      const headers = DsmPathwayCodec.encode(produceCtx, {})
+
+      clock.setSystemTime(consumerNowMs)
+      consumeCtx = processor.setCheckpoint(
+        ['direction:in', 'group:g', 'topic:skew', 'type:kafka'], null, DsmPathwayCodec.decode(headers)
+      )
+    } finally {
+      clock.restore()
+    }
+
+    const consumeHash = consumeCtx.hash.readBigUInt64LE()
+    const timeBucket = processor.bucketFromTimestamp(consumerNowMs * 1e6)
+    const consumePoint = [...timeBucket.checkpoints.values()].find(point => point.hash === consumeHash)
+    assert.ok(consumePoint, 'consume checkpoint was not recorded')
+
+    for (const name of ['edgeLatency', 'pathwayLatency']) {
+      const sketch = consumePoint[name]
+      assert.strictEqual(sketch.count, 1, `${name} count`)
+      assert.ok(sketch.min >= 0, `${name} min is ${sketch.min}s`)
+      assert.strictEqual(sketch.negativeStore.count, 0, `${name} has values in the negative store`)
+      assert.ok(sketch.getValueAtQuantile(0.5) >= 0, `${name} p50 is ${sketch.getValueAtQuantile(0.5)}s`)
+    }
   })
 })
 

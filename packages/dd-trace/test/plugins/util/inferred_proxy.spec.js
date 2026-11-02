@@ -4,14 +4,14 @@ const assert = require('node:assert/strict')
 const { Agent } = require('node:http')
 
 const { describe, it, afterEach } = require('mocha')
-const axios = require('axios')
 
 require('../../setup/core')
 const agent = require('../agent')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const httpRequest = require('../../setup/helpers/http-client')
 
-// Create axios instance with no connection pooling
-const httpClient = axios.create({
+// Create httpRequest instance with no connection pooling
+const httpClient = httpRequest.create({
   httpAgent: new Agent({ keepAlive: false }),
   timeout: 5000,
 })
