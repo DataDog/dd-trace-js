@@ -2,4 +2,5 @@
 
 require('./src/helpers/bundler-register')
 require('./src/helpers/register')
-require('./src/helpers/rewriter/loader')
+// The extension is required: bundlers that prefer `.mjs` (e.g. Vite) would otherwise pick the ESM loader hook.
+require('./src/helpers/rewriter/loader.js')

@@ -8,7 +8,13 @@ const {
 } = require('../../constants/tags')
 const { audioMimeTypeFromFormat, formatAudioPart } = require('../../audio-utils')
 const { safeJsonParse } = require('../../util')
-const { AUDIO_MIME_TYPES, IMAGE_FALLBACK, INPUT_TYPE_IMAGE } = require('./constants')
+const {
+  AUDIO_MIME_TYPES,
+  DECISION_PROVIDER,
+  DECISION_PROVIDER_TAG,
+  IMAGE_FALLBACK,
+  INPUT_TYPE_IMAGE,
+} = require('./constants')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
@@ -479,6 +485,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   }
 
   #tagDecision (span, inputs, response, error) {
+    this._tagger.tagSpanTags(span, { [DECISION_PROVIDER_TAG]: DECISION_PROVIDER })
+
     const { input, questions } = inputs
 
     const inputMessages = typeof input === 'string'

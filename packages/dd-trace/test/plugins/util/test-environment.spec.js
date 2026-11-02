@@ -22,6 +22,7 @@ const {
   CI_ENV_VARS,
   CI_NODE_LABELS,
   GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
   GIT_COMMIT_HEAD_SHA,
   PR_NUMBER,
@@ -34,6 +35,7 @@ const freshConfig = () => {
 }
 
 const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
+  'node:child_process': { execFileSync: cachedExecStub },
   './git-cache': {
     cachedExec: cachedExecStub,
   },
@@ -364,6 +366,33 @@ describe('Test Parallelization environment metadata', () => {
 })
 
 describe('test environment data', () => {
+  for (const userProvidedBase of [undefined, 'user-base']) {
+    it(`prepares the effective PR diff base from ${userProvidedBase ? 'user metadata' : 'CI metadata'}`, () => {
+      const getGitMetadata = sinon.stub().returns({})
+      const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
+        './ci': {
+          getCIMetadata: () => ({
+            [GIT_COMMIT_HEAD_SHA]: 'head-sha',
+            [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: 'ci-base',
+          }),
+        },
+        './git': { getGitMetadata, getGitInformationDiscrepancy: () => ({}) },
+        './user-provided-git': {
+          getUserProviderGitMetadata: () => userProvidedBase
+            ? { [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: userProvidedBase }
+            : {},
+        },
+      })
+
+      getTestEnvironmentMetadata()
+
+      sinon.assert.calledOnceWithMatch(getGitMetadata, {
+        headCommitSha: 'head-sha',
+        pullRequestBaseBranchSha: userProvidedBase || 'ci-base',
+      })
+    })
+  }
+
   it('getTestEnvironmentMetadata can include service name', () => {
     const tags = getTestEnvironmentMetadata('jest', { service: 'service-name' })
     assertObjectContains(tags, { 'service.name': 'service-name' })

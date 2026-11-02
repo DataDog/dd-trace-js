@@ -799,6 +799,8 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
       commitMessage,
       ciWorkspacePath,
       headCommitSha,
+      pullRequestBaseBranchSha: userProvidedGitMetadata[GIT_PULL_REQUEST_BASE_BRANCH_SHA] ||
+        ciMetadata[GIT_PULL_REQUEST_BASE_BRANCH_SHA],
     })
   }
 

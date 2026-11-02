@@ -103,14 +103,14 @@ async function addBreakpoint (probe) {
       file, lineNumber, columnNumber, probe.id, probe.version
     )
     const position = await getGeneratedPosition(url, source, lineNumber, sourceMapURL)
-    if (position.line !== null && position.column !== null) {
-      lineNumber = position.line
-      columnNumber = position.column
-    } else {
+    if (position.line === null || position.column === null) {
       throw new Error(
         // eslint-disable-next-line @stylistic/max-len
         `Could not find generated position for ${url}:${lineNumber}:${columnNumber} (probe: ${probe.id}, version: ${probe.version})`
       )
+    } else {
+      lineNumber = position.line
+      columnNumber = position.column
     }
   }
 
