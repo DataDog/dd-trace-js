@@ -172,6 +172,8 @@
     "openfeature.js",
     "openfeature/rules-based.js",
     "openfeature/rules-based.d.ts",
+    "openfeature/exposure-hook.js",
+    "openfeature/exposure-hook.d.ts",
     "packages/*/index.js",
     "packages/*/index.electron.js",
     "packages/*/lib/**/*",
