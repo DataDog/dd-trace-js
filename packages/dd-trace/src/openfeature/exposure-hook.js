@@ -61,11 +61,15 @@ class ExposureHook {
 
   /** @param {unknown} error */
   #logFailure (error) {
-    if (this.#warned) {
-      log.debug('Exposure callback failed', error)
-    } else {
-      this.#warned = true
-      log.warn('Exposure callback failed; later failures are logged at debug level', error)
+    try {
+      if (this.#warned) {
+        log.debug('Exposure callback failed', error)
+      } else {
+        this.#warned = true
+        log.warn('Exposure callback failed; later failures are logged at debug level', error)
+      }
+    } catch {
+      // Formatting a value the callback threw can itself throw; the evaluation must still succeed.
     }
   }
 }

@@ -183,6 +183,27 @@ describe('ExposureHook', () => {
     }
   })
 
+  it('contains a failure to log the callback error', async () => {
+    log.warn = sinon.stub().throws(new Error('formatting the callback error failed'))
+    const unhandled = []
+    const onUnhandled = reason => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const details = { flagKey: 'flag', variant: 'on', flagMetadata: {} }
+      const syncHook = new ExposureHook(() => { throw new Error('callback failed') })
+      const asyncHook = new ExposureHook(async () => { throw new Error('callback failed') })
+
+      syncHook.finally({ flagKey: 'flag', context: {} }, details)
+      asyncHook.finally({ flagKey: 'flag', context: {} }, details)
+      await new Promise(resolve => setImmediate(resolve))
+
+      sinon.assert.calledTwice(log.warn)
+      assert.deepStrictEqual(unhandled, [])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
   it('keeps a feature named __proto__', () => {
     const evaluation = new ExposureEvaluation({ flagKey: 'flag' }, {
       flagKey: 'flag',
