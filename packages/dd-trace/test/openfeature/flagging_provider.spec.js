@@ -124,9 +124,10 @@ describe('FlaggingProvider', () => {
       mockEVPHookClass.resetHistory()
       mockConfig.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED = false
       const disabled = new FlaggingProvider(mockTracer, mockConfig)
-      const [internalExposureHook, ...disabledHooks] = disabled.hooks
-      assert.strictEqual(internalExposureHook.constructor.name, 'ExposureLoggingHook')
-      assert.deepStrictEqual(disabledHooks, [mockEvalMetricsHook, mockDebugLoggingHook, mockSpanEnrichmentHook])
+      assert.strictEqual(disabled.hooks[0].constructor.name, 'ExposureLoggingHook')
+      assert.deepStrictEqual(disabled.hooks.slice(1), [
+        mockEvalMetricsHook, mockDebugLoggingHook, mockSpanEnrichmentHook,
+      ])
       sinon.assert.notCalled(mockEVPHookClass)
       disabled.onClose()
     })
@@ -163,10 +164,8 @@ describe('FlaggingProvider', () => {
       mockConfig.DD_METRICS_OTEL_ENABLED = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      // The base provider registers its own internal exposure logging hook first.
-      const [internalExposureHook, ...hooks] = provider.hooks
-      assert.strictEqual(internalExposureHook.constructor.name, 'ExposureLoggingHook')
-      assert.deepStrictEqual(hooks, [mockDebugLoggingHook, mockSpanEnrichmentHook, mockEVPHook])
+      assert.strictEqual(provider.hooks[0].constructor.name, 'ExposureLoggingHook')
+      assert.deepStrictEqual(provider.hooks.slice(1), [mockDebugLoggingHook, mockSpanEnrichmentHook, mockEVPHook])
       sinon.assert.calledOnceWithExactly(mockSpanEnrichmentHookClass, mockTracer)
       sinon.assert.calledOnceWithExactly(mockEVPHookClass, mockConfig)
     })
@@ -194,23 +193,18 @@ describe('FlaggingProvider', () => {
     it('should register EvalMetricsHook, DebugLoggingHook, SpanEnrichmentHook, and the EVP hook when enabled', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      // The base provider registers its internal exposure logging hook first.
-      assert.strictEqual(provider.hooks.length, 5)
       assert.strictEqual(provider.hooks[0].constructor.name, 'ExposureLoggingHook')
-      assert.strictEqual(provider.hooks[1], mockEvalMetricsHook)
-      assert.strictEqual(provider.hooks[2], mockDebugLoggingHook)
-      assert.strictEqual(provider.hooks[3], mockSpanEnrichmentHook)
-      assert.strictEqual(provider.hooks[4], mockEVPHook)
+      assert.deepStrictEqual(provider.hooks.slice(1), [
+        mockEvalMetricsHook, mockDebugLoggingHook, mockSpanEnrichmentHook, mockEVPHook,
+      ])
     })
 
     it('should register EvalMetricsHook and DebugLoggingHook when span enrichment is disabled', () => {
       mockConfig.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      assert.strictEqual(provider.hooks.length, 4)
       assert.strictEqual(provider.hooks[0].constructor.name, 'ExposureLoggingHook')
-      assert.strictEqual(provider.hooks[1], mockEvalMetricsHook)
-      assert.strictEqual(provider.hooks[2], mockDebugLoggingHook)
+      assert.deepStrictEqual(provider.hooks.slice(1), [mockEvalMetricsHook, mockDebugLoggingHook, mockEVPHook])
     })
 
     it('should register DebugLoggingHook when debug logging is enabled', () => {
@@ -224,9 +218,8 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       sinon.assert.notCalled(mockDebugLoggingHookClass)
-      assert.strictEqual(provider.hooks.length, 4)
       assert.strictEqual(provider.hooks[0].constructor.name, 'ExposureLoggingHook')
-      assert.strictEqual(provider.hooks[1], mockEvalMetricsHook)
+      assert.deepStrictEqual(provider.hooks.slice(1), [mockEvalMetricsHook, mockSpanEnrichmentHook, mockEVPHook])
     })
 
     it('should not register DebugLoggingHook when the debug channel has no subscribers', () => {
@@ -234,7 +227,8 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       sinon.assert.notCalled(mockDebugLoggingHookClass)
-      assert.strictEqual(provider.hooks.length, 4)
+      assert.strictEqual(provider.hooks[0].constructor.name, 'ExposureLoggingHook')
+      assert.deepStrictEqual(provider.hooks.slice(1), [mockEvalMetricsHook, mockSpanEnrichmentHook, mockEVPHook])
     })
 
     it('should log info message when span enrichment is enabled', () => {

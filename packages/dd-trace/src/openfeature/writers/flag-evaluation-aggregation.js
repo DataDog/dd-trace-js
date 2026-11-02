@@ -7,6 +7,7 @@ const {
   FLAG_EVALUATION_GLOBAL_CAP,
   FLAG_EVALUATION_PER_FLAG_CAP,
 } = require('../constants/constants')
+const { snapshotFeatures } = require('./split-features')
 const { validatedContextEntries, snapshotFromEntries } = require('./flag-evaluation-context')
 const { normalizeTargetingKey, optionalKey, protectedErrorCode } =
   require('./flag-evaluation-pii')
@@ -20,22 +21,22 @@ const MAX_DIRECT_IDENTITY_LENGTH = 16_383
  * @typedef {object} FlagEvaluationEvent
  * @property {string} flagKey
  * @property {string} [variant]
+ * @property {Record<string, string | number | boolean>} [features]
  * @property {string} [allocationKey]
  * @property {boolean} runtimeDefault
  * @property {unknown} [errorCode]
  * @property {unknown} [targetingKey]
  * @property {ContextSnapshot} [attrs]
  * @property {unknown} [observeFullEvaluationData]
- * @property {Record<string, string|number|boolean>} [features]
  * @property {number} timestamp
  */
 /**
  * @typedef {object} AggregationDimensions
  * @property {string} flagKey
  * @property {string} [variant]
+ * @property {Record<string, string | number | boolean>} [features]
  * @property {string} [allocation]
  * @property {string} [error]
- * @property {Record<string, string|number|boolean>} [features]
  */
 /**
  * @typedef {AggregationDimensions & {
@@ -68,27 +69,6 @@ function observeEntry (entry, timestamp, consent) {
   entry.consent &&= consent === true
 }
 
-/**
- * Sorted copy of the feature map so the bucket identity never depends on
- * metadata insertion order. Returns undefined for anything not a non-empty
- * flat scalar map.
- *
- * @param {unknown} features
- * @returns {Record<string, string|number|boolean> | undefined}
- */
-function sortedFeatures (features) {
-  if (typeof features !== 'object' || features === null || Array.isArray(features)) return
-  /** @type {Record<string, string|number|boolean> | undefined} */
-  let sorted
-  for (const key of Object.keys(features).sort()) {
-    const value = features[key]
-    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue
-    sorted ??= /** @type {Record<string, string|number|boolean>} */ (Object.create(null))
-    sorted[key] = value
-  }
-  return sorted
-}
-
 /** @param {Map<string, AggregationEntry>} entries */
 function evaluationCount (entries) {
   let count = 0
@@ -117,10 +97,8 @@ class FlagEvaluationAggregator {
     const error = protectedErrorCode(event.errorCode)
     const variant = optionalKey(event.variant)
     const allocation = optionalKey(event.allocationKey)
-    const features = sortedFeatures(event.features)
+    const features = snapshotFeatures(event.features)
     // Group by the raw key; the serializer independently hashes protected rows once per output bucket.
-    // Features are a bucket dimension in both tiers and whatever the consent: rows with
-    // different features must not merge.
     const identity = JSON.stringify([
       flagKey, variant, allocation, event.runtimeDefault === true, error,
       targetingKey, contextEntries, consent, features,
@@ -150,13 +128,13 @@ class FlagEvaluationAggregator {
       flagKey,
       variant,
       allocation,
+      features,
       runtimeDefault: event.runtimeDefault === true,
       error,
       rawTargetingKey: targetingKey,
       // Repeated observations need validation and identity, but no new retained snapshot.
       attrs: snapshotFromEntries(contextEntries),
       consent,
-      features,
       count: 1,
       first: event.timestamp,
       last: event.timestamp,

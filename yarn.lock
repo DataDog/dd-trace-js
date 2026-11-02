@@ -1186,10 +1186,10 @@
   dependencies:
     undici-types "~8.9.0"
 
-"@types/sinon@^22.0.1":
-  version "22.0.1"
-  resolved "https://registry.yarnpkg.com/@types/sinon/-/sinon-22.0.1.tgz#576f3cac7663b6104a2a5c50f4d277f46d3e160a"
-  integrity sha512-MThluJXPmpBY+Z5S3565F2z+hjkCXnBrr36j2mitVQ7JUtxA+A+YQhs+0Q6J8jxb0SVJvydO+6NWfj9EBzpiBQ==
+"@types/sinon@^22.0.2":
+  version "22.0.2"
+  resolved "https://registry.yarnpkg.com/@types/sinon/-/sinon-22.0.2.tgz#5c641c8eb687d228f616242d2a7fad95adffc9bd"
+  integrity sha512-2qLRFlluKkn6mci189eKhlOsHcdFpsn/9+29S4VmwKCpfb+vseKrZSSOSy5259yzIpP/y4gLfqQfIIR/lZn4Ng==
   dependencies:
     "@sinonjs/fake-timers" "^15.4.0"
 

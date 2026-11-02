@@ -1,6 +1,7 @@
 'use strict'
 
 const { hashTargetingKey: digestTargetingKey } = require('../encoding')
+const { snapshotFeatures } = require('./split-features')
 
 // Keep this vocabulary explicit: an upstream enum addition needs a privacy review.
 const ERROR_CODES = new Set([
@@ -90,38 +91,17 @@ function normalizeFlagEvaluationEvent (event, targetingKey) {
     flagKey: normalizeTargetingKey(event.flagKey),
     variant: optionalKey(event.variant),
     allocationKey: optionalKey(event.allocationKey),
+    features: snapshotFeatures(event.features),
     runtimeDefault: event.runtimeDefault === true,
     errorCode: protectedErrorCode(event.errorCode),
     targetingKey,
     attrs: consent ? event.attrs : undefined,
     observeFullEvaluationData: consent,
-    features: flagEvaluationFeatures(event.features),
     timestamp: typeof event.timestamp === 'number' ? event.timestamp : NaN,
   }
 }
 
-/**
- * Split features routed to the EVALUATION destination. Keys are sorted so the
- * aggregation identity does not depend on metadata insertion order.
- *
- * @param {unknown} features
- * @returns {Record<string, string|number|boolean> | undefined}
- */
-function flagEvaluationFeatures (features) {
-  if (typeof features !== 'object' || features === null || Array.isArray(features)) return
-  /** @type {Record<string, string|number|boolean> | undefined} */
-  let normalized
-  for (const key of Object.keys(features).sort()) {
-    const value = features[key]
-    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue
-    normalized ??= /** @type {Record<string, string|number|boolean>} */ (Object.create(null))
-    normalized[key] = value
-  }
-  return normalized
-}
-
 module.exports = {
-  flagEvaluationFeatures,
   normalizeFlagEvaluationEvent,
   normalizeTargetingKey,
   optionalKey,

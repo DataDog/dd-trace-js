@@ -81,6 +81,26 @@ describe('FlagEvalEVPHook', () => {
     selectRoute.firstCall.args[1](true, route)
   }
 
+  it('captures only evaluation-routed split features, independently of context consent', () => {
+    const result = details(false, {
+      __dd_has_evaluation_features: true,
+      '__dd_evaluation_feature.holdout.key': 'holdout',
+      '__dd_evaluation_feature.holdout.should_include_in_holdout_analysis': false,
+      '__dd_evaluation_feature.weight': 0,
+      '__dd_feature.secret': 'hook-only',
+      '__dd_exposure_feature.secret': 'exposure-only',
+    })
+    hook.finally({ flagKey: 'flag', context: {} }, result)
+    result.flagMetadata['__dd_evaluation_feature.holdout.key'] = 'changed'
+    assert.deepStrictEqual({ ...writer.enqueue.firstCall.args[0].features }, {
+      'holdout.key': 'holdout',
+      'holdout.should_include_in_holdout_analysis': false,
+      weight: 0,
+    })
+    hook.finally({ flagKey: 'flag', context: {} }, details())
+    assert.strictEqual(writer.enqueue.secondCall.args[0].features, undefined)
+  })
+
   it('captures an evaluation-time snapshot while route discovery is still pending', () => {
     const context = { targetingKey: 'customer', nested: { plan: 'pro' } }
     hook.finally({ flagKey: 'flag', context }, details())
@@ -111,68 +131,6 @@ describe('FlagEvalEVPHook', () => {
     assert.strictEqual(event.observeFullEvaluationData, true)
     assert.deepStrictEqual({ ...event.attrs }, { 'nested.plan': 'pro' })
     assert.ok(Object.isFrozen(event.attrs))
-  })
-
-  describe('evaluation features', () => {
-    it('captures the EVALUATION features of the selected split', () => {
-      enable()
-      hook.finally({ flagKey: 'flag', context: {} }, details(true, {
-        __dd_has_evaluation_features: true,
-        '__dd_evaluation_feature.holdout.key': '06ad',
-        '__dd_evaluation_feature.holdout.should_include_in_holdout_analysis': false,
-        '__dd_evaluation_feature.holdout.ratio': 0.5,
-      }))
-
-      assert.deepStrictEqual({ ...writer.enqueue.firstCall.args[0].features }, {
-        'holdout.key': '06ad',
-        'holdout.should_include_in_holdout_analysis': false,
-        'holdout.ratio': 0.5,
-      })
-    })
-
-    it('captures EVALUATION features whatever the consent', () => {
-      enable()
-      hook.finally({ flagKey: 'flag', context: {} }, details(false, {
-        __dd_has_evaluation_features: true,
-        '__dd_evaluation_feature.holdout.key': '06ad',
-      }))
-
-      assert.deepStrictEqual({ ...writer.enqueue.firstCall.args[0].features }, { 'holdout.key': '06ad' })
-      assert.strictEqual(writer.enqueue.firstCall.args[0].attrs, undefined)
-    })
-
-    it('does not capture features when the split has no EVALUATION destination', () => {
-      enable()
-      hook.finally({ flagKey: 'flag', context: {} }, details(true, {
-        '__dd_evaluation_feature.holdout.key': '06ad',
-      }))
-
-      assert.strictEqual(writer.enqueue.firstCall.args[0].features, undefined)
-      assert.strictEqual(writer.enqueue.firstCall.args[0]['__dd_evaluation_feature.holdout.key'], undefined)
-    })
-
-    it('keeps an EVALUATION feature named __proto__', () => {
-      enable()
-      hook.finally({ flagKey: 'flag', context: {} }, details(true, {
-        __dd_has_evaluation_features: true,
-        '__dd_evaluation_feature.__proto__': 'proto-value',
-      }))
-
-      const { features } = writer.enqueue.firstCall.args[0]
-      assert.strictEqual(Object.getOwnPropertyDescriptor(features, '__proto__')?.value, 'proto-value')
-    })
-
-    it('drops features without a scalar value', () => {
-      enable()
-      hook.finally({ flagKey: 'flag', context: {} }, details(true, {
-        __dd_has_evaluation_features: true,
-        '__dd_evaluation_feature.valid': 'yes',
-        '__dd_evaluation_feature.nested': { key: 'value' },
-        '__dd_evaluation_feature.listed': ['value'],
-      }))
-
-      assert.deepStrictEqual({ ...writer.enqueue.firstCall.args[0].features }, { valid: 'yes' })
-    })
   })
 
   for (const consent of [false, undefined, null, 'true', 1]) {

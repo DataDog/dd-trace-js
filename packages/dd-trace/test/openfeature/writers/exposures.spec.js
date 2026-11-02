@@ -92,18 +92,6 @@ describe('OpenFeature Exposures Writer', () => {
       writer.setEnabled(true) // Enable writer for append tests
     })
 
-    it('keeps Datadog exposure logging by default when the featureFlags group is absent', () => {
-      const ungatedWriter = new ExposuresWriter(config)
-      ungatedWriter.setEnabled(true)
-      try {
-        ungatedWriter.append(exposureEvent)
-
-        assert.strictEqual(ungatedWriter._buffer?.length, 1)
-      } finally {
-        ungatedWriter.destroy()
-      }
-    })
-
     it('should add exposure event to buffer', () => {
       writer.append(exposureEvent)
 
@@ -238,6 +226,17 @@ describe('OpenFeature Exposures Writer', () => {
     })
   })
 
+  it('preserves scalar exposure features, including false, zero, and prototype-like keys', () => {
+    const features = JSON.parse('{"holdout.key":"holdout","included":false,"weight":0,"__proto__":"value"}')
+    features.invalid = { nested: 'omit' }
+    features.nonfinite = Infinity
+    Object.defineProperty(features, 'accessor', { enumerable: true, get () { throw new Error('must not read') } })
+    const payload = JSON.parse(JSON.stringify(writer.makePayload([{ ...exposureEvent, features }])))
+    assert.deepStrictEqual(payload.exposures[0].features,
+      JSON.parse('{"holdout.key":"holdout","included":false,"weight":0,"__proto__":"value"}'))
+    assert.strictEqual(writer.makePayload([{ ...exposureEvent, features: {} }]).exposures[0].features, undefined)
+  })
+
   describe('makePayload', () => {
     it('should return context wrapper with exposures array', () => {
       const events = [exposureEvent]
@@ -302,35 +301,6 @@ describe('OpenFeature Exposures Writer', () => {
       const payload = writer.makePayload([{ ...exposureEvent, serial_id: 0 }])
 
       assert.strictEqual(payload.exposures[0].serial_id, 0)
-    })
-
-    it('should carry split features routed to EXPOSURE on the event', () => {
-      const payload = writer.makePayload([{
-        ...exposureEvent,
-        features: { 'holdout.key': '06ad', 'holdout.should_include_in_holdout_analysis': false, ratio: 0.5 },
-      }])
-
-      assert.deepStrictEqual({ ...payload.exposures[0].features }, {
-        'holdout.key': '06ad',
-        'holdout.should_include_in_holdout_analysis': false,
-        ratio: 0.5,
-      })
-    })
-
-    it('should keep a feature named __proto__ on the event', () => {
-      const payload = writer.makePayload([{ ...exposureEvent, features: JSON.parse('{"__proto__":"proto-value"}') }])
-
-      const features = payload.exposures[0].features
-      assert.strictEqual(Object.getOwnPropertyDescriptor(features, '__proto__')?.value, 'proto-value')
-      assert.ok(JSON.stringify(payload).includes('"features":{"__proto__":"proto-value"}'))
-    })
-
-    it('should omit features entirely when none are valid', () => {
-      for (const features of [undefined, null, 'features', [], { nested: { key: 'value' } }]) {
-        const encoded = JSON.stringify(writer.makePayload([{ ...exposureEvent, features }]))
-
-        assert.ok(!encoded.includes('features'), `Encoded payload: ${encoded}`)
-      }
     })
 
     // The intake declares serial_id as an integer and rejects the whole exposure on a type

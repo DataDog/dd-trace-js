@@ -256,8 +256,11 @@ class NoopExperiment {
 class NoopExperiments {
   #reason
 
-  constructor (reason) {
-    this.#reason = reason || 'LLMObs experiments are not available'
+  /**
+   * @param {string} [reason]
+   */
+  constructor (reason = 'LLMObs experiments are not available') {
+    this.#reason = reason
   }
 
   #warn () {

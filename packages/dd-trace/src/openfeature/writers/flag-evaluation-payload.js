@@ -24,9 +24,9 @@ const { recordDegraded, recordDropped, recordPayloadSplit } = require('./flag-ev
  * @property {string} [targeting_key]
  * @property {{ evaluation: ContextSnapshot }} [context]
  * @property {{ key: string }} [variant]
+ * @property {Record<string, string | number | boolean>} [features]
  * @property {{ key: string }} [allocation]
  * @property {{ message: string }} [error]
- * @property {Record<string, string|number|boolean>} [features]
  */
 /** @typedef {{ encoded: string, rows: number, evaluations: number }} EncodedFlagEvaluationPayload */
 
@@ -53,10 +53,9 @@ function makeRow (entry, timestamp, degraded) {
   const allocation = normalizeTargetingKey(entry.allocation)
   if (variant) row.variant = { key: variant }
   if (allocation) row.allocation = { key: allocation }
+  if (entry.features !== undefined) row.features = entry.features
   const error = protectedErrorCode(entry.error)
   if (error !== undefined) row.error = { message: error }
-  // Features come from the flag configuration, so both tiers keep them whatever the consent.
-  if (entry.features) row.features = entry.features
   if (!degraded) {
     const targetingKey = entry.consent === true
       ? normalizeTargetingKey(entry.rawTargetingKey)

@@ -1,35 +1,14 @@
 'use strict'
 
 const { MAX_EVALUATION_TIMESTAMP_MS } = require('../constants/constants')
+const { snapshotFeatures } = require('./split-features')
+
 const { snapshotEvaluationContext } = require('./flag-evaluation-context')
 const {
   recordContextTruncated, recordDropped, recordHookError, recordTargetingKeyOmitted,
 } = require('./flag-evaluation-telemetry')
 const FlagEvaluationsWriter = require('./flag-evaluations')
 const { setExposureDeliveryStrategy } = require('./util')
-
-const HAS_EVALUATION_FEATURES_METADATA_KEY = '__dd_has_evaluation_features'
-const EVALUATION_FEATURE_PREFIX = '__dd_evaluation_feature.'
-
-/**
- * Split features routed to the EVALUATION destination. They come from the flag
- * configuration, not the evaluation context, so they are captured whatever the
- * consent.
- *
- * @param {import('@openfeature/core').FlagMetadata | undefined} metadata
- * @returns {Record<string, string|number|boolean> | undefined}
- */
-function evaluationFeatures (metadata) {
-  if (metadata?.[HAS_EVALUATION_FEATURES_METADATA_KEY] !== true) return
-  let features
-  for (const [key, value] of Object.entries(metadata)) {
-    if (!key.startsWith(EVALUATION_FEATURE_PREFIX)) continue
-    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue
-    features ??= Object.create(null)
-    features[key.slice(EVALUATION_FEATURE_PREFIX.length)] = value
-  }
-  return features
-}
 
 /** Captures terminal SDK results; the writer owns deferred aggregation and delivery. */
 class FlagEvalEVPHook {
@@ -105,12 +84,14 @@ class FlagEvalEVPHook {
         flagKey: hookContext.flagKey,
         variant: evaluationDetails.variant,
         allocationKey: typeof metadata?.__dd_allocation_key === 'string' ? metadata.__dd_allocation_key : undefined,
+        features: metadata?.__dd_has_evaluation_features === true
+          ? snapshotFeatures(metadata, '__dd_evaluation_feature.')
+          : undefined,
         runtimeDefault: evaluationDetails.variant === undefined,
         errorCode: evaluationDetails.errorCode,
         targetingKey,
         attrs,
         observeFullEvaluationData: consent,
-        features: evaluationFeatures(metadata),
         timestamp,
       })
     } catch {

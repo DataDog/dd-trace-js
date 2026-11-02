@@ -180,7 +180,7 @@ function getRunnerConfigurationContract (framework, runnerArgs, environment, pro
  * @returns {string|undefined} validation error
  */
 function getDynamicRunnerEnvironmentError (command) {
-  const source = String(command || '')
+  const source = String(command)
   for (const match of source.matchAll(
     /(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s]+))/g
   )) {
