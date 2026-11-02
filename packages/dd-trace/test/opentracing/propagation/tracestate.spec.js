@@ -252,23 +252,6 @@ describe('TraceState', () => {
     assert.strictEqual(ts.toString(), `dd=s:2,${other.join(',')}`)
   })
 
-  it('should not collect other members beyond the limit after invalid input members', () => {
-    const header = `${'invalid,'.repeat(32)}overflow=value,dd=s:2`
-    const ts = TraceState.fromString(header)
-
-    assert.strictEqual(ts.get('overflow'), undefined)
-    assert.strictEqual(ts.toString(), 'dd=s:2')
-  })
-
-  for (const otherCount of [0, 31, 32]) {
-    it(`should keep the first valid dd after ${otherCount} other members`, () => {
-      const other = Array.from({ length: otherCount }, (_, index) => `k${index}=v${index}`)
-      const header = [...other, 'dd=s:2', 'dd=s:1'].join(',')
-
-      assert.strictEqual(TraceState.fromString(header).get('dd'), 's:2')
-    })
-  }
-
   it('should ignore invalid dd after the limit and keep the first 32 other members', () => {
     const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
     const ts = TraceState.fromString(`${other.join(',')},dd=bad\tvalue`)

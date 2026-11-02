@@ -9,20 +9,18 @@ const WHITESPACE = /[ \t]/
 /**
  * Parse a separator-delimited string into key/value entries.
  *
- * @param {string | undefined} value
+ * @param {string} value
  * @param {string} fieldSeparator Between entries.
  * @param {string} pairSeparator Between key and value within an entry.
  * @param {boolean} rejectValueTabs Drop entries whose value contains an internal tab.
  * @param {number} [maxEntries] Maximum number of entries to parse.
  * @param {number} [maxValueLength] Maximum length of an entry value.
  * @param {boolean} [prioritizeDd] Keep dd first even when it follows the member limit.
- * @returns {[string, string][] | undefined} Entries in reverse of wire order.
+ * @returns {[string, string][]} Entries in reverse of wire order.
  */
 function parseEntries (
   value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries = Infinity, maxValueLength = Infinity, prioritizeDd
 ) {
-  if (typeof value !== 'string' || !value.length) return
-
   /** @type {[string, string][]} */
   const entries = []
   /** @type {[string, string] | undefined} */
@@ -30,21 +28,13 @@ function parseEntries (
   let start = 0
   let memberCount = 0
 
-  while (start <= value.length) {
-    let splitIndex = start
-    if (memberCount >= maxEntries) {
-      if (ddEntry) break
-      const position = value.indexOf('dd', start)
-      if (position === -1) break
-      start = value.lastIndexOf(fieldSeparator, position) + fieldSeparator.length
-      splitIndex = position + 2
-    }
-
+  while (start <= value.length && memberCount < maxEntries) {
     const separatorIndex = value.indexOf(fieldSeparator, start)
     const end = separatorIndex === -1 ? value.length : separatorIndex
+    let splitIndex = start
     while (splitIndex < end && value[splitIndex] !== pairSeparator) splitIndex++
     const key = splitIndex > start && splitIndex < end ? value.slice(start, splitIndex).trim() : undefined
-    if (key && (memberCount < maxEntries || key === 'dd') && !WHITESPACE.test(key)) {
+    if (key && !WHITESPACE.test(key)) {
       // W3C §3.3.1.3.2: value = 0*255(chr) nblk-chr; chr = %x20 / nblk-chr (no tab).
       // Leading 0x20 is part of value; trailing whitespace is OWS.
       const entryValue = value.slice(splitIndex + 1, end).trimEnd()
@@ -60,8 +50,33 @@ function parseEntries (
     }
 
     memberCount++
-    if (separatorIndex === -1) break
+    if (separatorIndex === -1) {
+      start = value.length + 1
+      break
+    }
     start = separatorIndex + fieldSeparator.length
+  }
+
+  if (prioritizeDd && ddEntry === undefined && start < value.length) {
+    let position = value.indexOf('dd', start)
+    while (position !== -1) {
+      const segmentStart = value.lastIndexOf(',', position) + 1
+      const separatorIndex = value.indexOf(',', position)
+      const end = separatorIndex === -1 ? value.length : separatorIndex
+      let splitIndex = position + 2
+      while (splitIndex < end && value[splitIndex] !== '=') splitIndex++
+
+      if (splitIndex < end && value.slice(segmentStart, splitIndex).trim() === 'dd') {
+        const entryValue = value.slice(splitIndex + 1, end).trimEnd()
+        if (entryValue && entryValue.length <= maxValueLength && !entryValue.includes('\t')) {
+          ddEntry = ['dd', entryValue]
+          break
+        }
+      }
+
+      if (separatorIndex === -1) break
+      position = value.indexOf('dd', separatorIndex + 1)
+    }
   }
 
   if (ddEntry && entries.length === maxEntries) entries.pop()
@@ -70,6 +85,28 @@ function parseEntries (
   entries.reverse()
   if (ddEntry) entries.push(ddEntry)
   return entries
+}
+
+/**
+ * @template T
+ * @param {new (entries?: [string, string][]) => T} Type
+ * @param {string | undefined} value
+ * @param {string} fieldSeparator
+ * @param {string} pairSeparator
+ * @param {boolean} rejectValueTabs
+ * @param {number} [maxEntries]
+ * @param {number} [maxValueLength]
+ * @param {boolean} [prioritizeDd]
+ */
+function fromString (
+  Type, value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries, maxValueLength, prioritizeDd
+) {
+  if (typeof value !== 'string' || !value.length) {
+    return new Type()
+  }
+  return new Type(parseEntries(
+    value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries, maxValueLength, prioritizeDd
+  ))
 }
 
 function toString (map, pairSeparator, fieldSeparator) {
@@ -144,7 +181,7 @@ class TraceStateData {
 
   /** @param {string | undefined} value */
   static fromString (value) {
-    return new TraceStateData(parseEntries(value, ';', ':', false))
+    return fromString(TraceStateData, value, ';', ':', false)
   }
 
   toString () {
@@ -235,7 +272,7 @@ class TraceState {
 
   /** @param {string | undefined} value */
   static fromString (value) {
-    return new TraceState(parseEntries(value, ',', '=', true, MAX_LIST_MEMBERS, MAX_VALUE_LENGTH, true))
+    return fromString(TraceState, value, ',', '=', true, MAX_LIST_MEMBERS, MAX_VALUE_LENGTH, true)
   }
 
   toString () {
