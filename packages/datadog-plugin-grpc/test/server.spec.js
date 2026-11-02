@@ -200,26 +200,94 @@ describe('Plugin', () => {
             })
         })
 
-        it('should finish a `unary` call once when the handler replies after the deadline', async () => {
+        it('should finish a `unary` call once when the handler replies after cancellation', async () => {
           const finishChannel = channel('apm:grpc:server:request:finish')
           let finishes = 0
           const onFinish = () => { finishes++ }
           finishChannel.subscribe(onFinish)
 
           try {
+            let call = null
+            let replied
+            const lateReply = new Promise(resolve => { replied = resolve })
             const client = await buildClient({
-              getUnary: (_, callback) => setTimeout(() => callback(null, {}), 200),
+              getUnary: (serverCall, callback) => {
+                // The instrumentation's listener runs first, so the reply lands after the span finished.
+                serverCall.once('cancelled', () => {
+                  callback(null, {})
+                  replied()
+                })
+                call.cancel()
+              },
             })
 
-            await new Promise(resolve => {
-              client.getUnary({ first: 'foobar' }, { deadline: Date.now() + 50 }, resolve)
-            })
-            await new Promise(resolve => setTimeout(resolve, 300))
+            call = client.getUnary({ first: 'foobar' }, () => {})
+            call.on('error', () => {})
+
+            await lateReply
 
             assert.strictEqual(finishes, 1)
           } finally {
             finishChannel.unsubscribe(onFinish)
           }
+        })
+
+        it('should keep the cancellation status when a `unary` handler errors after cancellation', async () => {
+          let call = null
+          const client = await buildClient({
+            getUnary: (serverCall, callback) => {
+              // An unfinished child keeps the trace buffered, so late tags would reach the agent.
+              const child = tracer.startSpan('child', { childOf: tracer.scope().active() })
+
+              serverCall.once('cancelled', () => {
+                const error = new Error('late')
+                error.code = grpc.status.INTERNAL
+                callback(error)
+                child.finish()
+              })
+              call.cancel()
+            },
+          })
+
+          call = client.getUnary({ first: 'foobar' }, () => {})
+          call.on('error', () => {})
+
+          return agent
+            .assertSomeTraces(traces => {
+              const span = traces[0].find(span => span.name === 'grpc.server')
+              assert.strictEqual(span.metrics['grpc.status.code'], 1)
+              assert.strictEqual(span.error, 0)
+              assert.ok(!(ERROR_MESSAGE in span.meta))
+            })
+        })
+
+        it('should keep the cancellation status when a `stream` emits an error after cancellation', async () => {
+          let call = null
+          const client = await buildClient({
+            getServerStream: stream => {
+              const child = tracer.startSpan('child', { childOf: tracer.scope().active() })
+
+              stream.on('error', () => {})
+              stream.once('cancelled', () => {
+                const error = new Error('late')
+                error.code = grpc.status.INTERNAL
+                stream.emit('error', error)
+                child.finish()
+              })
+              call.cancel()
+            },
+          })
+
+          call = client.getServerStream({ first: 'foobar' }, () => {})
+          call.on('error', () => {})
+
+          return agent
+            .assertSomeTraces(traces => {
+              const span = traces[0].find(span => span.name === 'grpc.server')
+              assert.strictEqual(span.metrics['grpc.status.code'], 1)
+              assert.strictEqual(span.error, 0)
+              assert.ok(!(ERROR_MESSAGE in span.meta))
+            })
         })
 
         it('should handle cancelled `stream` calls', async () => {

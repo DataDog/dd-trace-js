@@ -24,7 +24,9 @@ const isValid = (server, args) => {
 }
 
 // A call can end through several paths (cancellation, error, handler callback);
-// only the first one may finish the span and set its status.
+// only the first one may finish the span and set its status. Later terminal
+// events must not publish errors or status updates either: the span can still
+// be buffered by an unfinished child, so they would overwrite the final tags.
 function finish (ctx) {
   if (ctx.finished) return
   ctx.finished = true
@@ -104,6 +106,8 @@ function wrapSetupHandlers (setupHandlers) {
 function createWrapEmit (call, ctx, onCancel) {
   return function wrapEmit (emit) {
     return function (event, arg1) {
+      if (ctx.finished) return emit.apply(this, arguments)
+
       switch (event) {
         case 'error':
           ctx.error = arg1
@@ -140,6 +144,9 @@ function wrapStream (call, ctx, onCancel) {
 
 function wrapCallback (callback = () => {}, call, ctx, onCancel) {
   return shimmer.wrapFunction(callback, callback => function (err, value, trailer, flags) {
+    if (ctx.finished) {
+      return asyncStartChannel.runStores(ctx, () => callback.apply(this, arguments))
+    }
     if (err) {
       ctx.error = err
       errorChannel.publish(ctx)
@@ -161,8 +168,10 @@ function wrapCallback (callback = () => {}, call, ctx, onCancel) {
 
 function wrapSendStatus (sendStatus, ctx) {
   return function (status) {
-    ctx.status = status
-    updateChannel.publish(ctx)
+    if (!ctx.finished) {
+      ctx.status = status
+      updateChannel.publish(ctx)
+    }
 
     return sendStatus.apply(this, arguments)
   }
