@@ -44,6 +44,12 @@ const webTagsCache = require('./web-tags-cache')
 /** @typedef {import('./opentracing/span')} DatadogSpan */
 /** @typedef {import('./opentracing/span_context')} DatadogSpanContext */
 /** @typedef {InstanceType<typeof import('@datadog/pprof').otelThreadCtx.ThreadContext>} ThreadContext */
+/**
+ * @typedef {object} CachedContext
+ * @property {ThreadContext | undefined} context
+ * @property {ReturnType<DatadogSpanContext['getTags']> | undefined} webTags
+ * @property {number} endpointIndex
+ */
 
 // OTEP-4947 duplicates are last-wins, so appending a later endpoint value would
 // correctly overwrite an earlier one — but an out-of-process reader sampling the
@@ -67,9 +73,10 @@ const webTagsCache = require('./web-tags-cache')
 // a bag, on already-expired spans under manual-GC debug mode — and webTagsCache
 // already depends on it, holding bags the wall profiler dereferences much later.
 //
-// Entries are dropped as soon as the endpoint resolves, or die with the tag bag
-// if it never does.
+// Waiters leave on span finish, ancestry changes, or endpoint resolution.
 const pendingEndpoints = new WeakMap()
+const NOT_WAITING = -1
+const AWAITING_OWN_ENDPOINT = -2
 
 // Positional attribute layout. The local root span ID stays at index 0 by
 // convention (mirrors libdatadog's libdd-otel-thread-ctx, where
@@ -122,14 +129,10 @@ function traceFlagsOf (spanContext) {
 //
 // Fields:
 //   context:  ThreadContext from @datadog/pprof.otelThreadCtx — built the first
-//             time onEnter activates the span, and cleared on span finish, which
-//             is how a pendingEndpoints waiter recognizes a record it must no
-//             longer append to.
+//             time onEnter activates the span, and cleared on span finish.
 //   webTags:  the web-server tag bag the record's endpoint comes from, or is
 //             waiting on; undefined while the span has no web-server ancestry.
-//             Distinguishes a stale announcement from a live one when a nearer
-//             web-server span takes over.
-//   awaitsOwnEndpoint: this is the request span, waiting on its own endpoint.
+//   endpointIndex: slot in pendingEndpoints, or NOT_WAITING / AWAITING_OWN_ENDPOINT.
 const CachedSym = Symbol('OtelThreadCtx.cached')
 
 let started = false
@@ -205,7 +208,7 @@ function getOrBuildContext (span) {
   attrs[THREAD_NAME_IDX] = THREAD_NAME
   attrs[THREAD_ID_IDX] = THREAD_ID
   if (cached === undefined) {
-    cached = { context: undefined, webTags: undefined, awaitsOwnEndpoint: false }
+    cached = { context: undefined, webTags: undefined, endpointIndex: NOT_WAITING }
     span[CachedSym] = cached
   }
   // The flags are the one part of the record that can still change after
@@ -222,6 +225,11 @@ function getOrBuildContext (span) {
 
 // Enlist a record built without an endpoint, so the resolution announcement for
 // its request fills it in.
+/**
+ * @param {DatadogSpan} span
+ * @param {CachedContext['webTags']} webTags
+ * @param {CachedContext} cached
+ */
 function awaitEndpoint (span, webTags, cached) {
   // No web-server span in this span's ancestry, so no endpoint is coming. Should
   // one appear later, webTagsCache announces that separately — see
@@ -229,17 +237,36 @@ function awaitEndpoint (span, webTags, cached) {
   if (webTags === undefined) return
   // The request span waits on its own announcement; only descendants need the shared list.
   if (webTags === span.context().getTags()) {
-    cached.awaitsOwnEndpoint = true
+    cached.endpointIndex = AWAITING_OWN_ENDPOINT
     return
   }
   const waiting = pendingEndpoints.get(webTags)
   if (waiting === undefined) {
+    cached.endpointIndex = 0
     pendingEndpoints.set(webTags, [cached])
   } else {
+    cached.endpointIndex = waiting.length
     waiting.push(cached)
   }
 }
 
+/** @param {CachedContext} cached */
+function removePendingEndpoint (cached) {
+  const index = cached.endpointIndex
+  if (index < 0) return
+  const waiting = pendingEndpoints.get(cached.webTags)
+  const last = waiting.pop()
+  if (last !== cached) {
+    waiting[index] = last
+    last.endpointIndex = index
+  }
+  cached.endpointIndex = NOT_WAITING
+}
+
+/**
+ * @param {ThreadContext} context
+ * @param {string} endpoint
+ */
 function appendEndpoint (context, endpoint) {
   // Append in place. The record buffer is shared across every async-context
   // frame holding this context, so the endpoint becomes visible everywhere at
@@ -264,6 +291,7 @@ function onEnter () {
   context.enter()
 }
 
+/** @param {DatadogSpan} span */
 function onSpanFinished (span) {
   if (!started) return
   const cached = span[CachedSym]
@@ -271,6 +299,7 @@ function onSpanFinished (span) {
   span[CachedSym] = undefined
   const context = cached.context
   if (context === undefined) return
+  removePendingEndpoint(cached)
   // The span is over, so its record must stop presenting itself as an active
   // thread context to an out-of-process reader. Invalidating the record covers
   // every async-context frame still holding this same context reference —
@@ -280,8 +309,6 @@ function onSpanFinished (span) {
   // overwrite the record, and in ACF mode there is no `before` hook either, so
   // they would keep exposing the finished span's IDs.
   context.invalidate()
-  // Marks the record dead for any pendingEndpoints waiter still holding this
-  // entry, which must not append to an invalidated record.
   cached.context = undefined
   // Also detach from the current frame when it is the holder, so the record
   // becomes unreachable and collectable instead of lingering as an invalid one
@@ -302,26 +329,26 @@ function onSpanFinished (span) {
 // The endpoint of a request has settled: fill in every record built while it was
 // still unresolved. `span` is the web-server span, so its tag bag is the key its
 // descendants enlisted under.
+/** @param {DatadogSpan} span */
 function onEndpointResolved (span) {
   if (!started) return
   const webTags = span.context().getTags()
   const own = span[CachedSym]
-  const ownWaits = own !== undefined && own.awaitsOwnEndpoint
+  const ownWaits = own !== undefined && own.endpointIndex === AWAITING_OWN_ENDPOINT
   const waiting = pendingEndpoints.get(webTags)
   if (!ownWaits && waiting === undefined) return
   const endpoint = finalEndpoint(webTags)
   // webTagsCache only announces settled endpoints, so this is belt and braces.
   if (endpoint === undefined) return
   if (ownWaits) {
-    own.awaitsOwnEndpoint = false
+    own.endpointIndex = NOT_WAITING
     if (own.context !== undefined && own.webTags === webTags) appendEndpoint(own.context, endpoint)
   }
   if (waiting === undefined) return
   pendingEndpoints.delete(webTags)
   for (const cached of waiting) {
-    // A record whose span has since been attributed to a nearer web-server span
-    // enlisted again under that bag, and this one is no longer its endpoint.
-    if (cached.context !== undefined && cached.webTags === webTags) appendEndpoint(cached.context, endpoint)
+    cached.endpointIndex = NOT_WAITING
+    appendEndpoint(cached.context, endpoint)
   }
 }
 
@@ -330,14 +357,14 @@ function onEndpointResolved (span) {
 // built without any web-server ancestry its first endpoint, or a nearer
 // web-server span superseded the one this record is showing. Give the record
 // the new request's endpoint if it has settled, or wait for its announcement.
+/** @param {DatadogSpan} span */
 function onWebTagsResolved (span) {
   if (!started) return
   const cached = span[CachedSym]
   if (cached === undefined || cached.context === undefined) return
   const webTags = webTagsCache.getCachedWebTags(span)
   if (webTags === cached.webTags) return
-  // Recorded so that an announcement for the bag this record was previously
-  // waiting on no longer applies to it.
+  removePendingEndpoint(cached)
   cached.webTags = webTags
   const endpoint = finalEndpoint(webTags)
   if (endpoint === undefined) {
