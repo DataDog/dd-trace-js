@@ -41,7 +41,7 @@ updates:
     directories:
       - "/.github/editorconfig-checker"
       - "/.github/playwright"
-      - "/.github/selenium"
+      - "/.github/browser-tools"
       - "/benchmark/sirun"
     schedule:
       interval: "weekly"
@@ -242,6 +242,7 @@ updates:
           - "@langchain/*"
           - "@modelcontextprotocol/sdk"
           - "@openai/*"
+          - "@typesafe-ai/sdk"
           - "ai"
           - "langchain"
           - "openai"

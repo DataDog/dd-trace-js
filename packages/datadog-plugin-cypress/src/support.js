@@ -523,6 +523,8 @@ afterEach(function () {
     isEfdRetry: currentTest._ddIsEfdRetry,
     isAttemptToFix: currentTest._ddIsAttemptToFix,
     isModified: currentTest._ddIsModified,
+    hasNativeRetries: !!(currentTest._testConfig && currentTest._testConfig.unverifiedTestConfig &&
+      currentTest._testConfig.unverifiedTestConfig.retries !== undefined),
     duration: currentTest.duration,
     // Mark suppressed tests so the plugin can tag them with the correct test management reason.
     isQuarantined: isTestManagementTestThatFailed && suppressedTestFailure.isQuarantined,

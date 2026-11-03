@@ -502,6 +502,7 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
     data.debugger.snapshot.timestamp <= Date.now(),
     `Expected ${data.debugger.snapshot.timestamp} <= ${Date.now()}`
   )
+  assert.strictEqual(data.timestamp, data.debugger.snapshot.timestamp)
 
   assert.ok(Array.isArray(data.debugger.snapshot.stack), `Expected array, got ${inspect(data.debugger.snapshot.stack)}`)
   assert.ok(data.debugger.snapshot.stack.length > 0, `Expected ${data.debugger.snapshot.stack.length} > 0`)

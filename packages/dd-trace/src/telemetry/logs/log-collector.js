@@ -48,7 +48,7 @@ function sanitize (logEntry) {
 
   for (let i = Math.max(firstIndex, 0); i < lines.length; i++) {
     const line = lines[i]
-    if (line.includes(ddBasePath)) {
+    if (ddBasePath !== undefined && line.includes(ddBasePath)) {
       stackLines.push(line.replace(ddBasePath, ''))
     } else {
       const match = NODE_FRAME_LINE_REGEX.exec(line)

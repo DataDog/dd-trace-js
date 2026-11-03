@@ -7,6 +7,8 @@ const CACHE_READ_INPUT_TOKENS_METRIC_KEY = 'cache_read_input_tokens'
 const CACHE_WRITE_INPUT_TOKENS_METRIC_KEY = 'cache_write_input_tokens'
 const CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY = 'ephemeral_5m_input_tokens'
 const CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY = 'ephemeral_1h_input_tokens'
+const CACHE_WRITE_30M_INPUT_TOKENS_METRIC_KEY = 'ephemeral_30m_input_tokens'
+const CACHE_WRITE_12H_INPUT_TOKENS_METRIC_KEY = 'ephemeral_12h_input_tokens'
 const REASONING_OUTPUT_TOKENS_METRIC_KEY = 'reasoning_output_tokens'
 const WEB_SEARCH_COUNT_METRIC_KEY = 'web_search_count'
 const STORAGE_SEARCH_COUNT_METRIC_KEY = 'storage_search_count'
@@ -21,6 +23,8 @@ module.exports = {
   METADATA: '_ml_obs.meta.metadata',
   COST_TAGS: '_ml_obs.meta.metadata._dd.cost_tags',
   AGENT_MANIFEST: '_ml_obs.meta.metadata._dd.agent_manifest',
+  AGENT_VERSION: '_ml_obs.agent_version',
+  AGENT_VERSION_TAG_KEY: 'agent_version',
   METRICS: '_ml_obs.metrics',
   TOOL_DEFINITIONS: '_ml_obs.meta.tool_definitions',
   ML_APP: '_ml_obs.meta.ml_app',
@@ -31,6 +35,7 @@ module.exports = {
 
   PARENT_AGENT_NAME: '_ml_obs.parent_agent_name',
   PARENT_AGENT_SPAN_ID: '_ml_obs.parent_agent_span_id',
+  PARENT_AGENT_VERSION: '_ml_obs.parent_agent_version',
   PROPAGATED_PARENT_AGENT_ID_KEY: '_dd.p.llmobs_pagent_span_id',
   PROPAGATED_PARENT_AGENT_NAME_KEY: '_dd.p.llmobs_pagent_name',
   PROPAGATED_SAMPLE_RATE_KEY: '_dd.p.llmobs_sr',
@@ -74,6 +79,8 @@ module.exports = {
   CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
   CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
   CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_30M_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_12H_INPUT_TOKENS_METRIC_KEY,
   REASONING_OUTPUT_TOKENS_METRIC_KEY,
   WEB_SEARCH_COUNT_METRIC_KEY,
   STORAGE_SEARCH_COUNT_METRIC_KEY,
@@ -88,6 +95,8 @@ module.exports = {
     cacheWriteTokens: CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
     cacheWrite5mTokens: CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
     cacheWrite1hTokens: CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
+    cacheWrite30mTokens: CACHE_WRITE_30M_INPUT_TOKENS_METRIC_KEY,
+    cacheWrite12hTokens: CACHE_WRITE_12H_INPUT_TOKENS_METRIC_KEY,
     reasoningOutputTokens: REASONING_OUTPUT_TOKENS_METRIC_KEY,
     webSearchCount: WEB_SEARCH_COUNT_METRIC_KEY,
     storageSearchCount: STORAGE_SEARCH_COUNT_METRIC_KEY,

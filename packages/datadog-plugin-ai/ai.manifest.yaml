@@ -1,0 +1,11 @@
+_v: 1
+name: ai
+display_name: Vercel AI SDK
+description: Instruments Vercel AI SDK text and structured object generation, streaming, embeddings, workflows, and tool
+  execution for tracing and LLM Observability, with optional AI Guard checks on model inputs and outputs.
+packages:
+- name: ai
+category:
+- gen_ai
+systems: []
+creation_date: '2025-08-14'

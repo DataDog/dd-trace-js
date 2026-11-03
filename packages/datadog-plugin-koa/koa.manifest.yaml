@@ -1,0 +1,12 @@
+_v: 1
+name: koa
+display_name: Koa
+description: Instruments Koa inbound HTTP requests and middleware execution, including route naming and error tracking.
+packages:
+- name: '@koa/router'
+- name: koa
+- name: koa-router
+category:
+- http.server
+systems: []
+creation_date: '2018-09-21'

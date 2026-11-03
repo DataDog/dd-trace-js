@@ -1,0 +1,11 @@
+_v: 1
+name: langchain
+display_name: LangChain
+description: Instruments LangChain chain execution, chat and language model generation, embeddings, tool execution, and
+  vector similarity retrieval with tracing and LLM Observability annotations.
+packages:
+- name: '@langchain/core'
+category:
+- gen_ai
+systems: []
+creation_date: '2024-11-20'

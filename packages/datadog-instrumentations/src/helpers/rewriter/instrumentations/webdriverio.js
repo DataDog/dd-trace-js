@@ -537,7 +537,10 @@ module.exports = [
     },
     astQuery: 'AssignmentExpression[left.object.object.name="Spec"]' +
       '[left.object.property.name="prototype"][left.property.name="execute"] > FunctionExpression',
+    // A method name keeps the original function expression, so the start context
+    // carries `self` (the legacy Spec) that the WebdriverIO Jasmine lifecycle reads.
     functionQuery: {
+      methodName: 'execute',
       kind: 'Sync',
     },
     channelName: 'Spec_execute',

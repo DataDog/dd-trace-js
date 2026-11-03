@@ -95,7 +95,7 @@ class ServerPlayback {
    * @param {number} now
    */
   responseDone (id, response, now) {
-    const entry = this.#turns.get(String(id))
+    const entry = this.#turns.get(id)
     if (!entry || !response?.output) return
     for (const item of response.output) {
       if (item.id && item.type === 'message') this.#bindOutput(entry, item, now)
@@ -322,8 +322,7 @@ class ServerPlayback {
 
   /** @param {object} item */
   #want (item) {
-    if (item.failed || item.attempts >= 2 || !this.#shouldRetainAudio() || !this.#requestItem) return
-    if (item.inFlight) return
+    if (item.failed || item.attempts >= 2 || !this.#shouldRetainAudio() || !this.#requestItem || item.inFlight) return
     item.wanted = true
     if (this.#scheduled || this.#closed) return
     this.#scheduled = setImmediate(() => {
@@ -357,8 +356,8 @@ class ServerPlayback {
     const item = this.#items.get(String(message?.id))
     if (!item) return
     item.inFlight = item.wanted = false
-    let index = 0
     if (message.content) {
+      let index = 0
       for (const part of message.content) {
         if (typeof part.audio === 'string') {
           const fallback = item.role === 'user' ? this.#inputFormat : this.#outputFormat
@@ -444,7 +443,7 @@ class ServerPlayback {
   /** @param {object} entry */
   #arm (entry) {
     clearTimeout(entry.timer)
-    const phase = entry.turn.serverSpeech.startTime !== undefined && !entry.stopped ? 'playback' : 'audio'
+    const phase = entry.turn.serverSpeech.startTime === undefined || entry.stopped ? 'audio' : 'playback'
     if (entry.phase !== phase) {
       entry.phase = phase
       entry.deadline = Date.now() + (phase === 'playback' ? PLAYBACK_WAIT_MS : AUDIO_WAIT_MS)

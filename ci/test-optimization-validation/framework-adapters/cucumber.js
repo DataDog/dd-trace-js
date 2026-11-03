@@ -88,7 +88,7 @@ const JAVASCRIPT_STRING_ESCAPES = Object.freeze({
  * @param {string|null|undefined} version installed Cucumber version
  */
 function supportsConfigIsolation (version) {
-  const match = /^[v=]?(\d+)(?:\.|$)/.exec(String(version || ''))
+  const match = /^[v=]?(\d+)(?:\.|$)/.exec(String(version))
   return Boolean(match && Number(match[1]) >= 8)
 }
 

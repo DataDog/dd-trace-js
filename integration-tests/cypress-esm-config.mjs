@@ -40,9 +40,7 @@ async function runCypress () {
   })
 
   const failures = results.totalFailed ?? results.failures ?? 0
-  if (failures !== 0) {
-    process.exit(failures)
-  }
+  process.exit(failures)
 }
 
 runCypress()

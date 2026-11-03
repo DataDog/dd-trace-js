@@ -143,6 +143,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "allowed": ".+",
         "default": null,
         "aliases": [
           "DATADOG_API_KEY"
@@ -497,6 +498,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "allowed": ".+",
         "default": null,
         "sensitive": true
       }
@@ -1001,6 +1003,15 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
+        "namespace": "featureFlags"
+      }
+    ],
+    "DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "description": "Enable Feature Flagging exposure delivery to Datadog independently of flag evaluation and evaluation telemetry.",
         "namespace": "featureFlags"
       }
     ],
@@ -4214,6 +4225,13 @@
       }
     ],
     "DD_TRACE_TEDIOUS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_TYPESAFE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

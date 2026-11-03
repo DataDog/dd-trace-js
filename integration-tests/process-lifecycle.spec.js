@@ -11,6 +11,7 @@ const sinon = require('sinon')
 
 const {
   createParallelIt,
+  execInProcessGroup,
   spawnPluginIntegrationTestProcAndExpectExit,
   spawnProcAndExpectExit,
   stopProc,
@@ -110,6 +111,71 @@ describe('spawnProcAndExpectExit', () => {
 
     await rejected
     assert.strictEqual(kill.callCount, 2)
+  })
+})
+
+describe('execInProcessGroup', () => {
+  const posixIt = process.platform === 'win32' ? it.skip : it
+
+  posixIt('drains output without a consumer', async () => {
+    const proc = execInProcessGroup(`node -e "process.stdout.write(Buffer.alloc(${256 * 1024}))"`)
+
+    try {
+      await once(proc, 'close')
+      assert.strictEqual(proc.exitCode, 0)
+    } finally {
+      await stopProc(proc)
+    }
+  })
+
+  posixIt('stops the shell and its descendants', async () => {
+    const proc = execInProcessGroup('node -e "' +
+      "process.on('SIGTERM', () => { process.stdout.write('stopped'); process.exit(0) }); " +
+      "process.stdout.write('ready'); setInterval(() => {}, 1000)" + '"')
+    let output = ''
+    proc.stdout.on('data', chunk => { output += chunk })
+
+    try {
+      await once(proc.stdout, 'data')
+      await stopProc(proc)
+
+      assert.strictEqual(output, 'readystopped')
+      assert.ok(proc.stdout.destroyed, 'child pipes must close before cleanup resolves')
+      assert.ok(proc.exitCode !== null || proc.signalCode !== null, 'shell must exit before cleanup resolves')
+    } finally {
+      await stopProc(proc)
+    }
+  })
+
+  posixIt('bounds cleanup when an escaped descendant keeps output open', async () => {
+    const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const proc = execInProcessGroup('node -e "' +
+      "const { spawn } = require('node:child_process'); " +
+      "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], " +
+      "{ detached: true, stdio: ['ignore', process.stdout, process.stderr] }); " +
+      'process.stdout.write(String(child.pid), () => process.exit(0))' + '"')
+    let escapedPid
+
+    try {
+      const [chunk] = await once(proc.stdout, 'data')
+      escapedPid = Number(chunk)
+      await once(proc, 'exit')
+      const stopped = assert.rejects(stopProc(proc, { timeoutMs: 100 }), {
+        message: `Process group ${proc.pid} did not close after SIGKILL`,
+      })
+
+      await clock.tickAsync(200)
+      await stopped
+    } finally {
+      clock.restore()
+      const closed = proc.stdout.destroyed ? undefined : once(proc, 'close')
+      try {
+        if (escapedPid) process.kill(-escapedPid, 'SIGKILL')
+      } catch (error) {
+        assert.strictEqual(error.code, 'ESRCH')
+      }
+      if (closed) await closed
+    }
   })
 })
 

@@ -1077,6 +1077,7 @@ function testEndHandler ({
       : undefined
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
+      hasAutomaticRetries(test, projects) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
@@ -1340,6 +1341,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
     }
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
+      hasAutomaticRetries(test, projects) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
@@ -2767,6 +2769,8 @@ function instrumentWorkerMainMethods (workerMain) {
     } else if (event === 'stepEnd') {
       const stepInfo = stepInfoByStepId[payload.stepId]
       delete stepInfoByStepId[payload.stepId]
+      if (!stepInfo) return dispatchEvent.apply(this, arguments)
+
       steps.push({
         testId: stepInfo.testId,
         startTime: new Date(stepInfo.startTime),
