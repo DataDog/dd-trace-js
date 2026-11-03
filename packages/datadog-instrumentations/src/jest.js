@@ -3108,7 +3108,9 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
         getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest, earlyFlakeDetectionFaultyThreshold)
 
       if (isFaulty) {
-        log.error('Early flake detection is disabled because the number of new suites is too high.')
+        log.warn(knownTests?.jest
+          ? 'Early flake detection is disabled because the number of new suites is too high.'
+          : 'Early flake detection is disabled because the known tests response does not contain Jest tests.')
         isEarlyFlakeDetectionEnabled = false
         isKnownTestsEnabled = false
         const testEnvironmentOptions = testPaths.tests[0]?.context?.config?.testEnvironmentOptions

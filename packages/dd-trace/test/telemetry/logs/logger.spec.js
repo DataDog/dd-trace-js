@@ -131,6 +131,21 @@ describe('logger telemetry delivery', () => {
     }])
   })
 
+  it('should retain errors with an unreadable error code', () => {
+    const cause = new Error('customer-secret')
+    cause.stack = `Error: customer-secret\n    at request (${ddBasePath}request.js:1:2)`
+    Object.defineProperty(cause, 'code', { get () { throw new Error('customer getter') } })
+
+    log.error('Request failed', cause)
+
+    assert.deepStrictEqual(collector.drain(), [{
+      message: 'Request failed',
+      level: 'ERROR',
+      count: 1,
+      stack_trace: 'Error: redacted\n    at request (request.js:1:2)',
+    }])
+  })
+
   it('should ignore causes with a throwing stack getter', () => {
     const cause = Object.create(null)
     Object.defineProperty(cause, 'stack', {

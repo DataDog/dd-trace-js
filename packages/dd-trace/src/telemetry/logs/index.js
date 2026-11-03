@@ -7,6 +7,13 @@ const logCollector = require('./log-collector')
 const telemetryLog = dc.channel('datadog:telemetry:log')
 const errorLog = dc.channel('datadog:log:error:record')
 
+const TEST_OPTIMIZATION_ERROR_CODES = new Set([
+  'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL',
+  'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT',
+  'ERR_DD_TEST_OPTIMIZATION_REQUEST_TIMEOUT',
+  'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT',
+])
+
 let enabled = false
 
 /**
@@ -54,6 +61,12 @@ function onErrorLog (msg) {
     } catch {
       return
     }
+    try {
+      const code = cause.code
+      if (TEST_OPTIMIZATION_ERROR_CODES.has(code)) telLog.tags = `error_code:${code}`
+    } catch {
+      // Error-like causes may expose unreadable properties.
+    }
     telLog.errorType = getErrorType(cause)
   }
 
@@ -93,6 +106,13 @@ function send (config, application, host) {
 
   const logs = logCollector.drain()
   if (logs) {
+    if (config.isCiVisibility) {
+      for (const entry of logs) {
+        entry.tags = entry.tags
+          ? `${entry.tags},test_optimization_enabled:true`
+          : 'test_optimization_enabled:true'
+      }
+    }
     sendData(config, application, host, 'logs', { logs })
   }
 }

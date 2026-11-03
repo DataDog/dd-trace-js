@@ -30,6 +30,17 @@ describe('telemetry log collector', () => {
       assert.strictEqual(logCollector.add({ message: 'Warn 1', level: 'WARN' }), true)
     })
 
+    it('should keep distinct metadata and deduplicate matching metadata', () => {
+      logCollector.add({ message: 'Request failed', level: 'ERROR', count: 1, tags: 'error_code:timeout' })
+      logCollector.add({ message: 'Request failed', level: 'ERROR', count: 1, tags: 'error_code:queue_full' })
+      logCollector.add({ message: 'Request failed', level: 'ERROR', count: 1, tags: 'error_code:timeout' })
+
+      assert.deepStrictEqual(logCollector.drain(), [
+        { message: 'Request failed', level: 'ERROR', count: 2, tags: 'error_code:timeout' },
+        { message: 'Request failed', level: 'ERROR', count: 1, tags: 'error_code:queue_full' },
+      ])
+    })
+
     it('should store logs with same message but different stack', () => {
       const ddFrame1 = `at T (${ddBasePath}path/to/dd/file1.js:1:2)`
       const ddFrame2 = `at T (${ddBasePath}path/to/dd/file2.js:3:4)`

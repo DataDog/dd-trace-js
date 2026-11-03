@@ -189,6 +189,28 @@ describe('telemetry logs', () => {
 
         sinon.assert.notCalled(logCollectorAdd)
       })
+
+      it('should report bounded Test Optimization error codes without exposing arbitrary codes', () => {
+        for (const code of [
+          'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL',
+          'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT',
+          'ERR_DD_TEST_OPTIMIZATION_REQUEST_TIMEOUT',
+          'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT',
+          'customer-secret',
+        ]) {
+          logCollectorAdd.resetHistory()
+          errorLog.publish({
+            message: 'Request failed',
+            cause: Object.assign(new Error('customer-secret'), { code }),
+            sendViaTelemetry: true,
+          })
+
+          sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
+            message: 'Request failed',
+            tags: code === 'customer-secret' ? undefined : `error_code:${code}`,
+          }))
+        }
+      })
     })
   })
 
@@ -235,6 +257,25 @@ describe('telemetry logs', () => {
 
       sinon.assert.notCalled(logCollectorDrain)
       sinon.assert.notCalled(sendData)
+    })
+
+    it('should identify all logs from Test Optimization while preserving existing tags', () => {
+      defaultConfig.isCiVisibility = true
+      collectedLogs.push({ message: 'AppSec diagnostic', level: 'WARN', tags: 'log_type:diagnostic' })
+      logs.start(defaultConfig)
+
+      logs.send(defaultConfig, application, host)
+
+      sinon.assert.calledOnceWithExactly(sendData, defaultConfig, application, host, 'logs', {
+        logs: [
+          { message: 'message', level: 'ERROR', tags: 'test_optimization_enabled:true' },
+          {
+            message: 'AppSec diagnostic',
+            level: 'WARN',
+            tags: 'log_type:diagnostic,test_optimization_enabled:true',
+          },
+        ],
+      })
     })
   })
 })
