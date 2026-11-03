@@ -26,8 +26,8 @@ describe('OpenFeature worker logging', () => {
       const { logs, telemetryErrors, requests } = JSON.parse(stdout)
       assert.strictEqual(requests, 2)
       assert.deepStrictEqual(telemetryErrors, [])
-      const successes = logs.filter(entry => entry.message.includes('Successfully sent 1 events'))
-      const failures = logs.filter(entry => entry.message.includes('Failed to send events to'))
+      const successes = logs.filter(entry => entry.message.includes('accepted 1 events at'))
+      const failures = logs.filter(entry => entry.message.includes('failed to send 1 events to'))
       assert.strictEqual(successes.length, enabled && level === 'debug' ? 1 : 0)
       assert.strictEqual(failures.length, enabled ? 1 : 0)
       if (enabled) {

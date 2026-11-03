@@ -103,14 +103,14 @@ async function addBreakpoint (probe) {
       file, lineNumber, columnNumber, probe.id, probe.version
     )
     const position = await getGeneratedPosition(url, source, lineNumber, sourceMapURL)
-    if (position.line !== null && position.column !== null) {
-      lineNumber = position.line
-      columnNumber = position.column
-    } else {
+    if (position.line === null || position.column === null) {
       throw new Error(
         // eslint-disable-next-line @stylistic/max-len
         `Could not find generated position for ${url}:${lineNumber}:${columnNumber} (probe: ${probe.id}, version: ${probe.version})`
       )
+    } else {
+      lineNumber = position.line
+      columnNumber = position.column
     }
   }
 
@@ -357,9 +357,10 @@ async function reEvaluateProbe (probe) {
 }
 
 async function start () {
-  sessionStarted = true
   log.debug('[debugger:devtools_client] Starting debugger')
   await session.post('Debugger.enable')
+  // Only flag the session as started once enabled, so the next probe retries a failed start and reports its cause
+  sessionStarted = true
 
   // Wait until there's a pause in script-loading to avoid accidentally adding probes to incorrect scripts. This is not
   // a guarantee, but best effort.

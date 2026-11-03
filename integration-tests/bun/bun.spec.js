@@ -190,4 +190,71 @@ describe('Bun runtime smoke tests', function () {
 
     assertBunSuccess(bunResult)
   })
+
+  describe('Dynamic Instrumentation', () => {
+    const ACKNOWLEDGED = 2
+    const DIAGNOSTIC = 'DATADOG TRACER DIAGNOSTIC - Live Debugger/Dynamic Instrumentation is disabled, ' +
+      'because it is not supported on Bun.'
+
+    // A dedicated agent keeps the Remote Config files added by a test away from the other tests
+    let diAgent
+    let remoteConfigRequests
+
+    beforeEach(async () => {
+      diAgent = await new FakeAgent().start()
+      remoteConfigRequests = []
+      diAgent.on('remote-config-request', (request) => remoteConfigRequests.push(request))
+    })
+
+    afterEach(async () => {
+      await diAgent?.stop()
+    })
+
+    /**
+     * @param {Record<string, string>} [env]
+     * @returns {Promise<void>}
+     */
+    async function assertDynamicInstrumentationSkipped (env) {
+      const result = await runBun('bun/dynamic-instrumentation.js', {
+        DD_TRACE_AGENT_URL: `http://127.0.0.1:${diAgent.port}`,
+        DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
+        DD_TRACE_STARTUP_LOGS: 'true',
+        ...env,
+      })
+
+      assertBunSuccess(result)
+      const output = result.stdout + result.stderr
+      assert.strictEqual(output.split(DIAGNOSTIC).length - 1, 1, `Expected the diagnostic once, got: ${output}`)
+      assert.ok(remoteConfigRequests.length > 0, 'Expected Remote Config requests')
+      for (const { client: { products } } of remoteConfigRequests) {
+        assert.ok(products.includes('APM_TRACING'), `Expected APM_TRACING in ${products}`)
+        assert.ok(!products.includes('LIVE_DEBUGGING'), `Expected no LIVE_DEBUGGING in ${products}`)
+      }
+    }
+
+    it('should not start when enabled by DD_DYNAMIC_INSTRUMENTATION_ENABLED', async () => {
+      await assertDynamicInstrumentationSkipped({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+    })
+
+    it('should not start when enabled by Remote Config', async () => {
+      diAgent.addRemoteConfig({
+        product: 'APM_TRACING',
+        id: 'enable-dynamic-instrumentation',
+        config: {
+          sdk_config: {
+            config: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' },
+          },
+        },
+      })
+
+      await assertDynamicInstrumentationSkipped()
+
+      // Only requests sent after the config was applied would subscribe to probes
+      const isAcknowledged = remoteConfigRequests.some(({ client: { state } }) => state.config_states.some(
+        ({ id, apply_state: applyState }) => id === 'enable-dynamic-instrumentation' && applyState === ACKNOWLEDGED
+      ))
+      assert.ok(isAcknowledged,
+        'Expected the Remote Config enabling Live Debugger/Dynamic Instrumentation to be acknowledged')
+    })
+  })
 })

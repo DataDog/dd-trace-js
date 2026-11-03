@@ -7,6 +7,7 @@ const { describe, it } = require('mocha')
 
 require('../../setup/core')
 
+const { loadAsBundled } = require('../../helpers/load-as-bundled')
 const {
   getCallSites,
   parseUserLandFrames,
@@ -419,6 +420,20 @@ describe('stacktrace utils', () => {
           const stack = `Error: test\n${instrumentationFrame}\n${userFrame}`
           assert.deepStrictEqual(parseUserLandFrames(stack).length, 1, `failed for repo name: ${repoName}`)
         }
+      })
+
+      it('should keep instrumentation frames when bundled into ESM output, where __filename is not defined', () => {
+        const stacktracePath = require.resolve('../../../src/plugins/util/stacktrace')
+        const bundled = /** @type {{ parseUserLandFrames: typeof parseUserLandFrames }} */ (
+          loadAsBundled(stacktracePath)
+        )
+        const instrFile = join(`${sep}dd-trace-js`, 'packages', 'datadog-instrumentations', 'src', 'express.js')
+        const stack = `Error: test\n    at wrappedUse (${instrFile}:144:16)\n    at testCase (/user/app/test.js:10:5)`
+
+        assert.deepStrictEqual(bundled.parseUserLandFrames(stack).map(frame => frame.fileName), [
+          instrFile,
+          '/user/app/test.js',
+        ])
       })
     })
 

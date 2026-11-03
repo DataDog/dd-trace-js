@@ -58,6 +58,65 @@ Catch `ConfigurationFetchError` to handle loading failures using its `code` and 
 Use `require('dd-trace/openfeature/rules-based')` for CommonJS or named imports from
 `dd-trace/openfeature/rules-based.js` for native Node.js ESM.
 
+<h2 id="feature-flag-exposure-logging">Feature Flag Exposure Logging</h2>
+
+Built-in Datadog exposure logging is enabled by default (`DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED=true`).
+Set `DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED=false` before tracer initialization to disable exposure
+buffering and delivery to Datadog in both agentless and Remote Configuration modes. Local flag evaluation and
+application OpenFeature hooks continue to work.
+Only `false` (case-insensitive) or `0` disables exposure logging. The tracer ignores unrecognized values.
+
+Disabling Datadog exposure delivery prevents experiment results from using those Datadog-collected exposures. If you
+log exposures separately to your data warehouse, warehouse-native analysis can use that source instead.
+
+This switch is independent of [evaluation counts](#feature-flag-evaluation-counts), which remain enabled by default.
+Evaluation events can include targeting keys. By default, valid non-empty keys are sent as unsalted SHA-256 hashes.
+When the flag configuration sets `observeFullEvaluationData` to `true`, events can include raw keys and a bounded
+evaluation-context snapshot. To disable aggregated `flagevaluation` events as well, also set
+`DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false`.
+Span enrichment, OpenTelemetry evaluation metrics, and debug logging retain their own settings; this switch does not
+disable all Feature Flagging telemetry.
+
+<h2 id="feature-flag-exposures-in-your-own-data-store">Feature Flag Exposures in Your Own Data Store</h2>
+
+Use the `ExposureHook` to receive every feature flag evaluation with the same deduplication decision the tracer uses, so your application can
+record exposures in its own data store:
+
+```javascript
+const tracer = require('dd-trace').init()
+const { OpenFeature } = require('@openfeature/server-sdk')
+const { ExposureHook } = require('dd-trace/openfeature/exposure-hook')
+
+OpenFeature.addHooks(new ExposureHook((evaluation) => {
+  if (!evaluation.shouldSend()) return
+  // Queue for your own writer; the callback runs on the evaluation thread and must not do I/O.
+  recordExposure({
+    flag: evaluation.flagKey,
+    variant: evaluation.variant,
+    allocation: evaluation.allocation,
+    targetingKey: evaluation.targetingKey,
+    features: evaluation.getFeatures(),
+  })
+}))
+
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+```
+
+Register the hook with `OpenFeature.addHooks` or on a client. The callback runs for every evaluation, including errors and repeats:
+
+- `isExposure()`: the evaluation succeeded and selected an allocation that logs exposures, whether or not this subject was already exposed.
+- `isCacheHit()`: this exposure repeats one already recorded for this subject (same flag, allocation, variant and serial id).
+- `shouldSend()`: a new or changed exposure; exactly what the tracer sends to Datadog.
+- `getFeatures()`: the read-only `__dd_feature.<key>` metadata of the selected split, such as `holdout.key`, `holdout.assignment_group` and
+  `holdout.should_include_in_holdout_analysis`.
+
+The callback runs on the evaluation thread: hand the data to a background queue instead of writing it from the callback. An exception from the
+callback does not affect the evaluation; the first failure is logged at warn level and later ones at debug level.
+
+To stop sending exposures to Datadog while the hook keeps working, see
+[Feature Flag Exposure Logging](#feature-flag-exposure-logging). The hook still receives every evaluation with the same
+`shouldSend()` decision, and exposure deduplication keeps running.
+
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 
 The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
@@ -153,7 +212,7 @@ tracer.use('pg', {
 
 LLM Observability integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.
 
-The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
+The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, `openai-agents`, and `typesafe`.
 
 ```javascript
 // Keep APM tracing for OpenAI, but let another integration own the LLM Observability spans.
@@ -175,28 +234,8 @@ tracer.use('openai', {
 <h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-sdk"></h5>
 
-Amazon Nova 2 Sonic LLM Observability supports `InvokeModelWithBidirectionalStreamCommand` in
-`@aws-sdk/client-bedrock-runtime >=3.785.0` with model `amazon.nova-2-sonic-v1:0`, supplied as a model ID
-or a foundation-model ARN such as `arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-2-sonic-v1:0`.
-Spans use the canonical model ID; the identifier sent to AWS is unchanged. Inference-profile identifiers,
-cross-region prefixes, other model versions (including Nova 2.5 Sonic), and malformed ARNs pass through
-without Nova capture. The integration does not perform model-resolution API calls.
-Initialize the tracer with LLM Observability enabled before loading the AWS SDK. Each logical response
-creates a `nova sonic audio turn` workflow with a `nova sonic response` LLM child and, when timing is
-available, `user speech` and `agent speech` workflow children. Turns inherit the invocation's application
-workflow, if present, and share a conversation session ID.
-
-The LLM child contains transcripts, tool calls/results, token usage, and bounded inline WAV audio.
-Invalid or oversized audio falls back to text without dropping independently valid speech timing.
-Audio-token counts are subsets of the input/output token totals. Input speech offsets select the audio
-clip; time to first audio uses local receipt of `userSpeechEnd` and the first output audio. Output speech
-timing projects PCM playback, including queueing, underrun silence, and interruption cuts; it does not
-measure sound heard at a device. Input is observed as the SDK consumes it, which may precede transmission.
-
-Original Nova Sonic and restarting a different prompt on the same connection are unsupported. On a prompt
-restart, the integration flushes the first prompt and stops capturing that connection. Set
-`tracer.use('aws-sdk', { llmobs: false })` to disable Nova audio/turn capture. Standard Bedrock APM tracing
-for other operations is unaffected.
+For Amazon Bedrock LLM Observability integrations, see the
+[automatic instrumentation documentation](https://docs.datadoghq.com/llm_observability/instrument/auto_instrumentation/#amazon-bedrock).
 
 <h5 id="azure-cosmos"></h5>
 <h5 id="azure-event-hubs"></h5>
@@ -269,6 +308,7 @@ for other operations is unaffected.
 <h5 id="sharedb"></h5>
 <h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
+<h5 id="typesafe"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
 <h5 id="web"></h5>
@@ -357,6 +397,7 @@ for other operations is unaffected.
 * [sharedb](./interfaces/plugins.sharedb.html)
 * [supabase](./interfaces/plugins.supabase.html)
 * [tedious](./interfaces/plugins.tedious.html)
+* [typesafe](./interfaces/plugins.typesafe.html)
 * [undici](./interfaces/plugins.undici.html)
 * [vitest](./interfaces/plugins.vitest.html)
 * [web](./interfaces/plugins.web.html)

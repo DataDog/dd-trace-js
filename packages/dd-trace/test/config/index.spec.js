@@ -29,6 +29,7 @@ const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
 
 describe('Config', () => {
   let log
+  let logWriter
   let pkg
   let env
   let fs
@@ -57,6 +58,17 @@ describe('Config', () => {
     }
   }
 
+  /**
+   * Telemetry keeps an entry per origin, and the entry with the highest `seq_id` is the reported value.
+   *
+   * @param {string} name
+   */
+  function getLatestConfigUpdate (name) {
+    return updateConfig.lastCall.args[0]
+      .filter(entry => entry.name === name)
+      .reduce((latest, entry) => entry.seq_id > latest.seq_id ? entry : latest)
+  }
+
   // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
   const getConfig = (options, overrides = {}) => {
     const {
@@ -67,6 +79,7 @@ describe('Config', () => {
     sinon.spy(log, 'info')
     sinon.spy(log, 'warn')
     sinon.spy(log, 'error')
+    logWriter = { warn: sinon.stub() }
     const loadParsers = proxyquire.noPreserveCache()
     const parsers = loadParsers('../../src/config/parsers', {})
     const loadSupportedConfigurations = proxyquire.noPreserveCache()
@@ -89,6 +102,7 @@ describe('Config', () => {
     const createConfig = loadConfig('../../src/config', {
       './defaults': configDefaults,
       '../log': log,
+      '../log/writer': logWriter,
       '../telemetry': { updateConfig },
       '../serverless': serverless,
       'node:fs': fs,
@@ -2708,6 +2722,41 @@ describe('Config', () => {
     assert.strictEqual(config.spanAttributeSchema, 'v0')
   })
 
+  it('should reject an empty API key', () => {
+    process.env.DD_API_KEY = ''
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_API_KEY, undefined)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: '<redacted>' for DD_API_KEY (source: env_var), picked default",
+    )
+  })
+
+  it('should reject an empty app key', () => {
+    process.env.DD_APP_KEY = ''
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_APP_KEY, undefined)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: '<redacted>' for DD_APP_KEY (source: env_var), picked default",
+    )
+  })
+
+  it('should redact an invalid API key', () => {
+    process.env.DD_API_KEY = 'api-key\n'
+
+    const config = getConfig()
+    const message = log.warn.firstCall.args[0]
+
+    assert.doesNotMatch(message, /api-key/)
+    assert.strictEqual(message, "Invalid value: '<redacted>' for DD_API_KEY (source: env_var), picked default")
+    assert.strictEqual(config.DD_API_KEY, undefined)
+  })
+
   it('should accept valid port boundaries', () => {
     process.env.DD_DOGSTATSD_PORT = '1'
     process.env.DD_TRACE_AGENT_PORT = '1'
@@ -5124,6 +5173,107 @@ rules:
     })
   })
 
+  context('DD_TRACE_OTEL_CTX_ENABLED', () => {
+    let originalOtelCtxEnabled
+    let originalAppsecEnabled
+
+    beforeEach(() => {
+      originalOtelCtxEnabled = process.env.DD_TRACE_OTEL_CTX_ENABLED
+      originalAppsecEnabled = process.env.DD_APPSEC_ENABLED
+      delete process.env.DD_TRACE_OTEL_CTX_ENABLED
+      delete process.env.DD_APPSEC_ENABLED
+    })
+
+    afterEach(() => {
+      if (originalOtelCtxEnabled !== undefined) {
+        process.env.DD_TRACE_OTEL_CTX_ENABLED = originalOtelCtxEnabled
+      } else {
+        delete process.env.DD_TRACE_OTEL_CTX_ENABLED
+      }
+      if (originalAppsecEnabled !== undefined) {
+        process.env.DD_APPSEC_ENABLED = originalAppsecEnabled
+      } else {
+        delete process.env.DD_APPSEC_ENABLED
+      }
+    })
+
+    it('should be false by default', () => {
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'default')
+    })
+
+    it('should be enabled when appsec is enabled via env var', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'calculated')
+    })
+
+    it('should be enabled when appsec is enabled via options', () => {
+      const config = getConfig({ appsec: { enabled: true } })
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'calculated')
+    })
+
+    it('should remain false when appsec is disabled', () => {
+      process.env.DD_APPSEC_ENABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+    })
+
+    it('should be enabled when DD_TRACE_OTEL_CTX_ENABLED is true without appsec', () => {
+      process.env.DD_TRACE_OTEL_CTX_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'env_var')
+    })
+
+    it('should prioritize DD_TRACE_OTEL_CTX_ENABLED=false over appsec setting', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      process.env.DD_TRACE_OTEL_CTX_ENABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'env_var')
+    })
+
+    it('should prioritize DD_TRACE_OTEL_CTX_ENABLED=false over appsec option', () => {
+      process.env.DD_TRACE_OTEL_CTX_ENABLED = 'false'
+      const config = getConfig({ appsec: { enabled: true } })
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+    })
+
+    it('should remain false when appsec is enabled in a serverless function', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+    })
+
+    it('should be enabled in a serverless function when DD_TRACE_OTEL_CTX_ENABLED is true', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+      process.env.DD_TRACE_OTEL_CTX_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'env_var')
+    })
+
+    it('should remain false when appsec is enabled on Vercel', () => {
+      process.env.VERCEL = '1'
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+    })
+
+    it('should be enabled on Vercel when DD_TRACE_OTEL_CTX_ENABLED is true', () => {
+      process.env.VERCEL = '1'
+      process.env.DD_TRACE_OTEL_CTX_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'env_var')
+    })
+  })
+
   context('NX auto-detection', () => {
     it('should use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is true or 1', () => {
       process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
@@ -5974,7 +6124,150 @@ rules:
     })
   })
 
+  for (const [runtime, versions] of [
+    ['Bun', { bun: '1.4.3' }],
+    ['Deno', { deno: '2.9.6' }],
+  ]) {
+    context(`on ${runtime}`, () => {
+      const debuggerDiagnostic = 'DATADOG TRACER DIAGNOSTIC - Live Debugger/Dynamic Instrumentation is disabled, ' +
+        `because it is not supported on ${runtime}.`
+      const failedTestReplayDiagnostic = 'DATADOG TRACER DIAGNOSTIC - Failed Test Replay is disabled, ' +
+        `because Live Debugger/Dynamic Instrumentation is not supported on ${runtime}.`
+
+      let versionsStub
+
+      beforeEach(() => {
+        versionsStub = sinon.stub(process, 'versions').value({ ...process.versions, ...versions })
+        // Startup logs are disabled by default in v5
+        process.env.DD_TRACE_STARTUP_LOGS = 'true'
+      })
+
+      afterEach(() => {
+        versionsStub.restore()
+      })
+
+      it('should disable Live Debugger/Dynamic Instrumentation enabled by an environment variable', () => {
+        process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        assert.strictEqual(config.getOrigin('dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED'), 'calculated')
+        assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+          { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: false, origin: 'calculated' },
+        ])
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should disable Live Debugger/Dynamic Instrumentation enabled programmatically', () => {
+        const config = getConfig({ dynamicInstrumentation: { enabled: true } })
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should disable Live Debugger/Dynamic Instrumentation enabled by Remote Config', () => {
+        const config = getConfig()
+
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+
+        // The rest of a later update still applies
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true', DD_TRACE_SAMPLE_RATE: '0.5' })
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        assert.strictEqual(config.sampleRate, 0.5)
+
+        config.setRemoteConfig(null)
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should keep reporting Live Debugger/Dynamic Instrumentation as calculated on Remote Config updates', () => {
+        const config = getConfig()
+
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+        config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        assert.strictEqual(config.getOrigin('dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED'), 'calculated')
+        assertObjectContains(getLatestConfigUpdate('DD_DYNAMIC_INSTRUMENTATION_ENABLED'), {
+          value: false,
+          origin: 'calculated',
+        })
+      })
+
+      it('should explain only once why Live Debugger/Dynamic Instrumentation is disabled', () => {
+        process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+
+        const config = getConfig()
+        // Recalculates the config, starting from the environment variable again
+        config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        sinon.assert.calledOnceWithExactly(logWriter.warn, debuggerDiagnostic)
+      })
+
+      it('should not explain why Live Debugger/Dynamic Instrumentation is disabled without startup logs', () => {
+        process.env.DD_TRACE_STARTUP_LOGS = 'false'
+        process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
+        sinon.assert.notCalled(logWriter.warn)
+      })
+
+      it('should disable Failed Test Replay without explaining why when it is enabled by default', () => {
+        const config = getConfig()
+
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED, false)
+        sinon.assert.notCalled(logWriter.warn)
+      })
+
+      it('should disable Failed Test Replay enabled by an environment variable', () => {
+        process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED, false)
+        sinon.assert.calledOnceWithExactly(logWriter.warn, failedTestReplayDiagnostic)
+      })
+
+      it('should disable Failed Test Replay enabled by Remote Config', () => {
+        const config = getConfig()
+
+        config.setRemoteConfig({ DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'true' })
+
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED, false)
+        assert.strictEqual(config.getOrigin('testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED'), 'calculated')
+        sinon.assert.calledOnceWithExactly(logWriter.warn, failedTestReplayDiagnostic)
+      })
+    })
+  }
+
   context('Feature Flagging configuration source', () => {
+    it('enables Datadog exposure logging by default', () => {
+      assert.strictEqual(defaults['featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED'], true)
+      assert.strictEqual(getConfig().featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED, true)
+    })
+
+    for (const enabled of [false, true]) {
+      it(`sets Datadog exposure logging to ${enabled} independently of evaluation and counts`, () => {
+        process.env.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED = String(enabled)
+        const config = getConfig()
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED, enabled)
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, true)
+        assert.strictEqual(config.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED, true)
+        assert.strictEqual(
+          config.getOrigin('featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED'), 'env_var'
+        )
+      })
+    }
+
     it('enables evaluation counts by default', () => {
       assert.strictEqual(defaults['featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED'], true)
       assert.strictEqual(getConfig().featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED, true)
