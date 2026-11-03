@@ -1,27 +1,7 @@
 name: Audit
 
 on:
-  workflow_call:
   pull_request:
-    paths:
-      - ".github/actions/datadog-ci/bun.lock"
-      - ".github/actions/datadog-ci/package.json"
-      - ".github/all-green/bun.lock"
-      - ".github/all-green/package.json"
-      - ".github/audit-allowlist.json"
-      - ".github/workflows/audit.yml"
-      - ".github/workflows/dependabot-audit.yml"
-      - "bun.lock"
-      - "docs/bun.lock"
-      - "docs/package.json"
-      - "package.json"
-      - "scripts/audit.js"
-      - "scripts/bun.js"
-      - "vendor/bun.lock"
-      - "vendor/package.json"
-  schedule:
-    - cron: "0 6 * * 1"
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
@@ -32,6 +12,7 @@ permissions:
 
 jobs:
   dependencies:
+    if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

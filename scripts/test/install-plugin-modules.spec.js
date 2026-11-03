@@ -153,8 +153,18 @@ describe('scripts/install_plugin_modules.js', function () {
 
     const preload = path.join(wrapperDirectory, 'native-override.js')
     fs.writeFileSync(preload, `
-const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
-externals.q = [{ name: 'q', overrides: { q: ${JSON.stringify(`file:${archive}`)} } }]
+const fs = require('node:fs/promises')
+const writeFile = fs.writeFile
+fs.writeFile = (file, data, ...options) => {
+  if (String(file).endsWith('package.json')) {
+    const manifest = JSON.parse(data)
+    if (manifest.dependencies?.q) {
+      manifest.dependencies.q = ${JSON.stringify(`file:${archive}`)}
+      data = JSON.stringify(manifest)
+    }
+  }
+  return writeFile(file, data, ...options)
+}
 `)
     const env = { NODE_OPTIONS: `--require=${preload}`, PACKAGE_VERSION_RANGE: '1.5.1' }
     const result = spawnInstall('q', { ...env, DD_TEST_FAIL_NATIVE_INSTALL: 'true' })
@@ -172,80 +182,6 @@ require('node:assert/strict').strictEqual(
     assert.strictEqual(rebuilt.status, 0, rebuilt.stderr)
   })
 
-  it('rejects conflicting declarative overrides', () => {
-    const preload = path.join(wrapperDirectory, 'conflicting-overrides.js')
-    fs.writeFileSync(preload, `
-const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
-externals.express.push(
-  { name: 'axios', overrides: { axios: '1' } },
-  { name: 'axios', overrides: { axios: '2' } }
-)
-`)
-
-    const result = spawnInstall('express', {
-      NODE_OPTIONS: `--require=${preload}`,
-    })
-
-    assert.strictEqual(result.status, 1)
-    assert.match(result.stderr, /Conflicting overrides for 'axios': "1" and "2"/)
-  })
-
-  it('rejects conflicting nested overrides before installing', () => {
-    const preload = path.join(wrapperDirectory, 'conflicting-nested-overrides.js')
-    fs.writeFileSync(preload, `
-const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
-externals.q = [
-  { name: 'collections', overrides: { q: { collections: '^5' } } },
-  { name: 'collections', overrides: { q: { collections: '^2' } } },
-]
-`)
-
-    const result = spawnInstall('q', { NODE_OPTIONS: `--require=${preload}` })
-
-    assert.doesNotMatch(result.stdout, /bun install/)
-    assert.strictEqual(result.status, 1)
-    assert.match(result.stderr, /Conflicting overrides for 'q'/)
-    assert.match(result.stderr, /\^5/)
-    assert.match(result.stderr, /\^2/)
-  })
-
-  for (const [label, overrides] of [
-    ['an npm-style nested object', { q: { collections: '^5.0.0' } }],
-    ['a pnpm-style parent selector', { 'q@^2>collections': '^5.0.0' }],
-  ]) {
-    it(`applies ${label} without overriding unrelated dependencies`, () => {
-      const preload = path.join(wrapperDirectory, 'nested-overrides.js')
-      fs.writeFileSync(preload, `
-const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
-externals.q = [{ name: 'collections', versions: ['^2.0.3'], overrides: ${JSON.stringify(overrides)} }]
-`)
-
-      runInstall('q', undefined, undefined, { NODE_OPTIONS: `--require=${preload}` })
-
-      const dependency = require(path.join(versionsDir, 'q@2.0.0'))
-      const unrelated = require(path.join(versionsDir, 'collections'))
-      assert.strictEqual(semver.major(unrelated.version()), 2)
-      const requireFromQ = createRequire(dependency.getPath())
-      assert.strictEqual(semver.major(requireFromQ('collections/package.json').version), 5)
-      dependency.get()
-    })
-  }
-
-  it('merges equivalent nested overrides from multiple declarations', () => {
-    const preload = path.join(wrapperDirectory, 'equivalent-overrides.js')
-    fs.writeFileSync(preload, `
-const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
-externals.q = [
-  { name: 'collections', versions: ['^2.0.3'], overrides: { q: { collections: '^5.0.0', asap: '^1' } } },
-  { name: 'collections', versions: ['^2.0.3'], overrides: { q: { asap: '^1', collections: '^5.0.0' } } },
-]
-`)
-
-    runInstall('q', undefined, undefined, { NODE_OPTIONS: `--require=${preload}` })
-
-    require(path.join(versionsDir, 'q@2.0.0')).get()
-  })
-
   it('supports a plugin filter that generates no workspaces', () => {
     fs.rmSync(path.join(versionsDir, 'node_modules'), { recursive: true, force: true })
     fs.rmSync(path.join(versionsDir, 'bun.lock'), { force: true })
@@ -253,11 +189,29 @@ externals.q = [
     runInstall('not-a-plugin')
   })
 
-  it('does not require latest-version caps for forced transitive dependencies', () => {
+  it('rejects an open-ended external dependency without a canonical version cap', () => {
+    const preload = path.join(wrapperDirectory, 'missing-external-cap.js')
+    fs.writeFileSync(preload, `
+const latests = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/versions/package.json'))})
+const externals = require(${JSON.stringify(path.join(repoRoot, 'packages/dd-trace/test/plugins/externals'))})
+delete latests.dependencies.bluebird
+externals.moleculer = [{ name: 'bluebird', versions: ['3.7.2'], version: '*', dep: true, forced: true }]
+`)
+
+    const result = spawnInstall('moleculer', { NODE_OPTIONS: `--require=${preload}` })
+
+    assert.strictEqual(result.status, 1, result.stderr)
+    assert.match(result.stderr, /Latest version for 'bluebird' needs to be defined/)
+  })
+
+  it('caps forced transitive dependencies at their canonical versions', () => {
     runInstall('google-cloud-vertexai')
 
     const manifest = require(path.join(versionsDir, '@google-cloud', 'vertexai', 'package.json'))
     assert.strictEqual(semver.subset(manifest.dependencies['google-auth-library'], '^9.0.0'), true)
+    const latest = require('../../packages/dd-trace/test/plugins/versions/package.json')
+      .dependencies['google-auth-library']
+    assert.strictEqual(semver.subset(manifest.dependencies['google-auth-library'], `<=${latest}`), true)
     const vertexAI = require(path.join(versionsDir, '@google-cloud', 'vertexai'))
     const directAuthPath = fs.realpathSync(vertexAI.getPath('google-auth-library'))
     const vertexAuthPath = fs.realpathSync(createRequire(vertexAI.getPath()).resolve('google-auth-library'))
@@ -313,18 +267,20 @@ externals.q = [
     bedrock.get('@smithy/node-http-handler')
   })
 
-  it('injects a forced dependency missing from the package manifest', () => {
+  it('loads Moleculer with its undeclared Bluebird dependency', () => {
     runInstall('moleculer')
 
-    const manifest = require(path.join(versionsDir, 'moleculer', 'package.json'))
-    assert.strictEqual(manifest.dependencies.bluebird, '3.7.2')
+    const moleculer = require(path.join(versionsDir, 'moleculer'))
+    moleculer.get()
+    assert.strictEqual(moleculer.get('bluebird').version, '3.7.2')
   })
 
-  it('pins the Claude Agent SDK to its compatible zod major', () => {
+  it('preserves the Claude Agent SDK zod peer major', () => {
     runInstall('claude-agent-sdk')
 
-    const manifest = require(path.join(versionsDir, '@anthropic-ai', 'claude-agent-sdk', 'package.json'))
-    assert.strictEqual(semver.subset(manifest.dependencies.zod, '^4.0.0'), true)
+    const sdk = require(path.join(versionsDir, '@anthropic-ai', 'claude-agent-sdk'))
+    sdk.get()
+    assert.strictEqual(semver.major(sdk.get('zod/package.json').version), 4)
   })
 
   it('keeps scoped package identities portable across path separators', () => {
@@ -341,13 +297,13 @@ path.join = function join (...parts) {
 }
 `)
 
-    runInstall('claude-agent-sdk', undefined, undefined, {
+    runInstall('google-cloud-vertexai', undefined, undefined, {
       NODE_OPTIONS: `--require=${preload}`,
     })
 
-    const manifest = require(path.join(versionsDir, '@anthropic-ai', 'claude-agent-sdk', 'package.json'))
-    assert.ok(manifest.dependencies.zod, 'expected the scoped workspace to receive its peer dependency')
-    assert.strictEqual(semver.subset(manifest.dependencies.zod, '^4.0.0'), true)
+    const manifest = require(path.join(versionsDir, '@google-cloud', 'vertexai', 'package.json'))
+    assert.ok(manifest.dependencies['google-auth-library'], 'expected the scoped workspace to receive its dependency')
+    assert.strictEqual(semver.subset(manifest.dependencies['google-auth-library'], '^9.0.0'), true)
   })
 
   it('trusts the transitive native builder required by pg-native', () => {
@@ -356,22 +312,17 @@ path.join = function join (...parts) {
     assert.ok(readVersionsManifest().trustedDependencies.includes('libpq'))
   })
 
-  it('scopes the q transitive override to q sandboxes', () => {
+  it('loads Q across its supported versions without transitive overrides', () => {
     runInstall('q')
 
-    assert.deepStrictEqual(readVersionsManifest().overrides, {
-      'q@^2>collections': '^5.0.0',
-    })
-    require(path.join(versionsDir, 'q')).get()
+    for (const version of ['1.0.0', '1', '2.0.0', '2']) {
+      require(path.join(versionsDir, `q@${version}`)).get()
+    }
   })
 
   it('scopes the recorded OpenAI dependency graph to langchain sandboxes', () => {
     runInstall('langchain')
 
-    // No override pins `@langchain/core` here. A workspace-wide one would drag langgraph's `>=1.1.16`
-    // sandboxes down to the 0.2 line, so the range is left to
-    // `@langchain/openai@0.0.34`'s own declaration — which is what the assertion below verifies.
-    assert.deepStrictEqual(readVersionsManifest().overrides, {})
     const manifest = require(path.join(versionsDir, 'langchain', 'package.json'))
     assert.strictEqual(manifest.dependencies['@langchain/openai'], '0.0.34')
     const langchain = require(path.join(versionsDir, 'langchain'))
@@ -382,7 +333,7 @@ path.join = function join (...parts) {
 })
 
 /**
- * @returns {{ trustedDependencies: string[], overrides: Record<string, string> }}
+ * @returns {{ trustedDependencies: string[] }}
  */
 function readVersionsManifest () {
   return JSON.parse(fs.readFileSync(path.join(versionsDir, 'package.json'), 'utf8'))

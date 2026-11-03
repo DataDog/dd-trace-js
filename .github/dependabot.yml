@@ -412,11 +412,13 @@ updates:
           - "*"
 
   # Esbuild integration test dependencies
+  # Webpack fixtures use the same update policy.
   - package-ecosystem: "npm"
     directories:
       - "/integration-tests/esbuild"
       - "/integration-tests/appsec/iast-esbuild-esm"
       - "/integration-tests/appsec/iast-esbuild-cjs"
+      - "/integration-tests/webpack"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 1
@@ -450,4 +452,21 @@ updates:
     labels:
       - dependabot
       - dependencies
+      - semver-patch
+
+  # Keep startup benchmark inputs fixed until their frozen lock is updated together.
+  - package-ecosystem: "npm"
+    directory: "/benchmark/sirun/startup/everything-fixture"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3
+    groups:
+      startup-benchmark:
+        patterns:
+          - "*"
+    labels:
+      - dependabot
+      - dependencies
+      - javascript
       - semver-patch

@@ -6,7 +6,7 @@
   "typings": "index.d.ts",
   "scripts": {
     "env": "bash ./plugin-env",
-    "prepare": "node scripts/prepare.js",
+    "prepare": "node scripts/patch-istanbul-lib-coverage.js && node scripts/patch-v8-to-istanbul.js && node scripts/bun.js install --cwd vendor --silent --frozen-lockfile",
     "prepack": "node scripts/release/swap-v5-types.js",
     "bench": "node benchmark/index.js",
     "bench:elevenlabs": "node benchmark/elevenlabs.js",
@@ -118,10 +118,11 @@
     "test:integration:plugins:coverage": "npm run services && node ./integration-tests/coverage/run-suite.js \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/${SPEC:-*}*.spec.js\"",
     "test:unit:plugins": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\" \"packages/datadog-plugin-@(${PLUGINS})/test/**/*.spec.js\" --exclude \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/*.spec.js\"",
     "test:release": "mocha \"scripts/release/**/*.spec.js\"",
-    "test:scripts": "mocha \"benchmark/e2e-test-optimization/*.spec.js\" \"benchmark/sirun/*.spec.js\" \"scripts/helpers/**/*.spec.js\" \"scripts/test/**/*.spec.js\" \"scripts/*.spec.mjs\" --timeout 240000",
+    "test:scripts": "mocha \"benchmark/e2e-test-optimization/*.spec.js\" \"benchmark/sirun/*.spec.js\" \"scripts/helpers/**/*.spec.js\" \"scripts/test/**/*.spec.js\" \"scripts/*.spec.mjs\"",
     "test:shimmer": "mocha \"packages/datadog-shimmer/test/**/*.spec.js\"",
     "test:shimmer:ci": "node scripts/c8-ci.js test:shimmer",
     "verify:workflow-job-names": "node scripts/verify-workflow-job-names.js",
+    "verify:dependency-updates": "node scripts/verify-dependency-updates.js",
     "verify-exercised-tests": "node scripts/verify-exercised-tests.js"
   },
   "repository": {
@@ -269,10 +270,6 @@
     "yaml": "^2.9.1"
   },
   "trustedDependencies": [
-    "@datadog/native-appsec",
-    "@datadog/native-iast-taint-tracking",
-    "@datadog/native-metrics",
-    "@datadog/pprof",
     "bun"
   ]
 }
