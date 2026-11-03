@@ -1,5 +1,5 @@
 {
   "scripts": {
-    "postCreate": "node scripts/bun.js install --frozen-lockfile"
+    "postCreate": "bun install --frozen-lockfile"
   }
 }

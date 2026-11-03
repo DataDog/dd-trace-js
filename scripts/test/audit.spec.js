@@ -10,7 +10,6 @@ const yaml = require('yaml')
 
 const repoRoot = path.join(__dirname, '..', '..')
 const auditScript = path.join(repoRoot, 'scripts', 'audit.js')
-const bunVersion = require('../../package.json').devDependencies.bun
 
 /**
  * @param {string} id
@@ -215,10 +214,6 @@ describe('scripts/audit.js', () => {
     const stub = path.join(stubDirectory, 'bun')
     fs.writeFileSync(stub, [
       '#!/bin/sh',
-      'if [ "$1" = "--version" ]; then',
-      `  echo ${bunVersion}`,
-      '  exit 0',
-      'fi',
       "cat <<'REPORT'",
       bunOutput ?? JSON.stringify(report),
       'REPORT',
