@@ -97,8 +97,11 @@ async function addBreakpoint (probe) {
  */
 async function installProbe (probe) {
   // Re-evaluation retries a failed installation with the same probe, which gets a new sampling index below
-  if (probes.get(probe.id) === probe) samplingIndexToProbe.delete(probe.samplingIndex)
-  probes.set(probe.id, probe)
+  if (probes.get(probe.id) === probe) {
+    samplingIndexToProbe.delete(probe.samplingIndex)
+  } else {
+    probes.set(probe.id, probe)
+  }
   if (!sessionStarted) await start()
 
   probe.samplingIndex = nextSamplingIndex++
