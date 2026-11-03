@@ -4,6 +4,7 @@ const os = require('os')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const formats = require('../../../../ext/formats')
+const exporters = require('../../../../ext/exporters')
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
@@ -45,7 +46,12 @@ class DatadogTracer {
       const { createOtlpTraceExporter } = require('../opentelemetry/trace')
       this._exporter = createOtlpTraceExporter(config)
     } else {
-      const Exporter = getExporter(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
+      let exporterName = config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER
+      if (config.llmobs?.DD_LLMOBS_ENABLED && !config.isCiVisibility &&
+          (!exporterName || exporterName === exporters.AGENT || exporterName === exporters.AGENTLESS)) {
+        exporterName = exporters.LLMOBS
+      }
+      const Exporter = getExporter(exporterName)
       this._exporter = new Exporter(config, this._prioritySampler)
     }
 
