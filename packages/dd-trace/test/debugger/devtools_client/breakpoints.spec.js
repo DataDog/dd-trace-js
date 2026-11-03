@@ -1647,13 +1647,12 @@ describe('breakpoints', function () {
       assert.strictEqual(stateMock.samplingIndexToProbe.size, 1)
     })
 
-    it('should retain compiled templates and report installation when a pending probe recovers', async function () {
-      stateMock.findScriptFromPartialPath.returns(undefined)
+    it('should retain compiled templates and report installation when a failed probe recovers', async function () {
+      sessionMock.post.withArgs('Debugger.setBreakpoint').onFirstCall().rejects(new Error('inspector failure'))
       const probe = genProbeConfig({ segments: [{ json: { ref: 'foo' }, dsl: 'foo' }] })
-      await assert.rejects(breakpoints.addBreakpoint(probe), { message: /No loaded script found/ })
+      await assert.rejects(breakpoints.addBreakpoint(probe), { message: /Error setting breakpoint for probe/ })
       const template = probe.template
 
-      stateMock.findScriptFromPartialPath.returns({ scriptId: 'script-1', url: 'file:///test.js' })
       scriptLoadingStabilizedCallback()
       await waitForQueuedOperations()
 
@@ -1663,11 +1662,12 @@ describe('breakpoints', function () {
       sinon.assert.calledOnceWithExactly(ackInstalled, probe)
     })
 
-    for (const failure of ['no script matches', 'the condition is invalid']) {
+    for (const failure of ['no script matches', 'the condition is invalid', 'the template is invalid']) {
       it(`should not retry installing a probe when ${failure} again`, async function () {
         const probe = genProbeConfig()
         if (failure === 'no script matches') stateMock.findScriptFromPartialPath.returns(undefined)
         if (failure === 'the condition is invalid') probe.when = { json: { invalid: true }, dsl: 'invalid' }
+        if (failure === 'the template is invalid') probe.segments = [{ json: { invalid: true }, dsl: 'invalid' }]
         await assert.rejects(breakpoints.addBreakpoint(probe))
         logMock.error.resetHistory()
         sessionMock.post.resetHistory()

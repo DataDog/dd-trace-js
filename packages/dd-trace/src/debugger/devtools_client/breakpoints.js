@@ -111,17 +111,6 @@ async function installProbe (probe) {
   // Optimize for sending data to debugger input endpoint
   probe.location = { file, lines: [String(lineNumber)] }
 
-  // Optimize for fast calculations when probe is hit
-  // Re-evaluation reuses the compiled probe after its segments have been discarded.
-  if (probe.segments !== undefined) {
-    probe.templateRequiresEvaluation = templateRequiresEvaluation(probe.segments)
-    if (probe.templateRequiresEvaluation) {
-      probe.template = compileSegments(probe.segments)
-      probe.templateRedactionErrors = getSegmentRedactionErrors(probe.segments)
-    }
-    delete probe.segments
-  }
-
   // Warning: The code below relies on undocumented behavior of the inspector!
   // It expects that `await session.post('Debugger.enable')` will wait for all loaded scripts to be emitted as
   // `Debugger.scriptParsed` events. If this ever changes, we will have a race condition!
@@ -146,6 +135,17 @@ async function installProbe (probe) {
         `Could not find generated position for ${url}:${lineNumber}:${columnNumber} (probe: ${probe.id}, version: ${probe.version})`
       )
     }
+  }
+
+  // Optimize for fast calculations when probe is hit
+  // Re-evaluation reuses the compiled probe after its segments have been discarded.
+  if (probe.segments !== undefined) {
+    probe.templateRequiresEvaluation = templateRequiresEvaluation(probe.segments)
+    if (probe.templateRequiresEvaluation) {
+      probe.template = compileSegments(probe.segments)
+      probe.templateRedactionErrors = getSegmentRedactionErrors(probe.segments)
+    }
+    delete probe.segments
   }
 
   try {
