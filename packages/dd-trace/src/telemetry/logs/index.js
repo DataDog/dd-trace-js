@@ -104,14 +104,15 @@ function stop () {
 function send (config, application, host) {
   if (!enabled) return
 
-  const logs = logCollector.drain()
+  let logs = logCollector.drain()
   if (logs) {
     if (config.isCiVisibility) {
-      for (const entry of logs) {
-        entry.tags = entry.tags
+      logs = logs.map(entry => ({
+        ...entry,
+        tags: entry.tags
           ? `${entry.tags},test_optimization_enabled:true`
-          : 'test_optimization_enabled:true'
-      }
+          : 'test_optimization_enabled:true',
+      }))
     }
     sendData(config, application, host, 'logs', { logs })
   }

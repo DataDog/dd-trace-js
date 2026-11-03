@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -257,6 +259,36 @@ describe('telemetry logs', () => {
 
       sinon.assert.notCalled(logCollectorDrain)
       sinon.assert.notCalled(sendData)
+    })
+
+    it('should tag copies without mutating immutable collected logs', () => {
+      defaultConfig.isCiVisibility = true
+      collectedLogs = [
+        Object.freeze({ message: 'frozen', level: 'ERROR' }),
+        Object.seal({ message: 'sealed', level: 'WARN' }),
+        Object.defineProperty({
+          message: 'non-writable tags', level: 'ERROR', count: 2, tags: 'log_type:diagnostic',
+        }, 'tags', { writable: false }),
+      ]
+      const originalLogs = collectedLogs.map(entry => ({ ...entry }))
+      logCollectorDrain.returns(collectedLogs)
+      logs.start(defaultConfig)
+
+      logs.send(defaultConfig, application, host)
+
+      assert.deepStrictEqual(collectedLogs, originalLogs)
+      sinon.assert.calledOnceWithExactly(sendData, defaultConfig, application, host, 'logs', {
+        logs: [
+          { message: 'frozen', level: 'ERROR', tags: 'test_optimization_enabled:true' },
+          { message: 'sealed', level: 'WARN', tags: 'test_optimization_enabled:true' },
+          {
+            message: 'non-writable tags',
+            level: 'ERROR',
+            count: 2,
+            tags: 'log_type:diagnostic,test_optimization_enabled:true',
+          },
+        ],
+      })
     })
 
     it('should identify all logs from Test Optimization while preserving existing tags', () => {
