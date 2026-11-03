@@ -37,12 +37,15 @@ describe('ioredis replay', () => {
       await agent.close()
     })
 
-    /** @param {string} rawCommand */
-    async function assertSingleSpan (rawCommand) {
+    /**
+     * @param {string} rawCommand
+     * @param {number} [expected]
+     */
+    async function assertSpans (rawCommand, expected = 1) {
       await redis.get('replay-marker')
       await agent.assertSomeTraces(() => {
         assert.ok(spans.some(span => span.meta['redis.raw_command'] === 'GET replay-marker'))
-        assert.equal(spans.filter(span => span.meta['redis.raw_command'] === rawCommand).length, 1)
+        assert.equal(spans.filter(span => span.meta['redis.raw_command'] === rawCommand).length, expected)
       })
     }
 
@@ -59,7 +62,7 @@ describe('ioredis replay', () => {
           const key = `replay-${name}-${ready}`
           const command = preventChanges(new Redis.Command('set', [key, 'value']))
           assert.equal((await redis.sendCommand(command)).toString(), 'OK')
-          await assertSingleSpan(`SET ${key} value`)
+          await assertSpans(`SET ${key} value`)
         })
       }
     }
@@ -84,7 +87,10 @@ describe('ioredis replay', () => {
       } finally {
         for (const access of accesses) access.restore()
       }
-      for (const access of accesses) assert.equal(access.calledWith(command), false)
+      for (const access of accesses) {
+        assert.equal(access.calledWith(command), false)
+        assert.equal(access.calledWith(command.promise), false)
+      }
       assert.deepEqual(Object.getOwnPropertySymbols(command), [])
       return pending
     }
@@ -93,7 +99,7 @@ describe('ioredis replay', () => {
       redis = new Redis()
       await once(redis, 'ready')
       await sendWithoutBookkeeping(redis, new Redis.Command('get', ['replay-ready']))
-      await assertSingleSpan('GET replay-ready')
+      await assertSpans('GET replay-ready')
     })
 
     it('does no command bookkeeping when enqueueing or when another client has queued commands', async () => {
@@ -104,8 +110,8 @@ describe('ioredis replay', () => {
       const queued = sendWithoutBookkeeping(redis, command)
       const ready = sendWithoutBookkeeping(other, new Redis.Command('get', ['replay-unrelated']))
       await Promise.all([queued, ready])
-      await assertSingleSpan('SET replay-queued value')
-      await assertSingleSpan('GET replay-unrelated')
+      await assertSpans('SET replay-queued value')
+      await assertSpans('GET replay-unrelated')
     })
 
     it('deduplicates commands enqueued after a ready stream becomes unwritable', async () => {
@@ -113,20 +119,20 @@ describe('ioredis replay', () => {
       await once(redis, 'ready')
       redis.stream.destroy()
       await sendWithoutBookkeeping(redis, new Redis.Command('set', ['replay-unwritable', 'value']))
-      await assertSingleSpan('SET replay-unwritable value')
+      await assertSpans('SET replay-unwritable value')
     })
 
     it('deduplicates the offline queue when resending unfulfilled commands is disabled', async () => {
       redis = new Redis({ lazyConnect: true, autoResendUnfulfilledCommands: false })
       await redis.set('replay-no-resend', 'value')
-      await assertSingleSpan('SET replay-no-resend value')
+      await assertSpans('SET replay-no-resend value')
     })
 
     it('bypasses bookkeeping with empty queues when resending unfulfilled commands is disabled', async () => {
       redis = new Redis({ lazyConnect: true, autoResendUnfulfilledCommands: false })
       await redis.connect()
       await sendWithoutBookkeeping(redis, new Redis.Command('get', ['replay-empty']))
-      await assertSingleSpan('GET replay-empty')
+      await assertSpans('GET replay-empty')
     })
 
     it('does not trace a queue drained while the plugin is disabled', async () => {
@@ -134,8 +140,22 @@ describe('ioredis replay', () => {
       redis = new Redis({ lazyConnect: true })
       await redis.set('replay-disabled-queue', 'value')
       tracer.use('ioredis', { enabled: true })
-      await assertSingleSpan('GET replay-marker')
+      await assertSpans('GET replay-marker')
       assert.equal(spans.filter(span => span.meta['redis.raw_command'] === 'SET replay-disabled-queue value').length, 0)
+    })
+
+    it('does not retrospectively trace commands enqueued before plugin activation', async () => {
+      tracer.use('ioredis', { enabled: false })
+      redis = new Redis({ lazyConnect: true })
+      const queued = redis.set('replay-before-activation', 'value')
+      tracer.use('ioredis', { enabled: true })
+      await Promise.all([queued, once(redis, 'ready')])
+      await sendWithoutBookkeeping(redis, new Redis.Command('get', ['replay-activation-marker']))
+      await agent.assertSomeTraces(() => {
+        assert.equal(spans.filter(span =>
+          span.meta['redis.raw_command'] === 'SET replay-before-activation value').length, 0)
+        assert.ok(spans.some(span => span.meta['redis.raw_command'] === 'GET replay-activation-marker'))
+      })
     })
 
     it('bypasses resend bookkeeping when tracing is disabled', async () => {
@@ -165,17 +185,17 @@ describe('ioredis replay', () => {
       await redis.set('replay-invalid-number', 'value')
       await assert.rejects(redis.incr('replay-invalid-number'), { message: /not an integer/ })
       await nested
-      await assertSingleSpan('INCR replay-invalid-number')
-      await assertSingleSpan('GET replay-nested')
+      await assertSpans('INCR replay-invalid-number')
+      await assertSpans('GET replay-nested')
     })
 
     const retries = ['TRYAGAIN retry later', 'CLUSTERDOWN retry later', 'MOVED', 'CONNECTION_CLOSED']
     const retryCases = retries.flatMap(error => error === 'CONNECTION_CLOSED'
-      ? [[error, false]]
-      : [[error, false], [error, true]])
-    for (const [error, pipeline] of retryCases) {
+      ? [[error, false, 1]]
+      : [[error, false, 1], ...(error.startsWith('CLUSTERDOWN') ? [] : [[error, true, 0]]), [error, true, 1]])
+    for (const [error, pipeline, delay] of retryCases) {
       const kind = pipeline ? 'pipeline command' : 'command'
-      it(`deduplicates a Cluster ${kind} delayed after ${error.split(' ')[0]}`, async () => {
+      it(`traces each native promise for a Cluster ${kind} after ${error.split(' ')[0]}, delay=${delay}`, async () => {
         let attempts = 0
         await withServer(Parser, (args, port, socket) => {
           const name = args[0].toString().toLowerCase()
@@ -195,23 +215,30 @@ describe('ioredis replay', () => {
         }, async port => {
           redis = new Redis.Cluster([{ host: '127.0.0.1', port }], {
             enableReadyCheck: false,
-            retryDelayOnTryAgain: 1,
-            retryDelayOnClusterDown: 1,
-            retryDelayOnMoved: 1,
-            retryDelayOnFailover: 1,
+            retryDelayOnTryAgain: delay,
+            retryDelayOnClusterDown: delay,
+            retryDelayOnMoved: delay,
+            retryDelayOnFailover: delay,
             redisOptions: { enableReadyCheck: false, disableClientInfo: true },
           })
           if (pipeline || !error.startsWith('TRYAGAIN')) await once(redis, 'ready')
           assert.equal(await getClusterValue(redis, 'replay-cluster', pipeline), 'value')
           assert.equal(attempts, 2)
-          await assertSingleSpan('GET replay-cluster')
+          await assertSpans('GET replay-cluster', pipeline ? 2 : 1)
+          assert.deepEqual(spans.filter(span => span.meta['redis.raw_command'] === 'GET replay-cluster')
+            .map(span => span.error).sort(), pipeline ? [0, 1] : [0])
+          if (pipeline) {
+            await assertSpans('GET {replay-cluster}-sibling', 2)
+            assert.ok(spans.filter(span => span.meta['redis.raw_command'] === 'GET {replay-cluster}-sibling')
+              .every(span => span.error === 0))
+          }
           if (error.startsWith('TRYAGAIN') || error === 'CONNECTION_CLOSED') {
             tracer.use('ioredis', { enabled: false })
             attempts = 0
             assert.equal(await getClusterValue(redis, 'replay-untraced', pipeline), 'value')
             assert.equal(attempts, 2)
             tracer.use('ioredis', { enabled: true })
-            await assertSingleSpan('GET replay-cluster')
+            await assertSpans('GET replay-cluster', pipeline ? 2 : 1)
             assert.equal(spans.filter(span => span.meta['redis.raw_command'] === 'GET replay-untraced').length, 0)
           }
           redis.disconnect()
@@ -237,7 +264,7 @@ describe('ioredis replay', () => {
           ])
           tracer.use('ioredis', { enabled: true })
           await sendWithoutBookkeeping(redis, new Redis.Command('get', ['replay-after-cleanup']))
-          await assertSingleSpan('GET replay-after-cleanup')
+          await assertSpans('GET replay-after-cleanup')
         })
       }
     }
@@ -264,12 +291,12 @@ describe('ioredis replay', () => {
         await redis.call('reset')
         assert.equal(await redis.call('himport', 'SET', 'review-key', 'review', 'value'), 1)
         assert.equal(attempts, 2)
-        await assertSingleSpan('HIMPORT SET review-key review value')
+        await assertSpans('HIMPORT SET review-key review value')
         assert.ok(spans.some(span => span.meta['redis.raw_command'] === 'HIMPORT PREPARE review field'))
         tracer.use('ioredis', { enabled: false })
         assert.equal(await redis.call('himport', 'SET', 'untraced-key', 'review', 'value'), 1)
         tracer.use('ioredis', { enabled: true })
-        await assertSingleSpan('HIMPORT SET review-key review value')
+        await assertSpans('HIMPORT SET review-key review value')
         assert.equal(spans.filter(span => span.meta['redis.raw_command'] ===
           'HIMPORT SET untraced-key review value').length, 0)
         redis.disconnect()
@@ -285,8 +312,9 @@ describe('ioredis replay', () => {
  */
 async function getClusterValue (client, key, pipeline) {
   if (!pipeline) return client.get(key)
-  const [[error, value]] = await client.pipeline().get(key).exec()
+  const [[error, value], sibling] = await client.pipeline().get(key).get(`{${key}}-sibling`).exec()
   assert.equal(error, null)
+  assert.deepEqual(sibling, [null, 'OK'])
   return value
 }
 
