@@ -69,7 +69,10 @@ class ElevenLabsLLMObsPlugin extends LLMObsPlugin {
     const output = { role: 'assistant', content: turn.text || '' }
     if (turn.calls.size) output.toolCalls = [...turn.calls.values()]
     if (turn.results.size) input.toolResults = [...turn.results.values()]
-    let budget = LLMOBS_AUDIO_INLINE_MAX_BYTES
+    // Leave room for the serialized UTF-8 text, tools, metadata, and audio-part wrappers before
+    // spending one event budget across both complete WAVs.
+    let budget = Math.max(0, LLMOBS_AUDIO_INLINE_MAX_BYTES -
+      Buffer.byteLength(JSON.stringify([[input], [output], metadata])) - 256)
     for (const [message, audio, rate] of [
       [input, turn.input, turn.inputRate], [output, turn.output, turn.outputRate],
     ]) {

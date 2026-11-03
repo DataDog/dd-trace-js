@@ -110,7 +110,6 @@ async function main () {
   conversation.sendUserMessage('First question')
   response(1, 'First answer')
   audio(1, 1000, 9)
-  deliver({ type: 'agent_response_complete', agent_response_complete_event: { event_id: 1 } })
   clock.tick(100)
   input(Buffer.alloc(3200, 2))
   conversation.sendUserMessage('Second question')

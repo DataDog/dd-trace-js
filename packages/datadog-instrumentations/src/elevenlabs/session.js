@@ -5,13 +5,13 @@ const { randomUUID } = require('node:crypto')
 const { AudioBuffer, RAW_LIMIT } = require('./audio')
 
 const AUDIO_PREFIX = '{"user_audio_chunk":"'
+const MAX_TOOL_ID_CHARS = 1024
 
 const EVENT_FIELDS = {
   user_transcript: 'user_transcription_event',
   audio: 'audio_event',
   agent_response: 'agent_response_event',
   agent_response_correction: 'agent_response_correction_event',
-  agent_response_complete: 'agent_response_complete_event',
   agent_chat_response_part: 'text_response_part',
   client_tool_call: 'client_tool_call',
   context_usage: 'context_usage_event',
@@ -37,13 +37,18 @@ function textOf (value) {
   return ''
 }
 
+/** @param {unknown} value */
+function toolIdOf (value) {
+  return typeof value === 'string' && value.length <= MAX_TOOL_ID_CHARS ? value : undefined
+}
+
 /**
  * @typedef {{runInContext?: <T>(fn: () => T) => T}} Scope
  * @typedef {{
  * id: bigint, input: AudioBuffer, output: AudioBuffer, userText: string,
  * responses: Map<string, string>, completed: Set<string>, calls: Map<string, object>,
  * results: Map<string, object>, tools: Set<object>, model?: string, start: number,
- * responseTime: number, toolEnd: number, responseComplete: boolean, interrupted: boolean,
+ * responseTime: number, toolEnd: number, retired: boolean, playbackEnd?: number, interrupted: boolean,
  * failed: boolean, metadata: Record<string, unknown>, scope: Scope, root?: object, llm?: object,
  * boundaryResponse?: boolean, closed?: boolean, text?: string, sessionId?: string,
  * inputRate?: number, outputRate?: number, argumentsSize: number, argumentSizes: Map<string, number>,
@@ -78,6 +83,9 @@ class Session {
   /** @type {bigint | undefined} */
   filteredAudioId = undefined
   closed = false
+  #waiting = false
+  /** @type {Map<bigint, string>} */
+  #models = new Map()
 
   /** @param {Options} options */
   constructor (options) { this.options = options }
@@ -94,7 +102,7 @@ class Session {
     // unknown IDs are stale; treating the boundary as stale steals the next input.
     if (id < this.lastInterrupt || id <= this.lastFinalized) return
     while (this.turns.size >= 2) this.finish(/** @type {Turn} */ (this.turns.values().next().value))
-    for (const previous of this.turns.values()) previous.responseComplete = true
+    for (const previous of this.turns.values()) previous.retired = true
     const input = this.pending
     this.pending = new AudioBuffer()
     this.pending.activity = input.activity.continueAt(input.duration(this.inputRate))
@@ -114,9 +122,10 @@ class Session {
       start: input.start ?? now,
       responseTime: now,
       toolEnd: now,
-      responseComplete: false,
+      retired: false,
       interrupted: false,
       boundaryResponse: id === this.lastInterrupt,
+      model: this.#models.get(id),
       failed: false,
       scope: {},
       metadata: {
@@ -133,6 +142,7 @@ class Session {
       turn.metadata.output_audio_omitted_reason = 'sdk_interruption_filter'
     }
     this.pendingText = ''
+    this.#models.delete(id)
     this.turns.set(id, turn)
     this.options.begin(turn)
     return turn
@@ -178,8 +188,10 @@ class Session {
     } else if (event.type === 'user_message') {
       this.pendingText = textOf(this.pendingText ? `${this.pendingText}\n${textOf(event.text)}` : textOf(event.text))
     } else if (event.type === 'client_tool_result') {
+      const id = toolIdOf(event.tool_call_id)
+      if (id === undefined) return
       for (const turn of this.turns.values()) {
-        if (turn.calls.has(event.tool_call_id)) this.toolResult(turn, event.tool_call_id, event.result)
+        if (turn.calls.has(id)) this.toolResult(turn, id, event.result)
       }
     }
   }
@@ -211,6 +223,13 @@ class Session {
       this.earlyOverflow = false
       return
     }
+    if (kind === 'queue_status') {
+      const status = event.queue_status_event?.status
+      if (status === 'admitted') this.#waiting = false
+      else if (status === 'waiting' || status === 'timed_out') this.#waiting = true
+      return
+    }
+    if (kind === 'audio' && this.#waiting) return
     if (kind === 'interruption') {
       const id = eventId(event.interruption_event?.event_id)
       if (id === undefined) return
@@ -219,7 +238,7 @@ class Session {
         this.filteredAudioId = undefined
       }
       for (const turn of this.turns.values()) {
-        if (turn.id <= id && (!turn.responseComplete || (turn.output.end(this.outputRate) ?? 0) > now)) {
+        if (turn.id <= id && (!this.responseFinished(turn, now) || (turn.playbackEnd ?? 0) > now)) {
           turn.interrupted = true
           turn.output.trim(now, this.outputRate)
         }
@@ -250,23 +269,36 @@ class Session {
       return
     }
     if (kind === 'audio' && id < this.lastInterrupt) return
-    const lookupOnly = ['agent_response_complete', 'context_usage', 'agent_tool_response_full_payload'].includes(kind)
+    if (kind === 'context_usage') {
+      const model = textOf(data.model)
+      if (!model) return
+      const known = this.turns.get(id)
+      if (known) known.model = model
+      else if (id >= this.lastInterrupt && id > this.lastFinalized) {
+        this.#models.delete(id)
+        this.#models.set(id, model)
+        while (this.#models.size > 2) this.#models.delete(/** @type {bigint} */ (this.#models.keys().next().value))
+      }
+      return
+    }
+    const lookupOnly = kind === 'agent_tool_response_full_payload'
     const turn = lookupOnly ? this.turns.get(id) : this.turn(id, now)
     if (!turn) return
     switch (kind) {
       case 'user_transcript': turn.userText = textOf(data.user_transcript); break
-      case 'audio':
+      case 'audio': {
+        const previousDuration = turn.output.duration(this.outputRate)
         turn.output.append(data.audio_base_64, now, this.outputRate, false, this.options.retain())
+        const duration = turn.output.duration(this.outputRate) - previousDuration
+        if (duration > 0) turn.playbackEnd = Math.max(turn.playbackEnd ?? now, now) + duration
         this.boundAudio(turn)
         break
-      case 'context_usage':
-        turn.model = textOf(data.model) || turn.model
-        break
-      case 'agent_response_complete':
-        turn.responseTime = now
-        turn.responseComplete = true
-        break
+      }
       case 'client_tool_call':
+        if (toolIdOf(data.tool_call_id) === undefined) {
+          turn.metadata.tool_calls_omitted = true
+          break
+        }
         if (typeof data.tool_call_id === 'string' && (turn.calls.has(data.tool_call_id) || turn.calls.size < 64)) {
           const argumentsJson = JSON.stringify(data.parameters || {})
           const used = turn.argumentsSize - (turn.argumentSizes.get(data.tool_call_id) || 0)
@@ -284,7 +316,9 @@ class Session {
         }
         break
       case 'agent_tool_response_full_payload':
-        if (turn.calls.has(data.tool_call_id)) this.toolResult(turn, data.tool_call_id, data.full_tool_result)
+        if (toolIdOf(data.tool_call_id) !== undefined && turn.calls.has(data.tool_call_id)) {
+          this.toolResult(turn, data.tool_call_id, data.full_tool_result)
+        }
         break
       default: this.response(turn, kind, data, now)
     }
@@ -304,7 +338,7 @@ class Session {
       if (turn.completed.has(key)) return
       const prefix = data.type === 'start' ? '' : (turn.responses.get(key) || '')
       turn.responses.set(key, textOf(prefix + textOf(data.text)))
-      if (key && data.type === 'stop') turn.completed.add(key)
+      if (data.type === 'stop') turn.completed.add(key)
     } else {
       const field = kind === 'agent_response_correction' ? 'corrected_agent_response' : 'agent_response'
       turn.responses.set(key, textOf(data[field]))
@@ -319,7 +353,7 @@ class Session {
    * @param {unknown} result
    */
   toolResult (turn, id, result) {
-    if (turn.closed) return ''
+    if (turn.closed || toolIdOf(id) === undefined) return ''
     let remaining = 100_000
     for (const [key, item] of turn.results) if (key !== id) remaining -= item.result.length
     let text = typeof result === 'string' ? result : JSON.stringify(result) ?? ''
@@ -329,6 +363,17 @@ class Session {
     }
     turn.results.set(id, { toolId: id, result: text, type: 'tool_result' })
     return text
+  }
+
+  /**
+   * Completion remains estimated: final text plus the observed playback queue, or retirement by a
+   * newer response. A text event alone cannot prove that audio delivery has finished.
+   * @param {Turn} turn
+   * @param {number} now
+   */
+  responseFinished (turn, now) {
+    return turn.retired || (turn.responses.size > 0 && turn.completed.size === turn.responses.size &&
+      turn.tools.size === 0 && turn.playbackEnd !== undefined && now >= turn.playbackEnd)
   }
 
   /** @param {Turn} turn */
@@ -363,8 +408,9 @@ class Session {
     this.pending = new AudioBuffer()
     this.pendingText = ''
     this.early = []
+    this.#models.clear()
     for (const turn of this.turns.values()) {
-      if (failed && !turn.responseComplete && !turn.interrupted) turn.failed = true
+      if (failed && !this.responseFinished(turn, now) && !turn.interrupted) turn.failed = true
       turn.output.trim(now, this.outputRate)
       this.finish(turn)
     }

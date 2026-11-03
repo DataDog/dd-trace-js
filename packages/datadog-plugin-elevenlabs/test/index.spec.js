@@ -70,6 +70,31 @@ withVersions('elevenlabs', '@elevenlabs/elevenlabs-js', '>=2.75.0 <3', version =
       }
     })
 
+    for (const llmobs of [false, true]) {
+      it(`drains deferred spans on natural process exit, llmobs=${llmobs}`, async () => {
+        const fakeAgent = await new FakeAgent().start()
+        const apmSpans = []
+        const llmobsSpans = []
+        fakeAgent.on('message', ({ payload }) => { if (Array.isArray(payload)) apmSpans.push(...payload.flat()) })
+        fakeAgent.on('llmobs', ({ payload }) => { for (const envelope of payload) llmobsSpans.push(...envelope.spans) })
+        try {
+          await spawnPluginIntegrationTestProcAndExpectExit(process.cwd(),
+            'packages/datadog-plugin-elevenlabs/test/fixtures/natural-exit.cjs', fakeAgent.port, {
+              SDK_CONVERSATION_PATH: sdkModule.getPath(
+                '@elevenlabs/elevenlabs-js/api/resources/conversationalAi/conversation'),
+              DD_LLMOBS_ENABLED: String(llmobs),
+              DD_LLMOBS_ML_APP: 'elevenlabs-natural-exit-test',
+              DD_LLMOBS_AGENTLESS_ENABLED: 'false',
+              DD_TRACE_FLUSH_INTERVAL: '60000',
+              _DD_LLMOBS_FLUSH_INTERVAL: '60000',
+              NODE_OPTIONS: `--import=${join(process.cwd(), 'initialize.mjs')}`,
+            })
+          assert.equal(apmSpans.filter(span => span.name === 'elevenlabs.request').length, 2)
+          assert.equal(llmobsSpans.length, llmobs ? 2 : 0)
+        } finally { await fakeAgent.stop() }
+      })
+    }
+
     for (const audioFirst of [false, true]) {
       it(`preserves full playback with the assumed SDK correction (audioFirst=${audioFirst})`, async () => {
         const fakeAgent = await new FakeAgent().start()

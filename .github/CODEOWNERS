@@ -259,6 +259,8 @@
 /benchmark/e2e-test-optimization/ @DataDog/ci-app-libraries
 
 # LLM Observability
+/packages/dd-trace/src/before-exit.js @DataDog/lang-platform-js @DataDog/ml-observability
+/packages/dd-trace/test/before-exit.spec.js @DataDog/lang-platform-js @DataDog/ml-observability
 /benchmark/elevenlabs.js @DataDog/ml-observability
 /.agents/skills/llmobs-integration/ @DataDog/ml-observability
 /.agents/skills/llmobs-testing/ @DataDog/ml-observability

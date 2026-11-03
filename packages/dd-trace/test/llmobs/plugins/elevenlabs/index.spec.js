@@ -183,6 +183,55 @@ describe('integrations', () => {
           'Corrected\nSecond answer.\nSame\nSame')
       })
 
+      for (const [typed, audioFirst] of [[false, false], [true, false], [false, true], [true, true]]) {
+        it(`preserves early model metadata, typed=${typed}, audioFirst=${audioFirst}`, async () => {
+          await start()
+          event('context_usage', 'context_usage_event', 1,
+            { model: 'early-model', context_tokens: 99, context_limit_tokens: 1000 })
+          if (typed) conversation.sendUserMessage('Typed after metadata')
+          if (audioFirst) { output(1, 20); clock.tick(20) }
+          response(); close()
+          const { llmobsSpans } = await getEvents(audioFirst ? 3 : 2)
+          const llm = byName(llmobsSpans, 'elevenlabs response')
+          assert.equal(llm.meta.model_name, 'early-model')
+          assert.equal(llm.meta.metadata.configured_llm, 'early-model')
+          assert.deepEqual(llm.metrics, {})
+          if (typed) assert.equal(llm.meta.input.messages[0].content, 'Typed after metadata')
+        })
+      }
+
+      it('does not create a turn from model metadata alone', async () => {
+        await start()
+        event('context_usage', 'context_usage_event', 1, { model: 'no-response-model' })
+        conversation.endSession()
+        require('../../../../../..').llmobs.trace({ kind: 'workflow', name: 'sentinel' }, () => {})
+        const { llmobsSpans } = await getEvents(1)
+        assert.deepEqual(llmobsSpans.map(span => span.name), ['sentinel'])
+      })
+
+      it('bounds early model hints and keeps them on their matching response IDs', async () => {
+        await start()
+        for (const id of [1, 2, 3]) event('context_usage', 'context_usage_event', id, { model: `model-${id}` })
+        for (const id of [1, 2, 3]) response(id)
+        close()
+        const { llmobsSpans } = await getEvents(6)
+        const llms = llmobsSpans.filter(span => span.name === 'elevenlabs response')
+        assert.notEqual(llms[0].meta.model_name, 'model-1')
+        assert.equal(llms[1].meta.model_name, 'model-2')
+        assert.equal(llms[2].meta.model_name, 'model-3')
+      })
+
+      it('ignores finalized model hints without displacing metadata for upcoming responses', async () => {
+        await start()
+        for (const id of [1, 2, 3]) response(id)
+        for (const id of [4, 5, 1]) event('context_usage', 'context_usage_event', id, { model: `model-${id}` })
+        response(4); response(5); close()
+        const { llmobsSpans } = await getEvents(10)
+        const llms = llmobsSpans.filter(span => span.name === 'elevenlabs response')
+        assert.equal(llms[3].meta.model_name, 'model-4')
+        assert.equal(llms[4].meta.model_name, 'model-5')
+      })
+
       it('keeps repeated identical text in separate turns without completion events', async () => {
         await start()
         for (let id = 1; id <= 3; id++) { input(20, id); response(id, 'Same'); output(id, 30); clock.tick(40) }
@@ -213,7 +262,6 @@ describe('integrations', () => {
         input(20)
         output(1, 1000)
         response()
-        event('agent_response_complete', 'agent_response_complete_event', 1)
         clock.tick(250)
         event('interruption', 'interruption_event', 1)
         output(1, 100)
@@ -373,6 +421,35 @@ describe('integrations', () => {
         })
       }
 
+      for (const length of [1024, 1025, 2 * 1024 * 1024]) {
+        it(`bounds retained tool IDs at length ${length} without blocking SDK execution`, async () => {
+          await start()
+          const handler = sinon.stub().returns('result')
+          tools.register('bounded-id', handler)
+          const id = 'i'.repeat(length)
+          event('client_tool_call', 'client_tool_call', 1,
+            { tool_name: 'bounded-id', tool_call_id: id, parameters: {} })
+          for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+          event('agent_tool_response_full_payload', 'agent_tool_response_full_payload', 1,
+            { tool_call_id: id, full_tool_result: 'provider result' })
+          response(); close()
+          const { llmobsSpans } = await getEvents(length <= 1024 ? 3 : 2)
+          const llm = byName(llmobsSpans, 'elevenlabs response')
+          assert.equal(handler.callCount, 1)
+          assert.equal(handler.firstCall.args[0].tool_call_id, id)
+          assert.equal(socket.sent.at(-1).tool_call_id, id)
+          if (length <= 1024) {
+            assert.equal(llm.meta.output.messages[0].tool_calls[0].tool_id, id)
+            assert.equal(llm.meta.input.messages[0].tool_results[0].tool_id, id)
+          } else {
+            assert.equal(llm.meta.output.messages[0].tool_calls, undefined)
+            assert.equal(llm.meta.input.messages[0].tool_results, undefined)
+            assert.equal(llm.meta.metadata.tool_calls_omitted, true)
+            assert.ok(Buffer.byteLength(JSON.stringify(llm)) < 10_000)
+          }
+        })
+      }
+
       it('reports thrown tools without changing the SDK error result', async () => {
         await start()
         tools.register('broken', () => { throw new TypeError('tool failed') })
@@ -456,12 +533,39 @@ describe('integrations', () => {
         assert.ok(llmobsSpans.every(span => span.status === 'error'))
       })
 
-      it('does not fail a completed response on a later transport error', async () => {
-        await start(); response(); event('agent_response_complete', 'agent_response_complete_event', 1)
+      for (const elapsed of [19, 20]) {
+        it(`attributes transport failure after ${elapsed}ms of a 20ms response`, async () => {
+          await start(); response(); output(1, 20)
+          clock.tick(elapsed)
+          conversation.on('error', () => {})
+          socket.emit('error', new Error('later transport error'))
+          const { llmobsSpans } = await getEvents(3)
+          const expected = elapsed === 20 ? 'ok' : 'error'
+          assert.equal(byName(llmobsSpans, 'elevenlabs response').status, expected)
+          assert.equal(byName(llmobsSpans, 'elevenlabs audio turn').status, expected)
+        })
+      }
+
+      it('accepts a real stream stop as final text and waits out queued playback gaps', async () => {
+        await start()
+        event('agent_chat_response_part', 'text_response_part', 1, { type: 'start', text: 'Hello' })
+        output(1, 10)
+        clock.tick(100)
+        output(1, 20)
+        event('agent_chat_response_part', 'text_response_part', 1, { type: 'stop', text: '.' })
+        clock.tick(20)
         conversation.on('error', () => {})
-        socket.emit('error', new Error('transport failed'))
-        const { llmobsSpans } = await getEvents(2)
-        assert.ok(llmobsSpans.every(span => span.status === 'ok'))
+        socket.emit('error', new Error('after playback'))
+        const { llmobsSpans } = await getEvents(3)
+        assert.equal(byName(llmobsSpans, 'elevenlabs response').status, 'ok')
+      })
+
+      it('keeps a response unfinished when final text is still missing after audio', async () => {
+        await start(); output(1, 20); clock.tick(20)
+        conversation.on('error', () => {})
+        socket.emit('error', new Error('before final text'))
+        const { llmobsSpans } = await getEvents(3)
+        assert.equal(byName(llmobsSpans, 'elevenlabs response').status, 'error')
       })
 
       it('fails unfinished work on abnormal close and finalizes only once', async () => {
@@ -601,6 +705,60 @@ describe('integrations', () => {
           assert.equal(llm.meta.metadata.audio_omitted, true)
         })
       }
+
+      it('reserves multibyte text and tool payloads before spending the audio budget', async () => {
+        await start()
+        const text = '界'.repeat(100_000)
+        input(60_000)
+        conversation.sendUserMessage(text)
+        event('client_tool_call', 'client_tool_call', 1,
+          { tool_name: 'remote', tool_call_id: 'payload-call', parameters: { text: text.slice(11) } })
+        event('agent_tool_response_full_payload', 'agent_tool_response_full_payload', 1,
+          { tool_call_id: 'payload-call', full_tool_result: text })
+        response(1, text)
+        output(1, 25_000)
+        clock.tick(25_000)
+        close()
+        const { llmobsSpans } = await getEvents(4)
+        const llm = byName(llmobsSpans, 'elevenlabs response')
+        assert.equal(llm.meta.input.messages[0].content, text)
+        assert.equal(llm.meta.output.messages[0].content, text)
+        assert.equal(llm.meta.input.messages[0].tool_results[0].result, text)
+        assert.equal(llm.meta.output.messages[0].tool_calls[0].arguments.text, text.slice(11))
+        assert.equal(llm.meta.output.messages[0].audio_parts, undefined)
+        assert.equal(llm.meta.metadata.audio_omitted, true)
+        assert.equal(llm.collection_errors, undefined)
+        const { EVP_EVENT_SIZE_LIMIT } = require('../../../../src/llmobs/constants/writers')
+        assert.ok(Buffer.byteLength(JSON.stringify(llm)) < EVP_EVENT_SIZE_LIMIT)
+        wav(llm.meta.input.messages[0].audio_parts[0], 16000, pcm(60_000))
+      })
+
+      it('does not turn accepted queue hold audio into agent speech or consume pending input', async () => {
+        await start(); input(20)
+        socket.deliver({ type: 'queue_status', queue_status_event: { status: 'waiting' } })
+        output(1, 100)
+        socket.deliver({ type: 'queue_status', queue_status_event: { status: 'admitted' } })
+        response(2, 'Admitted answer'); output(2, 20); close()
+        const { llmobsSpans } = await getEvents(4)
+        const llms = llmobsSpans.filter(span => span.name === 'elevenlabs response')
+        assert.equal(llms.length, 1)
+        assert.equal(llms[0].meta.metadata.event_id, '2')
+        wav(llms[0].meta.input.messages[0].audio_parts[0], 16000, pcm(20))
+        wav(llms[0].meta.output.messages[0].audio_parts[0], 24000, pcm(20, 24000, 9))
+        assert.equal(outputSpy.callCount, 2, 'SDK hold playback must remain unchanged')
+      })
+
+      it('emits no agent turn when the call queue times out', async () => {
+        await start()
+        socket.deliver({ type: 'queue_status', queue_status_event: { status: 'waiting' } })
+        output(1, 100)
+        socket.deliver({ type: 'queue_status', queue_status_event: { status: 'timed_out' } })
+        output(1, 100)
+        socket.emit('close', 4300, Buffer.from('queue timeout'))
+        require('../../../../../..').llmobs.trace({ kind: 'workflow', name: 'sentinel' }, () => {})
+        const { llmobsSpans } = await getEvents(1)
+        assert.deepEqual(llmobsSpans.map(span => span.name), ['sentinel'])
+      })
 
       it('shares the audio budget and never exports an overflowed prefix', async () => {
         await start()

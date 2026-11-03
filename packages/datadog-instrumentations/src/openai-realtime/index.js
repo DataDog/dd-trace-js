@@ -4,6 +4,7 @@ const dc = require('dc-polyfill')
 
 const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
 const log = require('../../../dd-trace/src/log')
+const { addBeforeExitFinalizer } = require('../../../dd-trace/src/before-exit')
 const shimmer = require('../../../datadog-shimmer')
 const RealtimeSession = require('./session')
 
@@ -303,7 +304,7 @@ function flushLiveSessions () {
   liveSessions.clear()
 }
 
-globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers?.add(flushLiveSessions)
+addBeforeExitFinalizer(flushLiveSessions)
 
 module.exports = {
   flushLiveSessions,

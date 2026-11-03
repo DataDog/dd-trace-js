@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 
 const log = require('../../dd-trace/src/log')
+const { addBeforeExitFinalizer } = require('../../dd-trace/src/before-exit')
 const shimmer = require('../../datadog-shimmer')
 const Session = require('./elevenlabs/session')
 
@@ -273,8 +274,7 @@ spanCh.asyncEnd.subscribe(ctx => observe(() => settleTool(ctx)))
 toolAsyncCh.error.subscribe(ctx => { if (!ctx.finished) spanCh.error.publish(ctx) })
 toolAsyncCh.asyncEnd.subscribe(ctx => { if (!ctx.finished) spanCh.asyncEnd.publish(ctx) })
 
-const beforeExitHandlers = globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers
-beforeExitHandlers?.add(() => {
+addBeforeExitFinalizer(() => {
   for (const reference of live) observe(() => reference.deref()?.finalize(true))
   live.clear()
 })
