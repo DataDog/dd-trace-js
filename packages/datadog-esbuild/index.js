@@ -9,7 +9,7 @@ const {
   createEsmResolver,
   processModule,
 } = require('../datadog-instrumentations/src/helpers/bundler-esm-exports')
-const { getGitMetadata, isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
+const { getGitMetadataBanner, isESMFile } = require('../datadog-instrumentations/src/helpers/bundler-utils')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
 const { createBundlerRewriter } = require('../datadog-instrumentations/src/helpers/rewriter')
@@ -124,25 +124,10 @@ ${build.initialOptions.banner.js}`
 
   // Bake DD_GIT_* into the banner unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
   if (DD_BUNDLER_INJECT_GIT_METADATA) {
-    const gitMetadata = getGitMetadata(log)
-    if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
+    const banner = getGitMetadataBanner(log)
+    if (banner) {
       build.initialOptions.banner ??= {}
-      build.initialOptions.banner.js ??= ''
-
-      build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null &&
-    process.env !== null && typeof process.env === 'object') {
-  ${gitMetadata.repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = '${gitMetadata.repositoryURL}';` : ''}
-  ${gitMetadata.commitSHA ? `process.env.DD_GIT_COMMIT_SHA = '${gitMetadata.commitSHA}';` : ''}
-}
-${build.initialOptions.banner.js}`
-
-      log.debug(
-        'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
-        gitMetadata.repositoryURL || 'not available',
-        gitMetadata.commitSHA || 'not available'
-      )
-    } else {
-      log.warn('No git metadata available - skipping injection')
+      build.initialOptions.banner.js = `${banner}${build.initialOptions.banner.js ?? ''}`
     }
   } else {
     log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')

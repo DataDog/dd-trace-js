@@ -5,6 +5,10 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 /**
+ * @typedef {{ debug: (...args: unknown[]) => void, warn: (...args: unknown[]) => void }} BundlerLog
+ */
+
+/**
  * Determines if a file is a ESM module or CommonJS
  *
  * @param {string} fullPathToModule File to analyze
@@ -39,7 +43,7 @@ function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
 /**
  * Reads the repository URL and commit SHA of the current working directory.
  *
- * @param {{ warn: (...args: unknown[]) => void }} log
+ * @param {BundlerLog} log
  * @returns {{ repositoryURL: string | null, commitSHA: string | null }}
  */
 function getGitMetadata (log) {
@@ -72,4 +76,29 @@ function getGitMetadata (log) {
   return gitMetadata
 }
 
-module.exports = { getGitMetadata, isESMFile }
+/**
+ * Returns a script setting `DD_GIT_REPOSITORY_URL` and `DD_GIT_COMMIT_SHA` from the git metadata of the current working
+ * directory, to prepend to the entry chunks of a bundle. Returns an empty string when no metadata is available.
+ *
+ * @param {BundlerLog} log
+ */
+function getGitMetadataBanner (log) {
+  const { repositoryURL, commitSHA } = getGitMetadata(log)
+  if (!repositoryURL && !commitSHA) {
+    log.warn('No git metadata available - skipping injection')
+    return ''
+  }
+
+  log.debug(
+    'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
+    repositoryURL || 'not available',
+    commitSHA || 'not available'
+  )
+  return 'if (typeof process === \'object\' && process !== null &&\n' +
+    '    process.env !== null && typeof process.env === \'object\') {\n' +
+    (repositoryURL ? `  process.env.DD_GIT_REPOSITORY_URL = ${JSON.stringify(repositoryURL)};\n` : '') +
+    (commitSHA ? `  process.env.DD_GIT_COMMIT_SHA = ${JSON.stringify(commitSHA)};\n` : '') +
+    '}\n'
+}
+
+module.exports = { getGitMetadataBanner, isESMFile }

@@ -87,24 +87,38 @@ describe('bundler utils', () => {
     })
   })
 
-  describe('getGitMetadata', () => {
-    let execSync, getGitMetadata, log
+  describe('getGitMetadataBanner', () => {
+    const REMOTE_COMMAND = 'git config --get remote.origin.url'
+    const SHA_COMMAND = 'git rev-parse HEAD'
+    let execSync, getGitMetadataBanner, log
 
     beforeEach(() => {
       execSync = sinon.stub()
-      log = { warn: sinon.spy() }
-      getGitMetadata = proxyquire('../../src/helpers/bundler-utils', {
+      log = { debug: sinon.spy(), warn: sinon.spy() }
+      getGitMetadataBanner = proxyquire('../../src/helpers/bundler-utils', {
         'node:child_process': { execSync },
-      }).getGitMetadata
+      }).getGitMetadataBanner
     })
 
-    it('should return the trimmed repository URL and commit SHA of the working directory', () => {
-      execSync.withArgs('git config --get remote.origin.url').returns('git@github.com:DataDog/dd-trace-js.git\n')
-      execSync.withArgs('git rev-parse HEAD').returns('abc123\n')
+    /**
+     * @param {string} banner
+     */
+    function runBanner (banner) {
+      const process = { env: {} }
+      // eslint-disable-next-line no-new-func
+      new Function('process', banner)(process)
+      return process.env
+    }
 
-      assert.deepStrictEqual(getGitMetadata(log), {
-        repositoryURL: 'git@github.com:DataDog/dd-trace-js.git',
-        commitSHA: 'abc123',
+    it('should set the trimmed repository URL and commit SHA of the working directory', () => {
+      execSync.withArgs(REMOTE_COMMAND).returns('git@github.com:DataDog/dd-trace-js.git\n')
+      execSync.withArgs(SHA_COMMAND).returns('abc123\n')
+
+      const banner = getGitMetadataBanner(log)
+
+      assert.deepStrictEqual(runBanner(banner), {
+        DD_GIT_REPOSITORY_URL: 'git@github.com:DataDog/dd-trace-js.git',
+        DD_GIT_COMMIT_SHA: 'abc123',
       })
       for (const call of execSync.getCalls()) {
         assert.deepStrictEqual(call.args[1], {
@@ -113,23 +127,64 @@ describe('bundler utils', () => {
           cwd: process.cwd(),
         })
       }
+      sinon.assert.calledOnceWithExactly(
+        log.debug,
+        'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
+        'git@github.com:DataDog/dd-trace-js.git',
+        'abc123'
+      )
       sinon.assert.notCalled(log.warn)
     })
 
-    it('should warn and keep the commit SHA when the repository URL lookup fails', () => {
-      execSync.withArgs('git config --get remote.origin.url').throws(new Error('no remote'))
-      execSync.withArgs('git rev-parse HEAD').returns('abc123\n')
+    it('should escape metadata as string literals', () => {
+      const repositoryURL = "https://example.com/it's \"quoted\"\\repo.git"
+      execSync.withArgs(REMOTE_COMMAND).returns(repositoryURL)
+      execSync.withArgs(SHA_COMMAND).returns('abc123')
 
-      assert.deepStrictEqual(getGitMetadata(log), { repositoryURL: null, commitSHA: 'abc123' })
-      sinon.assert.calledOnceWithExactly(log.warn, 'failed to get git repository URL:', 'no remote')
+      assert.deepStrictEqual(runBanner(getGitMetadataBanner(log)), {
+        DD_GIT_REPOSITORY_URL: repositoryURL,
+        DD_GIT_COMMIT_SHA: 'abc123',
+      })
     })
 
-    it('should warn and keep the repository URL when the commit SHA lookup fails', () => {
-      execSync.withArgs('git config --get remote.origin.url').returns('https://example.com/repo.git\n')
-      execSync.withArgs('git rev-parse HEAD').throws(new Error('not a git repository'))
+    it('should not touch an environment that is not an object', () => {
+      execSync.withArgs(REMOTE_COMMAND).returns('https://example.com/repo.git')
+      execSync.withArgs(SHA_COMMAND).returns('abc123')
+      const banner = getGitMetadataBanner(log)
 
-      assert.deepStrictEqual(getGitMetadata(log), { repositoryURL: 'https://example.com/repo.git', commitSHA: null })
+      // eslint-disable-next-line no-new-func
+      new Function('process', banner)({ env: null })
+      // eslint-disable-next-line no-new-func
+      new Function('process', banner)(null)
+    })
+
+    it('should warn and set only the commit SHA when the repository URL lookup fails', () => {
+      execSync.withArgs(REMOTE_COMMAND).throws(new Error('no remote'))
+      execSync.withArgs(SHA_COMMAND).returns('abc123\n')
+
+      assert.deepStrictEqual(runBanner(getGitMetadataBanner(log)), { DD_GIT_COMMIT_SHA: 'abc123' })
+      sinon.assert.calledOnceWithExactly(log.warn, 'failed to get git repository URL:', 'no remote')
+      sinon.assert.calledWith(log.debug, sinon.match.string, 'not available', 'abc123')
+    })
+
+    it('should warn and set only the repository URL when the commit SHA lookup fails', () => {
+      execSync.withArgs(REMOTE_COMMAND).returns('https://example.com/repo.git\n')
+      execSync.withArgs(SHA_COMMAND).throws(new Error('not a git repository'))
+
+      assert.deepStrictEqual(runBanner(getGitMetadataBanner(log)), {
+        DD_GIT_REPOSITORY_URL: 'https://example.com/repo.git',
+      })
       sinon.assert.calledOnceWithExactly(log.warn, 'failed to get git commit SHA:', 'not a git repository')
+      sinon.assert.calledWith(log.debug, sinon.match.string, 'https://example.com/repo.git', 'not available')
+    })
+
+    it('should return an empty banner when no git metadata is available', () => {
+      execSync.throws(new Error('git is not installed'))
+
+      assert.strictEqual(getGitMetadataBanner(log), '')
+      sinon.assert.calledWith(log.warn, 'No git metadata available - skipping injection')
+      sinon.assert.callCount(log.warn, 3)
+      sinon.assert.notCalled(log.debug)
     })
   })
 })
