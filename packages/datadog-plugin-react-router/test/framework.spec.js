@@ -37,8 +37,9 @@ async function runCjsMutation (versionKey, instrumented) {
  * @param {string} versionKey
  * @param {number} agentPort
  * @param {'http' | 'express' | 'http2'} [host]
+ * @param {Record<string, string>} [env]
  */
-async function prepareEsmRequest (versionKey, agentPort, host = 'http') {
+async function prepareEsmRequest (versionKey, agentPort, host = 'http', env) {
   const directory = await mkdtemp(path.join(tmpdir(), 'dd-react-router-esm-'))
   let child
   try {
@@ -59,7 +60,7 @@ async function prepareEsmRequest (versionKey, agentPort, host = 'http') {
       require.resolve('../../../register'),
       String(agentPort),
       host,
-    ], { env: { ...process.env, DD_INJECT_FORCE: '1', NODE_OPTIONS: '' }, silent: true, execArgv: [] })
+    ], { env: { ...process.env, DD_INJECT_FORCE: '1', NODE_OPTIONS: '', ...env }, silent: true, execArgv: [] })
     /** @type {Buffer[]} */
     const stderr = []
     const childStderr = /** @type {import('node:stream').Readable} */ (child.stderr)
@@ -454,6 +455,24 @@ describe('Plugin', () => {
         const result = await sendRequest(trace)
         assert.deepEqual(result, { status: 200, body: 'ok' })
       }).timeout(20000)
+
+      for (const value of ['false', '0', 'true', '1']) {
+        it(`respects DD_TRACE_REACT_ROUTER_ENABLED=${value}`, async () => {
+          const sendRequest = await prepareEsmRequest(version, agent.port, 'http', {
+            DD_TRACE_REACT_ROUTER_ENABLED: value,
+          })
+          const enabled = value === 'true' || value === '1'
+          const trace = agent.assertSomeTraces(traces => {
+            const spans = traces[0]
+            assert.equal(spans.some(span => span.name === 'react-router.loader'), enabled)
+            const request = spans.find(span => span.type === 'web')
+            assert.ok(request)
+            assert.equal(request.meta['http.route'], enabled ? '/users/:id' : undefined)
+          })
+          const result = await sendRequest(trace)
+          assert.deepEqual(result, { status: 200, body: 'ok' })
+        }).timeout(20000)
+      }
 
       it('does not mutate a frozen server build', async () => {
         tracer.use('react-router', {})

@@ -301,6 +301,9 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="react-router"></h5>
+
+Set `DD_TRACE_REACT_ROUTER_ENABLED=false` to disable React Router tracing. React Router tracing is enabled by default.
+
 <h5 id="redis"></h5>
 <h5 id="restify"></h5>
 <h5 id="rhea"></h5>

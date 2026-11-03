@@ -381,6 +381,7 @@ export interface GeneratedConfig {
   DD_TRACE_Q_ENABLED: boolean;
   DD_TRACE_REACT_DOM_ENABLED: boolean;
   DD_TRACE_REACT_ENABLED: boolean;
+  DD_TRACE_REACT_ROUTER_ENABLED: boolean;
   DD_TRACE_REDIS_CLIENT_ENABLED: boolean;
   DD_TRACE_REDIS_ENABLED: boolean;
   DD_TRACE_REQUEST_ENABLED: boolean;
@@ -1108,6 +1109,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_RATE_LIMIT: number;
   DD_TRACE_REACT_DOM_ENABLED: boolean;
   DD_TRACE_REACT_ENABLED: boolean;
+  DD_TRACE_REACT_ROUTER_ENABLED: boolean;
   DD_TRACE_REDIS_CLIENT_ENABLED: boolean;
   DD_TRACE_REDIS_ENABLED: boolean;
   DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: boolean;
