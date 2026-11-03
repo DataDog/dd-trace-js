@@ -27,13 +27,6 @@ if ! hash node 2>/dev/null; then
   exit 1
 fi
 
-if ! hash bun 2>/dev/null; then
-  echo "bun is not installed. Please install bun before running this script."
-  bun_version=$(node -p "require('./package.json').devDependencies.bun")
-  echo "You can install bun by running 'npm install -g bun@$bun_version'."
-  exit 1
-fi
-
 read -r PLUGINS SERVICES <<<$(node - << EOF
 const fs=require('fs');
 const yaml = require('yaml');

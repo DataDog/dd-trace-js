@@ -158,36 +158,10 @@ describe('scripts/audit.js', () => {
     assert.match(result.stderr, /Unknown level 'medium'/)
   })
 
-  it('keeps path, scheduled, manual, and Dependabot audits on one implementation', () => {
+  it('audits every configured directory on Dependabot pull requests', () => {
     const auditWorkflow = yaml.parse(fs.readFileSync(path.join(repoRoot, '.github/workflows/audit.yml'), 'utf8'))
-    const dependabotWorkflow = yaml.parse(
-      fs.readFileSync(path.join(repoRoot, '.github/workflows/dependabot-audit.yml'), 'utf8')
-    )
-    const auditedPaths = [
-      '.github/actions/datadog-ci/bun.lock',
-      '.github/actions/datadog-ci/package.json',
-      '.github/all-green/bun.lock',
-      '.github/all-green/package.json',
-      '.github/audit-allowlist.json',
-      '.github/workflows/audit.yml',
-      '.github/workflows/dependabot-audit.yml',
-      'bun.lock',
-      'docs/bun.lock',
-      'docs/package.json',
-      'package.json',
-      'scripts/audit.js',
-      'scripts/bun.js',
-      'vendor/bun.lock',
-      'vendor/package.json',
-    ]
-
-    assert.strictEqual(Object.hasOwn(auditWorkflow.on, 'workflow_call'), true)
-    assert.ok(auditWorkflow.on.schedule)
-    assert.strictEqual(Object.hasOwn(auditWorkflow.on, 'workflow_dispatch'), true)
-    assert.deepStrictEqual(auditWorkflow.on.pull_request.paths.sort(), auditedPaths.sort())
-    assert.deepStrictEqual(dependabotWorkflow.on.pull_request['paths-ignore'].sort(), auditedPaths.sort())
-    assert.strictEqual(dependabotWorkflow.jobs['dependabot-audit'].if, "github.actor == 'dependabot[bot]'")
-    assert.strictEqual(dependabotWorkflow.jobs['dependabot-audit'].uses, './.github/workflows/audit.yml')
+    assert.deepStrictEqual(auditWorkflow.on, { pull_request: null })
+    assert.strictEqual(auditWorkflow.jobs.dependencies.if, "github.actor == 'dependabot[bot]'")
 
     const expectedDirectories = ['.', '.github/actions/datadog-ci', '.github/all-green', 'docs', 'vendor']
     assert.deepStrictEqual(auditWorkflow.jobs.dependencies.strategy.matrix.directory.sort(), expectedDirectories)

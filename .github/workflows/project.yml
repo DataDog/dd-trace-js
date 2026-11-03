@@ -52,6 +52,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: npm run lint
+      - run: node node_modules/mocha/bin/mocha.js scripts/test/bun.spec.js
 
   lint-editorconfig:
     runs-on: ubuntu-latest

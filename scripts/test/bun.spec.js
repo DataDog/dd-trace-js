@@ -41,18 +41,22 @@ describe('scripts/bun.js', function () {
     )
   })
 
+  it('runs commands with the pinned binary', () => {
+    assert.strictEqual(execFileSync(process.execPath, [bunScript, '--version'], {
+      encoding: 'utf8',
+    }).trim(), bunVersion)
+  })
+
   it('bootstraps pinned Bun when PATH does not contain it', () => {
     const backupDirectory = `${bootstrapDirectory}.backup-${process.pid}`
     const commandDirectory = fs.mkdtempSync(path.join(tmpdir(), 'dd-fake-bun-'))
     const bunCommand = process.platform === 'win32' ? 'bun.exe' : 'bun'
     const originalNpmExecPath = process.env.npm_execpath
     const originalPath = process.env.PATH
-    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
     try {
       if (fs.existsSync(bootstrapDirectory)) fs.renameSync(bootstrapDirectory, backupDirectory)
-      const globalNpmRoot = execFileSync(npm, ['root', '--global'], { encoding: 'utf8' }).trim()
-      process.env.npm_execpath = path.join(globalNpmRoot, 'npm', 'bin', 'npm-cli.js')
+      delete process.env.npm_execpath
       createWrongBunCommand(commandDirectory, bunCommand)
       process.env.PATH = `${commandDirectory}${path.delimiter}${originalPath}`
 

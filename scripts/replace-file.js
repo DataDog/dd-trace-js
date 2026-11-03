@@ -15,7 +15,7 @@ function replaceFile (filename, content) {
 
   try {
     const { mode } = fs.statSync(filename)
-    // Isolated installs hardlink package files from Bun's shared cache. A fresh inode keeps the patch local.
+    // Bun hardlinks cached packages on Linux and Windows with either linker. Keep patches out of the shared cache.
     fs.writeFileSync(temporaryFile, content, { mode })
     fs.renameSync(temporaryFile, filename)
   } finally {

@@ -6,7 +6,6 @@ const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
 const { arch } = require('os')
 const { join, posix } = require('path')
-const { isDeepStrictEqual } = require('node:util')
 
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
@@ -17,7 +16,6 @@ const {
   getInstrumentationNames,
 } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange, resolvePluginVersions } = require('../packages/dd-trace/test/plugins/versions')
-const { dependencies: latests } = require('../packages/dd-trace/test/plugins/versions/package.json')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const mapWithConcurrency = require('./helpers/concurrency')
@@ -33,7 +31,6 @@ const FS_CONCURRENCY = 50
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const externalDeps = new Map()
-const workspaceOverrides = {}
 // Names of every package the synthesized workspaces install, both directly (via
 // `assertPackage`) and through peer-dep injection (via `assertPeerDependencies`).
 // Bun runs lifecycle scripts only for packages listed in the workspace root's
@@ -177,6 +174,8 @@ function getRangeMaximum (range) {
  * @param {Array<{ name: string }>} packages
  */
 function applyExternalConfiguration (moduleNames, packages) {
+  // A plugin can install a differently named package (for example genai installs @google/genai).
+  // Apply declarations for both identities before writing the root manifest that owns Bun's lifecycle trust.
   const activeNames = new Set(moduleNames)
   for (const { name } of packages) activeNames.add(name)
 
@@ -190,17 +189,6 @@ function applyExternalConfiguration (moduleNames, packages) {
         for (const trustedDependency of external.trustedDependencies) {
           trustedDependencies.add(trustedDependency)
         }
-      }
-      if (!external.overrides) continue
-
-      for (const [dependency, version] of Object.entries(external.overrides)) {
-        const configuredVersion = workspaceOverrides[dependency]
-        if (configuredVersion !== undefined && !isDeepStrictEqual(configuredVersion, version)) {
-          throw new Error(`Conflicting overrides for '${dependency}': ` +
-            `${JSON.stringify(configuredVersion)} and ${JSON.stringify(version)}`
-          )
-        }
-        workspaceOverrides[dependency] = version
       }
     }
   }
@@ -382,19 +370,19 @@ async function patchPeerDependencies ({ folder, externalName }) {
         if (dep === externalName) {
           versionPkgJson.dependencies[name] = pkgJson.version
         } else if (version) {
-          versionPkgJson.dependencies[name] = capKnownRange(name, version)
+          versionPkgJson.dependencies[name] = getCappedRange(name, version)
         } else {
           const declared = pkgJson[section][name]
           const range = declared.startsWith('workspace:')
             // A `workspace:` protocol leaked into the published manifest (some monorepo packages publish it raw); it
             // cannot resolve outside the source repo, so fall back to the pinned compatible version.
-            ? (latests[name] ?? '*')
+            ? ''
             : declared.includes('||')
               // Use the first version in the list (as npm does by default)
               ? declared.split('||', 1)[0].trim()
               // Only one version available so use that.
               : declared
-          versionPkgJson.dependencies[name] = capKnownRange(name, range)
+          versionPkgJson.dependencies[name] = getCappedRange(name, range)
         }
         break
       }
@@ -407,14 +395,9 @@ async function patchPeerDependencies ({ folder, externalName }) {
         const dependency = requirePackageJson(from, { paths: requireFromPackage.resolve.paths(from) })
         declaredRange = dependency.dependencies?.[name]
       }
-      // An explicit `version` in externals.js wins, then the range the installed package declares for itself, and
-      // only then the newest published version. The declared range matters because a forced transitive has to stay
-      // in the same generation as the sandbox consuming it: resolving `*` against the registry grafts the newest
-      // major onto an old client (a `@smithy/*` v4 handler onto the v2-era `@aws-sdk/client-bedrock-runtime@3.422.0`),
-      // and that handler's own transitives then resolve independently of the rest of the sandbox. Which majors
-      // collide changes every time the dependency publishes, so the sandbox breaks on an unrelated day.
-      const range = version ?? declaredRange ?? latests[name]
-      versionPkgJson.dependencies[name] = capKnownRange(name, range)
+      // Preserve the client's dependency range so older SDKs do not receive incompatible transitive majors.
+      const range = version ?? declaredRange ?? ''
+      versionPkgJson.dependencies[name] = getCappedRange(name, range)
     }
   }
 
@@ -517,7 +500,6 @@ async function assertWorkspaces () {
     workspaces: {
       packages: [...workspaces].sort(),
     },
-    overrides: workspaceOverrides,
     trustedDependencies: [...trustedDependencies].sort(),
   }, null, 2) + '\n')
 }
@@ -537,14 +519,6 @@ function install () {
       { cause: error }
     )
   }
-}
-
-/**
- * @param {string} name
- * @param {string} range
- */
-function capKnownRange (name, range) {
-  return latests[name] === undefined ? range : getCappedRange(name, range)
 }
 
 /**

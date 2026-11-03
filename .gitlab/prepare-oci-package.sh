@@ -11,7 +11,9 @@ bun=$(node scripts/bun.js)
 
 mkdir -p packaging/sources
 
-# Install from the manifest before unpacking dd-trace, otherwise its prepare script recursively rebuilds vendor.
+# The repository lock describes dd-trace as the root; use its manifest to keep production resolutions frozen.
+# npm previously installed the tarball as a dependency and skipped prepare. With this manifest as root, Bun runs it.
+# The archive already contains vendor bundles and omits build scripts, so remove prepare before installing.
 tar -xOf "$archive" package/package.json > packaging/sources/package.json
 npm pkg delete scripts.prepare --prefix packaging/sources
 cp bun.lock packaging/sources/bun.lock
@@ -20,7 +22,7 @@ cp bun.lock packaging/sources/bun.lock
 
 rm packaging/sources/package.json packaging/sources/bun.lock
 mkdir -p packaging/sources/node_modules/dd-trace
-# The OCI layout expects dd-trace beside its hoisted production dependencies in the shared node_modules.
+# Unpack beside the hoisted dependencies to match the OCI image layout.
 tar -xzf "$archive" --strip-components=1 -C packaging/sources/node_modules/dd-trace
 
 if [ -n "$CI_COMMIT_TAG" ] && [ -z "$JS_PACKAGE_VERSION" ]; then

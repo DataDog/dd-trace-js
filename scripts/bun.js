@@ -8,6 +8,9 @@ const repoRoot = path.join(__dirname, '..')
 const bunVersion = require('../package.json').devDependencies.bun
 const bunCommand = process.platform === 'win32' ? 'bun.exe' : 'bun'
 
+// Source archives can run prepare before Bun is installed. A different global Bun can change lock resolution.
+// Reuse the pinned binary when available; bootstrap it with npm only when neither PATH nor the local cache supplies it.
+// The npm package's postinstall places the platform binary at bin/bun.exe, so Bun itself must remain trusted.
 function getBunBinary () {
   const installedVersion = spawnSync(bunCommand, ['--version'], { encoding: 'utf8' })
   if (installedVersion.status === 0 && installedVersion.stdout.trim() === bunVersion) {
@@ -32,11 +35,25 @@ function getBunBinary () {
     // report anything useful. That path is reached whenever the bootstrapped binary is missing, which is what
     // `bun install --ignore-scripts` leaves behind.
     const npmExecPath = process.env.npm_execpath
-    let npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+    let npm = 'npm'
     const npmArguments = ['install']
     if (npmExecPath && /\.[cm]?js$/.test(npmExecPath)) {
       npm = process.execPath
       npmArguments.unshift(npmExecPath)
+    } else if (process.platform === 'win32') {
+      // Node cannot execute npm.cmd directly. npm's Windows shim keeps its JavaScript CLI beside it.
+      let npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')
+      if (process.env.PATH) {
+        for (const directory of process.env.PATH.split(path.delimiter)) {
+          const candidate = path.join(directory, 'node_modules', 'npm', 'bin', 'npm-cli.js')
+          if (fs.existsSync(path.join(directory, 'npm.cmd')) && fs.existsSync(candidate)) {
+            npmCli = candidate
+            break
+          }
+        }
+      }
+      npm = process.execPath
+      npmArguments.unshift(npmCli)
     }
     npmArguments.push(
       '--prefix', bootstrapDirectory,
@@ -61,6 +78,15 @@ function getBunBinary () {
   return bunBinary
 }
 
-if (require.main === module) process.stdout.write(getBunBinary())
+if (require.main === module) {
+  const binary = getBunBinary()
+  if (process.argv.length > 2) {
+    execFileSync(binary, [`--config=${path.join(repoRoot, 'bunfig.toml')}`, ...process.argv.slice(2)], {
+      stdio: 'inherit',
+    })
+  } else {
+    process.stdout.write(binary)
+  }
+}
 
 module.exports = { getBunBinary }

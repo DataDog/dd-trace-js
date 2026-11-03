@@ -18,13 +18,7 @@
     },
     "vendor": {
       "level": "moderate",
-      "allow": [
-        {
-          "id": "GHSA-8988-4f7v-96qf",
-          "package": "@opentelemetry/core",
-          "reason": "Patched in 2.8.0, outside the OpenTelemetry 1.x compatibility range bundled by vendor. Removing this acceptance requires a deliberate OpenTelemetry major upgrade of the shipped vendor tree."
-        }
-      ]
+      "allow": []
     },
     "docs": {
       "level": "high",

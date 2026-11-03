@@ -22,7 +22,7 @@ runs:
         if [ -f "$RUNNER_TEMP/dd-trace-bun-cache.pack" ]; then
           bun pm cache unpack "$RUNNER_TEMP/dd-trace-bun-cache.pack"
         fi
-    - run: bun install --frozen-lockfile --linker=hoisted
+    - run: bun install --frozen-lockfile --linker=hoisted --network-concurrency 8
       shell: bash
     - name: Pack Bun cache
       if: steps.bun-cache.outputs.cache-hit != 'true'

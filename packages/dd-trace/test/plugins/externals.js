@@ -130,14 +130,6 @@ module.exports = {
       versions: ['^4.0.0'],
     },
   ],
-  '@anthropic-ai/claude-agent-sdk': [
-    {
-      name: 'zod',
-      version: '^4.0.0',
-      dep: true,
-      forced: true,
-    },
-  ],
   'cookie-parser': [
     {
       name: 'express',
@@ -274,7 +266,7 @@ module.exports = {
       versions: ['5.0.7'],
     },
   ],
-  // Match each client's Google GAX dependency so gRPC credentials share one class.
+  // Match Google GAX's gRPC range so credential instanceof checks see one class. Keep while tests load gRPC directly.
   '@google-cloud/pubsub': [
     {
       name: '@grpc/grpc-js',
@@ -287,16 +279,8 @@ module.exports = {
   // so older SDKs do not load a newer handler with an incompatible @smithy/core.
   '@aws-sdk/client-bedrock-runtime': [
     {
+      // Keep while the HTTP handler is loaded directly by the tests.
       name: '@smithy/node-http-handler',
-      dep: true,
-      forced: true,
-    },
-  ],
-  // The clock-skew tests read the client's @aws-sdk/core version through the workspace.
-  '@aws-sdk/client-lambda': [
-    {
-      name: '@aws-sdk/core',
-      version: '^3.0.0',
       dep: true,
       forced: true,
     },
@@ -304,6 +288,7 @@ module.exports = {
   // The GoogleAuth prototype stub must resolve to the same module instance as the SDK.
   '@google-cloud/vertexai': [
     {
+      // Keep while tests stub GoogleAuth through the workspace rather than through the SDK's public auth options.
       name: 'google-auth-library',
       version: '^9.0.0',
       dep: true,
@@ -495,7 +480,7 @@ module.exports = {
       dep: true,
     },
     {
-      // The recorded cassettes match the OpenAI/JS 4.x request shape.
+      // The recorded cassettes match the OpenAI/JS 4.x request shape. Remove when they cover newer request formats.
       name: '@langchain/openai',
       version: '0.0.34',
       dep: true,
@@ -591,11 +576,8 @@ module.exports = {
   ],
   moleculer: [
     {
-      // Moleculer loads Bluebird as a runtime fallback without declaring it in its manifest.
       name: 'bluebird',
       versions: ['3.7.2'],
-      dep: true,
-      forced: true,
     },
   ],
   'mongodb-core': [
@@ -706,6 +688,7 @@ module.exports = {
     {
       name: 'pg-native',
       versions: ['3.0.0'],
+      // libpq builds the native addon; keep while pg-native delegates its build to this transitive package.
       trustedDependencies: ['libpq'],
     },
     {
@@ -780,10 +763,6 @@ module.exports = {
     {
       name: 'collections',
       versions: ['5'],
-      // q@2 requires collections/shim, which is absent from its declared collections@^2.
-      overrides: {
-        'q@^2>collections': '^5.0.0',
-      },
     },
     {
       name: 'q',

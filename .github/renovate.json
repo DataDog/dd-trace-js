@@ -4,7 +4,8 @@
     "config:recommended"
   ],
   "enabledManagers": [
-    "bun"
+    "bun",
+    "npm"
   ],
   "includePaths": [
     "package.json",
@@ -16,7 +17,17 @@
     "vendor/package.json",
     "vendor/bun.lock",
     ".github/all-green/package.json",
-    ".github/all-green/bun.lock"
+    ".github/all-green/bun.lock",
+    "packages/dd-trace/test/plugins/versions/package.json",
+    "integration-tests/esbuild/package.json",
+    "integration-tests/appsec/iast-esbuild-cjs/package.json",
+    "integration-tests/appsec/iast-esbuild-esm/package.json",
+    "integration-tests/webpack/package.json",
+    "benchmark/sirun/startup/everything-fixture/package.json",
+    "benchmark/sirun/startup/everything-fixture/package-lock.json"
+  ],
+  "ignorePaths": [
+    "**/node_modules/**"
   ],
   "timezone": "UTC",
   "dependencyDashboard": true,
@@ -38,7 +49,8 @@
     {
       "description": "Disable regular dependency updates",
       "matchManagers": [
-        "bun"
+        "bun",
+        "npm"
       ],
       "matchUpdateTypes": [
         "major",
@@ -56,7 +68,8 @@
     {
       "description": "Automerge Sunday lockfile maintenance",
       "matchManagers": [
-        "bun"
+        "bun",
+        "npm"
       ],
       "matchUpdateTypes": [
         "lockFileMaintenance"

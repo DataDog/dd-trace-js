@@ -150,17 +150,15 @@ should always work.
 
 We use [Bun](https://bun.com/), pinned in `devDependencies.bun` in `package.json`, for installing
 dependencies and the per-plugin sandbox installs. Run-scripts (`test:*`, `lint`, …) go through
-`npm`. The easiest way to install bun:
+`npm`. To install dependencies, run this in the project directory:
 
 ```sh
-npm install -g "bun@$(node -p 'require("./package.json").devDependencies.bun')"
+node scripts/bun.js install --frozen-lockfile
 ```
 
-To install dependencies once you have Node and bun installed, run this in the project directory:
-
-```sh
-bun install
-```
+This command installs the pinned Bun version locally if it is unavailable. npm scripts use the local
+Bun executable, so a global Bun installation is optional. Use `node scripts/bun.js <command>` to run
+other Bun commands at the pinned version.
 
 ### Supply-chain hardening
 
