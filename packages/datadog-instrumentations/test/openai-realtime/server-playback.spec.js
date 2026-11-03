@@ -216,4 +216,168 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
     h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
     assert.strictEqual(h.emitted[0].userSpeech.startTime, 1_001_000)
   })
+
+  for (const outcome of ['error', 'timeout']) {
+    it('omits a partial multi-item recording after retrieval ' + outcome, () => {
+      const h = harness()
+      h.start('r1', ['a1', 'a2'])
+      h.retrieve('a1', 4)
+      if (outcome === 'error') {
+        h.send({ type: 'error', error: { event_id: h.requests.find(x => x.itemId === 'a2').eventId } })
+      }
+      h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+      if (outcome === 'timeout') h.clock.tick(5000)
+      assert.strictEqual(h.emitted.length, 1)
+      assert.strictEqual(h.emitted[0].output.audio.length, 0)
+      assert.strictEqual(h.emitted[0].output.audioPresent, true)
+      assert.strictEqual(h.emitted[0].output.transcript, 'synthetic output')
+      assert.strictEqual(h.emitted[0].failed, false)
+    })
+  }
+
+  it('requires every expected audio content part before assembling a clip', () => {
+    const h = harness()
+    h.start()
+    h.send({
+      type: 'response.output_item.done',
+      response_id: 'r1',
+      item: {
+        id: 'a1',
+        type: 'message',
+        status: 'completed',
+        content: [{ type: 'output_audio' }, { type: 'output_audio' }],
+      },
+    })
+    h.retrieve('a1', 4)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].output.audio.length, 0)
+    assert.strictEqual(h.emitted[0].output.audioPresent, true)
+  })
+
+  it('preserves the audio marker when truncation precedes every retrieval', () => {
+    const h = harness()
+    h.start()
+    h.send({ type: 'output_audio_buffer.cleared', response_id: 'r1' })
+    h.send({ type: 'conversation.item.truncated', item_id: 'a1', content_index: 0, audio_end_ms: 500 })
+    h.clock.tick(5000)
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].output.audio.length, 0)
+    assert.strictEqual(h.emitted[0].output.audioPresent, true)
+  })
+
+  it('preserves the input audio marker when its retrieval fails', () => {
+    const h = harness()
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+    h.send({
+      type: 'conversation.item.done',
+      item: { id: 'u1', type: 'message', role: 'user', content: [{ type: 'input_audio' }] },
+    })
+    h.clock.tick(0)
+    h.send({ type: 'response.created', response: { id: 'r1' } })
+    h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+    h.send({ type: 'error', error: { event_id: h.requests[0].eventId } })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].input.audio.length, 0)
+    assert.strictEqual(h.emitted[0].input.audioPresent, true)
+  })
+
+  it('uses the short deadline for generated audio that never starts playing', () => {
+    const h = harness()
+    h.start('r1', ['a1'], false)
+    h.retrieve('a1')
+    h.clock.tick(4999)
+    assert.strictEqual(h.emitted.length, 0)
+    h.clock.tick(1)
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].agentSpeech, undefined)
+    assert.strictEqual(h.emitted[0].output.audio.length, 0)
+    assert.strictEqual(h.emitted[0].output.audioPresent, true)
+  })
+
+  it('releases completed never-played audio when newer playback starts', () => {
+    const h = harness()
+    h.start('r1', ['a1'], false)
+    h.retrieve('a1')
+    h.clock.tick(100)
+    h.start('r2', ['a2'])
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].output.audio.length, 0)
+    assert.strictEqual(h.emitted[0].agentSpeech, undefined)
+    h.retrieve('a2')
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r2' })
+    assert.strictEqual(h.emitted.length, 2)
+    assert.ok(h.emitted[1].agentSpeech)
+  })
+
+  it('extends the short startup wait only once playback actually starts', () => {
+    const h = harness()
+    h.start('r1', ['a1'], false)
+    h.retrieve('a1')
+    h.clock.tick(4999)
+    h.send({ type: 'output_audio_buffer.started', response_id: 'r1' })
+    h.clock.tick(6000)
+    assert.strictEqual(h.emitted.length, 0)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].output.audio.length, 48000)
+  })
+
+  it('evicts a completed turn before an older turn still generating', () => {
+    const h = harness()
+    h.send({ type: 'response.created', response: { id: 'generating' } })
+    for (let i = 0; i < 127; i++) h.start('held-' + i, ['audio-' + i], false)
+    assert.strictEqual(h.emitted.length, 0)
+    h.start('newest', ['audio-newest'], false)
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].output.transcript, 'synthetic output')
+    h.send({
+      type: 'response.done',
+      response: { id: 'generating', status: 'completed', output: [], usage: { input_tokens: 99, output_tokens: 1 } },
+    })
+    assert.strictEqual(h.emitted.length, 2)
+    assert.strictEqual(h.emitted[1].usage.input_tokens, 99)
+    h.session.finishSession(h.clock.now)
+  })
+
+  it('preserves generating turns when the tracking limit has no completed victim', () => {
+    const h = harness({ retain: false })
+    for (let i = 0; i < 129; i++) h.send({ type: 'response.created', response: { id: 'r' + i } })
+    assert.strictEqual(h.emitted.length, 0)
+    h.send({
+      type: 'response.done',
+      response: { id: 'r0', status: 'completed', output: [], usage: { input_tokens: 99, output_tokens: 1 } },
+    })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].usage.input_tokens, 99)
+    h.session.finishSession(h.clock.now)
+  })
+
+  it('does not finalize a generating turn under item capacity pressure', () => {
+    const h = harness({ retain: false })
+    h.send({ type: 'response.created', response: { id: 'generating' } })
+    for (let i = 0; i < 256; i++) {
+      h.send({
+        type: 'response.output_item.added',
+        response_id: 'generating',
+        item: { id: 'a' + i, type: 'message', status: 'in_progress', content: [{ type: 'output_audio' }] },
+      })
+    }
+    h.send({ type: 'response.created', response: { id: 'overflow' } })
+    h.send({
+      type: 'response.output_item.added',
+      response_id: 'overflow',
+      item: { id: 'extra', type: 'message', status: 'in_progress', content: [{ type: 'output_audio' }] },
+    })
+    assert.strictEqual(h.emitted.length, 0)
+    h.send({
+      type: 'response.done',
+      response: { id: 'generating', status: 'completed', output: [], usage: { input_tokens: 99, output_tokens: 1 } },
+    })
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'generating' })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].usage.input_tokens, 99)
+    assert.strictEqual(h.emitted[0].output.audioPresent, true)
+    h.session.finishSession(h.clock.now)
+  })
 })

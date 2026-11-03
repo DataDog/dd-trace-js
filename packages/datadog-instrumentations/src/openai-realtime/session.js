@@ -257,6 +257,11 @@ class RealtimeSession {
     }
   }
 
+  /** @param {{ type?: string, error?: { event_id?: unknown } } | undefined} event */
+  isRetrievalError (event) {
+    return this.#playback?.isRetrievalError(event) ?? false
+  }
+
   // -- event entry points ---------------------------------------------------
 
   /**
@@ -776,7 +781,7 @@ class RealtimeSession {
     }
 
     this.#applyCachedTranscript(turn)
-    this.#playback?.responseDone(key, response)
+    this.#playback?.responseDone(key, response, now)
 
     // Hold the turn open for a late input transcription ONLY when transcription is actually enabled
     // and this item has not already reached a terminal state: otherwise no transcript is ever

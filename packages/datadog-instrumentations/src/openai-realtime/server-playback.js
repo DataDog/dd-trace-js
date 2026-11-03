@@ -1,5 +1,7 @@
 'use strict'
 
+const { randomUUID } = require('node:crypto')
+
 const {
   bytesPerSecond,
   realtimeAudioFormatToMime,
@@ -27,6 +29,7 @@ class ServerPlayback {
   #active
   #scheduled
   #sequence = 0
+  #requestPrefix = 'ddtrace_realtime_audio_' + randomUUID() + '_'
   #closed = false
   #inputFormat = { mimeType: 'audio/pcm', sampleRate: 24_000 }
   #outputFormat = { mimeType: 'audio/pcm', sampleRate: 24_000 }
@@ -52,7 +55,10 @@ class ServerPlayback {
 
   /** @param {import('./turns').InputTurn} input */
   rememberInput (input) {
-    if (input.itemId !== undefined) this.#bind(input.itemId, input, undefined, 'user')
+    if (input.itemId !== undefined) {
+      input.audio.present = true
+      this.#bind(input.itemId, input, undefined, 'user')
+    }
   }
 
   /**
@@ -61,7 +67,7 @@ class ServerPlayback {
    */
   start (id, turn) {
     if (this.#closed) return
-    if (this.#turns.size >= MAX_TURNS) this.#finish(this.#turns.values().next().value, Date.now(), true)
+    if (this.#turns.size >= MAX_TURNS && !this.#evictHeld(Date.now())) return
     const entry = {
       id,
       turn,
@@ -69,6 +75,7 @@ class ServerPlayback {
       held: false,
       transcriptPending: false,
       hasAudio: false,
+      audioIncomplete: false,
       stopped: false,
       cleared: false,
       truncated: false,
@@ -85,12 +92,13 @@ class ServerPlayback {
   /**
    * @param {string} id
    * @param {object} response
+   * @param {number} now
    */
-  responseDone (id, response) {
+  responseDone (id, response, now) {
     const entry = this.#turns.get(String(id))
     if (!entry || !response?.output) return
     for (const item of response.output) {
-      if (item.id && item.type === 'message') this.#bindOutput(entry, item)
+      if (item.id && item.type === 'message') this.#bindOutput(entry, item, now)
     }
   }
 
@@ -135,10 +143,14 @@ class ServerPlayback {
     const type = event.type
     if (type === 'response.output_item.added' || type === 'response.output_item.done') {
       const entry = this.#turns.get(String(event.response_id))
-      if (entry && event.item?.type === 'message') this.#bindOutput(entry, event.item)
+      if (entry && event.item?.type === 'message') this.#bindOutput(entry, event.item, now)
     } else if (type === 'conversation.item.done') {
       const item = this.#items.get(String(event.item?.id))
-      if (item && this.#hasAudio(event.item)) this.#want(item)
+      if (item && this.#hasAudio(event.item)) {
+        this.#expectAudio(item, event.item)
+        this.#rebuild(item, now)
+        this.#want(item)
+      }
     } else if (type === 'conversation.item.retrieved') {
       this.#retrieve(event.item, now)
     } else if (type === 'conversation.item.truncated') {
@@ -157,6 +169,12 @@ class ServerPlayback {
     } else if (type === 'output_audio_buffer.started') {
       const entry = this.#turns.get(String(event.response_id))
       if (entry) {
+        for (const previous of this.#turns.values()) {
+          if (previous !== entry && previous.held && previous.hasAudio &&
+              previous.turn.serverSpeech.startTime === undefined && !previous.stopped) {
+            this.#finish(previous, now, true)
+          }
+        }
         entry.hasAudio = true
         entry.turn.serverSpeech.startTime ??= now
         if (this.#active && this.#active !== entry) {
@@ -167,6 +185,7 @@ class ServerPlayback {
           this.#check(previous, now)
         }
         this.#active = entry
+        this.#check(entry, now)
       }
     } else if (type === 'output_audio_buffer.stopped' || type === 'output_audio_buffer.cleared') {
       const entry = this.#turns.get(String(event.response_id))
@@ -197,6 +216,16 @@ class ServerPlayback {
     }
   }
 
+  /** @param {{ type?: string, error?: { event_id?: unknown } } | undefined} event */
+  isRetrievalError (event) {
+    if (event?.type !== 'error') return false
+    const id = event.error?.event_id
+    if (typeof id !== 'string' || !id.startsWith(this.#requestPrefix)) return false
+    const suffix = id.slice(this.#requestPrefix.length)
+    const sequence = Number(suffix)
+    return Number.isSafeInteger(sequence) && sequence > 0 && sequence <= this.#sequence && String(sequence) === suffix
+  }
+
   /** @param {number} now */
   finishSession (now) {
     this.#closed = true
@@ -214,15 +243,40 @@ class ServerPlayback {
   /**
    * @param {object} entry
    * @param {object} message
+   * @param {number} now
    */
-  #bindOutput (entry, message) {
+  #bindOutput (entry, message, now) {
     if (typeof message.id !== 'string' || !message.id) return
-    const item = this.#bind(message.id, entry.turn, entry, 'assistant')
-    entry.output.set(item.id, item)
-    if (this.#hasAudio(message)) {
+    const hasAudio = this.#hasAudio(message)
+    if (hasAudio) {
       entry.hasAudio = true
       entry.turn.audio.present = true
-      if (message.status === 'completed') this.#want(item)
+    }
+    const item = this.#bind(message.id, entry.turn, entry, 'assistant')
+    if (!item) {
+      if (hasAudio) {
+        entry.audioIncomplete = true
+        entry.turn.audio.clear()
+        entry.turn.audio.present = true
+      }
+      return
+    }
+    entry.output.set(item.id, item)
+    this.#expectAudio(item, message)
+    this.#rebuild(item, now)
+    if (hasAudio && message.status === 'completed') this.#want(item)
+  }
+
+  /**
+   * @param {{ expected: Set<number>, hasAudio: boolean }} item
+   * @param {{ content?: Array<{ type?: string }> }} message
+   */
+  #expectAudio (item, message) {
+    for (const [index, part] of (message.content || []).entries()) {
+      if (['audio', 'input_audio', 'output_audio'].includes(part.type)) {
+        item.expected.add(index)
+        item.hasAudio = true
+      }
     }
   }
 
@@ -235,10 +289,16 @@ class ServerPlayback {
   #bind (id, side, entry, role) {
     let item = this.#items.get(id)
     if (!item) {
+      while (this.#items.size >= MAX_ITEMS) {
+        if (!this.#evictHeld(Date.now())) break
+      }
       if (this.#items.size >= MAX_ITEMS) {
-        const oldest = this.#items.values().next().value
-        if (oldest.entry) this.#finish(oldest.entry, Date.now(), true)
-        else this.#items.delete(oldest.id)
+        const orphan = [...this.#items.values()].find(candidate => !candidate.entry)
+        if (!orphan) return
+        this.#items.delete(orphan.id)
+        for (const [eventId, request] of this.#requests) {
+          if (request === orphan) this.#requests.delete(eventId)
+        }
       }
       item = {
         id,
@@ -246,6 +306,8 @@ class ServerPlayback {
         entry,
         role,
         parts: new Map(),
+        expected: new Set(),
+        hasAudio: role === 'user',
         caps: new Map(),
         inFlight: false,
         wanted: false,
@@ -270,7 +332,7 @@ class ServerPlayback {
         if (!candidate.wanted || candidate.inFlight) continue
         candidate.wanted = false
         if (!this.#shouldRetainAudio()) { this.#check(candidate.entry, Date.now()); continue }
-        const eventId = 'ddtrace_realtime_audio_' + (++this.#sequence)
+        const eventId = this.#requestPrefix + (++this.#sequence)
         candidate.inFlight = true
         candidate.attempts++
         this.#requests.set(eventId, candidate)
@@ -310,6 +372,8 @@ class ServerPlayback {
             ? Buffer.from(part.audio.slice(0, Math.ceil(bytes / 3) * 4), 'base64').subarray(0, bytes)
             : undefined
           item.parts.set(index, { bytes, buffer: retained, mimeType, sampleRate })
+          item.expected.add(index)
+          item.hasAudio = true
         }
         if (item.role === 'user' && part.transcript && !item.side.transcript) item.side.transcript = part.transcript
         index++
@@ -326,7 +390,13 @@ class ServerPlayback {
   #rebuild (item, now) {
     const items = item.role === 'assistant' ? item.entry.output.values() : [item]
     const parts = []
+    let complete = !item.entry?.audioIncomplete
     for (const owned of items) {
+      if (!owned.hasAudio) continue
+      if (owned.parts.size === 0) complete = false
+      for (const index of owned.expected) {
+        if (!owned.parts.has(index)) complete = false
+      }
       for (const [index, part] of owned.parts) {
         const cap = owned.caps.get(index)
         const rate = bytesPerSecond(part.mimeType, part.sampleRate)
@@ -342,10 +412,11 @@ class ServerPlayback {
       for (const part of parts) part.buffer = undefined
     }
     const first = parts[0]
-    const complete = parts.every(part => part.buffer !== undefined &&
+    complete &&= parts.every(part => part.buffer !== undefined &&
       part.mimeType === first?.mimeType && part.sampleRate === first?.sampleRate)
     item.side.audio.replaceBuffers(complete ? parts.map(part => part.buffer) : [], total, now,
       first?.mimeType || '', first?.sampleRate || 0)
+    item.side.audio.present ||= item.role === 'assistant' ? item.entry.hasAudio : item.hasAudio
   }
 
   /** @param {object} entry */
@@ -373,13 +444,24 @@ class ServerPlayback {
   /** @param {object} entry */
   #arm (entry) {
     clearTimeout(entry.timer)
-    const phase = entry.hasAudio && !entry.stopped ? 'playback' : 'audio'
+    const phase = entry.turn.serverSpeech.startTime !== undefined && !entry.stopped ? 'playback' : 'audio'
     if (entry.phase !== phase) {
       entry.phase = phase
       entry.deadline = Date.now() + (phase === 'playback' ? PLAYBACK_WAIT_MS : AUDIO_WAIT_MS)
     }
     entry.timer = setTimeout(() => this.#finish(entry, Date.now(), true), Math.max(0, entry.deadline - Date.now()))
     entry.timer.unref?.()
+  }
+
+  /** @param {number} now */
+  #evictHeld (now) {
+    for (const entry of this.#turns.values()) {
+      if (entry.held) {
+        this.#finish(entry, now, true)
+        return true
+      }
+    }
+    return false
   }
 
   /**
