@@ -69,25 +69,22 @@ describe('ioredis replay', () => {
      * @param {import('ioredis').Command} command
      */
     function sendWithoutBookkeeping (client, command) {
-      const originalHas = WeakSet.prototype.has
-      const originalAdd = WeakSet.prototype.add
-      let lookups = 0
-      const has = sinon.stub(WeakSet.prototype, 'has').callsFake(function (value) {
-        if (value === command) lookups++
-        return originalHas.call(this, value)
-      })
-      const add = sinon.stub(WeakSet.prototype, 'add').callsFake(function (value) {
-        if (value === command) lookups++
-        return originalAdd.call(this, value)
-      })
+      const accesses = [
+        sinon.spy(WeakMap.prototype, 'get'),
+        sinon.spy(WeakMap.prototype, 'has'),
+        sinon.spy(WeakMap.prototype, 'set'),
+        sinon.spy(WeakMap.prototype, 'delete'),
+        sinon.spy(WeakSet.prototype, 'has'),
+        sinon.spy(WeakSet.prototype, 'add'),
+        sinon.spy(WeakSet.prototype, 'delete'),
+      ]
       let pending
       try {
         pending = client.sendCommand(command)
       } finally {
-        has.restore()
-        add.restore()
+        for (const access of accesses) access.restore()
       }
-      assert.equal(lookups, 0)
+      for (const access of accesses) assert.equal(access.calledWith(command), false)
       assert.deepEqual(Object.getOwnPropertySymbols(command), [])
       return pending
     }
@@ -172,8 +169,13 @@ describe('ioredis replay', () => {
       await assertSingleSpan('GET replay-nested')
     })
 
-    for (const error of ['TRYAGAIN retry later', 'CLUSTERDOWN retry later', 'MOVED', 'CONNECTION_CLOSED']) {
-      it(`deduplicates a Cluster command delayed after ${error.split(' ')[0]}`, async () => {
+    const retries = ['TRYAGAIN retry later', 'CLUSTERDOWN retry later', 'MOVED', 'CONNECTION_CLOSED']
+    const retryCases = retries.flatMap(error => error === 'CONNECTION_CLOSED'
+      ? [[error, false]]
+      : [[error, false], [error, true]])
+    for (const [error, pipeline] of retryCases) {
+      const kind = pipeline ? 'pipeline command' : 'command'
+      it(`deduplicates a Cluster ${kind} delayed after ${error.split(' ')[0]}`, async () => {
         let attempts = 0
         await withServer(Parser, (args, port, socket) => {
           const name = args[0].toString().toLowerCase()
@@ -199,14 +201,14 @@ describe('ioredis replay', () => {
             retryDelayOnFailover: 1,
             redisOptions: { enableReadyCheck: false, disableClientInfo: true },
           })
-          if (!error.startsWith('TRYAGAIN')) await once(redis, 'ready')
-          assert.equal(await redis.get('replay-cluster'), 'value')
+          if (pipeline || !error.startsWith('TRYAGAIN')) await once(redis, 'ready')
+          assert.equal(await getClusterValue(redis, 'replay-cluster', pipeline), 'value')
           assert.equal(attempts, 2)
           await assertSingleSpan('GET replay-cluster')
           if (error.startsWith('TRYAGAIN') || error === 'CONNECTION_CLOSED') {
             tracer.use('ioredis', { enabled: false })
             attempts = 0
-            assert.equal(await redis.get('replay-untraced'), 'value')
+            assert.equal(await getClusterValue(redis, 'replay-untraced', pipeline), 'value')
             assert.equal(attempts, 2)
             tracer.use('ioredis', { enabled: true })
             await assertSingleSpan('GET replay-cluster')
@@ -215,6 +217,29 @@ describe('ioredis replay', () => {
           redis.disconnect()
         })
       })
+    }
+
+    for (const failure of [false, true]) {
+      for (const disabled of [false, true]) {
+        const outcome = failure ? 'rejection' : 'success'
+        it(`restores the numeric fast path after ${outcome}, disabled=${disabled}`, async () => {
+          redis = new Redis({ lazyConnect: true })
+          const ready = once(redis, 'ready')
+          const command = new Redis.Command('get', failure ? [] : ['replay-cleanup'])
+          const pending = redis.sendCommand(command)
+          async function disableAfterReady () {
+            await ready
+            if (disabled) tracer.use('ioredis', { enabled: false })
+          }
+          await Promise.all([
+            disableAfterReady(),
+            failure ? assert.rejects(pending, { message: /wrong number of arguments/ }) : pending,
+          ])
+          tracer.use('ioredis', { enabled: true })
+          await sendWithoutBookkeeping(redis, new Redis.Command('get', ['replay-after-cleanup']))
+          await assertSingleSpan('GET replay-after-cleanup')
+        })
+      }
     }
 
     it('deduplicates a managed HIMPORT command through preparation and recovery', async function () {
@@ -240,6 +265,7 @@ describe('ioredis replay', () => {
         assert.equal(await redis.call('himport', 'SET', 'review-key', 'review', 'value'), 1)
         assert.equal(attempts, 2)
         await assertSingleSpan('HIMPORT SET review-key review value')
+        assert.ok(spans.some(span => span.meta['redis.raw_command'] === 'HIMPORT PREPARE review field'))
         tracer.use('ioredis', { enabled: false })
         assert.equal(await redis.call('himport', 'SET', 'untraced-key', 'review', 'value'), 1)
         tracer.use('ioredis', { enabled: true })
@@ -251,6 +277,18 @@ describe('ioredis replay', () => {
     })
   })
 })
+
+/**
+ * @param {import('ioredis').Cluster} client
+ * @param {string} key
+ * @param {boolean} pipeline
+ */
+async function getClusterValue (client, key, pipeline) {
+  if (!pipeline) return client.get(key)
+  const [[error, value]] = await client.pipeline().get(key).exec()
+  assert.equal(error, null)
+  return value
+}
 
 /**
  * @param {typeof import('redis-parser')} Parser
