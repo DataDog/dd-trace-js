@@ -27,22 +27,57 @@ const {
   TEST_RETRY_REASON_TYPES,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
-const { PLAYWRIGHT_VERSION } = process.env
+const { PLAYWRIGHT_VERSION, TEST_OPTIMIZATION_NODE_SHARD } = process.env
 
 const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
 const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
+const nodeShardIndex = ['oldest', 'latest'].indexOf(TEST_OPTIMIZATION_NODE_SHARD)
+const nodeShard = nodeShardIndex === -1 ? undefined : { index: nodeShardIndex, count: 2 }
+
+function createPlaywrightIt () {
+  return createParallelIt(global.it, { withReceiver: true, shard: nodeShard })
+}
 
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
+
+  describe(`playwright@${version} native project retry attribution`, function () {
+    this.timeout(60000)
+    const it = createPlaywrightIt()
+    useSandbox([`@playwright/test@${version}`])
+
+    it('keeps explicit project retries external when ATR is enabled', async (receiver, run) => {
+      receiver.setSettings({ flaky_test_retries_enabled: true })
+      const proc = run('./node_modules/.bin/playwright test -c playwright.config.js --workers=1 --retries=2', {
+        cwd: sandboxCwd(),
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TEST_DIR: './ci-visibility/playwright-native-retries',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+        },
+      })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 3)
+          const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retries.length, 2)
+          assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext))
+        })
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 1)
+    })
+  })
 
   // The v5 legacy framework does not support suite-level retry overrides.
   const contextRetryLimits = satisfies(version, '>=1.38.0') || version === 'latest' ? describe : describe.skip
 
   contextRetryLimits(`playwright@${version} retry exhaustion metadata`, function () {
     this.timeout(60000)
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createPlaywrightIt()
     useSandbox([`@playwright/test@${version}`])
 
     for (const dynamic of [false, true]) {
@@ -74,7 +109,10 @@ versions.forEach((version) => {
               assert.ok(attempts.every(test => test.meta[TEST_STATUS] === 'fail'))
               assert.strictEqual(attempts[0].meta[TEST_IS_RETRY], undefined)
               assert.ok(attempts.slice(1).every(test => test.meta[TEST_IS_RETRY] === 'true'))
-              assert.ok(attempts.slice(1).every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
+              const reason = name === 'default retries @smoke'
+                ? TEST_RETRY_REASON_TYPES.atr
+                : TEST_RETRY_REASON_TYPES.ext
+              assert.ok(attempts.slice(1).every(test => test.meta[TEST_RETRY_REASON] === reason))
               assert.strictEqual(attempts.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], count > 1 ? 'true' : undefined)
               assert.ok(attempts.slice(0, -1).every(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === undefined))
               assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], 'fail')
@@ -83,6 +121,33 @@ versions.forEach((version) => {
             assert.strictEqual(sessions.length, 1)
             assert.strictEqual(sessions[0].content.meta[TEST_STATUS], 'fail')
             assert.ok(tests.every(test => test.test_session_id === sessions[0].content.test_session_id))
+          })
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+
+      it(`attributes explicit native retries correctly (dynamic=${dynamic})`, async (receiver, run) => {
+        receiver.setSettings({
+          itr_enabled: false, tests_skipping: false, code_coverage: false, flaky_test_retries_enabled: true,
+        })
+        const proc = run('./node_modules/.bin/playwright test -c playwright.config.js --workers=1 --retries=2', {
+          cwd: sandboxCwd(),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: './ci-visibility/playwright-retry-limits',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(dynamic),
+            DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+          },
+        })
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 6)
+            const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, 3)
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext))
           })
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 1)
@@ -135,7 +200,7 @@ versions.forEach((version) => {
   const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createPlaywrightIt()
     // Worker trace finalization and these fixtures require the Playwright 1.38+ integration.
     const modernRetryTest = satisfies(version, '>=1.38.0') || version === 'latest' ? it : global.it.skip
 

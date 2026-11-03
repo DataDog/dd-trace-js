@@ -93,7 +93,7 @@ class ManagedPrompt {
   format (variables = {}) {
     if (typeof this.template === 'string') return render(this.template, variables)
     return this.template.flatMap(item => {
-      if (!isPlaceholder(item)) return [{ ...item, content: render(item.content, variables) }]
+      if (!isPlaceholder(item)) return { ...item, content: render(item.content, variables) }
       if (!Object.hasOwn(variables, item.name)) {
         throw new TypeError(`Missing message placeholder variable '${item.name}'`)
       }

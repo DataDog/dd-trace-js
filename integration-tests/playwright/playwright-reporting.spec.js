@@ -58,7 +58,7 @@ const {
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
-const { PLAYWRIGHT_VERSION } = process.env
+const { PLAYWRIGHT_VERSION, TEST_OPTIMIZATION_NODE_SHARD } = process.env
 
 const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
 const latest = getLatestPlaywrightSpecifier()
@@ -74,6 +74,12 @@ const VIDEO_UPLOAD_UNSUPPORTED_VERSION_WARNING =
   'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video upload requires Playwright 1.38.0 or later.'
 const EMPTY_SHARD_SKIP_REASON = 'No tests were assigned to this shard'
 const UNBOUND_RUNNER_EXPORT_VERSION = '1.59.0'
+const nodeShardIndex = ['oldest', 'latest'].indexOf(TEST_OPTIMIZATION_NODE_SHARD)
+const nodeShard = nodeShardIndex === -1 ? undefined : { index: nodeShardIndex, count: 2 }
+
+function createPlaywrightIt () {
+  return createParallelIt(global.it, { withReceiver: true, shard: nodeShard })
+}
 
 function assertRequestErrorTag (events, tag) {
   const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
@@ -175,7 +181,7 @@ const unboundRunnerExportContext = !PLAYWRIGHT_VERSION || PLAYWRIGHT_VERSION ===
   : context.skip
 
 unboundRunnerExportContext(`playwright@${UNBOUND_RUNNER_EXPORT_VERSION} unbound runner export`, function () {
-  const it = createParallelIt(global.it, { withReceiver: true })
+  const it = createPlaywrightIt()
   let cwd
 
   this.timeout(80000)
@@ -215,7 +221,7 @@ for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', lat
   // Playwright versions below the release line's minimum are not instrumented.
   const listingContext = version === latest || satisfies(version, `>=${oldest}`) ? describe : describe.skip
   listingContext(`playwright@${version} test listing`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createPlaywrightIt()
 
     this.timeout(60000)
     useSandbox([`@playwright/test@${version}`])
@@ -292,7 +298,7 @@ for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', lat
 const retryHistoryContext = PLAYWRIGHT_VERSION === 'oldest' ? describe.skip : describe
 
 retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
-  const it = createParallelIt(global.it, { withReceiver: true })
+  const it = createPlaywrightIt()
   this.timeout(60000)
   useSandbox([`@playwright/test@${latest}`])
 
@@ -376,7 +382,7 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
   describe(`playwright@${version} global errors`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createPlaywrightIt()
     this.timeout(60000)
     useSandbox([`@playwright/test@${version}`])
 
@@ -437,7 +443,7 @@ versions.forEach((version) => {
   const contextOldVersions = version !== 'latest' && satisfies(version, '<1.38.0') ? context : context.skip
 
   describe(`playwright@${version}`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createPlaywrightIt()
     const deferredFailureScreenshotTest = satisfies(version, '>=1.60.0') || version === 'latest'
       ? it
       : global.it.skip

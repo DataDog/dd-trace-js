@@ -829,7 +829,7 @@ class RealtimeSession {
       input.audio.totalDecodedBytes, inputFormat.mimeType, inputFormat.sampleRate
     )
     const userEnd = input.speechEndTime ??
-      (userStart !== undefined && inputDurationMs !== undefined ? userStart + inputDurationMs : undefined)
+      (userStart === undefined || inputDurationMs === undefined ? undefined : userStart + inputDurationMs)
 
     const agentStart = turn.audio.startTime
     const playbackMs = segmentDurationMs(

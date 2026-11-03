@@ -52,6 +52,7 @@ const options = {
   testPathIgnorePatterns: ['/node_modules/'],
   modulePathIgnorePatterns: ['<rootDir>/\\.bun/'],
   cache: false,
+  watchman: false,
   testRegex: process.env.TESTS_TO_RUN ? new RegExp(process.env.TESTS_TO_RUN) : /test\/ci-visibility-test/,
   coverage: !!process.env.ENABLE_CODE_COVERAGE,
   runInBand: true,

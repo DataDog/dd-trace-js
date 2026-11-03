@@ -6,7 +6,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const retryMarker = path.join(__dirname, '.webdriverio-spec-file-retry')
+const retryMarker = process.env.WEBDRIVERIO_RETRY_MARKER || path.join(__dirname, '.webdriverio-spec-file-retry')
 
 describe('WebdriverIO spec file retries', () => {
   it('reports the retried worker', () => {

@@ -137,7 +137,7 @@ function splitNodeOptions (source) {
   let started = false
   let quote
 
-  for (let index = 0; index < String(source).length; index++) {
+  for (let index = 0; index < source.length; index++) {
     const character = source[index]
     if (character === '\0') throw new Error('NODE_OPTIONS contains a null byte.')
     if (!quote && /\s/.test(character)) {
@@ -158,11 +158,7 @@ function splitNodeOptions (source) {
       }
     }
     const next = source[index + 1]
-    if (character === '\\' && next && (next === quote || /[\s'"\\]/.test(next))) {
-      value += source[++index]
-    } else {
-      value += character
-    }
+    value += character === '\\' && next && (next === quote || /[\s'"\\]/.test(next)) ? source[++index] : character
     started = true
   }
   if (quote) throw new Error('NODE_OPTIONS contains an unterminated quoted value.')

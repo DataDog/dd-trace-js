@@ -132,8 +132,7 @@ module.exports.checkForPotentialConflicts = function () {
 
   for (const pathToModule of Object.keys(require.cache)) {
     const { pkg } = extractPackageAndModulePath(pathToModule)
-    if (naughties.has(pkg)) continue
-    if (!potentialConflicts.has(pkg)) continue
+    if (naughties.has(pkg) || !potentialConflicts.has(pkg)) continue
 
     warnings.push(() => `Warning: Package '${pkg}' may cause conflicts with dd-trace.`)
 

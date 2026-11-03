@@ -141,9 +141,13 @@ class WebdriverioVideo {
     captureOwners.set(browser, this)
     this.#onResult = /** @param {{command?: string, endpoint?: string}} event */ (event) => {
       const { command, endpoint } = event
-      if (command === 'takeScreenshot' || endpoint?.endsWith('/screenshot')) return
-      // WDIO looks up the context before BiDi navigation. Capturing in that gap can block navigation.
-      if (command === 'getWindowHandle' || command === 'getWindowHandles') return
+      if (
+        command === 'takeScreenshot' || endpoint?.endsWith('/screenshot') ||
+        // WDIO looks up the context before BiDi navigation. Capturing in that gap can block navigation.
+        command === 'getWindowHandle' || command === 'getWindowHandles'
+      ) {
+        return
+      }
       this.capture()
     }
     browser.on?.('result', this.#onResult)
@@ -252,7 +256,7 @@ class WebdriverioVideo {
     const frames = Array.isArray(screenshots) ? screenshots : [screenshots]
     if (!frames.length) throw new Error('WebdriverIO returned no video frames')
     for (let index = 0; index < frames.length; index++) {
-      if (typeof frames[index] !== 'string') throw new Error('WebdriverIO returned an invalid video frame')
+      if (typeof frames[index] !== 'string') throw new TypeError('WebdriverIO returned an invalid video frame')
       if (Buffer.byteLength(frames[index], 'base64') > MAX_FRAME_BYTES - frameBytes) {
         throw new Error('WebdriverIO video frames exceeded the 200 MiB worker limit')
       }

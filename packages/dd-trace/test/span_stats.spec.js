@@ -145,6 +145,106 @@ describe('SpanAggKey', () => {
       key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,')
   })
 
+  it('should retrieve HTTP method and status from OTel attributes', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        'http.request.method': 'PATCH',
+        [HTTP_ROUTE]: '/users/:id',
+      },
+      metrics: {
+        'http.response.status_code': 204,
+      },
+    }
+    const key = new SpanAggKey(span)
+
+    assert.strictEqual(key.method, 'PATCH')
+    assert.strictEqual(key.statusCode, 204)
+    assert.strictEqual(key.endpoint, '/users/:id')
+  })
+
+  it('should skip a malformed Datadog HTTP status and use the OTel attribute', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        [HTTP_STATUS_CODE]: '',
+        'http.response.status_code': '500',
+      },
+      metrics: {},
+    }
+
+    const key = new SpanAggKey(span)
+
+    assert.strictEqual(key.statusCode, 500)
+  })
+
+  for (const source of ['meta', 'metrics']) {
+    it(`should preserve non-negative int32 OTel statuses from ${source}`, () => {
+      for (const status of [0, 200, 0x7fffffff]) {
+        for (const value of [status, String(status)]) {
+          const span = { ...basicSpan, meta: {}, metrics: {}, [source]: { 'http.response.status_code': value } }
+
+          assert.strictEqual(new SpanAggKey(span).statusCode, status)
+        }
+      }
+    })
+
+    it(`should reject invalid OTel statuses from ${source}`, () => {
+      const statuses = [
+        '1e2', '0x10', ' 200 ', '1.5', '0200', '+1', '-0', '',
+        -1, 1.5, 0x80000000, 0xffffffff, 0x100000000, 0x1000000c8,
+        NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1,
+        undefined, null, true, {}, [], Symbol('status'), 200n,
+      ]
+      for (const status of statuses) {
+        for (const value of typeof status === 'number' ? [status, String(status)] : [status]) {
+          const span = { ...basicSpan, meta: {}, metrics: {}, [source]: { 'http.response.status_code': value } }
+
+          assert.strictEqual(new SpanAggKey(span).statusCode, 0, `status ${String(value)} must not be aggregated`)
+        }
+      }
+    })
+  }
+
+  it('should use the metric fallback when the OTel meta status is outside the wire range', () => {
+    const span = {
+      ...basicSpan,
+      meta: { 'http.response.status_code': '-1' },
+      metrics: { 'http.response.status_code': 204 },
+    }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, 204)
+  })
+
+  it('should preserve Datadog-first HTTP status precedence', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        [HTTP_STATUS_CODE]: '201',
+        'http.response.status_code': '202',
+      },
+      metrics: {
+        'http.response.status_code': 203,
+      },
+    }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, '201')
+  })
+
+  it('should prefer OTel meta status over the metric fallback', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        'http.response.status_code': '202',
+      },
+      metrics: {
+        'http.response.status_code': 203,
+      },
+    }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, 202)
+  })
+
   it('should include HTTP method and endpoint in aggregation key', () => {
     const span = {
       ...basicSpan,
@@ -446,7 +546,7 @@ describe('SpanStatsProcessor', () => {
     })
     assert.strictEqual(processor.interval, config.stats.interval)
     assert.ok(processor.buckets instanceof TimeBuckets)
-    assert.strictEqual(processor.hostname, hostname())
+    assert.strictEqual(processor.hostname, '')
     assert.strictEqual(processor.enabled, config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED)
     assert.strictEqual(processor.env, config.env)
     assert.strictEqual(processor.version, config.version)
@@ -533,7 +633,7 @@ describe('SpanStatsProcessor', () => {
     processor.onInterval()
 
     assert.deepStrictEqual(exporter.export.lastCall.args[0], {
-      Hostname: hostname(),
+      Hostname: '',
       Env: config.env,
       Version: config.version,
       Stats: [{
@@ -593,7 +693,7 @@ describe('SpanStatsProcessor', () => {
     processor.onInterval()
 
     assert.deepStrictEqual(exporter.export.lastCall.args[0], {
-      Hostname: hostname(),
+      Hostname: '',
       Env: config.env,
       Version: version,
       Stats: [],
@@ -603,6 +703,24 @@ describe('SpanStatsProcessor', () => {
       Sequence: processor.sequence,
       ProcessTags: processTags.serialized,
     })
+  })
+
+  it('should export an empty hostname when reportHostname is disabled', () => {
+    const config = getConfigFresh({ stats: true })
+    assert.strictEqual(config.reportHostname, false)
+    const processor = new SpanStatsProcessor(config)
+    clearTimeout(processor.timer)
+    processor.onInterval()
+
+    assert.strictEqual(exporter.export.lastCall.args[0].Hostname, '')
+  })
+
+  it('should export the system hostname when reportHostname is enabled', () => {
+    const processor = new SpanStatsProcessor(getConfigFresh({ stats: true, reportHostname: true }))
+    clearTimeout(processor.timer)
+    processor.onInterval()
+
+    assert.strictEqual(exporter.export.lastCall.args[0].Hostname, hostname())
   })
 
   it('should clear buckets after each interval flush', () => {

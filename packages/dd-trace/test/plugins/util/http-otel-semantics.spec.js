@@ -110,7 +110,7 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(metrics['http.response.status_code'], 500)
       assert.strictEqual(meta['error.type'], '500')
       assert.ok(!('http.url' in meta))
-      assert.ok(!('http.endpoint' in meta))
+      assert.strictEqual(meta['http.endpoint'], '/u')
       assert.ok(!('http.useragent' in meta))
       assert.ok(!('http.client_ip' in meta))
     })

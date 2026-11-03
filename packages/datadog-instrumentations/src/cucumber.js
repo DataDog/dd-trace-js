@@ -129,6 +129,7 @@ let earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
 let earlyFlakeDetectionFaultyThreshold = 0
 let isEarlyFlakeDetectionFaulty = false
 let isFlakyTestRetriesEnabled = false
+let hasAutomaticRetries = false
 let isDynamicAtrEnabled = false
 let dynamicAtrBuckets
 let isKnownTestsEnabled = false
@@ -255,6 +256,7 @@ function configureParallelWorkerWorldParameters (options) {
   }
 
   options.worldParameters._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+  options.worldParameters._ddHasAutomaticRetries = hasAutomaticRetries
   options.worldParameters._ddNumTestRetries = numTestRetries
   options.worldParameters._ddIsDynamicAtrEnabled = isDynamicAtrEnabled
   options.worldParameters._ddDynamicAtrBuckets = dynamicAtrBuckets
@@ -298,6 +300,7 @@ function readParallelWorkerWorldParameters (options) {
 /**
  * @param {object} worldParameters
  * @param {boolean} [worldParameters._ddIsFlakyTestRetriesEnabled]
+ * @param {boolean} [worldParameters._ddHasAutomaticRetries]
  * @param {number} [worldParameters._ddNumTestRetries]
  * @param {boolean} [worldParameters._ddIsDynamicAtrEnabled]
  * @param {number[]} [worldParameters._ddDynamicAtrBuckets]
@@ -306,6 +309,7 @@ function readParallelWorkerWorldParameters (options) {
  */
 function readParallelWorkerAtrParameters (worldParameters) {
   isFlakyTestRetriesEnabled = !!worldParameters._ddIsFlakyTestRetriesEnabled
+  hasAutomaticRetries = !!worldParameters._ddHasAutomaticRetries
   numTestRetries = worldParameters._ddNumTestRetries ?? 0
   isDynamicAtrEnabled = !!worldParameters._ddIsDynamicAtrEnabled
   dynamicAtrBuckets = worldParameters._ddDynamicAtrBuckets
@@ -496,8 +500,14 @@ function finishParallelSuiteIfDone (testFileAbsolutePath) {
   const finished = pickleResultByFile[testFileAbsolutePath]
   const expectedPickles = pickleByFile[testFileAbsolutePath]
 
-  if (!finished || !expectedPickles || finished.length !== expectedPickles.length) return
-  if (finishedParallelSuites.has(testFileAbsolutePath)) return
+  if (
+    !finished ||
+    !expectedPickles ||
+    finished.length !== expectedPickles.length ||
+    finishedParallelSuites.has(testFileAbsolutePath)
+  ) {
+    return
+  }
 
   finishedParallelSuites.add(testFileAbsolutePath)
   testSuiteFinishCh.publish({
@@ -511,8 +521,7 @@ function maybeRecordFinalParallelEfdStatus ({ pickleId, testFileAbsolutePath }) 
   const testStatuses = efdStatusesByPickleId.get(pickleId)
   const finished = pickleResultByFile[testFileAbsolutePath]
 
-  if (efdRetryCount === undefined || !testStatuses || !finished) return
-  if (testStatuses.length !== efdRetryCount + 1) return
+  if (efdRetryCount === undefined || !testStatuses || !finished || testStatuses.length !== efdRetryCount + 1) return
 
   finished.push(efdRetryCount === 0 ? testStatuses[0] : getTestStatusFromRetries(testStatuses))
   efdStatusesByPickleId.delete(pickleId)
@@ -736,9 +745,10 @@ function publishRetriedAttempt (runner, state) {
   const nextAttempt = currentAttempt + 1
   const failedAttemptCtx = numAttemptToCtx.get(currentAttempt)
   const isFirstAttempt = currentAttempt === 0
-  const isAtrRetry = !isFirstAttempt && isFlakyTestRetriesEnabled
+  const isAtrRetry = !isFirstAttempt && state.hasAutomaticRetries
 
   if (isFirstAttempt && isDynamicAtrEnabled && isFlakyTestRetriesEnabled) {
+    state.hasAutomaticRetries = true
     state.dynamicAtrRetryCount = getDynamicAtrRetryCount(
       performance.now() - state.executionStart,
       earlyFlakeDetectionRetryPolicy,
@@ -750,7 +760,7 @@ function publishRetriedAttempt (runner, state) {
   }
 
   // ATR: record this attempt as failed so when run().finally runs (after retry) we have all statuses
-  if (isFlakyTestRetriesEnabled) {
+  if (state.hasAutomaticRetries) {
     const nameForKey = getCucumberTestName(runner.pickle.name, currentAttempt > 0)
     const atrKey = `${runner.pickle.uri}:${nameForKey}`
     if (atrStatusesByScenarioKey.has(atrKey)) {
@@ -826,7 +836,7 @@ function wrapRun (pl, isLatestVersion, version) {
     }
     const ctx = testStartPayload
     const promises = {}
-    const state = { numAttempt: 0, promises, testStartPayload }
+    const state = { numAttempt: 0, promises, testStartPayload, hasAutomaticRetries }
     numAttemptToCtx.set(state.numAttempt, ctx)
     runnerToRetryState.set(this, state)
     if (isTestManagementTestsEnabled && getTestProperties(testSuitePath, this.pickle.name).attemptToFix) {
@@ -956,7 +966,7 @@ function wrapRun (pl, isLatestVersion, version) {
 
         // ATR: accumulate statuses by stable scenario key (uri:name) so retries are grouped.
         // Cucumber appends " (attempt N)" or " (attempt N, retried)" to the scenario name; normalize for keying.
-        if (isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry && numTestRetries > 0) {
+        if (state.hasAutomaticRetries && !isAttemptToFix && !isEfdRetry && numTestRetries > 0) {
           const atrKey = `${this.pickle.uri}:${testName}`
           if (atrStatusesByScenarioKey.has(atrKey)) {
             atrStatusesByScenarioKey.get(atrKey).push(status)
@@ -1005,7 +1015,7 @@ function wrapRun (pl, isLatestVersion, version) {
 
         // Notice that ATR is handled using cucumber native retries features.
         // Therefore, if we reach this point, we are certain that it's the last ATR execution
-        const isLastAtrRetry = isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
+        const isLastAtrRetry = state.hasAutomaticRetries && !isAttemptToFix && !isEfdRetry &&
           numTestRetries > 0 && this.maxAttempts > 1
 
         const statuses = lastStatusByPickleId.get(this.pickle.id)
@@ -1034,8 +1044,8 @@ function wrapRun (pl, isLatestVersion, version) {
           error,
           isNew,
           isEfdRetry,
-          isFlakyRetry: state.numAttempt > 0 && isFlakyTestRetriesEnabled,
-          isExternalRetry: state.numAttempt > 0 && !isFlakyTestRetriesEnabled,
+          isFlakyRetry: state.numAttempt > 0 && state.hasAutomaticRetries,
+          isExternalRetry: state.numAttempt > 0 && !state.hasAutomaticRetries,
           isAttemptToFix,
           isAttemptToFixRetry,
           hasFailedAllRetries,
@@ -1256,7 +1266,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     const processArgv = process.argv.slice(2).join(' ')
     const command = getEnvironmentVariable('npm_lifecycle_script') || `cucumber-js ${processArgv}`
 
-    if (isFlakyTestRetriesEnabled && !options.retry && numTestRetries > 0) {
+    const originalRetryCount = options.retry
+    hasAutomaticRetries = isFlakyTestRetriesEnabled && !options.retry && numTestRetries > 0
+    if (hasAutomaticRetries) {
       options.retry = numTestRetries
     }
 
@@ -1298,6 +1310,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
         log.error('Cucumber test session finalization error: %s', finalizationError)
       }
       throw error
+    } finally {
+      if (hasAutomaticRetries) options.retry = originalRetryCount
     }
     const success = satisfies(frameworkVersion, '>=13.1.0') ? result.success : result
 

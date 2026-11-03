@@ -300,8 +300,7 @@ function configureEfdSuiteTracker (testFilepaths, repositoryRoot) {
  * @param {boolean} hasNewTest
  */
 function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
-  if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string') return false
-  if (isEarlyFlakeDetectionFaulty) return false
+  if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string' || isEarlyFlakeDetectionFaulty) return false
 
   if (hasNewTest) {
     suitesWithNewTests.add(testSuite)
@@ -681,6 +680,7 @@ function resetMainProcessProvidedContext (ctx) {
     _ddIsEfdSuiteAdmissionEnabled: false,
     _ddIsFlakyTestRetriesEnabled: false,
     _ddFlakyTestRetriesCount: 0,
+    _ddFlakyTestRetriesUseRetryMarker: false,
     _ddIsDynamicAtrEnabled: false,
     _ddDynamicAtrBuckets: undefined,
     _ddFlakyTestRetriesIncludesUnnamedProject: false,
@@ -824,7 +824,7 @@ async function runMainProcessSetup (
     }
   }
 
-  const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
+  const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications, frameworkVersion)
   if (flakyTestRetriesConfiguration) {
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
@@ -833,6 +833,7 @@ async function runMainProcessSetup (
       _ddDynamicAtrBuckets: dynamicAtrBuckets,
       _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
       _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
+      _ddFlakyTestRetriesUseRetryMarker: flakyTestRetriesConfiguration.usesRetryMarker,
     }, 'Could not send library configuration to workers.')
   }
 
@@ -1039,7 +1040,7 @@ function shouldUseBrowserReporter (frameworkVersion, testSpecifications) {
     testSpecifications.some(isBrowserTestSpecification)
 }
 
-function configureFlakyTestRetries (ctx, testSpecifications) {
+function configureFlakyTestRetries (ctx, testSpecifications, frameworkVersion) {
   if (!isFlakyTestRetriesEnabled || (!isDynamicAtrEnabled && flakyTestRetriesCount <= 0)) return
 
   const maximumDynamicAtrRetries = dynamicAtrBuckets
@@ -1048,13 +1049,14 @@ function configureFlakyTestRetries (ctx, testSpecifications) {
   const retryCount = isDynamicAtrEnabled
     ? Math.max(1, maximumDynamicAtrRetries)
     : flakyTestRetriesCount
+  const usesRetryMarker = isDynamicAtrEnabled || satisfies(frameworkVersion, '>=4.1.0')
   let configured = false
   let includesUnnamedProject = false
   const projectNames = []
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
     if (!config.retry || config.retry.__ddTestOptAtr) {
       // The serializable marker survives task inheritance and setup refreshes, unlike numeric retry counts.
-      config.retry = isDynamicAtrEnabled ? { count: retryCount, __ddTestOptAtr: true } : retryCount
+      config.retry = usesRetryMarker ? { count: retryCount, __ddTestOptAtr: true } : retryCount
       configured = true
       if (projectName) {
         projectNames.push(projectName)
@@ -1069,6 +1071,7 @@ function configureFlakyTestRetries (ctx, testSpecifications) {
   return {
     includesUnnamedProject,
     projectNames,
+    usesRetryMarker,
   }
 }
 
@@ -1201,11 +1204,7 @@ function getSortWrapper (sort, frameworkVersion) {
 
 function getFinishWrapper (exitOrClose) {
   return async function () {
-    if (finishedSessionContexts.has(this)) {
-      return exitOrClose.apply(this, arguments)
-    }
-
-    if (!testSessionFinishCh.hasSubscribers) {
+    if (finishedSessionContexts.has(this) || !testSessionFinishCh.hasSubscribers) {
       return exitOrClose.apply(this, arguments)
     }
     finishedSessionContexts.add(this)
@@ -1234,11 +1233,11 @@ function getFinishWrapper (exitOrClose) {
     )
     const hasErrors = hasRunError || error ||
       this.state.getCountOfFailedTests() > 0 || this.state.getUnhandledErrors().length > 0
-    const testSessionEmptyReason = !hasErrors && !hasExecutedTests
-      ? (isEmptyShard
-          ? 'zero_test_shard'
-          : tests.length > 0 || skippedSuites.length > 0 ? 'all_tests_skipped' : 'zero_tests')
-      : undefined
+    const testSessionEmptyReason = hasErrors || hasExecutedTests
+      ? undefined
+      : isEmptyShard
+        ? 'zero_test_shard'
+        : tests.length > 0 || skippedSuites.length > 0 ? 'all_tests_skipped' : 'zero_tests'
     const status = hasErrors ? 'fail' : (testSessionEmptyReason ? 'skip' : 'pass')
     const flushPromise = getChannelPromise(testSessionFinishCh, {
       status,
@@ -1758,8 +1757,7 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
 }
 
 async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker, files = result?.files) {
-  if (!testSuiteFinishCh.hasSubscribers) return
-  if (!Array.isArray(result?.files) || !Array.isArray(files)) return
+  if (!testSuiteFinishCh.hasSubscribers || !Array.isArray(result?.files) || !Array.isArray(files)) return
 
   const setupState = ctx && mainProcessSetupStates.get(ctx)
   if (

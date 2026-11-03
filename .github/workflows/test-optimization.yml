@@ -44,7 +44,9 @@ jobs:
       fail-fast: false
       matrix:
         version: [oldest, maintenance, active, latest]
-    name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
+        # The TIA code coverage specs and the remaining specs each take about half of the suite time.
+        spec: ['tia-code-coverage*', '!(tia-code-coverage*)']
+    name: ${{ github.workflow }} / integration (node-${{ matrix.version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -70,6 +72,8 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
       - run: npm run test:integration:testopt:coverage
+        env:
+          SPEC: ${{ matrix.spec }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-testopt-${{ matrix.version }}
@@ -128,7 +132,7 @@ jobs:
             echo "image-tag=$IMAGE_TAG"
           } >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -177,6 +181,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       OPTIONS_OVERRIDE: 1
       PLAYWRIGHT_VERSION: ${{ matrix.playwright-version }}
+      TEST_OPTIMIZATION_NODE_SHARD: ${{ matrix.node-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/dd-sts-api-key
@@ -206,6 +211,10 @@ jobs:
         version: [oldest, latest]
         # "oldest" is 5.2.0 in <=5 and 8.0.0 in >=6
         mocha-version: [oldest, latest]
+        spec:
+          - mocha
+          - mocha-advanced-features
+    name: integration-mocha (${{ matrix.mocha-version }}, node-${{ matrix.version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -225,16 +234,19 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
+          SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
-          flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}
+          flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}-${{ matrix.spec }}
 
   integration-webdriverio:
+    needs: browser-tools
     strategy:
       fail-fast: false
       matrix:
-        # Keep the regular and Test Optimization suites in separate lanes; together they exceed the CI time budget.
+        # Keep the regular, failure video, and Test Optimization suites in separate lanes; together they exceed the
+        # CI time budget. The oldest Test Optimization suite also runs each adapter in its own lane.
         include:
           - node-version: oldest
             webdriverio-version: oldest
@@ -244,14 +256,30 @@ jobs:
             spec: webdriverio
           - node-version: oldest
             webdriverio-version: oldest
+            spec: webdriverio.failure-videos
+          - node-version: latest
+            webdriverio-version: latest
+            spec: webdriverio.failure-videos
+          - node-version: oldest
+            webdriverio-version: oldest
             spec: webdriverio.test-optimization
+            adapter: mocha
+          - node-version: oldest
+            webdriverio-version: oldest
+            spec: webdriverio.test-optimization
+            adapter: jasmine
           - node-version: latest
             webdriverio-version: latest
             spec: webdriverio.test-optimization
     name: >-
       integration-webdriverio (${{ matrix.webdriverio-version }},
-      node-${{ matrix.node-version }}, ${{ matrix.spec }})
+      node-${{ matrix.node-version }}, ${{ matrix.spec }}${{ matrix.adapter && format(', {0}', matrix.adapter) || '' }})
     runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.browser-tools.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node
@@ -259,21 +287,23 @@ jobs:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: npm run test:instrumentations:ci
-        if: matrix.spec == 'webdriverio'
+        if: matrix.spec == 'webdriverio.test-optimization' && matrix.adapter != 'jasmine'
         env:
           PLUGINS: webdriverio
       - uses: ./.github/actions/upload-junit-artifacts
         id: webdriverio_instrumentation_upload
-        if: "!cancelled() && matrix.spec == 'webdriverio'"
+        if: "!cancelled() && matrix.spec == 'webdriverio.test-optimization' && matrix.adapter != 'jasmine'"
         with:
           id: ${{ github.job }}-${{ strategy.job-index }}-instrumentation
       - name: Clear uploaded instrumentation JUnit reports
         if: "!cancelled() && steps.webdriverio_instrumentation_upload.outcome == 'success'"
         run: rm -f ./*.xml
-      - name: Install FFmpeg for video recording and validation
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Configure Git safe directory
+        # The WebdriverIO job runs in a container where the checkout can be owned by a different UID.
+        # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Use installed Chrome and ChromeDriver
-        if: matrix.spec == 'webdriverio'
+        if: matrix.spec != 'webdriverio.test-optimization'
         run: |
           google-chrome --version
           chromedriver --version
@@ -284,6 +314,7 @@ jobs:
         env:
           SPEC: ${{ matrix.spec }}
           WEBDRIVERIO_VERSION: ${{ matrix.webdriverio-version }}
+          WEBDRIVERIO_ADAPTER: ${{ matrix.adapter }}
           WEBDRIVERIO_REAL_BROWSER: 'true'
       - uses: ./.github/actions/coverage
         with:
@@ -356,6 +387,10 @@ jobs:
       matrix:
         version: [oldest, latest]
         cucumber-version: [7.0.0, latest]
+        spec:
+          - cucumber
+          - cucumber-report-methods
+    name: integration-cucumber (${{ matrix.cucumber-version }}, node-${{ matrix.version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -375,13 +410,14 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
+          SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
-          flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}
+          flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}-${{ matrix.spec }}
 
-  selenium-image:
-    name: Ensure Selenium Docker image
+  browser-tools:
+    name: Ensure browser tools Docker image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -393,11 +429,11 @@ jobs:
       - name: Determine image tag
         id: image
         run: |
-          DOCKER_HASH=$(sha256sum .github/selenium/Dockerfile | cut -c1-8)
-          IMAGE="ghcr.io/datadog/dd-trace-js/selenium-tools:${DOCKER_HASH}"
+          DOCKER_HASH=$(sha256sum .github/browser-tools/Dockerfile | cut -c1-8)
+          IMAGE="ghcr.io/datadog/dd-trace-js/browser-tools:${DOCKER_HASH}"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -409,12 +445,12 @@ jobs:
           if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
             echo "Image ${IMAGE} already exists, skipping build"
           else
-            docker build -t "${IMAGE}" .github/selenium
+            docker build -t "${IMAGE}" .github/browser-tools
             docker push "${IMAGE}"
           fi
 
   integration-selenium:
-    needs: selenium-image
+    needs: browser-tools
     strategy:
       fail-fast: false
       matrix:
@@ -423,7 +459,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: ${{ needs.selenium-image.outputs.image }}
+      image: ${{ needs.browser-tools.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -466,6 +502,7 @@ jobs:
         spec:
           - cypress-reporting
           - cypress-reporting-instrumentation
+          - cypress-reporting-config
           - cypress-itr
           - cypress-tia-code-coverage
           - cypress-efd
@@ -544,6 +581,7 @@ jobs:
         version: [oldest, latest]
         spec:
           - vitest.core
+          - vitest.retries
           - vitest.tia
           - vitest.test-management
           - vitest.advanced
@@ -587,6 +625,9 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           SPEC: ${{ matrix.spec }}
+          TEST_OPTIMIZATION_PARALLEL_VITEST_VERSIONS: >-
+            ${{ (matrix.spec == 'vitest.core' || matrix.spec == 'vitest.retries') && matrix.vitest-version == 'all'
+            && 'oldest,latest' || '' }}
           VITEST_VERSION: ${{ matrix.vitest-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
@@ -594,7 +635,7 @@ jobs:
           flags: test-optimization-vitest-${{ matrix.version }}
 
   integration-vitest-browser:
-    needs: [playwright-image, selenium-image]
+    needs: [playwright-image, browser-tools]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -610,7 +651,7 @@ jobs:
             container-image: ${{ fromJson(needs.playwright-image.outputs.images).latest.latest }}
           - version: latest
             browser-provider: webdriverio
-            container-image: ${{ needs.selenium-image.outputs.image }}
+            container-image: ${{ needs.browser-tools.outputs.image }}
             browser-binary: /usr/bin/google-chrome
             browser-driver-binary: /usr/bin/chromedriver
     name: integration-vitest-browser (${{ matrix.browser-provider }}, node-${{ matrix.version }})
