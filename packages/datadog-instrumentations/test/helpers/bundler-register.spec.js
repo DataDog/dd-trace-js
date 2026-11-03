@@ -330,6 +330,101 @@ describe('bundler register', () => {
     assert.deepStrictEqual(payload.module, { patched: true })
   })
 
+  describe('ES module export proxies', () => {
+    it('runs matching hooks against the proxy, which they patch in place', () => {
+      const { proxy, writes } = createExportProxy({ Hono: class Hono {} })
+      const hook = sinon.stub().callsFake(exports => {
+        exports.Hono = class Instrumented {}
+        return exports
+      })
+      const otherFile = sinon.stub()
+      const { loadChannel, publish } = loadBundlerRegister({
+        hooks: { hono: sinon.stub() },
+        instrumentations: {
+          hono: [{ file: 'dist/hono.js', hook, versions: ['>=4'] }, { file: 'other.js', hook: otherFile }],
+        },
+      })
+
+      publish({ esm: true, module: proxy, package: 'hono', path: 'hono/dist/hono.js', version: '4.13.14' })
+
+      sinon.assert.calledOnceWithExactly(hook, proxy, '4.13.14', true)
+      sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'hono' })
+      sinon.assert.notCalled(otherFile)
+      assert.deepStrictEqual(writes.map(([name, value]) => [name, value.name]), [['Hono', 'Instrumented']])
+    })
+
+    it('replaces the default export with a new object returned by a hook, like import-in-the-middle', () => {
+      const original = { original: true }
+      const replacement = { replaced: true }
+      const first = sinon.stub().returns(replacement)
+      const second = sinon.stub()
+      const withDefault = createExportProxy({ default: original, named: original })
+      const withoutDefault = createExportProxy({ named: original })
+      const { publish } = loadBundlerRegister({
+        hooks: { 'test-esm': sinon.stub() },
+        instrumentations: { 'test-esm': [{ hook: first }, { hook: second }] },
+      })
+
+      publish({ esm: true, module: withDefault.proxy, package: 'test-esm', path: 'test-esm', version: '1.0.0' })
+      publish({ esm: true, module: withoutDefault.proxy, package: 'test-esm', path: 'test-esm', version: '1.0.0' })
+
+      // Later hooks receive what earlier hooks returned.
+      sinon.assert.calledWithExactly(second.firstCall, replacement, '1.0.0', true)
+      assert.deepStrictEqual(withDefault.writes, [['default', replacement]])
+      assert.deepStrictEqual(withoutDefault.writes, [])
+    })
+
+    it('selects the default export for patchDefault hooks and skips namespaces lacking one', () => {
+      const original = function connect () {}
+      const instrumented = function instrumented () {}
+      const patchDefault = sinon.stub().returns(instrumented)
+      const namespaceOnly = sinon.stub()
+      const withDefault = createExportProxy({ default: original })
+      const withoutDefault = createExportProxy({ named: original })
+      const { publish } = loadBundlerRegister({
+        hooks: { 'test-default': sinon.stub(), 'test-namespace': sinon.stub() },
+        instrumentations: {
+          'test-default': [{ hook: patchDefault, patchDefault: true }],
+          'test-namespace': [{ hook: namespaceOnly, patchDefault: false }],
+        },
+      })
+
+      publish({ esm: true, module: withDefault.proxy, package: 'test-default', path: 'test-default', version: '1.0.0' })
+      publish({
+        esm: true, module: withoutDefault.proxy, package: 'test-namespace', path: 'test-namespace', version: '1.0.0',
+      })
+
+      sinon.assert.calledOnceWithExactly(patchDefault, original, '1.0.0', true)
+      assert.deepStrictEqual(withDefault.writes, [['default', instrumented]])
+      sinon.assert.notCalled(namespaceOnly)
+      assert.deepStrictEqual(withoutDefault.writes, [])
+    })
+
+    it('skips disabled integrations and incompatible versions, and contains hook failures', () => {
+      const hook = sinon.stub().throws(new Error('patch failed'))
+      const disabledHook = sinon.stub()
+      const { proxy, writes } = createExportProxy({ default: {} })
+      const { log, publish } = loadBundlerRegister({
+        disabled: new Set(['test-disabled']),
+        hooks: { 'test-esm': sinon.stub(), 'test-disabled': sinon.stub() },
+        instrumentations: {
+          'test-esm': [{ hook, versions: ['>=2'] }],
+          'test-disabled': [{ hook: disabledHook }],
+        },
+      })
+
+      publish({ esm: true, module: proxy, package: 'test-esm', path: 'test-esm', version: '1.0.0' })
+      sinon.assert.notCalled(hook)
+      publish({ esm: true, module: proxy, package: 'test-disabled', path: 'test-disabled', version: '1.0.0' })
+      sinon.assert.notCalled(disabledHook)
+      publish({ esm: true, module: proxy, package: 'test-esm', path: 'test-esm', version: '2.0.0' })
+
+      sinon.assert.calledOnce(hook)
+      sinon.assert.calledWithMatch(log.error, 'Error executing bundler hook: %s', 'patch failed')
+      assert.deepStrictEqual(writes, [])
+    })
+  })
+
   it('rejects unmatched paths and incompatible versions', () => {
     const integrationHook = sinon.stub()
     const { publish } = loadBundlerRegister({
@@ -389,6 +484,23 @@ describe('bundler register', () => {
     sinon.assert.calledWithMatch(log.error, 'Error executing bundler hook: %s', 'patch failed')
   })
 })
+
+/**
+ * Mimics the export proxy published by bundler ES module wrappers: writes go through the wrapper's setters.
+ *
+ * @param {Record<string, unknown>} exports
+ */
+function createExportProxy (exports) {
+  const writes = []
+  const proxy = new Proxy({ ...exports }, {
+    set (target, name, value) {
+      writes.push([name, value])
+      target[name] = value
+      return true
+    },
+  })
+  return { proxy, writes }
+}
 
 /**
  * @param {unknown} value
