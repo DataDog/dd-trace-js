@@ -558,6 +558,14 @@ class Config extends ConfigBase {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
+    if (this.llmobs.DD_LLMOBS_ENABLED) {
+      // LLMObs payloads use APM structured metadata, which is only supported by protocol v0.4.
+      if (this.protocolVersion !== '0.4') {
+        log.warn('LLM Observability requires protocol version 0.4 - overriding choice of %s', this.protocolVersion)
+      }
+      setAndTrack(this, 'protocolVersion', '0.4')
+    }
+
     if (this.OTEL_RESOURCE_ATTRIBUTES) {
       for (const [key, value] of Object.entries(this.OTEL_RESOURCE_ATTRIBUTES)) {
         // Not replacing existing tags keeps the order of the tags as before.

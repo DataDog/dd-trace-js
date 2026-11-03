@@ -1767,7 +1767,7 @@ describe('Config', () => {
         DD_LLMOBS_ML_APP: 'myMlApp',
       },
       middlewareTracingEnabled: false,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
       remoteConfig: {
         DD_REMOTE_CONFIGURATION_ENABLED: false,
@@ -2357,7 +2357,7 @@ describe('Config', () => {
       },
       plugins: false,
       port: 6218,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       rateLimit: 1000,
       remoteConfig: {
         pollInterval: 42,
@@ -2458,7 +2458,7 @@ describe('Config', () => {
       peerServiceMapping: { d: 'dd' },
       plugins: false,
       port: 6218,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
       },
@@ -2611,7 +2611,7 @@ describe('Config', () => {
       { name: 'DD_TRACE_PEER_SERVICE_MAPPING', value: 'd:dd', origin: 'code' },
       { name: 'plugins', value: false, origin: 'code' },
       { name: 'DD_TRACE_AGENT_PORT', value: 6218, origin: 'code' },
-      { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.5', origin: 'code' },
+      { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.4', origin: 'code' },
       { name: 'DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS', value: 42, origin: 'code' },
       { name: 'DD_TRACE_REPORT_HOSTNAME', value: true, origin: 'code' },
       { name: 'DD_RUNTIME_METRICS_ENABLED', value: true, origin: 'code' },
@@ -3062,7 +3062,7 @@ describe('Config', () => {
         d: 'dd',
       },
       port: 7777,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
       },
@@ -3167,7 +3167,7 @@ describe('Config', () => {
       },
       middlewareTracingEnabled: true,
       peerServiceMapping: { d: 'dd' },
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
       },
@@ -5858,6 +5858,76 @@ rules:
     it('should not enable agentless exporter by default', () => {
       const config = getConfig()
       assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+    })
+
+    it('should preserve the exporter configuration without enabling global agentless mode', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'api-key'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_AGENTLESS_ENABLED, false)
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, '')
+      assert.strictEqual(config.protocolVersion, '0.4')
+    })
+
+    it('should preserve the default exporter configuration when LLMObs is enabled', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, '')
+    })
+
+    for (const name of ['DD_AGENTLESS_ENABLED', '_DD_APM_TRACING_AGENTLESS_ENABLED']) {
+      it(`should retain the agentless exporter selected by ${name} with LLMObs enabled`, () => {
+        process.env[name] = 'true'
+        process.env.DD_LLMOBS_ENABLED = 'true'
+        process.env.DD_API_KEY = 'api-key'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+      })
+    }
+
+    for (const exporter of ['agent', 'agentless', 'electron', 'log']) {
+      it(`should preserve an explicitly configured ${exporter} exporter when LLMObs is enabled`, () => {
+        process.env.DD_LLMOBS_ENABLED = 'true'
+
+        const config = getConfig({ experimental: { exporter } })
+
+        assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, exporter)
+      })
+    }
+
+    it('should preserve the OTLP trace exporter when LLMObs is enabled', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'llmobs')
+    })
+
+    it('should not enable agentless APM when LLMObs is explicitly disabled', () => {
+      process.env.DD_LLMOBS_ENABLED = 'false'
+      process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+    })
+
+    it('should use protocol v0.4 for LLMObs meta_struct delivery', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.protocolVersion, '0.4')
     })
 
     it('should configure all supported features for agentless mode', () => {
