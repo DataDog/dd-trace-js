@@ -1,8 +1,6 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
-
-const { DEPENDENCY_EVALUATION_CHANNEL, MAX_EVALUATION_TIMESTAMP_MS } = require('../constants/constants')
+const { MAX_EVALUATION_TIMESTAMP_MS } = require('../constants/constants')
 const { snapshotEvaluationContext } = require('./flag-evaluation-context')
 const {
   recordContextTruncated, recordDropped, recordHookError, recordTargetingKeyOmitted,
@@ -10,31 +8,44 @@ const {
 const FlagEvaluationsWriter = require('./flag-evaluations')
 const { setExposureDeliveryStrategy } = require('./util')
 
-const dependencyEvaluationCh = channel(DEPENDENCY_EVALUATION_CHANNEL)
-
 /** Captures terminal SDK results; the writer owns deferred aggregation and delivery. */
 class FlagEvalEVPHook {
   /** @type {FlagEvaluationsWriter} */
   #writer
   #closed = false
   #stopDeliveryStrategy
-  #handleDependencyEvaluation = ({ context, details }) => {
-    this.#capture(details.flagKey, { context }, details)
-  }
+  #dependencyTelemetrySidecar
 
   /**
    * The provider only constructs this hook when evaluation counts are enabled.
    *
    * @param {import('../../config/config-base')} config
+   * @param {{
+   *   takeDependencyEvaluations: (metadata: object | undefined) => Array<{
+   *     flagKey: string,
+   *     details: import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>
+   *   }>
+   * }} dependencyTelemetrySidecar
    */
-  constructor (config) {
+  constructor (config, dependencyTelemetrySidecar) {
     const writer = new FlagEvaluationsWriter(config)
     this.#writer = writer
+    this.#dependencyTelemetrySidecar = dependencyTelemetrySidecar
     this.#stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
       if (this.#closed) return
       writer.setEnabled(enabled, route)
     })
-    dependencyEvaluationCh.subscribe(this.#handleDependencyEvaluation)
+  }
+
+  /**
+   * Successful prerequisite evaluations are available before later application hooks run.
+   * Consume them here so a later hook failure cannot discard their telemetry.
+   *
+   * @param {import('@openfeature/core').HookContext} hookContext
+   * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
+   */
+  after (hookContext, evaluationDetails) {
+    this.#captureDependencies(hookContext, evaluationDetails)
   }
 
   /**
@@ -45,7 +56,23 @@ class FlagEvalEVPHook {
    * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
    */
   finally (hookContext, evaluationDetails) {
+    // Error-coded provider results skip after, but retain the provider metadata
+    // on the final root details. Taking the sidecar batch is idempotent.
+    this.#captureDependencies(hookContext, evaluationDetails)
     this.#capture(hookContext.flagKey, hookContext, evaluationDetails)
+  }
+
+  /**
+   * @param {import('@openfeature/core').HookContext} hookContext
+   * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
+   */
+  #captureDependencies (hookContext, evaluationDetails) {
+    const dependencies = this.#dependencyTelemetrySidecar?.takeDependencyEvaluations(
+      evaluationDetails?.flagMetadata
+    ) ?? []
+    for (const dependency of dependencies) {
+      this.#capture(dependency.flagKey, hookContext, dependency.details)
+    }
   }
 
   /**
@@ -116,7 +143,6 @@ class FlagEvalEVPHook {
   destroy () {
     if (this.#closed) return
     this.#closed = true
-    dependencyEvaluationCh.unsubscribe(this.#handleDependencyEvaluation)
     this.#stopDeliveryStrategy?.()
     this.#writer.destroy()
   }

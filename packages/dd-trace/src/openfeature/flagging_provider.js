@@ -2,11 +2,14 @@
 
 const { channel } = require('dc-polyfill')
 
-const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/openfeature-node-server')
+const {
+  DatadogNodeServerProvider,
+  DependencyTelemetrySidecar,
+} = require('../../../../vendor/dist/@datadog/openfeature-node-server')
 const log = require('../log')
 const { debugChannel } = require('../log/channels')
 const configurationSource = require('./configuration_source')
-const { DEPENDENCY_EVALUATION_CHANNEL, EXPOSURE_CHANNEL } = require('./constants/constants')
+const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const DebugLoggingHook = require('./debug-logging-hook')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
@@ -31,9 +34,11 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @param {import('../config/config-base')} config - Tracer configuration object
    */
   constructor (tracer, config) {
+    const evaluationCountsEnabled = config.featureFlags?.DD_FLAGGING_EVALUATION_COUNTS_ENABLED !== false
+    const dependencyTelemetrySidecar = evaluationCountsEnabled ? new DependencyTelemetrySidecar() : undefined
     super({
       exposureChannel: channel(EXPOSURE_CHANNEL),
-      dependencyEvaluationChannel: channel(DEPENDENCY_EVALUATION_CHANNEL),
+      dependencyTelemetrySidecar,
       initializationTimeoutMs: config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
     })
 
@@ -59,8 +64,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     log.debug('%s created with timeout: %dms', this.constructor.name,
       config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS)
 
-    if (config.featureFlags?.DD_FLAGGING_EVALUATION_COUNTS_ENABLED !== false) {
-      this.#flagEvalEVPHook = new FlagEvalEVPHook(config)
+    if (evaluationCountsEnabled) {
+      this.#flagEvalEVPHook = new FlagEvalEVPHook(config, dependencyTelemetrySidecar)
       this.hooks.push(this.#flagEvalEVPHook)
     }
 

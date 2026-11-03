@@ -37,12 +37,6 @@ module.exports = {
 
   /**
    * @constant
-   * @type {string} Channel name for dependency evaluation submission
-   */
-  DEPENDENCY_EVALUATION_CHANNEL: 'ffe:evaluation:submit',
-
-  /**
-   * @constant
    * @type {string} Reason code for noop provider evaluations
    */
   NOOP_REASON: 'STATIC',

@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
+const { DatadogNodeServerProvider, DependencyTelemetrySidecar } = require('@datadog/openfeature-node-server')
 const { ErrorCode, OpenFeature } = require('@openfeature/server-sdk')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -50,7 +50,10 @@ describe('FlaggingProvider EVP lifecycle', () => {
     Provider = proxyquire('../../src/openfeature/flagging_provider', {
       './writers/flag-eval-evp-hook': Hook,
       './configuration_source': { create: sinon.stub() },
-      '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
+      '../../../../vendor/dist/@datadog/openfeature-node-server': {
+        DatadogNodeServerProvider,
+        DependencyTelemetrySidecar,
+      },
     })
     config = {
       url: new URL('http://localhost:8126'),
