@@ -67,11 +67,14 @@ class AudioBuffer {
   /**
    * @param {number} now
    * @param {number} rate
+   * @param {number} [playbackEnd] Estimated end of the queued PCM, including delivery gaps.
    */
-  trim (now, rate) {
+  trim (now, rate, playbackEnd) {
     if (this.start === undefined || !rate) return
-    const size = Math.max(0, Math.floor((now - this.start) * rate / 1000)) * 2
-    this.total = Math.min(this.total, size)
+    const end = playbackEnd ?? this.start + this.duration(rate)
+    const remaining = Math.max(0, end - now) * rate / 1000
+    const size = Math.max(0, Math.floor(this.total / 2 - remaining)) * 2
+    this.total = size
     if (!this.overflow && this.size > size) {
       this.chunks = [this.bytes().subarray(0, size)]
       this.size = size

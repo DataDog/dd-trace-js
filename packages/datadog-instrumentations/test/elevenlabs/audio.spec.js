@@ -31,6 +31,17 @@ describe('ElevenLabs PCM accumulation', () => {
     assert.equal(audio.start, 90)
     assert.equal(audio.end(16000), 100)
   })
+  for (const retain of [false, true]) {
+    it(`excludes delivery gaps from the played sample count, retain=${retain}`, () => {
+      const audio = new AudioBuffer()
+      audio.append(Buffer.alloc(960, 1).toString('base64'), 0, 24000, false, retain)
+      audio.append(Buffer.alloc(4800, 2).toString('base64'), 100, 24000, false, retain)
+      audio.trim(110, 24000, 200)
+      assert.equal(audio.total, 1440)
+      if (retain) assert.deepEqual(audio.bytes(), Buffer.concat([Buffer.alloc(960, 1), Buffer.alloc(480, 2)]))
+      else assert.equal(audio.bytes().length, 0)
+    })
+  }
   it('cuts output at a sample boundary', () => {
     const audio = new AudioBuffer()
     audio.append(Buffer.alloc(4800, 9).toString('base64'), 100, 24000, false, true)

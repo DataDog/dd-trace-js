@@ -6,6 +6,7 @@ const { AudioBuffer, RAW_LIMIT } = require('./audio')
 
 const AUDIO_PREFIX = '{"user_audio_chunk":"'
 const MAX_TOOL_ID_CHARS = 1024
+const MAX_TOOL_NAME_CHARS = 1024
 
 const EVENT_FIELDS = {
   user_transcript: 'user_transcription_event',
@@ -31,9 +32,12 @@ function eventId (value) {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? BigInt(value) : undefined
 }
 
-/** @param {unknown} value */
-function textOf (value) {
-  if (typeof value === 'string') return value.slice(0, 100_000)
+/**
+ * @param {unknown} value
+ * @param {number} [limit]
+ */
+function textOf (value, limit = 100_000) {
+  if (typeof value === 'string') return value.slice(0, limit)
   return ''
 }
 
@@ -70,6 +74,8 @@ class Session {
   turns = new Map()
   pending = new AudioBuffer()
   pendingText = ''
+  /** @type {number | undefined} */
+  #pendingTextStart = undefined
   early = []
   earlySize = 0
   earlyOverflow = false
@@ -119,7 +125,7 @@ class Session {
       calls: new Map(),
       results: new Map(),
       tools: new Set(),
-      start: input.start ?? now,
+      start: Math.min(input.start ?? now, this.#pendingTextStart ?? now),
       responseTime: now,
       toolEnd: now,
       retired: false,
@@ -142,6 +148,7 @@ class Session {
       turn.metadata.output_audio_omitted_reason = 'sdk_interruption_filter'
     }
     this.pendingText = ''
+    this.#pendingTextStart = undefined
     this.#models.delete(id)
     this.turns.set(id, turn)
     this.options.begin(turn)
@@ -186,6 +193,7 @@ class Session {
         }
       }
     } else if (event.type === 'user_message') {
+      this.#pendingTextStart ??= now
       this.pendingText = textOf(this.pendingText ? `${this.pendingText}\n${textOf(event.text)}` : textOf(event.text))
     } else if (event.type === 'client_tool_result') {
       const id = toolIdOf(event.tool_call_id)
@@ -240,7 +248,7 @@ class Session {
       for (const turn of this.turns.values()) {
         if (turn.id <= id && (!this.responseFinished(turn, now) || (turn.playbackEnd ?? 0) > now)) {
           turn.interrupted = true
-          turn.output.trim(now, this.outputRate)
+          this.trimOutput(turn, now)
         }
       }
       return
@@ -294,27 +302,32 @@ class Session {
         this.boundAudio(turn)
         break
       }
-      case 'client_tool_call':
-        if (toolIdOf(data.tool_call_id) === undefined) {
+      case 'client_tool_call': {
+        const id = toolIdOf(data.tool_call_id)
+        if (id === undefined || (!turn.calls.has(id) && turn.calls.size >= 64)) {
           turn.metadata.tool_calls_omitted = true
           break
         }
-        if (typeof data.tool_call_id === 'string' && (turn.calls.has(data.tool_call_id) || turn.calls.size < 64)) {
-          const argumentsJson = JSON.stringify(data.parameters || {})
-          const used = turn.argumentsSize - (turn.argumentSizes.get(data.tool_call_id) || 0)
-          const argumentsFit = argumentsJson.length + used <= 100_000
-          if (!argumentsFit) turn.metadata.tool_arguments_truncated = true
-          const size = argumentsFit ? argumentsJson.length : 2 // omitted arguments retain the empty object
-          turn.argumentSizes.set(data.tool_call_id, size)
-          turn.argumentsSize = used + size
-          turn.calls.set(data.tool_call_id, {
-            name: textOf(data.tool_name),
-            arguments: argumentsFit ? data.parameters || {} : {},
-            toolId: data.tool_call_id,
-            type: 'tool',
-          })
+        const argumentsJson = JSON.stringify(data.parameters || {})
+        const used = turn.argumentsSize - (turn.argumentSizes.get(id) || 0)
+        const argumentsFit = argumentsJson.length + used <= 100_000
+        if (!argumentsFit) turn.metadata.tool_arguments_truncated = true
+        const size = argumentsFit ? argumentsJson.length : 2 // omitted arguments retain the empty object
+        turn.argumentSizes.set(id, size)
+        turn.argumentsSize = used + size
+        // The 64-call limit also bounds retained names to 65,536 characters per turn.
+        const name = textOf(data.tool_name, MAX_TOOL_NAME_CHARS)
+        if (typeof data.tool_name === 'string' && data.tool_name.length > MAX_TOOL_NAME_CHARS) {
+          turn.metadata.tool_names_truncated = true
         }
+        turn.calls.set(id, {
+          name,
+          arguments: argumentsFit ? data.parameters || {} : {},
+          toolId: id,
+          type: 'tool',
+        })
         break
+      }
       case 'agent_tool_response_full_payload':
         if (toolIdOf(data.tool_call_id) !== undefined && turn.calls.has(data.tool_call_id)) {
           this.toolResult(turn, data.tool_call_id, data.full_tool_result)
@@ -376,6 +389,16 @@ class Session {
       turn.tools.size === 0 && turn.playbackEnd !== undefined && now >= turn.playbackEnd)
   }
 
+  /**
+   * @param {Turn} turn
+   * @param {number} now
+   */
+  trimOutput (turn, now) {
+    turn.output.trim(now, this.outputRate, turn.playbackEnd)
+    // Discarded queued samples must not be subtracted again by another interruption or close.
+    if (turn.playbackEnd !== undefined) turn.playbackEnd = Math.min(turn.playbackEnd, now)
+  }
+
   /** @param {Turn} turn */
   boundAudio (turn) { if (turn.input.size + turn.output.size > RAW_LIMIT) turn.output.omit() }
 
@@ -407,11 +430,12 @@ class Session {
     }
     this.pending = new AudioBuffer()
     this.pendingText = ''
+    this.#pendingTextStart = undefined
     this.early = []
     this.#models.clear()
     for (const turn of this.turns.values()) {
       if (failed && !this.responseFinished(turn, now) && !turn.interrupted) turn.failed = true
-      turn.output.trim(now, this.outputRate)
+      this.trimOutput(turn, now)
       this.finish(turn)
     }
   }

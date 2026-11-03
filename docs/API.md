@@ -419,6 +419,9 @@ Browser/WebRTC conversations (`@elevenlabs/client`), telephony, and standalone s
 Negotiated PCM16 input and output are exported as WAV using their respective sample rates. Audio shares one bounded
 budget per LLM span; unsupported or oversized clips fall back to text with omission metadata. Phase timing and playback
 are estimated, and these spans explicitly opt out of time-to-first-audio metrics.
+Tool capture retains up to 64 calls per turn with IDs and names limited to 1,024 characters. Oversized names are
+truncated; omitted calls and truncated arguments, names, or results are marked in span metadata. SDK handlers still
+receive their original input and execute normally.
 
 For optional speaker activity colors, open the ElevenLabs agent's **Advanced → Client Events** settings and enable
 **VAD score (`vad_score`)**, preserving the other events your application uses. The tracer observes this event without

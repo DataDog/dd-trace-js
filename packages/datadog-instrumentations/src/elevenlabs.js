@@ -215,7 +215,10 @@ channel('_onWebSocketClose').start.subscribe(ctx => {
 })
 channel('executeToolAsync').start.subscribe(ctx => {
   if (handling?.turn && ctx.arguments[1] && typeof ctx.arguments[1] === 'object') {
-    tools.set(ctx.arguments[1], handling)
+    const { session, turn } = handling
+    // Preserve this dispatch's bounded input even if another message reuses its call ID.
+    const call = turn.calls.get(ctx.arguments[1].tool_call_id)
+    if (call) tools.set(ctx.arguments[1], { session, turn, call })
   }
 })
 channel('register').start.subscribe(ctx => {
@@ -226,9 +229,8 @@ channel('register').start.subscribe(ctx => {
   ctx.arguments[1] = shimmer.wrapCallback(handler, original => function (parameters) {
     const owner = tools.get(parameters)
     if (!owner || owner.turn.closed || !spanCh.start.hasSubscribers) return original.apply(this, arguments)
-    const { session, turn } = owner
+    const { session, turn, call } = owner
     const id = parameters.tool_call_id
-    if (!turn.calls.has(id)) return original.apply(this, arguments)
     if (turn.tools.size >= 64) {
       turn.metadata.tool_spans_omitted = true
       return run(turn.scope, () => original.apply(this, arguments))
@@ -237,9 +239,9 @@ channel('register').start.subscribe(ctx => {
       session,
       turn,
       kind: 'tool',
-      name: turn.calls.get(id).name,
+      name: call.name,
       id,
-      parameters,
+      parameters: call.arguments,
       startTime: Date.now(),
       promise: true,
     }
@@ -252,7 +254,8 @@ channel('register').start.subscribe(ctx => {
         tool.promise = value != null && typeof value.then === 'function'
         return value
       }, tool)
-      return tool.promise ? toolAsyncCh.tracePromise(() => result, tool) : result
+      // The SDK assimilates handler results. Share one native promise so lazy thenables run once.
+      return tool.promise ? toolAsyncCh.tracePromise(() => Promise.resolve(result), tool) : result
     })
   })
 })

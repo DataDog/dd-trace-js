@@ -273,6 +273,64 @@ describe('integrations', () => {
         assert.equal(audio.interrupt.callCount, 1)
       })
 
+      for (const mode of ['interruption', 'close']) {
+        for (const gap of [0, 100]) {
+          it(`trims a playback gap using queued audio on ${mode}, gap=${gap}`, async () => {
+            await start()
+            response(); output(1, 20)
+            clock.tick(20 + gap)
+            output(1, 100)
+            clock.tick(10)
+            if (mode === 'interruption') {
+              event('interruption', 'interruption_event', 2)
+              // A repeated cut and later close must not subtract queued samples twice.
+              event('interruption', 'interruption_event', 2)
+              close()
+            } else {
+              conversation.endSession()
+            }
+            const { llmobsSpans } = await getEvents(3)
+            const llm = byName(llmobsSpans, 'elevenlabs response')
+            wav(llm.meta.output.messages[0].audio_parts[0], 24000, pcm(30, 24000, 9))
+            assert.equal(llm.meta.metadata.interrupted, mode === 'interruption')
+          })
+        }
+      }
+
+      it('keeps the earliest typed send time and resets it for the next turn', async () => {
+        await start()
+        const first = Date.now()
+        conversation.sendUserMessage('First')
+        clock.tick(125)
+        conversation.sendUserMessage('More input')
+        clock.tick(375)
+        response(1)
+        clock.tick(100)
+        const second = Date.now()
+        conversation.sendUserMessage('Second')
+        clock.tick(250)
+        response(2); close()
+        const { llmobsSpans } = await getEvents(4)
+        const roots = llmobsSpans.filter(span => span.name === 'elevenlabs audio turn')
+        assert.equal(roots[0].start_ns, first * 1e6)
+        assert.equal(roots[0].duration, 500e6)
+        assert.equal(roots[1].start_ns, second * 1e6)
+        assert.equal(roots[1].duration, 250e6)
+      })
+
+      for (const typedFirst of [false, true]) {
+        it(`uses the earliest typed send or microphone start, typedFirst=${typedFirst}`, async () => {
+          await start()
+          const began = Date.now()
+          if (typedFirst) conversation.sendUserMessage('Typed before audio')
+          input(20)
+          if (!typedFirst) conversation.sendUserMessage('Typed after audio')
+          clock.tick(100); response(); close()
+          const { llmobsSpans } = await getEvents(3)
+          assert.equal(byName(llmobsSpans, 'elevenlabs audio turn').start_ns, began * 1e6)
+        })
+      }
+
       it('retains known late text while unknown stale IDs cannot steal the next input', async () => {
         await start()
         response(2)
@@ -388,6 +446,132 @@ describe('integrations', () => {
           assert.equal(tool.status, 'ok')
           assert.equal(byName(llmobsSpans, 'elevenlabs audio turn').meta.metadata.tool_execution_incomplete, undefined)
           assert.equal(socket.sent.at(-1).result, 'tool result')
+        })
+      }
+
+      for (const reject of [false, true]) {
+        it(`runs a lazy thenable once and shares its SDK/span result, reject=${reject}`, async () => {
+          await start()
+          let calls = 0
+          tools.register('lazy', () => ({
+            then (resolve, fail) {
+              calls++
+              clock.tick(7)
+              if (reject) fail(new TypeError(`lazy failure ${calls}`))
+              else resolve(`lazy result ${calls}`)
+            },
+          }))
+          event('client_tool_call', 'client_tool_call', 1,
+            { tool_name: 'lazy', tool_call_id: 'lazy-call', parameters: {} })
+          for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+          response(); close()
+          const { llmobsSpans } = await getEvents(3)
+          const tool = byName(llmobsSpans, 'lazy')
+          assert.equal(calls, 1)
+          assert.equal(tool.duration, 7e6)
+          assert.equal(socket.sent.at(-1).is_error, reject)
+          assert.equal(socket.sent.at(-1).result, reject ? 'lazy failure 1' : 'lazy result 1')
+          assert.equal(tool.status, reject ? 'error' : 'ok')
+          if (reject) assert.equal(tool.meta['error.message'], 'lazy failure 1')
+          else assert.equal(tool.meta.output.value, 'lazy result 1')
+        })
+      }
+
+      for (const size of [100_000 - 11, 100_000 - 10, 2 * 1024 * 1024]) {
+        it(`uses bounded tool input at argument size ${size}`, async () => {
+          await start()
+          const handler = sinon.stub().returns('done')
+          tools.register('bounded-input', handler)
+          const parameters = { text: 'x'.repeat(size) }
+          event('client_tool_call', 'client_tool_call', 1,
+            { tool_name: 'bounded-input', tool_call_id: 'input-call', parameters })
+          for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+          response(); close()
+          const { llmobsSpans } = await getEvents(3)
+          const tool = byName(llmobsSpans, 'bounded-input')
+          assert.equal(handler.firstCall.args[0].text.length, size)
+          assert.deepEqual(JSON.parse(tool.meta.input.value), size + 11 <= 100_000 ? parameters : {})
+          assert.equal(tool.collection_errors, undefined)
+          assert.ok(Buffer.byteLength(JSON.stringify(tool)) < 110_000)
+        })
+      }
+
+      it('keeps bounded tool input tied to each invocation when a call ID is reused', async () => {
+        await start()
+        const complete = []
+        tools.register('reuse', () => new Promise(resolve => complete.push(resolve)))
+        for (const label of ['first', 'second']) {
+          event('client_tool_call', 'client_tool_call', 1,
+            { tool_name: 'reuse', tool_call_id: 'same', parameters: { label } })
+        }
+        for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+        for (const resolve of complete) resolve('done')
+        for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+        response(); close()
+        const { llmobsSpans } = await getEvents(4)
+        const inputs = llmobsSpans.filter(span => span.name === 'reuse').map(span => JSON.parse(span.meta.input.value))
+        assert.deepEqual(inputs, [{ label: 'first' }, { label: 'second' }])
+      })
+
+      for (const count of [64, 65]) {
+        it(`marks omitted calls only past the call-count limit, count=${count}`, async () => {
+          await start()
+          const handler = sinon.stub().returns('done')
+          tools.register('counted', handler)
+          for (let i = 0; i < count; i++) {
+            event('client_tool_call', 'client_tool_call', 1,
+              { tool_name: 'counted', tool_call_id: `count-${i}`, parameters: {} })
+          }
+          for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+          response(); close()
+          const { llmobsSpans } = await getEvents(66)
+          const llm = byName(llmobsSpans, 'elevenlabs response')
+          assert.equal(handler.callCount, count)
+          assert.equal(llm.meta.output.messages[0].tool_calls.length, 64)
+          assert.equal(llm.meta.metadata.tool_calls_omitted, count === 65 ? true : undefined)
+          assert.equal(socket.sent.at(-1).tool_call_id, `count-${count - 1}`)
+        })
+      }
+
+      it('keeps existing call updates at the call-count limit without claiming omissions', async () => {
+        await start()
+        for (let i = 0; i < 64; i++) {
+          event('client_tool_call', 'client_tool_call', 1,
+            { tool_name: 'remote', tool_call_id: `call-${i}`, parameters: {} })
+        }
+        event('client_tool_call', 'client_tool_call', 1,
+          { tool_name: 'remote', tool_call_id: 'call-63', parameters: { updated: true } })
+        for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+        response(); close()
+        const { llmobsSpans } = await getEvents(2)
+        const llm = byName(llmobsSpans, 'elevenlabs response')
+        const calls = llm.meta.output.messages[0].tool_calls
+        assert.equal(calls.length, 64)
+        assert.deepEqual(calls[63].arguments, { updated: true })
+        assert.equal(llm.meta.metadata.tool_calls_omitted, undefined)
+      })
+
+      for (const length of [1024, 1025, 100_000]) {
+        it(`bounds tool names across a full turn at name length ${length}`, async () => {
+          await start()
+          const names = Array.from({ length: 64 }, (_, i) => `${i}:` + '界'.repeat(length - String(i).length - 1))
+          const handler = sinon.stub().returns('done')
+          for (const name of names) tools.register(name, handler)
+          for (let i = 0; i < names.length; i++) {
+            event('client_tool_call', 'client_tool_call', 1,
+              { tool_name: names[i], tool_call_id: `name-${i}`, parameters: {} })
+          }
+          for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+          response(); close()
+          const { llmobsSpans } = await getEvents(66)
+          const llm = byName(llmobsSpans, 'elevenlabs response')
+          const calls = llm.meta.output.messages[0].tool_calls
+          assert.equal(handler.callCount, 64)
+          assert.equal(calls.length, 64)
+          assert.ok(calls.every(call => call.name.length <= 1024))
+          assert.equal(llm.meta.metadata.tool_names_truncated, length > 1024 ? true : undefined)
+          assert.equal(llm.collection_errors, undefined)
+          assert.ok(Buffer.byteLength(JSON.stringify(llm)) < 300_000)
         })
       }
 
