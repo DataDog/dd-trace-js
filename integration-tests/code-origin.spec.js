@@ -2,11 +2,10 @@
 
 const assert = require('node:assert')
 const path = require('node:path')
-const Axios = require('axios')
 const { assertObjectContains, FakeAgent, spawnProc, sandboxCwd, useSandbox } = require('./helpers')
 
 describe('Code Origin for Spans', function () {
-  let cwd, appFile, agent, proc, axios
+  let cwd, appFile, agent, proc
 
   useSandbox(['fastify'])
 
@@ -27,13 +26,18 @@ describe('Code Origin for Spans', function () {
       },
       stdio: 'pipe',
     })
-    axios = Axios.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
     proc?.kill()
     await agent?.stop()
   })
+
+  async function request () {
+    const response = await fetch(proc.url)
+    assert.strictEqual(response.status, 200)
+    await response.arrayBuffer()
+  }
 
   describe('source map support', function () {
     it('should support source maps', async () => {
@@ -55,7 +59,7 @@ describe('Code Origin for Spans', function () {
             },
           })
         }, 2_500),
-        await axios.get('/'),
+        request(),
       ])
     })
   })

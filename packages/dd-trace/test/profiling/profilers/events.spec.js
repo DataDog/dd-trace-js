@@ -47,7 +47,8 @@ function runOnceAndProfile (startChannel, finishChannel, ctx) {
   try {
     startChannel.publish(ctx)
     finishChannel.publish(ctx)
-    return profiler.profile(true, startTime, new Date())()
+    const stopProfiling = profiler.profile(true, startTime, new Date())
+    return stopProfiling()
   } finally {
     profiler.stop()
   }
@@ -110,7 +111,8 @@ describe('profilers/events', () => {
           startCh.publish(ctx)
           finishCh.publish(ctx)
         }
-        const profile = profiler.profile(true, startTime, new Date())()
+        const stopProfiling = profiler.profile(true, startTime, new Date())
+        const profile = stopProfiling()
         const sampleCount = profile.sample.length
         assert.equal(sampleCount, expectedSampleCount)
       }
@@ -166,7 +168,8 @@ describe('profilers/events', () => {
           }]
         },
       })
-      const profile = profiler.profile(true, startTime, new Date())()
+      const stopProfiling = profiler.profile(true, startTime, new Date())
+      const profile = stopProfiling()
       const labels = collectLabels(profile.sample[0], profile.stringTable)
 
       assert.equal(labels['gc reason'], 'construct_retained,forced')

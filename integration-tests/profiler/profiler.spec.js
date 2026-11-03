@@ -681,6 +681,9 @@ describe('profiler', () => {
         DD_PROFILING_ENABLED: '1',
         DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'warn',
+        // Allocation profiling is not yet supported together with OOM monitoring: combining them triggers an
+        // upstream @datadog/pprof bug in the async OOM callback path. Disable it here until that's fixed upstream.
+        DD_PROFILING_ALLOCATION_ENABLED: '0',
       }
     })
 
@@ -734,13 +737,12 @@ describe('profiler', () => {
 
       // Following tests also use unreliable strategies to export profiles
       // (or check that the process can recover from OOM, which is also unreliable).
-      it('sends a heap profile on OOM with external process and exits successfully', () => {
+      it('sends a heap profile on OOM with the default automatic heap limit extension and exits successfully', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
           env: {
             ...oomEnv,
-            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '20000000',
             DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '3',
           },
         })

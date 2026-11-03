@@ -2,7 +2,7 @@
 
 // From agent truncators: https://github.com/DataDog/datadog-agent/blob/main/pkg/trace/agent/truncator.go
 
-// Values from: https://github.com/DataDog/datadog-agent/blob/main/pkg/trace/traceutil/truncate.go#L22-L27
+// Values from: https://github.com/DataDog/datadog-agent/blob/main/pkg/trace/traceutil/normalize/truncate.go
 // MAX_RESOURCE_NAME_LENGTH the maximum length a span resource can have
 const MAX_RESOURCE_NAME_LENGTH = 5000
 // MAX_META_KEY_LENGTH the maximum length of metadata key
@@ -15,7 +15,7 @@ const MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION = 5000
 const MAX_METRIC_KEY_LENGTH = MAX_META_KEY_LENGTH
 
 // From agent normalizer:
-// https://github.com/DataDog/datadog-agent/blob/main/pkg/trace/traceutil/normalize.go
+// https://github.com/DataDog/datadog-agent/blob/main/pkg/trace/traceutil/normalize/normalize.go
 // DEFAULT_SPAN_NAME is the default name we assign a span if it's missing and we have no reasonable fallback
 const DEFAULT_SPAN_NAME = 'unnamed_operation'
 // DEFAULT_SERVICE_NAME is the default name we assign a service if it's missing and we have no reasonable fallback
@@ -53,7 +53,6 @@ function truncateSpanTestOpt (span) {
  * the formatter no longer reshapes events, it hands the raw array through.
  *
  * @param {{ startTime: number }} event
- * @returns {number}
  */
 function eventTimeNano (event) {
   return Math.round(event.startTime * 1e6)

@@ -19,9 +19,6 @@ function runUserHandler (handler) {
   return userHandlerContext.run(true, handler)
 }
 
-/**
- * @returns {boolean} whether a managed finalizer owns the current lifecycle event
- */
 function shouldDeferLegacyFinalization () {
   return userHandlerContext.getStore() === true
 }

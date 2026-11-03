@@ -28,8 +28,9 @@ class StatsPoint {
   }
 
   addLatencies (checkpoint) {
-    const edgeLatencySec = checkpoint.edgeLatencyNs / 1e9
-    const pathwayLatencySec = checkpoint.pathwayLatencyNs / 1e9
+    // Start times can come from another host's clock, so skew can make these negative.
+    const edgeLatencySec = Math.max(0, checkpoint.edgeLatencyNs / 1e9)
+    const pathwayLatencySec = Math.max(0, checkpoint.pathwayLatencyNs / 1e9)
     this.edgeLatency.accept(edgeLatencySec)
     this.pathwayLatency.accept(pathwayLatencySec)
     this.payloadSize.accept(checkpoint.payloadSize)

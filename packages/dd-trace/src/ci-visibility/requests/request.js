@@ -13,6 +13,7 @@ const {
   singleJitteredDelay,
 } = require('../../exporters/common/retry')
 const { parseUrl } = require('../../exporters/common/url')
+const { getHttpsProxyAgent } = require('../../exporters/common/proxy')
 const { getRateLimitResetDelay } = require('./rate-limit')
 
 const legacyStorage = storage('legacy')
@@ -56,6 +57,16 @@ function request (data, options, callback) {
 
   if (!opts.socketPath) {
     opts.agent = isSecure ? httpsAgent : httpAgent
+  }
+
+  const hasApiKey = headers['dd-api-key'] !== undefined || headers['DD-API-KEY'] !== undefined
+  if (hasApiKey && isSecure) {
+    try {
+      opts.agent = getHttpsProxyAgent(opts, opts.agent)
+    } catch (error) {
+      callback(error)
+      return
+    }
   }
 
   let hasRetried = false

@@ -56,7 +56,6 @@ function writeApprovalArtifacts (input) {
  *
  * @param {Array<{path: string, sha256: string}>|undefined} expected preflight project files
  * @param {Array<{path: string, sha256: string}>} actual approval project files
- * @returns {void}
  */
 function assertExpectedProjectFiles (expected, actual) {
   if (!expected) return
@@ -71,11 +70,11 @@ function assertExpectedProjectFiles (expected, actual) {
  * Loads the reviewed approval file only after its exact bytes match the user-approved SHA-256.
  *
  * @param {string} approvalPath approval JSON path
- * @param {string} expectedDigest user-approved SHA-256
+ * @param {string | undefined} expectedDigest user-approved SHA-256
  * @returns {{material: object, path: string}} verified approval material
  */
 function loadApprovedPlan (approvalPath, expectedDigest) {
-  if (!APPROVAL_DIGEST_PATTERN.test(String(expectedDigest || ''))) {
+  if (!APPROVAL_DIGEST_PATTERN.test(expectedDigest || '')) {
     throw new Error('Invalid --sha256 value. Render a fresh plan with --print-plan.')
   }
 
@@ -109,7 +108,6 @@ function loadApprovedPlan (approvalPath, expectedDigest) {
  *
  * @param {object} material parsed approval material
  * @param {string} approvalPath approved JSON path
- * @returns {void}
  */
 function validateApprovedPlanShape (material, approvalPath) {
   const manifestPath = material?.manifest?.path
@@ -145,7 +143,6 @@ function validateApprovedPlanShape (material, approvalPath) {
  * Creates a standard SHA-256 checksum list for independently checking covered files.
  *
  * @param {object} material approval material
- * @returns {string} checksum manifest
  */
 function getCoveredFilesManifest (material) {
   const files = new Map([[material.manifest.path, material.manifest.sha256]])

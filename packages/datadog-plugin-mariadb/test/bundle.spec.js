@@ -5,19 +5,18 @@ const { mkdtemp, rm, writeFile } = require('node:fs/promises')
 const net = require('node:net')
 const { tmpdir } = require('node:os')
 const path = require('node:path')
-const { performance } = require('node:perf_hooks')
 const { setImmediate: nextImmediate } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
 const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
-const sinon = require('sinon')
 
 const { ANY_STRING } = require('../../../integration-tests/helpers')
 const { CLIENT_PORT_KEY, ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { withFakeNow, withoutImmediateClockRead } = require('./helpers')
 
 const queryStartCh = dc.channel('apm:mariadb:query:start')
 
@@ -66,21 +65,6 @@ async function getClosedPort () {
 }
 
 /**
- * @param {number} start
- * @param {(advanceTo: (value: number) => void) => Promise<unknown>} run
- * @returns {Promise<void>}
- */
-async function withFakeNow (start, run) {
-  const nowStub = sinon.stub(performance, 'now').returns(start)
-
-  try {
-    await run(value => nowStub.returns(value))
-  } finally {
-    nowStub.restore()
-  }
-}
-
-/**
  * Asserts every expected MariaDB resource in the trace containing the named root span.
  *
  * @param {string} rootName
@@ -105,7 +89,7 @@ describe('Plugin', () => {
   describe('mariadb CommonJS bundle', () => {
     if (semver.lt(process.version, '20.0.0')) return
 
-    withVersions('mariadb', 'mariadb', '3.5.3', version => {
+    withVersions('mariadb', 'mariadb', '>=3.5.3', version => {
       const versionModule = `../../../versions/mariadb@${version}`
       let importFilePath
       let temporaryDirectory
@@ -366,16 +350,10 @@ describe('Plugin', () => {
               assert.ok(span, `missing query span: ${inspect(traces.flat().map(span => span.resource))}`)
               assert.strictEqual(span.metrics['mariadb.pool.wait_time'], 0)
             }, { spanResourceMatch: /^SELECT 25 AS bundle_recent_idle$/ })
-            const nowStub = sinon.stub(performance, 'now').returns(100)
 
-            try {
-              const query = pool.query('SELECT 25 AS bundle_recent_idle')
+            const query = withoutImmediateClockRead(() => pool.query('SELECT 25 AS bundle_recent_idle'))
 
-              sinon.assert.notCalled(nowStub)
-              await Promise.all([assertion, query])
-            } finally {
-              nowStub.restore()
-            }
+            await Promise.all([assertion, query])
           } finally {
             await pool.end()
           }
@@ -443,18 +421,14 @@ describe('Plugin', () => {
             await pool.query('CREATE TEMPORARY TABLE dd_bundle_reentrant (value INT)')
             let batch
             pool.once('acquire', () => {
-              batch = pool.batch('INSERT INTO dd_bundle_reentrant VALUES (?)', [[1]])
+              batch = withoutImmediateClockRead(() => {
+                return pool.batch('INSERT INTO dd_bundle_reentrant VALUES (?)', [[1]])
+              })
             })
-            const nowStub = sinon.stub(performance, 'now').returns(100)
 
-            try {
-              await pool.query('SELECT 27 AS bundle_reentrant')
-              assert.ok(batch, 'reentrant batch did not start')
-              await batch
-              sinon.assert.notCalled(nowStub)
-            } finally {
-              nowStub.restore()
-            }
+            await pool.query('SELECT 27 AS bundle_reentrant')
+            assert.ok(batch, 'reentrant batch did not start')
+            await batch
           } finally {
             await pool.end()
           }

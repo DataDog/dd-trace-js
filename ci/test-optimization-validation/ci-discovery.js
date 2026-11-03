@@ -40,8 +40,7 @@ function buildCiDiscovery ({ manifest, diagnosis }) {
   const candidateFound = getManifestWorkflowLocations(manifest)
   const manifestFound = uniqueStrings([...declaredFound, ...candidateFound])
   const searched = normalizeStringArray(declared.searched)
-  let method = 'validator-static-diagnosis'
-  if (candidateFound.length > 0) method = 'framework-ci-command'
+  let method = candidateFound.length > 0 ? 'framework-ci-command' : 'validator-static-diagnosis'
   if (declaredFound.length > 0) method = 'manifest'
   if (typeof declared.method === 'string' && declared.method) method = declared.method
   const found = manifestFound.length > 0 ? manifestFound : staticFound
@@ -83,8 +82,14 @@ function getManifestWorkflowLocations (manifest) {
 
 function getFrameworkCiDiscoveryContradiction (framework, manifest) {
   const ciDiscovery = manifest?.ciDiscovery
-  if (!ciDiscovery || !Array.isArray(ciDiscovery.staticFound) || ciDiscovery.staticFound.length === 0) return null
-  if (!frameworkClaimsNoCi(framework)) return null
+  if (
+    !ciDiscovery ||
+    !Array.isArray(ciDiscovery.staticFound) ||
+    ciDiscovery.staticFound.length === 0 ||
+    !frameworkClaimsNoCi(framework)
+  ) {
+    return null
+  }
 
   return {
     reason: 'CI workflow files were found by validator static diagnosis, but this manifest entry says no CI ' +

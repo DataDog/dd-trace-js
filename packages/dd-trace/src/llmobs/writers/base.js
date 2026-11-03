@@ -4,7 +4,7 @@ const { URL, format } = require('node:url')
 const path = require('node:path')
 const request = require('../../exporters/common/request')
 const { getEnvironmentVariable } = require('../../config/helper')
-const { createServerlessDeliveryTracker } = require('../../serverless')
+const { createServerlessDeliveryTracker, IS_STANDARD_AWS_LAMBDA } = require('../../serverless')
 
 const logger = require('../../log')
 
@@ -17,13 +17,19 @@ const {
 } = require('../constants/writers')
 const { parseResponseAndLog } = require('./util')
 
+const MAX_BUFFER_EVENTS = 1000
+
 class LLMObsBuffer {
-  constructor ({ events, size, routing = {}, isDefault = false, limit = 1000 }) {
+  /**
+   * @param {{
+   *   events: Record<string, unknown>[],
+   *   routing?: { apiKey?: string, site?: string }
+   * }} options
+   */
+  constructor ({ events, routing = {} }) {
     this.events = events
-    this.size = size
+    this.size = 0
     this.routing = routing
-    this.isDefault = isDefault
-    this.limit = limit
   }
 
   clear () {
@@ -46,7 +52,7 @@ class BaseLLMObsWriter {
     this._eventType = eventType
 
     /** @type {LLMObsBuffer} */
-    this._buffer = new LLMObsBuffer({ events: [], size: 0, isDefault: true })
+    this._buffer = new LLMObsBuffer({ events: [] })
 
     /** @type {import('../../config/config-base')} */
     this._config = config
@@ -85,7 +91,7 @@ class BaseLLMObsWriter {
     const apiKey = routing.apiKey
     let buffer = this.#multiTenantBuffers.get(apiKey)
     if (!buffer) {
-      buffer = new LLMObsBuffer({ events: [], size: 0, routing })
+      buffer = new LLMObsBuffer({ events: [], routing })
       this.#multiTenantBuffers.set(apiKey, buffer)
     }
     return buffer
@@ -95,15 +101,14 @@ class BaseLLMObsWriter {
    * @param {Record<string, unknown>} event
    * @param {{ apiKey?: string, site?: string }} [routing]
    * @param {number} [byteLength]
-   * @returns {boolean} `true` if the event was buffered, `false` if it was dropped
    * (e.g. the per-routing buffer was full). Callers that depend on the event
    * actually being submitted should check this value.
    */
   append (event, routing, byteLength) {
     const buffer = this._getBuffer(routing)
 
-    if (buffer.events.length >= buffer.limit) {
-      logger.warn(`${this.constructor.name} event buffer full (limit is ${buffer.limit}), dropping event`)
+    if (buffer.events.length >= MAX_BUFFER_EVENTS) {
+      logger.warn(`${this.constructor.name} event buffer full (limit is ${MAX_BUFFER_EVENTS}), dropping event`)
       telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
       return false
     }
@@ -112,6 +117,8 @@ class BaseLLMObsWriter {
 
     buffer.size += eventSize
     buffer.events.push(event)
+    // The standard Lambda sandbox can freeze before the periodic flush runs.
+    if (IS_STANDARD_AWS_LAMBDA) this.flush()
     return true
   }
 
@@ -158,30 +165,48 @@ class BaseLLMObsWriter {
     }
 
     for (const [apiKey, buffer] of this.#multiTenantBuffers) {
-      if (buffer.events.length === 0) continue
+      if (buffer.events.length === 0) {
+        this.#multiTenantBuffers.delete(apiKey)
+        continue
+      }
+      const site = buffer.routing.site || this._config.site
+      const maskedApiKey = `****${apiKey.slice(-4)}`
+      let options
+      let url
+      try {
+        options = {
+          headers: {
+            'Content-Type': 'application/json',
+            'DD-API-KEY': apiKey,
+          },
+          method: 'POST',
+          timeout: this._timeout,
+          url: new URL(format({
+            protocol: 'https:',
+            hostname: `${this._intake}.${site}`,
+          })),
+          path: this._baseEndpoint,
+        }
+        url = this.#buildUrl(options.url.href, options.path)
+      } catch (error) {
+        buffer.clear()
+        this.#multiTenantBuffers.delete(apiKey)
+        logger.error(
+          'Failed to route LLMObs %s events for API key %s: %s',
+          this._eventType,
+          maskedApiKey,
+          error.message
+        )
+        continue
+      }
+
       const events = buffer.events
       buffer.clear()
-      const site = buffer.routing.site || this._config.site
-      const options = {
-        headers: {
-          'Content-Type': 'application/json',
-          'DD-API-KEY': apiKey,
-        },
-        method: 'POST',
-        timeout: this._timeout,
-        url: new URL(format({
-          protocol: 'https:',
-          hostname: `${this._intake}.${site}`,
-        })),
-        path: this._baseEndpoint,
-      }
-      const url = this.#buildUrl(options.url.href, options.path)
-      const maskedApiKey = apiKey ? `****${apiKey.slice(-4)}` : ''
+      this.#multiTenantBuffers.delete(apiKey)
       log.debug('Encoding and flushing multi-tenant buffer for %s', maskedApiKey)
       requests.push({ events, options, url })
     }
 
-    this.#cleanupEmptyBuffers()
     return requests
   }
 
@@ -192,14 +217,6 @@ class BaseLLMObsWriter {
       parseResponseAndLog(err, code, events.length, url, this._eventType)
       done?.()
     })
-  }
-
-  #cleanupEmptyBuffers () {
-    for (const [key, buffer] of this.#multiTenantBuffers) {
-      if (buffer.events.length === 0) {
-        this.#multiTenantBuffers.delete(key)
-      }
-    }
   }
 
   makePayload (events) {}
@@ -277,12 +294,7 @@ class BaseLLMObsWriter {
   }
 
   _encode (payload) {
-    return JSON.stringify(payload, (key, value) => {
-      if (typeof value === 'string') {
-        return encodeUnicode(value) // serialize unicode characters
-      }
-      return value
-    }).replaceAll(String.raw`\\u`, String.raw`\u`) // remove double escaping
+    return encodeUnicode(JSON.stringify(payload))
   }
 }
 

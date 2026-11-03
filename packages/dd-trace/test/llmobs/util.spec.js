@@ -7,16 +7,12 @@ const { before, describe, it } = require('mocha')
 const getConfig = require('../../src/config')
 const {
   agentNameWireSafe,
-  appendOptionalPropagatedTag,
-  audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
   generateLlmObsTraceId,
   llmObsTraceIdToWire,
-  formatAudioPart,
   getFunctionArguments,
   normalizeLlmObsTraceId,
-  stripTagsetEntry,
   validateCostTags,
   safeJsonParse,
   validateKind,
@@ -98,65 +94,6 @@ describe('util', () => {
     it('accepts a name at the 256 byte cap and rejects the first byte over', () => {
       assert.strictEqual(agentNameWireSafe('a'.repeat(256)), true)
       assert.strictEqual(agentNameWireSafe('a'.repeat(257)), false)
-    })
-  })
-
-  describe('appendOptionalPropagatedTag', () => {
-    it('appends key=value to an empty tagset', () => {
-      assert.strictEqual(appendOptionalPropagatedTag('', 'k', 'v'), 'k=v')
-    })
-
-    it('appends with a comma separator to a non-empty tagset', () => {
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'v'), 'a=1,k=v')
-    })
-
-    it('returns the original tagset when value is falsy', () => {
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', undefined), 'a=1')
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', ''), 'a=1')
-    })
-
-    it('returns the original tagset when the safeguard rejects the value', () => {
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'bad', () => false), 'a=1')
-    })
-
-    it('appends when the safeguard accepts the value', () => {
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'good', () => true), 'a=1,k=good')
-    })
-
-    it('skips the entry when it would exceed maxTagSetLength', () => {
-      // 'a=1' is 3 chars; ',k=v' is 4 chars; total 7. Cap at 6 → skip.
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'v', null, 6), 'a=1')
-    })
-
-    it('appends when the entry fits exactly within maxTagSetLength', () => {
-      // 'a=1' (3) + ',k=v' (4) = 7. Cap at 7 → fits.
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'v', null, 7), 'a=1,k=v')
-    })
-  })
-
-  describe('stripTagsetEntry', () => {
-    it('removes a key=value entry from the middle of the tagset', () => {
-      assert.strictEqual(stripTagsetEntry('a=1,b=2,c=3', 'b'), 'a=1,c=3')
-    })
-
-    it('removes a key=value entry from the start of the tagset', () => {
-      assert.strictEqual(stripTagsetEntry('b=2,c=3', 'b'), 'c=3')
-    })
-
-    it('removes a key=value entry from the end of the tagset', () => {
-      assert.strictEqual(stripTagsetEntry('a=1,b=2', 'b'), 'a=1')
-    })
-
-    it('removes all occurrences of a duplicate key', () => {
-      assert.strictEqual(stripTagsetEntry('k=old,a=1,k=new', 'k'), 'a=1')
-    })
-
-    it('returns the original tagset unchanged when the key is absent', () => {
-      assert.strictEqual(stripTagsetEntry('a=1,c=3', 'b'), 'a=1,c=3')
-    })
-
-    it('returns empty string when stripping the only entry', () => {
-      assert.strictEqual(stripTagsetEntry('k=v', 'k'), '')
     })
   })
 
@@ -479,57 +416,6 @@ describe('util', () => {
     it('is a no-op-safe when span has no context', () => {
       assert.strictEqual(findGenAIAncestorSpanId(undefined), null)
       assert.strictEqual(findGenAIAncestorSpanId({}), null)
-    })
-  })
-
-  describe('audioMimeTypeFromFormat', () => {
-    it('maps a format to audio/<format> by default', () => {
-      assert.strictEqual(audioMimeTypeFromFormat('wav'), 'audio/wav')
-      assert.strictEqual(audioMimeTypeFromFormat('opus'), 'audio/opus')
-      assert.strictEqual(audioMimeTypeFromFormat('mp3'), 'audio/mp3')
-    })
-
-    it('prefers a provider override from mimeTypeLookup', () => {
-      assert.strictEqual(audioMimeTypeFromFormat('mp3', { mp3: 'audio/mpeg' }), 'audio/mpeg')
-      assert.strictEqual(audioMimeTypeFromFormat('wav', { mp3: 'audio/mpeg' }), 'audio/wav')
-    })
-
-    it('normalizes whitespace and case', () => {
-      assert.strictEqual(audioMimeTypeFromFormat('  MP3 ', { mp3: 'audio/mpeg' }), 'audio/mpeg')
-      assert.strictEqual(audioMimeTypeFromFormat('WAV'), 'audio/wav')
-    })
-
-    it('defaults to audio/wav for missing or non-string formats', () => {
-      assert.strictEqual(audioMimeTypeFromFormat(''), 'audio/wav')
-      assert.strictEqual(audioMimeTypeFromFormat('   '), 'audio/wav')
-      assert.strictEqual(audioMimeTypeFromFormat(undefined), 'audio/wav')
-      assert.strictEqual(audioMimeTypeFromFormat(5), 'audio/wav')
-    })
-  })
-
-  describe('formatAudioPart', () => {
-    it('passes through an existing base64 string', () => {
-      assert.deepStrictEqual(
-        formatAudioPart('aGVsbG8=', 'audio/wav'),
-        { mimeType: 'audio/wav', content: 'aGVsbG8=' }
-      )
-    })
-
-    it('base64-encodes Buffer and Uint8Array input', () => {
-      const expected = Buffer.from('hello').toString('base64')
-      assert.deepStrictEqual(
-        formatAudioPart(Buffer.from('hello'), 'audio/mpeg'),
-        { mimeType: 'audio/mpeg', content: expected }
-      )
-      assert.deepStrictEqual(
-        formatAudioPart(new Uint8Array([104, 101, 108, 108, 111]), 'audio/mpeg'),
-        { mimeType: 'audio/mpeg', content: expected }
-      )
-    })
-
-    it('passes through non-binary, non-string input unchanged (tagger soft-skips it)', () => {
-      const result = formatAudioPart(5, 'audio/wav')
-      assert.deepStrictEqual(result, { mimeType: 'audio/wav', content: 5 })
     })
   })
 })

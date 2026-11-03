@@ -101,7 +101,6 @@ function unwrapChain (node) {
 
 /**
  * @param {import('estree').Node} node
- * @returns {boolean}
  */
 function isAssertOkCall (node) {
   return (
@@ -197,7 +196,6 @@ function isStringLiteral (node) {
 
 /**
  * @param {import('estree').Node} node
- * @returns {boolean}
  */
 function isRegexLiteral (node) {
   return node?.type === 'Literal' && node.regex != null

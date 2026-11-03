@@ -337,7 +337,6 @@ function getToolNameFromTags (tags) {
 
 /**
  * @param {unknown} value
- * @returns {string}
  */
 function stringifyToolCallResult (value) {
   return JSON.stringify(value) ?? UNPARSABLE_TOOL_RESULT
@@ -345,7 +344,6 @@ function stringifyToolCallResult (value) {
 
 /**
  * @param {ToolCallContentPart[]} value
- * @returns {string}
  */
 function formatToolCallContent (value) {
   if (!Array.isArray(value)) return UNPARSABLE_TOOL_RESULT
@@ -388,7 +386,6 @@ function formatToolCallContent (value) {
 
 /**
  * @param {ToolCallResultContent | null | undefined} content
- * @returns {string}
  */
 function getToolCallResultContent (content) {
   try {
@@ -426,7 +423,6 @@ function getToolCallResultContent (content) {
  * Computes the LLM Observability `ai` span name
  * @param {string} operation
  * @param {string} functionId
- * @returns {string}
  */
 function getLlmObsSpanName (operation, functionId) {
   return functionId ? `${functionId}.${operation}` : operation

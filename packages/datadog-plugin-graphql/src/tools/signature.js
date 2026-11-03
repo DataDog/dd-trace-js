@@ -6,8 +6,7 @@ const transforms = require('./transforms')
 // Apollo Server / Yoga / Mercurius hand back the same parsed `DocumentNode`
 // from their own document caches per execute, so memoizing the signature on
 // the document keeps the visit/print pipeline off the hot path. The inner
-// Map keys on operationName since `separateOperations` picks a different
-// sub-document for each operation.
+// Map keys on operationName since each operation has a different sub-document.
 const cache = new WeakMap()
 
 function defaultEngineReportingSignature (ast, operationName) {

@@ -1,11 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const guard = require('../startup-guard')
 
 const BaseAwsSdkPlugin = require('../../../packages/datadog-plugin-aws-sdk/src/base')
 const EventBridge = require('../../../packages/datadog-plugin-aws-sdk/src/services/eventbridge')
 const Lambda = require('../../../packages/datadog-plugin-aws-sdk/src/services/lambda')
+const guard = require('../startup-guard')
 
 const { VARIANT } = process.env
 

@@ -36,7 +36,6 @@ class SpanSampler {
    * span sampling metadata when appropriate.
    *
    * @param {import('./opentracing/span_context')} spanContext
-   * @returns {void}
    */
   sample (spanContext) {
     const decision = spanContext._sampling.priority

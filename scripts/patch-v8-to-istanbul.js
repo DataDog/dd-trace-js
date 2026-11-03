@@ -134,7 +134,6 @@ for (const marker of requiredMarkers) {
  * @param {RegExp} re        matches the region, pristine or previously patched
  * @param {string} original  exact pristine text (mismatch without the marker = upstream changed)
  * @param {string} replacement
- * @returns {boolean} whether the file is now patched
  */
 function applyPatch (relTarget, sentinel, re, original, replacement) {
   let targetFile

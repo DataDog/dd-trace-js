@@ -43,11 +43,17 @@ function buildClient (service, callback) {
   })
 }
 
-const client = await buildClient({
+await buildClient({
   getUnary: (_, callback) => callback(),
 })
 
-client.getUnary({ first: 'foobar' }, () => {})
+const identity = (b) => b
+const directClient = new grpc.Client(`127.0.0.1:${port}`, grpc.credentials.createInsecure())
+await new Promise((resolve, reject) =>
+  directClient.makeUnaryRequest('/test.TestService/getUnary', identity, identity, Buffer.alloc(0),
+    (err) => err ? reject(err) : resolve()))
+
+directClient.close()
 
 if (server) {
   await server.forceShutdown()

@@ -16,25 +16,27 @@ if (PROFILER !== 'space' && PROFILER !== 'all') {
 
 tracer.init({ profiling: 'true' })
 
-assert.equal(tracer._profilerStarted, true, 'profiler.start did not return true')
+tracer.profilerStarted().then((started) => {
+  assert.equal(started, true, 'profiler.start did not return true')
 
-// Keep the process busy so the wall and space profilers actually sample. Sized
-// to stay under the 60s upload period, so no profile is exported and no agent
-// is required.
-guard.loopStart()
-const ROUNDS = 32_000
-let sink = 0
-for (let round = 0; round < ROUNDS; round++) {
-  for (let i = 0; i < 20_000; i++) {
-    sink += Math.sqrt(i) * Math.cos(i)
+  // Keep the process busy so the wall and space profilers actually sample. Sized
+  // to stay under the 60s upload period, so no profile is exported and no agent
+  // is required.
+  guard.loopStart()
+  const ROUNDS = 32_000
+  let sink = 0
+  for (let round = 0; round < ROUNDS; round++) {
+    for (let i = 0; i < 20_000; i++) {
+      sink += Math.sqrt(i) * Math.cos(i)
+    }
+    const items = new Array(2000)
+    for (let i = 0; i < items.length; i++) {
+      items[i] = { index: i, label: `item-${i}` }
+    }
+    sink += items[round % items.length].index
   }
-  const items = new Array(2000)
-  for (let i = 0; i < items.length; i++) {
-    items[i] = { index: i, label: `item-${i}` }
-  }
-  sink += items[round % items.length].index
-}
 
-assert.notEqual(sink, Infinity)
+  assert.notEqual(sink, Infinity)
 
-guard.done()
+  guard.done()
+})

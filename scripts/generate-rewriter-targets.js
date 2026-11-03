@@ -3,7 +3,9 @@
 const { readFileSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 
-const instrumentations = require('../packages/datadog-instrumentations/src/helpers/rewriter/instrumentations')
+const {
+  instrumentations,
+} = require('../packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry')
 
 const CHECK_FLAG = '--check'
 const OUTPUT_PATH_IN_REPOSITORY = 'packages/datadog-instrumentations/src/helpers/rewriter/targets.json'
@@ -17,7 +19,6 @@ function generateRewriterTargets () {
     targets[`${name}/${filePath}`] = name
   }
 
-  // The replacer array orders the keys, so adding a descriptor stays a one-line diff.
   return `${JSON.stringify(targets, Object.keys(targets).sort(), 2)}\n`
 }
 
@@ -27,12 +28,12 @@ function checkRewriterTargets () {
   }
 
   // eslint-disable-next-line no-console
-  console.error(`❌ The rewriter target map is out of date.
+  console.error(`❌ The generated rewriter metadata is out of date.
 
-The checked-in map no longer matches the rewriter instrumentation descriptors in:
-- packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/
+The checked-in map no longer matches the registered rewriter instrumentation descriptors in:
+- packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry.js
 
-A stale map silently disables rewriting for the descriptors it is missing.
+A stale file can silently disable rewriting or plugin activation.
 
 To regenerate it locally, run:
   npm run generate:rewriter:targets

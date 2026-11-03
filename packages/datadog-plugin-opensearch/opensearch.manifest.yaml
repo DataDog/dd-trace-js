@@ -1,0 +1,11 @@
+_v: 1
+name: opensearch
+display_name: OpenSearch
+description: Instruments OpenSearch client requests, capturing request details, connection metadata, and errors.
+packages:
+- name: '@opensearch-project/opensearch'
+category:
+- db.client
+systems:
+- opensearch
+creation_date: '2022-10-17'

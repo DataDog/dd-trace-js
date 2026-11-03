@@ -1,6 +1,6 @@
 'use strict'
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -90,19 +90,22 @@ describe('telemetry logs', () => {
     let logCollectorAdd
     let telemetryLog
     let errorLog
+    let logs
 
     beforeEach(() => {
       telemetryLog = dc.channel('datadog:telemetry:log')
-      errorLog = dc.channel('datadog:log:error')
+      errorLog = dc.channel('datadog:log:error:record')
 
       logCollectorAdd = sinon.stub()
-      const logs = proxyquire('../../../src/telemetry/logs', {
+      logs = proxyquire('../../../src/telemetry/logs', {
         './log-collector': {
           add: logCollectorAdd,
         },
       })
       logs.start(defaultConfig)
     })
+
+    afterEach(() => logs.stop())
 
     it('should be not called with DEBUG level', () => {
       telemetryLog.publish({ message: 'message', level: 'DEBUG' })
@@ -145,8 +148,8 @@ describe('telemetry logs', () => {
       sinon.assert.notCalled(logCollectorAdd)
     })
 
-    describe('datadog:log:error', () => {
-      it('should be called when an Error object is published to datadog:log:error', () => {
+    describe('datadog:log:error:record', () => {
+      it('should collect the cause of an error record', () => {
         const error = new Error('message')
         const stack = error.stack
         errorLog.publish({ cause: error, sendViaTelemetry: true })
@@ -159,7 +162,7 @@ describe('telemetry logs', () => {
         }))
       })
 
-      it('should be called when an error string is published to datadog:log:error', () => {
+      it('should collect the message of an error record', () => {
         errorLog.publish({ message: 'custom error message', sendViaTelemetry: true })
 
         sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
@@ -169,13 +172,13 @@ describe('telemetry logs', () => {
         }))
       })
 
-      it('should not be called when an invalid object is published to datadog:log:error', () => {
+      it('should ignore invalid error records', () => {
         errorLog.publish({ invalid: 'field', sendViaTelemetry: true })
 
         sinon.assert.notCalled(logCollectorAdd)
       })
 
-      it('should not be called when an object without message and stack is published to datadog:log:error', () => {
+      it('should ignore unresolved error records', () => {
         errorLog.publish(Log.parse(() => new Error('error')))
 
         sinon.assert.notCalled(logCollectorAdd)
@@ -212,6 +215,8 @@ describe('telemetry logs', () => {
         },
       })
     })
+
+    afterEach(() => logs.stop())
 
     it('should drain logCollector and call sendData', () => {
       logs.start(defaultConfig)

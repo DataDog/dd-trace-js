@@ -258,6 +258,32 @@ describe('Plugin', () => {
             })
           })
 
+          it('should preserve parent context when native completion is synchronous', async () => {
+            const client = await aerospike.connect({ ...config, maxConnsPerNode: 0 })
+            const tracesPromise = agent.assertSomeTraces(traces => {
+              const commandSpans = traces.flat().filter(span => span.meta.component === 'aerospike')
+
+              assert.strictEqual(commandSpans.length, 1)
+            }, { spanResourceMatch: /^Get$/ })
+            const callbackPromise = tracer.trace('test', parentSpan => new Promise((resolve, reject) => {
+              client.get(key, commandError => {
+                try {
+                  assert.strictEqual(commandError?.code, aerospike.status.ERR_NO_MORE_CONNECTIONS)
+                  assert.strictEqual(tracer.scope().active(), parentSpan)
+                  resolve()
+                } catch (error) {
+                  reject(error)
+                }
+              })
+            }))
+
+            try {
+              await Promise.all([callbackPromise, tracesPromise])
+            } finally {
+              client.close(false)
+            }
+          })
+
           it('should handle errors', done => {
             let error
 

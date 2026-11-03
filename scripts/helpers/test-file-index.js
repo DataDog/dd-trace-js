@@ -71,7 +71,6 @@ function walkTestFiles (repoRoot) {
  * on a bare string keeps them and would then compare one segment too many.
  *
  * @param {string} pattern
- * @returns {string}
  */
 function normalizePattern (pattern) {
   if (!pattern.includes('./') && !pattern.includes('//')) return pattern
@@ -97,7 +96,6 @@ function normalizePattern (pattern) {
  * Longest leading directory path of `pattern` that contains no wildcard.
  *
  * @param {string} pattern
- * @returns {string}
  */
 function literalPrefix (pattern) {
   const magic = pattern.search(PATTERN_MAGIC)

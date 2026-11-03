@@ -1,11 +1,13 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const Module = require('node:module')
+const vm = require('node:vm')
 
 const sinon = require('sinon')
 const dc = require('dc-polyfill')
-const { describe, it, before, beforeEach } = require('mocha')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
 require('./setup/core')
 const Hook = require('../src/ritm')
@@ -51,6 +53,57 @@ describe('Ritm', () => {
 
     moduleLoadStartChannel.subscribe(startListener)
     moduleLoadEndChannel.subscribe(endListener)
+  })
+
+  afterEach(() => {
+    moduleLoadStartChannel.unsubscribe(startListener)
+    moduleLoadEndChannel.unsubscribe(endListener)
+  })
+
+  it('balances nested failed loads, preserves thrown values, and instruments a successful retry', () => {
+    const state = require('./ritm-tests/module-load-state')
+    const events = []
+    const start = payload => events.push(['start', payload.filename])
+    const end = payload => events.push(['end', payload.filename, Object.hasOwn(payload, 'module')])
+    const onRequire = sinon.spy(exports => ({ ...exports, patched: true }))
+    const hook = Hook(['./ritm-tests/module-load-parent'], onRequire)
+    moduleLoadStartChannel.subscribe(start)
+    moduleLoadEndChannel.subscribe(end)
+    try {
+      for (const failure of [new Error('module evaluation failed'), undefined]) {
+        events.length = 0
+        state.load = () => { throw failure }
+        let threw = false
+        try {
+          require('./ritm-tests/module-load-parent')
+        } catch (error) {
+          threw = true
+          assert.equal(error, failure)
+        }
+        assert.equal(threw, true)
+        const stack = []
+        for (const [kind, filename] of events) {
+          if (kind === 'start') stack.push(filename)
+          else assert.equal(stack.pop(), filename)
+        }
+        assert.deepEqual(stack, [])
+        for (const basename of ['module-load-parent.js', 'module-load-retry.js']) {
+          const matching = events.filter(([, filename]) => filename.endsWith(basename))
+          assert.deepEqual(matching.map(([kind, , hasModule]) => [kind, hasModule]), [
+            ['start', undefined], ['end', false],
+          ])
+        }
+        assert.equal(onRequire.callCount, 0)
+      }
+      state.load = () => ({ loaded: true })
+      assert.deepEqual(require('./ritm-tests/module-load-parent'), { loaded: true, patched: true })
+      assert.equal(onRequire.callCount, 1)
+    } finally {
+      state.load = () => ({ loaded: true })
+      moduleLoadStartChannel.unsubscribe(start)
+      moduleLoadEndChannel.unsubscribe(end)
+      hook.unhook()
+    }
   })
 
   it('should shim util', () => {
@@ -147,6 +200,28 @@ describe('Ritm', () => {
       } else {
         delete require.cache[prefixedKey]
       }
+    }
+  })
+
+  it('does not mistake a bundler external factory cache for Node require.cache', () => {
+    const filename = require.resolve('../src/ritm')
+    const nativeRequire = Module.createRequire(filename)
+    const bundledRequire = name => nativeRequire(name)
+    // External factories enter the bundle cache with empty exports before calling native require.
+    bundledRequire.cache = { net: { exports: {} }, 'node:net': { exports: {} } }
+    const mod = new Module(filename)
+    const factory = vm.runInThisContext(Module.wrap(fs.readFileSync(filename, 'utf8')))
+    factory(mod.exports, bundledRequire, mod, filename, __dirname)
+    const onRequire = sinon.spy(exports => exports)
+    const hook = mod.exports(['net'], onRequire)
+    try {
+      const net = require('net')
+      assert.equal(typeof net.isIP, 'function')
+      assert.equal(require('net'), net)
+      assert.equal(require('node:net'), net)
+      sinon.assert.calledOnce(onRequire)
+    } finally {
+      hook.unhook()
     }
   })
 

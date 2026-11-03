@@ -1,14 +1,18 @@
 import { startVitest } from 'vitest/node'
+import { getVitestOptions, usesModeArgument } from './options.mjs'
 
 async function runProgrammaticTests () {
   try {
-    const vitest = await startVitest('test', [], {
+    const options = getVitestOptions({
       test: {
         environment: 'node',
       },
       run: true,
       watch: false,
     })
+    const vitest = usesModeArgument
+      ? await startVitest('test', [], options)
+      : await startVitest([], options)
 
     await vitest.close()
   } catch (error) {

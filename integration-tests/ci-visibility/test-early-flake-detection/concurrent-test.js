@@ -3,9 +3,10 @@
 const { describe, expect, test } = require('@jest/globals')
 
 describe('early flake detection concurrent tests', () => {
-  test.concurrent.only.each([
+  const parameterizedTest = test.concurrent.only.each([
     ['can pass normally'],
-  ])('%s', () => {
+  ])
+  parameterizedTest('%s', () => {
     expect(1 + 2).toBe(3)
   })
 })

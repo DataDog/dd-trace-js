@@ -1,5 +1,7 @@
 'use strict'
 
+const { writeFileSync } = require('node:fs')
+
 const { test: base, expect } = require('@playwright/test')
 
 let releaseDeferredFailureScreenshot
@@ -43,6 +45,12 @@ test.skip('does not reserve a worker trace slot for an expected skip', () => {})
 test('uploads only the automatic failure screenshot', async ({ page }, testInfo) => {
   await page.goto(process.env.PW_BASE_URL)
 
+  if (process.env.PLAYWRIGHT_LOG_MEDIA_CONFIG === 'true') {
+    const { screenshot, video } = testInfo.project.use
+    // eslint-disable-next-line no-console
+    console.log(`FAILURE_MEDIA_CONFIG=${JSON.stringify({ screenshot, video })}`)
+  }
+
   const manualScreenshotPath = testInfo.outputPath('test-failed-99.png')
   await page.screenshot({ path: manualScreenshotPath })
   await testInfo.attach('screenshot', {
@@ -57,6 +65,30 @@ test('uploads only the automatic failure screenshot', async ({ page }, testInfo)
     path: injectedScreenshotPath,
     contentType: 'image/png',
   })
+
+  const manualVideoPath = testInfo.outputPath('manual-video.webm')
+  writeFileSync(manualVideoPath, 'manual video attachment')
+  await testInfo.attach('video', {
+    path: manualVideoPath,
+    contentType: 'video/webm',
+  })
+
+  const injectedVideoPath = testInfo.outputPath('injected-video.webm')
+  writeFileSync(injectedVideoPath, 'injected video attachment')
+  testInfo.attachments.push({
+    name: 'video',
+    path: injectedVideoPath,
+    contentType: 'video/webm',
+  })
+
+  if (process.env.PLAYWRIGHT_AUTO_NAMED_MANUAL_VIDEO === 'true') {
+    const autoNamedManualVideoPath = testInfo.outputPath('video-2.webm')
+    writeFileSync(autoNamedManualVideoPath, 'manual video attachment with an automatic filename')
+    await testInfo.attach('video', {
+      path: autoNamedManualVideoPath,
+      contentType: 'video/webm',
+    })
+  }
 
   expect(true).toBe(false)
 })

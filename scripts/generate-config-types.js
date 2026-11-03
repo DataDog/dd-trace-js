@@ -41,6 +41,7 @@ const PROPERTY_TYPE_OVERRIDES = {
 }
 const TRANSFORM_TYPE_OVERRIDES = {
   normalizeProfilingEnabled: "'true' | 'false' | 'auto'",
+  normalizeProfilingHeapLimitExtensionSize: "number | 'auto'",
   normalizeProfilingUploadCompression: '{ method: string; level: number | undefined }',
   parseOtelTags: 'Record<string, string>',
   sampleRate: 'number',
@@ -132,8 +133,7 @@ function findCalculatedFallbackProperties () {
 const CALCULATED_FALLBACK_PROPERTIES = findCalculatedFallbackProperties()
 
 function withUndefined (type, entry, propertyName) {
-  if (entry.default !== null) return type
-  if (CALCULATED_FALLBACK_PROPERTIES.has(propertyName)) return type
+  if (entry.default !== null || CALCULATED_FALLBACK_PROPERTIES.has(propertyName)) return type
   return `${type} | undefined`
 }
 

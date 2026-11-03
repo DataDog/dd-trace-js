@@ -370,6 +370,32 @@ describe('Appsec Waf Telemetry metrics', () => {
         sinon.assert.calledWith(track, 77)
       })
 
+      it('should report accumulated WAF and RASP durations with the same version tags', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({ duration: 10, durationExt: 20, wafVersion, rulesVersion }, req)
+        appsecTelemetry.updateRaspRequestsMetricTags(
+          { duration: 30, durationExt: 40, wafVersion, rulesVersion },
+          req,
+          { type: 'rule-type' }
+        )
+
+        appsecTelemetry.incrementRequestDurationMetrics(req)
+
+        const versionsTags = {
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion,
+        }
+        sinon.assert.callCount(distribution, 4)
+        sinon.assert.calledWithExactly(distribution, 'waf.duration', versionsTags)
+        sinon.assert.calledWithExactly(distribution, 'waf.duration_ext', versionsTags)
+        sinon.assert.calledWithExactly(distribution, 'rasp.duration', versionsTags)
+        sinon.assert.calledWithExactly(distribution, 'rasp.duration_ext', versionsTags)
+        sinon.assert.callCount(track, 4)
+        sinon.assert.calledWith(track, 10)
+        sinon.assert.calledWith(track, 20)
+        sinon.assert.calledWith(track, 30)
+        sinon.assert.calledWith(track, 40)
+      })
+
       it('should not report waf.duration/waf.duration_ext when there is no accumulated duration', () => {
         appsecTelemetry.incrementRequestDurationMetrics(req)
 

@@ -66,6 +66,31 @@ describe('OpenFeature configuration source', () => {
     )
   })
 
+  it('uses shared site normalization for the managed UFC endpoint', () => {
+    config.site = '  MOCK-INTAKE.INVALID  '
+
+    assert.strictEqual(
+      createSourceConfig().endpoint.toString(),
+      'https://ufc-server.ff-cdn.mock-intake.invalid/api/v2/feature-flagging/config/rules-based/server?dd_env=my+env'
+    )
+  })
+
+  it('rejects an invalid managed site without logging its value', () => {
+    const sensitiveSite = 'sensitive\\invalid.example'
+    config.site = sensitiveSite
+
+    const source = configurationSource.create(config, sinon.spy())
+
+    assert.strictEqual(source, undefined)
+    sinon.assert.notCalled(AgentlessConfigurationSource)
+    sinon.assert.calledOnceWithMatch(
+      log.error,
+      'Unable to configure Feature Flagging configuration source',
+      sinon.match.instanceOf(Error)
+    )
+    assert.ok(!log.error.firstCall.args[1].message.includes(sensitiveSite))
+  })
+
   it('caps the polling interval at one hour', () => {
     config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = 4 * 60 * 60
 
@@ -117,6 +142,42 @@ describe('OpenFeature configuration source', () => {
       'https://example.com/custom/ufc?tenant=one'
     )
     assert.strictEqual(resolved.apiKey, undefined)
+  })
+
+  it('logs only the origin, dropping credentials, path, and query, when starting the agentless source', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+      'https://user:tok@example.com/signed-token-in-path/ufc?sig=super-secret-value'
+
+    createSourceConfig()
+
+    sinon.assert.calledOnceWithExactly(
+      log.debug,
+      'Feature Flags: starting agentless configuration source at %s ' +
+      '(%s endpoint, poll interval %ds, request timeout %ds, DD-API-KEY header %s)',
+      'https://example.com',
+      'custom',
+      30,
+      5,
+      'not sent'
+    )
+  })
+
+  it('logs the effective agentless settings for the default endpoint', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = 7200
+
+    createSourceConfig()
+
+    sinon.assert.calledOnceWithExactly(
+      log.debug,
+      'Feature Flags: starting agentless configuration source at %s ' +
+      '(%s endpoint, poll interval %ds, request timeout %ds, DD-API-KEY header %s)',
+      'https://ufc-server.ff-cdn.datadoghq.com',
+      'default',
+      3600,
+      5,
+      'sent'
+    )
+    assert.doesNotMatch(JSON.stringify(log.debug.firstCall.args), /test-api-key/)
   })
 
   it('derives and creates the managed GovCloud endpoint without hard-coding availability', () => {
@@ -223,6 +284,21 @@ describe('OpenFeature configuration source', () => {
 
     assert.strictEqual(source, undefined)
     sinon.assert.notCalled(AgentlessConfigurationSource)
+  })
+
+  it('warns when Remote Config delivery is selected but Remote Configuration is disabled', () => {
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+    config.remoteConfig = { DD_REMOTE_CONFIGURATION_ENABLED: false }
+
+    configurationSource.create(config, sinon.spy())
+
+    sinon.assert.calledOnceWithMatch(log.warn, /Remote Configuration is disabled.*DD_REMOTE_CONFIGURATION_ENABLED=true/)
+
+    log.warn.resetHistory()
+    config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = true
+    configurationSource.create(config, sinon.spy())
+
+    sinon.assert.notCalled(log.warn)
   })
 
   for (const source of ['offline', 'invalid']) {

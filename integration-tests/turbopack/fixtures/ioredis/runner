@@ -1,0 +1,11 @@
+'use strict'
+
+module.exports = class Redis {
+  constructor () {
+    this.options = {}
+  }
+
+  sendCommand (command) {
+    return command.promise
+  }
+}

@@ -16,6 +16,7 @@ const telemetryGood = ['complete', 'injection_forced:false']
 
 const { engines, nodeMaxMajor: MAX_NODE_MAJOR } = require('../package.json')
 const {
+  assertOutputMatchesInOrder,
   runAndCheckWithTelemetry: testFile,
   useEnv,
   useSandbox,
@@ -28,6 +29,19 @@ const currentVersionIsSupported = semver.satisfies(NODE_VERSION, supportedRange)
 // more fine-grained control of these variables in these tests.
 delete process.env.DD_INJECTION_ENABLED
 delete process.env.DD_INJECT_FORCE
+
+describe('guardrail output assertions', () => {
+  it('allows unrelated debug lines between expected lines', () => {
+    assertOutputMatchesInOrder('first\nunrelated debug output\nsecond\n', 'first\nsecond\n')
+  })
+
+  it('preserves the order of expected lines', () => {
+    assert.throws(
+      () => assertOutputMatchesInOrder('second\nunrelated debug output\nfirst\n', 'first\nsecond\n'),
+      /does not contain expected output line "second/
+    )
+  })
+})
 
 function testInjectionScenarios (arg, filename, esmWorks = false) {
   if (!currentVersionIsSupported) return
@@ -342,9 +356,9 @@ describe('init.js', () => {
        */
       function checkGlobalPreload (out) {
         assert.match(out,
-          /^if \(getBuiltin\('module'\)\.createRequire\("file:.+\/initialize\.mjs"\)\('\.\/init\.js'\)\) {\n/)
+          /^if \(getBuiltin\('module'\)\.createRequire\("file:.+\/initialize\.mjs"\)\('\.\/init\.js'\)\) \{\n/)
         assert.match(out,
-          /\n {2}process\.emitWarning\('dd-trace cannot instrument ES modules on Node\.js 20\.0\.0\. Upgrade to Node\.js 20\.1\.0 or newer\.'\)\n}\n$/)
+          /\n {2}process\.emitWarning\('dd-trace cannot instrument ES modules on Node\.js 20\.0\.0\. Upgrade to Node\.js 20\.1\.0 or newer\.'\)\n\}\n$/)
       }
 
       it('provides application-realm preload source', () =>

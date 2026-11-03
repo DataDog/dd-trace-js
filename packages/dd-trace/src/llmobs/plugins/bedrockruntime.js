@@ -1,10 +1,14 @@
 'use strict'
 
 const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 const telemetry = require('../telemetry')
+const { safeJsonParse } = require('../util')
 const {
+  buildUsage,
   extractRequestParams,
   extractTextAndResponseReason,
+  mergeStreamedUsage,
   parseModelId,
   extractTextAndResponseReasonFromStream,
   extractConverseToolDefinitions,
@@ -52,12 +56,45 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       // avoids instrumenting other non supported runtime operations
       if (!ENABLED_OPERATIONS.has(operation)) return
 
-      const { modelProvider, modelName } = parseModelId(request.params.modelId)
+      // the SDK rejects a request with no model id, and the parser assumes a string
+      const modelId = request.params?.modelId
+      if (typeof modelId !== 'string') return
+
+      const { modelProvider, modelName } = parseModelId(modelId)
 
       // avoids instrumenting non llm type
       if (modelName.includes('embed')) return
 
       const span = ctx.currentStore?.span
+      if (!span) return
+
+      if (!this._llmobsEnabledFor(ctx)) {
+        // no LLMObs payload to build, so the usage comes from the response headers and, where
+        // those are absent, from whatever reported it
+        let usage
+        if (CONVERSE_OPERATIONS.has(operation)) {
+          // a non-streamed Converse puts it on the response, a streamed one on a metadata event
+          usage = buildUsage(response.usage) ?? ctx.streamedUsage
+        } else if (operation.toLowerCase().includes('stream')) {
+          // every streamed frame was folded into the running totals as it arrived
+          usage = ctx.streamedUsage
+        } else {
+          // headers can report some counts and the body others, so both are read and
+          // `extractTokens` merges them field by field
+          usage = responseBodyUsage(response, modelProvider, modelName)
+        }
+
+        this._setGenAiApmTags(span, {
+          spanKind: 'llm',
+          modelName: modelId.toLowerCase(),
+          modelProvider: 'amazon_bedrock',
+          // a count no source reported comes back undefined and is left off the span: reporting
+          // zeros for every metric would be worse than reporting none
+          metrics: extractTokens({ tokensFromHeaders, usage: usage ?? {} }),
+        })
+        return
+      }
+
       this.setLLMObsTags({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders })
     })
 
@@ -71,6 +108,10 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const cacheReadTokenCount = headers['x-amzn-bedrock-cache-read-input-token-count']
       const cacheWriteTokenCount = headers['x-amzn-bedrock-cache-write-input-token-count']
 
+      // Responses that report no counts at all, error responses included, would otherwise cache a
+      // record of undefined fields that reads as a measurement of zero.
+      if (!inputTokenCount && !outputTokenCount && !cacheReadTokenCount && !cacheWriteTokenCount) return
+
       pendingTokenHeaders.set(requestId, {
         inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount, 10),
         outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount, 10),
@@ -80,6 +121,13 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
 
     this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk }) => {
+      if (!this._llmobsEnabledFor(ctx)) {
+        // only the token counts are needed, for the `gen_ai.usage.*` metrics; the generated
+        // content is left to the LLMObs path, so nothing is retained past the running totals
+        ctx.streamedUsage = mergeChunkUsage(ctx, chunk)
+        return
+      }
+
       if (!ctx.chunks) ctx.chunks = []
 
       if (chunk) ctx.chunks.push(chunk)
@@ -141,10 +189,10 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       max_tokens: Number.parseInt(requestParams.maxTokens, 10) || 0,
     })
     this._tagger.tagLLMIO(span, requestParams.prompt, textAndResponseReason.messages)
-    this._tagger.tagMetrics(span, extractTokens({
+    this._tagger.tagMetrics(span, zeroFilled(extractTokens({
       tokensFromHeaders,
       usage: textAndResponseReason.usage,
-    }))
+    })))
   }
 }
 
@@ -159,9 +207,74 @@ function consumeTokenHeaders (requestId) {
 }
 
 /**
- * Combine response-body usage with header-derived counts, preferring the body.
+ * Fold one streamed frame's token counts into the totals on `ctx`. Converse reports them on a
+ * metadata event; `invokeModel` reports them in the frame body, in a shape that varies by
+ * provider, so the body is read through the same table the LLMObs path uses.
+ *
+ * @param {object} ctx
+ * @param {object} [chunk]
+ * @returns {import('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
+ *   .StreamedUsage | undefined}
+ */
+function mergeChunkUsage (ctx, chunk) {
+  const metadataUsage = chunk?.metadata?.usage
+  if (metadataUsage) return buildUsage(metadataUsage) ?? ctx.streamedUsage
+
+  const bytes = chunk?.chunk?.bytes
+  if (!ArrayBuffer.isView(bytes)) return ctx.streamedUsage
+
+  // a view, not a copy: this runs on every frame of every streamed response
+  const text = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('utf8')
+  const body = safeJsonParse(text, null)
+  // a frame the model filled with generated text rather than JSON must not reach the application
+  if (typeof body !== 'object' || body === null) return ctx.streamedUsage
+
+  return mergeStreamedUsage(ctx.streamedUsage, body, streamModelProvider(ctx))
+}
+
+/**
+ * Token usage a non-streamed `invokeModel` reports in its own response body, which several
+ * providers carry and the headers do not always correlate. Read through the same extractor the
+ * LLMObs path uses, which parses this body on every request anyway.
+ *
+ * @param {{ body?: Uint8Array }} response
+ * @param {string} modelProvider
+ * @param {string} modelName
+ * @returns {Record<string, number | undefined> | undefined}
+ */
+function responseBodyUsage (response, modelProvider, modelName) {
+  if (!response?.body) return
+
+  try {
+    return extractTextAndResponseReason(response, modelProvider, modelName).usage
+  } catch (e) {
+    // the extractor parses the body itself; a malformed one must not disable the plugin
+    log.debug('Failed to read Bedrock response usage: %s', e.message)
+  }
+}
+
+/**
+ * The provider is fixed for the life of the stream, so it is parsed off the request once.
+ *
+ * @param {object} ctx
+ */
+function streamModelProvider (ctx) {
+  if (ctx.streamModelProvider === undefined) {
+    const modelId = (ctx.request ?? ctx.response?.request)?.params?.modelId
+    ctx.streamModelProvider = typeof modelId === 'string'
+      ? parseModelId(modelId).modelProvider.toUpperCase()
+      : ''
+  }
+
+  return ctx.streamModelProvider
+}
+
+/**
+ * Combine response-body usage with header-derived counts, preferring the body. A count no source
+ * reported stays undefined rather than becoming a zero that reads as a measurement.
  *
  * @param {{ tokensFromHeaders: HeaderTokens | undefined, usage: Record<string, number | undefined> }} options
+ * @returns {Record<string, number | undefined>}
  */
 function extractTokens ({ tokensFromHeaders, usage }) {
   const {
@@ -171,20 +284,59 @@ function extractTokens ({ tokensFromHeaders, usage }) {
     cacheWriteTokensFromHeaders,
   } = tokensFromHeaders ?? {}
 
-  const inputTokens = usage.inputTokens || inputTokensFromHeaders || 0
-  const outputTokens = usage.outputTokens || outputTokensFromHeaders || 0
-  const cacheReadTokens = usage.cacheReadTokens || cacheReadTokensFromHeaders || 0
-  const cacheWriteTokens = usage.cacheWriteTokens || cacheWriteTokensFromHeaders || 0
+  const inputTokens = resolveCount(usage.inputTokens, inputTokensFromHeaders)
+  const outputTokens = resolveCount(usage.outputTokens, outputTokensFromHeaders)
+  const cacheReadTokens = resolveCount(usage.cacheReadTokens, cacheReadTokensFromHeaders)
+  const cacheWriteTokens = resolveCount(usage.cacheWriteTokens, cacheWriteTokensFromHeaders)
 
   // adjust for the fact that bedrock input tokens only count non-cached tokens
-  const normalizedInputTokens = inputTokens + cacheReadTokens + cacheWriteTokens
+  const normalizedInputTokens = inputTokens === undefined &&
+    cacheReadTokens === undefined &&
+    cacheWriteTokens === undefined
+    ? undefined
+    : (inputTokens ?? 0) + (cacheReadTokens ?? 0) + (cacheWriteTokens ?? 0)
+
+  const totalTokens = normalizedInputTokens === undefined && outputTokens === undefined
+    ? undefined
+    : (normalizedInputTokens ?? 0) + (outputTokens ?? 0)
 
   return {
     inputTokens: normalizedInputTokens,
     outputTokens,
-    totalTokens: normalizedInputTokens + outputTokens,
+    totalTokens,
     cacheReadTokens,
     cacheWriteTokens,
+  }
+}
+
+/**
+ * The body wins over the headers whenever it reported a count, a measured zero included, and a
+ * value neither reported as a number is left undefined: header counts are parsed from strings
+ * and can arrive empty.
+ *
+ * @param {unknown} fromBody
+ * @param {unknown} fromHeaders
+ * @returns {number | undefined}
+ */
+function resolveCount (fromBody, fromHeaders) {
+  const value = typeof fromBody === 'number' ? fromBody : fromHeaders
+  return typeof value === 'number' && !Number.isNaN(value) ? value : undefined
+}
+
+/**
+ * The LLMObs metrics contract reports an unmeasured count as zero, where the `gen_ai.*` APM
+ * attributes leave it off the span entirely.
+ *
+ * @param {Record<string, number | undefined>} tokens
+ * @returns {Record<string, number>}
+ */
+function zeroFilled (tokens) {
+  return {
+    inputTokens: tokens.inputTokens ?? 0,
+    outputTokens: tokens.outputTokens ?? 0,
+    totalTokens: tokens.totalTokens ?? 0,
+    cacheReadTokens: tokens.cacheReadTokens ?? 0,
+    cacheWriteTokens: tokens.cacheWriteTokens ?? 0,
   }
 }
 

@@ -3,7 +3,6 @@
 const assert = require('node:assert')
 const { inspect } = require('node:util')
 
-const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -11,13 +10,12 @@ const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
+const logger = require('../../../src/log')
 const agent = require('../../plugins/agent')
 const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
 const { removeDestroyHandler } = require('../util')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
-const injectCh = channel('dd-trace:span:inject')
 
 describe('sdk', () => {
   let LLMObsSDK
@@ -95,6 +93,23 @@ describe('sdk', () => {
       assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
       assert.strictEqual(typeof llmobs.experiments.pullDataset, 'function')
     })
+
+    it('exposes evaluator primitives only through the experiments facade', () => {
+      const experiments = llmobs.experiments
+      for (const name of [
+        'BaseEvaluator',
+        'BaseSummaryEvaluator',
+        'EvaluatorContext',
+        'SummaryEvaluatorContext',
+        'EvaluatorResult',
+        'MultiEvaluatorResult',
+        'RemoteEvaluator',
+        'RemoteEvaluatorError',
+      ]) {
+        assert.strictEqual(llmobs[name], undefined)
+        assert.strictEqual(typeof experiments[name], 'function')
+      }
+    })
   })
 
   describe('enable', () => {
@@ -113,8 +128,8 @@ describe('sdk', () => {
       })
 
       assert.strictEqual(disabledLLMObs.enabled, true)
-      assert.strictEqual(disabledLLMObs._config.llmobs.mlApp, 'mlApp')
-      assert.strictEqual(disabledLLMObs._config.llmobs.agentlessEnabled, undefined)
+      assert.strictEqual(disabledLLMObs._config.llmobs.DD_LLMOBS_ML_APP, 'mlApp')
+      assert.strictEqual(disabledLLMObs._config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, undefined)
 
       sinon.assert.called(llmobsModule.enable)
 
@@ -596,6 +611,25 @@ describe('sdk', () => {
           })
         })
 
+        it('auto-annotates experiment spans without stringifying structured values', () => {
+          let span
+          const output = { status: 'ok', nested: { count: 3 } }
+          function experimentTask (input) {
+            span = llmobs._active()
+            return output
+          }
+
+          const wrappedExperimentTask = llmobs.wrap({ kind: 'experiment' }, experimentTask)
+
+          wrappedExperimentTask({ prompt: 'smoke test' })
+
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.meta.span.kind': 'experiment',
+            '_ml_obs.meta.input': { prompt: 'smoke test' },
+            '_ml_obs.meta.output': output,
+          })
+        })
+
         it('does not crash for auto-annotation values that are overriden', () => {
           const circular = {}
           circular.circular = circular
@@ -959,6 +993,136 @@ describe('sdk', () => {
         })
       })
     })
+    describe('version option', () => {
+      function emittedTags (name) {
+        return LLMObsSpanWriter.prototype.append.getCalls().find(call => call.args[0].name === name)?.args[0].tags
+      }
+
+      it('reports the version on an agent span started with trace, and not on the APM span options', () => {
+        sinon.spy(llmobs._tracer, 'trace')
+        try {
+          llmobs.trace({ kind: 'agent', name: 'agent', version: '2.1.0' }, () => {})
+          assert.strictEqual(llmobs._tracer.trace.firstCall.args[1].version, undefined)
+        } finally {
+          llmobs._tracer.trace.restore()
+        }
+
+        assert.ok(emittedTags('agent').includes('agent_version:2.1.0'))
+      })
+
+      it('reports the version on an agent span started with wrap', () => {
+        const agentFn = llmobs.wrap({ kind: 'agent', name: 'agent', version: '1.10' }, () => {})
+        agentFn()
+
+        assert.ok(emittedTags('agent').includes('agent_version:1.10'))
+      })
+
+      it('reports the version on a decorated agent method', () => {
+        const decorator = llmobs.decorate({ kind: 'agent', version: '2.1.0' })
+        const run = decorator(() => {}, { kind: 'method', name: 'run' })
+        run()
+
+        assert.ok(emittedTags('run').includes('agent_version:2.1.0'))
+      })
+
+      function hasNoVersion (name) {
+        return !emittedTags(name).some(tag => tag.startsWith('agent_version:'))
+      }
+
+      it('reports the version on the spans the agent runs', () => {
+        llmobs.trace({ kind: 'agent', name: 'agent', version: '1.0.0' }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'step' }, () => {
+            llmobs.trace({ kind: 'llm', name: 'llm' }, () => {})
+          })
+          llmobs.trace({ kind: 'tool', name: 'tool' }, () => {})
+        })
+
+        for (const name of ['agent', 'step', 'llm', 'tool']) {
+          assert.ok(emittedTags(name).includes('agent_version:1.0.0'), name)
+        }
+      })
+
+      it('reports a nested agent version on the spans that nested agent runs', () => {
+        llmobs.trace({ kind: 'agent', name: 'outer', version: '1.0.0' }, () => {
+          llmobs.trace({ kind: 'agent', name: 'inner', version: '2.0.0' }, () => {
+            llmobs.trace({ kind: 'llm', name: 'inner_llm' }, () => {})
+          })
+          llmobs.trace({ kind: 'llm', name: 'outer_llm' }, () => {})
+        })
+
+        assert.ok(emittedTags('inner_llm').includes('agent_version:2.0.0'))
+        assert.ok(emittedTags('outer_llm').includes('agent_version:1.0.0'))
+      })
+
+      it('reports the outer version on a nested agent without one, and on the spans it runs', () => {
+        llmobs.trace({ kind: 'agent', name: 'outer', version: '1.0.0' }, () => {
+          llmobs.trace({ kind: 'agent', name: 'inner' }, () => {
+            llmobs.trace({ kind: 'llm', name: 'llm' }, () => {})
+          })
+        })
+
+        assert.ok(emittedTags('inner').includes('agent_version:1.0.0'))
+        assert.ok(emittedTags('llm').includes('agent_version:1.0.0'))
+      })
+
+      it('warns when dropping a non-string version option on an agent span', () => {
+        sinon.spy(logger, 'warn')
+        try {
+          llmobs.trace({ kind: 'agent', name: 'agent', version: 3 }, () => {})
+          sinon.assert.calledOnceWithExactly(logger.warn, 'Dropping the agent version, it must be a string.')
+        } finally {
+          logger.warn.restore()
+        }
+
+        assert.ok(hasNoVersion('agent'))
+      })
+
+      it('wins over the version declared by an enclosing annotation context', () => {
+        llmobs.annotationContext({ agent: { version: 'from_context', name: 'travel_desk' } }, () => {
+          llmobs.trace({ kind: 'agent', name: 'agent', version: 'from_option' }, agentSpan => {
+            assert.deepStrictEqual(LLMObsTagger.tagMap.get(agentSpan)['_ml_obs.meta.metadata._dd.agent_manifest'], {
+              name: 'travel_desk',
+            })
+          })
+        })
+
+        assert.ok(emittedTags('agent').includes('agent_version:from_option'))
+        assert.ok(!emittedTags('agent').includes('agent_version:from_context'))
+      })
+
+      it('is replaced by a later annotation', () => {
+        llmobs.trace({ kind: 'agent', name: 'agent', version: '1.0.0' }, () => {
+          llmobs.annotate({ agent: { version: '1.0.1' } })
+        })
+
+        assert.ok(emittedTags('agent').includes('agent_version:1.0.1'))
+        assert.ok(!emittedTags('agent').includes('agent_version:1.0.0'))
+      })
+
+      for (const version of ['', 1.1, 0, { major: 1 }, 'release,canary']) {
+        it(`ignores an unreportable version (${inspect(version)})`, () => {
+          llmobs.trace({ kind: 'agent', name: 'agent', version }, () => {})
+
+          assert.ok(!emittedTags('agent').some(tag => tag.startsWith('agent_version:')))
+        })
+      }
+
+      it('drops the version on a non-agent span with a warning', () => {
+        sinon.spy(logger, 'warn')
+        try {
+          llmobs.trace({ kind: 'workflow', name: 'workflow', version: '1.0.0' }, () => {})
+          sinon.assert.calledWith(
+            logger.warn,
+            'Dropping the version option on a %s span, it is only supported for agent spans.',
+            'workflow'
+          )
+        } finally {
+          logger.warn.restore()
+        }
+
+        assert.ok(!emittedTags('workflow').some(tag => tag.startsWith('agent_version:')))
+      })
+    })
   })
 
   describe('annotate', () => {
@@ -1182,6 +1346,25 @@ describe('sdk', () => {
       })
     })
 
+    it('annotates experiment io without stringifying structured values', () => {
+      const inputData = { prompt: 'smoke test' }
+      const outputData = {
+        status: 'ok',
+        count: 3,
+        nested: { a: 1, b: [1, 2, 3] },
+      }
+
+      llmobs.trace({ kind: 'experiment', name: 'test' }, span => {
+        llmobs.annotate({ inputData, outputData })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'experiment',
+          '_ml_obs.meta.input': inputData,
+          '_ml_obs.meta.output': outputData,
+        })
+      })
+    })
+
     it('annotates metadata if present', () => {
       const metadata = { response_type: 'json' }
 
@@ -1229,6 +1412,142 @@ describe('sdk', () => {
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.tags': tags,
+        })
+      })
+    })
+
+    describe('agent', () => {
+      const MANIFEST = '_ml_obs.meta.metadata._dd.agent_manifest'
+      const VERSION = '_ml_obs.agent_version'
+
+      it('records the version and manifest on an agent span', () => {
+        const agent = {
+          name: 'travel_desk',
+          instructions: 'Book travel.',
+          model: 'gpt-4o',
+          tools: [{ name: 'get_weather', parameters: { city: { type: 'string', required: true } } }],
+        }
+
+        llmobs.trace({ kind: 'agent', name: 'test' }, span => {
+          llmobs.annotate({
+            agent: {
+              ...agent,
+              version: '2.1.0',
+              modelSettings: { temperature: 0.1, extra_headers: { authorization: 'secret' } },
+            },
+          })
+
+          const tags = LLMObsTagger.tagMap.get(span)
+          assert.strictEqual(tags[VERSION], '2.1.0')
+          assert.deepStrictEqual(tags[MANIFEST], {
+            ...agent,
+            model_settings: { temperature: 0.1 },
+          })
+        })
+      })
+
+      it('emits the manifest named after the span and the version tag on the span event', () => {
+        llmobs.trace({ kind: 'agent', name: 'travel_desk_span' }, () => {
+          llmobs.annotate({ agent: { version: '2.1.0', model: 'gpt-4o' } })
+        })
+
+        const event = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+        assert.deepStrictEqual(event.meta.metadata, {
+          _dd: { agent_manifest: { framework: 'manual', model: 'gpt-4o', name: 'travel_desk_span' } },
+        })
+        assert.ok(event.tags.includes('agent_version:2.1.0'))
+      })
+
+      it('does not store a manifest for a version-only agent', () => {
+        llmobs.trace({ kind: 'agent', name: 'test' }, span => {
+          llmobs.annotate({ agent: { version: '1.0.0' } })
+
+          const tags = LLMObsTagger.tagMap.get(span)
+          assert.strictEqual(tags[VERSION], '1.0.0')
+          assert.strictEqual(tags[MANIFEST], undefined)
+        })
+      })
+
+      it('shallow-updates the manifest across repeated annotations', () => {
+        llmobs.trace({ kind: 'agent', name: 'test' }, span => {
+          llmobs.annotate({
+            agent: {
+              name: 'first',
+              model: 'gpt-4o',
+              modelSettings: { temperature: 0.1, max_tokens: 10, tool_choice: 'auto' },
+              tools: [{ name: 'one' }, { name: 'two' }],
+            },
+          })
+          llmobs.annotate({
+            agent: {
+              name: 'second',
+              model: '',
+              instructions: null,
+              modelSettings: { temperature: 0.5, tool_choice: '' },
+              tools: [{ name: 'three' }],
+            },
+          })
+          llmobs.annotate({ agent: { name: 42, modelSettings: { extra_headers: { authorization: 'secret' } } } })
+
+          assert.deepStrictEqual(LLMObsTagger.tagMap.get(span)[MANIFEST], {
+            name: 'second',
+            model: 'gpt-4o',
+            model_settings: { temperature: 0.5 },
+            tools: [{ name: 'three' }],
+          })
+        })
+      })
+
+      it('emits the declared version over a user tag of the same name', () => {
+        llmobs.trace({ kind: 'agent', name: 'test' }, () => {
+          llmobs.annotate({ tags: { team: 'ml', agent_version: 'from_tags' }, agent: { version: '1.0.0' } })
+        })
+
+        const { tags } = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+        assert.ok(tags.includes('team:ml'))
+        assert.ok(tags.includes('agent_version:1.0.0'))
+        assert.ok(!tags.includes('agent_version:from_tags'))
+      })
+
+      it('drops the agent on a non-agent span with a warning', () => {
+        sinon.spy(logger, 'warn')
+        try {
+          llmobs.trace({ kind: 'workflow', name: 'test' }, span => {
+            llmobs.annotate({ agent: { version: '1.0.0', name: 'travel_desk' } })
+
+            const tags = LLMObsTagger.tagMap.get(span)
+            assert.strictEqual(tags[VERSION], undefined)
+            assert.strictEqual(tags[MANIFEST], undefined)
+          })
+          sinon.assert.calledWithMatch(logger.warn, 'Dropping agent annotation on non-agent span kind')
+        } finally {
+          logger.warn.restore()
+        }
+      })
+
+      it('drops a non-object agent with a warning', () => {
+        sinon.spy(logger, 'warn')
+        try {
+          llmobs.trace({ kind: 'agent', name: 'test' }, span => {
+            llmobs.annotate({ agent: 'travel_desk' })
+
+            const tags = LLMObsTagger.tagMap.get(span)
+            assert.strictEqual(tags[VERSION], undefined)
+            assert.strictEqual(tags[MANIFEST], undefined)
+          })
+          sinon.assert.calledWith(logger.warn, 'Dropping agent annotation, the agent must be a plain object.')
+        } finally {
+          logger.warn.restore()
+        }
+      })
+
+      it('does not throw on an agent whose fields cannot be read', () => {
+        const agent = {}
+        Object.defineProperty(agent, 'instructions', { enumerable: true, get () { throw new Error('dynamic') } })
+
+        llmobs.trace({ kind: 'agent', name: 'test' }, span => {
+          llmobs.annotate({ agent })
+          assert.strictEqual(LLMObsTagger.tagMap.get(span)[MANIFEST], undefined)
         })
       })
     })
@@ -1446,6 +1765,337 @@ describe('sdk', () => {
         })
       })
     })
+
+    describe('agent', () => {
+      const MANIFEST = '_ml_obs.meta.metadata._dd.agent_manifest'
+      const VERSION = '_ml_obs.agent_version'
+
+      function tagsOf (span) {
+        return LLMObsTagger.tagMap.get(span)
+      }
+
+      function emittedEvent (name) {
+        const call = LLMObsSpanWriter.prototype.append.getCalls().find(call => call.args[0].name === name)
+        return call?.args[0]
+      }
+
+      function createPluginTagger () {
+        return new LLMObsTagger({ llmobs: { DD_LLMOBS_ENABLED: true }, service: 'service' }, true)
+      }
+
+      it('emits the declaration on agent spans only', () => {
+        llmobs.annotationContext({ agent: { version: '1.0.0', name: 'travel_desk' } }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'workflow' }, () => {
+            llmobs.trace({ kind: 'agent', name: 'agent' }, agentSpan => {
+              assert.strictEqual(tagsOf(agentSpan)[VERSION], '1.0.0')
+              assert.deepStrictEqual(tagsOf(agentSpan)[MANIFEST], { name: 'travel_desk' })
+            })
+          })
+        })
+
+        assert.ok(emittedEvent('agent').tags.includes('agent_version:1.0.0'))
+        const workflow = emittedEvent('workflow')
+        assert.ok(!workflow.tags.some(tag => tag.startsWith('agent_version:')))
+        assert.strictEqual(workflow.meta.metadata, undefined)
+      })
+
+      it('emits the context version on the spans an agent in the block runs', () => {
+        llmobs.annotationContext({ agent: { version: '1.0.0' } }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'workflow' }, () => {
+            llmobs.trace({ kind: 'agent', name: 'agent' }, () => {
+              llmobs.trace({ kind: 'llm', name: 'llm' }, () => {})
+            })
+          })
+        })
+
+        assert.ok(emittedEvent('llm').tags.includes('agent_version:1.0.0'))
+        assert.ok(!emittedEvent('workflow').tags.some(tag => tag.startsWith('agent_version:')))
+      })
+
+      it('emits the manifest and version on the span event', () => {
+        llmobs.annotationContext({ agent: { version: '1.0.0', instructions: 'Book travel.' } }, () => {
+          llmobs.trace({ kind: 'agent', name: 'travel_desk' }, () => {})
+        })
+
+        const event = emittedEvent('travel_desk')
+        assert.deepStrictEqual(event.meta.metadata, {
+          _dd: { agent_manifest: { framework: 'manual', instructions: 'Book travel.', name: 'travel_desk' } },
+        })
+        assert.ok(event.tags.includes('agent_version:1.0.0'))
+      })
+
+      it('declares every agent span in the block, nested and sibling ones included', () => {
+        llmobs.annotationContext({ agent: { version: '1.0.0', name: 'travel_desk' } }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'workflow' }, () => {
+            llmobs.trace({ kind: 'agent', name: 'outer' }, outer => {
+              llmobs.trace({ kind: 'workflow', name: 'step' }, () => {
+                llmobs.trace({ kind: 'agent', name: 'inner' }, inner => {
+                  assert.strictEqual(tagsOf(inner)[VERSION], '1.0.0')
+                  assert.deepStrictEqual(tagsOf(inner)[MANIFEST], { name: 'travel_desk' })
+                })
+              })
+              assert.deepStrictEqual(tagsOf(outer)[MANIFEST], { name: 'travel_desk' })
+            })
+            llmobs.trace({ kind: 'agent', name: 'sibling' }, sibling => {
+              assert.deepStrictEqual(tagsOf(sibling)[MANIFEST], { name: 'travel_desk' })
+            })
+          })
+        })
+
+        for (const name of ['outer', 'inner', 'sibling']) {
+          assert.deepStrictEqual(emittedEvent(name).meta.metadata._dd.agent_manifest, {
+            framework: 'manual',
+            name: 'travel_desk',
+          })
+        }
+        assert.strictEqual(emittedEvent('workflow').meta.metadata, undefined)
+      })
+
+      it('lets a nested block declare the nested agent span', () => {
+        llmobs.annotationContext({ agent: { name: 'outer_agent', model: 'gpt-4o' } }, () => {
+          llmobs.trace({ kind: 'agent', name: 'outer' }, outer => {
+            llmobs.annotationContext({ agent: { name: 'inner_agent' } }, () => {
+              llmobs.trace({ kind: 'agent', name: 'inner' }, inner => {
+                assert.deepStrictEqual(tagsOf(inner)[MANIFEST], { name: 'inner_agent', model: 'gpt-4o' })
+              })
+            })
+            assert.deepStrictEqual(tagsOf(outer)[MANIFEST], { name: 'outer_agent', model: 'gpt-4o' })
+          })
+        })
+      })
+
+      it('shallow-updates nested blocks onto one agent span, the inner block winning', () => {
+        llmobs.annotationContext({
+          agent: { version: '1.0.0', name: 'outer_agent', model: 'gpt-4o', modelSettings: { temperature: 0.1 } },
+        }, () => {
+          llmobs.annotationContext({
+            agent: { version: '2.0.0', name: 'inner_agent', modelSettings: { top_p: 0.9 } },
+          }, () => {
+            llmobs.trace({ kind: 'agent', name: 'agent' }, agentSpan => {
+              assert.strictEqual(tagsOf(agentSpan)[VERSION], '2.0.0')
+              assert.deepStrictEqual(tagsOf(agentSpan)[MANIFEST], {
+                name: 'inner_agent',
+                model: 'gpt-4o',
+                model_settings: { top_p: 0.9 },
+              })
+            })
+          })
+        })
+      })
+
+      it('keeps the outer version when a nested block declares a non-string one', () => {
+        llmobs.annotationContext({ agent: { version: '1.0.0' } }, () => {
+          llmobs.annotationContext({ agent: { version: 2, name: 'inner_agent' } }, () => {
+            llmobs.trace({ kind: 'agent', name: 'agent' }, () => {})
+          })
+        })
+
+        assert.ok(emittedEvent('agent').tags.includes('agent_version:1.0.0'))
+      })
+
+      it('lets a direct annotation override the context declaration on a nested agent span', () => {
+        llmobs.annotationContext({ agent: { name: 'travel_desk' } }, () => {
+          llmobs.trace({ kind: 'agent', name: 'outer' }, outer => {
+            llmobs.trace({ kind: 'agent', name: 'inner' }, inner => {
+              llmobs.annotate({ agent: { name: 'weather', instructions: 'Check the weather.' } })
+              assert.deepStrictEqual(tagsOf(inner)[MANIFEST], { name: 'weather', instructions: 'Check the weather.' })
+            })
+            assert.deepStrictEqual(tagsOf(outer)[MANIFEST], { name: 'travel_desk' })
+          })
+        })
+      })
+
+      it('merges a direct annotation onto the context declaration', () => {
+        llmobs.annotationContext({ agent: { version: '1.0.0', name: 'travel_desk', model: 'gpt-4o' } }, () => {
+          llmobs.trace({ kind: 'agent', name: 'agent' }, agentSpan => {
+            llmobs.annotate({ agent: { version: '1.0.1', model: 'gpt-4o-mini' } })
+            assert.strictEqual(tagsOf(agentSpan)[VERSION], '1.0.1')
+            assert.deepStrictEqual(tagsOf(agentSpan)[MANIFEST], { name: 'travel_desk', model: 'gpt-4o-mini' })
+          })
+        })
+      })
+
+      it('does not share the context declaration between agent spans', () => {
+        llmobs.annotationContext({ agent: { name: 'travel_desk' } }, () => {
+          llmobs.trace({ kind: 'agent', name: 'first' }, () => {
+            llmobs.annotate({ agent: { model: 'gpt-4o' } })
+          })
+          llmobs.trace({ kind: 'agent', name: 'second' }, second => {
+            assert.deepStrictEqual(tagsOf(second)[MANIFEST], { name: 'travel_desk' })
+          })
+        })
+      })
+
+      it('snapshots the declaration when the context is entered', () => {
+        const agent = { version: '1.0.0', instructions: 'first' }
+        llmobs.annotationContext({ agent }, () => {
+          agent.version = '2.0.0'
+          agent.instructions = 'second'
+          llmobs.trace({ kind: 'agent', name: 'agent' }, agentSpan => {
+            assert.strictEqual(tagsOf(agentSpan)[VERSION], '1.0.0')
+            assert.deepStrictEqual(tagsOf(agentSpan)[MANIFEST], { instructions: 'first' })
+          })
+        })
+      })
+
+      it('warns on and ignores a malformed agent', () => {
+        sinon.spy(logger, 'warn')
+        try {
+          llmobs.annotationContext({ agent: 'travel_desk' }, () => {
+            llmobs.trace({ kind: 'agent', name: 'agent' }, agentSpan => {
+              assert.strictEqual(tagsOf(agentSpan)[VERSION], undefined)
+              assert.strictEqual(tagsOf(agentSpan)[MANIFEST], undefined)
+            })
+          })
+          sinon.assert.calledWith(logger.warn, 'Dropping agent annotation, the agent must be a plain object.')
+        } finally {
+          logger.warn.restore()
+        }
+      })
+
+      it('does not break spans in the block when the agent cannot be read', () => {
+        const agent = { version: '1.0.0' }
+        Object.defineProperty(agent, 'instructions', { enumerable: true, get () { throw new Error('dynamic') } })
+
+        const result = llmobs.annotationContext({ agent }, () => {
+          return llmobs.trace({ kind: 'agent', name: 'agent' }, agentSpan => {
+            assert.strictEqual(tagsOf(agentSpan)[MANIFEST], undefined)
+            return 'ran'
+          })
+        })
+
+        assert.strictEqual(result, 'ran')
+      })
+
+      for (const agents of [5, 'x', { version: '1.0.0' }, [{ manifest: { name: 'forged' } }]]) {
+        it(`ignores a caller option named agents (${JSON.stringify(agents)})`, () => {
+          llmobs.annotationContext({ agents }, () => {
+            llmobs.trace({ kind: 'agent', name: 'agent' }, agentSpan => {
+              assert.strictEqual(tagsOf(agentSpan)[MANIFEST], undefined)
+            })
+          })
+        })
+      }
+
+      it('emits the declared version over a user tag on the agent and its children, not on spans outside it', () => {
+        llmobs.annotationContext({ tags: { agent_version: 'from_tags' }, agent: { version: 'from_agent' } }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'workflow' }, () => {})
+          llmobs.trace({ kind: 'agent', name: 'agent' }, () => {
+            llmobs.trace({ kind: 'tool', name: 'tool' }, () => {})
+          })
+        })
+
+        assert.ok(emittedEvent('agent').tags.includes('agent_version:from_agent'))
+        assert.ok(emittedEvent('tool').tags.includes('agent_version:from_agent'))
+        assert.ok(!emittedEvent('tool').tags.includes('agent_version:from_tags'))
+        assert.ok(emittedEvent('workflow').tags.includes('agent_version:from_tags'))
+      })
+
+      it('does not write annotations into the context tags object', () => {
+        const tags = { team: 'ml' }
+        llmobs.annotationContext({ tags }, () => {
+          llmobs.trace({ kind: 'agent', name: 'first' }, () => {
+            llmobs.annotate({ tags: { step: 'one' } })
+          })
+          llmobs.trace({ kind: 'agent', name: 'second' }, second => {
+            assert.deepStrictEqual(tagsOf(second)['_ml_obs.tags'], { team: 'ml' })
+          })
+        })
+
+        assert.deepStrictEqual(tags, { team: 'ml' })
+      })
+
+      it('does not break spans in the block when the context tags cannot be read', () => {
+        const tags = new Proxy({}, { ownKeys () { throw new Error('dynamic') } })
+        const pluginTagger = createPluginTagger()
+
+        const result = llmobs.annotationContext({ tags }, () => {
+          return llmobs.trace({ kind: 'workflow', name: 'workflow' }, workflow => {
+            const span = tracer._tracer.startSpan('plugin.agent', { childOf: workflow })
+            pluginTagger.registerLLMObsSpan(span, { kind: 'agent', parent: workflow, integration: 'test' })
+            assert.strictEqual(tagsOf(span)['_ml_obs.tags'], undefined)
+            span.finish()
+            return 'ran'
+          })
+        })
+
+        assert.strictEqual(result, 'ran')
+      })
+
+      it('keeps other context options', () => {
+        llmobs.annotationContext({ name: 'renamed', tags: { team: 'ml' }, agent: { version: '1.0.0' } }, () => {
+          llmobs.trace({ kind: 'agent', name: 'agent' }, agentSpan => {
+            assertObjectContains(tagsOf(agentSpan), {
+              '_ml_obs.name': 'renamed',
+              '_ml_obs.tags': { team: 'ml' },
+              [VERSION]: '1.0.0',
+            })
+          })
+        })
+      })
+
+      it('declares an integration agent span in the block', () => {
+        const pluginTagger = createPluginTagger()
+        llmobs.annotationContext({ agent: { name: 'travel_desk' } }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'workflow' }, workflow => {
+            const span = tracer._tracer.startSpan('claude_agent_sdk.query', { childOf: workflow })
+            pluginTagger.registerLLMObsSpan(span, { kind: 'agent', parent: workflow, integration: 'test' })
+            assert.deepStrictEqual(tagsOf(span)[MANIFEST], { name: 'travel_desk' })
+            span.finish()
+          })
+        })
+      })
+
+      it('reports the version on integration llm and tool spans under a versioned agent', () => {
+        const pluginTagger = createPluginTagger()
+        llmobs.trace({ kind: 'agent', name: 'agent', version: '1.0.0' }, agent => {
+          for (const kind of ['llm', 'tool']) {
+            const span = tracer._tracer.startSpan(`plugin.${kind}`, { childOf: agent })
+            pluginTagger.registerLLMObsSpan(span, { kind, parent: agent, integration: 'test' })
+            span.finish()
+          }
+        })
+
+        assert.ok(emittedEvent('plugin.llm').tags.includes('agent_version:1.0.0'))
+        assert.ok(emittedEvent('plugin.tool').tags.includes('agent_version:1.0.0'))
+      })
+
+      it('reports the context version on the llm and tool spans of an integration agent', () => {
+        const pluginTagger = createPluginTagger()
+        llmobs.annotationContext({ agent: { version: '1.0.0' } }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'workflow' }, workflow => {
+            const agent = tracer._tracer.startSpan('claude_agent_sdk.query', { childOf: workflow })
+            pluginTagger.registerLLMObsSpan(agent, { kind: 'agent', parent: workflow, integration: 'test' })
+            for (const kind of ['llm', 'tool']) {
+              const span = tracer._tracer.startSpan(`plugin.${kind}`, { childOf: agent })
+              pluginTagger.registerLLMObsSpan(span, { kind, parent: agent, integration: 'test' })
+              span.finish()
+            }
+            agent.finish()
+          })
+        })
+
+        for (const name of ['claude_agent_sdk.query', 'plugin.llm', 'plugin.tool']) {
+          assert.ok(emittedEvent(name).tags.includes('agent_version:1.0.0'), name)
+        }
+      })
+
+      it('emits the context declaration on a span promoted to an agent after registration', () => {
+        const pluginTagger = createPluginTagger()
+        llmobs.annotationContext({ agent: { version: '1.0.0', name: 'travel_desk' } }, () => {
+          llmobs.trace({ kind: 'agent', name: 'query' }, query => {
+            const span = tracer._tracer.startSpan('Agent (subagent)', { childOf: query })
+            pluginTagger.registerLLMObsSpan(span, { kind: 'tool', parent: query, integration: 'test' })
+            pluginTagger.changeKind(span, 'agent')
+            span.finish()
+          })
+        })
+
+        const event = emittedEvent('Agent (subagent)')
+        assert.ok(event.tags.includes('agent_version:1.0.0'))
+        assert.deepStrictEqual(event.meta.metadata._dd.agent_manifest, { framework: 'manual', name: 'travel_desk' })
+      })
+    })
   })
 
   it('annotates toolDefinitions if present', () => {
@@ -1556,13 +2206,13 @@ describe('sdk', () => {
     })
 
     it('throws for a missing mlApp', () => {
-      const mlApp = tracer._tracer._config.llmobs.mlApp
-      delete tracer._tracer._config.llmobs.mlApp
+      const mlApp = tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP
+      delete tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP
 
       assert.throws(() => llmobs.submitEvaluation(spanCtx))
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
 
-      tracer._tracer._config.llmobs.mlApp = mlApp
+      tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP = mlApp
     })
 
     it('throws for an invalid timestamp', () => {
@@ -2346,12 +2996,12 @@ describe('sdk', () => {
       let mlApp
 
       before(() => {
-        mlApp = tracer._tracer._config.llmobs.mlApp
-        delete tracer._tracer._config.llmobs.mlApp
+        mlApp = tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP
+        delete tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP
       })
 
       after(() => {
-        tracer._tracer._config.llmobs.mlApp = mlApp
+        tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP = mlApp
       })
 
       it('throws', () => {
@@ -2407,6 +3057,115 @@ describe('sdk', () => {
     })
   })
 
+  describe('gen_ai APM attributes', () => {
+    const ALL_TOKEN_METRICS = {
+      input_tokens: 10,
+      output_tokens: 20,
+      total_tokens: 30,
+      cache_read_input_tokens: 4,
+      cache_write_input_tokens: 5,
+      reasoning_output_tokens: 6,
+    }
+
+    function apmTags (span) {
+      return span.context().getTags()
+    }
+
+    it('emits every scalar on an llm span', () => {
+      let span
+      llmobs.trace(
+        { kind: 'llm', name: 'myLLM', modelName: 'gpt-4', modelProvider: 'OpenAI', sessionId: 'sess-1' },
+        _span => {
+          span = _span
+          llmobs.annotate(span, { metrics: ALL_TOKEN_METRICS })
+        }
+      )
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'gpt-4',
+        'gen_ai.provider.name': 'openai',
+        'gen_ai.application.name': 'mlApp',
+        'gen_ai.conversation.id': 'sess-1',
+        'gen_ai.usage.input_tokens': 10,
+        'gen_ai.usage.output_tokens': 20,
+        'gen_ai.usage.total_tokens': 30,
+        'gen_ai.usage.cache_read_input_tokens': 4,
+        'gen_ai.usage.cache_write_input_tokens': 5,
+        'gen_ai.usage.reasoning_output_tokens': 6,
+        '_dd.llmobs.artificial_gen_ai_tags': 'true',
+      })
+    })
+
+    it('falls back to the custom model and provider on an llm span without them', () => {
+      let span
+      llmobs.trace({ kind: 'llm', name: 'myLLM' }, _span => {
+        span = _span
+      })
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.request.model': 'custom',
+        'gen_ai.provider.name': 'custom',
+      })
+    })
+
+    it('keeps annotated model fields on a non-model-backed kind', () => {
+      let span
+      llmobs.trace({ kind: 'agent', name: 'myAgent', modelName: 'gpt-4o', modelProvider: 'OpenAI' }, _span => {
+        span = _span
+      })
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.operation.name': 'agent',
+        'gen_ai.request.model': 'gpt-4o',
+        'gen_ai.provider.name': 'openai',
+      })
+    })
+
+    it('omits token usage and model on a workflow span', () => {
+      let span
+      llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, _span => {
+        span = _span
+        llmobs.annotate(span, { metrics: ALL_TOKEN_METRICS })
+      })
+
+      const tags = apmTags(span)
+      assert.strictEqual(tags['gen_ai.operation.name'], 'workflow')
+      assert.strictEqual(tags['gen_ai.request.model'], undefined)
+      assert.strictEqual(tags['gen_ai.provider.name'], undefined)
+      for (const key of Object.keys(ALL_TOKEN_METRICS)) {
+        assert.strictEqual(tags[`gen_ai.usage.${key}`], undefined)
+      }
+      assert.strictEqual(tags['_dd.llmobs.artificial_gen_ai_tags'], 'true')
+    })
+
+    it('keeps the attributes when the user span processor drops the LLMObs event', () => {
+      let span
+      llmobs.registerProcessor(() => null)
+      try {
+        llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'gpt-4', modelProvider: 'OpenAI' }, _span => {
+          span = _span
+        })
+      } finally {
+        llmobs.deregisterProcessor()
+      }
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'gpt-4',
+        'gen_ai.provider.name': 'openai',
+      })
+    })
+
+    it('does not emit anything for a span that is not an LLMObs span', () => {
+      const span = tracer.startSpan('apm.only')
+      span.finish()
+
+      assert.strictEqual(apmTags(span)['gen_ai.operation.name'], undefined)
+      assert.strictEqual(apmTags(span)['_dd.llmobs.artificial_gen_ai_tags'], undefined)
+    })
+  })
+
   describe('distributed', () => {
     it('adds the current llmobs span id and sampling decision to the injection context', () => {
       const carrier = { 'x-datadog-tags': '' }
@@ -2416,15 +3175,17 @@ describe('sdk', () => {
         parentId = span.context().toSpanId()
         traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
 
-        // simulate injection from http integration or from tracer
-        // something that triggers the text_map injection
-        injectCh.publish({ carrier })
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const wireTraceId = BigInt(`0x${traceId}`).toString(10)
+      const propagatedLlmobsTags = []
+      for (const tag of carrier['x-datadog-tags'].split(',')) {
+        if (tag.startsWith('_dd.p.llmobs_')) propagatedLlmobsTags.push(tag)
+      }
 
       assert.strictEqual(
-        carrier['x-datadog-tags'],
+        propagatedLlmobsTags.join(','),
         // eslint-disable-next-line @stylistic/max-len
         `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp,_dd.p.llmobs_sr=1,_dd.p.llmobs_sd=1,_dd.p.llmobs_trace_id=${wireTraceId}`
       )
@@ -2435,7 +3196,7 @@ describe('sdk', () => {
       let agentId
       llmobs.trace({ kind: 'agent', name: 'my_agent' }, span => {
         agentId = span.context().toSpanId()
-        injectCh.publish({ carrier })
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2448,8 +3209,8 @@ describe('sdk', () => {
       let agentId
       llmobs.trace({ kind: 'agent', name: 'my_agent' }, span => {
         agentId = span.context().toSpanId()
-        llmobs.trace({ kind: 'tool', name: 'my_tool' }, () => {
-          injectCh.publish({ carrier })
+        llmobs.trace({ kind: 'tool', name: 'my_tool' }, toolSpan => {
+          tracer.inject(toolSpan, 'text_map', carrier)
         })
       })
 
@@ -2460,8 +3221,8 @@ describe('sdk', () => {
 
     it('does not propagate agent attribution when there is no agent in the chain', () => {
       const carrier = { 'x-datadog-tags': '' }
-      llmobs.trace({ kind: 'workflow', name: 'my_workflow' }, () => {
-        injectCh.publish({ carrier })
+      llmobs.trace({ kind: 'workflow', name: 'my_workflow' }, span => {
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2474,7 +3235,7 @@ describe('sdk', () => {
       let agentId
       llmobs.trace({ kind: 'agent', name: 'Researcher, v2' }, span => {
         agentId = span.context().toSpanId()
-        injectCh.publish({ carrier })
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2484,8 +3245,8 @@ describe('sdk', () => {
 
     it('propagates an agent name containing "=" (legal in tagset values)', () => {
       const carrier = { 'x-datadog-tags': '' }
-      llmobs.trace({ kind: 'agent', name: 'model=gpt4' }, () => {
-        injectCh.publish({ carrier })
+      llmobs.trace({ kind: 'agent', name: 'model=gpt4' }, span => {
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2493,14 +3254,13 @@ describe('sdk', () => {
     })
 
     it('strips stale upstream pagent entries when a local agent overrides them', () => {
-      // Simulate `_injectTags` having already written upstream attribution into the carrier.
       let agentId
-      const carrier = {
-        'x-datadog-tags': '_dd.p.llmobs_pagent_span_id=upstream_id,_dd.p.llmobs_pagent_name=upstream_agent',
-      }
+      const carrier = {}
       llmobs.trace({ kind: 'agent', name: 'local_agent' }, span => {
         agentId = span.context().toSpanId()
-        injectCh.publish({ carrier })
+        span.context()._trace.tags['_dd.p.llmobs_pagent_span_id'] = 'upstream_id'
+        span.context()._trace.tags['_dd.p.llmobs_pagent_name'] = 'upstream_agent'
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2511,15 +3271,13 @@ describe('sdk', () => {
     })
 
     it('strips stale upstream pagent_name when local agent name is unsafe', () => {
-      // Even though the upstream name was safe, the downstream should see id-only when the
-      // local agent name is not wire-safe (decision: keep just the id, wipe the name).
       let agentId
-      const carrier = {
-        'x-datadog-tags': '_dd.p.llmobs_pagent_span_id=upstream_id,_dd.p.llmobs_pagent_name=upstream_agent',
-      }
+      const carrier = {}
       llmobs.trace({ kind: 'agent', name: 'Researcher, v2' }, span => {
         agentId = span.context().toSpanId()
-        injectCh.publish({ carrier })
+        span.context()._trace.tags['_dd.p.llmobs_pagent_span_id'] = 'upstream_id'
+        span.context()._trace.tags['_dd.p.llmobs_pagent_name'] = 'upstream_agent'
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2531,16 +3289,16 @@ describe('sdk', () => {
       const originalMax = tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
       const carrier = { 'x-datadog-tags': '' }
 
-      llmobs.trace({ kind: 'agent', name: 'my_agent' }, () => {
+      llmobs.trace({ kind: 'agent', name: 'my_agent' }, span => {
         // First injection: measure the tags string length WITHOUT pagent entries.
-        injectCh.publish({ carrier })
+        tracer.inject(span, 'text_map', carrier)
         const baseLength = carrier['x-datadog-tags']
           .split(',').filter(e => !e.startsWith('_dd.p.llmobs_pagent')).join(',').length
 
         // Second injection: budget allows the base tags but not the id entry (so name is also dropped).
         carrier['x-datadog-tags'] = ''
         tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = baseLength
-        injectCh.publish({ carrier })
+        tracer.inject(span, 'text_map', carrier)
       })
       tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = originalMax
 

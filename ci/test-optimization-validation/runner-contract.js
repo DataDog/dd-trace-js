@@ -88,7 +88,7 @@ const ENVIRONMENT_EXPANSION_PATTERN = /\$|%[^%]+%|![^!]+!/
  * Extracts bounded runner configuration from a detected package script.
  *
  * @param {string} framework framework name
- * @param {string} command detected package script
+ * @param {string | undefined} command detected package script
  * @param {string} projectRoot detected project root
  * @param {string} repositoryRoot repository root
  * @param {string} [platform] target platform
@@ -176,11 +176,11 @@ function getRunnerConfigurationContract (framework, runnerArgs, environment, pro
 /**
  * Rejects shell-expanded allowlisted environment assignments before command tokenization.
  *
- * @param {string} command detected package script
+ * @param {string | undefined} command detected package script
  * @returns {string|undefined} validation error
  */
 function getDynamicRunnerEnvironmentError (command) {
-  const source = String(command || '')
+  const source = String(command)
   for (const match of source.matchAll(
     /(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s]+))/g
   )) {
@@ -198,7 +198,7 @@ function getDynamicRunnerEnvironmentError (command) {
  * Returns literal existing test roots selected by a direct framework invocation.
  *
  * @param {string} framework framework name
- * @param {string} command detected package script
+ * @param {string | undefined} command detected package script
  * @param {string} projectRoot detected project root
  * @param {string} repositoryRoot repository root
  * @returns {string[]} physical search roots
@@ -241,7 +241,6 @@ function getRunnerSearchRoots (framework, command, projectRoot, repositoryRoot) 
  * @param {string} projectRoot detected project root
  * @param {string} repositoryRoot repository root
  * @param {boolean} directory whether the option explicitly requires a directory
- * @returns {void}
  */
 function addRunnerSearchRoot (roots, value, projectRoot, repositoryRoot, directory) {
   if (typeof value !== 'string' || !value) return
@@ -334,13 +333,13 @@ function getArgumentOptionValues (args, expected) {
 /**
  * Selects a project-owned runner only for an exact `node <regular-file>` package script.
  *
- * @param {string} command detected package script
+ * @param {string | undefined} command detected package script
  * @param {string} projectRoot detected project root
  * @param {string} repositoryRoot repository root
  * @returns {string|undefined} physical runner path
  */
 function getProjectNodeRunner (command, projectRoot, repositoryRoot) {
-  if (CONTROL_PATTERN.test(String(command || ''))) return
+  if (CONTROL_PATTERN.test(command || '')) return
   const tokens = tokenizeCommand(command)
   if (tokens.length !== 2 || !/^node(?:\.exe)?$/i.test(path.basename(tokens[0])) || tokens[1].startsWith('-')) return
 
@@ -446,13 +445,12 @@ function getRunnerInputError (args, environment, projectRoot, repositoryRoot, co
 /**
  * Finds a direct framework executable behind inert launch wrappers.
  *
- * @param {string} command detected package script
+ * @param {string | undefined} command detected package script
  * @param {string} framework framework name
  * @returns {{error?: string, runnerIndex: number, tokens: string[]}|undefined} parsed invocation
  */
 function getFrameworkInvocation (command, framework) {
-  if (CONTROL_PATTERN.test(String(command || ''))) return
-  if (command === `direct ${framework} binary`) return
+  if (CONTROL_PATTERN.test(command || '') || command === `direct ${framework} binary`) return
   const tokens = tokenizeCommand(command)
   const executable = getRunnerExecutableName(framework)
   const runnerIndex = tokens.findIndex(token => {
@@ -523,7 +521,6 @@ function getRunnerArgs (framework, invocation) {
  * Normalizes executable shims and supported JavaScript runner entrypoints.
  *
  * @param {string} token command token
- * @returns {string} normalized executable basename
  */
 function normalizeRunnerBasename (token) {
   return path.basename(token)
@@ -655,12 +652,12 @@ function resolveInputFile (input, projectRoot) {
 /**
  * Tokenizes bounded package-script evidence without expanding variables or invoking a shell.
  *
- * @param {string} command package script
+ * @param {string | undefined} command package script
  * @returns {string[]} inert tokens
  */
 function tokenizeCommand (command) {
   const tokens = []
-  for (const match of String(command || '').matchAll(/"([^"\r\n]*)"|'([^'\r\n]*)'|([^\s"']+)/g)) {
+  for (const match of (command || '').matchAll(/"([^"\r\n]*)"|'([^'\r\n]*)'|([^\s"']+)/g)) {
     tokens.push(match[1] ?? match[2] ?? match[3])
   }
   return tokens
@@ -670,7 +667,6 @@ function tokenizeCommand (command) {
  * Returns the executable name for a framework.
  *
  * @param {string} framework framework name
- * @returns {string} executable name
  */
 function getRunnerExecutableName (framework) {
   if (framework === 'cucumber') return 'cucumber-js'
@@ -682,7 +678,6 @@ function getRunnerExecutableName (framework) {
  *
  * @param {string} root root path
  * @param {string} filename candidate path
- * @returns {boolean} whether the candidate is contained
  */
 function isPathInside (root, filename) {
   const relative = path.relative(path.resolve(root), path.resolve(filename))

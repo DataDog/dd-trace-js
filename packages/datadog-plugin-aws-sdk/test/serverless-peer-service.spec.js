@@ -393,6 +393,7 @@ function toPromise (client, fn) {
       return result.promise()
     }
 
-    return promisify(fn)(...args)
+    const fnAsync = promisify(fn)
+    return fnAsync(...args)
   }
 }

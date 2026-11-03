@@ -1,12 +1,10 @@
 'use strict'
 
 describe('early flake detection focus', () => {
-  // eslint-disable-next-line mocha/no-exclusive-tests
   test.only('known focused test', () => {
     expect(1 + 2).toBe(3)
   })
 
-  // eslint-disable-next-line mocha/no-exclusive-tests
   test.only('new focused test skipped by pattern', () => {
     expect(2 + 1).toBe(3)
   })

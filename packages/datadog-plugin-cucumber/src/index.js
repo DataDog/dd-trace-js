@@ -35,6 +35,7 @@ const {
   TEST_SOURCE_START,
   TEST_STATUS,
   TEST_FINAL_STATUS,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -72,6 +73,7 @@ class CucumberPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       isParallel,
+      testSessionEmptyReason,
       error,
       onDone,
     }) => {
@@ -116,6 +118,13 @@ class CucumberPlugin extends CiPlugin {
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
+      if (testSessionEmptyReason) {
+        setExpectedEmptyTestSessionTags(
+          this.testSessionSpan,
+          this.testModuleSpan,
+          testSessionEmptyReason
+        )
+      }
       if (error) {
         for (const testSuiteSpan of this._testSuiteSpansByTestSuite.values()) {
           testSuiteSpan.setTag(TEST_STATUS, 'fail')
@@ -124,7 +133,6 @@ class CucumberPlugin extends CiPlugin {
         this.testSessionSpan.setTag('error', error)
         this.testModuleSpan.setTag('error', error)
       }
-      this.tracer._exporter.exportDeferredTestSuiteSpans?.()
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
@@ -202,7 +210,6 @@ class CucumberPlugin extends CiPlugin {
     this.addSub('ci:cucumber:test-suite:finish', ({ status, testSuitePath }) => {
       const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuitePath)
       testSuiteSpan.setTag(TEST_STATUS, status)
-      this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
       testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
@@ -442,7 +449,8 @@ class CucumberPlugin extends CiPlugin {
     })
 
     this.addSub('ci:cucumber:is-modified-test', ({
-      scenarios,
+      gherkinNodes,
+      gherkinScopeRanges,
       testFileAbsolutePath,
       modifiedFiles,
       stepIds,
@@ -450,11 +458,25 @@ class CucumberPlugin extends CiPlugin {
       setIsModified,
     }) => {
       const testScenarioPath = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot || process.cwd())
-      for (const scenario of scenarios) {
+      for (const [startLine, endLine] of gherkinScopeRanges) {
+        if (isModifiedTest(testScenarioPath, startLine, endLine, modifiedFiles, 'cucumber')) {
+          setIsModified(true)
+          return
+        }
+      }
+      for (const gherkinNode of gherkinNodes) {
+        const lastStep = gherkinNode.steps.at(-1)
+        let endLine = lastStep?.location.line ?? gherkinNode.location.line
+        if (lastStep?.dataTable?.rows.length) {
+          endLine = lastStep.dataTable.rows.at(-1).location.line
+        } else if (lastStep?.docString) {
+          const { content, location } = lastStep.docString
+          endLine = location.line + (content ? content.split('\n').length + 1 : 1)
+        }
         const isModified = isModifiedTest(
           testScenarioPath,
-          scenario.location.line,
-          scenario.steps.at(-1).location.line,
+          gherkinNode.location.line,
+          endLine,
           modifiedFiles,
           'cucumber'
         )

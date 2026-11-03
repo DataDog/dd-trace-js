@@ -167,7 +167,6 @@ function sanitizeEnvValue (name, value) {
  * Redacts common inline secret forms from strings.
  *
  * @param {string} value string to sanitize
- * @returns {string} sanitized string
  */
 function sanitizeString (value) {
   const references = []
@@ -195,14 +194,13 @@ function sanitizeString (value) {
  * Detects default-ignorable Unicode characters that can conceal executable text or secret names.
  *
  * @param {unknown} value candidate text
- * @returns {boolean} true when the text contains a default-ignorable Unicode character
  */
 function hasUnicodeDefaultIgnorable (value) {
-  return DEFAULT_IGNORABLE_TEST_PATTERN.test(String(value ?? ''))
+  return DEFAULT_IGNORABLE_TEST_PATTERN.test(String(value))
 }
 
 function hasUnsafeInvisibleCharacter (value) {
-  const text = String(value ?? '')
+  const text = String(value)
   return hasUnicodeDefaultIgnorable(text) || UNSAFE_CONTROL_TEST_PATTERN.test(text)
 }
 
@@ -214,7 +212,6 @@ function hasUnsafeExecutionCharacter (value) {
  * Makes untrusted text safe to print to an interactive terminal while preserving line breaks.
  *
  * @param {unknown} value console value
- * @returns {string} inert console text
  */
 function sanitizeConsoleText (value) {
   let result = ''
@@ -231,10 +228,9 @@ function sanitizeConsoleText (value) {
  * Returns whether a key or variable name usually carries secret values.
  *
  * @param {string} name key or environment variable name
- * @returns {boolean} true when values under this name should be redacted
  */
 function isSensitiveName (name) {
-  const normalized = String(name || '').replaceAll(/[-.]/g, '_')
+  const normalized = name.replaceAll(/[-.]/g, '_')
   return SENSITIVE_NAME_PATTERN.test(normalized) ||
     SENSITIVE_AUTH_NAME_PATTERN.test(normalized) ||
     SENSITIVE_COOKIE_NAME_PATTERN.test(normalized) ||

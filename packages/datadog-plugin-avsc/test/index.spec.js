@@ -36,7 +36,7 @@ function compareJson (expected, span) {
 
 describe('Plugin', () => {
   describe('avsc', function () {
-    this.timeout(0)
+    this.timeout(30_000)
     let tracer
     let avro
     let dateNowStub

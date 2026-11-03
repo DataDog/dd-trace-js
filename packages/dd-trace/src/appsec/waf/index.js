@@ -25,7 +25,7 @@ let limiter = new Limiter(100)
 let WAFManager = null
 
 /**
- * @typedef {import('./waf_manager').WAFManagerConfig & { rateLimit: number }} WAFConfig
+ * @typedef {import('./waf_manager').WAFManagerConfig & { DD_APPSEC_TRACE_RATE_LIMIT: number }} WAFConfig
  */
 
 const waf = {
@@ -48,7 +48,7 @@ const waf = {
 function init (rules, config) {
   destroy()
 
-  limiter = new Limiter(config.rateLimit)
+  limiter = new Limiter(config.DD_APPSEC_TRACE_RATE_LIMIT)
 
   // Lazy loading improves the startup time
   WAFManager = require('./waf_manager')

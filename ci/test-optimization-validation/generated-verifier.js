@@ -227,7 +227,6 @@ function getGeneratedRuntimeFileStatus (strategy) {
  * Formats a parsed test count for a customer-facing diagnosis.
  *
  * @param {number|null} count observed test count
- * @returns {string} formatted count
  */
 function formatObservedCount (count) {
   return count === null ? 'an unknown test count' : `${count} observed tests`

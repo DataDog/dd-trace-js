@@ -31,7 +31,6 @@ function readHeaderName (node, model) {
  * @param {import('estree').Node} node
  * @param {Record<string, string[]>} visitorKeys
  * @param {CarrierModel} model
- * @returns {void}
  */
 function collectCarrierModel (node, visitorKeys, model) {
   if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init &&

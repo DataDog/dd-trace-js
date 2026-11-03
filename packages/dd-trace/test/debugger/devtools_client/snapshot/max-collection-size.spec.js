@@ -8,6 +8,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../setup/mocha')
 
+const { INCOMPLETE_REASON } = require('../../../../src/debugger/guardrail-metrics')
 const {
   LARGE_OBJECT_SKIP_THRESHOLD,
   DEFAULT_MAX_COLLECTION_SIZE,
@@ -33,6 +34,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
 
       describe(`should respect the default maxCollectionSize if ${postfix}`, function () {
         let state
+        let incomplete
 
         const expectedElements = []
         const expectedEntries = []
@@ -48,10 +50,15 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         }
 
         beforeEach(function (done) {
-          assertOnBreakpoint(done, config, (_state) => {
+          assertOnBreakpoint(done, config, (_state, _incomplete) => {
             state = _state
+            incomplete = _incomplete
           })
           setAndTriggerBreakpoint(target, 29)
+        })
+
+        it('should record the collection size limit as an incomplete capture reason', function () {
+          assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.COLLECTION_SIZE)
         })
 
         it('should have expected number of elements in state', function () {

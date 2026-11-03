@@ -47,16 +47,17 @@ merge-lcov.js  (called by run-suite.js after mocha exits; converts every V8
 | File | Role |
 | --- | --- |
 | `runtime.js` | Shared constants/helpers (paths, env vars, `applyCoverageEnv`, `resolveCoverageRoot`, `getV8CoverageDir`). |
-| `run-suite.js` | Entry point. Resets the collector, points mocha's `NODE_V8_COVERAGE` at it, runs mocha, then the merger. |
+| `run-suite.js` | Entry point/module. Resets the collector, runs one or more covered mocha environments, then the merger. |
 | `register.js` | Preloaded into mocha; installs the `child_process` / `Worker` patches. |
 | `patch-child-process.js` | Rewrites options for `fork`/`spawn`/`exec`/`Worker` so every Node descendant inherits `NODE_V8_COVERAGE` and the bootstrap require. |
 | `child-bootstrap.js` | Preloaded into every child. Re-installs the patch (for deeper custom-env spawns) and flushes V8 coverage on the termination signals the harness uses to stop long-running fixtures. Does **no** instrumentation. |
-| `merge-lcov.js` | Converts every per-process V8 profile in the collector via `v8-to-istanbul` (same `include`/`exclude` as `nyc.config.js`) into a single LCOV + HTML report. |
+| `merge-lcov.js` | Converts every per-process V8 profile in the collector via `v8-to-istanbul` (same `include`/`exclude` as `nyc.config.js`) into LCOV plus local debugging reports. |
 
 ## Environment variables
 
 | Name | Purpose |
 | --- | --- |
+| `CI` | When set, report generation defaults to LCOV-only because CI uploaders do not consume HTML, text, or JSON reports. |
 | `NODE_V8_COVERAGE` | Node's native coverage output directory. Pointed at the shared collector for every process in the tree — unless the child already carries its own value (see below), in which case that is left intact. |
 | `_DD_TRACE_INTEGRATION_COVERAGE_ROOT` | Set to the resolved dd-trace root. Presence activates the harness for the whole process tree. |
 | `_DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR` | Optional override for the collector directory. |

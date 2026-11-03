@@ -66,7 +66,6 @@ function overrideParentId (headers, parentId) {
  * Whether the current trace context warrants a new checkpoint over the previously-saved one.
  * @param {Record<string, string>} currentHeaders
  * @param {Record<string, string>} previousHeaders
- * @returns {boolean}
  */
 function needsCheckpointUpdate (currentHeaders, previousHeaders) {
   for (const key of Object.keys(currentHeaders)) {

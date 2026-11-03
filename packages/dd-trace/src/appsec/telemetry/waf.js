@@ -1,9 +1,6 @@
 'use strict'
 
-const telemetryMetrics = require('../../telemetry/metrics')
-const { tags, getVersionsTags, DD_TELEMETRY_REQUEST_METRICS } = require('./common')
-
-const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
+const { appsecMetrics, tags, getVersionsTags, DD_TELEMETRY_REQUEST_METRICS } = require('./common')
 
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
 
@@ -126,21 +123,6 @@ function incrementWafRequests (store) {
   }
 }
 
-function incrementWafDurationMetrics (requestMetrics) {
-  const { duration, durationExt, wafVersion, rulesVersion } = requestMetrics
-  if (!duration && !durationExt) return
-
-  const versionsTags = getVersionsTags(wafVersion, rulesVersion)
-
-  if (duration) {
-    appsecMetrics.distribution('waf.duration', versionsTags).track(duration)
-  }
-
-  if (durationExt) {
-    appsecMetrics.distribution('waf.duration_ext', versionsTags).track(durationExt)
-  }
-}
-
 function incrementTruncatedMetrics (metrics, truncationReason) {
   const truncationTags = { truncation_reason: truncationReason }
   appsecMetrics.count('waf.input_truncated', truncationTags).inc(1)
@@ -163,5 +145,4 @@ module.exports = {
   incrementWafUpdates,
   incrementWafConfigErrors,
   incrementWafRequests,
-  incrementWafDurationMetrics,
 }

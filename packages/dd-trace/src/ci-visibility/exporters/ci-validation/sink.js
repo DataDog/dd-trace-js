@@ -179,7 +179,6 @@ class CiValidationSink {
   /**
    * Atomically publishes this process's bounded completion evidence.
    *
-   * @returns {boolean} whether the record was published
    */
   #writeCompletionRecord () {
     const directoryPath = path.join(this.#outputRoot, 'completions')
@@ -215,7 +214,6 @@ class CiValidationSink {
    * Writes one completed JSON payload to a unique file.
    *
    * @param {Buffer} payload JSON payload
-   * @returns {boolean} whether the payload was written
    */
   #writePayloadFile (payload) {
     if (this.#fileCount >= MAX_OUTPUT_FILES) {

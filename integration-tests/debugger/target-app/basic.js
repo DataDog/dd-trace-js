@@ -5,9 +5,17 @@ require('dd-trace/init')
 // @ts-expect-error This code is running in a sandbox where fastify is available
 const Fastify = require('fastify')
 
+let nativeStorage
+if (process.env.TRIGGER_MISSING_ASYNC_RESOURCE) {
+  const { AsyncLocalStorage } = require('node:async_hooks')
+  nativeStorage = new AsyncLocalStorage()
+  nativeStorage.enterWith('native')
+}
+
 const fastify = Fastify({ logger: { level: 'error' } })
 
 fastify.get('/foo/:name', function fooHandler (request) {
+  nativeStorage?._propagate({}, undefined, 'PROMISE')
   return { hello: request.params.name } // BREAKPOINT: /foo/bar
 })
 

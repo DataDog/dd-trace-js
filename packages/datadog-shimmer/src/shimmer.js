@@ -53,8 +53,15 @@ function copyProperties (original, wrapped) {
       const descriptor = /** @type {Descriptor} */ (Object.getOwnPropertyDescriptor(original, key))
       if (descriptor.writable && descriptor.enumerable && descriptor.configurable) {
         wrapped[key] = original[key]
-      } else if (descriptor.writable || descriptor.configurable || !Object.hasOwn(wrapped, key)) {
-        Object.defineProperty(wrapped, key, descriptor)
+      } else {
+        try {
+          Object.defineProperty(wrapped, key, descriptor)
+        } catch (error) {
+          const wrappedDescriptor = Object.getOwnPropertyDescriptor(wrapped, key)
+          if (wrappedDescriptor?.configurable !== false || wrappedDescriptor.writable) {
+            throw error
+          }
+        }
       }
     }
   }
@@ -307,11 +314,11 @@ function assertMethod (target, name, method) {
     let message = 'No target object provided'
 
     if (target) {
-      if (typeof target !== 'object' && typeof target !== 'function') {
-        message = 'Invalid target'
-      } else {
+      if (typeof target === 'object' || typeof target === 'function') {
         name = String(name)
         message = method ? `Original method ${name} is not a function` : `No original method ${name}`
+      } else {
+        message = 'Invalid target'
       }
     }
 
@@ -320,19 +327,17 @@ function assertMethod (target, name, method) {
 }
 
 /**
- * Asserts that a target is not a class constructor.
+ * Asserts that a target is not an identifiable class constructor.
  *
  * @param {Function} target - The target function.
- * @throws {Error} If the target is a class constructor.
+ * @throws {TypeError} If the target is an identifiable class constructor.
  */
 function assertNotClass (target) {
-  // Class constructors have a non-writable `prototype` property; functions have a
-  // writable one and arrows / async / method-shorthand have none at all. The
-  // `'prototype' in target` gate skips the descriptor lookup for the no-prototype
-  // shapes; the `in` operator is cheaper than reading `target.prototype` since
-  // it returns a boolean instead of materialising the prototype reference.
+  // Frozen functions also have a non-writable `prototype`; inspect their source only then.
   if ('prototype' in target &&
-      Object.getOwnPropertyDescriptor(target, 'prototype').writable === false) {
+      // Bound generators inherit `prototype` without owning one, so the descriptor may still be missing.
+      Object.getOwnPropertyDescriptor(target, 'prototype')?.writable === false &&
+      (!Object.isFrozen(target) || Function.prototype.toString.call(target).startsWith('class'))) {
     throw new TypeError('Target is a native class constructor and cannot be wrapped.')
   }
 }

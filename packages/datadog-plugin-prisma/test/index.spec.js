@@ -129,7 +129,8 @@ describe('Plugin', () => {
         start: { hasSubscribers: spies.hasSubscribers !== false },
       }
 
-      return proxyquire.noPreserveCache()('../src/datadog-tracing-helper', {
+      const loadDatadogTracingHelper = proxyquire.noPreserveCache()
+      return loadDatadogTracingHelper('../src/datadog-tracing-helper', {
         'dc-polyfill': {
           tracingChannel: () => channel,
         },

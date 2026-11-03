@@ -2,7 +2,9 @@
 
 const log = require('../../../../../log')
 
-const COMMAND_PATTERN = String.raw`^(?:\s*(?:sudo|doas)\s+)?\b\S+\b\s(.*)`
+// `\S+\s` accepts command tokens that end in punctuation. The optional prefix uses horizontal
+// whitespace so multiline matching cannot start inside a line-terminator run.
+const COMMAND_PATTERN = String.raw`^(?:[ \t]*(?:sudo|doas)[ \t]+)?\S+\s([\s\S]*)`
 const pattern = new RegExp(COMMAND_PATTERN, 'gmi')
 
 module.exports = function extractSensitiveRanges (evidence) {

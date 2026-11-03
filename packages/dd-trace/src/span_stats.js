@@ -100,16 +100,42 @@ class SpanAggStats {
   }
 }
 
+/**
+ * Accept canonical decimal strings or numbers in the non-negative int32 range.
+ *
+ * @param {unknown} value
+ */
+function toStatusCode (value) {
+  if (typeof value === 'number') return value === (value | 0) && value >= 0 ? value : undefined
+  if (typeof value !== 'string') return
+
+  const integer = Number(value) | 0
+  return integer >= 0 && String(integer) === value ? integer : undefined
+}
+
+/**
+ * @param {import('./span_format').FormattedSpan} span
+ */
+function httpStatusCode (span) {
+  const datadogStatus = span.meta[HTTP_STATUS_CODE]
+  if (datadogStatus) return datadogStatus
+
+  const otelMetaStatus = toStatusCode(span.meta['http.response.status_code'])
+  if (otelMetaStatus !== undefined) return otelMetaStatus
+
+  return toStatusCode(span.metrics?.['http.response.status_code']) ?? 0
+}
+
 class SpanAggKey {
   constructor (span) {
     this.name = span.name || DEFAULT_SPAN_NAME
     this.service = span.service || DEFAULT_SERVICE_NAME
     this.resource = span.resource || ''
     this.type = span.type || ''
-    this.statusCode = span.meta[HTTP_STATUS_CODE] || 0
+    this.statusCode = httpStatusCode(span)
     this.synthetics = span.meta[ORIGIN_KEY] === 'synthetics'
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
-    this.method = span.meta[HTTP_METHOD] || ''
+    this.method = span.meta[HTTP_METHOD] || span.meta['http.request.method'] || ''
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
     // dd gRPC plugin sets a numeric code via setTag; OTel/manual sets a string name via meta.
@@ -136,19 +162,8 @@ class SpanAggKey {
   }
 
   toString () {
-    return [
-      this.name,
-      this.service,
-      this.resource,
-      this.type,
-      this.statusCode,
-      this.synthetics,
-      this.method,
-      this.endpoint,
-      this.srvSrc,
-      this.spanKind,
-      this.rpcStatusCode,
-    ].join(',')
+    return `${this.name},${this.service},${this.resource},${this.type},${this.statusCode},${this.synthetics},` +
+      `${this.method},${this.endpoint},${this.srvSrc},${this.spanKind},${this.rpcStatusCode}`
   }
 }
 
@@ -201,19 +216,27 @@ class TimeBuckets extends Map {
 }
 
 class SpanStatsProcessor {
-  constructor ({
-    stats: {
-      DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
-      interval = 10,
-    } = {},
-    hostname,
-    port,
-    url,
-    env,
-    tags,
-    version: appVersion,
-    _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
-  } = {}, otlpExporter) {
+  #config
+
+  /**
+   * @param {import('./config/config-base')} config
+   * @param {import('./opentelemetry/metrics/otlp_span_stats_exporter').OtlpStatsExporter} [otlpExporter]
+   */
+  constructor (config, otlpExporter) {
+    const {
+      stats: {
+        DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
+        interval = 10,
+      } = {},
+      hostname,
+      port,
+      url,
+      env,
+      tags,
+      version: appVersion,
+      reportHostname,
+      _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
+    } = config
     if (!otlpExporter) {
       this.exporter = new SpanStatsExporter({ hostname, port, tags, url })
     }
@@ -221,11 +244,13 @@ class SpanStatsProcessor {
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
     this.buckets = new TimeBuckets(Boolean(otlpExporter))
-    this.hostname = os.hostname()
+    // A non-empty client hostname takes precedence over the agent's own hostname for the resulting
+    // metrics, so only send it when explicitly requested.
+    this.hostname = reportHostname ? os.hostname() : ''
     this.enabled = enabled
     this.otlpExporter = otlpExporter || null
     this.env = env
-    this.tags = tags || {}
+    this.#config = config
     this.sequence = 0
     this.version = appVersion
 
@@ -258,7 +283,7 @@ class SpanStatsProcessor {
         Stats: this.#toV06Payload(drained),
         Lang: 'javascript',
         TracerVersion: pkg.version,
-        RuntimeID: this.tags['runtime-id'],
+        RuntimeID: this.#config.tags['runtime-id'],
         Sequence: ++this.sequence,
         ProcessTags: processTags.serialized,
       }, done)

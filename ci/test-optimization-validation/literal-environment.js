@@ -12,7 +12,7 @@ const ASSIGNMENT_PATTERN =
  * @returns {{assignments: Array<{name: string, source: string, value: string}>, length: number}} parsed prefix
  */
 function parseLiteralEnvironmentPrefix (command) {
-  const source = String(command || '')
+  const source = command
   const assignments = []
   let offset = 0
 
@@ -37,10 +37,9 @@ function parseLiteralEnvironmentPrefix (command) {
  * @param {string} command command text
  * @param {string} name environment variable
  * @param {string} [platform] target platform
- * @returns {string} command without empty assignments
  */
 function removeEmptyLiteralEnvironmentAssignments (command, name, platform = process.platform) {
-  const source = String(command || '')
+  const source = command
   const prefix = parseLiteralEnvironmentPrefix(source)
   const retained = prefix.assignments.filter(assignment => {
     return !environmentNamesEqual(assignment.name, name, platform) || assignment.value !== ''

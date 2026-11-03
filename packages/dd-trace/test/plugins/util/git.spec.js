@@ -1,12 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { execSync } = require('node:child_process')
+const { execFileSync, execSync } = require('node:child_process')
 const os = require('node:os')
 const fs = require('node:fs')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 
 const { describe, it, afterEach, beforeEach } = require('mocha')
+const nock = require('nock')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -38,13 +40,17 @@ const {
   GIT_COMMIT_HEAD_COMMITTER_NAME,
 } = require('../../../src/plugins/util/tags')
 
-const { getGitMetadata, unshallowRepository, getGitDiff } = proxyquire('../../../src/plugins/util/git',
-  {
-    './git-cache': {
-      cachedExec: cachedExecStub,
-    },
-  }
-)
+const {
+  getGitMetadata,
+  unshallowRepository,
+  getGitDiff,
+  isGitAvailable: isGitAvailableWithStub,
+} = proxyquire('../../../src/plugins/util/git', {
+  'node:child_process': { execFileSync: cachedExecStub },
+  './git-cache': {
+    cachedExec: cachedExecStub,
+  },
+})
 
 function getFakeDirectory () {
   if (os.platform() === 'win32') {
@@ -449,6 +455,11 @@ describe('isGitAvailable', () => {
     assert.strictEqual(isGitAvailable(), true)
   })
 
+  it('checks whether git can be executed directly', () => {
+    assert.strictEqual(isGitAvailableWithStub(), true)
+    sinon.assert.calledOnceWithExactly(cachedExecStub, 'git', ['--version'])
+  })
+
   it('returns false if git is not available', () => {
     process.env.PATH = ''
 
@@ -490,6 +501,7 @@ describe('getGitDiff', () => {
 
     const { getGitDiff } = proxyquire('../../../src/plugins/util/git',
       {
+        'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': {
           cachedExec: cachedExecStub,
         },
@@ -840,29 +852,73 @@ describe('getGitInformationDiscrepancy', () => {
 })
 
 describe('fetchHeadCommitSha', () => {
+  const cachedExecStub = sinon.stub()
+  const execFileSyncStub = sinon.stub()
+  const logErrorSpy = sinon.spy()
+  const environment = {
+    PATH: '/test/bin',
+    GIT_SSH_COMMAND: 'ssh -F test-config',
+    GIT_NO_LAZY_FETCH: '0',
+    GIT_ALLOW_PROTOCOL: 'https',
+  }
   const { fetchHeadCommitSha } = proxyquire('../../../src/plugins/util/git',
     {
       './git-cache': {
         cachedExec: cachedExecStub,
       },
+      'node:child_process': { execFileSync: execFileSyncStub },
+      '../../log': { error: logErrorSpy },
+      '../../config/helper': { getEnvironmentVariables: () => environment },
     }
   )
 
-  it('fetches the head commit SHA', () => {
+  afterEach(() => {
+    cachedExecStub.reset()
+    execFileSyncStub.reset()
+    logErrorSpy.resetHistory()
+  })
+
+  beforeEach(() => {
+    cachedExecStub.returns('')
+    execFileSyncStub.returns('')
+  })
+
+  it('preserves the original fetch for a commit that is already available locally', () => {
+    cachedExecStub.returns('')
+
+    fetchHeadCommitSha('abc123')
+
+    sinon.assert.calledWithExactly(execFileSyncStub, 'git', ['cat-file', '-e', 'abc123'], {
+      stdio: 'pipe',
+      env: { ...environment, GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' },
+    })
+    sinon.assert.neverCalledWith(cachedExecStub, 'git', ['cat-file', '-e', 'abc123'])
+    sinon.assert.calledWith(execFileSyncStub, 'git', [
+      'fetch',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--recurse-submodules=no',
+      '--no-write-fetch-head',
+      'origin',
+      'abc123',
+    ])
+  })
+
+  it('fetches only the missing head commit', () => {
     const headSha = 'abc123'
     const remoteName = 'origin'
 
-    cachedExecStub
-      .onCall(0).returns(null)
-      .onCall(1).returns(null)
-      .onCall(2).returns('')
+    execFileSyncStub
+      .returns('')
+      .onCall(0).throws(new Error('Commit is missing'))
 
     fetchHeadCommitSha(headSha)
 
-    sinon.assert.calledWith(cachedExecStub,
+    sinon.assert.calledWith(execFileSyncStub,
       'git',
       [
         'fetch',
+        '--depth=1',
         '--update-shallow',
         '--filter=blob:none',
         '--recurse-submodules=no',
@@ -872,4 +928,620 @@ describe('fetchHeadCommitSha', () => {
       ]
     )
   })
+
+  it('logs a failed fetch without throwing', () => {
+    cachedExecStub.throws(new Error('Git command failed'))
+    execFileSyncStub.throws(new Error('Git command failed'))
+
+    fetchHeadCommitSha('abc123')
+
+    sinon.assert.called(logErrorSpy)
+    assert.ok(execFileSyncStub.getCalls().some(call => call.args[1][0] === 'fetch'))
+  })
+
+  it('retries the original fetch after a bounded fetch fails', () => {
+    execFileSyncStub.onCall(0).throws(new Error('Commit is missing'))
+    execFileSyncStub.onCall(1).throws(new Error('Shallow requests are unsupported'))
+
+    fetchHeadCommitSha('abc123')
+
+    const fetches = execFileSyncStub.getCalls().filter(call => call.args[1][0] === 'fetch')
+    assert.strictEqual(fetches.length, 2)
+    assert.ok(fetches[0].args[1].includes('--depth=1'))
+    assert.ok(!fetches[1].args[1].includes('--depth=1'))
+    sinon.assert.calledOnce(logErrorSpy)
+  })
+
+  for (const missing of [false, true]) {
+    it(`bounds timed-out fetches for a ${missing ? 'missing' : 'local'} commit`, () => {
+      const error = Object.assign(new Error('spawnSync git ETIMEDOUT'), { code: 'ETIMEDOUT' })
+      execFileSyncStub.withArgs('git', sinon.match.array.startsWith(['fetch'])).throws(error)
+      if (missing) {
+        execFileSyncStub.withArgs('git', ['cat-file', '-e', 'abc123']).throws(new Error('Commit is missing'))
+      }
+
+      assert.strictEqual(fetchHeadCommitSha('abc123'), false)
+
+      const fetches = execFileSyncStub.getCalls().filter(call => call.args[1][0] === 'fetch')
+      assert.strictEqual(fetches.length, missing ? 2 : 1)
+      for (const call of fetches) {
+        assert.strictEqual(call.args[2].timeout, 5000)
+      }
+      assert.strictEqual(logErrorSpy.callCount, fetches.length)
+    })
+  }
+
+  it('does not retry a failed original fetch for a local head', () => {
+    execFileSyncStub.onCall(1).throws(new Error('Remote is unavailable'))
+
+    fetchHeadCommitSha('abc123')
+
+    sinon.assert.calledTwice(execFileSyncStub)
+    sinon.assert.calledOnce(logErrorSpy)
+  })
+
+  it('suppresses tracing for internal local-object probes', () => {
+    const legacyStorage = require('../../../../datadog-core').storage('legacy')
+    const probeStates = []
+    execFileSyncStub.callsFake((command, flags) => {
+      if (flags[0] === 'cat-file') probeStates.push(legacyStorage.getHandle()?.noop)
+      return ''
+    })
+
+    fetchHeadCommitSha('abc123')
+
+    assert.deepStrictEqual(probeStates, [true])
+  })
+})
+
+describe('PR head metadata in shallow repositories', () => {
+  let directory
+  let checkout
+  let remote
+  let headSha
+  let baseSha
+  let getGitMetadata
+  let getGitDiff
+  let cachedExecSpy
+
+  /**
+   * @param {string} cwd
+   * @param {string[]} flags
+   * @param {import('node:child_process').ExecFileSyncOptions} [options]
+   */
+  function git (cwd, flags, options = {}) {
+    return execFileSync('git', flags, { ...options, cwd, stdio: 'pipe' }).toString().trim()
+  }
+
+  beforeEach(() => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-pr-head-'))
+    remote = path.join(directory, 'remote.git')
+    checkout = path.join(directory, 'checkout')
+    git(directory, ['init', '--bare', remote])
+    git(remote, ['config', 'uploadpack.allowFilter', 'true'])
+    git(remote, ['fast-import', '--quiet'], {
+      input: `commit refs/heads/juan-fernandez/head
+mark :1
+committer Test Author <author@example.com> 1700000000 +0000
+data 4
+root
+M 100644 inline history.txt
+data 4
+root
+
+commit refs/heads/juan-fernandez/head
+mark :2
+author PR Author <pr-author@example.com> 1700000001 +0000
+committer PR Committer <pr-committer@example.com> 1700000002 +0000
+data 17
+PR head DD_abc123
+from :1
+M 100644 inline history.txt
+data 4
+head
+
+commit refs/heads/juan-fernandez/merge
+mark :3
+committer Test Author <author@example.com> 1700000003 +0000
+data 4
+base
+from :1
+
+commit refs/heads/juan-fernandez/merge
+committer Test Author <author@example.com> 1700000004 +0000
+data 5
+merge
+from :3
+merge :2
+
+done
+`,
+    })
+    headSha = git(remote, ['rev-parse', 'refs/heads/juan-fernandez/head'])
+    baseSha = git(remote, ['rev-parse', `${headSha}^`])
+    git(directory, [
+      'clone', '--depth=1', '--no-checkout', '--branch', 'juan-fernandez/merge',
+      pathToFileURL(remote).href, checkout,
+    ])
+    git(checkout, ['update-ref', '--no-deref', 'HEAD', git(checkout, ['rev-parse', 'HEAD'])])
+    cachedExecSpy = sinon.spy((command, flags, options) =>
+      execFileSync(command, flags, { stdio: 'pipe', ...options, cwd: checkout }))
+    const gitUtils = proxyquire('../../../src/plugins/util/git', {
+      './git-cache': { cachedExec: cachedExecSpy },
+      'node:child_process': { execFileSync: cachedExecSpy },
+    })
+    getGitMetadata = gitUtils.getGitMetadata
+    getGitDiff = gitUtils.getGitDiff
+  })
+
+  afterEach(() => {
+    nock.cleanAll()
+    fs.rmSync(directory, { recursive: true, force: true })
+  })
+
+  it('fetches head metadata without its ancestors or changing the checkout', () => {
+    const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+    const originalRefs = git(checkout, ['show-ref'])
+    const fetchHeadPath = path.join(checkout, '.git', 'FETCH_HEAD')
+    fs.writeFileSync(fetchHeadPath, 'unchanged\n')
+
+    const metadata = getGitMetadata({ headCommitSha: headSha })
+
+    assertObjectContains(metadata, {
+      [GIT_COMMIT_HEAD_MESSAGE]: "PR head DD_abc123'\n",
+      [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'PR Author',
+      [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'pr-author@example.com',
+      [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'PR Committer',
+      [GIT_COMMIT_HEAD_COMMITTER_EMAIL]: 'pr-committer@example.com',
+    })
+    assert.strictEqual(new Date(metadata[GIT_COMMIT_HEAD_AUTHOR_DATE]).toISOString(), '2023-11-14T22:13:21.000Z')
+    assert.strictEqual(new Date(metadata[GIT_COMMIT_HEAD_COMMITTER_DATE]).toISOString(), '2023-11-14T22:13:22.000Z')
+    assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '1')
+    assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+    assert.strictEqual(git(checkout, ['show-ref']), originalRefs)
+    assert.strictEqual(fs.readFileSync(fetchHeadPath, 'utf8'), 'unchanged\n')
+  })
+
+  it('preserves available head history', () => {
+    git(checkout, ['fetch', '--depth=2', 'origin', headSha])
+
+    const metadata = getGitMetadata({ headCommitSha: headSha })
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+    assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
+  })
+
+  it('recovers head metadata when a shallow lock prevents fetching at depth 1', () => {
+    fs.writeFileSync(path.join(checkout, '.git', 'shallow.lock'), 'held\n')
+    const execute = (command, flags, options) => cachedExecSpy(command, flags, {
+      ...options,
+      env: { ...process.env, ...options?.env, GIT_NO_LAZY_FETCH: '1' },
+    })
+    const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
+      './git-cache': { cachedExec: execute },
+      'node:child_process': { execFileSync: execute },
+    })
+
+    const metadata = getGitMetadata({ headCommitSha: headSha })
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+  })
+
+  it('retries the original fetch when the bounded fetch leaves head metadata unreadable', () => {
+    let failedHeadRead = false
+    const execute = (command, flags, options) => {
+      if (flags[0] === 'show' && flags.at(-1) === headSha && !failedHeadRead) {
+        failedHeadRead = true
+        throw new Error('Head metadata is temporarily unavailable')
+      }
+      return cachedExecSpy(command, flags, options)
+    }
+    const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
+      './git-cache': { cachedExec: execute },
+      'node:child_process': { execFileSync: execute },
+    })
+
+    const metadata = getGitMetadata({ headCommitSha: headSha })
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    const fetches = cachedExecSpy.getCalls().filter(call => call.args[1][0] === 'fetch')
+    assert.strictEqual(fetches.length, 2)
+    assert.ok(fetches[0].args[1].includes('--depth=1'))
+    assert.ok(!fetches[1].args[1].includes('--depth=1'))
+  })
+
+  for (const operation of ['metadata', 'diff']) {
+    it(`continues after timed-out ${operation} recovery and can retry later`, () => {
+      const fetchOptions = []
+      const execute = (command, flags, options) => {
+        if (flags[0] === 'fetch') {
+          fetchOptions.push(options)
+          throw Object.assign(new Error('spawnSync git ETIMEDOUT'), { code: 'ETIMEDOUT' })
+        }
+        return cachedExecSpy(command, flags, options)
+      }
+      const gitUtils = proxyquire('../../../src/plugins/util/git', {
+        './git-cache': { cachedExec: execute },
+        'node:child_process': { execFileSync: execute },
+      })
+
+      if (operation === 'metadata') {
+        const metadata = gitUtils.getGitMetadata({ headCommitSha: headSha })
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], undefined)
+        assert.strictEqual(metadata[GIT_COMMIT_SHA], git(checkout, ['rev-parse', 'HEAD']))
+        assert.strictEqual(fetchOptions.length, 2)
+        assert.strictEqual(getGitMetadata({ headCommitSha: headSha })[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+      } else {
+        assert.strictEqual(gitUtils.getGitDiff(baseSha, headSha), '')
+        assert.strictEqual(fetchOptions.length, 4)
+        assert.match(getGitDiff(baseSha, headSha), /\+head/)
+      }
+      for (const options of fetchOptions) {
+        assert.strictEqual(options.timeout, 5000)
+      }
+    })
+  }
+
+  for (const missingObject of ['head', 'parent']) {
+    for (const legacyGit of [false, true]) {
+      const suffix = legacyGit ? ' without GIT_NO_LAZY_FETCH support' : ''
+      it(`does not lazily fetch a missing ${missingObject} after timed-out metadata recovery${suffix}`, () => {
+        // Even failed filtered fetches configure the remote as a promisor.
+        git(checkout, ['config', 'remote.origin.promisor', 'true'])
+        git(checkout, ['config', 'remote.origin.partialclonefilter', 'blob:none'])
+        let fetches = 0
+        const execute = (command, flags, options) => {
+          if (flags[0] === 'fetch') {
+            fetches++
+            if (missingObject === 'parent' && fetches === 1) {
+              const object = execFileSync('git', ['cat-file', 'commit', headSha], { cwd: remote, stdio: 'pipe' })
+              git(checkout, ['hash-object', '-t', 'commit', '-w', '--stdin'], { input: object })
+              return ''
+            }
+            throw Object.assign(new Error('spawnSync git ETIMEDOUT'), { code: 'ETIMEDOUT' })
+          }
+          if (legacyGit) {
+            options = { ...options, env: { ...process.env, ...options?.env, GIT_NO_LAZY_FETCH: '0' } }
+          }
+          return cachedExecSpy(command, flags, options)
+        }
+        const gitUtils = proxyquire('../../../src/plugins/util/git', {
+          './git-cache': { cachedExec: execute },
+          'node:child_process': { execFileSync: execute },
+        })
+
+        const metadata = gitUtils.getGitMetadata({ headCommitSha: headSha })
+
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], undefined)
+        assert.strictEqual(metadata[GIT_COMMIT_SHA], git(checkout, ['rev-parse', 'HEAD']))
+        assert.strictEqual(fetches, 2)
+        const commits = git(checkout, ['cat-file', '--batch-all-objects', '--batch-check=%(objecttype)'])
+          .split('\n').filter(type => type === 'commit')
+        assert.strictEqual(commits.length, missingObject === 'head' ? 1 : 2)
+        assert.strictEqual(getGitMetadata({ headCommitSha: headSha })[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+      })
+    }
+  }
+
+  it('prepares the known diff base before the remote becomes unavailable', () => {
+    git(remote, ['config', 'uploadpack.allowFilter', 'false'])
+
+    const metadata = getGitMetadata({ headCommitSha: headSha, pullRequestBaseBranchSha: baseSha })
+    git(checkout, ['remote', 'set-url', 'origin', path.join(directory, 'unavailable.git')])
+    const diff = getGitDiff(baseSha, headSha)
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.match(diff, /-root/)
+    assert.match(diff, /\+head/)
+  })
+
+  it('fetches missing diff snapshots without relying on metadata extraction', () => {
+    git(remote, ['config', 'uploadpack.allowFilter', 'false'])
+
+    const diff = getGitDiff(baseSha, headSha)
+
+    assert.match(diff, /-root/)
+    assert.match(diff, /\+head/)
+  })
+
+  for (const { snapshot, branch, includeTarget, cachedShallow } of [
+    { snapshot: 'base', branch: 'head', includeTarget: true },
+    { snapshot: 'target', branch: 'base', includeTarget: true },
+    { snapshot: 'base and target', branch: 'root', includeTarget: true },
+    { snapshot: 'base for a working-tree diff', branch: 'head', includeTarget: false },
+    { snapshot: 'target with a stale cached depth', branch: 'base', includeTarget: true, cachedShallow: true },
+  ]) {
+    it(`preserves a full single-branch clone when fetching the missing ${snapshot}`, () => {
+      const diffBase = git(remote, ['rev-parse', 'refs/heads/juan-fernandez/merge^1'])
+      git(remote, ['update-ref', 'refs/heads/juan-fernandez/base', diffBase])
+      git(remote, ['update-ref', 'refs/heads/juan-fernandez/root', baseSha])
+      fs.rmSync(checkout, { recursive: true, force: true })
+      git(directory, [
+        'clone', '--single-branch', '--branch', `juan-fernandez/${branch}`,
+        pathToFileURL(remote).href, checkout,
+      ])
+      const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+      const originalRefs = git(checkout, ['show-ref'])
+      assert.strictEqual(git(checkout, ['rev-parse', '--is-shallow-repository']), 'false')
+      if (cachedShallow) {
+        getGitDiff = proxyquire('../../../src/plugins/util/git', {
+          './git-cache': {
+            cachedExec: (command, flags, options) => flags[1] === '--is-shallow-repository'
+              ? 'true'
+              : cachedExecSpy(command, flags, options),
+          },
+          'node:child_process': { execFileSync: cachedExecSpy },
+        }).getGitDiff
+      }
+
+      const diff = getGitDiff(diffBase, includeTarget ? headSha : undefined)
+
+      assert.match(diff, /-root/)
+      assert.match(diff, /\+head/)
+      assert.strictEqual(git(checkout, ['rev-parse', '--is-shallow-repository']), 'false')
+      assert.strictEqual(git(checkout, ['rev-list', '--count', diffBase]), '2')
+      assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
+      assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+      assert.strictEqual(git(checkout, ['show-ref']), originalRefs)
+    })
+  }
+
+  for (const partial of [false, true]) {
+    for (const missingObject of ['head', 'tree']) {
+      const clone = partial ? 'partial' : 'single-branch'
+      it(`recovers a missing ${missingObject} in a non-shallow ${clone} clone after a failed fetch`, () => {
+        git(remote, ['update-ref', 'refs/heads/juan-fernandez/root', baseSha])
+        fs.rmSync(checkout, { recursive: true, force: true })
+        git(directory, [
+          'clone', '--single-branch', '--no-checkout', ...(partial ? ['--filter=blob:none'] : []),
+          '--branch', 'juan-fernandez/root', pathToFileURL(remote).href, checkout,
+        ])
+        if (missingObject === 'tree') {
+          const object = execFileSync('git', ['cat-file', 'commit', headSha], { cwd: remote, stdio: 'pipe' })
+          git(checkout, ['hash-object', '-t', 'commit', '-w', '--stdin'], { input: object })
+        }
+        const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+        const originalRefs = git(checkout, ['show-ref'])
+        const fetchHeadPath = path.join(checkout, '.git', 'FETCH_HEAD')
+        fs.writeFileSync(fetchHeadPath, 'unchanged\n')
+        const fetchOptions = []
+        const execute = (command, flags, options) => {
+          if (flags[0] === 'fetch') {
+            assert.ok(!flags.includes('--depth=1'))
+            fetchOptions.push(options)
+            throw Object.assign(new Error('spawnSync git ETIMEDOUT'), { code: 'ETIMEDOUT' })
+          }
+          return cachedExecSpy(command, flags, options)
+        }
+        const gitUtils = proxyquire('../../../src/plugins/util/git', {
+          './git-cache': { cachedExec: execute },
+          'node:child_process': { execFileSync: execute },
+        })
+
+        const unavailable = gitUtils.getGitMetadata({ headCommitSha: headSha })
+
+        assert.strictEqual(unavailable[GIT_COMMIT_HEAD_MESSAGE], undefined)
+        assert.strictEqual(unavailable[GIT_COMMIT_SHA], originalHead)
+        assert.strictEqual(fetchOptions.length, 1)
+        assert.strictEqual(fetchOptions[0].timeout, 5000)
+        const metadata = getGitMetadata({ headCommitSha: headSha })
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_COMMITTER_EMAIL], 'pr-committer@example.com')
+        const fetches = cachedExecSpy.getCalls().filter(call => call.args[1][0] === 'fetch')
+        assert.strictEqual(fetches.length, 1)
+        assert.ok(!fetches[0].args[1].includes('--depth=1'))
+        assert.strictEqual(fetches[0].args[2].timeout, 5000)
+        assert.strictEqual(git(checkout, ['rev-parse', '--is-shallow-repository']), 'false')
+        assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
+        assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+        assert.strictEqual(git(checkout, ['show-ref']), originalRefs)
+        assert.strictEqual(fs.readFileSync(fetchHeadPath, 'utf8'), 'unchanged\n')
+      })
+    }
+  }
+
+  it('preserves existing base history while preparing a missing head for the diff', () => {
+    git(remote, ['config', 'uploadpack.allowFilter', 'false'])
+    git(remote, ['fast-import', '--quiet'], {
+      input: `commit refs/heads/juan-fernandez/base
+mark :5
+committer Base <base@example.com> 1700000005 +0000
+data 4
+base
+from ${baseSha}
+
+commit refs/heads/juan-fernandez/base
+committer Base <base@example.com> 1700000006 +0000
+data 4
+base
+from :5
+
+done
+`,
+    })
+    const knownBase = git(remote, ['rev-parse', 'refs/heads/juan-fernandez/base'])
+    git(checkout, ['fetch', '--depth=2', 'origin', knownBase])
+
+    getGitMetadata({ headCommitSha: headSha, pullRequestBaseBranchSha: knownBase })
+    git(checkout, ['remote', 'set-url', 'origin', path.join(directory, 'unavailable.git')])
+
+    assert.strictEqual(git(checkout, ['rev-list', '--count', knownBase]), '2')
+    assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '1')
+    assert.match(getGitDiff(knownBase, headSha), /\+head/)
+  })
+
+  for (const cachedShallow of [true, false]) {
+    it(`uses the current shallow state for metadata when the Git cache contains ${cachedShallow}`, () => {
+      const diffBase = git(remote, ['rev-parse', 'refs/heads/juan-fernandez/merge^1'])
+      const repo = path.resolve(__dirname, '../../../../..')
+      const script = `
+        const fs = require('node:fs')
+        const path = require('node:path')
+        const { execFileSync } = require('node:child_process')
+        const [repo, checkout, remoteUrl, headSha, diffBase, cacheDir, cachedShallow] = process.argv.slice(1)
+        const options = { cwd: checkout, stdio: 'pipe' }
+        if (cachedShallow === 'false') execFileSync('git', ['fetch', '--unshallow', 'origin'], options)
+        const config = require(path.join(repo, 'packages/dd-trace/src/config'))()
+        config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = true
+        config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = cacheDir
+        const { cachedExec } = require(path.join(repo, 'packages/dd-trace/src/plugins/util/git-cache'))
+        const cachedState = cachedExec('git', ['rev-parse', '--is-shallow-repository'], options).toString().trim()
+        process.chdir(path.dirname(checkout))
+        fs.rmSync(checkout, { recursive: true, force: true })
+        const shallow = cachedShallow === 'false'
+        execFileSync('git', [
+          'clone', '--no-checkout', '--single-branch', ...(shallow ? ['--depth=1'] : []),
+          '--branch', shallow ? 'juan-fernandez/merge' : 'juan-fernandez/head', remoteUrl, checkout,
+        ], { stdio: 'pipe' })
+        process.chdir(checkout)
+        const originalHead = execFileSync('git', ['rev-parse', 'HEAD'], options).toString()
+        const originalRefs = execFileSync('git', ['show-ref'], options).toString()
+        const { getGitMetadata, getGitDiff } = require(path.join(repo, 'packages/dd-trace/src/plugins/util/git'))
+        const metadata = getGitMetadata({ headCommitSha: headSha, pullRequestBaseBranchSha: diffBase })
+        const metadataShallowState = execFileSync('git', ['rev-parse', '--is-shallow-repository'], options)
+          .toString().trim()
+        const diff = getGitDiff(diffBase, headSha)
+        process.stdout.write(JSON.stringify({
+          cachedState, metadata, metadataShallowState, diff,
+          finalShallowState: execFileSync('git', ['rev-parse', '--is-shallow-repository'], options).toString().trim(),
+          headCount: execFileSync('git', ['rev-list', '--count', headSha], options).toString().trim(),
+          originalHead, originalRefs,
+          finalHead: execFileSync('git', ['rev-parse', 'HEAD'], options).toString(),
+          finalRefs: execFileSync('git', ['show-ref'], options).toString(),
+        }))
+      `
+      const result = JSON.parse(execFileSync(process.execPath, [
+        '-e', script, repo, checkout, pathToFileURL(remote).href, headSha, diffBase,
+        path.join(directory, 'git-cache'), String(cachedShallow),
+      ], { cwd: checkout, stdio: 'pipe' }))
+
+      assert.strictEqual(result.cachedState, String(cachedShallow))
+      assert.strictEqual(result.metadataShallowState, String(!cachedShallow))
+      assert.strictEqual(result.finalShallowState, String(!cachedShallow))
+      assert.strictEqual(result.metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+      assert.strictEqual(result.headCount, cachedShallow ? '2' : '1')
+      assert.match(result.diff, /-root/)
+      assert.match(result.diff, /\+head/)
+      assert.strictEqual(result.finalHead, result.originalHead)
+      assert.strictEqual(result.finalRefs, result.originalRefs)
+    })
+  }
+
+  it('does not use a cached missing-object probe to shorten subsequently fetched head history', () => {
+    const repo = path.resolve(__dirname, '../../../../..')
+    const script = `
+      const path = require('node:path')
+      const { execFileSync } = require('node:child_process')
+      const [repo, headSha, cacheDir] = process.argv.slice(1)
+      const config = require(path.join(repo, 'packages/dd-trace/src/config'))()
+      config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = true
+      config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = cacheDir
+      const { cachedExec } = require(path.join(repo, 'packages/dd-trace/src/plugins/util/git-cache'))
+      try { cachedExec('git', ['cat-file', '-e', headSha]) } catch {}
+      execFileSync('git', ['fetch', '--depth=2', 'origin', headSha], { stdio: 'pipe' })
+      const { getGitMetadata } = require(path.join(repo, 'packages/dd-trace/src/plugins/util/git'))
+      process.stdout.write(JSON.stringify(getGitMetadata({ headCommitSha: headSha })))
+    `
+
+    const metadata = JSON.parse(execFileSync(process.execPath, [
+      '-e', script, repo, headSha, path.join(directory, 'git-cache'),
+    ], { cwd: checkout, stdio: 'pipe' }))
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
+  })
+
+  for (const missingObject of ['parent', 'tree']) {
+    it(`recovers head metadata and its Test Management marker with a missing ${missingObject}`, (done) => {
+      const commits = missingObject === 'parent' ? [headSha] : [headSha, baseSha]
+      for (const sha of commits) {
+        const object = execFileSync('git', ['cat-file', 'commit', sha], { cwd: remote, stdio: 'pipe' })
+        git(checkout, ['hash-object', '-t', 'commit', '-w', '--stdin'], { input: object })
+      }
+      git(checkout, ['cat-file', '-e', headSha])
+      assert.throws(() => git(checkout, ['show', '-s', '--format=%B', headSha]), { status: 128 })
+
+      const metadata = getGitMetadata({ headCommitSha: headSha })
+
+      assertObjectContains(metadata, {
+        [GIT_COMMIT_HEAD_MESSAGE]: "PR head DD_abc123'\n",
+        [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'PR Author',
+        [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'pr-author@example.com',
+        [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'PR Committer',
+        [GIT_COMMIT_HEAD_COMMITTER_EMAIL]: 'pr-committer@example.com',
+      })
+
+      const { getTestManagementTests } = proxyquire(
+        '../../../src/ci-visibility/test-management/get-test-management-tests', {
+          '../requests/fs-cache': { withCache: (key, fetch, callback) => fetch(null, callback) },
+        })
+      const scope = nock('http://localhost:8126')
+        .post('/evp_proxy/v2/api/v2/test/libraries/test-management/tests', body =>
+          body.data.attributes.sha === headSha &&
+          body.data.attributes.commit_message === "PR head DD_abc123'\n")
+        .reply(200, { data: { attributes: { modules: {} } } })
+
+      getTestManagementTests({
+        url: 'http://localhost:8126',
+        isEvpProxy: true,
+        evpProxyPrefix: '/evp_proxy/v2',
+        repositoryUrl: 'https://example.com/repository',
+        commitHeadSha: headSha,
+        commitHeadMessage: metadata[GIT_COMMIT_HEAD_MESSAGE],
+        commitMessage: metadata[GIT_COMMIT_MESSAGE],
+        sha: metadata[GIT_COMMIT_SHA],
+      }, err => {
+        assert.ifError(err)
+        assert.ok(scope.isDone())
+        done()
+      })
+    })
+  }
+
+  it('can still retrieve a PR diff when the local shallow head has a missing base', () => {
+    git(checkout, ['fetch', '--depth=1', 'origin', headSha])
+    git(checkout, ['checkout', '--detach', headSha])
+    assert.throws(() => git(checkout, ['cat-file', '-e', baseSha]), { status: 1 })
+
+    const metadata = getGitMetadata({ headCommitSha: headSha })
+    const diff = getGitDiff(baseSha, headSha)
+
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+    assert.match(diff, /diff --git a\/history\.txt b\/history\.txt/)
+    assert.match(diff, /-root/)
+    assert.match(diff, /\+head/)
+  })
+
+  for (const legacyGit of [false, true]) {
+    const suffix = legacyGit ? ' without GIT_NO_LAZY_FETCH support' : ''
+    it(`does not lazily fetch head history in a shallow partial clone${suffix}`, () => {
+      fs.rmSync(checkout, { recursive: true, force: true })
+      git(directory, [
+        'clone', '--depth=1', '--filter=blob:none', '--no-checkout', '--branch', 'juan-fernandez/merge',
+        pathToFileURL(remote).href, checkout,
+      ])
+      assert.strictEqual(git(checkout, ['config', '--get', 'remote.origin.promisor']), 'true')
+      if (legacyGit) {
+        // Simulate Git versions predating GIT_NO_LAZY_FETCH; the transport guard must still prevent lazy downloads.
+        const execute = (command, flags, options) => cachedExecSpy(command, flags, {
+          ...options,
+          env: { ...process.env, ...options?.env, GIT_NO_LAZY_FETCH: '0' },
+        })
+        getGitMetadata = proxyquire('../../../src/plugins/util/git', {
+          './git-cache': { cachedExec: execute },
+          'node:child_process': { execFileSync: execute },
+        }).getGitMetadata
+      }
+
+      const metadata = getGitMetadata({ headCommitSha: headSha })
+
+      assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
+      assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '1')
+      const fetchedCommits = git(checkout, ['cat-file', '--batch-all-objects', '--batch-check=%(objecttype)'])
+        .split('\n').filter(type => type === 'commit')
+      assert.strictEqual(fetchedCommits.length, 2)
+    })
+  }
 })

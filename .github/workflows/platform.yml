@@ -91,6 +91,10 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: npm run test:integration:bun
+      - name: Run existing unit tests with Bun
+        run: |
+          ./node_modules/.bin/bun run --bun test:core
+          ./node_modules/.bin/bun run --bun test:shimmer
       - uses: ./.github/actions/upload-junit-artifacts
         if: always()
         with:

@@ -26,7 +26,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       t.agent.addRemoteConfig(t.rcConfig)
       const response = await t.triggerBreakpoint()
       assert.strictEqual(response.status, 200)
-      assert.deepStrictEqual(response.data, { hello: 'bar' })
+      assert.deepStrictEqual(response.body, { hello: 'bar' })
 
       const [{ payload }] = await diagnosticsInput
 
@@ -65,11 +65,11 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       t.agent.addRemoteConfig(t.rcConfig)
       const response1 = await t.triggerBreakpoint()
       assert.strictEqual(response1.status, 200)
-      assert.deepStrictEqual(response1.data, { hello: 'bar' })
+      assert.deepStrictEqual(response1.body, { hello: 'bar' })
 
-      const response2 = await t.axios.get(t.breakpoint.url)
+      const response2 = await t.request(t.breakpoint.url)
       assert.strictEqual(response2.status, 200)
-      assert.deepStrictEqual(response2.data, { hello: 'bar' })
+      assert.deepStrictEqual(response2.body, { hello: 'bar' })
 
       await allSnapshotsReceived
     })
@@ -88,7 +88,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       t.agent.addRemoteConfig(t.rcConfig)
       const response = await t.triggerBreakpoint()
       assert.strictEqual(response.status, 200)
-      assert.deepStrictEqual(response.data, { hello: 'bar' })
+      assert.deepStrictEqual(response.body, { hello: 'bar' })
 
       const [{ payload }] = await v2Input
 
@@ -119,7 +119,7 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       t.agent.addRemoteConfig(t.rcConfig)
       const response = await t.triggerBreakpoint()
       assert.strictEqual(response.status, 200)
-      assert.deepStrictEqual(response.data, { hello: 'bar' })
+      assert.deepStrictEqual(response.body, { hello: 'bar' })
 
       const [, [{ payload }]] = await Promise.all([v2404Event, diagnosticsInput])
 
@@ -156,11 +156,11 @@ describe('Dynamic Instrumentation - Endpoint Fallback', function () {
       t.agent.addRemoteConfig(t.rcConfig)
       const response1 = await t.triggerBreakpoint()
       assert.strictEqual(response1.status, 200)
-      assert.deepStrictEqual(response1.data, { hello: 'bar' })
+      assert.deepStrictEqual(response1.body, { hello: 'bar' })
 
-      const response2 = await t.axios.get(t.breakpoint.url)
+      const response2 = await t.request(t.breakpoint.url)
       assert.strictEqual(response2.status, 200)
-      assert.deepStrictEqual(response2.data, { hello: 'bar' })
+      assert.deepStrictEqual(response2.body, { hello: 'bar' })
 
       await Promise.all([v2404Event, allSnapshotsReceived])
     })

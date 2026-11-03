@@ -2,11 +2,18 @@
 
 const tracerVersion = require('../../../version').VERSION
 
+// Service discovery reads this metadata after tracer initialization; retaining the handle keeps
+// the backing memfd open for the process lifetime.
+let metadataHandle
+
+/**
+ * @param {import('./config/config-base')} config
+ */
 function storeConfig (config) {
   try {
     // Load binding first to not import other modules if it throws
-    const libdatadog = require('@datadog/libdatadog')
-    const processDiscovery = libdatadog.maybeLoad('process-discovery')
+    const libdatadogExtras = require('@datadog/libdatadog-extras')
+    const processDiscovery = libdatadogExtras.maybeLoad('process-discovery')
     if (processDiscovery === undefined) {
       return
     }
@@ -42,7 +49,8 @@ function storeConfig (config) {
       threadlocalMetadata
     )
 
-    return processDiscovery.storeMetadata(metadata)
+    metadataHandle = processDiscovery.storeMetadata(metadata)
+    return metadataHandle
   } catch {
     // Either libdatadog or process-discovery is unavailable.
   }

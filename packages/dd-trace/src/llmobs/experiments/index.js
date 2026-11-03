@@ -2,8 +2,10 @@
 
 const log = require('../../log')
 const { ExperimentsClient } = require('./client')
-const { Dataset, DatasetRecord } = require('./dataset')
+const { Dataset } = require('./dataset')
 const { Experiment, ExternalExperiment } = require('./experiment')
+const evaluatorTypes = require('./evaluator')
+const remoteEvaluatorTypes = require('./remote-evaluator')
 const { validateTagsList } = require('./util')
 const NoopExperiments = require('./noop')
 
@@ -35,9 +37,41 @@ class Experiments {
 
   constructor (config, llmobs) {
     this.#config = config
-    this.#llmobs = config.llmobs?.mlApp || config.service ? llmobs : undefined
-    this.#projectName = config.llmobs?.projectName || DEFAULT_PROJECT_NAME
+    this.#llmobs = config.llmobs?.DD_LLMOBS_ML_APP || config.service ? llmobs : undefined
+    this.#projectName = config.llmobs?.DD_LLMOBS_PROJECT_NAME || DEFAULT_PROJECT_NAME
     this.#client = this.#clientForProject(this.#projectName)
+  }
+
+  get BaseEvaluator () {
+    return evaluatorTypes.BaseEvaluator
+  }
+
+  get BaseSummaryEvaluator () {
+    return evaluatorTypes.BaseSummaryEvaluator
+  }
+
+  get EvaluatorContext () {
+    return evaluatorTypes.EvaluatorContext
+  }
+
+  get SummaryEvaluatorContext () {
+    return evaluatorTypes.SummaryEvaluatorContext
+  }
+
+  get EvaluatorResult () {
+    return evaluatorTypes.EvaluatorResult
+  }
+
+  get MultiEvaluatorResult () {
+    return evaluatorTypes.MultiEvaluatorResult
+  }
+
+  get RemoteEvaluator () {
+    return remoteEvaluatorTypes.RemoteEvaluator
+  }
+
+  get RemoteEvaluatorError () {
+    return remoteEvaluatorTypes.RemoteEvaluatorError
   }
 
   /**
@@ -72,21 +106,7 @@ class Experiments {
       : (descriptionOrOptions ?? {})
     const client = this.#clientForOperation(options.projectName)
     const dataset = new Dataset(client, name, options.description ?? '')
-    const recordIds = new Set()
-    if ((options.records) != null) {
-      for (const record of options.records) {
-        if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
-          throw new Error('record id must be a non-empty string')
-        }
-        if (record.id !== undefined) {
-          if (recordIds.has(record.id)) throw new Error(`Duplicate record id '${record.id}'`)
-          recordIds.add(record.id)
-        }
-        dataset.addRecord(
-          new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id, record.tags)
-        )
-      }
-    }
+    if ((options.records) != null) dataset.addRecords(options.records)
     return dataset
   }
 
@@ -95,7 +115,7 @@ class Experiments {
   // wait until that many records are readable. Pass `tags` to filter records by
   // dataset record tags.
   async pullDataset (name, options = {}) {
-    const { expectedRecordCount, maxWaitMs = 30_000, projectName, tags, version } = options
+    const { expectedRecordCount, maxWaitMs = 30_000, projectName, tags, version: datasetVersion = null } = options
     const filterTags = validateTagsList(tags)
     const client = this.#clientForOperation(projectName)
     const resolvedProjectName = projectName ?? this.#projectName
@@ -103,7 +123,6 @@ class Experiments {
 
     let pulledDataset = null
     let records = []
-    const datasetVersion = version ?? null
     let latestVersion = null
     let lastError = ''
 
@@ -193,9 +212,9 @@ class Experiments {
     const projectName = options?.projectName ?? datasetProjectName
     const client = this.#clientForOperation(projectName)
     const usesDatasetOverride = datasetProjectName !== undefined && datasetProjectName !== this.#projectName
-    const resolvedProjectName = projectName ?? this.#config.llmobs?.projectName
+    const resolvedProjectName = projectName ?? this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME
     const experimentOptions = options?.projectName === undefined &&
-      (usesDatasetOverride || this.#config.llmobs?.projectName !== undefined) &&
+      (usesDatasetOverride || this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME !== undefined) &&
       resolvedProjectName !== undefined
       ? { ...options, projectName: resolvedProjectName }
       : options
@@ -212,8 +231,9 @@ class Experiments {
    */
   startExperiment (options) {
     const client = this.#clientForOperation(options?.projectName)
-    const experimentOptions = options?.projectName === undefined && this.#config.llmobs?.projectName !== undefined
-      ? { ...options, projectName: this.#config.llmobs.projectName }
+    const experimentOptions = options?.projectName === undefined &&
+      this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME !== undefined
+      ? { ...options, projectName: this.#config.llmobs.DD_LLMOBS_PROJECT_NAME }
       : options
     return new Experiment(client, { ...experimentOptions, external: true }).start()
       .then(experiment => new ExternalExperiment(experiment))
@@ -226,11 +246,16 @@ function createExperiments (config, llmobs) {
   if (!config.llmobs?.DD_LLMOBS_ENABLED) {
     return new NoopExperiments('LLM Observability is not enabled')
   }
-  if (!(config.DD_API_KEY) || !config.DD_APP_KEY) {
+  if (config.DD_API_KEY === undefined || config.DD_APP_KEY === undefined) {
     log.warn('LLMObs experiments: missing api and/or app keys, set DD_API_KEY and DD_APP_KEY')
     return new NoopExperiments('DD_API_KEY and DD_APP_KEY are required for experiments')
   }
   return new Experiments(config, llmobs)
 }
 
-module.exports = { Experiments, createExperiments }
+module.exports = {
+  Experiments,
+  createExperiments,
+  ...evaluatorTypes,
+  ...remoteEvaluatorTypes,
+}

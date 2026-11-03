@@ -7,7 +7,6 @@ const APPROVED_EXECUTABLE = Symbol('approvedValidationExecutable')
  *
  * @param {object} command command to bind
  * @param {object} identity approved executable identity
- * @returns {void}
  */
 function bindApprovedExecutable (command, identity) {
   Object.defineProperty(command, APPROVED_EXECUTABLE, {

@@ -346,7 +346,6 @@ function runCommand (command, options = {}) {
  *
  * @param {object} result command result
  * @param {object[]} outputStates prepared command output state
- * @returns {void}
  */
 function finishCommandOutputCleanup (result, outputStates) {
   result.commandOutputPaths = cleanupCommandOutputs(outputStates)
@@ -608,7 +607,6 @@ function serializeCommand (command) {
  * Renders the command that will actually execute without trusting display-only manifest fields.
  *
  * @param {object} command command to render
- * @returns {string} unambiguous customer-facing command
  */
 function serializeApprovalCommand (command) {
   return command.argv.map(formatApprovalArgument).join(' ')
@@ -617,11 +615,9 @@ function serializeApprovalCommand (command) {
 /**
  * Quotes arguments whose boundaries would otherwise be ambiguous in an approval plan.
  *
- * @param {string} value argument value
- * @returns {string} visible argument
+ * @param {string} argument argument value
  */
-function formatApprovalArgument (value) {
-  const argument = String(value)
+function formatApprovalArgument (argument) {
   if (/^[A-Za-z0-9_@%+=:,./\\-]+$/.test(argument)) return argument
   if (process.platform === 'win32') return JSON.stringify(argument)
   return `'${argument.replaceAll('\'', '\'"\'"\'')}'`

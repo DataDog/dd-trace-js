@@ -1,8 +1,6 @@
 'use strict'
 
-const telemetryMetrics = require('../../telemetry/metrics')
-
-const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
+const { appsecMetrics } = require('./common')
 
 function incrementMissingUserLogin (framework, eventType) {
   appsecMetrics.count('instrum.user_auth.missing_user_login', {

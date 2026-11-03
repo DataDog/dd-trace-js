@@ -4,6 +4,8 @@ const assert = require('node:assert/strict')
 const path = require('path')
 const { inspect } = require('node:util')
 
+const proxyquire = require('proxyquire')
+
 const { reportStackTrace, getCallsiteFrames } = require('../../src/appsec/stack_trace')
 
 describe('Stack trace reporter', () => {
@@ -72,6 +74,25 @@ describe('Stack trace reporter', () => {
       reportStackTrace(rootSpan, stackId, frames)
 
       assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+    })
+
+    it('should keep every frame when the dd-trace location is unknown', () => {
+      const { getCallsiteFrames } = proxyquire('../../src/appsec/stack_trace', {
+        '../util': { ddBasePath: undefined },
+      })
+      const fileNames = [path.join(__dirname, 'file0'), path.join('undefined', 'file1')]
+      const callSiteList = fileNames.map((fileName, i) => ({
+        getFileName: () => fileName,
+        getLineNumber: () => i,
+        getColumnNumber: () => i,
+        getFunctionName: () => `function${i}`,
+        getTypeName: () => `Class${i}`,
+        isNative: () => false,
+      }))
+
+      const frames = getCallsiteFrames(32, getCallsiteFrames, () => callSiteList)
+
+      assert.deepStrictEqual(frames.map(frame => frame.file), fileNames)
     })
   })
 

@@ -1,0 +1,11 @@
+_v: 1
+name: apollo
+display_name: Apollo Gateway
+description: Instruments Apollo Gateway GraphQL requests, including validation, query planning, execution, subgraph
+  fetching, and response postprocessing.
+packages:
+- name: '@apollo/gateway'
+category:
+- graphql.server
+systems: []
+creation_date: '2024-03-07'

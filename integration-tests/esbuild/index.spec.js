@@ -10,6 +10,7 @@ const pathModule = require('node:path')
 const fs = require('node:fs')
 
 const { describe, before, it } = require('mocha')
+const semver = require('semver')
 
 // sub process must be executed inside TEST_DIR
 const TEST_DIR = pathModule.join(__dirname, '.')
@@ -107,6 +108,15 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    for (const format of ['cjs', 'esm']) {
+      it(`instruments Orchestrion integrations in ${format} bundles`, function () {
+        const { engines } = require(pathModule.join(TEST_DIR, 'node_modules/@langchain/core/package.json'))
+        if (!semver.satisfies(process.versions.node, engines.node)) this.skip()
+
+        execSync(`node ./build-and-test-orchestrion.js ${format}`, { timeout })
+      })
+    }
+
     describe('ESM', () => {
       afterEach(() => {
         rmSync('./out.mjs', { force: true })
@@ -119,6 +129,48 @@ esbuildVersions.forEach((version) => {
         execSync('npm run built:esm', {
           timeout,
         })
+      })
+
+      it('bundles instrumented Node.js subpaths', async () => {
+        delete require.cache[require.resolve('esbuild')]
+        const esbuild = require('esbuild')
+        const ddPlugin = require('../../esbuild')
+        const { version: installedVersion } = JSON.parse(
+          fs.readFileSync(require.resolve('esbuild/package.json'), 'utf8')
+        )
+
+        assert.strictEqual(esbuild.version, installedVersion)
+
+        const result = await esbuild.build({
+          absWorkingDir: pathModule.dirname(process.cwd()),
+          stdin: {
+            contents: `
+              import dns from 'node:dns/promises'
+              import http from 'node:http'
+              console.log(typeof dns.lookup, typeof http.createServer)
+            `,
+            loader: 'js',
+            resolveDir: process.cwd(),
+            sourcefile: 'builtin-subpath.mjs',
+          },
+          bundle: true,
+          format: 'esm',
+          platform: 'node',
+          plugins: [ddPlugin],
+          write: false,
+        })
+
+        const output = result.outputFiles[0].text
+        assert.match(
+          output,
+          /register.*"node:dns\/promises".*"node:dns\/promises"\);$/m,
+          'Bundle should contain the node:dns/promises instrumentation'
+        )
+        assert.match(
+          output,
+          /register.*"node:http".*"node:http"\);$/m,
+          'Bundle should contain the node:http instrumentation'
+        )
       })
 
       it('runs minified ESM bundles without ReferenceError on arguments', () => {

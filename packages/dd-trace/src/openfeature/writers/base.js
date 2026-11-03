@@ -1,9 +1,14 @@
 'use strict'
 
 const request = require('../../exporters/common/request')
-const { safeJSONStringify } = require('../../exporters/common/util')
 
 const log = require('../../log')
+const tracerVersion = require('../../../../../package.json').version
+
+const EVP_ORIGIN_HEADERS = {
+  'DD-EVP-ORIGIN': 'dd-trace-js',
+  'DD-EVP-ORIGIN-VERSION': tracerVersion,
+}
 
 /**
  * @typedef {object} BaseFFEWriterOptions
@@ -15,6 +20,7 @@ const log = require('../../log')
  * @property {number} [payloadSizeLimit] - Maximum payload size in bytes
  * @property {number} [eventSizeLimit] - Maximum individual event size in bytes
  * @property {object} [headers] - Additional HTTP headers
+ * @property {(error: Error, statusCode?: number) => string} [formatError] - Optional delivery error redaction
  */
 
 /**
@@ -23,6 +29,8 @@ const log = require('../../log')
  * @property {string} endpoint - Route endpoint
  * @property {object} headers - Route-specific headers
  * @property {import('node:https').Agent} [agent] - Optional HTTPS proxy agent
+ * @property {Function} [onFallback] - Called after direct fallback becomes active
+ * @property {Function} [onUnavailable] - Called after the local route becomes unavailable
  */
 
 /**
@@ -30,6 +38,8 @@ const log = require('../../log')
  * @property {URL} url - Route base URL
  * @property {string} endpoint - Route endpoint
  * @property {object} requestOptions - HTTP request options
+ * @property {Function} [onFallback] - Called after direct fallback becomes active
+ * @property {Function} [onUnavailable] - Called after the local route becomes unavailable
  */
 
 /**
@@ -37,22 +47,32 @@ const log = require('../../log')
  *
  * @param {Error | null} error - Request error
  * @param {number | undefined} statusCode - HTTP response status
- * @returns {boolean} Whether direct retry is safe
  */
-function isDefinitiveRejection (error, statusCode) {
+function isSafeToReplay (error, statusCode) {
   return error?.code === 'EAI_AGAIN' || error?.code === 'ECONNREFUSED' ||
     error?.code === 'ENOENT' || error?.code === 'ENOTFOUND' ||
-    statusCode === 403 || statusCode === 404 || statusCode === 405
+    statusCode === 404 || statusCode === 405
 }
 
 /**
- * Tests whether a local route can have accepted an event batch before failing.
+ * Tests whether a local route failed without an authoritative HTTP response.
  *
  * @param {Error | null} error - Request error
- * @returns {boolean} Whether the delivery result is ambiguous
+ * @param {number | undefined} statusCode - HTTP response status
  */
-function isAmbiguousNetworkFailure (error) {
-  return error?.code === 'ECONNRESET' || error?.code === 'EPIPE' || error?.code === 'ETIMEDOUT'
+function isTransportFailure (error, statusCode) {
+  // SDK backpressure says nothing about the local receiver's health.
+  return error !== null && error !== undefined && statusCode === undefined &&
+    error.code !== 'ERR_DD_REQUEST_BUFFER_FULL'
+}
+
+/**
+ * Tests whether an HTTP response should move only future Agentless batches.
+ *
+ * @param {number | undefined} statusCode - HTTP response status
+ */
+function shouldSwitchFutureRoute (statusCode) {
+  return statusCode === 403 || statusCode === 429 || statusCode >= 500 && statusCode < 600
 }
 
 /**
@@ -61,10 +81,14 @@ function isAmbiguousNetworkFailure (error) {
  */
 class BaseFFEWriter {
   #destroyer
+  #formatError
   /**
    * @param {BaseFFEWriterOptions} options - Writer configuration options
    */
-  constructor ({ interval, timeout, config, endpoint, agentUrl, payloadSizeLimit, eventSizeLimit, headers }) {
+  constructor ({
+    interval, timeout, config, endpoint, agentUrl, payloadSizeLimit, eventSizeLimit, headers, formatError,
+  }) {
+    this.#formatError = formatError
     this._interval = interval ?? 1000
     this._timeout = timeout ?? 5000
 
@@ -83,10 +107,11 @@ class BaseFFEWriter {
     this._requestOptions = {
       headers: {
         ...this._headers,
+        ...EVP_ORIGIN_HEADERS,
         'Content-Type': 'application/json',
       },
       method: 'POST',
-      retry: true,
+      retry: false,
       timeout: this._timeout,
       url: this._baseUrl,
       path: this._endpoint,
@@ -152,11 +177,10 @@ class BaseFFEWriter {
 
     const payload = this._encode(this.makePayload(events))
 
+    // Keep byte counting behind the debug callback because payloads can be several megabytes.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-    log.debug(() => `${this.constructor.name} flushing payload: ${safeJSONStringify(payload)}`)
-
-    const route = this.#createActiveRoute()
-    this.#sendRequest(payload, events.length, route, this._fallbackRoute)
+    log.debug(() => `${this.constructor.name} flushing ${events.length} events (${Buffer.byteLength(payload)} bytes)`)
+    this._sendPayload(payload, events.length)
   }
 
   /**
@@ -174,7 +198,8 @@ class BaseFFEWriter {
    */
   destroy () {
     if (this.#destroyer) {
-      log.debug('Stopping %s', this.constructor.name)
+      log.debug('%s stopping with %d buffered events; final flush requested without awaiting delivery',
+        this.constructor.name, this._buffer.length)
       clearInterval(this._periodic)
       this.flush()
       globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
@@ -189,10 +214,22 @@ class BaseFFEWriter {
   /**
    * @private
    * @param {Array<object>} payload - Payload to encode
-   * @returns {string} JSON-stringified payload
    */
   _encode (payload) {
     return JSON.stringify(payload)
+  }
+
+  /**
+   * Sends one encoded event batch through a snapshot of the selected routes.
+   *
+   * @protected
+   * @param {string} payload - Encoded event batch
+   * @param {number} eventCount - Event count
+   * @param {(delivered: boolean) => void} [onComplete] - Final outcome after any safe fallback attempt
+   */
+  _sendPayload (payload, eventCount, onComplete) {
+    const route = this.#createActiveRoute()
+    this.#sendRequest(payload, eventCount, route, this._fallbackRoute, onComplete)
   }
 
   /**
@@ -200,7 +237,6 @@ class BaseFFEWriter {
    *
    * @param {WriterRoute} route - Active route
    * @param {WriterRoute} [fallbackRoute] - Direct fallback route
-   * @returns {void}
    */
   _setRoutes (route, fallbackRoute) {
     this.#activateRoute(this.#createRoute(route))
@@ -214,21 +250,26 @@ class BaseFFEWriter {
    * @returns {ActiveWriterRoute} Active route state
    */
   #createRoute (route) {
+    const requestOptions = {
+      headers: {
+        ...route.headers,
+        ...EVP_ORIGIN_HEADERS,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      retry: false,
+      timeout: this._timeout,
+      url: route.url,
+      path: route.endpoint,
+    }
+    if (route.agent) requestOptions.agent = route.agent
+
     return {
       url: route.url,
       endpoint: route.endpoint,
-      requestOptions: {
-        ...(route.agent && { agent: route.agent }),
-        headers: {
-          ...route.headers,
-          'Content-Type': 'application/json',
-        },
-        method: 'POST',
-        retry: true,
-        timeout: this._timeout,
-        url: route.url,
-        path: route.endpoint,
-      },
+      requestOptions,
+      onFallback: route.onFallback,
+      onUnavailable: route.onUnavailable,
     }
   }
 
@@ -242,6 +283,8 @@ class BaseFFEWriter {
       url: this._baseUrl,
       endpoint: this._endpoint,
       requestOptions: this._requestOptions,
+      onFallback: this._onFallback,
+      onUnavailable: this._onUnavailable,
     }
   }
 
@@ -249,59 +292,123 @@ class BaseFFEWriter {
    * Makes a route active for future event batches.
    *
    * @param {ActiveWriterRoute} route - Route state
-   * @returns {void}
    */
   #activateRoute (route) {
     this._baseUrl = route.url
     this._endpoint = route.endpoint
     this._requestOptions = route.requestOptions
+    this._onFallback = route.onFallback
+    this._onUnavailable = route.onUnavailable
   }
 
   /**
-   * Sends an encoded batch and switches to direct intake after supported local route failures.
+   * Sends an encoded batch once per route and applies safe local fallback semantics.
    *
    * @param {string} payload - Encoded event batch
    * @param {number} eventCount - Event count
    * @param {ActiveWriterRoute} route - Selected route
    * @param {ActiveWriterRoute} [fallbackRoute] - Direct fallback route
-   * @returns {void}
+   * @param {(delivered: boolean) => void} [onComplete] - True only for a successful final response
    */
-  #sendRequest (payload, eventCount, route, fallbackRoute) {
-    request(payload, route.requestOptions, (error, response, statusCode) => {
-      if (fallbackRoute && isDefinitiveRejection(error, statusCode)) {
+  #sendRequest (payload, eventCount, route, fallbackRoute, onComplete) {
+    // The request helper mutates headers. Concurrent envelopes must not share them.
+    const requestOptions = { ...route.requestOptions, headers: { ...route.requestOptions.headers } }
+    request(payload, requestOptions, (error, response, statusCode) => {
+      const errorMessage = error && (this.#formatError
+        ? this.#formatError(error, statusCode)
+        : error.message)
+      if (fallbackRoute && isSafeToReplay(error, statusCode)) {
         log.debug(
-          '%s switching from %s%s to direct intake after definitive rejection',
+          '%s switching from %s to direct intake after definitive rejection',
           this.constructor.name,
-          route.url.href,
-          route.endpoint
+          route.url.origin
         )
-        this.#activateRoute(fallbackRoute)
-        this._fallbackRoute = undefined
-        this.#sendRequest(payload, eventCount, fallbackRoute)
+        if (this._requestOptions === route.requestOptions) {
+          this.#activateRoute(fallbackRoute)
+          this._fallbackRoute = undefined
+          route.onFallback?.()
+        }
+        this.#sendRequest(payload, eventCount, fallbackRoute, undefined, onComplete)
         return
       }
 
-      if (fallbackRoute && isAmbiguousNetworkFailure(error)) {
+      if (fallbackRoute && isTransportFailure(error, statusCode)) {
         log.debug(
-          '%s switching future batches from %s%s to direct intake after ambiguous failure without replaying the batch',
+          '%s switching future batches from %s to direct intake after an ambiguous failure without replay',
           this.constructor.name,
-          route.url.href,
-          route.endpoint
+          route.url.origin
         )
-        this.#activateRoute(fallbackRoute)
-        this._fallbackRoute = undefined
-        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
+        if (this._requestOptions === route.requestOptions) {
+          this.#activateRoute(fallbackRoute)
+          this._fallbackRoute = undefined
+          route.onFallback?.()
+        }
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
+        onComplete?.(false)
         return
       }
 
-      if (error) {
-        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
-      } else if (statusCode >= 200 && statusCode < 300) {
-        log.debug('Successfully sent %d events', eventCount)
+      if (fallbackRoute && shouldSwitchFutureRoute(statusCode)) {
+        log.debug(
+          '%s switching future batches from %s to direct intake after status %d without replay',
+          this.constructor.name,
+          route.url.origin,
+          statusCode
+        )
+        if (this._requestOptions === route.requestOptions) {
+          this.#activateRoute(fallbackRoute)
+          this._fallbackRoute = undefined
+          route.onFallback?.()
+        }
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
+        onComplete?.(false)
+        return
+      }
+
+      if (
+        !fallbackRoute &&
+        this._requestOptions === route.requestOptions &&
+        route.onUnavailable &&
+        (isSafeToReplay(error, statusCode) ||
+          isTransportFailure(error, statusCode) ||
+          shouldSwitchFutureRoute(statusCode))
+      ) {
+        route.onUnavailable()
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
+        onComplete?.(false)
+        return
+      }
+
+      const delivered = !error && statusCode >= 200 && statusCode < 300
+      if (delivered) {
+        log.debug('%s accepted %d events at %s (%s, status %d); downstream delivery is not observed',
+          this.constructor.name, eventCount, route.url.origin,
+          // An Agent URL path prefix precedes the EVP path, so the route type cannot be read from its start.
+          route.endpoint.includes('/evp_proxy/') ? 'Agent/local EVP handoff' : 'HTTP receiver', statusCode)
       } else {
-        log.warn('Events request returned status %d', statusCode)
+        this.#logDropped(route, eventCount, error, errorMessage, statusCode)
       }
+      onComplete?.(delivered)
     })
+  }
+
+  /**
+   * Batches are not retried after a failed final attempt, so the failure log states the loss.
+   *
+   * @param {ActiveWriterRoute} route - Route that failed
+   * @param {number} eventCount - Event count in the dropped batch
+   * @param {Error | null} error - Request error
+   * @param {string | null | undefined} errorMessage - Redacted request error
+   * @param {number | undefined} statusCode - HTTP response status
+   */
+  #logDropped (route, eventCount, error, errorMessage, statusCode) {
+    if (error) {
+      log.error('%s failed to send %d events to %s (status=%s, cause=%s); events dropped',
+        this.constructor.name, eventCount, route.url.origin, statusCode ?? 'none', errorMessage)
+    } else {
+      log.warn('%s events request to %s returned status %d; %d events were dropped',
+        this.constructor.name, route.url.origin, statusCode, eventCount)
+    }
   }
 }
 

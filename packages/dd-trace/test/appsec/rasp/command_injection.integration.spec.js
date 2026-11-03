@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 
 const path = require('node:path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
 const {
@@ -14,9 +13,10 @@ const {
   spawnProc,
   stopProc,
 } = require('../../../../../integration-tests/helpers')
+const HttpRequest = require('../../setup/helpers/http-client')
 
 describe('RASP - command_injection - integration', () => {
-  let axios, cwd, appFile, agent, proc
+  let httpRequest, cwd, appFile, agent, proc
 
   useSandbox(
     ['express'],
@@ -42,7 +42,7 @@ describe('RASP - command_injection - integration', () => {
         DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json'),
       },
     })
-    axios = Axios.create({ baseURL: proc.url })
+    httpRequest = HttpRequest.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
@@ -52,7 +52,7 @@ describe('RASP - command_injection - integration', () => {
 
   async function testRequestBlocked (url, ruleId = 3, variant = 'shell') {
     try {
-      await axios.get(url)
+      await httpRequest.get(url)
     } catch (e) {
       if (!e.response) {
         throw e

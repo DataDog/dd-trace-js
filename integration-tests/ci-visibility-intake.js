@@ -111,7 +111,6 @@ class FakeCiVisIntake extends FakeAgent {
    * Sets library configuration responses to return in order.
    *
    * @param {object[]} responses
-   * @returns {void}
    */
   setSettingsResponses (responses) {
     this.#settingsResponses = responses.slice()
@@ -121,7 +120,6 @@ class FakeCiVisIntake extends FakeAgent {
    * Delays settings responses to exercise initialization ordering.
    *
    * @param {number} delayMs
-   * @returns {void}
    */
   setSettingsResponseDelay (delayMs) {
     this.#settingsResponseDelayMs = delayMs
@@ -146,7 +144,6 @@ class FakeCiVisIntake extends FakeAgent {
 
   /**
    * @param {number} delayMs - Delay before responding to screenshot uploads
-   * @returns {void}
    */
   setMediaResponseDelay (delayMs) {
     this.#mediaResponseDelayMs = delayMs
@@ -155,7 +152,6 @@ class FakeCiVisIntake extends FakeAgent {
   /**
    * Leaves media requests open until the client cancels them.
    *
-   * @returns {void}
    */
   setMediaResponsesPending () {
     this.#mediaResponsesPending = true
@@ -173,7 +169,6 @@ class FakeCiVisIntake extends FakeAgent {
    * Sets Test Management responses to return in order.
    *
    * @param {object[]} responses
-   * @returns {void}
    */
   setTestManagementTestResponses (responses) {
     this.#testManagementResponses = responses.slice()
@@ -207,6 +202,11 @@ class FakeCiVisIntake extends FakeAgent {
         headers: req.headers,
         url: req.url,
       })
+    })
+
+    app.post('/dogstatsd/v2/proxy', express.text({ type: () => true }), (req, res) => {
+      res.status(200).send('OK')
+      this.emit('message', { headers: req.headers, payload: req.body, url: req.url })
     })
 
     // It can be slowed down with setWaitingTime
@@ -292,7 +292,11 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post('/api/v2/ci/test-runs/:traceId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
+    app.post([
+      '/api/v2/ci/test-runs/:traceId/media',
+      '/evp_proxy/:version/api/v2/ci/test-runs/:traceId/media',
+      '/api/v2/ci/test-suites/:testSessionId/:testSuiteId/media',
+    ], express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
       const receivedAtMs = Date.now()
       const respond = () => {
         res.status(this.#mediaResponseStatusCode).send()
@@ -300,6 +304,8 @@ class FakeCiVisIntake extends FakeAgent {
           headers: req.headers,
           media: {
             traceId: req.params.traceId,
+            testSessionId: req.params.testSessionId,
+            testSuiteId: req.params.testSuiteId,
             contentType: req.headers['content-type'],
             // Metadata is carried as query params (not X-Dd-* headers) so it survives the Agent's
             // evp_proxy, which forwards only an allow-listed header set.
@@ -514,20 +520,29 @@ class FakeCiVisIntake extends FakeAgent {
    * @param {(payloads: object[]) => void} onPayload Assertion callback, invoked once
    *   on the post-exit buffer. Callers can read `childProcess.exitCode` immediately
    *   after the returned promise resolves.
-   * @param {{ gracePeriod?: number, hardTimeout?: number }} [options]
+   * @param {{ gracePeriod?: number, hardTimeout?: number, captureOutput?: boolean }} [options]
    */
   gatherPayloadsUntilChildExit (childProcess, payloadMatch, onPayload, options = {}) {
-    const { gracePeriod = 1000, hardTimeout = 30_000 } = options
+    const { gracePeriod = 1000, hardTimeout = 30_000, captureOutput = false } = options
     const payloads = []
+    let stdout = ''
+    let stderr = ''
 
     return new Promise((resolve, reject) => {
       let settled = false
       let graceTimer = null
 
+      const stdoutHandler = chunk => { stdout = (stdout + chunk.toString()).slice(-64 * 1024) }
+      const stderrHandler = chunk => { stderr = (stderr + chunk.toString()).slice(-64 * 1024) }
+
       const cleanup = () => {
         settled = true
         this.off('message', messageHandler)
         childProcess.off('exit', exitHandler)
+        if (captureOutput) {
+          childProcess.stdout?.off('data', stdoutHandler)
+          childProcess.stderr?.off('data', stderrHandler)
+        }
         clearTimeout(hardTimer)
         clearTimeout(graceTimer)
       }
@@ -572,11 +587,16 @@ class FakeCiVisIntake extends FakeAgent {
         if (settled) return
         cleanup()
         reject(new Error(
-          `gatherPayloadsUntilChildExit: hard timeout of ${hardTimeout}ms expired (child still running)`
+          `gatherPayloadsUntilChildExit: hard timeout of ${hardTimeout}ms expired (child still running)` +
+          (captureOutput ? `\nChild stdout:\n${stdout}\nChild stderr:\n${stderr}` : '')
         ))
       }, hardTimeout)
 
       this.on('message', messageHandler)
+      if (captureOutput) {
+        childProcess.stdout?.on('data', stdoutHandler)
+        childProcess.stderr?.on('data', stderrHandler)
+      }
 
       // Child may already have exited (very fast spawn-and-die).
       if (childProcess.exitCode !== null || childProcess.signalCode != null) {

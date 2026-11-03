@@ -13,7 +13,8 @@ describe('PropagationHashManager', () => {
   beforeEach(() => {
     // Create a fresh instance for each test
     const PropagationHashManager = proxyquire('../src/propagation-hash/index', {})
-    propagationHash = new (PropagationHashManager.constructor)()
+    const PropagationHashManagerClass = PropagationHashManager.constructor
+    propagationHash = new PropagationHashManagerClass()
   })
 
   describe('configure', () => {

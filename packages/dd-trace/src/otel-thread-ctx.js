@@ -20,24 +20,30 @@
 // and the OTel ContextManager activates spans via
 // storage('legacy').run({ span: ddSpan }, ...), so the active span
 // our writer reads from legacy storage is the same DatadogSpan in
-// both cases. The OTel-visible trace/span IDs come from the same
-// _ddContext.toTraceId/toSpanId calls we use here.
+// both cases. The record's trace/span IDs are read from the same
+// Identifier bytes (and _dd.p.tid) behind _ddContext.toTraceId/toSpanId,
+// and the spec pins them byte-for-byte to those methods.
 
 const { isMainThread, threadId } = require('worker_threads')
 
+const { AUTO_KEEP } = require('../../../ext/priority')
 const { isACFActive } = require('../../datadog-core/src/storage')
 const log = require('./log')
 const {
   enterCh,
   spanFinishCh,
   getActiveSpan,
-  ensureChannelsActivated,
+  acquireChannels,
 } = require('./storage-channels')
 const {
   finalEndpoint,
   getStartedSpans,
 } = require('./profiling/webspan-utils')
 const webTagsCache = require('./web-tags-cache')
+
+/** @typedef {import('./opentracing/span')} DatadogSpan */
+/** @typedef {import('./opentracing/span_context')} DatadogSpanContext */
+/** @typedef {InstanceType<typeof import('@datadog/pprof').otelThreadCtx.ThreadContext>} ThreadContext */
 
 // OTEP-4947 duplicates are last-wins, so appending a later endpoint value would
 // correctly overwrite an earlier one — but an out-of-process reader sampling the
@@ -94,6 +100,20 @@ const ATTRIBUTE_KEYS = [
 const THREAD_NAME = (isMainThread ? 'Main' : `Worker #${threadId}`) + ' Event Loop'
 const THREAD_ID = String(threadId)
 
+// W3C trace-flags byte for a record, derived the same way DatadogSpanContext
+// #toTraceparent derives the flags it puts on the wire — sampled iff the
+// priority is AUTO_KEEP or above.
+//
+// Unlike toTraceparent, this does NOT materialize a not-yet-taken decision
+// (_ensureSamplingPriority): that would move every trace's sampling decision
+// forward to the first activation of its first span, on the tracer's hot path,
+// as a side effect of profiling being enabled. An undefined priority therefore
+// reads as not sampled, which is also what OTEP-4947 prescribes when the flags
+// are not known yet. See the note on setTraceFlags in getOrBuildContext.
+function traceFlagsOf (spanContext) {
+  return spanContext._sampling?.priority >= AUTO_KEEP ? 1 : 0
+}
+
 // Cache slot on span objects. One ThreadContext is built per span on first
 // activation and re-installed across every async-context frame that
 // re-enters the span — V8's AsyncContextFrame inherits the JS
@@ -109,6 +129,7 @@ const THREAD_ID = String(threadId)
 //             waiting on; undefined while the span has no web-server ancestry.
 //             Distinguishes a stale announcement from a live one when a nearer
 //             web-server span takes over.
+//   awaitsOwnEndpoint: this is the request span, waiting on its own endpoint.
 const CachedSym = Symbol('OtelThreadCtx.cached')
 
 let started = false
@@ -116,12 +137,59 @@ let ThreadContext
 let getContext
 let clearContext
 
+// Reusable: the ThreadContext constructor copies the ids into its own record.
+const traceIdBytes = Buffer.alloc(16)
+const spanIdBytes = new Uint8Array(8)
+
+/**
+ * Same bytes as decoding toTraceId(true); unexpected shapes fall back to that.
+ *
+ * @param {DatadogSpanContext} spanContext
+ * @returns {Uint8Array}
+ */
+function getTraceIdBytes (spanContext) {
+  const low = spanContext._traceId.toBuffer()
+  if (low.length === 16) {
+    for (let i = 0; i < 16; i++) traceIdBytes[i] = low[i]
+    return traceIdBytes
+  }
+  if (low.length !== 8) return Buffer.from(spanContext.toTraceId(true), 'hex')
+  const high = spanContext._trace.tags['_dd.p.tid']
+  if (high) {
+    // write() stops at the first non-hex character, so only a valid _dd.p.tid fills all 8 bytes.
+    if (typeof high !== 'string' || high.length !== 16 || traceIdBytes.write(high, 0, 8, 'hex') !== 8) {
+      return Buffer.from(spanContext.toTraceId(true), 'hex')
+    }
+  } else {
+    for (let i = 0; i < 8; i++) traceIdBytes[i] = 0
+  }
+  for (let i = 0; i < 8; i++) traceIdBytes[i + 8] = low[i]
+  return traceIdBytes
+}
+
+/**
+ * @param {DatadogSpanContext} spanContext
+ * @returns {Uint8Array}
+ */
+function getSpanIdBytes (spanContext) {
+  const bytes = spanContext._spanId.toBuffer()
+  if (bytes.length !== 8) return Buffer.from(spanContext.toSpanId(true), 'hex')
+  for (let i = 0; i < 8; i++) spanIdBytes[i] = bytes[i]
+  return spanIdBytes
+}
+
+/**
+ * @param {DatadogSpan} span
+ * @returns {ThreadContext | undefined} The span's record, or undefined when the span's trace or span id is malformed.
+ */
 function getOrBuildContext (span) {
   let cached = span[CachedSym]
   if (cached !== undefined && cached.context !== undefined) return cached.context
   const spanContext = span.context()
-  const traceId = Uint8Array.from(Buffer.from(spanContext.toTraceId(true), 'hex'))
-  const spanId = Uint8Array.from(Buffer.from(spanContext.toSpanId(true), 'hex'))
+  const traceId = getTraceIdBytes(spanContext)
+  const spanId = getSpanIdBytes(spanContext)
+  // The native constructor throws on any other id length, and onEnter runs inside user code.
+  if (traceId.length !== 16 || spanId.length !== 8) return
   // Local root span: the first entry in the trace's started-spans list, or
   // this span itself when it IS the root. Encoded as 16-char lowercase hex
   // per the libdatadog convention.
@@ -137,22 +205,33 @@ function getOrBuildContext (span) {
   attrs[THREAD_NAME_IDX] = THREAD_NAME
   attrs[THREAD_ID_IDX] = THREAD_ID
   if (cached === undefined) {
-    cached = {}
+    cached = { context: undefined, webTags: undefined, awaitsOwnEndpoint: false }
     span[CachedSym] = cached
   }
-  cached.context = new ThreadContext(traceId, spanId, attrs)
+  // The flags are the one part of the record that can still change after
+  // publication: a decision taken later, or overridden, is pushed into the live
+  // record with setTraceFlags rather than by rebuilding the context, which would
+  // strand every async-context frame already holding this one. Nothing calls it
+  // yet — the tracer publishes no event for a sampling decision — so a record
+  // built before the decision keeps reading as not sampled.
+  cached.context = new ThreadContext(traceId, spanId, traceFlagsOf(spanContext), attrs)
   cached.webTags = webTags
-  if (endpoint === undefined) awaitEndpoint(webTags, cached)
+  if (endpoint === undefined) awaitEndpoint(span, webTags, cached)
   return cached.context
 }
 
 // Enlist a record built without an endpoint, so the resolution announcement for
 // its request fills it in.
-function awaitEndpoint (webTags, cached) {
+function awaitEndpoint (span, webTags, cached) {
   // No web-server span in this span's ancestry, so no endpoint is coming. Should
   // one appear later, webTagsCache announces that separately — see
   // onWebTagsResolved.
   if (webTags === undefined) return
+  // The request span waits on its own announcement; only descendants need the shared list.
+  if (webTags === span.context().getTags()) {
+    cached.awaitsOwnEndpoint = true
+    return
+  }
   const waiting = pendingEndpoints.get(webTags)
   if (waiting === undefined) {
     pendingEndpoints.set(webTags, [cached])
@@ -172,12 +251,13 @@ function appendEndpoint (context, endpoint) {
 
 function onEnter () {
   if (!started) return
-  const span = getActiveSpan()
-  if (!span) {
-    clearContext()
+  const span = /** @type {DatadogSpan | null | undefined} */ (getActiveSpan())
+  const context = span && getOrBuildContext(span)
+  if (!context) {
+    // Clearing an empty frame would still make pprof install a new AsyncContextFrame.
+    if (getContext() !== undefined) clearContext()
     return
   }
-  const context = getOrBuildContext(span)
   // Skip if this CPED already holds the same context. Same allocation-churn
   // fix as the wall profiler in dd-trace-js#8638.
   if (getContext() === context) return
@@ -225,11 +305,18 @@ function onSpanFinished (span) {
 function onEndpointResolved (span) {
   if (!started) return
   const webTags = span.context().getTags()
+  const own = span[CachedSym]
+  const ownWaits = own !== undefined && own.awaitsOwnEndpoint
   const waiting = pendingEndpoints.get(webTags)
-  if (waiting === undefined) return
+  if (!ownWaits && waiting === undefined) return
   const endpoint = finalEndpoint(webTags)
   // webTagsCache only announces settled endpoints, so this is belt and braces.
   if (endpoint === undefined) return
+  if (ownWaits) {
+    own.awaitsOwnEndpoint = false
+    if (own.context !== undefined && own.webTags === webTags) appendEndpoint(own.context, endpoint)
+  }
+  if (waiting === undefined) return
   pendingEndpoints.delete(webTags)
   for (const cached of waiting) {
     // A record whose span has since been attributed to a nearer web-server span
@@ -260,7 +347,7 @@ function onWebTagsResolved (span) {
     // ThreadContext would strand every async-context frame holding this one.
     // The work is still nested in the outer request, which makes that the least
     // wrong of the values available.
-    awaitEndpoint(webTags, cached)
+    awaitEndpoint(span, webTags, cached)
   } else {
     appendEndpoint(cached.context, endpoint)
   }
@@ -279,7 +366,7 @@ function missingApiMember (ns) {
   for (const name of ['ThreadContext', 'getContext', 'clearContext', 'getProcessContextAttributes']) {
     if (typeof ns[name] !== 'function') return name
   }
-  for (const name of ['appendAttributes', 'enter', 'invalidate']) {
+  for (const name of ['appendAttributes', 'enter', 'invalidate', 'setTraceFlags']) {
     if (typeof ns.ThreadContext.prototype[name] !== 'function') return `ThreadContext.prototype.${name}`
   }
 }
@@ -287,15 +374,21 @@ function missingApiMember (ns) {
 // Install and detach one throwaway context, to establish that this process can
 // actually do it before any span depends on it.
 //
-// @datadog/pprof decides whether AsyncContextFrame is available by inspecting
-// `process.execArgv`, and throws from enter() when it concludes it isn't. That
-// disagrees with the feature detection behind `isACFActive` whenever the flag
-// reached Node by another route: `NODE_OPTIONS=--experimental-async-context-frame`
-// is accepted on Node 22 and 23 and leaves `execArgv` empty, and a worker thread
-// created with an explicit `execArgv` loses it too. Since our subscribers run
-// inline with `storage.enterWith`, letting that throw would put the exception in
-// application code on the first span activation, so find out here instead, where
-// declining to start is still an option.
+// @datadog/pprof throws from enter() when it concludes AsyncContextFrame is not
+// active. It reaches that conclusion by its own feature detection, asking the
+// addon what is in the CPED slot during a `run()` — direct evidence about the
+// exact slot the out-of-process reader walks. `isACFActive` above tests the same
+// property through a weaker proxy: whether `run()` delegates to `enterWith()`,
+// which holds today but relies on unspecified dispatch that anything patching
+// `AsyncLocalStorage` can break. So the two can disagree, and pprof's answer is
+// the one that governs whether a record ever gets written. Its enter() can also
+// fail for reasons `isACFActive` says nothing about, such as an addon that
+// loaded but whose TLS block is unusable.
+//
+// Since our subscribers run inline with `storage.enterWith`, letting enter()
+// throw would put the exception in application code on the first span
+// activation, so find out here instead, where declining to start is still an
+// option.
 function canInstallContext (ns) {
   try {
     // Zero-filled ids: the record is only readable while it is installed, which
@@ -344,7 +437,7 @@ function start () {
   getContext = ns.getContext
   clearContext = ns.clearContext
 
-  ensureChannelsActivated(isACFActive)
+  acquireChannels(false)
   enterCh.subscribe(onEnter)
   spanFinishCh.subscribe(onSpanFinished)
   // Endpoint updates come from the shared web-tags cache's transition channels

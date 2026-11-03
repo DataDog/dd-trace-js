@@ -104,7 +104,6 @@ function addValueReference (references, reference) {
 /**
  * @param {ValueReferences} references
  * @param {ValueReference} reference
- * @returns {boolean}
  */
 function hasValueReference (references, reference) {
   return references.get(reference.variable)?.has(reference.memberPath) === true
@@ -113,7 +112,6 @@ function hasValueReference (references, reference) {
 /**
  * @param {ValueReference} left
  * @param {ValueReference} right
- * @returns {boolean}
  */
 function isSameValueReference (left, right) {
   return left.variable === right.variable && left.memberPath === right.memberPath
@@ -122,7 +120,6 @@ function isSameValueReference (left, right) {
 /**
  * @param {ValueReference} write
  * @param {ValueReference} value
- * @returns {boolean}
  */
 function writesValueReference (write, value) {
   return write.variable === value.variable &&
@@ -133,7 +130,6 @@ function writesValueReference (write, value) {
 
 /**
  * @param {import('estree').Node} node
- * @returns {boolean}
  */
 function isFakeAgent (node) {
   if (node.type === 'AwaitExpression' || node.type === 'ChainExpression') {
@@ -154,7 +150,6 @@ function isFakeAgent (node) {
 
 /**
  * @param {import('estree').Node} node
- * @returns {boolean}
  */
 function isFunction (node) {
   return node.type === 'ArrowFunctionExpression' ||
@@ -164,7 +159,6 @@ function isFunction (node) {
 
 /**
  * @param {import('estree').Node} node
- * @returns {boolean}
  */
 function isTeardownHook (node) {
   return node.type === 'CallExpression' &&
@@ -222,7 +216,6 @@ function resolveCallback (node, sourceCode, seen = new Set()) {
  * @param {import('estree').CallExpression} node
  * @param {Set<string>} methodNames
  * @param {import('estree').Node} argument
- * @returns {boolean}
  */
 function isPromiseStaticCall (node, methodNames, argument) {
   return node.callee.type === 'MemberExpression' &&
@@ -300,7 +293,6 @@ function getResultParent (node) {
 /**
  * @param {import('estree').Node} node
  * @param {TeardownCallback} callback
- * @returns {boolean}
  */
 function isSettled (node, callback) {
   let currentNode = node
@@ -362,7 +354,6 @@ function getFlowEvents (events, segment) {
  * @param {StopCall} stopCall
  * @param {AssignedValueReference} assignedValue
  * @param {Map<import('eslint').Rule.CodePathSegment, FlowEvent[]>} events
- * @returns {boolean}
  */
 function isAssignedValueSettled (stopCall, assignedValue, events) {
   const { assignment, valueReference } = assignedValue
@@ -373,7 +364,6 @@ function isAssignedValueSettled (stopCall, assignedValue, events) {
    * @param {boolean} skipSourceWrite
    * @param {Map<import('eslint').Rule.CodePathSegment, number>} visiting
    * @param {Map<import('eslint').Rule.CodePathSegment, Map<number, boolean>>} memo
-   * @returns {boolean}
    */
   function settlesOnEveryPath (segment, initial, skipSourceWrite, visiting, memo) {
     const state = (initial ? 2 : 0) | (skipSourceWrite ? 1 : 0)

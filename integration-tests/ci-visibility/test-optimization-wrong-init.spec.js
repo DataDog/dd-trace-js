@@ -8,6 +8,7 @@ const { exec } = require('child_process')
 const { sandboxCwd, useSandbox, getCiVisAgentlessConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
+const { getLatestMochaSpecifier } = require('../mocha/versions')
 
 const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 
@@ -54,7 +55,7 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
     if (!isLatestCucumberSupported && testFramework === 'cucumber') return
     if (NODE_MAJOR <= 18 && testFramework === 'vitest') return
 
-    const testFrameworks = ['jest', 'mocha', 'vitest']
+    const testFrameworks = ['jest', `mocha@${getLatestMochaSpecifier()}`, 'vitest']
 
     if (isLatestCucumberSupported) {
       testFrameworks.push('@cucumber/cucumber')

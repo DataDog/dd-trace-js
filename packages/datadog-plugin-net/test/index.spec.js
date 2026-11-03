@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const dns = require('node:dns')
+const { errorMonitor, once } = require('node:events')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
@@ -251,6 +252,108 @@ describe('Plugin', () => {
             })
           })
         })
+      })
+
+      it('should preserve synchronous TCP errors and cleanup repeated attempts', async () => {
+        const socket = new net.Socket()
+        const events = ['connect', 'close', 'timeout', errorMonitor]
+        const listeners = new Map()
+        const emit = socket.emit
+        const expectedError = new Error('lookup failed')
+        const span = expectSomeSpan(agent, {
+          name: 'tcp.connect',
+          resource: `localhost:${port}`,
+          meta: {
+            [ERROR_TYPE]: expectedError.name,
+            [ERROR_MESSAGE]: expectedError.message,
+            [ERROR_STACK]: expectedError.stack,
+          },
+        })
+
+        socket.emit = emit
+        socket.setMaxListeners(0)
+        for (const event of events) {
+          socket.on(event, () => {})
+          listeners.set(event, socket.listeners(event))
+        }
+
+        try {
+          assert.throws(() => socket.connect({
+            port,
+            host: 'localhost',
+            get lookup () {
+              throw expectedError
+            },
+          }), error => error === expectedError)
+          await span
+
+          for (let i = 0; i < 100; i++) {
+            assert.throws(() => socket.connect({ port, host: 'localhost', lookup: 42 }), {
+              code: 'ERR_INVALID_ARG_TYPE',
+            })
+          }
+
+          for (const event of events) {
+            assert.deepStrictEqual(socket.listeners(event), listeners.get(event))
+          }
+          assert.strictEqual(socket.emit, emit)
+          assert.strictEqual(Object.hasOwn(socket, 'emit'), true)
+        } finally {
+          socket.destroy()
+        }
+      })
+
+      it('should cleanup repeated synchronous IPC failures', () => {
+        const socket = new net.Socket()
+        const events = ['connect', 'close', 'timeout', errorMonitor]
+        const listeners = new Map()
+        const emit = socket.emit
+
+        socket.setMaxListeners(0)
+        for (const event of events) {
+          socket.on(event, () => {})
+          listeners.set(event, socket.listeners(event))
+        }
+
+        try {
+          for (let i = 0; i < 100; i++) {
+            assert.throws(() => socket.connect({ path: 42 }), {
+              code: 'ERR_INVALID_ARG_TYPE',
+            })
+          }
+
+          for (const event of events) {
+            assert.deepStrictEqual(socket.listeners(event), listeners.get(event))
+          }
+          assert.strictEqual(socket.emit, emit)
+          assert.strictEqual(Object.hasOwn(socket, 'emit'), true)
+        } finally {
+          socket.destroy()
+        }
+      })
+
+      it('should reuse a socket after a synchronous connect failure', async () => {
+        const socket = new net.Socket()
+        const emit = socket.emit
+        let callbackCalls = 0
+        const callback = () => callbackCalls++
+
+        try {
+          assert.throws(() => socket.connect({ port, host: 'localhost', lookup: 42 }, callback), {
+            code: 'ERR_INVALID_ARG_TYPE',
+          })
+          assert.deepStrictEqual(socket.listeners('connect'), [callback])
+          assert.strictEqual(socket.emit, emit)
+
+          const ready = once(socket, 'ready')
+          socket.connect({ port, host: 'localhost' })
+          await ready
+
+          assert.strictEqual(callbackCalls, 1)
+          assert.strictEqual(Object.hasOwn(socket, 'emit'), true)
+        } finally {
+          socket.destroy()
+        }
       })
 
       it('should run event listeners in the correct scope', () => {

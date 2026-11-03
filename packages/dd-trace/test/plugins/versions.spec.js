@@ -3,8 +3,11 @@
 const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const { coerce, major, maxSatisfying } = require('semver')
 
+const { getInstrumentation } = require('../setup/helpers/load-inst')
+const externals = require('./externals')
 const {
   brokenVersionReason,
   getVersionList,
@@ -65,12 +68,12 @@ describe('getVersionList', () => {
 
   it('adds the floor, the floor major and the top major for non-consecutive packages', () => {
     // The middle majors may be unpublished, but the floor major (1) and the top major (5) both exist and are tested.
-    assert.deepEqual(keys('mongodb', ['>=1 <6'], new Set(['mongodb'])), ['1.0.0', '1', '5'])
+    assert.deepEqual(keys('mongodb', ['>=1 <6'], new Map([['mongodb', '>=2 <5']])), ['1.0.0', '1', '5'])
   })
 
-  it('treats the built-in non-consecutive packages as floor + floor major + top major', () => {
-    // graphql jumps from 0.x to 14.x; 1.x–13.x are skipped, but the latest 0.x and the newest major are still tested.
-    assert.deepEqual(keys('graphql', ['>=0.10']), ['0.10.0', '0', latestMajorKey('graphql')])
+  it('keeps every published major of graphql', () => {
+    const publishedMajors = Array.from({ length: major(latests.graphql) - 13 }, (_, index) => String(index + 14))
+    assert.deepEqual(keys('graphql', ['>=0.10']), ['0.10.0', '0', ...publishedMajors])
   })
 
   it('throws on an unparseable range', () => {
@@ -93,6 +96,30 @@ describe('resolvePluginVersions', () => {
       versions: ['5', '6'],
     },
   ]
+
+  it('keeps stable Redis majors from the instrumentation declarations', () => {
+    const declarations = getInstrumentation('redis').filter(({ name }) => name === '@redis/client')
+    const result = resolvePluginVersions({ name: '@redis/client', declarations, env: {} })
+    const stableMajors = Array.from({ length: major(latests['@redis/client']) - 4 }, (_, index) => String(index + 5))
+
+    assert.deepEqual(versionKeys(result), ['1.1.0', '1', ...stableMajors])
+  })
+
+  for (const latest of ['7.0.1', '26.0.0']) {
+    it(`keeps published OracleDB majors with the latest pinned to ${latest}`, () => {
+      const { resolvePluginVersions } = proxyquire('./versions', {
+        './package.json': { dependencies: { ...latests, oracledb: latest } },
+      })
+      const result = resolvePluginVersions({
+        name: 'oracledb',
+        declarations: getInstrumentation('oracledb'),
+        env: {},
+      })
+
+      assert.deepEqual(versionKeys(result), ['5.0.0', '5', '6', '7', ...(latest === '26.0.0' ? ['26'] : [])])
+      assert.equal(result.unversioned, '>=5')
+    })
+  }
 
   it('expands the declared versions and uses every active range for the unversioned folder', () => {
     const result = resolvePluginVersions({
@@ -168,6 +195,48 @@ describe('resolvePluginVersions', () => {
     const result = resolvePluginVersions({
       name: 'mongodb',
       declarations: [{ versions: ['>=2 <5'] }],
+      honourEnvRange: false,
+      env: { PACKAGE_VERSION_RANGE: '>=3 <4' },
+    })
+
+    assert.deepEqual(versionKeys(result), ['2.0.0', '2', '3', '4'])
+    assert.equal(result.unversioned, '>=2 <5')
+  })
+
+  it('honours PACKAGE_VERSION_RANGE for the Supabase test package', () => {
+    const result = resolvePluginVersions({
+      name: '@supabase/supabase-js',
+      declarations: externals.supabase,
+      honourEnvRange: false,
+      env: { PACKAGE_VERSION_RANGE: '=2.115.0' },
+    })
+
+    assert.deepEqual(versionKeys(result), ['2.115.0'])
+    assert.equal(result.unversioned, '=2.115.0')
+  })
+
+  for (const [nodeVersion, expected] of [['22.11.999', '4.29.1'], ['22.12.0', '5.12.5']]) {
+    it(`selects a compatible Fastify fixture for light-my-request on Node.js ${nodeVersion}`, () => {
+      const result = resolvePluginVersions({
+        name: 'fastify',
+        declarations: externals['light-my-request'].filter(({ name }) => name === 'fastify'),
+        nodeVersion,
+        honourEnvRange: false,
+        env: { PACKAGE_VERSION_RANGE: '6' },
+      })
+
+      assert.equal(maxSatisfying(['4.29.1', '5.12.5'], result.unversioned), expected)
+    })
+  }
+
+  it('ignores the PACKAGE_VERSION_RANGE opt-in of a declaration outside the Node.js range', () => {
+    const result = resolvePluginVersions({
+      name: 'mongodb',
+      declarations: [
+        { versions: ['>=2 <5'] },
+        { versions: ['>=5'], node: '>=22', honourEnvRange: true },
+      ],
+      nodeVersion: '21.999.999',
       honourEnvRange: false,
       env: { PACKAGE_VERSION_RANGE: '>=3 <4' },
     })

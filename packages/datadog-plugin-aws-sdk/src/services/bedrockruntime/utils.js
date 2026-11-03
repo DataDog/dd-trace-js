@@ -24,6 +24,15 @@ const PROVIDER = {
 }
 
 /**
+ * @typedef {{
+ *   inputTokens?: number,
+ *   outputTokens?: number,
+ *   cacheReadTokens?: number,
+ *   cacheWriteTokens?: number,
+ * }} StreamedUsage
+ */
+
+/**
  * Coerce the chunks into a single response body.
  *
  * @param {Array<{ chunk: { bytes: Buffer } }>} chunks
@@ -44,10 +53,7 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
   }
 
   let message = ''
-  let inputTokens = 0
-  let outputTokens = 0
-  let cacheReadTokens = 0
-  let cacheWriteTokens = 0
+  let usage
 
   for (const { chunk: { bytes } } of chunks) {
     const body = JSON.parse(Buffer.from(bytes).toString('utf8'))
@@ -56,8 +62,6 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
       case PROVIDER.AMAZON: {
         if (body?.outputText) {
           message += body?.outputText
-          inputTokens = body?.inputTextTokenCount
-          outputTokens = body?.totalOutputTextTokenCount
         } else if (body?.contentBlockDelta?.delta?.text) {
           message += body.contentBlockDelta.delta.text
         }
@@ -79,9 +83,6 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
           message += body.delta.text
         }
 
-        if (body.message?.usage?.input_tokens) inputTokens = body.message.usage.input_tokens
-        if (body.message?.usage?.output_tokens) outputTokens = body.message.usage.output_tokens
-
         break
       }
       case PROVIDER.COHERE: {
@@ -101,24 +102,61 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
       }
     }
 
-    // by default, it seems newer versions of the AWS SDK include the input/output token counts in the response body
-    const invocationMetrics = body['amazon-bedrock-invocationMetrics']
-    if (invocationMetrics) {
-      inputTokens = invocationMetrics.inputTokenCount
-      outputTokens = invocationMetrics.outputTokenCount
-      cacheReadTokens = invocationMetrics.cacheReadInputTokenCount
-      cacheWriteTokens = invocationMetrics.cacheWriteInputTokenCount
+    usage = mergeStreamedUsage(usage, body, modelProviderUpper)
+  }
+
+  return new Generation({ message, role: 'assistant', ...usage })
+}
+
+/**
+ * Merge the token counts one streamed `invokeModel` frame reports into the running totals. Each
+ * provider spells them differently, and most report none until the trailing invocation metrics,
+ * so a frame carrying no counts leaves the totals as they were.
+ *
+ * @param {StreamedUsage} [usage]
+ * @param {object} body parsed chunk body
+ * @param {string} modelProviderUpper
+ * @returns {StreamedUsage | undefined}
+ */
+function mergeStreamedUsage (usage, body, modelProviderUpper) {
+  // by default, it seems newer versions of the AWS SDK include the input/output token counts in
+  // the response body; any provider can send them, and they supersede what the frames reported
+  const invocationMetrics = body['amazon-bedrock-invocationMetrics']
+  if (invocationMetrics) {
+    return {
+      inputTokens: invocationMetrics.inputTokenCount,
+      outputTokens: invocationMetrics.outputTokenCount,
+      cacheReadTokens: invocationMetrics.cacheReadInputTokenCount,
+      cacheWriteTokens: invocationMetrics.cacheWriteInputTokenCount,
     }
   }
 
-  return new Generation({
-    message,
-    role: 'assistant',
-    inputTokens,
-    outputTokens,
-    cacheReadTokens,
-    cacheWriteTokens,
-  })
+  switch (modelProviderUpper) {
+    case PROVIDER.AMAZON: {
+      const { inputTextTokenCount, totalOutputTextTokenCount } = body
+      if (inputTextTokenCount === undefined && totalOutputTextTokenCount === undefined) return usage
+
+      return {
+        ...usage,
+        inputTokens: inputTextTokenCount ?? usage?.inputTokens,
+        outputTokens: totalOutputTextTokenCount ?? usage?.outputTokens,
+      }
+    }
+    case PROVIDER.ANTHROPIC: {
+      // `message_start` reports the initial counts under `message.usage`; the closing
+      // `message_delta` reports the final output count at the top level
+      const chunkUsage = body.message?.usage ?? body.usage
+      if (!chunkUsage) return usage
+
+      return {
+        ...usage,
+        inputTokens: chunkUsage.input_tokens ?? usage?.inputTokens,
+        outputTokens: chunkUsage.output_tokens ?? usage?.outputTokens,
+      }
+    }
+  }
+
+  return usage
 }
 
 class Generation {
@@ -265,8 +303,11 @@ function extractRequestParams (params, provider) {
         for (const message of requestBody.messages) {
           const textBlocks = message.content?.filter(block => block.text) || []
           if (textBlocks.length > 0) {
+            let content = ''
+            for (const block of textBlocks) content += block.text
+
             messages.push({
-              content: textBlocks.map(block => block.text).join(''),
+              content,
               role: message.role,
             })
           }
@@ -288,9 +329,14 @@ function extractRequestParams (params, provider) {
         for (let idx = requestBody.messages.length - 1; idx >= 0; idx--) {
           const message = requestBody.messages[idx]
           if (message.role === 'user') {
-            prompt = message.content?.filter(block => block.type === 'text')
-              .map(block => block.text)
-              .join('')
+            const content = message.content
+            prompt = undefined
+            if (content) {
+              prompt = ''
+              for (const block of content) {
+                if (block.type === 'text') prompt += block.text
+              }
+            }
             break
           }
         }
@@ -492,6 +538,8 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
       if (block == null || typeof block !== 'object') continue
       if (typeof block.text === 'string') {
         content += block.text
+      } else if (typeof block.guardContent?.text?.text === 'string') {
+        content += block.guardContent.text.text
       } else if (block.toolUse) {
         toolCalls.push(buildToolCall(block.toolUse))
       } else if (block.toolResult) {
@@ -518,7 +566,6 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
  * of the `[name, value]` tuple.
  *
  * @param {object} block
- * @returns {string}
  */
 function getContentBlockType (block) {
   const key = Object.keys(block)[0]
@@ -546,7 +593,10 @@ function parseToolInput (inputStr) {
 }
 
 function buildToolResult ({ toolUseId, content }) {
-  const result = (content || []).map(resolveToolResultItem).join('')
+  let result = ''
+  if (content) {
+    for (const item of content) result += resolveToolResultItem(item)
+  }
   return { name: '', result, toolId: toolUseId ?? '', type: 'tool_result' }
 }
 
@@ -556,13 +606,27 @@ function resolveToolResultItem (item) {
   return `[Unsupported content type(s): ${getContentBlockType(item)}]`
 }
 
+/**
+ * Normalize a Converse usage object onto the LLMObs metric names. Returns undefined when the
+ * response reported no counts at all, so a caller cannot mistake an empty record for a measurement.
+ *
+ * @param {object} [usage]
+ * @returns {{
+ *   inputTokens?: number, outputTokens?: number, cacheReadTokens?: number, cacheWriteTokens?: number
+ * } | undefined}
+ */
 function buildUsage (usage = {}) {
-  return {
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    cacheReadTokens: usage.cacheReadInputTokens ?? usage.cacheReadInputTokenCount,
-    cacheWriteTokens: usage.cacheWriteInputTokens ?? usage.cacheWriteInputTokenCount,
+  const inputTokens = usage.inputTokens
+  const outputTokens = usage.outputTokens
+  const cacheReadTokens = usage.cacheReadInputTokens ?? usage.cacheReadInputTokenCount
+  const cacheWriteTokens = usage.cacheWriteInputTokens ?? usage.cacheWriteInputTokenCount
+
+  if (inputTokens === undefined && outputTokens === undefined &&
+      cacheReadTokens === undefined && cacheWriteTokens === undefined) {
+    return
   }
+
+  return { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens }
 }
 
 /**
@@ -600,7 +664,11 @@ function extractRequestParamsConverse (params) {
   const prompt = []
   if (params.system) {
     for (const block of params.system) {
-      if (typeof block?.text === 'string') prompt.push({ content: block.text, role: 'system' })
+      if (typeof block?.text === 'string') {
+        prompt.push({ content: block.text, role: 'system' })
+      } else if (typeof block?.guardContent?.text?.text === 'string') {
+        prompt.push({ content: block.guardContent.text.text, role: 'system' })
+      }
     }
   }
   if (params.messages) {
@@ -698,6 +766,8 @@ function extractTextAndResponseReasonConverseFromStream (chunks) {
 
 module.exports = {
   Generation,
+  buildUsage,
+  mergeStreamedUsage,
   RequestParams,
   extractTextAndResponseReasonFromStream,
   parseModelId,

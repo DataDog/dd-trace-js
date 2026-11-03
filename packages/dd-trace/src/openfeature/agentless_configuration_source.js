@@ -14,6 +14,8 @@ const FIRST_RETRY_MAX_MS = 10_000
 const SECOND_RETRY_MIN_MS = 5000
 const SECOND_RETRY_MAX_MS = 30_000
 const RETRY_JITTER = 0.2
+const POLL_FAILED_WITHOUT_CONFIGURATION = 'Feature Flags: agentless configuration poll failed (%s); ' +
+  'no configuration has been applied yet, so flag evaluations return their default values'
 
 /**
  * @typedef {object} AgentlessSourceConfig
@@ -21,6 +23,7 @@ const RETRY_JITTER = 0.2
  * @property {number} pollIntervalMs
  * @property {number} requestTimeoutMs
  * @property {string | undefined} apiKey
+ * @property {string | undefined} env
  */
 
 /**
@@ -44,11 +47,16 @@ class AgentlessConfigurationSource {
 
   #applicationFailureLogged = false
 
+  /** @type {string | undefined} */
+  #appliedCreatedAt
+
   /** @type {AgentlessSourceConfig} */
   #config
 
   /** @type {string | undefined} */
   #etag
+
+  #failedPolls = 0
 
   /** @type {Set<string>} */
   #failureWarnings = new Set()
@@ -64,9 +72,6 @@ class AgentlessConfigurationSource {
     this.#applyConfiguration = applyConfiguration
   }
 
-  /**
-   * @returns {void}
-   */
   start () {
     if (this.#abortController) return
 
@@ -75,12 +80,12 @@ class AgentlessConfigurationSource {
     this.#poll(abortController)
   }
 
-  /**
-   * @returns {void}
-   */
   stop () {
-    this.#abortController?.abort()
+    if (!this.#abortController) return
+
+    this.#abortController.abort()
     this.#abortController = undefined
+    log.debug('Feature Flags: agentless configuration polling stopped')
   }
 
   /**
@@ -112,8 +117,22 @@ class AgentlessConfigurationSource {
    */
   async #pollOnce (abortController) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      log.debug('Feature Flags: agentless configuration poll attempt %d/%d', attempt, MAX_ATTEMPTS)
       const response = await this.#request(abortController.signal)
       if (this.#abortController !== abortController) return
+
+      if (response.statusCode === 304) {
+        // 304 means the cached configuration is still valid, not a failure.
+        log.debug('Feature Flags: agentless configuration poll attempt %d/%d returned HTTP 304 (unchanged)',
+          attempt, MAX_ATTEMPTS)
+      } else if (response.statusCode === undefined) {
+        log.debug('Feature Flags: agentless configuration poll attempt %d/%d failed: %s',
+          attempt, MAX_ATTEMPTS, errorMessage(response.error))
+      } else {
+        // Avoids errorMessage(response.error), which embeds the full request URL.
+        log.debug('Feature Flags: agentless configuration poll attempt %d/%d returned HTTP %d',
+          attempt, MAX_ATTEMPTS, response.statusCode)
+      }
 
       const retryable = response.statusCode === undefined || isRetryableStatus(response.statusCode)
       if (!retryable) {
@@ -123,10 +142,13 @@ class AgentlessConfigurationSource {
 
       if (attempt === MAX_ATTEMPTS) {
         this.#warnFailure(response.statusCode, response.error, attempt)
+        this.#logPollFailure('retries exhausted')
         return
       }
 
       const delay = retryDelay(this.#config.pollIntervalMs, attempt, Math.random())
+      log.debug('Feature Flags: agentless configuration poll attempt %d/%d is retryable; retrying in %dms',
+        attempt, MAX_ATTEMPTS, delay)
       if (!await wait(delay, abortController.signal)) return
     }
   }
@@ -175,27 +197,43 @@ class AgentlessConfigurationSource {
 
   /**
    * @param {PollResponse} response
-   * @returns {void}
    */
   #apply (response) {
     const statusCode = response.statusCode
-    if (statusCode === 304) return
-
-    if (statusCode === 401 || statusCode === 403) {
-      this.#warnFailure(statusCode, undefined, 1)
+    if (statusCode === 304) {
+      // A custom endpoint can answer 304 without having been sent an ETag, so it confirms nothing
+      // until a configuration has been applied.
+      if (this.#appliedCreatedAt === undefined) {
+        this.#logPollFailure('HTTP 304 received before any configuration was applied')
+      } else {
+        this.#logPollRecovery()
+      }
       return
     }
 
-    if (statusCode !== 200) return
+    if (statusCode === 401 || statusCode === 403) {
+      this.#warnFailure(statusCode, undefined, 1)
+      this.#logPollFailure('authentication failed, not retried')
+      return
+    }
+
+    if (statusCode !== 200) {
+      this.#logPollFailure('HTTP status is not retryable')
+      return
+    }
 
     let configuration
     try {
       configuration = parseConfiguration(response.body)
-    } catch {
+    } catch (error) {
       if (!this.#malformedPayloadLogged) {
         this.#malformedPayloadLogged = true
         log.error('Feature Flagging agentless endpoint returned malformed UFC payload')
       }
+      // JSON.parse messages quote the payload, so only report our own validation reasons.
+      log.debug('Feature Flags: agentless configuration payload rejected: %s',
+        error instanceof SyntaxError ? 'response body is not valid JSON' : error.message)
+      this.#logPollFailure('malformed UFC payload')
       return
     }
 
@@ -206,19 +244,53 @@ class AgentlessConfigurationSource {
         this.#applicationFailureLogged = true
         log.warn('Feature Flagging agentless UFC payload could not be applied: %s', errorMessage(error))
       }
+      this.#logPollFailure('configuration could not be applied')
       return
     }
 
     const etag = response.headers?.etag
     const value = Array.isArray(etag) ? etag[0] : etag
     this.#etag = value?.trim() || undefined
+    this.#appliedCreatedAt = configuration.createdAt
+
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.debug(() => {
+      const flagCount = Object.keys(configuration.flags).length
+      // A custom endpoint is requested as configured, so DD_ENV is only sent when the URL carries dd_env.
+      const requestedEnv = this.#config.endpoint.searchParams.get('dd_env')
+      return 'Feature Flags: agentless configuration applied successfully ' +
+        `(${flagCount} flag(s) received; per-flag validity is checked at evaluation, ` +
+        `configuration environment=${configuration.environment.name}, ` +
+        `createdAt=${configuration.createdAt}, etag=${this.#etag ?? 'none'}, ` +
+        `sdk env=${this.#config.env ?? 'unset'}, requested dd_env=${requestedEnv ?? 'not sent'})`
+    })
+    this.#logPollRecovery()
+  }
+
+  /**
+   * @param {string} reason
+   */
+  #logPollFailure (reason) {
+    this.#failedPolls++
+    if (this.#appliedCreatedAt === undefined) {
+      log.debug(POLL_FAILED_WITHOUT_CONFIGURATION, reason)
+    } else {
+      log.debug('Feature Flags: agentless configuration poll failed (%s); keeping the configuration created at %s',
+        reason, this.#appliedCreatedAt)
+    }
+  }
+
+  #logPollRecovery () {
+    if (this.#failedPolls === 0) return
+
+    log.debug('Feature Flags: agentless configuration poll succeeded after %d failed poll(s)', this.#failedPolls)
+    this.#failedPolls = 0
   }
 
   /**
    * @param {number | undefined} statusCode
    * @param {unknown} error
    * @param {number} attempts
-   * @returns {void}
    */
   #warnFailure (statusCode, error, attempts) {
     const category = statusCode === 401 || statusCode === 403
@@ -278,16 +350,21 @@ function parseConfiguration (body) {
 }
 
 /**
+ * Formats a request error, including the underlying network error code
+ * (e.g. ENOTFOUND, ECONNREFUSED, ETIMEDOUT) when available, since "request
+ * failed" alone does not tell a customer whether the problem is DNS, a
+ * refused connection, a timeout, or something else.
+ *
  * @param {unknown} error
- * @returns {string}
  */
 function errorMessage (error) {
-  return error instanceof Error ? error.message : String(error ?? 'request was not sent')
+  if (!(error instanceof Error)) return String(error ?? 'request was not sent')
+  const code = /** @type {{ code?: string }} */ (error).code
+  return code ? `${error.message} (${code})` : error.message
 }
 
 /**
  * @param {number | undefined} status
- * @returns {boolean}
  */
 function isRetryableStatus (status) {
   return status === 408 || status === 429 || (status >= 500 && status <= 599)
@@ -297,7 +374,6 @@ function isRetryableStatus (status) {
  * @param {number} pollIntervalMs
  * @param {number} attempt
  * @param {number} random
- * @returns {number}
  */
 function retryDelay (pollIntervalMs, attempt, random) {
   const base = attempt === 1
@@ -310,7 +386,6 @@ function retryDelay (pollIntervalMs, attempt, random) {
  * @param {number} value
  * @param {number} minimum
  * @param {number} maximum
- * @returns {number}
  */
 function clamp (value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value))

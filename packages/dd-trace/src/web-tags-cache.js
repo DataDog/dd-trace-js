@@ -120,8 +120,12 @@ function onTagsUpdate (span) {
   // the ancestor's own update is what settles the endpoint. Skipped entirely
   // when nobody is listening, keeping this the same early return it used to be
   // for consumers that only care about web-tag discovery.
-  if (!endpointResolvedCh.hasSubscribers || cached.endpointFinal || cached.webTags !== tags) return
-  if (finalEndpoint(tags) === undefined) return
+  if (
+    !endpointResolvedCh.hasSubscribers || cached.endpointFinal || cached.webTags !== tags ||
+    finalEndpoint(tags) === undefined
+  ) {
+    return
+  }
   cached.endpointFinal = true
   endpointResolvedCh.publish(span)
 }

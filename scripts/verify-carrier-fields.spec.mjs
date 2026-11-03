@@ -10,7 +10,7 @@ import { createCarrierFieldsEslint, verifyCarrierFields } from './verify-carrier
 
 describe('verify-carrier-fields', () => {
   it('does not allow inline comments to suppress managed-header access', async () => {
-    const eslint = createCarrierFieldsEslint(process.cwd())
+    const eslint = await createCarrierFieldsEslint(process.cwd())
     const [result] = await eslint.lintText(`
       // eslint-disable-next-line eslint-rules/eslint-carrier-fields
       return carrier['x-datadog-trace-id'] = value
@@ -20,7 +20,7 @@ describe('verify-carrier-fields', () => {
   })
 
   it('enforces managed-header access in every production package', async () => {
-    const eslint = createCarrierFieldsEslint(process.cwd())
+    const eslint = await createCarrierFieldsEslint(process.cwd())
     const [result] = await eslint.lintText(`
       import 'node:fs'
       const traceIdHeader = 'x-datadog-trace-id'
@@ -31,7 +31,7 @@ describe('verify-carrier-fields', () => {
   })
 
   it('does not allow inline comments to suppress direct carrier access in the propagation core', async () => {
-    const eslint = createCarrierFieldsEslint(process.cwd())
+    const eslint = await createCarrierFieldsEslint(process.cwd())
     const [result] = await eslint.lintText(`
       // eslint-disable-next-line eslint-rules/eslint-carrier-fields
       carrier[key] = value

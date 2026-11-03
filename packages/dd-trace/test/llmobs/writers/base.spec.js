@@ -19,6 +19,20 @@ describe('BaseLLMObsWriter', () => {
   let options
   let logger
 
+  function getBaseLLMObsWriter () {
+    const loadServerless = proxyquire.noPreserveCache()
+    const serverless = loadServerless('../../../src/serverless', {})
+    proxyquire.preserveCache()
+    return proxyquire('../../../src/llmobs/writers/base', {
+      '../../exporters/common/request': request,
+      '../../log': logger,
+      '../../serverless': serverless,
+      './util': proxyquire('../../../src/llmobs/writers/util', {
+        '../../log': logger,
+      }),
+    })
+  }
+
   beforeEach(() => {
     request = sinon.stub()
     logger = {
@@ -26,13 +40,7 @@ describe('BaseLLMObsWriter', () => {
       warn: sinon.stub(),
       error: sinon.stub(),
     }
-    BaseLLMObsWriter = proxyquire('../../../src/llmobs/writers/base', {
-      '../../exporters/common/request': request,
-      '../../log': logger,
-      './util': proxyquire('../../../src/llmobs/writers/util', {
-        '../../log': logger,
-      }),
-    })
+    BaseLLMObsWriter = getBaseLLMObsWriter()
 
     clock = sinon.useFakeTimers({
       toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
@@ -166,6 +174,22 @@ describe('BaseLLMObsWriter', () => {
     assert.strictEqual(writer._buffer.size, 16)
   })
 
+  describe('in standard AWS Lambda', () => {
+    useEnv({ AWS_LAMBDA_INITIALIZATION_TYPE: 'on-demand' })
+
+    it('sends each event on append', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+
+      writer.append({ foo: 'bar' })
+
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(request.getCall(0).args[0], '{"events":[{"foo":"bar"}]}')
+      assert.strictEqual(writer._buffer.events.length, 0)
+    })
+  })
+
   it('does not append an event if the buffer is full', () => {
     writer = new BaseLLMObsWriter(options)
     writer.setAgentless(true)
@@ -180,6 +204,31 @@ describe('BaseLLMObsWriter', () => {
   })
 
   describe('flush', () => {
+    it('sends valid ASCII JSON without changing escaped values in a batch', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(false)
+      writer.makePayload = (events) => ({ events })
+
+      const events = [
+        {
+          path: String.raw`C:\Users\test\Documents\unity project`,
+          unicodeEscape: String.raw`\u0041`,
+          control: 'line\n\t"quoted"',
+        },
+        { café: '😀', value: String.raw`\😀` },
+      ]
+
+      for (const event of events) writer.append(event)
+      writer.flush()
+
+      sinon.assert.calledOnce(request)
+      const body = request.firstCall.args[0]
+      assert.strictEqual(Buffer.byteLength(body), body.length)
+      assert.ok(body.includes(String.raw`\ud83d\ude00`))
+      assert.ok(body.includes(String.raw`caf\u00e9`))
+      assert.deepStrictEqual(JSON.parse(body), { events })
+    })
+
     it('flushes a buffer in agentless mode', () => {
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(true)
@@ -222,6 +271,21 @@ describe('BaseLLMObsWriter', () => {
       assert.strictEqual(requestOptions.url.href, 'https://intake.site-a.com/')
       assert.strictEqual(requestOptions.path, '/endpoint')
       assert.strictEqual(requestOptions.headers['DD-API-KEY'], 'key-a')
+    })
+
+    it('does not flush an empty routed buffer left by a failed append', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      const event = {}
+      event.self = event
+
+      assert.throws(
+        () => writer.append(event, { apiKey: 'key-a', site: 'site-a.com' }),
+        { name: 'TypeError' }
+      )
+      writer.flush()
+
+      sinon.assert.notCalled(request)
     })
 
     it('does not flush when agentless property is not set', () => {
@@ -280,8 +344,36 @@ describe('BaseLLMObsWriter', () => {
       )
     })
 
+    it('isolates an invalid route from valid buffers', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
+      writer.append({ foo: 'default' })
+      writer.append({ foo: 'invalid' }, { apiKey: 'invalid', site: 'invalid site' })
+      writer.append({ foo: 'valid' }, { apiKey: 'valid', site: 'valid.site.com' })
+
+      writer.flush()
+
+      sinon.assert.calledTwice(request)
+      sinon.assert.calledOnce(logger.error)
+
+      writer.flush()
+
+      sinon.assert.calledTwice(request)
+      const events = request.getCalls().map(call => JSON.parse(call.args[0]).events[0])
+      assert.deepStrictEqual(events, [{ foo: 'default' }, { foo: 'valid' }])
+      sinon.assert.calledOnceWithExactly(
+        logger.error,
+        'Failed to route LLMObs %s events for API key %s: %s',
+        undefined,
+        '****alid',
+        'Invalid URL'
+      )
+    })
+
     it('waits for an export already in flight', () => {
       process.env.VERCEL = '1'
+      BaseLLMObsWriter = getBaseLLMObsWriter()
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(true)
       writer.makePayload = (events) => ({ events })
@@ -300,6 +392,7 @@ describe('BaseLLMObsWriter', () => {
 
     it('waits for every request drained at the flush boundary', () => {
       process.env.VERCEL = '1'
+      BaseLLMObsWriter = getBaseLLMObsWriter()
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(true)
       writer.makePayload = (events) => ({ events })
@@ -320,6 +413,7 @@ describe('BaseLLMObsWriter', () => {
 
     it('continues after a boundary request throws while waiting for earlier requests', () => {
       process.env.VERCEL = '1'
+      BaseLLMObsWriter = getBaseLLMObsWriter()
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(true)
       writer.makePayload = (events) => ({ events })

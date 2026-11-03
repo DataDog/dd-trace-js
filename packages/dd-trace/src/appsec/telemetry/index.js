@@ -5,14 +5,13 @@ const {
   incrementApiSecRequestNoSchema,
   incrementApiSecRequestSchema,
 } = require('./api_security')
-const { DD_TELEMETRY_REQUEST_METRICS } = require('./common')
+const { appsecMetrics, DD_TELEMETRY_REQUEST_METRICS, getVersionsTags } = require('./common')
 const { incrementMissingUserId, incrementMissingUserLogin, incrementSdkEvent } = require('./user')
 const {
   addRaspRequestMetrics,
   trackRaspMetrics,
   trackRaspRuleMatch,
   trackRaspRuleSkipped,
-  incrementRaspDurationMetrics,
 } = require('./rasp')
 const {
   addWafRequestMetrics,
@@ -21,7 +20,6 @@ const {
   incrementWafUpdates,
   incrementWafConfigErrors,
   incrementWafRequests,
-  incrementWafDurationMetrics,
 } = require('./waf')
 
 const metricsStoreMap = new WeakMap()
@@ -150,8 +148,28 @@ function incrementRequestDurationMetrics (req) {
   const store = getStore(req)
   const requestMetrics = store[DD_TELEMETRY_REQUEST_METRICS]
 
-  incrementWafDurationMetrics(requestMetrics)
-  incrementRaspDurationMetrics(requestMetrics)
+  if (!requestMetrics.duration && !requestMetrics.durationExt &&
+      !requestMetrics.raspDuration && !requestMetrics.raspDurationExt) return
+
+  const { duration, durationExt, raspDuration, raspDurationExt, wafVersion, rulesVersion } = requestMetrics
+
+  const versionsTags = getVersionsTags(wafVersion, rulesVersion)
+
+  if (duration) {
+    appsecMetrics.distribution('waf.duration', versionsTags).track(duration)
+  }
+
+  if (durationExt) {
+    appsecMetrics.distribution('waf.duration_ext', versionsTags).track(durationExt)
+  }
+
+  if (raspDuration) {
+    appsecMetrics.distribution('rasp.duration', versionsTags).track(raspDuration)
+  }
+
+  if (raspDurationExt) {
+    appsecMetrics.distribution('rasp.duration_ext', versionsTags).track(raspDurationExt)
+  }
 }
 
 function incrementMissingUserLoginMetric (framework, eventType) {

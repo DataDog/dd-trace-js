@@ -2,8 +2,8 @@
 
 const assert = require('node:assert/strict')
 const path = require('path')
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../integration-tests/helpers')
+const HttpRequest = require('../setup/helpers/http-client')
 
 describe('RASP - downstream request integration', () => {
   let cwd, appFile
@@ -31,8 +31,8 @@ describe('RASP - downstream request integration', () => {
         ...envOverrides,
       },
     })
-    const axios = Axios.create({ baseURL: proc.url })
-    return { agent, proc, axios }
+    const httpRequest = HttpRequest.create({ baseURL: proc.url })
+    return { agent, proc, httpRequest }
   }
 
   async function teardownTest (agent, proc) {
@@ -125,15 +125,13 @@ describe('RASP - downstream request integration', () => {
       timeout: 4_000,
       expectedMessageCount: 3,
       resolveAtFirstSuccess: true,
-    }).then(
-      () => {
-        assert.strictEqual(appsecTelemetryReceived, true)
-      })
+    })
+    assert.strictEqual(appsecTelemetryReceived, true)
   }
 
   describe('Downstream configuration', () => {
     describe('with body sampling enabled', () => {
-      let agent, proc, axios
+      let agent, proc, httpRequest
 
       beforeEach(async function () {
         this.timeout(60000)
@@ -143,7 +141,7 @@ describe('RASP - downstream request integration', () => {
         })
         agent = setup.agent
         proc = setup.proc
-        axios = setup.axios
+        httpRequest = setup.httpRequest
       })
 
       afterEach(async () => {
@@ -151,50 +149,56 @@ describe('RASP - downstream request integration', () => {
       })
 
       it('should set all tags', async function () {
-        const resultPromise = Promise.all([assertMessage(agent), assertTelemetry(agent)])
-        await axios.post('/with-body')
-
-        return resultPromise
+        await Promise.all([
+          assertMessage(agent),
+          assertTelemetry(agent),
+          httpRequest.post('/with-body'),
+        ])
       })
 
       it('collects response body when stream is consumed via readable', async function () {
-        const resultPromise = Promise.all([assertMessage(agent), assertTelemetry(agent)])
-        await axios.post('/with-readable')
-
-        return resultPromise
+        await Promise.all([
+          assertMessage(agent),
+          assertTelemetry(agent),
+          httpRequest.post('/with-readable'),
+        ])
       })
 
       it('collects response body when stream is consumed via async iterator', async function () {
-        const resultPromise = Promise.all([assertMessage(agent), assertTelemetry(agent)])
-        await axios.post('/with-async-iterator')
-
-        return resultPromise
+        await Promise.all([
+          assertMessage(agent),
+          assertTelemetry(agent),
+          httpRequest.post('/with-async-iterator'),
+        ])
       })
 
       it('collects response body for form-urlencoded content-type', async function () {
-        const resultPromise = Promise.all([assertMessage(agent), assertTelemetry(agent)])
-        await axios.post('/with-body-form')
-
-        return resultPromise
+        await Promise.all([
+          assertMessage(agent),
+          assertTelemetry(agent),
+          httpRequest.post('/with-body-form'),
+        ])
       })
 
       it('does not collect response body for unsupported content-type', async function () {
-        const resultPromise = Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
-        await axios.post('/with-body-text')
-
-        return resultPromise
+        await Promise.all([
+          assertMessage(agent, true, false),
+          assertTelemetry(agent),
+          httpRequest.post('/with-body-text'),
+        ])
       })
 
       it('Handles redirection correctly', async function () {
-        const resultPromise = Promise.all([assertMessage(agent, true, true, 2), assertTelemetry(agent)])
-        await axios.post('/with-redirect')
-
-        return resultPromise
+        await Promise.all([
+          assertMessage(agent, true, true, 2),
+          assertTelemetry(agent),
+          httpRequest.post('/with-redirect'),
+        ])
       })
     })
 
     describe('with body sampling disabled', () => {
-      let agent, proc, axios
+      let agent, proc, httpRequest
 
       beforeEach(async function () {
         this.timeout(60000)
@@ -204,7 +208,7 @@ describe('RASP - downstream request integration', () => {
         })
         agent = setup.agent
         proc = setup.proc
-        axios = setup.axios
+        httpRequest = setup.httpRequest
       })
 
       afterEach(async () => {
@@ -213,15 +217,16 @@ describe('RASP - downstream request integration', () => {
 
       it('still sets metric even when body sampling is disabled', async function () {
         this.timeout(31_000)
-        const resultPromise = Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
-        await axios.post('/with-body')
-
-        return resultPromise
+        await Promise.all([
+          assertMessage(agent, true, false),
+          assertTelemetry(agent),
+          httpRequest.post('/with-body'),
+        ])
       })
     })
 
     describe('with zero max count limit', () => {
-      let agent, proc, axios
+      let agent, proc, httpRequest
 
       beforeEach(async function () {
         this.timeout(60000)
@@ -231,7 +236,7 @@ describe('RASP - downstream request integration', () => {
         })
         agent = setup.agent
         proc = setup.proc
-        axios = setup.axios
+        httpRequest = setup.httpRequest
       })
 
       afterEach(async () => {
@@ -240,10 +245,11 @@ describe('RASP - downstream request integration', () => {
 
       it('skips downstream analysis when limit is zero', async function () {
         this.timeout(31_000)
-        const resultPromise = Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
-        await axios.post('/with-body')
-
-        return resultPromise
+        await Promise.all([
+          assertMessage(agent, true, false),
+          assertTelemetry(agent),
+          httpRequest.post('/with-body'),
+        ])
       })
     })
   })

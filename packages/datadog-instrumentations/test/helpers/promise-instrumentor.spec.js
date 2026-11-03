@@ -22,7 +22,8 @@ describe('helpers/promise-instrumentor', () => {
 
     it('should call through unchanged when there are no subscribers', async () => {
       const calls = []
-      const wrapped = instrument(() => assert.fail('buildContext must not run without subscribers'))(
+      const wrapPromise = instrument(() => assert.fail('buildContext must not run without subscribers'))
+      const wrapped = wrapPromise(
         function (...args) {
           calls.push({ thisArg: this, args })
           return Promise.resolve('ok')
@@ -44,7 +45,8 @@ describe('helpers/promise-instrumentor', () => {
       const handler = () => { events.push('start') }
       startCh.subscribe(handler)
       try {
-        const wrapped = instrument(() => undefined)(function (...args) {
+        const wrapPromise = instrument(() => undefined)
+        const wrapped = wrapPromise(function (...args) {
           return Promise.resolve(args.length)
         })
 
@@ -84,7 +86,8 @@ describe('helpers/promise-instrumentor', () => {
 
     it('should publish start then finish with ctx.result set to the resolved value', async () => {
       const instrument = createPromiseInstrumentor(prefix)
-      const wrapped = instrument((_, args) => ({ args: [...args] }))(value => Promise.resolve(value))
+      const wrapPromise = instrument((_, args) => ({ args: [...args] }))
+      const wrapped = wrapPromise(value => Promise.resolve(value))
 
       const resolved = await wrapped({ address: '127.0.0.1' })
 
@@ -97,7 +100,8 @@ describe('helpers/promise-instrumentor', () => {
     it('should publish error then finish and rethrow when the promise rejects', async () => {
       const instrument = createPromiseInstrumentor(prefix)
       const failure = new Error('boom')
-      const wrapped = instrument(() => ({}))(() => Promise.reject(failure))
+      const wrapPromise = instrument(() => ({}))
+      const wrapped = wrapPromise(() => Promise.reject(failure))
 
       await assert.rejects(wrapped(), error => error === failure)
 
@@ -108,7 +112,8 @@ describe('helpers/promise-instrumentor', () => {
     it('should publish error and rethrow when the underlying call throws synchronously', () => {
       const instrument = createPromiseInstrumentor(prefix)
       const failure = new TypeError('sync boom')
-      const wrapped = instrument(() => ({}))(() => { throw failure })
+      const wrapPromise = instrument(() => ({}))
+      const wrapped = wrapPromise(() => { throw failure })
 
       assert.throws(() => wrapped(), error => error === failure)
 

@@ -261,7 +261,6 @@ function recordException (ddSpan, exception, timeInput, otelTraceSemanticsEnable
  * @param {number} currentCode 0 = UNSET, 1 = OK, 2 = ERROR.
  * @param {{ code?: number, message?: string }} [status]
  * @param {boolean} [otelTraceSemanticsEnabled]
- * @returns {number} The new status code to track on the caller.
  */
 function applyOtelStatus (ddSpan, currentCode, status, otelTraceSemanticsEnabled) {
   if (!isWritable(ddSpan)) return currentCode

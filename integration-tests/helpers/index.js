@@ -3,6 +3,7 @@
 const assert = require('assert')
 const childProcess = require('child_process')
 const { exec, execSync, fork, spawn } = childProcess
+const { once } = require('node:events')
 const { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
 const http = require('http')
@@ -37,6 +38,31 @@ const ANY_STRING = Symbol('test.ANY_STRING')
 const ANY_NUMBER = Symbol('test.ANY_NUMBER')
 const ANY_VALUE = Symbol('test.ANY_VALUE')
 const defaultStopProcTimeoutMs = 2_000
+const processGroupClosePromises = new WeakMap()
+
+/**
+ * @param {string} out
+ * @param {string} expectedOut
+ */
+function assertOutputMatchesInOrder (out, expectedOut) {
+  let offset = 0
+  let expectedOffset = 0
+
+  while (expectedOffset < expectedOut.length) {
+    const newline = expectedOut.indexOf('\n', expectedOffset)
+    const end = newline === -1 ? expectedOut.length : newline + 1
+    const expectedLine = expectedOut.slice(expectedOffset, end)
+    const match = out.slice(offset).match(new RegExp(expectedLine))
+
+    assert.notStrictEqual(
+      match,
+      null,
+      `output "${out}" does not contain expected output line "${expectedLine}" after offset ${offset}`
+    )
+    offset += match.index + match[0].length
+    expectedOffset = end
+  }
+}
 
 /**
  * @param {string} filename
@@ -48,7 +74,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
   assert.notStrictEqual(proc.pid, undefined, 'Process PID is not available')
   const pid = proc.pid
-  let out = await new Promise((resolve, reject) => {
+  const out = await new Promise((resolve, reject) => {
     proc.once('error', reject)
     const out = []
     proc.stdout.on('data', data => {
@@ -66,10 +92,10 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
     expectedOut(out)
   } else {
     if (process.env.DD_TRACE_DEBUG) {
-      // Debug adds this, which we don't care about in these tests
-      out = out.replace('Flushing 0 metrics via HTTP\n', '')
+      assertOutputMatchesInOrder(out, expectedOut)
+    } else {
+      assert.match(out, new RegExp(expectedOut), `output "${out}" does not contain expected output "${expectedOut}"`)
     }
-    assert.match(out, new RegExp(expectedOut), `output "${out}" does not contain expected output "${expectedOut}"`)
   }
 
   if (expectedSource) {
@@ -185,7 +211,20 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
  *   stdout: import('node:stream').Readable,
  *   stderr: import('node:stream').Readable
  * }} SpawnedProcess
+ * @typedef {Promise<void> & {
+ *   proc: SpawnedProcess
+ * }} ExpectedExitPromise
  */
+
+class ProcessTimeoutError extends Error {
+  /**
+   * @param {number} timeoutMs
+   */
+  constructor (timeoutMs) {
+    super(`Process did not exit within ${timeoutMs} ms.`)
+    this.code = 'ERR_PROCESS_TIMEOUT'
+  }
+}
 
 /**
  * Spawns a Node.js script in a child process and returns a promise that resolves when the process is ready.
@@ -242,8 +281,8 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 /**
  * Spawns a Node.js script in a child process that is expected to run and exit cleanly.
  *
- * This function expects the process to complete and exit with code 0, in which case the promise resolves
- * with `undefined`. Use this for short-lived processes like validation scripts or tests that run to completion.
+ * This function expects the process to complete and exit with code 0, in which case the returned promise resolves.
+ * Use this for short-lived processes like validation scripts or tests that run to completion.
  *
  * For long-running processes (like servers) that should not exit, use `spawnProc` instead.
  *
@@ -253,21 +292,68 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
  *   standard output of the child process. If not provided, the output will be logged to the console.
  * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
  *   standard error of the child process. If not provided, the error will be logged to the console.
- * @returns {Promise<void>} A promise that resolves when the process exits with code 0.
+ * @param {number} [timeoutMs] - Maximum time to wait for the process to exit.
+ * @returns {ExpectedExitPromise}
  */
-function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHandler) {
+function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHandler, timeoutMs) {
   const proc = spawnProcImpl(filename, options, stdioHandler, stderrHandler)
 
-  return new Promise((resolve, reject) => {
-    proc
-      .once('error', reject)
-      .once('exit', code => {
-        if (code !== 0) {
-          return reject(new Error(`Process exited with status code ${code}.`))
-        }
-        resolve()
-      })
-  })
+  const completed = /** @type {ExpectedExitPromise} */ (new Promise((resolve, reject) => {
+    let timeout
+    let timedOut = false
+
+    proc.once('error', onError)
+    proc.once('exit', onExit)
+
+    if (timeoutMs !== undefined) {
+      timeout = setTimeout(onTimeout, timeoutMs)
+    }
+
+    async function onTimeout () {
+      timedOut = true
+      const timeoutError = new ProcessTimeoutError(timeoutMs)
+
+      try {
+        await stopProc(proc)
+        cleanup()
+        reject(timeoutError)
+      } catch (error) {
+        cleanup()
+        reject(error)
+      }
+    }
+
+    /**
+     * @param {Error} error
+     */
+    function onError (error) {
+      if (timedOut) return
+      cleanup()
+      reject(error)
+    }
+
+    /**
+     * @param {number|null} code
+     */
+    function onExit (code) {
+      if (timedOut) return
+      cleanup()
+      if (code !== 0) {
+        reject(new Error(`Process exited with status code ${code}.`))
+        return
+      }
+      resolve()
+    }
+
+    function cleanup () {
+      clearTimeout(timeout)
+      proc.removeListener('error', onError)
+      proc.removeListener('exit', onExit)
+    }
+  }))
+
+  completed.proc = proc
+  return completed
 }
 
 /**
@@ -284,6 +370,31 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
  */
 async function stopProc (proc, options = {}) {
   if (!proc) return
+
+  const processGroupClosed = processGroupClosePromises.get(proc)
+  if (processGroupClosed) {
+    const signal = options.signal ?? 'SIGTERM'
+    const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
+
+    try {
+      let closed
+      try {
+        killProcessGroup(proc, signal)
+        closed = await waitForPromise(processGroupClosed, timeoutMs)
+      } finally {
+        // Also stop descendants that ignore the initial signal or close their pipes before exiting.
+        killProcessGroup(proc, 'SIGKILL')
+      }
+
+      if (!closed && !await waitForPromise(processGroupClosed, timeoutMs)) {
+        throw new Error(`Process group ${proc.pid} did not close after SIGKILL`)
+      }
+    } finally {
+      processGroupClosePromises.delete(proc)
+    }
+    return
+  }
+
   if (proc.exitCode !== null || proc.signalCode !== null) return
 
   const signal = options.signal ?? 'SIGTERM'
@@ -307,6 +418,56 @@ async function stopProc (proc, options = {}) {
 
   if (!exitedAfterSigkill) {
     throw new Error(`Process ${proc.pid} did not exit after SIGKILL`)
+  }
+}
+
+/**
+ * Runs a shell command in an isolated process group on POSIX so cleanup can
+ * stop descendants even after the shell exits.
+ *
+ * @param {string} command - Shell command to run.
+ * @param {childProcess.ExecOptions} [options] - Process options.
+ * @returns {childProcess.ChildProcess}
+ */
+function execInProcessGroup (command, options = {}) {
+  if (process.platform === 'win32') return exec(command, options)
+
+  const proc = spawn(command, { ...options, shell: options.shell || true, detached: true })
+  // Like exec(), drain output even when the caller does not consume it.
+  proc.stdout.resume()
+  proc.stderr.resume()
+  const closed = once(proc, 'close')
+  closed.catch(() => {})
+  if (proc.pid !== undefined) processGroupClosePromises.set(proc, closed)
+  return proc
+}
+
+/**
+ * @param {childProcess.ChildProcess} proc - Process whose group should be stopped.
+ * @param {keyof import('node:os').SignalConstants} signal - Signal to send.
+ */
+function killProcessGroup (proc, signal) {
+  try {
+    process.kill(-proc.pid, signal)
+  } catch (error) {
+    if (error.code !== 'ESRCH') throw error
+  }
+}
+
+/**
+ * @param {Promise<unknown>} promise - Promise to wait for.
+ * @param {number} timeoutMs - Max time to wait in milliseconds.
+ * @returns {Promise<boolean>} `true` if the promise resolved before timeout.
+ */
+async function waitForPromise (promise, timeoutMs) {
+  let timeout
+  try {
+    return await Promise.race([
+      promise.then(() => true),
+      new Promise(resolve => { timeout = setTimeout(resolve, timeoutMs, false) }),
+    ])
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
@@ -885,11 +1046,14 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMess
  * @returns {typeof process.env}
  */
 function getCiVisAgentlessConfig (port) {
-  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
+  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js.
+  // The outer workflow's GitHub metadata references commits that do not exist in the sandbox repository.
+  // GITHUB_RUN_ID is Cucumber's primary key for GitHub detection; without it, the missing event file is ignored.
   // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
-  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
+  const { GITHUB_ACTIONS, GITHUB_EVENT_PATH, GITHUB_RUN_ID, GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
+    DATADOG_API_KEY: undefined,
     DD_API_KEY: '1',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
@@ -903,11 +1067,15 @@ function getCiVisAgentlessConfig (port) {
  * @returns {typeof process.env}
  */
 function getCiVisEvpProxyConfig (port) {
-  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
+  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js.
+  // The outer workflow's GitHub metadata references commits that do not exist in the sandbox repository.
+  // GITHUB_RUN_ID is Cucumber's primary key for GitHub detection; without it, the missing event file is ignored.
   // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
-  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
+  const { GITHUB_ACTIONS, GITHUB_EVENT_PATH, GITHUB_RUN_ID, GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
+    DATADOG_API_KEY: undefined,
+    DD_API_KEY: undefined,
     DD_TRACE_AGENT_PORT: String(port),
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
@@ -1036,13 +1204,14 @@ function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, additionalE
  * @param {AdditionalEnvArgs} [additionalEnvArgs]
  * @param {string[]} [execArgv]
  * @param {(data: Buffer) => void} [stdioHandler]
+ * @param {number} [timeoutMs]
  */
 function spawnPluginIntegrationTestProcAndExpectExit (
-  cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler
+  cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler, timeoutMs
 ) {
   const { filename, options, stdioHandler: handler } =
     preparePluginIntegrationTestSpawnOptions(cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler)
-  return spawnProcAndExpectExit(filename, options, handler)
+  return spawnProcAndExpectExit(filename, options, handler, undefined, timeoutMs)
 }
 
 /**
@@ -1093,9 +1262,6 @@ function useSandbox (...args) {
   })
 }
 
-/**
- * @returns {string}
- */
 function sandboxCwd () {
   return sandbox.folder
 }
@@ -1235,16 +1401,27 @@ function deepFreeze (value) {
  * When `withReceiver: true` is set, each test function receives
  * `(receiver, run)` arguments automatically — see `withReceiver` for details.
  *
- * @param {(name: string, fn: () => Promise<void>) => void} mochaIt
- * @param {{ concurrency?: number, withReceiver?: boolean }} [options]
- * @returns {(name: string, fn: (...args: unknown[]) => Promise<void>, opts?: { retries?: number }) => void}
+ * @param {import('mocha').TestFunction} mochaIt
+ * @param {{
+ *   concurrency?: number,
+ *   withReceiver?: boolean,
+ *   shard?: { index: number, count: number }
+ * }} [options]
+ * @returns {(
+ *   name: string,
+ *   fn: (...args: unknown[]) => Promise<void>,
+ *   opts?: { retries?: number }
+ * ) => import('mocha').Test}
  */
-function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver = false } = {}) {
+function createParallelIt (
+  mochaIt,
+  { concurrency = 2, withReceiver: useReceiver = false, shard } = {}
+) {
   // Keyed by Mocha Suite object; populated lazily on first run within each suite.
   const suiteStates = new Map()
-  // All registered entries, queued by test title. A queue (array) per title
-  // lets multiple suites with duplicate test names each claim their own entry.
-  const entriesByTitle = new Map()
+  const shardStatesBySuite = new Map()
+  const entriesByTest = new Map()
+  let nextShardBatch = 0
 
   function getState (suite) {
     if (!suiteStates.has(suite)) {
@@ -1259,7 +1436,16 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
     state.active++
     Promise.resolve(entry.fn()).then(
       (val) => { entry.done = true; state.active--; flush(state); resolve(val) },
-      (err) => { entry.done = true; entry.rejected = true; state.active--; flush(state); reject(err) }
+      (err) => {
+        entry.done = true
+        entry.rejected = true
+        state.active--
+        reject(err)
+        // Give Mocha a chance to enqueue a retry before another scenario
+        // consumes the freed slot. A terminal failure resumes the queue on
+        // the next turn without delaying successful scenarios.
+        setImmediate(() => flush(state))
+      }
     )
   }
 
@@ -1270,12 +1456,14 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
     }
   }
 
-  function schedule (entry, state) {
+  function schedule (entry, state, priority = false) {
     entry.promise = new Promise((resolve, reject) => {
       if (state.active < concurrency) {
         startNow(entry, state, resolve, reject)
       } else {
-        state.waiting.push({ entry, resolve, reject })
+        const queued = { entry, resolve, reject }
+        if (priority) state.waiting.unshift(queued)
+        else state.waiting.push(queued)
       }
     })
     // Suppress unhandled-rejection until Mocha attaches its own handler via
@@ -1285,11 +1473,9 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
 
   return function it (name, fn, opts = {}) {
     const wrappedFn = useReceiver ? withReceiver(fn) : fn
-    const entry = { name, fn: wrappedFn, promise: null, done: false, rejected: false }
-    if (!entriesByTitle.has(name)) entriesByTitle.set(name, [])
-    entriesByTitle.get(name).push(entry)
+    const entry = { name, fn: wrappedFn, promise: null, done: false, observed: false, rejected: false }
 
-    mochaIt(name, function () {
+    const test = mochaIt(name, function () {
       if (opts.retries !== undefined) {
         this.retries(opts.retries)
       }
@@ -1298,29 +1484,48 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
       if (!state.launched) {
         state.launched = true
         for (const test of suite.tests) {
-          const queue = entriesByTitle.get(test.title)
-          const e = queue && queue.shift()
-          if (e) schedule(e, state)
+          const registeredEntry = entriesByTest.get(test)
+          if (registeredEntry) schedule(registeredEntry, state)
         }
-      } else if (entry.done && entry.rejected) {
+      } else if (entry.observed && entry.done && entry.rejected) {
         // Mocha is retrying a failed test — restart only this scenario
-        schedule(entry, state)
+        schedule(entry, state, true)
       }
+      entry.observed = true
       // If done && !rejected: already passed, return resolved promise
       // If !done: still running or queued, return pending promise
       return entry.promise
     })
+
+    // Keep the same scenarios together that would share a suite's concurrency
+    // pool without sharding, since some integration fixtures share a sandbox.
+    const suite = test.parent
+    const shardState = shardStatesBySuite.get(suite) || { testCount: 0, assignedShard: 0 }
+    if (shardState.testCount % concurrency === 0) {
+      shardState.assignedShard = nextShardBatch++ % (shard?.count || 1)
+    }
+    shardState.testCount++
+    shardStatesBySuite.set(suite, shardState)
+    const { assignedShard } = shardState
+    if (shard && assignedShard !== shard.index) {
+      test.pending = true
+      return test
+    }
+
+    entriesByTest.set(test, entry)
+    return test
   }
 }
 
 /**
  * Wraps a test body with FakeCiVisIntake lifecycle management. Starts a
- * receiver before the test, passes it (and an optional `run` exec helper that
+ * receiver before the test, passes it (and an optional `run` shell helper that
  * auto-kills on cleanup) to `fn`, then stops the receiver in a finally block.
  *
  * @param {(
  *   receiver: FakeCiVisIntake,
- *   run: (cmd: string, opts?: object) => import('child_process').ChildProcess
+ *   run: ((cmd: string, opts?: object) => import('child_process').ChildProcess) &
+ *     { stop: () => Promise<void> }
  * ) => Promise<void>} fn
  * @returns {() => Promise<void>}
  */
@@ -1329,14 +1534,23 @@ function withReceiver (fn) {
     const receiver = await new FakeCiVisIntake().start()
     let lastProc
     const run = (cmd, opts) => {
-      lastProc = exec(cmd, opts)
+      lastProc = execInProcessGroup(cmd, opts)
       return lastProc
     }
+
+    async function stopLastProcess () {
+      await stopProc(lastProc)
+    }
+    run.stop = stopLastProcess
+
     try {
       await fn(receiver, run)
     } finally {
-      lastProc?.kill()
-      await receiver.stop()
+      try {
+        await stopLastProcess()
+      } finally {
+        await receiver.stop()
+      }
     }
   }
 }
@@ -1347,9 +1561,11 @@ module.exports = {
   ANY_VALUE,
   FakeAgent,
   hookFile,
+  assertOutputMatchesInOrder,
   assertObjectContains,
   assertUUID,
   deepFreeze,
+  execInProcessGroup,
   stopProc,
   stopCiVisTestEnv,
   spawnProc,

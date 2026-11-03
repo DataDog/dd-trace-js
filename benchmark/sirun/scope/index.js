@@ -41,11 +41,13 @@ if (MODE === 'bind') {
 
   // Sanity: a bound function runs its target and returns its value.
   scope.activate(span, () => {})
-  assert.equal(scope.bind(target, span)(), 1, 'bound function did not invoke its target')
+  const boundTarget = scope.bind(target, span)
+  assert.equal(boundTarget(), 1, 'bound function did not invoke its target')
 
   guard.loopStart()
   for (let i = 0; i < count; i++) {
-    scope.bind(target, span)()
+    const boundTarget = scope.bind(target, span)
+    boundTarget()
   }
   guard.done()
 

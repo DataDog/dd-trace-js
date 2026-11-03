@@ -2,14 +2,13 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
-
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 describe('express-mongo-sanitize', () => {
   withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
@@ -54,7 +53,7 @@ describe('express-mongo-sanitize', () => {
         it('it continues working without sanitization request', async () => {
           assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, false)
 
-          await axios.get(`http://localhost:${port}/?param=paramvalue`)
+          await httpRequest.get(`http://localhost:${port}/?param=paramvalue`)
 
           sinon.assert.calledOnce(requestBody)
           assert.strictEqual(requestBody.firstCall.args[0].query.param, 'paramvalue')
@@ -63,7 +62,7 @@ describe('express-mongo-sanitize', () => {
         it('it continues working with sanitization request', async () => {
           assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, false)
 
-          await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
+          await httpRequest.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
           sinon.assert.calledOnce(requestBody)
           assert.strictEqual(requestBody.firstCall.args[0].query.param.$eq, undefined)
@@ -85,7 +84,7 @@ describe('express-mongo-sanitize', () => {
         it('it continues working without sanitization request', async () => {
           assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, true)
 
-          await axios.get(`http://localhost:${port}/?param=paramvalue`)
+          await httpRequest.get(`http://localhost:${port}/?param=paramvalue`)
 
           sinon.assert.calledOnce(requestBody)
           assert.strictEqual(requestBody.firstCall.args[0].query.param, 'paramvalue')
@@ -94,7 +93,7 @@ describe('express-mongo-sanitize', () => {
         it('it continues working with sanitization request', async () => {
           assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, true)
 
-          await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
+          await httpRequest.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
           sinon.assert.calledOnce(requestBody)
           assert.strictEqual(requestBody.firstCall.args[0].query.param.$eq, undefined)
@@ -103,7 +102,7 @@ describe('express-mongo-sanitize', () => {
         it('subscription is called with expected parameters without sanitization request', async () => {
           assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, true)
 
-          await axios.get(`http://localhost:${port}/?param=paramvalue`)
+          await httpRequest.get(`http://localhost:${port}/?param=paramvalue`)
 
           sinon.assert.calledOnce(subscription)
           assert.deepStrictEqual(
@@ -116,7 +115,7 @@ describe('express-mongo-sanitize', () => {
         it('subscription is called with expected parameters with sanitization request', async () => {
           assert.strictEqual(sanitizeMiddlewareFinished.hasSubscribers, true)
 
-          await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
+          await httpRequest.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
           sinon.assert.calledOnce(subscription)
           assert.deepStrictEqual(
