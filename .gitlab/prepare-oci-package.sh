@@ -7,8 +7,6 @@ cd ..
 archive=$(npm pack --silent)
 test -f "$archive"
 
-bun=$(node scripts/bun.js)
-
 mkdir -p packaging/sources
 
 # The repository lock describes dd-trace as the root; use its manifest to keep production resolutions frozen.
@@ -17,7 +15,7 @@ mkdir -p packaging/sources
 tar -xOf "$archive" package/package.json > packaging/sources/package.json
 npm pkg delete scripts.prepare --prefix packaging/sources
 cp bun.lock packaging/sources/bun.lock
-"$bun" --config="$PWD/bunfig.toml" install --production --frozen-lockfile \
+node scripts/bun.js install --production --frozen-lockfile \
   --linker=hoisted --network-concurrency 8 --cwd packaging/sources
 
 rm packaging/sources/package.json packaging/sources/bun.lock

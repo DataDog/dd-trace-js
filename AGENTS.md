@@ -51,7 +51,7 @@ unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
 PLUGINS="<name>" npm run test:plugins:ci
 ```
 
-The `:ci` script runs `yarn services` to install versioned dependencies and check services before testing.
+The `:ci` script runs `npm run services` to install versioned dependencies and check services before testing.
 After setup, use `PLUGINS="<name>" npm run test:plugins` to rerun without repeating dependency installation.
 For service-backed tests, find the CI job that runs the target spec under `.github/workflows/`.
 Match its test action or script, `PLUGINS`, and any `SPEC` filter.
