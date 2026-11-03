@@ -152,9 +152,10 @@ describe('PR title workflow', () => {
     }
   })
 
-  it('skips label synchronization for Dependabot pull requests', () => {
+  it('skips label synchronization for dependency bot pull requests', () => {
     const titleCondition = "steps.rename.outputs.renamed != 'true' && " +
       "github.event.pull_request.user.login != 'dependabot[bot]' && " +
+      "github.event.pull_request.user.login != 'renovate[bot]' && " +
       "(github.event.action == 'opened' || " +
       "github.event.action == 'reopened' || " +
       "(github.event.action == 'edited' && github.event.changes.title != null))"
