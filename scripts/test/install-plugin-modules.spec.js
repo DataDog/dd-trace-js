@@ -93,21 +93,6 @@ describe('scripts/install_plugin_modules.js', function () {
     ])
   })
 
-  it('removes shared and nested native builds when the Node ABI changes', () => {
-    const staleMarker = path.join(versionsDir, 'node_modules', 'stale-abi-marker')
-    const staleNested = path.join(versionsDir, 'stale-workspace', 'node_modules', 'stale-abi-marker')
-    fs.mkdirSync(path.dirname(staleNested), { recursive: true })
-    fs.writeFileSync(staleNested, '')
-    fs.mkdirSync(path.dirname(staleMarker), { recursive: true })
-    fs.writeFileSync(path.join(versionsDir, '.node-abi'), 'stale')
-    fs.writeFileSync(staleMarker, '')
-
-    runInstall('pino')
-
-    assert.strictEqual(fs.existsSync(staleMarker), false)
-    assert.strictEqual(fs.existsSync(staleNested), false)
-  })
-
   it('reports guidance when Bun cannot install the generated workspaces', () => {
     const result = spawnInstall('express', {
       DD_TEST_FAIL_BUN_INSTALL: 'true',
@@ -133,7 +118,7 @@ describe('scripts/install_plugin_modules.js', function () {
     )
   })
 
-  it('rebuilds a dependency after its postinstall failed in an earlier invocation', () => {
+  it('rebuilds dependencies after failed postinstalls and Node ABI changes', () => {
     const fixture = path.join(wrapperDirectory, 'native', 'package')
     fs.mkdirSync(fixture, { recursive: true })
     fs.writeFileSync(path.join(fixture, 'package.json'), JSON.stringify({
@@ -143,10 +128,10 @@ describe('scripts/install_plugin_modules.js', function () {
       scripts: { postinstall: 'node install.js' },
     }))
     fs.writeFileSync(path.join(fixture, 'index.js'),
-      "module.exports = require('node:fs').existsSync(require('node:path').join(__dirname, 'built'))\n")
+      "module.exports = require('node:fs').readFileSync(require('node:path').join(__dirname, 'built'), 'utf8')\n")
     fs.writeFileSync(path.join(fixture, 'install.js'),
       "if (process.env.DD_TEST_FAIL_NATIVE_INSTALL === 'true') process.exit(1)\n" +
-      "require('node:fs').writeFileSync(require('node:path').join(__dirname, 'built'), '')\n")
+      "require('node:fs').writeFileSync(require('node:path').join(__dirname, 'built'), process.versions.modules)\n")
     const archive = path.join(wrapperDirectory, 'native.tgz')
     const packed = spawnSync('tar', ['-czf', archive, '-C', path.dirname(fixture), 'package'], { encoding: 'utf8' })
     assert.strictEqual(packed.status, 0, packed.stderr)
@@ -173,9 +158,21 @@ fs.writeFile = (file, data, ...options) => {
 
     runInstall('q', undefined, undefined, env)
 
+    const nodeAbiFile = path.join(versionsDir, '.node-abi')
+    const lockFile = path.join(versionsDir, 'bun.lock')
+    const lock = fs.readFileSync(lockFile, 'utf8')
+    fs.writeFileSync(nodeAbiFile, 'stale')
+    const failedRebuild = spawnInstall('q', { ...env, DD_TEST_FAIL_NATIVE_INSTALL: 'true' })
+    assert.strictEqual(failedRebuild.status, 1, failedRebuild.stderr)
+    assert.strictEqual(fs.readFileSync(nodeAbiFile, 'utf8'), 'stale')
+
+    runInstall('q', undefined, undefined, env)
+    assert.strictEqual(fs.readFileSync(nodeAbiFile, 'utf8'), process.versions.modules)
+    assert.strictEqual(fs.readFileSync(lockFile, 'utf8'), lock)
+
     const rebuilt = spawnSync(process.execPath, ['-e', `
 require('node:assert/strict').strictEqual(
-  require(${JSON.stringify(path.join(versionsDir, 'q@1.5.1'))}).get(), true,
+  require(${JSON.stringify(path.join(versionsDir, 'q@1.5.1'))}).get(), process.versions.modules,
   'the next invocation must run the failed postinstall again'
 )
 `], { encoding: 'utf8' })
