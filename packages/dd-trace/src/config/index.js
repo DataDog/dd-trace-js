@@ -548,6 +548,9 @@ class Config extends ConfigBase {
 
     if (this.llmobs.DD_LLMOBS_ENABLED) {
       // LLMObs payloads use APM structured metadata, which is only supported by protocol v0.4.
+      if (this.protocolVersion !== '0.4') {
+        log.warn('LLM Observability requires protocol version 0.4 - overriding choice of %s', this.protocolVersion)
+      }
       setAndTrack(this, 'protocolVersion', '0.4')
     }
 

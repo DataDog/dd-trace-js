@@ -208,6 +208,46 @@ describe('LLMObsExporter', () => {
     sinon.assert.notCalled(AgentlessExporter)
   })
 
+  it('honors an explicit Agent exporter when LLMObs agentless mode is enabled', () => {
+    const config = getConfig()
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agent'
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = true
+    const prioritySampler = {}
+    const exporter = new Exporter(config, prioritySampler)
+    const trace = [{ name: 'llm.request' }]
+
+    exporter.export(trace)
+
+    sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
+    sinon.assert.calledOnceWithExactly(agentExporter.export, trace)
+    sinon.assert.notCalled(AgentlessExporter)
+    sinon.assert.notCalled(fetchAgentInfo)
+  })
+
+  for (const agentlessEnabled of [undefined, false, true]) {
+    it(`preserves LLMObs transport selection ${agentlessEnabled} with an empty exporter setting`, () => {
+      const config = getConfig()
+      config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = ''
+      config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = agentlessEnabled
+      const exporter = new Exporter(config, {})
+      const trace = [{ name: 'llm.request' }]
+
+      exporter.export(trace)
+
+      if (agentlessEnabled === undefined) {
+        sinon.assert.calledOnce(fetchAgentInfo)
+        sinon.assert.notCalled(AgentExporter)
+        sinon.assert.notCalled(AgentlessExporter)
+        fetchAgentInfo.yield(new Error('Agent unavailable'))
+      } else {
+        sinon.assert.notCalled(fetchAgentInfo)
+      }
+
+      const selectedExporter = agentlessEnabled === false ? agentExporter : agentlessExporter
+      sinon.assert.calledOnceWithExactly(selectedExporter.export, trace)
+    })
+  }
+
   it('uses the agentless exporter immediately when global agentless mode is explicitly enabled', () => {
     getValueFromEnvSources.returns(true)
     const config = getConfig()

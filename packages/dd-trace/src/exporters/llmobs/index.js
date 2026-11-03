@@ -33,10 +33,11 @@ class LLMObsExporter extends BufferingExporter {
     this._url = undefined
 
     const globalAgentlessEnabled = getValueFromEnvSources('DD_AGENTLESS_ENABLED', true)
-    const useAgentlessExporter = config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === 'agentless'
-    const agentlessEnabled = useAgentlessExporter
-      ? true
-      : globalAgentlessEnabled ?? config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED
+
+    const exporter = config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER
+    const useAgentlessExporter = exporter === 'agentless' ? true : exporter === 'agent' ? false : undefined
+
+    const agentlessEnabled = useAgentlessExporter ?? globalAgentlessEnabled ?? config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED
 
     if (agentlessEnabled === undefined) {
       fetchAgentInfo(config.url, (err) => {
