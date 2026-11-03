@@ -146,14 +146,20 @@ describe('PR title workflow', () => {
 
   it('inspects files for every event unless the title was auto-renamed', () => {
     const inspectionCondition = "steps.rename.outputs.renamed != 'true'"
-    const titleCondition = "steps.rename.outputs.renamed != 'true' && " +
-      "(github.event.action == 'opened' || " +
-      "github.event.action == 'reopened' || " +
-      "(github.event.action == 'edited' && github.event.changes.title != null))"
 
     for (const step of [checkout, fetchHead, validation]) {
       assert.strictEqual(step.if.replaceAll(/\s+/g, ' '), inspectionCondition)
     }
+  })
+
+  it('skips label synchronization for dependency bot pull requests', () => {
+    const titleCondition = "steps.rename.outputs.renamed != 'true' && " +
+      "github.event.pull_request.user.login != 'dependabot[bot]' && " +
+      "github.event.pull_request.user.login != 'renovate[bot]' && " +
+      "(github.event.action == 'opened' || " +
+      "github.event.action == 'reopened' || " +
+      "(github.event.action == 'edited' && github.event.changes.title != null))"
+
     assert.strictEqual(labelSync.if.replaceAll(/\s+/g, ' '), titleCondition)
   })
 

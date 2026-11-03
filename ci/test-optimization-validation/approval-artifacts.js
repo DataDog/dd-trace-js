@@ -70,11 +70,11 @@ function assertExpectedProjectFiles (expected, actual) {
  * Loads the reviewed approval file only after its exact bytes match the user-approved SHA-256.
  *
  * @param {string} approvalPath approval JSON path
- * @param {string} expectedDigest user-approved SHA-256
+ * @param {string | undefined} expectedDigest user-approved SHA-256
  * @returns {{material: object, path: string}} verified approval material
  */
 function loadApprovedPlan (approvalPath, expectedDigest) {
-  if (!APPROVAL_DIGEST_PATTERN.test(String(expectedDigest || ''))) {
+  if (!APPROVAL_DIGEST_PATTERN.test(expectedDigest || '')) {
     throw new Error('Invalid --sha256 value. Render a fresh plan with --print-plan.')
   }
 
