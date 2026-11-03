@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -113,6 +115,12 @@ describe('plugin fixture discovery', () => {
       assert.ok(!packages.includes('@supabase/supabase-js@2.112.2'))
     })
   })
+
+  it('checks dependency pins without generating workspaces or installing packages', () => {
+    withInstallerFixture({ PLUGINS: 'bullmq' }, fixtureRoot => {
+      assert.strictEqual(existsSync(join(fixtureRoot, 'versions')), false)
+    }, ['--check'])
+  })
 })
 
 /**
@@ -120,8 +128,9 @@ describe('plugin fixture discovery', () => {
  *
  * @param {Record<string, string>} env
  * @param {(fixtureRoot: string) => void} assertions
+ * @param {string[]} [args]
  */
-function withInstallerFixture (env, assertions) {
+function withInstallerFixture (env, assertions, args = []) {
   const fixtureRoot = mkdtempSync(join(tmpdir(), 'dd-trace-plugin-installer-'))
   try {
     const scripts = join(fixtureRoot, 'scripts')
@@ -145,7 +154,7 @@ require.cache[execPath] = {
 }
 `)
 
-    execFileSync(process.execPath, ['--require', preload, join(scripts, 'install_plugin_modules.js')], {
+    execFileSync(process.execPath, ['--require', preload, join(scripts, 'install_plugin_modules.js'), ...args], {
       env: {
         ...process.env,
         DD_INSTALLER_EXEC_PATH: join(root, 'scripts/helpers/exec.js'),
