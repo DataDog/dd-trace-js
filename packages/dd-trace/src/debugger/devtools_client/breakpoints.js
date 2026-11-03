@@ -267,7 +267,7 @@ async function removeBreakpoint ({ id }) {
 
   // Failed installations remain pending for later script loading, but cancellation must remove them too.
   if (locationKey === undefined) {
-    if (sessionStarted && canStop()) await stop()
+    if (canStop()) await stop()
     return
   }
 
@@ -441,10 +441,10 @@ function markForRetry (probe) {
 /**
  * Only an enabled debugger notices newly loaded scripts, so it must keep running while any breakpoint is set or any
  * probe waits to be installed. Probes whose installation failed against their script do not count, as they are only
- * retried if that script changes.
+ * retried if that script changes. A debugger that isn't started has nothing to stop.
  */
 function canStop () {
-  if (breakpointToProbes.size !== 0) return false
+  if (!sessionStarted || breakpointToProbes.size !== 0) return false
   for (const probe of probes.values()) {
     if (probe.scriptId === undefined) return false
   }
