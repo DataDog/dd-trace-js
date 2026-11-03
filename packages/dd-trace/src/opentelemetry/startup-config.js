@@ -48,11 +48,10 @@ function startupConfig (config, rules, pipelines = {}) {
       ? attributes['service.name']
       : undefined,
     OTEL_RESOURCE_ATTRIBUTES: attributes,
+    OTEL_TRACES_EXPORTER: traces ? 'otlp' : 'none',
+    OTEL_METRICS_EXPORTER: metrics ? 'otlp' : 'none',
     OTEL_LOGS_EXPORTER: logs ? 'otlp' : 'none',
     OTEL_TRACES_SPAN_METRICS_ENABLED: spanMetrics,
-    otlp_traces_export_enabled: traces,
-    otlp_metrics_export_enabled: metrics,
-    otlp_logs_export_enabled: logs,
   }
 
   if (tracing) {
@@ -81,7 +80,6 @@ function startupConfig (config, rules, pipelines = {}) {
 
   if (pipelines.traces) {
     Object.assign(out, buildSanitizedExporterConfig(config, 'TRACES', pipelines.traces.protocol))
-    out.OTEL_TRACES_EXPORTER = 'otlp'
   }
   const metricsExporter = pipelines.metrics || pipelines.spanMetrics
   if (metricsExporter) {

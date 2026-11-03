@@ -33,6 +33,10 @@ describe('effective OTel startup configuration', () => {
     for (const output of [c, flare]) {
       assert.equal('OTEL_SERVICE_NAME' in output, false)
       assert.deepEqual(output.OTEL_RESOURCE_ATTRIBUTES, {})
+      for (const signal of ['TRACES', 'METRICS', 'LOGS']) {
+        assert.equal(output[`OTEL_${signal}_EXPORTER`], 'none')
+        assert.equal(`otlp_${signal.toLowerCase()}_export_enabled` in output, false)
+      }
     }
     assert.equal(c.OTEL_PROPAGATORS, DD_MAJOR >= 6 ? 'datadog,tracecontext,baggage' : undefined)
     assert.equal('OTEL_TRACES_SAMPLER' in c, false)
@@ -88,6 +92,9 @@ describe('effective OTel startup configuration', () => {
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/json',
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: '1234',
     })
+    for (const signal of ['TRACES', 'METRICS', 'LOGS']) {
+      assert.equal(c[`OTEL_${signal}_EXPORTER`], 'otlp')
+    }
     assert.equal(c.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'https://collector.example/base/v1/traces')
     assert.equal(c.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'https://collector.example/base/v1/metrics')
     assert.equal(c.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'https://logs.example/custom')
@@ -114,8 +121,8 @@ describe('effective OTel startup configuration', () => {
         [`DD_${signal}_OTEL_ENABLED`]: 'true',
         OTEL_STARTUP_SAMPLE: 'true',
       })
-      assert.equal(c.otlp_traces_export_enabled, false)
-      assert.equal(c[`otlp_${signal.toLowerCase()}_export_enabled`], true)
+      assert.equal(c.OTEL_TRACES_EXPORTER, 'none')
+      assert.equal(c[`OTEL_${signal}_EXPORTER`], 'otlp')
       assert.equal(c[`OTEL_EXPORTER_OTLP_${signal}_PROTOCOL`], 'http/protobuf')
       assert.equal(c.OTEL_PROPAGATORS, DD_MAJOR >= 6 ? 'datadog,tracecontext,baggage' : undefined)
       assert.ok(Object.keys(carrier).length > 0)
@@ -130,15 +137,14 @@ describe('effective OTel startup configuration', () => {
       OTEL_METRICS_EXPORTER: 'none',
     })
     assert.equal(c.OTEL_LOGS_EXPORTER, 'otlp')
-    assert.equal(c.otlp_logs_export_enabled, true)
-    assert.equal(c.otlp_metrics_export_enabled, false)
+    assert.equal(c.OTEL_METRICS_EXPORTER, 'none')
     assert.equal('OTEL_METRIC_EXPORT_INTERVAL' in c, false)
   })
 
   it('does not advertise OTLP traces in CI or Electron', () => {
     for (const options of [{ isCiVisibility: true }, { experimental: { exporter: 'electron' } }]) {
       const { configuration: c } = run({ OTEL_TRACES_EXPORTER: 'otlp' }, options)
-      assert.equal(c.otlp_traces_export_enabled, false)
+      assert.equal(c.OTEL_TRACES_EXPORTER, 'none')
       assert.equal('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT' in c, false)
     }
   })
@@ -146,7 +152,7 @@ describe('effective OTel startup configuration', () => {
   it('reports span-metrics transport without claiming that a MeterProvider is active', () => {
     const { configuration: c } = run({ OTEL_TRACES_SPAN_METRICS_ENABLED: 'true' })
     assert.equal(c.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
-    assert.equal(c.otlp_metrics_export_enabled, false)
+    assert.equal(c.OTEL_METRICS_EXPORTER, 'none')
     assert.equal(c.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'http/protobuf')
     assert.equal('OTEL_METRIC_EXPORT_INTERVAL' in c, false)
     assert.equal('OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE' in c, false)
@@ -374,7 +380,7 @@ describe('effective OTel startup configuration', () => {
         OTEL_STARTUP_EXISTING_PROVIDER: signal,
       })
       assert.equal(result.previousProviderStillActive, true)
-      assert.equal(result.configuration[`otlp_${signal}_export_enabled`], false)
+      assert.equal(result.configuration[`OTEL_${signal.toUpperCase()}_EXPORTER`], 'none')
       assert.equal(`OTEL_EXPORTER_OTLP_${signal.toUpperCase()}_PROTOCOL` in result.configuration, false)
     })
   }

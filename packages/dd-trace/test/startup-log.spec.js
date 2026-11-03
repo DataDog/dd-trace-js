@@ -80,9 +80,9 @@ describe('startup logging', () => {
     assert.strictEqual(logObj.debug, true)
     assert.strictEqual(logObj.appsec_enabled, true)
     assert.strictEqual(logObj.data_streams_enabled, true)
-    assert.strictEqual('otlp_traces_export_enabled' in logObj, true)
-    assert.strictEqual('otlp_metrics_export_enabled' in logObj, true)
-    assert.strictEqual('otlp_logs_export_enabled' in logObj, true)
+    assert.strictEqual('OTEL_TRACES_EXPORTER' in logObj, true)
+    assert.strictEqual('OTEL_METRICS_EXPORTER' in logObj, true)
+    assert.strictEqual('OTEL_LOGS_EXPORTER' in logObj, true)
   })
 
   it('logIntegrations should output loaded integrations', () => {
@@ -124,9 +124,8 @@ describe('startup logging', () => {
       integrations_loaded: ['http', 'fs', 'semver'],
       appsec_enabled: true,
       data_streams_enabled: true,
-      otlp_traces_export_enabled: false,
-      otlp_metrics_export_enabled: false,
-      otlp_logs_export_enabled: false,
+      OTEL_TRACES_EXPORTER: 'none',
+      OTEL_METRICS_EXPORTER: 'none',
       DD_TRACE_OTEL_ENABLED: false,
       DD_TRACE_OTEL_SEMANTICS_ENABLED: false,
       DD_METRICS_OTEL_ENABLED: false,
@@ -329,7 +328,7 @@ describe('profiling_enabled', () => {
   })
 })
 
-describe('otlp export flags', () => {
+describe('OTel exporters', () => {
   function clearOtlpEnv () {
     delete process.env.DD_TRACE_ENABLED
     delete process.env.OTEL_TRACES_EXPORTER
@@ -349,38 +348,38 @@ describe('otlp export flags', () => {
     return require('./helpers/config').runStartup(process.env, configOptions).configuration
   }
 
-  it('should default to false when no OTLP env vars are set', () => {
+  it('should default to none when no OTLP env vars are set', () => {
     const logObj = startupLogObj()
-    assert.strictEqual(logObj.otlp_traces_export_enabled, false)
-    assert.strictEqual(logObj.otlp_metrics_export_enabled, false)
-    assert.strictEqual(logObj.otlp_logs_export_enabled, false)
+    assert.strictEqual(logObj.OTEL_TRACES_EXPORTER, 'none')
+    assert.strictEqual(logObj.OTEL_METRICS_EXPORTER, 'none')
+    assert.strictEqual(logObj.OTEL_LOGS_EXPORTER, 'none')
   })
 
-  it('otlp_traces_export_enabled should be true when OTEL_TRACES_EXPORTER is otlp', () => {
+  it('OTEL_TRACES_EXPORTER should be otlp when OTEL_TRACES_EXPORTER is otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
-    assert.strictEqual(startupLogObj().otlp_traces_export_enabled, true)
+    assert.strictEqual(startupLogObj().OTEL_TRACES_EXPORTER, 'otlp')
   })
 
-  it('otlp_traces_export_enabled should be false when OTEL_TRACES_EXPORTER is none', () => {
+  it('OTEL_TRACES_EXPORTER should be none when OTEL_TRACES_EXPORTER is none', () => {
     process.env.DD_TRACE_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'
-    assert.strictEqual(startupLogObj().otlp_traces_export_enabled, false)
+    assert.strictEqual(startupLogObj().OTEL_TRACES_EXPORTER, 'none')
   })
 
-  it('otlp_traces_export_enabled should be false in Test Optimization mode even when exporter is otlp', () => {
+  it('OTEL_TRACES_EXPORTER should be none in Test Optimization mode even when exporter is otlp', () => {
     // Test Optimization keeps test spans on the citestcycle endpoint, so the OTLP
     // trace exporter is not used regardless of OTEL_TRACES_EXPORTER (see opentracing/tracer.js).
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
-    assert.strictEqual(startupLogObj({ isCiVisibility: true }).otlp_traces_export_enabled, false)
+    assert.strictEqual(startupLogObj({ isCiVisibility: true }).OTEL_TRACES_EXPORTER, 'none')
   })
 
-  it('otlp_metrics_export_enabled should be true when DD_METRICS_OTEL_ENABLED is true', () => {
+  it('OTEL_METRICS_EXPORTER should be otlp when DD_METRICS_OTEL_ENABLED is true', () => {
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
-    assert.strictEqual(startupLogObj().otlp_metrics_export_enabled, true)
+    assert.strictEqual(startupLogObj().OTEL_METRICS_EXPORTER, 'otlp')
   })
 
-  it('otlp_logs_export_enabled should be true when DD_LOGS_OTEL_ENABLED is true', () => {
+  it('OTEL_LOGS_EXPORTER should be otlp when DD_LOGS_OTEL_ENABLED is true', () => {
     process.env.DD_LOGS_OTEL_ENABLED = 'true'
-    assert.strictEqual(startupLogObj().otlp_logs_export_enabled, true)
+    assert.strictEqual(startupLogObj().OTEL_LOGS_EXPORTER, 'otlp')
   })
 })
