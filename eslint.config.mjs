@@ -182,6 +182,9 @@ export default [
       'integration-tests/debugger/target-app/source-map-support/typescript.js', // Generated
       'integration-tests/esbuild/out.js', // Generated
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
+      'integration-tests/electron/vite-app/.vite', // Generated
+      'integration-tests/vite/**/dist*', // Generated
+      'integration-tests/vite/react-router/build', // Generated
       'packages/datadog-plugin-graphql/src/tools/index.js', // Inlined from apollo-graphql
     ],
   },
@@ -1129,6 +1132,19 @@ export default [
     files: ['packages/datadog-instrumentations/test/helpers/rewriter/node_modules/test-esm/**/*.js'],
     languageOptions: {
       sourceType: 'module',
+    },
+  },
+  {
+    // The React Router fixture is an ES module package (`"type": "module"`), like the framework's own templates.
+    name: 'dd-trace/vite/react-router-fixture',
+    files: ['integration-tests/vite/react-router/**/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+    },
+    rules: {
+      // Dependencies and the build output only exist in the integration sandbox.
+      'n/no-extraneous-import': 'off',
+      'n/no-missing-import': 'off',
     },
   },
   {
