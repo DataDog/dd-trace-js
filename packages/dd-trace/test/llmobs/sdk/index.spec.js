@@ -6,6 +6,8 @@ const { inspect } = require('node:util')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
+const { Experiment } = require('../../../src/llmobs/experiments/experiment')
 const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
@@ -16,6 +18,17 @@ const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
 const { removeDestroyHandler } = require('../util')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+
+function experimentClient () {
+  return {
+    appBase: 'https://app.datadoghq.com',
+    projectName: 'default-project',
+    ensureProjectId: sinon.stub().resolves('proj'),
+    createExperiment: sinon.stub().resolves({ experimentId: 'exp' }),
+    postExperimentEvents: sinon.stub().resolves(),
+    updateExperiment: sinon.stub().resolves(),
+  }
+}
 
 describe('sdk', () => {
   let LLMObsSDK
@@ -109,6 +122,63 @@ describe('sdk', () => {
         assert.strictEqual(llmobs[name], undefined)
         assert.strictEqual(typeof experiments[name], 'function')
       }
+    })
+
+    it('includes expected output on experiment span events', async () => {
+      const client = experimentClient()
+      const expectedOutput = { answer: '4' }
+      const dataset = Dataset.fromExisting(client, 'demo', '', 'ds', 'proj', [
+        new DatasetRecord({ question: '2+2' }, expectedOutput, {}, 'record-1'),
+      ], 1, 1)
+
+      await new Experiment(client, {
+        name: 'expected-output',
+        dataset,
+        task: () => ({ answer: '4' }),
+      }, llmobs).run()
+
+      sinon.assert.calledOnce(LLMObsSpanWriter.prototype.append)
+      assert.deepStrictEqual(LLMObsSpanWriter.prototype.append.firstCall.firstArg.meta.expected_output, expectedOutput)
+    })
+
+    it('includes expected output when the experiment task fails', async () => {
+      const client = experimentClient()
+      const expectedOutput = { answer: '4' }
+      const dataset = Dataset.fromExisting(client, 'demo', '', 'ds', 'proj', [
+        new DatasetRecord({ question: '2+2' }, expectedOutput, {}, 'record-1'),
+      ], 1, 1)
+
+      await new Experiment(client, {
+        name: 'expected-output-error',
+        dataset,
+        task: () => { throw new Error('task failed') },
+      }, llmobs).run()
+
+      sinon.assert.calledOnce(LLMObsSpanWriter.prototype.append)
+      const event = LLMObsSpanWriter.prototype.append.firstCall.firstArg
+      assert.strictEqual(event.status, 'error')
+      assert.deepStrictEqual(event.meta.expected_output, expectedOutput)
+    })
+
+    it('preserves falsy expected outputs on experiment span events', async () => {
+      const client = experimentClient()
+      const expectedOutputs = [false, 0, '', null]
+      const records = expectedOutputs.map((expectedOutput, index) =>
+        new DatasetRecord(index, expectedOutput, {}, `record-${index}`)
+      )
+      const dataset = Dataset.fromExisting(client, 'demo', '', 'ds', 'proj', records, 1, 1)
+
+      await new Experiment(client, {
+        name: 'falsy-expected-outputs',
+        dataset,
+        task: input => input,
+      }, llmobs).run({ concurrency: 1 })
+
+      sinon.assert.callCount(LLMObsSpanWriter.prototype.append, expectedOutputs.length)
+      assert.deepStrictEqual(
+        LLMObsSpanWriter.prototype.append.getCalls().map(call => call.firstArg.meta.expected_output),
+        expectedOutputs
+      )
     })
   })
 

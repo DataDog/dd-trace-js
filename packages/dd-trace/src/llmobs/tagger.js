@@ -10,6 +10,7 @@ const {
   SESSION_ID_TRACE_DEFAULT_KEY,
   ML_APP,
   SPAN_KIND,
+  EXPERIMENT_EXPECTED_OUTPUT,
   EXPERIMENT_INPUT,
   EXPERIMENT_OUTPUT,
   INPUT_VALUE,
@@ -339,6 +340,16 @@ class LLMObsTagger {
   tagExperimentIO (span, inputData, outputData) {
     this.#tagExperimentValue(span, inputData, EXPERIMENT_INPUT, 'input')
     this.#tagExperimentValue(span, outputData, EXPERIMENT_OUTPUT, 'output')
+  }
+
+  /**
+   * Stores the expected output for an experiment span.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} expectedOutput
+   */
+  tagExperimentExpectedOutput (span, expectedOutput) {
+    this.#tagExperimentValue(span, expectedOutput, EXPERIMENT_EXPECTED_OUTPUT, 'expected output')
   }
 
   tagTextIO (span, inputData, outputData) {

@@ -917,17 +917,19 @@ class Experiment {
           try {
             output = await execute()
           } catch (err) {
-            this.#llmobs.annotate(span, {
+            this.#llmobs._annotateExperimentSpan(span, {
               inputData: record.input,
               outputData: output,
+              expectedOutput: record.expectedOutput,
               metadata: buildSpanMetadata(record.metadata, this.#config),
               tags,
             })
             throw err
           }
-          this.#llmobs.annotate(span, {
+          this.#llmobs._annotateExperimentSpan(span, {
             inputData: record.input,
             outputData: output,
+            expectedOutput: record.expectedOutput,
             metadata: buildSpanMetadata(record.metadata, this.#config),
             tags,
           })
