@@ -12,10 +12,10 @@ const { nowUnixNano } = require('./time')
  * @param {(error: Error | null) => void} [done]
  * @param {Error | null} [error]
  */
-function callDone (done, error) {
+function callDone (done, error = null) {
   if (!done) return
   try {
-    done(error ?? null)
+    done(error)
   } catch (callbackError) {
     log.error('Error completing OTLP metrics lifecycle callback:', callbackError)
   }

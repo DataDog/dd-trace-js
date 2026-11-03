@@ -18,6 +18,7 @@ const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
+  getServerlessPlatform,
   getServerlessPlatformTags,
   IS_SERVERLESS,
   getIsGCPFunction,
@@ -451,6 +452,17 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.DD_APPSEC_ENABLED ?? false)
     }
 
+    // Enable the thread context writer when appsec is enabled and only
+    // if DD_TRACE_OTEL_CTX_ENABLED is not explicitly set. The writer is started once
+    // at init, so appsec enabled later through remote config does not start it.
+    // Serverless functions and Vercel are left out: the eBPF reader cannot run there.
+    if (!trackedConfigOrigins.has('DD_TRACE_OTEL_CTX_ENABLED') &&
+        this.appsec.DD_APPSEC_ENABLED &&
+        !IS_SERVERLESS &&
+        !getServerlessPlatform().isVercel) {
+      setAndTrack(this, 'DD_TRACE_OTEL_CTX_ENABLED', true)
+    }
+
     if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
       setAndTrack(this, 'spanComputePeerService', true)
     }
@@ -864,7 +876,7 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
 function warnWrongOtelSettings () {
   // This mostly works for non-aliased environment variables only.
   // TODO: Adjust this to work across all sources.
-  for (const [otelEnvVar, ddEnvVar, key] of [
+  for (const [otelEnvVar, ddEnvVar, key = otelEnvVar] of [
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL', 'logLevel'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
@@ -881,7 +893,7 @@ function warnWrongOtelSettings () {
   ]) {
     // eslint-disable-next-line eslint-rules/eslint-process-env
     const envs = process.env
-    const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key ?? otelEnvVar))
+    const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key))
     const otelEnvValue = envs[otelEnvVar]
     if (otelEnvValue) {
       if (envs[ddEnvVar]) {

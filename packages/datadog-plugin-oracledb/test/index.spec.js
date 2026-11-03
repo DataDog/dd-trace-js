@@ -3,7 +3,7 @@
 const assert = require('node:assert')
 
 const dc = require('dc-polyfill')
-const { after, before, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const ddpv = require('mocha/package.json').version
@@ -423,11 +423,13 @@ describe('Plugin', () => {
         })
 
         describe('with service function', () => {
+          let currentService
+
           before(async () => {
             await agent.load('oracledb', {
               service (connAttrs) {
                 assert.strictEqual(connAttrs.connectString, config.connectString)
-                return connAttrs.connectString
+                return currentService ?? connAttrs.connectString
               },
             })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
@@ -445,6 +447,11 @@ describe('Plugin', () => {
           after(async () => {
             await agent.close()
           })
+
+          afterEach(() => {
+            currentService = undefined
+          })
+
           withNamingSchema(
             () => connection.execute(dbQuery),
             {
@@ -467,6 +474,16 @@ describe('Plugin', () => {
               }),
               connection.execute(dbQuery),
             ])
+          })
+
+          it('resolves the service function for every query', async () => {
+            for (const service of ['first', 'second']) {
+              currentService = service
+              await Promise.all([
+                agent.assertFirstTraceSpan({ service }),
+                connection.execute(dbQuery),
+              ])
+            }
           })
         })
 
