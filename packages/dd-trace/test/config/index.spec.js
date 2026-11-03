@@ -1125,6 +1125,31 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, 0)
   })
 
+  for (const [name, options] of [
+    ['electron', { experimental: { exporter: 'electron' } }],
+    ['agentless', { experimental: { exporter: 'agentless' } }],
+    ['Test Optimization', { isCiVisibility: true }],
+  ]) {
+    it(`should not infer OTel sampling or span metrics for ${name}`, () => {
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.DD_METRICS_OTEL_ENABLED = 'true'
+      const config = getConfig(options)
+
+      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, false)
+    })
+
+    it(`should preserve explicit OTel sampling and span metrics for ${name}`, () => {
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.OTEL_TRACES_SAMPLER = 'always_off'
+      process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
+      const config = getConfig(options)
+
+      assert.strictEqual(config.sampleRate, 0)
+      assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
+    })
+  }
+
   it('should keep OTEL_TRACES_EXPORTER=otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
@@ -5939,37 +5964,6 @@ rules:
   })
 
   describe('remote config application', () => {
-    it('should apply and restore remote OTel semantics through the normal config layer', () => {
-      const config = getConfig()
-
-      config.setRemoteConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true' })
-      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true)
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
-      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_SEMANTICS_ENABLED'), 'remote_config')
-
-      config.setRemoteConfig(null)
-      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
-    })
-
-    for (const options of [
-      { DD_TRACE_EXPERIMENTAL_EXPORTER: 'electron' },
-      { DD_AGENTLESS_ENABLED: 'true' },
-      { DD_TRACE_OTEL_SEMANTICS_ENABLED: 'false' },
-    ]) {
-      it(`should recalculate OTel compatibility for remote ${Object.keys(options)[0]}`, () => {
-        process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
-        const config = getConfig()
-
-        config.setRemoteConfig(options)
-        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
-
-        config.setRemoteConfig(null)
-        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true)
-        assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
-      })
-    }
-
     it('should restore tracked origins when an individual RC option falls back to code', () => {
       const config = getConfig({ sampleRate: 0.5, logInjection: true })
 
@@ -6235,14 +6229,14 @@ rules:
       assert.strictEqual(config.sampleRate, 0.25)
     })
 
-    it('should infer an OTel sample rate from the OTLP trace exporter in agentless mode', () => {
+    it('should retain native sampling when agentless overrides the OTLP trace exporter', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
 
       const config = getConfig()
 
       assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
-      assert.strictEqual(config.sampleRate, 1)
+      assert.strictEqual(config.sampleRate, undefined)
     })
 
     it('should preserve explicit OTel span metrics', () => {

@@ -26,6 +26,7 @@ const {
   getIsAzureFunction,
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
+const { usesOtlpTraceExporter } = require('../exporter')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
 const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
@@ -744,16 +745,9 @@ class Config extends ConfigBase {
       setAndTrack(this, 'spanComputePeerService', true)
     }
 
-    // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
-    // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
-    // that don't set the sampler still get parent-based sampling. Electron exporter spans go over
-    // the Electron SDK's IPC bridge rather than OTLP (see opentracing/tracer.js), so an
-    // OTEL_TRACES_EXPORTER=otlp set for an unrelated telemetry pipeline shouldn't also override
-    // dd-trace's own sampling policy in that case.
+    // An explicit OTel sampler also applies to native trace exporters.
     if (!trackedConfigOrigins.has('sampleRate') &&
-        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
-          (this.OTEL_TRACES_EXPORTER === 'otlp' &&
-            this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'))) {
+        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') || usesOtlpTraceExporter(this))) {
       setAndTrack(this, 'sampleRate',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
@@ -804,7 +798,7 @@ class Config extends ConfigBase {
       assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
     }
 
-    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
+    const autoTraceMetrics = usesOtlpTraceExporter(this) && this.DD_METRICS_OTEL_ENABLED === true
     setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
 
     if (this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
