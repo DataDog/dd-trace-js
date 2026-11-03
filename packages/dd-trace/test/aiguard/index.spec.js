@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { rejects } = require('node:assert/strict')
 const { inspect, isDeepStrictEqual } = require('node:util')
+const vm = require('node:vm')
 
 const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -1546,9 +1547,6 @@ describe('AIGuard SDK', () => {
       ['a string', 'tag'],
       ['a number', 42],
       ['a function', () => {}],
-      ['a boxed string', Object('ab')],
-      ['a typed array', new Uint8Array([7, 8])],
-      ['a class instance', new (class Tags { constructor () { this.leaked = 'field' } })()],
     ]) {
       it(`ignores tags given as ${description}`, async () => {
         mockAllow()
@@ -1562,6 +1560,25 @@ describe('AIGuard SDK', () => {
             assert.ok(!Object.hasOwn(span.metrics, key), `Unexpected metric key: ${key}`)
           }
           assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
+        })
+      })
+    }
+
+    for (const [description, createTags] of [
+      ['an object from another realm', () => vm.runInNewContext("({ 'team.name': 'checkout' })")],
+      ['an object with a custom prototype', () => Object.assign(Object.create({ inherited: 'skip' }), {
+        'team.name': 'checkout',
+      })],
+      ['a class instance', () => new (class Tags { constructor () { this['team.name'] = 'checkout' } })()],
+    ]) {
+      it(`sets own enumerable tags given as ${description}`, async () => {
+        mockAllow()
+
+        await aiguard.evaluate(prompt, { tags: createTags() })
+
+        await assertGuardSpan(span => {
+          assert.strictEqual(span.meta['team.name'], 'checkout')
+          assert.ok(!Object.hasOwn(span.meta, 'inherited'), 'Unexpected meta key: inherited')
         })
       })
     }
@@ -1586,22 +1603,33 @@ describe('AIGuard SDK', () => {
       })
     })
 
-    for (const trap of ['getPrototypeOf', 'ownKeys']) {
-      it(`does not reject when the ${trap} trap of a tags proxy throws`, async () => {
-        mockAllow()
-        const tags = new Proxy({ kept: 'no' }, {
-          [trap] () { throw new Error('boom') },
-        })
-
-        const evaluation = await aiguard.evaluate(prompt, { tags })
-
-        assert.strictEqual(evaluation.action, 'ALLOW')
-        await assertGuardSpan(span => {
-          assert.ok(!Object.hasOwn(span.meta, 'kept'))
-          assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
-        })
+    it('does not reject when the ownKeys trap of a tags proxy throws', async () => {
+      mockAllow()
+      const tags = new Proxy({ kept: 'no' }, {
+        ownKeys () { throw new Error('boom') },
       })
-    }
+
+      const evaluation = await aiguard.evaluate(prompt, { tags })
+
+      assert.strictEqual(evaluation.action, 'ALLOW')
+      await assertGuardSpan(span => {
+        assert.ok(!Object.hasOwn(span.meta, 'kept'))
+        assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
+      })
+    })
+
+    it('sets tags from a proxy without consulting its prototype', async () => {
+      mockAllow()
+      const tags = new Proxy({ kept: 'yes' }, {
+        getPrototypeOf () { throw new Error('boom') },
+      })
+
+      await aiguard.evaluate(prompt, { tags })
+
+      await assertGuardSpan(span => {
+        assert.strictEqual(span.meta.kept, 'yes')
+      })
+    })
 
     it('does not copy custom tags into reserved keys when the ai_guard span is the trace root', async () => {
       mockAllow()

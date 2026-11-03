@@ -128,19 +128,6 @@ function normalizeExtraEntries (field, entries) {
 }
 
 /**
- * Returns whether a value is a plain object, so boxed primitives, typed arrays and class instances
- * cannot leak their indexes or fields as tags.
- *
- * @param {unknown} value
- * @returns {value is Record<string, unknown>}
- */
-function isPlainObject (value) {
-  if (value === null || typeof value !== 'object') return false
-  const proto = Object.getPrototypeOf(value)
-  return proto === Object.prototype || proto === null
-}
-
-/**
  * Returns whether a custom tag entry can be set on the AI Guard span.
  *
  * Only primitive values are accepted because the span flattens nested objects into dotted keys,
@@ -190,7 +177,7 @@ function isValidCustomTag (key, value) {
 function setCustomTags (span, tags) {
   let keys
   try {
-    if (!isPlainObject(tags)) return
+    if (!isRecord(tags)) return
     keys = Object.keys(tags)
   } catch (error) {
     log.debug('AIGuard: failed to read custom tags: %s', error?.message)
