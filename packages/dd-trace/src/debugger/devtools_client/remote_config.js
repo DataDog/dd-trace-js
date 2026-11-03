@@ -57,8 +57,7 @@ probePort.on('message', async ({ action, probe, ackId }) => {
     probePort.postMessage({ ackId })
   } catch (err) {
     const knownAction = action === 'apply' || action === 'modify' || action === 'unapply' ? action : 'unknown'
-    // Structured cloning an Error drops its custom properties, so send the reason separately. `reason` is set by the
-    // validation in `processMsg` or by `breakpoints.js`, and `phase` by `addBreakpoint` when installing a probe failed.
+    // Structured cloning an Error drops its custom properties, so send `reason` and `phase` separately.
     probePort.postMessage({ ackId, error: err, reason: err.reason, action: knownAction, phase: err.phase })
     ackError(err, probe)
   }
