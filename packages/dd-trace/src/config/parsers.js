@@ -262,6 +262,28 @@ const telemetryTransformers = {
   },
 }
 
+/**
+ * OTEL key-value lists (e.g. `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_EXPORTER_OTLP_HEADERS`) use the W3C Baggage
+ * format, where `,`, `=` and other characters in keys and values are percent-encoded.
+ * The whole value is discarded when any entry fails to decode, as the OTEL spec recommends.
+ * https://opentelemetry.io/docs/specs/otel/resource/sdk/#specifying-resource-information-via-an-environment-variable
+ *
+ * @param {Record<string, string>} entries
+ * @returns {Record<string, string> | undefined}
+ */
+function percentDecodeEntries (entries) {
+  /** @type {Record<string, string>} */
+  const decoded = {}
+  try {
+    for (const [key, value] of Object.entries(entries)) {
+      decoded[decodeURIComponent(key)] = decodeURIComponent(value)
+    }
+  } catch {
+    return
+  }
+  return decoded
+}
+
 const parsers = {
   BOOLEAN (raw) {
     if (raw === 'true' || raw === '1') {
@@ -335,6 +357,9 @@ const parsers = {
       raw = raw.replaceAll(/\s+/g, ',')
     }
     tagger.add(entries, raw, valueSeparator)
+    if (valueSeparator === '=' && raw.includes('%')) {
+      return percentDecodeEntries(entries)
+    }
     return entries
   },
   JSON (raw) {
