@@ -5,8 +5,11 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const appsec = require('../../src/appsec')
+const addresses = require('../../src/appsec/addresses')
+const waf = require('../../src/appsec/waf')
 const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
 const httpRequest = require('../setup/helpers/http-client')
@@ -22,6 +25,7 @@ type Book {
 
 type Query {
     books(title: String): [Book!]!
+    login(id: String): String
 }`
 
 const query = `
@@ -56,6 +60,10 @@ const resolvers = {
         return book.title.includes(args.title)
       })
     },
+    login: (root, args) => {
+      require('../../').appsec.setUser({ id: args.id })
+      return args.id
+    },
   },
   Book: {
     // An explicit resolver, so every Apollo version publishes this argument-less field to AppSec.
@@ -75,6 +83,29 @@ async function makeGraphqlRequest (port, variables, derivativeParam, extraHeader
     query,
     variables,
   }, { headers, maxRedirects: 0 })
+}
+
+function postGraphqlQuery (port, query) {
+  return httpRequest.post(`http://localhost:${port}/graphql`, { query }, {
+    headers: { 'content-type': 'application/json' },
+    maxRedirects: 0,
+  })
+}
+
+/**
+ * Counts the WAF runs that checked `fieldName` without arguments.
+ *
+ * @param {sinon.SinonSpy} wafRun
+ * @param {string} fieldName
+ */
+function countFieldWithoutArgumentsRuns (wafRun, fieldName) {
+  return wafRun.getCalls().filter(call => {
+    const resolverInfo = call.args[0]?.ephemeral?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]
+    const fieldArguments = resolverInfo?.[fieldName]
+    return fieldArguments !== undefined &&
+      Object.keys(resolverInfo).length === 1 &&
+      Object.keys(fieldArguments).length === 0
+  }).length
 }
 
 function graphqlCommonTests (config) {
@@ -205,6 +236,61 @@ function graphqlCommonTests (config) {
       assert.ok(error, 'Request should not return 200')
       assert.strictEqual(error.response.status, 403)
       assert.deepStrictEqual(error.response.data, JSON.parse(graphqlJson))
+    })
+  })
+
+  describe('WAF runs for fields without arguments', () => {
+    let wafRun
+
+    /**
+     * @param {string} rules
+     */
+    function enableAppsecWithWafSpy (rules) {
+      appsec.enable(getConfigFresh({ appsec: { enabled: true, rules: path.join(__dirname, rules) } }))
+      setTestBlockingTemplates()
+      // Enabling AppSec replaces `waf.run`, so the spy goes on afterwards.
+      wafRun = sinon.spy(waf, 'run')
+    }
+
+    afterEach(() => {
+      wafRun.restore()
+      appsec.disable()
+    })
+
+    it('Should run the WAF once for a field resolved through several aliases', async () => {
+      enableAppsecWithWafSpy('graphql-rules.json')
+
+      const response = await postGraphqlQuery(config.port, `
+        query {
+          books(title: "Test") {
+            first: author
+            second: author
+            third: author
+          }
+        }`)
+
+      const author = books[0].author
+      assert.deepStrictEqual(response.data, {
+        data: { books: [{ first: author, second: author, third: author }] },
+      })
+      assert.strictEqual(countFieldWithoutArgumentsRuns(wafRun, 'author'), 1)
+    })
+
+    it('Should run the WAF again for a field once setUser adds a user to the request', async () => {
+      enableAppsecWithWafSpy('graphql-user-field-rules.json')
+
+      // The rule needs both the user and the field, so only the `author` resolved after `login` can block.
+      const error = await postGraphqlQuery(config.port, `
+        query {
+          before: books(title: "Test") { author }
+          login(id: "blocked-user")
+          after: books(title: "Test") { author }
+        }`).then(() => null, error => error)
+
+      assert.ok(error, 'Request should not return 200')
+      assert.strictEqual(error.response.status, 403)
+      assert.deepStrictEqual(error.response.data, JSON.parse(graphqlJson))
+      assert.strictEqual(countFieldWithoutArgumentsRuns(wafRun, 'author'), 2)
     })
   })
 
