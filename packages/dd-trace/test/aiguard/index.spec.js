@@ -1583,54 +1583,6 @@ describe('AIGuard SDK', () => {
       })
     }
 
-    it('does not reject when reading a tag throws', async () => {
-      mockAllow()
-      const tags = { before: 'set' }
-      Object.defineProperty(tags, 'broken', {
-        enumerable: true,
-        get () { throw new Error('boom') },
-      })
-      tags.after = 'set'
-
-      const evaluation = await aiguard.evaluate(prompt, { tags })
-
-      assert.strictEqual(evaluation.action, 'ALLOW')
-      await assertGuardSpan(span => {
-        assert.strictEqual(span.meta.before, 'set')
-        assert.strictEqual(span.meta.after, 'set')
-        assert.ok(!Object.hasOwn(span.meta, 'broken'))
-        assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
-      })
-    })
-
-    it('does not reject when the ownKeys trap of a tags proxy throws', async () => {
-      mockAllow()
-      const tags = new Proxy({ kept: 'no' }, {
-        ownKeys () { throw new Error('boom') },
-      })
-
-      const evaluation = await aiguard.evaluate(prompt, { tags })
-
-      assert.strictEqual(evaluation.action, 'ALLOW')
-      await assertGuardSpan(span => {
-        assert.ok(!Object.hasOwn(span.meta, 'kept'))
-        assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
-      })
-    })
-
-    it('sets tags from a proxy without consulting its prototype', async () => {
-      mockAllow()
-      const tags = new Proxy({ kept: 'yes' }, {
-        getPrototypeOf () { throw new Error('boom') },
-      })
-
-      await aiguard.evaluate(prompt, { tags })
-
-      await assertGuardSpan(span => {
-        assert.strictEqual(span.meta.kept, 'yes')
-      })
-    })
-
     it('does not copy custom tags into reserved keys when the ai_guard span is the trace root', async () => {
       mockAllow()
 

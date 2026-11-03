@@ -175,16 +175,9 @@ function isValidCustomTag (key, value) {
  * @param {unknown} tags
  */
 function setCustomTags (span, tags) {
-  let keys
-  try {
-    if (!isRecord(tags)) return
-    keys = Object.keys(tags)
-  } catch (error) {
-    log.debug('AIGuard: failed to read custom tags: %s', error?.message)
-    return
-  }
+  if (!isRecord(tags)) return
 
-  for (const key of keys) {
+  for (const key of Object.keys(tags)) {
     const value = tags[key]
     if (isValidCustomTag(key, value)) {
       span.setTag(key, value)
