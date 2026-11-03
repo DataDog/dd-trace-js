@@ -185,15 +185,11 @@ function setCustomTags (span, tags) {
   }
 
   for (const key of keys) {
-    try {
-      const value = tags[key]
-      if (isValidCustomTag(key, value)) {
-        span.setTag(key, value)
-      } else {
-        log.debug('AIGuard: dropping invalid custom tag %s', key)
-      }
-    } catch (error) {
-      log.debug('AIGuard: failed to set custom tag %s: %s', key, error?.message)
+    const value = tags[key]
+    if (isValidCustomTag(key, value)) {
+      span.setTag(key, value)
+    } else {
+      log.debug('AIGuard: dropping invalid custom tag %s', key)
     }
   }
 }
