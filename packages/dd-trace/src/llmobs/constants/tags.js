@@ -48,6 +48,18 @@ module.exports = {
   NAME: '_ml_obs.name',
   TRACE_ID: '_ml_obs.trace_id',
   PROPAGATED_TRACE_ID_KEY: '_dd.p.llmobs_trace_id',
+
+  // W3C baggage carrier for distributed LLMObs context, independent of the APM trace headers.
+  BAGGAGE_PARENT_ID_KEY: 'llmobs.parent_id',
+  BAGGAGE_TRACE_ID_KEY: 'llmobs.trace_id',
+  BAGGAGE_ML_APP_KEY: 'llmobs.ml_app',
+  BAGGAGE_SESSION_ID_KEY: 'llmobs.session_id',
+  BAGGAGE_SAMPLE_RATE_KEY: 'llmobs.sample_rate',
+  BAGGAGE_SAMPLING_DECISION_KEY: 'llmobs.sampling_decision',
+  BAGGAGE_PARENT_AGENT_ID_KEY: 'llmobs.parent_agent_span_id',
+  BAGGAGE_PARENT_AGENT_NAME_KEY: 'llmobs.parent_agent_name',
+  BAGGAGE_AGENT_NAME_MAX_LENGTH: 512,
+
   LLMOBS_TRACE_ID_BRIDGE_KEY: 'llmobs_trace_id',
   LLMOBS_PARENT_ID_BRIDGE_KEY: 'llmobs_parent_id',
   LLMOBS_SUBMITTED_TAG_KEY: '_dd.llmobs.submitted',

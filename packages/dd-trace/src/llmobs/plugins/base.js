@@ -5,6 +5,7 @@ const { PROPAGATED_SESSION_ID_KEY } = require('../constants/tags')
 const { MODEL_BACKED_SPAN_KINDS, setGenAiApmTags, updateGenAiApmTags } = require('../gen-ai-tags')
 const { storage: llmobsStorage } = require('../storage')
 const telemetry = require('../telemetry')
+const { getPropagatedValue } = require('../util')
 
 const TracingPlugin = require('../../plugins/tracing')
 const LLMObsTagger = require('../tagger')
@@ -214,7 +215,7 @@ class LLMObsPlugin extends TracingPlugin {
   _setGenAiApmTags (span, tags) {
     // the in-process session default is written by the tagger, which never runs on this path, so
     // an inherited session can only have come from an upstream service
-    const propagatedSessionId = span.context()._trace.tags[PROPAGATED_SESSION_ID_KEY]
+    const propagatedSessionId = getPropagatedValue(span.context()._trace.tags, PROPAGATED_SESSION_ID_KEY)
 
     setGenAiApmTags(span, { ...tags, sessionId: tags.sessionId || propagatedSessionId })
   }
