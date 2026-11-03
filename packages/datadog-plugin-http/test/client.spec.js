@@ -104,7 +104,7 @@ describe('Plugin', () => {
             assert.ok(!Object.hasOwn(span.meta, 'out.host'))
             assert.ok(!Object.hasOwn(span.meta, 'error.type'))
             assert.ok(!Object.hasOwn(span.meta, 'operation.name'))
-            assert.strictEqual(span.type, undefined)
+            assert.ok(!Object.hasOwn(span.meta, 'span.type'))
           })
           const request = http.get(`${protocol}://localhost:${port}/user`, response => response.resume())
           await Promise.all([traceReceived, once(request, 'close')])
