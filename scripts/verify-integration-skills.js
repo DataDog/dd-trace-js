@@ -224,6 +224,9 @@ let pluginRegistrations
 /** @type {Map<string, import('eslint').SourceCode | undefined>} */
 const sourceCodes = new Map()
 
+/** @type {Map<string, string | undefined>} */
+const sourcePaths = new Map()
+
 /**
  * @param {string} filename
  */
@@ -635,6 +638,7 @@ function resolveLocalSource (filename, request) {
 
   const target = path.posix.normalize(path.posix.join(path.posix.dirname(filename), request))
   if (target === '..' || target.startsWith('../')) return
+  if (sourcePaths.has(target)) return sourcePaths.get(target)
 
   const candidates = [target]
   if (!path.posix.extname(target)) {
@@ -642,7 +646,9 @@ function resolveLocalSource (filename, request) {
     for (const suffix of SOURCE_SUFFIXES) candidates.push(path.posix.join(target, `index${suffix}`))
   }
 
-  return candidates.find(isFile)
+  const source = candidates.find(isFile)
+  sourcePaths.set(target, source)
+  return source
 }
 
 /**
@@ -879,7 +885,9 @@ function findContractSources (sources, pluginDirectories) {
         !dependency.slice(PLUGIN_BASE_DIRECTORY.length).includes('/')
       const isCrossPlugin = dependency.startsWith('packages/datadog-plugin-') &&
         !pluginDirectories.some(directory => dependency.startsWith(`${directory}/`))
-      if (!isBase && !isCrossPlugin) continue
+      const isInstrumentation = dependency.startsWith(`${INSTRUMENTATION_DIRECTORY}/`) &&
+        !dependency.startsWith(`${INSTRUMENTATION_DIRECTORY}/helpers/`)
+      if (!isBase && !isCrossPlugin && !isInstrumentation) continue
 
       visited.add(dependency)
       contracts.add(dependency)
@@ -1286,7 +1294,10 @@ function inspectIntegration (integration, packageName, mode, traits) {
     ...TEST_SUFFIXES.map(suffix => existingPath(`packages/datadog-instrumentations/test/${integration}${suffix}`)),
     ...listRelativeFiles(`packages/datadog-instrumentations/test/${integration}`, TEST_SUFFIXES),
   ])
-  const { sources: contractSources } = findContractSources(plugins, packageRegistrations.pluginDirectories)
+  const { sources: contractSources } = findContractSources(
+    compactPaths([instrumentation, rewriter, ...plugins]),
+    packageRegistrations.pluginDirectories
+  )
   const { publicIds } = packageRegistrations
   const ledger = findRegistrationLedger(publicIds)
   const channelSources = compactPaths([

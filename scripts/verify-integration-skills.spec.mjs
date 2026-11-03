@@ -288,15 +288,17 @@ describe('verify-integration-skills', () => {
     assert.strictEqual(status, 0, stderr)
   })
 
-  it('counts CRLF skill files against the same token budget', () => {
-    const filename = '.agents/skills/serverless-integrations/SKILL.md'
-    const source = skillFiles[filename] + 'Use `code`.\n'.repeat(120)
-    const lf = runTool([], (root) => writeFixtureFile(root, filename, source))
-    const crlf = runTool([], (root) => writeFixtureFile(root, filename, source.replaceAll('\n', '\r\n')))
+  for (const [format, newline] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+    it(`counts ${format} skill files against the same token budget`, () => {
+      const filename = '.agents/skills/serverless-integrations/SKILL.md'
+      const source = skillFiles[filename] + 'Use `code`.\n'.repeat(120)
+      const { status, stderr } = runTool([], (root) => {
+        writeFixtureFile(root, filename, source.replaceAll('\n', newline))
+      })
 
-    assert.strictEqual(lf.status, 0, lf.stderr)
-    assert.strictEqual(crlf.status, 0, crlf.stderr)
-  })
+      assert.strictEqual(status, 0, stderr)
+    })
+  }
 
   it('accepts equivalent native discovery link targets', () => {
     const { status, stderr } = runTool([], (root) => {
@@ -364,11 +366,15 @@ describe('verify-integration-skills', () => {
     })
   }
 
-  it('discovers pure Orchestrion packages and closest references without hook files', () => {
+  it('discovers pure Orchestrion packages without hook files', () => {
     const packet = inspect(runTool, 'fixture', [], writePureRewriterFixture)
-    const { reference } = inspect(runTool, 'new-plugin', ['--traits', 'cache,orchestrion'], writePureRewriterFixture)
 
     assert.strictEqual(packet.packages.some(({ name }) => name === '@pure/fixture'), true)
+  })
+
+  it('discovers pure Orchestrion references without hook files', () => {
+    const { reference } = inspect(runTool, 'new-plugin', ['--traits', 'cache,orchestrion'], writePureRewriterFixture)
+
     assert.strictEqual(reference?.integration, 'fixture')
     assert.strictEqual(reference.files.includes('packages/datadog-instrumentations/src/fixture.js'), false)
   })
@@ -665,7 +671,6 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
 
   it('escapes control characters in human-readable evidence', () => {
     const { status, stdout, stderr } = runTool(['--inspect', 'fixture'], writeControlRegistry)
-    const jsonResult = runTool(['--inspect', 'fixture', '--json'], writeControlRegistry)
 
     assert.strictEqual(status, 0, stderr)
     assert.strictEqual(stdout.includes('\u001B'), false)
@@ -675,6 +680,11 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.strictEqual(stdout.includes('\u2029'), false)
     assert.strictEqual(stdout.includes('\u{E0001}'), false)
     assert.match(stdout, /\\u001B\[31m\\u009B\\u202E\\u2028\\u2029\\uDB40\\uDC01fixture/)
+  })
+
+  it('escapes control characters in JSON evidence', () => {
+    const jsonResult = runTool(['--inspect', 'fixture', '--json'], writeControlRegistry)
+
     assert.strictEqual(jsonResult.status, 0, jsonResult.stderr)
     assert.strictEqual(jsonResult.stdout.includes('\u009B'), false)
     assert.strictEqual(jsonResult.stdout.includes('\u202E'), false)
@@ -823,9 +833,6 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.deepStrictEqual(packet.targets.plugins, [])
     assert.deepStrictEqual(packet.packages, [{ name: 'new-plugin', requested: false }])
 
-    assert.deepStrictEqual(inspect(runTool, 'new-plugin', ['--package', '@scope/new-plugin']).packages, [
-      { name: '@scope/new-plugin', requested: true },
-    ])
     assert.deepStrictEqual(packet.reference, {
       integration: 'fixture',
       category: 'cache',
@@ -850,6 +857,12 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
       ],
     })
     assert.strictEqual(packet.references[0], '.agents/skills/apm-integrations/references/orchestrion.md')
+  })
+
+  it('uses the requested package for an absent integration', () => {
+    assert.deepStrictEqual(inspect(runTool, 'new-plugin', ['--package', '@scope/new-plugin']).packages, [
+      { name: '@scope/new-plugin', requested: true },
+    ])
   })
 
   it('rejects unknown inspection options', () => {
@@ -896,13 +909,18 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     ])
   })
 
-  it('finds workflow entries and instrumentation tests outside the APM plugin layout', () => {
+  it('finds workflow entries and tests in the Test Optimization layout', () => {
     const webdriverio = inspect(runRepositoryTool, 'webdriverio')
-    const crypto = inspect(runRepositoryTool, 'crypto')
 
     assert.strictEqual(webdriverio.registrations.workflows.some(line => line.includes('test-optimization.yml')), true)
     const instrumentationTests = 'packages/datadog-instrumentations/test'
     assert.strictEqual(webdriverio.targets.tests.includes(`${instrumentationTests}/webdriverio.spec.js`), true)
+  })
+
+  it('finds instrumentation tests without a plugin directory', () => {
+    const crypto = inspect(runRepositoryTool, 'crypto')
+    const instrumentationTests = 'packages/datadog-instrumentations/test'
+
     assert.strictEqual(crypto.targets.tests.includes(`${instrumentationTests}/crypto.spec.js`), true)
   })
 
@@ -914,7 +932,7 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.deepStrictEqual(packet.registrations.workflows, [])
   })
 
-  it('renders the bounded review and debug routes', () => {
+  it('renders the bounded debug route', () => {
     const { status, stdout } = runTool([
       '--inspect',
       'fixture',
@@ -923,8 +941,6 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
       '--traits',
       'shimmer',
     ])
-    const missing = runTool(['--inspect', 'new-plugin', '--traits', 'cache,auto'])
-    const noTraits = runTool(['--inspect', 'new-plugin'])
 
     assert.strictEqual(status, 0)
     assert.match(stdout, /^Integration: fixture$/m)
@@ -932,6 +948,11 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.match(stdout, /^ {2}fixture-package$/m)
     assert.match(stdout, /^Contract sources:$/m)
     assert.match(stdout, /references\/shimmer\.md/)
+  })
+
+  it('renders the review route for an absent integration', () => {
+    const missing = runTool(['--inspect', 'new-plugin', '--traits', 'cache,auto'])
+
     assert.strictEqual(missing.status, 0)
     assert.match(missing.stdout, /^Mode: review; traits: cache, auto$/m)
     assert.match(missing.stdout, /^ {2}instrumentation: missing$/m)
@@ -941,6 +962,11 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.match(missing.stdout, /^Contract sources:\n {2}none$/m)
     assert.match(missing.stdout, /^ {2}packages\/dd-trace\/src\/plugins\/cache\.js$/m)
     assert.match(missing.stdout, /^Closest current reference: fixture \(cache\)$/m)
+  })
+
+  it('renders the review route without traits', () => {
+    const noTraits = runTool(['--inspect', 'new-plugin'])
+
     assert.strictEqual(noTraits.status, 0)
     assert.match(noTraits.stdout, /^Mode: review$/m)
     assert.match(noTraits.stdout, /^Contract sources:\n {2}none$/m)
@@ -961,14 +987,18 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
 
   it('lists inherited plugin contract sources', () => {
     const packet = inspect(runTool, 'derived')
-    const missingBase = inspect(runTool, 'derived', [], (root) => {
-      rmSync(join(root, 'packages/dd-trace/src/plugins/database.js'))
-    })
 
     assert.deepStrictEqual(packet.evidence.contractSources, [
       'packages/dd-trace/src/plugins/database.js',
       'packages/dd-trace/src/plugins/storage.js',
     ])
+  })
+
+  it('omits missing inherited plugin contract sources', () => {
+    const missingBase = inspect(runTool, 'derived', [], (root) => {
+      rmSync(join(root, 'packages/dd-trace/src/plugins/database.js'))
+    })
+
     assert.deepStrictEqual(missingBase.evidence.contractSources, [])
   })
 
@@ -978,51 +1008,69 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
       rmSync(join(root, '.github/CODEOWNERS'))
       rmSync(join(root, 'packages/dd-trace/test/plugins/versions/package.json'))
     })
+
+    assert.strictEqual(packet.packages[0].version, undefined)
+    assert.deepStrictEqual(packet.registrations.docsTest, [])
+    assert.deepStrictEqual(packet.registrations.codeowners, [])
+  })
+
+  it('reports unavailable dependency pins without failing', () => {
     const noDependencies = inspect(runTool, 'fixture', [], (root) => {
       writeFixtureFile(root, 'packages/dd-trace/test/plugins/versions/package.json', '{}')
     })
+
+    assert.strictEqual(noDependencies.packages[0].version, undefined)
+  })
+
+  it('falls back to a nested test when the reference index test is absent', () => {
     const fallbackTest = inspect(runTool, 'new-plugin', ['--traits', 'cache,auto'], (root) => {
       rmSync(join(root, 'packages/datadog-plugin-fixture/test/index.spec.js'))
       rmSync(join(root, 'index.d.v5.ts'))
       rmSync(join(root, '.github/workflows/serverless.yml'))
     })
 
-    assert.strictEqual(packet.packages[0].version, undefined)
-    assert.deepStrictEqual(packet.registrations.docsTest, [])
-    assert.deepStrictEqual(packet.registrations.codeowners, [])
-    assert.strictEqual(noDependencies.packages[0].version, undefined)
     assert.strictEqual(
       fallbackTest.reference.files.at(-1),
       'packages/datadog-plugin-fixture/test/nested/cjs.spec.cjs'
     )
   })
 
-  it('treats unavailable or invalid registry evidence as absent', () => {
+  it('treats unavailable hook registry evidence as absent', () => {
     const missingHookRegistry = inspect(runTool, 'fixture', [], (root) => {
       rmSync(join(root, 'packages/datadog-instrumentations/src/helpers/hooks.js'))
     })
+
+    assert.strictEqual(missingHookRegistry.packages[0].hook, undefined)
+  })
+
+  it('treats unavailable plugin registry evidence as absent', () => {
     const missingRegistry = inspect(runTool, 'fixture', [], (root) => {
       rmSync(join(root, 'packages/dd-trace/src/plugins/index.js'))
     })
-    const invalidRegistry = inspect(runTool, 'fixture', [], (root) => {
-      writeFixtureFile(root, 'packages/dd-trace/src/plugins/index.js', 'module.exports = false\n')
+
+    assert.strictEqual(missingRegistry.packages[0].plugin, undefined)
+  })
+
+  for (const [kind, source] of [
+    ['invalid', 'module.exports = false\n'],
+    ['null', 'module.exports = null\n'],
+    ['malformed', 'module.exports = {\n'],
+  ]) {
+    it(`treats ${kind} plugin registry evidence as absent`, () => {
+      const packet = inspect(runTool, 'fixture', [], (root) => {
+        writeFixtureFile(root, 'packages/dd-trace/src/plugins/index.js', source)
+      })
+
+      assert.strictEqual(packet.packages[0].plugin, undefined)
     })
-    const nullRegistry = inspect(runTool, 'fixture', [], (root) => {
-      writeFixtureFile(root, 'packages/dd-trace/src/plugins/index.js', 'module.exports = null\n')
-    })
-    const malformedRegistry = inspect(runTool, 'fixture', [], (root) => {
-      writeFixtureFile(root, 'packages/dd-trace/src/plugins/index.js', 'module.exports = {\n')
-    })
+  }
+
+  it('treats replaced plugin registry evidence as absent', () => {
     const replacedRegistry = inspect(runTool, 'fixture', [], (root) => {
       const filename = 'packages/dd-trace/src/plugins/index.js'
       writeFixtureFile(root, filename, `${sourceFiles[filename]}module.exports = false\n`)
     })
 
-    assert.strictEqual(missingHookRegistry.packages[0].hook, undefined)
-    assert.strictEqual(missingRegistry.packages[0].plugin, undefined)
-    assert.strictEqual(invalidRegistry.packages[0].plugin, undefined)
-    assert.strictEqual(nullRegistry.packages[0].plugin, undefined)
-    assert.strictEqual(malformedRegistry.packages[0].plugin, undefined)
     assert.strictEqual(replacedRegistry.packages[0].plugin, undefined)
   })
 
@@ -1196,9 +1244,13 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
 
   it('falls back to a common reference only when no integration shares the category', () => {
     const common = inspect(runRepositoryTool, 'new-plugin', ['--traits', 'tracing,shimmer'])
-    const none = inspect(runTool, 'new-plugin', ['--traits', 'server'])
 
     assert.strictEqual(common.reference?.category, 'common')
+  })
+
+  it('omits a reference when no integration shares the category or is common', () => {
+    const none = inspect(runTool, 'new-plugin', ['--traits', 'server'])
+
     assert.strictEqual(none.reference, undefined)
   })
 
@@ -1282,11 +1334,25 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     )
     assert.notStrictEqual(subscriptionCount, 0)
     assert.strictEqual(anchors.length, subscriptionCount)
+  })
 
+  it('renders cross-plugin dependent sources', () => {
     const rendered = runRepositoryTool(['--inspect', 'google-cloud-pubsub', '--mode', 'serverless'])
     assert.strictEqual(rendered.status, 0)
     assert.match(rendered.stdout, /^ {2}packages\/datadog-plugin-http\/src\/index\.js$/m)
   })
+
+  for (const integration of ['http', 'http2']) {
+    it(`finds channel publishers in the split ${integration} instrumentation`, () => {
+      const packet = inspect(runRepositoryTool, integration)
+
+      for (const role of ['client', 'server']) {
+        const filename = `packages/datadog-instrumentations/src/${integration}/${role}.js`
+        assert.strictEqual(packet.evidence.contractSources.includes(filename), true)
+        assert.strictEqual(packet.evidence.channelAnchors.some(anchor => anchor.startsWith(`${filename}:`)), true)
+      }
+    })
+  }
 
   it('routes router integrations through their actual contract sources', () => {
     const packet = inspect(runRepositoryTool, 'express', ['--traits', 'router'])
@@ -1346,16 +1412,20 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.match(stderr, /default_prompt must mention \$serverless-integrations/)
   })
 
-  it('rejects malformed and incomplete discovery metadata', () => {
+  it('rejects malformed discovery metadata', () => {
     const malformed = runTool([], (root) => {
       writeFixtureFile(root, '.agents/skills/serverless-integrations/agents/openai.yaml', 'interface: [\n')
-    })
-    const incomplete = runTool([], (root) => {
-      writeFixtureFile(root, '.agents/skills/serverless-integrations/agents/openai.yaml', '{}\n')
     })
 
     assert.strictEqual(malformed.status, 1)
     assert.match(malformed.stderr, /invalid YAML/)
+  })
+
+  it('rejects incomplete discovery metadata', () => {
+    const incomplete = runTool([], (root) => {
+      writeFixtureFile(root, '.agents/skills/serverless-integrations/agents/openai.yaml', '{}\n')
+    })
+
     assert.strictEqual(incomplete.status, 1)
     assert.match(incomplete.stderr, /missing interface\.display_name/)
   })
