@@ -6,8 +6,6 @@ const { spawnSync } = require('node:child_process')
 const { readFileSync } = require('node:fs')
 const path = require('node:path')
 
-const { getBunBinary } = require('./bun')
-
 const severities = ['info', 'low', 'moderate', 'high', 'critical']
 const defaultAllowlist = path.join(__dirname, '..', '.github', 'audit-allowlist.json')
 
@@ -50,7 +48,7 @@ function getGhsaId (url) {
  * @returns {Map<string, AuditAdvisory>}
  */
 function runAudit (directory) {
-  const result = spawnSync(getBunBinary(), ['audit', '--json'], {
+  const result = spawnSync('bun', ['audit', '--json'], {
     cwd: path.resolve(directory),
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],

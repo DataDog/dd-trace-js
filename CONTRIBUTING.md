@@ -153,12 +153,11 @@ dependencies and the per-plugin sandbox installs. Run-scripts (`test:*`, `lint`,
 `npm`. To install dependencies, run this in the project directory:
 
 ```sh
-node scripts/bun.js install --frozen-lockfile
+bun install --frozen-lockfile
 ```
 
-This command installs the pinned Bun version locally if it is unavailable. npm scripts use the local
-Bun executable, so a global Bun installation is optional. Use `node scripts/bun.js <command>` to run
-other Bun commands at the pinned version.
+Install Bun before running this command. CI uses the pinned version, and npm scripts use the local
+Bun dependency after installation.
 
 ### Supply-chain hardening
 
