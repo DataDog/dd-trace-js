@@ -23,6 +23,8 @@ const COMMONJS_BINDINGS = MODULE_BINDING | REQUIRE_BINDING
 const targetPackages = new Set(Object.keys(hooks))
 for (const name of getRewriteTargetNames()) targetPackages.add(name)
 const packagePathPattern = createPackagePathPattern()
+// Process-global on purpose: shared by every bundler integration in the process so each dc
+// module gets one rewriter and each package hook loads once. Keys are absolute paths or names.
 const entrypoints = new Map()
 const loadedHooks = new Set()
 const packageCache = new Map()
@@ -56,6 +58,11 @@ const rewriters = new Map()
  * Classifies a resolved package file. For ESM package-root hooks, request is the original
  * package specifier: resolving a dual package with require conditions can select a different file.
  * A rewrite classification may still append matching CommonJS publications.
+ *
+ * Not a pure lookup: it realpaths the file, reads package.json, loads the package's dd-trace hook
+ * and, for CommonJS entrypoint candidates, resolves the package entrypoint with Module.createRequire.
+ * Results are cached per package, but bundler callers should still gate calls with
+ * `packagePathPattern` rather than classifying every module speculatively.
  *
  * @param {{ resourcePath: string, request?: string, warn?: (warning: Error) => void }} options
  * @returns {Classification}
@@ -148,16 +155,22 @@ function getTarget (inputPath, includeEsmHooks, request) {
     /** @type {string} */ (extracted.path),
     path.normalize(/** @type {string} */ (extracted.pkgJson))
   )
-  // Turbopack does not intercept ESM exports, so do not load ESM hooks for its transforms.
-  const publications = packageInfo.esm
-    ? includeEsmHooks && !rewriteTarget ? getPublications(resourcePath, packageInfo, request) : []
-    : getPublications(resourcePath, packageInfo)
+  let publications = []
+  if (!packageInfo.esm) {
+    publications = getPublications(resourcePath, packageInfo)
+  } else if (includeEsmHooks && !rewriteTarget) {
+    // instrument() cannot intercept ESM exports, so only classification loads ESM hooks; the
+    // bundler that requested it is responsible for intercepting 'esm-intercept' modules.
+    publications = getPublications(resourcePath, packageInfo, request)
+  }
+
   /** @type {Classification} */
-  const kind = rewriteTarget
-    ? 'orchestrion-rewrite'
-    : publications.length === 0
-      ? 'none'
-      : packageInfo.esm ? 'esm-intercept' : 'cjs-publication'
+  let kind = 'none'
+  if (rewriteTarget) {
+    kind = 'orchestrion-rewrite'
+  } else if (publications.length > 0) {
+    kind = packageInfo.esm ? 'esm-intercept' : 'cjs-publication'
+  }
   return { kind, nativeResourcePath, resourcePath, packageInfo, publications, rewriteTarget }
 }
 
@@ -505,9 +518,9 @@ ${publications}  }
 function appendActivation (source, payload, dcModule, esm) {
   if (esm) {
     return `${source}
-import ddTraceTurbopackDc from ${JSON.stringify(dcModule)}
+import ddTraceBundlerDc from ${JSON.stringify(dcModule)}
 {
-  const channel = ddTraceTurbopackDc.channel('${CHANNEL}')
+  const channel = ddTraceBundlerDc.channel('${CHANNEL}')
   if (channel.hasSubscribers) channel.publish(${JSON.stringify({ activate: true, ...payload })})
 }
 `
