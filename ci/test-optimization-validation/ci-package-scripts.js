@@ -98,7 +98,7 @@ function expandCommand (command, scripts, path, stack, state) {
  * @returns {string[]|undefined} literal command segments
  */
 function splitLiteralAndChain (command) {
-  const source = String(command || '').trim()
+  const source = command.trim()
   if (!source || DYNAMIC_VALUE_PATTERN.test(source)) return
   const segments = []
   let quote
