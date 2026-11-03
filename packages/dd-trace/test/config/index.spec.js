@@ -626,6 +626,26 @@ describe('Config', () => {
     })
   })
 
+  it('should percent-decode OTLP exporter header keys and values', () => {
+    process.env.OTEL_EXPORTER_OTLP_HEADERS = 'Authorization=Basic%20dXNlcjpwYXNz%3D%3D,x%2Dtenant=a%2Cb'
+
+    const config = getConfig()
+
+    assertObjectContains(config, {
+      OTEL_EXPORTER_OTLP_HEADERS: { Authorization: 'Basic dXNlcjpwYXNz==', 'x-tenant': 'a,b' },
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS: { Authorization: 'Basic dXNlcjpwYXNz==', 'x-tenant': 'a,b' },
+    })
+  })
+
+  it('should discard OTLP exporter headers that fail to percent-decode', () => {
+    process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'x-valid=ok,x-invalid=%E0%A4%A'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.['x-invalid'], undefined)
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.['x-valid'], undefined)
+  })
+
   it('should reject malformed and unsupported OTLP HTTP endpoints', () => {
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'ftp://collector:4318'
     process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'not a URL'
@@ -909,6 +929,20 @@ describe('Config', () => {
       })
       assert.ok(!Object.hasOwn(config.tags, 'deployment.environment'))
       assert.ok(!Object.hasOwn(config.tags, 'deployment.environment.name'))
+    })
+
+    it('percent-decodes resource attribute keys and values', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES = 'service.name=my%20service,team%2Ename=a%3Db%2Cc,emoji=%F0%9F%9A%80'
+
+      const config = getConfig()
+
+      assertObjectContains(config, {
+        service: 'my service',
+        tags: {
+          'team.name': 'a=b,c',
+          emoji: '\u{1F680}',
+        },
+      })
     })
 
     it('keeps DD_ENV precedence over deployment environment resource attributes', () => {
