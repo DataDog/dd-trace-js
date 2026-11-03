@@ -498,7 +498,7 @@ describe('Turbopack loader', () => {
 
     assert.match(dcModule, /^\.\.\//)
     assert.match(result.code, /\/\/ rewritten/)
-    assert.match(result.code, new RegExp(`import ddTraceTurbopackDc from ${escapeRegExp(JSON.stringify(dcModule))}`))
+    assert.match(result.code, new RegExp(`import ddTraceBundlerDc from ${escapeRegExp(JSON.stringify(dcModule))}`))
     assert.match(result.code, /channel\.hasSubscribers/)
     assert.match(result.code, /"activate":true,"package":"rewrite-package"/)
     assert.equal(result.code.match(/"activate":true/g)?.length, 1)
