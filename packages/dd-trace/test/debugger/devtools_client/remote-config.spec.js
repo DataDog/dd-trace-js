@@ -54,7 +54,7 @@ describe('remote config failure reasons', () => {
     },
     {
       overrides: {},
-      action: 'customer-action',
+      action: 'unexpected-action',
       reason: 'unknown_remote_config_action',
       message: 'Cannot process probe',
     },
@@ -73,7 +73,7 @@ describe('remote config failure reasons', () => {
       const response = probePort.postMessage.firstCall.args[0]
       assert.strictEqual(response.ackId, 42)
       assert.strictEqual(response.reason, reason)
-      assert.strictEqual(response.action, action === 'customer-action' ? 'unknown' : action)
+      assert.strictEqual(response.action, action)
       assert.strictEqual(response.phase, undefined)
       assert.ok(response.error instanceof Error)
       assert.strictEqual(response.error.name, 'Error')
