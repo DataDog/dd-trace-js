@@ -8,7 +8,6 @@ const { tmpdir } = require('node:os')
 const path = require('node:path')
 const { promisify } = require('node:util')
 
-const axios = require('axios')
 const semver = require('semver')
 
 if (semver.gte(process.versions.node, '22.22.3')) require('../../../register')
@@ -18,6 +17,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { CLIENT } = require('../../../ext/kinds')
 const { HTTP_URL, SPAN_KIND } = require('../../../ext/tags')
+const axios = require('../../../versions/axios').get()
 const execFileAsync = promisify(execFile)
 
 /**
@@ -62,7 +62,8 @@ async function prepareEsmRequest (versionKey, agentPort, host = 'http') {
     ], { env: { ...process.env, DD_INJECT_FORCE: '1', NODE_OPTIONS: '' }, silent: true, execArgv: [] })
     /** @type {Buffer[]} */
     const stderr = []
-    child.stderr.on('data', stderr.push.bind(stderr))
+    const childStderr = /** @type {import('node:stream').Readable} */ (child.stderr)
+    childStderr.on('data', stderr.push.bind(stderr))
     const closed = once(child, 'close')
     const [message] = await Promise.race([
       once(child, 'message'),
@@ -426,6 +427,30 @@ describe('Plugin', () => {
         const response = await handleRequest(new Request('http://localhost/users/123'))
         assert.equal(response.status, 200)
         assert.equal(await response.text(), 'ok')
+      })
+
+      it('preserves an ambient trace without a local request span', async () => {
+        tracer.use('react-router', {})
+        const handleRequest = createRequestHandler(createBuild({ loader () { return 'user' } }), 'test')
+        const childOf = tracer.extract('http_headers', {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          'x-datadog-sampling-priority': '1',
+        })
+        const trace = agent.assertSomeTraces(traces => {
+          const request = traces[0].find(span => span.name === 'test.request')
+          const loader = traces[0].find(span => span.name === 'react-router.loader')
+          assert.ok(request)
+          assert.equal(request.meta['http.route'], undefined)
+          assert.ok(loader)
+          assert.equal(loader.parent_id.toString(), request.span_id.toString())
+        })
+        const response = tracer.trace('test.request', { childOf }, () => {
+          return handleRequest(new Request('http://localhost/users/123'))
+        })
+        const [, result] = await Promise.all([trace, response])
+        assert.equal(result.status, 200)
+        assert.equal(await result.text(), 'ok')
       })
 
       it('reports an action span without changing the response', async () => {

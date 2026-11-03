@@ -1,6 +1,6 @@
 'use strict'
 
-const { addHook, channel, getHooks } = require('./helpers/instrument')
+const { channel } = require('./helpers/instrument')
 
 const deriveStartChannel = channel('tracing:orchestrion:react-router:derive:start')
 const loaderStartChannel = channel('apm:react-router:loader:start')
@@ -104,12 +104,3 @@ function onDeriveStart (message) {
 }
 
 deriveStartChannel.subscribe(onDeriveStart)
-
-/** @param {unknown} exports */
-function preserveExports (exports) {
-  return exports
-}
-
-for (const hook of getHooks('react-router').values()) {
-  addHook(hook, preserveExports)
-}

@@ -217,6 +217,7 @@ const web = {
       if (!parentId) return
       span = started.find(parent => parent.context()._spanId === parentId)
     }
+    return span
   },
 
   // Return the active span.

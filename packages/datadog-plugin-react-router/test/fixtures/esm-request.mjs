@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { takeCoverage } from 'node:v8'
 
 const require = createRequire(import.meta.url)
+const ipc = /** @type {Required<Pick<typeof process, 'send'>>} */ (process)
 const [tracerPath, registerPath, agentPort, host] = process.argv.slice(2)
 const tracer = require(tracerPath).init({
   flushInterval: 0,
@@ -44,8 +45,8 @@ const build = {
 const handleRequest = createRequestHandler(build, 'test')
 
 /**
- * @param {import('node:http').IncomingMessage} request
- * @param {import('node:http').ServerResponse} response
+ * @param {import('node:http').IncomingMessage | import('node:http2').Http2ServerRequest} request
+ * @param {import('node:http').ServerResponse | import('node:http2').Http2ServerResponse} response
  */
 async function onRequest (request, response) {
   const run = async () => {
@@ -70,7 +71,7 @@ if (host === 'express') {
 }
 server.listen(0, '127.0.0.1')
 await once(server, 'listening')
-process.send('ready')
+ipc.send('ready')
 await once(process, 'message')
 let client
 let result
@@ -96,4 +97,4 @@ try {
   await closed
 }
 if (process.env.NODE_V8_COVERAGE) takeCoverage()
-process.send(result)
+ipc.send(result)

@@ -91,12 +91,9 @@ exports.getHooks = function getHooks (names) {
     // for their own registration (the ai and
     // aws-durable-execution-sdk-js plugins set `hook.file = null`), which must
     // not leak into any other call.
-    const filePath = /** @type {string | RegExp} */ (module.filePath)
-    const hook = typeof filePath === 'string'
-      ? { name: module.name, versions: [module.versionRange], file: filePath }
-      : { name: module.name, versions: [module.versionRange], filePattern: filePath.source.replace(/^\^/, '') }
-    sourceRewritePaths.set(hook, filePath)
-    hooks.set(`${module.name}|${module.versionRange}|${filePath}`, hook)
+    const hook = { name: module.name, versions: [module.versionRange], file: module.filePath }
+    sourceRewritePaths.set(hook, module.filePath)
+    hooks.set(`${module.name}|${module.versionRange}|${module.filePath}`, hook)
   }
   return hooks
 }

@@ -142,11 +142,8 @@ dc.subscribe(CHANNEL, (message) => {
 
   if (payload.activate) {
     for (const { sourceRewrite, versions, hook } of instrumentation) {
-      if (!sourceRewrite || typeof payload.path !== 'string' || !matchVersion(payload.version, versions)) continue
-      const matchesPath = sourceRewrite instanceof RegExp
-        ? payload.path.startsWith(`${name}/`) && sourceRewrite.test(payload.path.slice(name.length + 1))
-        : payload.path === filename(name, sourceRewrite)
-      if (!matchesPath) continue
+      if (!sourceRewrite || payload.path !== filename(name, sourceRewrite) ||
+        !matchVersion(payload.version, versions)) continue
 
       try {
         loadChannel.publish({ name })
@@ -158,8 +155,6 @@ dc.subscribe(CHANNEL, (message) => {
     }
     return
   }
-
-  if (typeof payload.path !== 'string') return
 
   for (const entry of instrumentation) {
     if (!matchesInstrumentation(name, payload.version, payload.path, entry)) continue

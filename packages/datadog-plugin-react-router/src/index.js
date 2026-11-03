@@ -45,8 +45,8 @@ class ReactRouterPlugin extends WebPlugin {
 
     const store = storage('legacy').getStore()
     const request = getRequest(store) ?? store?.req
-    const span = /** @type {import('../../dd-trace/src/opentracing/span') | undefined} */ (
-      (request && web.root(request)) || web.rootFromSpan(store?.span)
+    const span = (request && web.root(request)) || web.rootFromSpan(
+      /** @type {import('../../dd-trace/src/opentracing/span') | undefined} */ (store?.span)
     )
     if (!span) return
     const httpUrl = /** @type {string} */ (span.context().getTag(HTTP_URL))

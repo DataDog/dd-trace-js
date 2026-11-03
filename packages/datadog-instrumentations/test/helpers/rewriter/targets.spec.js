@@ -33,6 +33,7 @@ describe('rewriter targets', () => {
       {
         moduleName: 'react-router',
         filePath: 'dist/development/chunk-JG3XND5A.mjs',
+        activate: true,
         sourceMatch: 'function derive(',
       }
     )
