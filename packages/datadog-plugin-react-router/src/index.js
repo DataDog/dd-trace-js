@@ -106,21 +106,10 @@ class ReactRouterPlugin extends WebPlugin {
     ctx.complete = (result, rejected) => {
       const outcome = /** @type {{ status?: string, error?: Error }} */ (result)
       const error = rejected ? result : outcome?.status === 'error' ? outcome.error : undefined
-      try {
-        if (error !== undefined && !span.context().getTag('error')) {
-          span.setTag('error', error)
-        }
-      } catch (failure) {
-        log.error('Error in react-router completion: %s', failure)
-        this.configure(false)
-      } finally {
-        try {
-          span.finish()
-        } catch (failure) {
-          log.error('Error finishing react-router span: %s', failure)
-          this.configure(false)
-        }
+      if (error !== undefined && !span.context().getTag('error')) {
+        span.setTag('error', error)
       }
+      span.finish()
     }
     return { ...store, span }
   }

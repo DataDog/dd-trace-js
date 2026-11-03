@@ -373,37 +373,6 @@ describe('Plugin', () => {
         }
       })
 
-      for (const [failure, method] of [
-        ['tagging', 'setTag'],
-        ['finishing', 'finish'],
-      ]) {
-        it(`preserves the response when ${failure} a loader span fails`, async () => {
-          tracer.use('react-router', {})
-          const Span = require('../../dd-trace/src/opentracing/span')
-          const original = Span.prototype[method]
-          let failed = false
-          /** @param {...unknown} args */
-          Span.prototype[method] = function (...args) {
-            const result = original.apply(this, args)
-            if (this.context().getTag('component') === 'react-router' &&
-              (method === 'finish' || args[0] === 'error') && !failed) {
-              failed = true
-              throw new Error(`${failure} failure`)
-            }
-            return result
-          }
-          try {
-            const handleRequest = createRequestHandler(createBuild({ loader () { throw new Error('loader failure') } }),
-              'test')
-            await assertHttpRoute(handleRequest, true, '/users/123', 500, false, '/users/:id', failure === 'tagging')
-            assert.equal(failed, true)
-            await assertHttpRoute(handleRequest, false, '/users/123', 500, false)
-          } finally {
-            Span.prototype[method] = original
-          }
-        })
-      }
-
       it('leaves a manifest request without a route', async () => {
         tracer.use('react-router', {})
         const build = createBuild()
