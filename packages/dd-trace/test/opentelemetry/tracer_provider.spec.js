@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 const { context, propagation, trace } = require('@opentelemetry/api')
 
@@ -10,9 +10,11 @@ require('../setup/core')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const { MultiSpanProcessor, NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
-require('../../index').init()
+const tracer = require('../../index').init()
 
 describe('OTel TracerProvider', () => {
+  afterEach(() => sinon.restore())
+
   it('should register with OTel API', () => {
     const provider = new TracerProvider()
     provider.register()
@@ -147,8 +149,23 @@ describe('OTel TracerProvider', () => {
     const processor = new NoopSpanProcessor()
     provider.addSpanProcessor(processor)
     processor.forceFlush = sinon.stub()
+    const exporterFlush = sinon.stub(tracer._tracer._exporter, 'flush')
+    const writerFlush = sinon.stub(tracer._tracer._exporter._writer, 'flush')
 
     provider.forceFlush()
+    sinon.assert.calledOnce(exporterFlush)
+    sinon.assert.notCalled(writerFlush)
     sinon.assert.calledOnce(processor.forceFlush)
+  })
+
+  it('should fall back to the writer when the exporter has no flush method', async () => {
+    const provider = new TracerProvider()
+    const exporter = tracer._tracer._exporter
+    sinon.stub(exporter, 'flush').value(undefined)
+    const writerFlush = sinon.stub(exporter._writer, 'flush')
+
+    await provider.forceFlush()
+
+    sinon.assert.calledOnce(writerFlush)
   })
 })
