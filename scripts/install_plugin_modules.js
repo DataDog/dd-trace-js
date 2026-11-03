@@ -1,11 +1,11 @@
 'use strict'
 
 const { createHash } = require('crypto')
-const { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } = require('fs')
-const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
+const { existsSync, readFileSync, writeFileSync } = require('fs')
+const { mkdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
 const { arch } = require('os')
-const { join, posix } = require('path')
+const { join } = require('path')
 
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
@@ -57,35 +57,23 @@ for (const external of Object.keys(externals)) {
 run()
 
 async function run () {
-  invalidateCacheOnNodeAbiChange()
+  const nodeAbiFile = join(__dirname, '..', 'versions', '.node-abi')
+  const recordedAbi = existsSync(nodeAbiFile) ? readFileSync(nodeAbiFile, 'utf8').trim() : undefined
+  const force = recordedAbi !== undefined && recordedAbi !== process.versions.modules
   const deferredPackageStages = await assertPrerequisites()
-  install()
+  install(force)
   for (const stage of deferredPackageStages) {
     // eslint-disable-next-line no-await-in-loop
     await mapWithConcurrency(stage, FS_CONCURRENCY, assertPackage)
     // eslint-disable-next-line no-await-in-loop
     await assertWorkspaces()
-    install()
+    install(force)
   }
   const changed = await assertPeerDependencies(join(__dirname, '..', 'versions'))
   // The peer-dependency install only does something when patching actually changed a manifest. Targeted
   // installs for plugins without external peer dependencies (the common CI matrix case) skip it entirely.
-  if (changed) install()
-}
-
-// Native build output belongs to the Node ABI, including packages nested by the hoisted linker.
-function invalidateCacheOnNodeAbiChange () {
-  const versionsDir = join(__dirname, '..', 'versions')
-  const nodeAbiFile = join(versionsDir, '.node-abi')
-  const currentAbi = process.versions.modules
-  const recordedAbi = existsSync(nodeAbiFile) ? readFileSync(nodeAbiFile, 'utf8').trim() : ''
-  if (recordedAbi && recordedAbi !== currentAbi) {
-    for (const entry of readdirSync(versionsDir)) {
-      if (entry !== 'bunfig.toml') rmSync(join(versionsDir, entry), { recursive: true, force: true })
-    }
-  }
-  mkdirSync(versionsDir, { recursive: true })
-  writeFileSync(nodeAbiFile, currentAbi)
+  if (changed) install(force)
+  writeFileSync(nodeAbiFile, process.versions.modules)
 }
 
 async function assertPrerequisites () {
@@ -309,39 +297,14 @@ async function assertPackage ({ name, version, range: dependencyVersionRange }) 
  * @returns {Promise<boolean>} Whether any manifest changed (and therefore a second install is required).
  */
 async function assertPeerDependencies (rootFolder) {
-  const folders = await collectPeerDependencyFolders(rootFolder)
+  const folders = []
+  for (const workspace of workspaces) {
+    const versionStart = workspace.indexOf('@', 1)
+    const externalName = versionStart === -1 ? workspace : workspace.slice(0, versionStart)
+    if (externalDeps.has(externalName)) folders.push({ folder: join(rootFolder, workspace), externalName })
+  }
   const changes = await mapWithConcurrency(folders, FS_CONCURRENCY, patchPeerDependencies)
   return changes.some(Boolean)
-}
-
-/**
- * Walk the generated tree and return the leaf workspace folders that have external peer dependencies to patch.
- *
- * @param {string} rootFolder
- * @param {string} [parent]
- * @returns {Promise<Array<{ folder: string, externalName: string }>>}
- */
-async function collectPeerDependencyFolders (rootFolder, parent = '') {
-  const entries = await readdir(rootFolder)
-  const folders = []
-
-  for (const entry of entries) {
-    const current = join(rootFolder, entry)
-
-    // eslint-disable-next-line no-await-in-loop
-    const folderStat = await lstat(current)
-    if (!folderStat.isDirectory() || entry === 'node_modules' || !isGeneratedWorkspace(entry, parent)) continue
-    if (entry.startsWith('@')) {
-      // eslint-disable-next-line no-await-in-loop
-      folders.push(...await collectPeerDependencyFolders(current, posix.join(parent, entry)))
-      continue
-    }
-
-    const externalName = posix.join(parent, entry.split('@', 1)[0])
-    if (externalDeps.has(externalName)) folders.push({ folder: current, externalName })
-  }
-
-  return folders
 }
 
 /**
@@ -406,28 +369,6 @@ async function patchPeerDependencies ({ folder, externalName }) {
 
   await writeFile(versionPkgJsonPath, after)
   return true
-}
-
-/**
- * Only inspect workspaces generated for the current install run.
- * This avoids stale folders in `versions/` from breaking targeted installs.
- *
- * @param {string} entry
- * @param {string} [parent]
- */
-function isGeneratedWorkspace (entry, parent = '') {
-  const workspaceName = parent ? posix.join(parent, entry) : entry
-
-  if (entry.startsWith('@')) {
-    for (const workspace of workspaces) {
-      if (workspace.startsWith(`${workspaceName}/`)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  return workspaces.has(workspaceName)
 }
 
 /**
@@ -504,9 +445,12 @@ async function assertWorkspaces () {
   }, null, 2) + '\n')
 }
 
-function install () {
+/**
+ * @param {boolean} [force]
+ */
+function install (force = false) {
   try {
-    exec('bun install --trust', { cwd: folder() })
+    exec(`bun install --trust${force ? ' --force' : ''}`, { cwd: folder() })
   } catch (error) {
     // A failure is most often an unresolvable version: a declared range spans a major version that was never
     // published. Point at the fix instead of leaving a bare bun error.
