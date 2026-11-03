@@ -174,8 +174,6 @@
     "openfeature/rules-based.d.ts",
     "openfeature/exposure-hook.js",
     "openfeature/exposure-hook.d.ts",
-    "test-optimization.js",
-    "test-optimization.d.ts",
     "packages/*/index.js",
     "packages/*/index.electron.js",
     "packages/*/lib/**/*",

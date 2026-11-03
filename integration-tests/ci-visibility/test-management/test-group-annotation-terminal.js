@@ -2,7 +2,7 @@
 
 const { AsyncResource } = require('node:async_hooks')
 
-const { noAutoRetry, preventFailureSuppression } = require('dd-trace/test-optimization')
+const { noAutoRetry, preventFailureSuppression } = require('dd-trace/ci/test-annotations')
 const mode = process.env.EXCLUSIONS_TERMINAL_MODE
 const externalErrorContext = new AsyncResource('external-native-describe-error')
 if (mode === 'external-expect') expect.assertions(1)

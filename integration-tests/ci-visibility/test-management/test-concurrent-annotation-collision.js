@@ -1,6 +1,6 @@
 'use strict'
 
-const { noAutoRetry, preventFailureSuppression } = require('dd-trace/test-optimization')
+const { noAutoRetry, preventFailureSuppression } = require('dd-trace/ci/test-annotations')
 const policy = process.env.EXCLUSIONS_COLLISION_POLICY
 let attempts = 0
 const declareSerial = () => test('same name', () => {

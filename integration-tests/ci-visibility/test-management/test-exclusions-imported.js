@@ -1,7 +1,7 @@
 'use strict'
 
 const { test } = require('@jest/globals')
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 const selected = test.only.each([1, 2])
 selected('selected %s', preventFailureSuppression(noAutoRetry((value, done) => done(new Error(`failure ${value}`)))))

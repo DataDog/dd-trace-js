@@ -1,4 +1,4 @@
-import { preventFailureSuppression, noAutoRetry } from '../test-optimization';
+import { preventFailureSuppression, noAutoRetry } from '../ci/test-annotations';
 
 const numericCallback = (value: number, label: string): string => label + value;
 const annotated: typeof numericCallback = preventFailureSuppression(noAutoRetry(numericCallback));

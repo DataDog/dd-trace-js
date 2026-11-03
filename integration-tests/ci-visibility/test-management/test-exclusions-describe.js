@@ -1,6 +1,6 @@
 'use strict'
 
-const { noAutoRetry } = require('dd-trace/test-optimization')
+const { noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 const fail = noAutoRetry(() => { throw new Error('intentional failure') })
 describe('native group', () => {

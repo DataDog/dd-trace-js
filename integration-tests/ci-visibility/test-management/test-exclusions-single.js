@@ -1,6 +1,6 @@
 'use strict'
 
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 if (process.env.EXCLUSIONS_HOOK_FAILURE) {
   beforeEach(() => { throw new Error('protected hook failure') })
 }

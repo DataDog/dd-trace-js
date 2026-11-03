@@ -1,6 +1,6 @@
 'use strict'
 
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 if (process.env.EXCLUSIONS_REQUIRE_WORKER === '1' && typeof process.send !== 'function') {
   throw new Error('expected worker IPC')

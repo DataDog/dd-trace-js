@@ -1,6 +1,6 @@
 'use strict'
 
-const { noAutoRetry, preventFailureSuppression } = require('dd-trace/test-optimization')
+const { noAutoRetry, preventFailureSuppression } = require('dd-trace/ci/test-annotations')
 
 let outerAttempt = 0
 describe('outer', () => {

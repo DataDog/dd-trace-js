@@ -1,6 +1,6 @@
 'use strict'
 
-const { noAutoRetry } = require('dd-trace/test-optimization')
+const { noAutoRetry } = require('dd-trace/ci/test-annotations')
 const callback = () => { expect(42).toBe(42) }
 test('passing environment test', process.env.EXCLUSIONS_ANNOTATED_ENVIRONMENT === '1'
   ? noAutoRetry(callback)

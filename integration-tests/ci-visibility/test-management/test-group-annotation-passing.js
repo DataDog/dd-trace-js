@@ -1,6 +1,6 @@
 'use strict'
 
-const { noAutoRetry, preventFailureSuppression } = require('dd-trace/test-optimization')
+const { noAutoRetry, preventFailureSuppression } = require('dd-trace/ci/test-annotations')
 const replay = process.env.EXCLUSIONS_PASSING_REPLAY === '1'
 
 describe('native passing', () => {

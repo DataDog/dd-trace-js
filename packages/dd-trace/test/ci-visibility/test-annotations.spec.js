@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { preventFailureSuppression, noAutoRetry } = require('../../../../test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('../../../../ci/test-annotations')
 
 // Exercise the public helpers without depending on their metadata representation.
 describe('Test Optimization callback annotations', () => {

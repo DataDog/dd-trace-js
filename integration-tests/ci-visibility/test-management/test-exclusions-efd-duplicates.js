@@ -1,6 +1,6 @@
 'use strict'
 
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 const excluded = noAutoRetry(() => { throw new Error('excluded duplicate failure') })
 const callbacks = [process.env.EXCLUSIONS_COMBINED === '1' ? preventFailureSuppression(excluded) : excluded, () => {}]

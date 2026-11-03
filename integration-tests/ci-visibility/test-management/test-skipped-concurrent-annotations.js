@@ -1,6 +1,6 @@
 'use strict'
 
-const { noAutoRetry, preventFailureSuppression } = require('dd-trace/test-optimization')
+const { noAutoRetry, preventFailureSuppression } = require('dd-trace/ci/test-annotations')
 
 const skippedRows = test.concurrent.skip.each([1, 2])
 skippedRows('excluded skipped row %s', noAutoRetry(async () => { throw new Error('must remain skipped') }))

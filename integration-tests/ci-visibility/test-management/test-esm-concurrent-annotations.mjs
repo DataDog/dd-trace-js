@@ -1,5 +1,5 @@
 import { test } from '@jest/globals'
-import annotations from 'dd-trace/test-optimization'
+import annotations from 'dd-trace/ci/test-annotations'
 
 if (globalThis.test !== undefined) throw new Error('Jest globals must remain disabled')
 

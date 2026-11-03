@@ -1,6 +1,6 @@
 'use strict'
 
-const { noAutoRetry, preventFailureSuppression } = require('dd-trace/test-optimization')
+const { noAutoRetry, preventFailureSuppression } = require('dd-trace/ci/test-annotations')
 
 const fail = noAutoRetry(() => { throw new Error('native quarantined failure') })
 describe('native group', () => {

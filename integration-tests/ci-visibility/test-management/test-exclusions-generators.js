@@ -1,6 +1,6 @@
 'use strict'
 
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 for (const [name, helper] of Object.entries({
   preventFailureSuppression,

@@ -886,10 +886,10 @@ function handle () {
 
 ## Jest test automation exclusions
 
-With the `jest-circus` runner, annotate test callbacks using `dd-trace/test-optimization`:
+With the `jest-circus` runner, annotate test callbacks using `dd-trace/ci/test-annotations`:
 
 ```javascript
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 test('critical check', preventFailureSuppression(noAutoRetry(() => {
   expect(check()).toBe(true)

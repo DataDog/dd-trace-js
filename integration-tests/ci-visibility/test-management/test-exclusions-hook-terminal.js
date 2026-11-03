@@ -1,6 +1,6 @@
 'use strict'
 
-const { noAutoRetry } = require('dd-trace/test-optimization')
+const { noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 // eslint-disable-next-line sonarjs/stable-tests -- verifies terminal failure with configured native retries
 jest.retryTimes(2)

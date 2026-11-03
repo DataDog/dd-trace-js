@@ -1,6 +1,6 @@
 'use strict'
 
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 function fail () { throw new Error('annotation failure') }
 

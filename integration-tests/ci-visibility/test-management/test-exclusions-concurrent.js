@@ -1,7 +1,7 @@
 'use strict'
 
 const { test } = require('@jest/globals')
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 const fail = preventFailureSuppression(noAutoRetry(async () => { throw new Error('concurrent failure') }))
 test.concurrent('protected concurrent', fail)

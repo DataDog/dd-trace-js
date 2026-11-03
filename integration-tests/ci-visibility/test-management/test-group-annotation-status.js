@@ -1,6 +1,6 @@
 'use strict'
 
-const { noAutoRetry, preventFailureSuppression } = require('dd-trace/test-optimization')
+const { noAutoRetry, preventFailureSuppression } = require('dd-trace/ci/test-annotations')
 const mode = process.env.EXCLUSIONS_DESCRIBE_MODE || 'exhaust'
 // eslint-disable-next-line sonarjs/stable-tests -- verify zero group retries override explicit global test retries
 if (mode === 'zero-with-global') jest.retryTimes(1)
