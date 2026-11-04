@@ -283,6 +283,7 @@
 /packages/datadog-plugin-google-cloud-vertexai/ @DataDog/ml-observability
 /packages/datadog-plugin-langchain/ @DataDog/ml-observability
 /packages/datadog-plugin-openai/ @DataDog/ml-observability
+/packages/dd-trace/src/exporters/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/src/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/test/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/test/plugins/util/llm.spec.js @DataDog/ml-observability
@@ -318,6 +319,7 @@
 /integration-tests/remote_config.spec.js @DataDog/apm-sdk-capabilities
 /integration-tests/telemetry-forwarder.sh @DataDog/apm-sdk-capabilities
 /integration-tests/telemetry.spec.js @DataDog/apm-sdk-capabilities
+/integration-tests/telemetry/ @DataDog/apm-sdk-capabilities
 
 /packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-capabilities
@@ -503,6 +505,7 @@
 /packages/dd-trace/src/bootstrap.js @DataDog/lang-platform-js
 /packages/dd-trace/src/constants.js @DataDog/lang-platform-js
 /packages/dd-trace/src/dogstatsd.js @DataDog/lang-platform-js
+/packages/dd-trace/src/esm-module-load.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporter.js @DataDog/lang-platform-js
 /packages/dd-trace/src/feature-registry.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
@@ -530,6 +533,7 @@
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/evp_proxy/ @DataDog/lang-platform-js
+/packages/dd-trace/test/esm-module-load.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/esm-named-exports.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporter.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporters/ @DataDog/lang-platform-js
@@ -575,8 +579,10 @@
 # Multiple teams
 /devdocs/ @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
 /docs/ @DataDog/apm-idm-js @DataDog/lang-platform-js
-/docs/API.md @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
-/docs/test.ts @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
+/docs/API.md @DataDog/apm-idm-js
+/docs/test.ts @DataDog/apm-idm-js
+/index.d.ts @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
+/index.d.v*.ts @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
 /.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
 /eslint-rules/* @DataDog/apm-sdk-capabilities @DataDog/lang-platform-js
 /ext/exporters.* @DataDog/apm-idm-js @DataDog/ci-app-libraries @DataDog/lang-platform-js

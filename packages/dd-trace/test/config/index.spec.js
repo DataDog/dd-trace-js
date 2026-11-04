@@ -1767,7 +1767,7 @@ describe('Config', () => {
         DD_LLMOBS_ML_APP: 'myMlApp',
       },
       middlewareTracingEnabled: false,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
       remoteConfig: {
         DD_REMOTE_CONFIGURATION_ENABLED: false,
@@ -2357,7 +2357,7 @@ describe('Config', () => {
       },
       plugins: false,
       port: 6218,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       rateLimit: 1000,
       remoteConfig: {
         pollInterval: 42,
@@ -2458,7 +2458,7 @@ describe('Config', () => {
       peerServiceMapping: { d: 'dd' },
       plugins: false,
       port: 6218,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
       },
@@ -2611,7 +2611,7 @@ describe('Config', () => {
       { name: 'DD_TRACE_PEER_SERVICE_MAPPING', value: 'd:dd', origin: 'code' },
       { name: 'plugins', value: false, origin: 'code' },
       { name: 'DD_TRACE_AGENT_PORT', value: 6218, origin: 'code' },
-      { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.5', origin: 'code' },
+      { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.4', origin: 'code' },
       { name: 'DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS', value: 42, origin: 'code' },
       { name: 'DD_TRACE_REPORT_HOSTNAME', value: true, origin: 'code' },
       { name: 'DD_RUNTIME_METRICS_ENABLED', value: true, origin: 'code' },
@@ -2720,6 +2720,41 @@ describe('Config', () => {
       "Invalid value: 'foo' for DD_TRACE_SPAN_ATTRIBUTE_SCHEMA (source: env_var), picked default",
     )
     assert.strictEqual(config.spanAttributeSchema, 'v0')
+  })
+
+  it('should reject an empty API key', () => {
+    process.env.DD_API_KEY = ''
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_API_KEY, undefined)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: '<redacted>' for DD_API_KEY (source: env_var), picked default",
+    )
+  })
+
+  it('should reject an empty app key', () => {
+    process.env.DD_APP_KEY = ''
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_APP_KEY, undefined)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: '<redacted>' for DD_APP_KEY (source: env_var), picked default",
+    )
+  })
+
+  it('should redact an invalid API key', () => {
+    process.env.DD_API_KEY = 'api-key\n'
+
+    const config = getConfig()
+    const message = log.warn.firstCall.args[0]
+
+    assert.doesNotMatch(message, /api-key/)
+    assert.strictEqual(message, "Invalid value: '<redacted>' for DD_API_KEY (source: env_var), picked default")
+    assert.strictEqual(config.DD_API_KEY, undefined)
   })
 
   it('should accept valid port boundaries', () => {
@@ -3027,7 +3062,7 @@ describe('Config', () => {
         d: 'dd',
       },
       port: 7777,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
       },
@@ -3132,7 +3167,7 @@ describe('Config', () => {
       },
       middlewareTracingEnabled: true,
       peerServiceMapping: { d: 'dd' },
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
       },
@@ -5138,6 +5173,107 @@ rules:
     })
   })
 
+  context('DD_TRACE_OTEL_CTX_ENABLED', () => {
+    let originalOtelCtxEnabled
+    let originalAppsecEnabled
+
+    beforeEach(() => {
+      originalOtelCtxEnabled = process.env.DD_TRACE_OTEL_CTX_ENABLED
+      originalAppsecEnabled = process.env.DD_APPSEC_ENABLED
+      delete process.env.DD_TRACE_OTEL_CTX_ENABLED
+      delete process.env.DD_APPSEC_ENABLED
+    })
+
+    afterEach(() => {
+      if (originalOtelCtxEnabled !== undefined) {
+        process.env.DD_TRACE_OTEL_CTX_ENABLED = originalOtelCtxEnabled
+      } else {
+        delete process.env.DD_TRACE_OTEL_CTX_ENABLED
+      }
+      if (originalAppsecEnabled !== undefined) {
+        process.env.DD_APPSEC_ENABLED = originalAppsecEnabled
+      } else {
+        delete process.env.DD_APPSEC_ENABLED
+      }
+    })
+
+    it('should be false by default', () => {
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'default')
+    })
+
+    it('should be enabled when appsec is enabled via env var', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'calculated')
+    })
+
+    it('should be enabled when appsec is enabled via options', () => {
+      const config = getConfig({ appsec: { enabled: true } })
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'calculated')
+    })
+
+    it('should remain false when appsec is disabled', () => {
+      process.env.DD_APPSEC_ENABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+    })
+
+    it('should be enabled when DD_TRACE_OTEL_CTX_ENABLED is true without appsec', () => {
+      process.env.DD_TRACE_OTEL_CTX_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'env_var')
+    })
+
+    it('should prioritize DD_TRACE_OTEL_CTX_ENABLED=false over appsec setting', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      process.env.DD_TRACE_OTEL_CTX_ENABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'env_var')
+    })
+
+    it('should prioritize DD_TRACE_OTEL_CTX_ENABLED=false over appsec option', () => {
+      process.env.DD_TRACE_OTEL_CTX_ENABLED = 'false'
+      const config = getConfig({ appsec: { enabled: true } })
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+    })
+
+    it('should remain false when appsec is enabled in a serverless function', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+    })
+
+    it('should be enabled in a serverless function when DD_TRACE_OTEL_CTX_ENABLED is true', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+      process.env.DD_TRACE_OTEL_CTX_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'env_var')
+    })
+
+    it('should remain false when appsec is enabled on Vercel', () => {
+      process.env.VERCEL = '1'
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, false)
+    })
+
+    it('should be enabled on Vercel when DD_TRACE_OTEL_CTX_ENABLED is true', () => {
+      process.env.VERCEL = '1'
+      process.env.DD_TRACE_OTEL_CTX_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.DD_TRACE_OTEL_CTX_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_CTX_ENABLED'), 'env_var')
+    })
+  })
+
   context('NX auto-detection', () => {
     it('should use NX_TASK_TARGET_PROJECT when DD_ENABLE_NX_SERVICE_NAME is true or 1', () => {
       process.env.NX_TASK_TARGET_PROJECT = 'my-nx-project'
@@ -5722,6 +5858,76 @@ rules:
     it('should not enable agentless exporter by default', () => {
       const config = getConfig()
       assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+    })
+
+    it('should preserve the exporter configuration without enabling global agentless mode', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'api-key'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_AGENTLESS_ENABLED, false)
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, '')
+      assert.strictEqual(config.protocolVersion, '0.4')
+    })
+
+    it('should preserve the default exporter configuration when LLMObs is enabled', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, '')
+    })
+
+    for (const name of ['DD_AGENTLESS_ENABLED', '_DD_APM_TRACING_AGENTLESS_ENABLED']) {
+      it(`should retain the agentless exporter selected by ${name} with LLMObs enabled`, () => {
+        process.env[name] = 'true'
+        process.env.DD_LLMOBS_ENABLED = 'true'
+        process.env.DD_API_KEY = 'api-key'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+      })
+    }
+
+    for (const exporter of ['agent', 'agentless', 'electron', 'log']) {
+      it(`should preserve an explicitly configured ${exporter} exporter when LLMObs is enabled`, () => {
+        process.env.DD_LLMOBS_ENABLED = 'true'
+
+        const config = getConfig({ experimental: { exporter } })
+
+        assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, exporter)
+      })
+    }
+
+    it('should preserve the OTLP trace exporter when LLMObs is enabled', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'llmobs')
+    })
+
+    it('should not enable agentless APM when LLMObs is explicitly disabled', () => {
+      process.env.DD_LLMOBS_ENABLED = 'false'
+      process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
+
+      const config = getConfig()
+
+      assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+    })
+
+    it('should use protocol v0.4 for LLMObs meta_struct delivery', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.protocolVersion, '0.4')
     })
 
     it('should configure all supported features for agentless mode', () => {

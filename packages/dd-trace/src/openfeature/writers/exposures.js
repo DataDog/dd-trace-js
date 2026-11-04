@@ -12,6 +12,7 @@ const {
 } = require('../../evp_proxy/constants')
 const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const log = require('../../log')
+const { snapshotFeatures } = require('./split-features')
 const BaseFFEWriter = require('./base')
 
 // Disabled-state cap. Drops invalidate experiment results because the provider's
@@ -42,6 +43,7 @@ const DELIVERY_MAX_BATCHES = 1000
  * @property {string} flag.key - Flag key
  * @property {object} variant - Variant information
  * @property {string} variant.key - Variant key
+ * @property {Record<string, string | number | boolean>} [features]
  * @property {number} [serial_id] - Serial id of the split the subject landed in
  * @property {object} subject - Subject (user/entity) information
  * @property {string} subject.id - Subject identifier
@@ -90,6 +92,8 @@ class ExposuresWriter extends BaseFFEWriter {
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   #shutdownTimer
 
+  #shutdownDropLogged = false
+
   /**
    * @param {import('../../config/config-base')} config - Tracer configuration object
    * @param {ExposureRoute} [route] - Caller-supplied route
@@ -107,6 +111,10 @@ class ExposuresWriter extends BaseFFEWriter {
       payloadSizeLimit: EVP_PAYLOAD_SIZE_LIMIT,
       eventSizeLimit: EVP_EVENT_SIZE_LIMIT,
       headers,
+      // Request errors can echo credentials in the URL or response body.
+      formatError: (error, statusCode) => statusCode === undefined
+        ? /** @type {{ code?: string }} */ (error).code ?? 'UNKNOWN'
+        : 'none',
     })
 
     if (route.agent || route.fallback) {
@@ -149,6 +157,8 @@ class ExposuresWriter extends BaseFFEWriter {
     this.#enabled = enabled
 
     if (enabled && this.#pendingEvents.length > 0) {
+      log.debug('%s exposure delivery enabled; queueing %d pending exposure event(s)',
+        this.constructor.name, this.#pendingEvents.length)
       // Flush all pending events as a batch
       super.append(this.#pendingEvents)
       this.#pendingEvents = []
@@ -216,6 +226,19 @@ class ExposuresWriter extends BaseFFEWriter {
 
   get droppedEventCount () {
     return this._droppedEvents
+  }
+
+  /**
+   * Reports exposures that shutdown cannot flush because delivery never became enabled.
+   */
+  destroy () {
+    const undelivered = this.#enabled ? 0 : this.#pendingEvents.length + this._buffer.length
+    super.destroy()
+    if (undelivered > 0 && !this.#shutdownDropLogged) {
+      this.#shutdownDropLogged = true
+      log.warn('%s dropped %d exposure event(s) at shutdown because exposure delivery was not enabled',
+        this.constructor.name, undelivered)
+    }
   }
 
   /**
@@ -360,6 +383,9 @@ class ExposuresWriter extends BaseFFEWriter {
           attributes: event.subject?.attributes,
         },
       }
+
+      const features = snapshotFeatures(event.features)
+      if (features !== undefined) formatted.features = features
 
       if (typeof event.serial_id === 'number') {
         formatted.serial_id = event.serial_id

@@ -24,6 +24,10 @@
  *   missing: { path: ArgumentPath, valueNode: { name: { value: string } } }[],
  *   values: Record<string, unknown>
  * }} CompiledArguments
+ * @typedef {(
+ *   value: Record<string, unknown>,
+ *   hoist: (value: unknown) => string
+ * ) => string} StringifyArguments
  * @typedef {{
  *   baseTypeName: string,
  *   resource: string,
@@ -36,6 +40,7 @@
  *   collapsedPathSegments: string[],
  *   staticArguments?: Record<string, unknown>,
  *   hasArgumentVariables?: boolean,
+ *   literals?: Record<string, unknown>,
  *   fieldName: string,
  *   fieldNode: import('graphql').FieldNode,
  *   fieldNodes: [import('graphql').FieldNode, ...import('graphql').FieldNode[]],
@@ -70,7 +75,8 @@
  * ) => FieldMetadata} CreateFieldMetadata
  * @typedef {(
  *   variableValues: Record<string, unknown> | undefined,
- *   cloneValue?: (value: unknown) => unknown
+ *   cloneValue?: (value: unknown) => unknown,
+ *   literalContext?: JitFieldDescriptor
  * ) => Record<string, unknown>} ArgumentFactory
  * @typedef {(
  *   rootCtx: object,
@@ -132,7 +138,7 @@
  *     fieldNodes: [import('graphql').FieldNode, ...import('graphql').FieldNode[]],
  *     originPaths: string[],
  *     args: CompiledArguments,
- *     argumentSource: string,
+ *     stringifyArguments: StringifyArguments,
  *     compiledField: string
  *   ) => string,
  *   finalizeCompilation: (
@@ -251,7 +257,7 @@ function createGraphqlJitRuntime ({
    * @param {[import('graphql').FieldNode, ...import('graphql').FieldNode[]]} fieldNodes
    * @param {string[]} originPaths
    * @param {CompiledArguments} args
-   * @param {string} argumentSource
+   * @param {StringifyArguments} stringifyArguments
    * @param {string} compiledField
    */
   function compileDefaultField (
@@ -262,7 +268,7 @@ function createGraphqlJitRuntime ({
     fieldNodes,
     originPaths,
     args,
-    argumentSource,
+    stringifyArguments,
     compiledField
   ) {
     const parentPath = originPaths.join('.')
@@ -284,7 +290,7 @@ function createGraphqlJitRuntime ({
     }, fieldNodes[0], createFieldMetadata)
     descriptor.staticArguments = args.values
     descriptor.hasArgumentVariables = args.missing.length !== 0
-    const argumentFactory = compileArgumentFactory(context, descriptor, args.missing, argumentSource)
+    const argumentFactory = compileArgumentFactory(context, descriptor, args.missing, stringifyArguments)
 
     const shouldTrace = '__context.ddTrace !== undefined && ' +
       '(__context.ddTrace.jitTraceAll || ' +
@@ -354,6 +360,7 @@ function createDescriptor (context, compilerPath, input, fieldNode, createFieldM
     fieldNode,
     fieldNodes: input.fieldNodes,
     hasArgumentVariables: undefined,
+    literals: undefined,
     parentId: undefined,
     parentPathKey: compilerPath.parentPathKey,
     parentTypeName,
@@ -374,13 +381,20 @@ function createDescriptor (context, compilerPath, input, fieldNode, createFieldM
  * @param {ConfiguredJitCompilationContext} context
  * @param {JitFieldDescriptor} descriptor
  * @param {CompiledArguments['missing']} missing
- * @param {string} argumentSource
+ * @param {StringifyArguments} stringifyArguments
  */
-function compileArgumentFactory (context, descriptor, missing, argumentSource) {
+function compileArgumentFactory (context, descriptor, missing, stringifyArguments) {
+  let literalIndex = 0
+  const argumentSource = stringifyArguments(descriptor.staticArguments, hoist)
   if (missing.length === 0 && argumentSource === '{}') return 'undefined'
 
   const name = `ddTraceArguments${descriptor.id}`
-  let source = `function ${name} (variableValues, cloneValue) {\n  const args = ${argumentSource}\n`
+  const hasLiterals = descriptor.literals !== undefined
+  const parameters = hasLiterals ? 'variableValues, cloneValue, __context' : 'variableValues, cloneValue'
+  let source = `function ${name} (${parameters}) {\n  const args = `
+  source += hasLiterals
+    ? `cloneValue === undefined ? ${argumentSource} : cloneValue(${argumentSource})\n`
+    : `${argumentSource}\n`
   const pathsByVariable = new Map()
 
   for (const { path, valueNode } of missing) {
@@ -411,6 +425,14 @@ function compileArgumentFactory (context, descriptor, missing, argumentSource) {
   source += '  return args\n}\n'
   context.hoistedFunctions.push(source)
   return name
+
+  /** @param {unknown} value */
+  function hoist (value) {
+    const name = `literal${literalIndex++}`
+    descriptor.literals ??= {}
+    descriptor.literals[name] = value
+    return name
+  }
 }
 
 /**
