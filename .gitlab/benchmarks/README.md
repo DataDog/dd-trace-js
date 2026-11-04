@@ -24,6 +24,25 @@ GitLab CI configuration for the benchmarks that run on the
   [apm-sdks-benchmarks](https://github.com/DataDog/apm-sdks-benchmarks/tree/main/.gitlab).
     - Change them there.
 
+## Merge queue
+
+Merge queue runs (`mq-working-branch-master-*`) apply the same regression check as the queued PR,
+on top of the latest `master`.
+
+- `.benchmarks` sets `BASELINE_BRANCH: master`, which bp-runner uses as the `run_microbenchmarks`
+  baseline branch. Without it, bp-runner finds the baseline by looking up the branch's PR, and
+  merge queue branches have none, so the run has no baseline. The baseline is now the merge-base
+  with `master`.
+- `check-big-regressions` honors the queued PR's `performance/ignore-performance-regression`
+  label. `github-should-ignore-regression` falls back to the PR in `DDCI_PULL_REQUEST_NUMBER` (the
+  queued PR) when the branch has no PR. This needs `MICROBENCHMARKS_CI_IMAGE` built from
+  benchmarking-platform-tools with #399 (one-request PR lookup) and #401 (the fallback).
+- `benchmarks-pr-comment` doesn't run, since there is no PR to comment on and its PR lookup would
+  repeat the same search.
+
+When several PRs are queued together, the baseline is still `master`, so the run also measures
+the PRs ahead of it, and only the last PR's label applies.
+
 ## Marking a benchmark as flaky
 
 Add it to `FLAKY_BENCHMARKS_REGEX` in `.benchmarks` (the shared template in `gitlab-ci.yml`).
