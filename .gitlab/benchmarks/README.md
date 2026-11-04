@@ -34,10 +34,9 @@ on top of the latest `master`.
   every PR in the repository, which takes minutes, can exhaust the shared GitHub App rate limit,
   and leaves the run without a baseline. The baseline is now the merge-base with `master`.
 - `check-big-regressions` honors the queued PR's `performance/ignore-performance-regression`
-  label once `MICROBENCHMARKS_CI_IMAGE` is built with benchmarking-platform-tools #401, where
-  `github-should-ignore-regression` falls back to the PR in `DDCI_PULL_REQUEST_NUMBER` (the queued
-  PR) when the branch has no PR. The label check still looks up the branch's PR first, which costs
-  one request with benchmarking-platform-tools #399 and a full PR search without it.
+  label. `github-should-ignore-regression` falls back to the PR in `DDCI_PULL_REQUEST_NUMBER` (the
+  queued PR) when the branch has no PR. This needs `MICROBENCHMARKS_CI_IMAGE` built from
+  benchmarking-platform-tools with #399 (one-request PR lookup) and #401 (the fallback).
 - `benchmarks-pr-comment` doesn't run, since there is no PR to comment on and its PR lookup would
   repeat the same search.
 
