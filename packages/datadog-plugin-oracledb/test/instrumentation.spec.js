@@ -56,7 +56,8 @@ describe('oracledb instrumentation', () => {
 
     class Pool {
       constructor (poolAttrs) {
-        if (options.homogeneous !== undefined) this.homogeneous = options.homogeneous
+        this.homogeneous = options.homogeneous ?? poolAttrs.homogeneous ?? true
+        this.connectString = poolAttrs.connectString ?? poolAttrs.connectionString
         this.user = options.poolUser
         this.poolAttrs = poolAttrs
         if (options.legacy) {
@@ -210,26 +211,6 @@ describe('oracledb instrumentation', () => {
     )
 
     assert.strictEqual(user, 'alias')
-  })
-
-  it('uses the pool options when public homogeneous metadata is unavailable', async () => {
-    const user = await getStartUser(
-      { poolUser: 'base' },
-      { homogeneous: false, user: 'base' },
-      pool => pool.getConnection({ user: 'proxy' })
-    )
-
-    assert.strictEqual(user, 'proxy')
-  })
-
-  it('defaults to a homogeneous pool when metadata is unavailable', async () => {
-    const user = await getStartUser(
-      { poolUser: 'base' },
-      { user: 'base' },
-      pool => pool.getConnection({ user: 'proxy' })
-    )
-
-    assert.strictEqual(user, 'base')
   })
 
   it('preserves Promise and callback errors from acquisition option getters', async () => {
