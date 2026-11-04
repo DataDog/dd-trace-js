@@ -1,16 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { execFile } = require('node:child_process')
+const { spawnSync } = require('node:child_process')
 const { randomUUID } = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { promisify } = require('node:util')
 
 const { sandboxCwd, useSandbox } = require('./helpers')
-
-const execFileAsync = promisify(execFile)
 
 describe('sandbox fixture copies', () => {
   const directory = path.join(os.tmpdir(), `dd-trace-sandbox-${randomUUID()}`)
@@ -75,7 +72,7 @@ describe('sandbox fixture copies', () => {
   }
 
   describe('failed source', () => {
-    it('rejects without copying later sources', async () => {
+    it('rejects without copying later sources', () => {
       const temporary = path.join(directory, 'failed')
       fs.mkdirSync(temporary)
       const spec = path.join(directory, 'failed.spec.cjs')
@@ -87,12 +84,15 @@ describe('failed source', () => {
   it('does not run', () => {})
 })
 `)
-      await assert.rejects(execFileAsync(process.execPath, [
+      const result = spawnSync(process.execPath, [
         require.resolve('mocha/bin/mocha.js'), '--no-config', '--no-package', '--reporter', 'json', spec,
       ], {
         cwd: path.join(__dirname, '..'),
+        encoding: 'utf8',
         env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
-      }), { code: 1, stdout: /missing-fixtures/ })
+      })
+      assert.strictEqual(result.status, 1)
+      assert.match(result.stdout, /missing-fixtures/)
 
       const roots = fs.readdirSync(temporary, { withFileTypes: true }).filter(entry => entry.isDirectory())
       assert.strictEqual(roots.length, 1)
