@@ -1,7 +1,16 @@
+import assert from 'node:assert/strict'
 import { appendFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 
 import { describe, test } from 'vitest'
 import { preventFailureSuppression, noAutoRetry } from 'dd-trace/ci/test-annotations.js'
+
+if (process.env.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE === '1') {
+  const require = createRequire(import.meta.url)
+  assert.equal(globalThis._ddtrace, undefined)
+  assert.ok(!Object.keys(require.cache).some(id => /[/\\]import-in-the-middle[/\\]/.test(id)))
+  assert.ok(!process.env.NODE_OPTIONS?.includes('vitest-annotations-register'))
+}
 
 function fail () { throw new Error('excluded failure') }
 
@@ -14,7 +23,22 @@ function tracked (name, callback = fail) {
   }
 }
 
-if (process.env.EXCLUSIONS_MODE === 'policy') {
+if (process.env.EXCLUSIONS_MODE === 'declaration-variants') {
+  const protect = callback => preventFailureSuppression(noAutoRetry(callback))
+  const generated = test.skipIf(false).concurrent.each([1, 2])
+  generated('generated %s', protect(tracked('generated')))
+  const forCases = test.runIf(true).for([1, 2])
+  forCases('for %s', protect(tracked('for')))
+  const fixtureTest = test.extend({ value: 'fixture value' })
+  fixtureTest('fixture', protect(function ({ value }) {
+    assert.equal(value, 'fixture value')
+    const failFixture = tracked('fixture')
+    failFixture()
+  }))
+  describe('nested', () => {
+    test('direct', protect(tracked('direct')))
+  })
+} else if (process.env.EXCLUSIONS_MODE === 'policy') {
   test('protected disabled', preventFailureSuppression(tracked('protected disabled')))
   test('protected quarantine', preventFailureSuppression(tracked('protected quarantine')))
   const protectedCases = test.each([1, 2])

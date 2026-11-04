@@ -1,9 +1,13 @@
-try {
-  // Vitest does not expose setFn from its public setup API; keep this optional for strict installers.
-  const vitestRunner = await import('@vitest/runner')
-  globalThis[Symbol.for('dd-trace.vitest.set-fn')] = vitestRunner.setFn
+import * as vitest from 'vitest'
+
+const vitestRunner = vitest.TestRunner || await import('vitest/suite')
+globalThis[Symbol.for('dd-trace.vitest.set-fn')] = vitestRunner.setTestFn || vitestRunner.setFn
+if (globalThis.process?.env?.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE === '1') {
+  const { captureDeclarations } = await import('./vitest-no-worker-init-annotations.mjs')
+  captureDeclarations(vitest.test, vitestRunner.getCurrentSuite)
+} else {
   trackNativeRetryOptions(vitestRunner.getCurrentSuite())
-} catch {}
+}
 globalThis[Symbol.for('dd-trace.vitest.browser-context-importer')] = () => import('@vitest/browser/context')
 
 await import('./vitest-no-worker-init-setup.mjs')

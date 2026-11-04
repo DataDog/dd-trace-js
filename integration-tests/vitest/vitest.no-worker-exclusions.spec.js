@@ -72,6 +72,29 @@ for (const version of versions) {
     }
     const named = (tests, name) => tests.filter(test => test.meta['test.name'] === name)
 
+    for (const pool of ['forks', 'threads']) {
+      // test.for is available on the supported no-worker path, starting with Vitest 3.2.6.
+      const declarationVariantsIt = version === '1.6.0' ? it.skip : it
+      declarationVariantsIt(`captures fixtures and generated declarations without a loader in ${pool}`, async () => {
+        receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
+        const names = ['generated 1', 'generated 2', 'for 1', 'for 2', 'fixture', 'nested direct']
+        properties(Object.fromEntries(names.map(name => [name, {
+          properties: { disabled: true, quarantined: true, attempt_to_fix: true },
+        }])))
+        await run('declaration-variants', 1, tests => {
+          assert.strictEqual(tests.length, names.length)
+          assert.deepStrictEqual(tests.map(test => test.meta['test.name']).sort(), names.sort())
+          for (const test of tests) {
+            assert.strictEqual(test.meta[protection], 'true')
+            assert.strictEqual(test.meta[exclusion], 'true')
+            assert.strictEqual(test.meta['test.status'], 'fail')
+            assert.strictEqual(test.meta['test.final_status'], 'fail')
+            assert.strictEqual(test.meta['test.is_retry'], undefined)
+          }
+        }, { POOL_CONFIG: pool }, { generated: 2, for: 2, fixture: 1, direct: 1 })
+      })
+    }
+
     it('keeps a protection-only failure blocking without implying retry exclusion', async () => {
       receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: false })
       properties({ sole: { properties: { disabled: true, quarantined: true } } })

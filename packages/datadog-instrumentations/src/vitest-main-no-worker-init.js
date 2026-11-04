@@ -2,7 +2,6 @@
 
 const { readFileSync } = require('node:fs')
 const path = require('node:path')
-const Module = require('node:module')
 
 const satisfies = require('../../../vendor/dist/semifies')
 
@@ -75,7 +74,6 @@ const VITEST_NO_WORKER_INIT_V5_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-v5-setup.mjs'
 )
-const VITEST_ANNOTATIONS_PRELOAD = require.resolve('../../../ci/vitest-annotations-register')
 const DECLARATION_ANNOTATIONS_MODULE = 'virtual:dd-vitest-test-declaration-annotations'
 const declarationAnnotationsSource = readFileSync(
   require.resolve('../../dd-trace/src/ci-visibility/test-declaration-annotations'), 'utf8'
@@ -302,10 +300,6 @@ function shouldUse (ctx, frameworkVersion, testSpecifications, options) {
     return false
   }
 
-  // The annotation preload requires this API; older runtimes keep normal worker initialization.
-  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-  if (typeof Module.register !== 'function') return false
-
   const config = ctx?.config
   if (!config) return false
 
@@ -455,9 +449,6 @@ function deactivate (ctx) {
 }
 
 function configureWorkerEnv (workerEnv, shouldSkipWorkerInit = false) {
-  const originalNodeOptions = removeAnnotationsPreload(workerEnv.NODE_OPTIONS)
-  if (originalNodeOptions === undefined) delete workerEnv.NODE_OPTIONS
-  else workerEnv.NODE_OPTIONS = originalNodeOptions
   if (!shouldSkipWorkerInit) {
     delete workerEnv[VITEST_NO_WORKER_INIT_ACTIVE_ENV]
     restoreDatadogTestOptimizationNodeOptions(workerEnv)
@@ -465,14 +456,12 @@ function configureWorkerEnv (workerEnv, shouldSkipWorkerInit = false) {
   }
 
   workerEnv[VITEST_NO_WORKER_INIT_ACTIVE_ENV] = '1'
-  // Pool env objects omit inherited variables; adding our preload must retain the parent's options.
+  // Pool env objects omit inherited variables; retain the parent's non-Datadog options.
   const inheritedNodeOptions = workerEnv.NODE_OPTIONS ?? getEnvironmentVariable('NODE_OPTIONS')
   rememberDatadogTestOptimizationNodeOptions(inheritedNodeOptions)
 
   const nodeOptions = removeDatadogTestOptimizationNodeOptions(inheritedNodeOptions)
-  workerEnv.NODE_OPTIONS = serializeNodeOptions([
-    ...splitNodeOptions(nodeOptions || ''), '--require', VITEST_ANNOTATIONS_PRELOAD,
-  ])
+  if (nodeOptions !== undefined) workerEnv.NODE_OPTIONS = nodeOptions
   return workerEnv
 }
 
@@ -1636,23 +1625,6 @@ function recomputeTaskState (task) {
   task.result ||= {}
   task.result.state = status
   return status
-}
-
-/** @param {string|undefined} nodeOptions */
-function removeAnnotationsPreload (nodeOptions) {
-  if (!nodeOptions) return nodeOptions
-  const tokens = splitNodeOptions(nodeOptions)
-  const filtered = []
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index]
-    if ((token === '--require' || token === '-r') && tokens[index + 1] === VITEST_ANNOTATIONS_PRELOAD) {
-      index++
-      continue
-    }
-    if (token === `--require=${VITEST_ANNOTATIONS_PRELOAD}` || token === `-r${VITEST_ANNOTATIONS_PRELOAD}`) continue
-    filtered.push(token)
-  }
-  return filtered.length === tokens.length ? nodeOptions : serializeNodeOptions(filtered)
 }
 
 function removeDatadogTestOptimizationNodeOptions (nodeOptions) {
