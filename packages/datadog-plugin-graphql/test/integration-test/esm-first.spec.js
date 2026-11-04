@@ -59,6 +59,7 @@ describeEsmFirst('GraphQL ESM-first exports', () => {
 
               const execute = graphqlSpans.find(span => span.name === 'graphql.execute')
               const resolve = graphqlSpans.find(span => span.name === 'graphql.resolve')
+              assert.equal(execute.resource, 'query Hello{hello(name:"")}')
               assert.equal(execute.meta['graphql.source'], 'query Hello { greeting: hello(name: "world") }')
               assert.equal(resolve.resource, 'hello:String')
               assert.equal(execute.error, outcome === 'error' ? 1 : 0)
