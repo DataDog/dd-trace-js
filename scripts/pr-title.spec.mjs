@@ -23,6 +23,14 @@ const syncLabels = vm.runInNewContext(
 )
 const require = createRequire(import.meta.url)
 const { isInternalOnly } = require('./release/changelog')
+const process = {
+  env: {
+    PR_TITLE_PATTERN: job.env.PR_TITLE_PATTERN,
+    SEMVER_MAJOR_LABEL_ID: job.env.SEMVER_MAJOR_LABEL_ID,
+    SEMVER_MINOR_LABEL_ID: job.env.SEMVER_MINOR_LABEL_ID,
+    SEMVER_PATCH_LABEL_ID: job.env.SEMVER_PATCH_LABEL_ID,
+  },
+}
 const validate = async (title, files = []) => {
   const failures = []
   const commands = []
@@ -38,7 +46,6 @@ const validate = async (title, files = []) => {
     info: Function.prototype,
     setFailed: message => failures.push(message),
   }
-  const process = { env: { PR_TITLE_PATTERN: job.env.PR_TITLE_PATTERN } }
   const loadModule = (id) => {
     if (id === 'node:child_process') {
       return {
@@ -113,35 +120,79 @@ describe('PR title workflow', () => {
     assert.doesNotMatch(validation.with.script, /\bgithub\./)
   })
 
-  it('syncs each label in a scope list', async () => {
-    let request
+  it('syncs only the semver label in one GraphQL request', async () => {
+    const requests = []
     const context = {
       repo: { owner: 'DataDog', repo: 'dd-trace-js' },
       payload: {
         action: 'opened',
         pull_request: {
           number: 1,
+          node_id: 'pull-request-id',
           title: 'fix(http, tests): change',
-          labels: [],
+          labels: [
+            { name: 'fix', node_id: 'fix-id' },
+            { name: 'http', node_id: 'http-id' },
+            { name: 'semver-minor', node_id: job.env.SEMVER_MINOR_LABEL_ID },
+          ],
         },
       },
     }
     const github = {
-      paginate: {
-        iterator: () => [{ data: ['fix', 'http', 'tests'].map(name => ({ name })) }],
-      },
-      rest: {
-        issues: {
-          listLabelsForRepo: Function.prototype,
-          setLabels: value => { request = value },
-        },
-      },
+      graphql: (query, variables) => requests.push({ query, variables }),
     }
-    const process = { env: { PR_TITLE_PATTERN: job.env.PR_TITLE_PATTERN } }
 
     await syncLabels(context, github, process)
 
-    assert.deepStrictEqual([...request.labels], ['fix', 'http', 'tests', 'semver-patch'])
+    assert.strictEqual(requests.length, 1)
+    assert.match(requests[0].query, /addLabelsToLabelable/)
+    assert.match(requests[0].query, /removeLabelsFromLabelable/)
+    assert.deepStrictEqual({
+      ...requests[0].variables,
+      addLabelIds: [...requests[0].variables.addLabelIds],
+      removeLabelIds: [...requests[0].variables.removeLabelIds],
+    }, {
+      pullRequestId: 'pull-request-id',
+      addLabelIds: [job.env.SEMVER_PATCH_LABEL_ID],
+      removeLabelIds: [job.env.SEMVER_MAJOR_LABEL_ID, job.env.SEMVER_MINOR_LABEL_ID],
+    })
+    assert.doesNotMatch(labelSync.with.script, /github\.rest|github\.paginate/)
+  })
+
+  it('does not sync when the title keeps the same semver level', async () => {
+    const context = {
+      payload: {
+        action: 'edited',
+        changes: { title: { from: 'fix(http): before' } },
+        pull_request: {
+          node_id: 'pull-request-id',
+          title: 'fix(express): after',
+          labels: [],
+        },
+      },
+    }
+    const github = { graphql: assert.fail }
+
+    await syncLabels(context, github, process)
+  })
+
+  it('does not sync when the event already has the valid semver label', async () => {
+    const context = {
+      payload: {
+        action: 'opened',
+        pull_request: {
+          node_id: 'pull-request-id',
+          title: 'feat(http): change',
+          labels: [
+            { name: 'http' },
+            { name: 'semver-minor' },
+          ],
+        },
+      },
+    }
+    const github = { graphql: assert.fail }
+
+    await syncLabels(context, github, process)
   })
 
   it('inspects files for every event unless the title was auto-renamed', () => {

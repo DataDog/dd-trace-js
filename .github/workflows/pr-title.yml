@@ -21,6 +21,10 @@ jobs:
       # regex (no lookarounds, named groups, or other JS-only features).
       # Revert PRs always get semver-patch regardless of the original change's type.
       PR_TITLE_PATTERN: '^(revert(!)?: .+|(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+)'
+      # Repository label node IDs avoid a lookup request before the GraphQL mutation.
+      SEMVER_MAJOR_LABEL_ID: MDU6TGFiZWwzMTA4NDk3NTM2
+      SEMVER_MINOR_LABEL_ID: MDU6TGFiZWwzMTYxOTczNTE0
+      SEMVER_PATCH_LABEL_ID: MDU6TGFiZWwzMTE0Njc4MTgx
     steps:
       - name: Auto-rename GitHub revert title to Conventional Commit
         id: rename
@@ -110,7 +114,6 @@ jobs:
               const isRevert = !m[3]
               return {
                 type: isRevert ? 'revert' : m[3],
-                scope: isRevert ? undefined : m[5],
                 breaking: isRevert ? m[2] === '!' : m[6] === '!',
               }
             }
@@ -124,54 +127,35 @@ jobs:
             }
 
             const pr = context.payload.pull_request
-            const next = parse(pr.title)
+            const semver = semverFor(parse(pr.title))
+            if (!semver) return
 
-            // Prefetch all existing repo labels once to avoid per-label API calls.
-            const repoLabels = new Set()
-            for await (const page of github.paginate.iterator(github.rest.issues.listLabelsForRepo, { ...context.repo, per_page: 100 })) {
-              for (const label of page.data) repoLabels.add(label.name)
-            }
+            const previousTitle = context.payload.changes?.title?.from
+            if (previousTitle != null && semverFor(parse(previousTitle)) === semver) return
 
-            // Returns the set of labels derived from a parsed title.
-            // Type and scope are only added if they exist in the repo.
-            const titledLabels = (parsed) => {
-              const labels = new Set()
-              if (!parsed.type) return labels
-              if (repoLabels.has(parsed.type)) labels.add(parsed.type)
-              if (parsed.scope) {
-                for (const scope of parsed.scope.split(',')) {
-                  const name = scope.trim()
-                  if (name && repoLabels.has(name)) labels.add(name)
+            const semverLabels = new Map([
+              ['semver-major', process.env.SEMVER_MAJOR_LABEL_ID],
+              ['semver-minor', process.env.SEMVER_MINOR_LABEL_ID],
+              ['semver-patch', process.env.SEMVER_PATCH_LABEL_ID],
+            ])
+            const current = (pr.labels || []).filter(label => semverLabels.has(label.name))
+            if (current.length === 1 && current[0].name === semver) return
+
+            const removeLabelIds = [...semverLabels]
+              .filter(([name]) => name !== semver)
+              .map(([, id]) => id)
+
+            await github.graphql(`
+              mutation SyncSemverLabel($pullRequestId: ID!, $addLabelIds: [ID!]!, $removeLabelIds: [ID!]!) {
+                addLabelsToLabelable(input: { labelableId: $pullRequestId, labelIds: $addLabelIds }) {
+                  clientMutationId
+                }
+                removeLabelsFromLabelable(input: { labelableId: $pullRequestId, labelIds: $removeLabelIds }) {
+                  clientMutationId
                 }
               }
-              const semver = semverFor(parsed)
-              if (semver) labels.add(semver)
-              return labels
-            }
-
-            const nextLabels = titledLabels(next)
-            const current = new Set((pr.labels || []).map(l => l.name))
-
-            // When the title changes, remove labels from the old title that no
-            // longer apply so stale type/scope/semver labels don't linger.
-            const titleChanged = context.payload.action === 'edited' &&
-              context.payload.changes?.title?.from != null
-            const toRemove = new Set()
-            if (titleChanged) {
-              const prev = parse(context.payload.changes.title.from)
-              for (const label of titledLabels(prev)) {
-                if (!nextLabels.has(label)) toRemove.add(label)
-              }
-            }
-
-            const desired = new Set([...current].filter(l => !toRemove.has(l)))
-            for (const label of nextLabels) desired.add(label)
-
-            const unchanged = current.size === desired.size && [...current].every(l => desired.has(l))
-            if (!unchanged) {
-              await github.rest.issues.setLabels({
-                ...context.repo,
-                issue_number: pr.number,
-                labels: [...desired],
-              })
-            }
+            `, {
+              pullRequestId: pr.node_id,
+              addLabelIds: [semverLabels.get(semver)],
+              removeLabelIds,
+            })
