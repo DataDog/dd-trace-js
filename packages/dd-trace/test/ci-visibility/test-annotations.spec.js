@@ -98,6 +98,32 @@ describe('Test Optimization callback annotations', () => {
       assert.strictEqual(annotated({ value: 42 }), 42)
     })
 
+    it('allows decorators to replace and remove the default toString', () => {
+      function callback () {}
+      const annotated = helper(helper(callback))
+      const render = () => 'custom source'
+      annotated.toString = render
+      assert.strictEqual(annotated.toString, render)
+      assert.strictEqual(annotated.toString(), 'custom source')
+      Object.defineProperty(annotated, 'toString', { get: () => render })
+      assert.strictEqual(annotated.toString, render)
+      delete annotated.toString
+      assert.strictEqual(Object.hasOwn(annotated, 'toString'), false)
+      assert.strictEqual(annotated.toString, Function.prototype.toString)
+      assert.strictEqual(Object.hasOwn(callback, 'toString'), false)
+    })
+
+    it('keeps the default toString immutable for frozen callbacks', () => {
+      const callback = Object.freeze(function callback () {})
+      const annotated = helper(helper(callback))
+      const render = () => 'custom source'
+      assert.throws(() => { annotated.toString = render }, { name: 'TypeError' })
+      assert.throws(() => { delete annotated.toString }, { name: 'TypeError' })
+      assert.throws(() => Object.defineProperty(annotated, 'toString', { value: render }), { name: 'TypeError' })
+      assert.strictEqual(annotated.toString(), callback.toString())
+      assert.strictEqual(Object.isFrozen(annotated), true)
+    })
+
     it('preserves custom toString methods and their mutability', () => {
       for (const writable of [false, true]) {
         for (const configurable of [false, true]) {
