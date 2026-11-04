@@ -55,6 +55,7 @@ const missingInstrumentationHooks = [
   'langchain',
   'langgraph',
   'postgres',
+  'react-router',
   'supabase',
   'typesafe',
 ]
@@ -65,6 +66,7 @@ const hooklessOrchestrionPlugins = new Set([
   'langchain',
   'langgraph',
   'postgres',
+  'react-router',
   'supabase',
   'typesafe',
 ])
@@ -211,6 +213,7 @@ describe('Plugin Structure Validation', () => {
       'bullmq',
       'mercurius',
       'postgres',
+      'react-router',
     ]
 
     for (const name of names) {

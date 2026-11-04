@@ -40,6 +40,10 @@ const registry = [
   { instrumentations: require('./instrumentations/openai-agents') },
   { instrumentations: require('./instrumentations/playwright') },
   { activate: true, instrumentations: require('./instrumentations/postgres') },
+  {
+    activate: /** @type {ActivationConfig} */ ({ setup: () => require('../../react-router') }),
+    instrumentations: require('./instrumentations/react-router'),
+  },
   { instrumentations: require('./instrumentations/vitest') },
   { instrumentations: require('./instrumentations/webdriverio') },
   {
