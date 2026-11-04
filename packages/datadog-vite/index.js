@@ -18,6 +18,10 @@ const RESOLVED_INIT_ID = '\0dd-trace-vite:init'
 // unresolved, so the init module is also loaded by its unresolved id.
 const INIT_LOAD_ID_PATTERN = /^(?:\0dd-trace-vite:init|virtual:dd-trace-vite\/init)$/
 const FIRST_IMPORT = `import ${JSON.stringify(INIT_ID)};`
+const FIRST_REQUIRE = `require(${JSON.stringify(INIT_ID)});`
+const TRIVIA_PATTERN = /\s+|\/\/[^\n]*|\/\*[\s\S]*?\*\//y
+// A directive, such as `'use strict'`, ends with a semicolon, a line break, a comment or the end of the code.
+const DIRECTIVE_PATTERN = /(["'])(?:(?!\1)[^\\\n\r]|\\[\s\S])*\1(?=[ \t]*(?:[;\n\r]|\/[/*]|$))(?:[ \t]*;)?/y
 const NODE_MODULES = '/node_modules/'
 const TRACER_DIRECTORY = `${fs.realpathSync(path.join(__dirname, '..', '..')).replaceAll('\\', '/')}/`
 // Optional dependencies of the tracer, required lazily. They must stay out of the bundle: some are native addons and
@@ -50,6 +54,7 @@ const mergedFunctions = new WeakSet()
  * @typedef {{ meta?: { rolldownVersion?: string } } | undefined} HookContext
  * @typedef {{
  *   getModuleInfo: (id: string) => { isEntry?: boolean } | null,
+ *   meta?: { rolldownVersion?: string },
  *   warn: (message: string) => void,
  * }} TransformContext
  * @typedef {{ name: string, config: { build: BuildOptions, consumer: string } }} Environment
@@ -171,7 +176,9 @@ function transform (context, code, id) {
     if (result && result.code !== code) output = { code: result.code, map: result.map ?? null }
     if (id !== RESOLVED_INIT_ID && id !== INIT_ID && context.getModuleInfo(id)?.isEntry) {
       // `null` keeps the incoming source map: the import is inserted without adding lines.
-      output = { code: prependFirstImport(output?.code ?? code), map: output?.map ?? null }
+      // Rolldown parses `.cjs` files as CommonJS scripts, which cannot contain an import.
+      const commonJs = isRolldown(context) && id.endsWith('.cjs')
+      output = { code: prependFirstImport(output?.code ?? code, commonJs), map: output?.map ?? null }
     }
   } catch (error) {
     context.warn(`Skipped ${id}: ${error instanceof Error ? error.message : String(error)}`)
@@ -189,15 +196,44 @@ function isInstrumentable (id) {
 }
 
 /**
- * The import runs before every other module of the entry. A hashbang must stay on the first line.
+ * The import runs before every other module of the entry. A hashbang must stay on the first line. In a CommonJS
+ * script, a `require` call follows the directive prologue instead, so `'use strict'` keeps applying.
  *
  * @param {string} code
+ * @param {boolean} commonJs
  */
-function prependFirstImport (code) {
-  if (!code.startsWith('#!')) return FIRST_IMPORT + code
-  const lineEnd = code.indexOf('\n')
-  if (lineEnd === -1) return `${code}\n${FIRST_IMPORT}`
-  return code.slice(0, lineEnd + 1) + FIRST_IMPORT + code.slice(lineEnd + 1)
+function prependFirstImport (code, commonJs) {
+  const statement = commonJs ? FIRST_REQUIRE : FIRST_IMPORT
+  let index = 0
+  if (code.startsWith('#!')) {
+    const lineEnd = code.indexOf('\n')
+    if (lineEnd === -1) return `${code}\n${statement}`
+    index = lineEnd + 1
+  }
+  const directiveEnd = commonJs ? getDirectivePrologueEnd(code, index) : undefined
+  if (directiveEnd === undefined) return code.slice(0, index) + statement + code.slice(index)
+  const separator = code[directiveEnd - 1] === ';' ? '' : ';'
+  return code.slice(0, directiveEnd) + separator + statement + code.slice(directiveEnd)
+}
+
+/**
+ * @param {string} code
+ * @param {number} index
+ * @returns {number | undefined}
+ */
+function getDirectivePrologueEnd (code, index) {
+  let end
+  while (index < code.length) {
+    TRIVIA_PATTERN.lastIndex = index
+    if (TRIVIA_PATTERN.test(code)) {
+      index = TRIVIA_PATTERN.lastIndex
+      continue
+    }
+    DIRECTIVE_PATTERN.lastIndex = index
+    if (!DIRECTIVE_PATTERN.test(code)) break
+    index = end = DIRECTIVE_PATTERN.lastIndex
+  }
+  return end
 }
 
 /**
