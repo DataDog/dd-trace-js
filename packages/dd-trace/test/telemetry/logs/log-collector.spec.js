@@ -31,13 +31,13 @@ describe('telemetry log collector', () => {
     })
 
     it('should keep distinct metadata and deduplicate matching metadata', () => {
-      logCollector.add({ message: 'Request failed', level: 'ERROR', count: 1, tags: 'error_code:timeout' })
-      logCollector.add({ message: 'Request failed', level: 'ERROR', count: 1, tags: 'error_code:queue_full' })
-      logCollector.add({ message: 'Request failed', level: 'ERROR', count: 1, tags: 'error_code:timeout' })
+      logCollector.add({ message: 'Request failed', level: 'ERROR', count: 1, tags: 'log_type:upload' })
+      logCollector.add({ message: 'Request failed', level: 'ERROR', count: 1, tags: 'log_type:flush' })
+      logCollector.add({ message: 'Request failed', level: 'ERROR', count: 1, tags: 'log_type:upload' })
 
       assert.deepStrictEqual(logCollector.drain(), [
-        { message: 'Request failed', level: 'ERROR', count: 2, tags: 'error_code:timeout' },
-        { message: 'Request failed', level: 'ERROR', count: 1, tags: 'error_code:queue_full' },
+        { message: 'Request failed', level: 'ERROR', count: 2, tags: 'log_type:upload' },
+        { message: 'Request failed', level: 'ERROR', count: 1, tags: 'log_type:flush' },
       ])
     })
 

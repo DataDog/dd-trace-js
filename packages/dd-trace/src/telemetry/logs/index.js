@@ -10,7 +10,6 @@ const errorLog = dc.channel('datadog:log:error:record')
 /**
  * @typedef {object} TelemetryLogOptions
  * @property {string} [tags] Default tags appended to every outgoing log.
- * @property {ReadonlySet<string>} [errorCodes] Error codes permitted in the error_code tag.
  */
 
 let logOptions
@@ -60,14 +59,6 @@ function onErrorLog (msg) {
       telLog.stack_trace = cause.stack
     } catch {
       return
-    }
-    if (logOptions?.errorCodes) {
-      try {
-        const code = cause.code
-        if (logOptions.errorCodes.has(code)) telLog.tags = `error_code:${code}`
-      } catch {
-        // Error-like causes may expose unreadable properties.
-      }
     }
     telLog.errorType = getErrorType(cause)
   }

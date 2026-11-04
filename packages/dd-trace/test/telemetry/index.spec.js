@@ -167,7 +167,6 @@ describe('telemetry', () => {
       _pluginsByName: pluginsByName,
     }, {
       tags: 'component:example',
-      errorCodes: new Set(['ERR_EXAMPLE_TIMEOUT']),
     })
   })
 
@@ -279,7 +278,7 @@ describe('telemetry', () => {
     dc.channel('datadog:telemetry:log').publish(Object.freeze({
       message: 'Product diagnostic', level: 'WARN', tags: 'log_type:diagnostic',
     }))
-    const cause = Object.assign(new TypeError('customer-secret'), { code: 'ERR_EXAMPLE_TIMEOUT' })
+    const cause = new TypeError('customer-secret')
     cause.stack = `TypeError: customer-secret\n    at request (${ddBasePath}request.js:1:2)`
     dc.channel('datadog:log:error:record').publish({
       message: 'Shared request failed', cause, sendViaTelemetry: true,
@@ -300,7 +299,7 @@ describe('telemetry', () => {
         level: 'ERROR',
         count: 1,
         stack_trace: 'TypeError: redacted\n    at request (request.js:1:2)',
-        tags: 'error_code:ERR_EXAMPLE_TIMEOUT,component:example',
+        tags: 'component:example',
       },
     ])
   })

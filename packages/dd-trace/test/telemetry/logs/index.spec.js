@@ -104,7 +104,7 @@ describe('telemetry logs', () => {
           add: logCollectorAdd,
         },
       })
-      logs.start(defaultConfig, { errorCodes: new Set(['ERR_EXAMPLE_TIMEOUT']) })
+      logs.start(defaultConfig)
     })
 
     afterEach(() => logs.stop())
@@ -190,37 +190,6 @@ describe('telemetry logs', () => {
         errorLog.publish({ message: 'custom error message', sendViaTelemetry: false })
 
         sinon.assert.notCalled(logCollectorAdd)
-      })
-
-      it('should report configured error codes without exposing arbitrary codes', () => {
-        for (const code of [
-          'ERR_EXAMPLE_TIMEOUT',
-          'customer-secret',
-        ]) {
-          logCollectorAdd.resetHistory()
-          errorLog.publish({
-            message: 'Request failed',
-            cause: Object.assign(new Error('customer-secret'), { code }),
-            sendViaTelemetry: true,
-          })
-
-          sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
-            message: 'Request failed',
-            tags: code === 'customer-secret' ? undefined : `error_code:${code}`,
-          }))
-        }
-      })
-
-      it('should not retain an error-code allowlist after restarting without options', () => {
-        logs.stop()
-        logs.start(defaultConfig)
-        errorLog.publish({
-          message: 'Request failed',
-          cause: Object.assign(new Error('customer-secret'), { code: 'ERR_EXAMPLE_TIMEOUT' }),
-          sendViaTelemetry: true,
-        })
-
-        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({ message: 'Request failed', tags: undefined }))
       })
     })
   })
