@@ -8,9 +8,10 @@ archive=$(npm pack --silent)
 test -f "$archive"
 
 mkdir -p packaging/sources
+printf '{}\n' > packaging/sources/package.json
 
-npm install --prefix ./packaging/sources/ "$archive"
-rm packaging/sources/*.json
+./node_modules/.bin/bun add --cwd ./packaging/sources/ "$PWD/$archive"
+rm packaging/sources/*.json packaging/sources/bun.lock
 
 if [ -n "$CI_COMMIT_TAG" ] && [ -z "$JS_PACKAGE_VERSION" ]; then
   JS_PACKAGE_VERSION=${CI_COMMIT_TAG##v}
