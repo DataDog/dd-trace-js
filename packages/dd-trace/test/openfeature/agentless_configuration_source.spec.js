@@ -142,8 +142,9 @@ describe('AgentlessConfigurationSource', () => {
   }
 
   for (const capabilities of [[], ['unknown-v1'], ['dependent-flag-variant-key-v1']]) {
-    it(`gates initial and conditional capability headers for ${JSON.stringify(capabilities)}`, async () => {
+    it(`gates initial and conditional capability parameters for ${JSON.stringify(capabilities)}`, async () => {
       getEvaluatorCapabilities.returns(capabilities)
+      config.endpoint.searchParams.set('token', 'preserved')
       responses.push(
         { statusCode: 200, headers: { etag: '"v1"' }, body: responseBody() },
         { statusCode: 304 }
@@ -153,10 +154,10 @@ describe('AgentlessConfigurationSource', () => {
       await tick(30_000)
       assert.strictEqual(requests.length, 2)
       for (const request of requests) {
-        assert.strictEqual(
-          request.options.headers['X-DD-FEATURE-FLAGS-CAPABILITIES'],
-          capabilities.includes('dependent-flag-variant-key-v1') ? 'dependent-flag-variant-key-v1' : undefined
-        )
+        const expected = capabilities.includes('dependent-flag-variant-key-v1') ? 'v1' : null
+        assert.strictEqual(request.options.url.searchParams.get('dependent-flags-variant-key'), expected)
+        assert.strictEqual(request.options.url.searchParams.get('token'), 'preserved')
+        assert.strictEqual(request.options.headers['X-DD-FEATURE-FLAGS-CAPABILITIES'], undefined)
       }
       assert.strictEqual(requests[1].options.headers['If-None-Match'], '"v1"')
     })
