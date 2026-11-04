@@ -41,10 +41,10 @@ class FlagEvalEVPHook {
    * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
    */
   finally (hookContext, evaluationDetails) {
-    const dependencies = this.#dependencyTelemetrySidecar.takeDependencyEvaluations(
+    const dependencies = this.#dependencyTelemetrySidecar?.takeDependencyEvaluations(
       evaluationDetails.flagMetadata,
       hookContext
-    )
+    ) ?? []
     for (const dependency of dependencies) {
       this.#capture(dependency.flagKey, hookContext, {
         ...dependency.details,

@@ -42,8 +42,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
-  * @param {import('../config/config-base')} config - Tracer configuration object
-  */
+   * @param {import('../config/config-base')} config - Tracer configuration object
+   */
   constructor (tracer, config) {
     const evaluationCountsEnabled = config.featureFlags?.DD_FLAGGING_EVALUATION_COUNTS_ENABLED !== false
     const dependencyTelemetrySidecar = new DependencyTelemetrySidecar(evaluationCountsEnabled)
