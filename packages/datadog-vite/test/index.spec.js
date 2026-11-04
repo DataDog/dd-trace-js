@@ -15,8 +15,6 @@ const { datadogVite } = require('../../../vite')
 
 const ROLLDOWN = { meta: { rolldownVersion: '1.0.0', viteVersion: '8.0.0' } }
 const ROLLUP = { meta: { rollupVersion: '4.0.0', viteVersion: '7.0.0' } }
-const FIRST_IMPORT = 'import "virtual:dd-trace-vite/init";'
-const FIRST_REQUIRE = 'require("virtual:dd-trace-vite/init");'
 const OPTIONAL_DEPENDENCIES = Object.keys(require('../../../package.json').optionalDependencies)
 const directories = []
 
@@ -168,22 +166,22 @@ describe('datadogVite', () => {
         return resolved.esbuild && resolved.esbuild.keepNames
       }
 
-      // Without a builder, only the SSR environment or the client environment is built.
-      assert.equal(keepsNames({ environments: { client, ssr: ssr('esbuild') } }), undefined)
-      assert.equal(keepsNames({ build: { ssr: 'server.ts' }, environments: { client, ssr: ssr('esbuild') } }), true)
-      assert.equal(keepsNames({ build: { ssr: 'server.ts' }, environments: { client, ssr: ssr(false) } }), undefined)
-      assert.equal(keepsNames({ environments: { client: { ...client, build: { minify: 'esbuild', lib: {} } } } }), true)
-      // With a builder, every environment is built and shares the esbuild options.
-      assert.equal(keepsNames({ builder: {}, environments: { client, ssr: ssr(false) } }), undefined)
-      assert.equal(keepsNames({ builder: {}, environments: { client, main: ssr('esbuild') } }), true)
-      assert.equal(keepsNames({ builder: {}, environments: { client, main: ssr('terser') } }), undefined)
-      // Vite 5 has no environments.
-      assert.equal(keepsNames({ build: { minify: 'esbuild' } }), undefined)
-      assert.equal(keepsNames({ build: { minify: 'esbuild', ssr: true } }), true)
-      assert.equal(keepsNames({ build: { minify: 'esbuild', lib: {} } }), true)
-      assert.equal(keepsNames({ build: { minify: false, ssr: true } }), undefined)
+      // Each environment resolves its own configuration, with its build options, unless the builder shares it.
+      for (const builder of [undefined, { sharedConfigBuild: false }]) {
+        const environments = { client, ssr: ssr('esbuild') }
+        assert.equal(keepsNames({ builder, build: { minify: 'esbuild' }, environments }), undefined)
+        assert.equal(keepsNames({ builder, build: { minify: 'esbuild', ssr: 'server.ts' }, environments }), true)
+        assert.equal(keepsNames({ builder, build: { minify: 'esbuild', lib: {} }, environments }), true)
+        assert.equal(keepsNames({ builder, build: { minify: false, ssr: true }, environments }), undefined)
+        assert.equal(keepsNames({ builder, build: { minify: 'terser', ssr: true }, environments }), undefined)
+      }
+      // A shared configuration shares the esbuild options between every built environment.
+      const shared = { sharedConfigBuild: true }
+      assert.equal(keepsNames({ builder: shared, environments: { client, ssr: ssr(false) } }), undefined)
+      assert.equal(keepsNames({ builder: shared, environments: { client, main: ssr('esbuild') } }), true)
+      assert.equal(keepsNames({ builder: shared, environments: { client, main: ssr('terser') } }), undefined)
 
-      const minifiedSsr = { build: { ssr: 'server.ts' }, environments: { ssr: ssr('esbuild') } }
+      const minifiedSsr = { build: { minify: 'esbuild', ssr: 'server.ts' }, environments: { ssr: ssr('esbuild') } }
       assert.equal(keepsNames({ ...minifiedSsr, esbuild: { keepNames: false } }), false)
       assert.equal(keepsNames({ ...minifiedSsr, esbuild: false }), false)
       assert.equal(keepsNames(minifiedSsr, ROLLDOWN), undefined)
@@ -295,10 +293,23 @@ describe('datadogVite', () => {
       const failed = runTransform(failing, source, resourcePath)
       assert.equal(failed.result, undefined)
       sinon.assert.calledOnceWithExactly(failed.warn, sinon.match(/helper failed/))
+    })
 
-      const throwing = loadPlugin({ instrument: () => { throw new Error('helper failed') } }).datadogVite()
-      const entry = runTransform(throwing, source, resourcePath, { isEntry: true })
-      assert.equal(entry.result, undefined)
+    it('filters the transform hook to target packages', () => {
+      const { filter } = datadogVite().transform
+
+      assert.equal(filter.id.test('/app/node_modules/express/lib/express.js'), true)
+      assert.equal(filter.id.test('/app/node_modules/@langchain/langgraph/dist/index.js'), true)
+      assert.equal(filter.id.test('/app/node_modules/unrelated/index.js'), false)
+      assert.equal(filter.id.test('/app/src/server.ts'), false)
+    })
+
+    it('leaves loading the tracer to the application', () => {
+      const plugin = datadogVite()
+
+      assert.equal(plugin.resolveId, undefined)
+      assert.equal(plugin.load, undefined)
+      assert.equal(runTransform(plugin, 'export const value = 1\n', '/app/src/server.ts').result, undefined)
     })
 
     it('passes the instrumentation source map through', () => {
@@ -409,100 +420,6 @@ describe('datadogVite', () => {
     })
   })
 
-  describe('first import', () => {
-    it('resolves the virtual module to the tracer package', () => {
-      for (const name of ['dd-trace', 'dd-trace-electron']) {
-        const { resolveId, load } = loadPlugin({ name }).datadogVite()
-
-        assert.equal(resolveId.filter.id.test('virtual:dd-trace-vite/init'), true)
-        assert.equal(resolveId.handler('virtual:dd-trace-vite/init'), '\0dd-trace-vite:init')
-        assert.equal(resolveId.handler('virtual:other'), undefined)
-        assert.equal(load.filter.id.test('\0dd-trace-vite:init'), true)
-        assert.equal(load.handler('\0dd-trace-vite:init'), `import ${JSON.stringify(name)}\n`)
-        // The CommonJS entry proxy of Vite 5 to 7 leaves its imports unresolved.
-        assert.equal(load.filter.id.test('virtual:dd-trace-vite/init'), true)
-        assert.equal(load.handler('virtual:dd-trace-vite/init'), `import ${JSON.stringify(name)}\n`)
-        assert.equal(load.filter.id.test('virtual:dd-trace-vite/init2'), false)
-        assert.equal(load.handler('/app/src/main.js'), undefined)
-      }
-    })
-
-    it('prepends the virtual import to every entry module, keeping a hashbang first', () => {
-      const plugin = datadogVite()
-      const entry = id => runTransform(plugin, 'export const value = 1\n', id, { isEntry: true }).result
-
-      assert.deepStrictEqual(entry('/app/src/server.ts'), {
-        code: `${FIRST_IMPORT}export const value = 1\n`,
-        map: null,
-      })
-      assert.equal(entry('\0virtual:framework/server-entry').code, `${FIRST_IMPORT}export const value = 1\n`)
-      assert.equal(entry('/app/node_modules/unrelated/server.js').code, `${FIRST_IMPORT}export const value = 1\n`)
-      assert.equal(
-        runTransform(plugin, '#!/usr/bin/env node\nmain()\n', '/app/cli.js', { isEntry: true }).result.code,
-        `#!/usr/bin/env node\n${FIRST_IMPORT}main()\n`
-      )
-      assert.equal(
-        runTransform(plugin, '#!/usr/bin/env node', '/app/cli.js', { isEntry: true }).result.code,
-        `#!/usr/bin/env node\n${FIRST_IMPORT}`
-      )
-      assert.equal(runTransform(plugin, 'export const value = 1\n', '/app/src/other.ts').result, undefined)
-      assert.equal(entry('/app/src/main.js?commonjs-entry').code, `${FIRST_IMPORT}export const value = 1\n`)
-      for (const id of ['\0dd-trace-vite:init', 'virtual:dd-trace-vite/init']) {
-        assert.equal(runTransform(plugin, 'import "dd-trace"\n', id, { isEntry: true }).result, undefined)
-      }
-    })
-
-    it('requires the virtual module after the directive prologue of CommonJS entries on Rolldown', () => {
-      const plugin = datadogVite()
-      const entry = (code, id = '/app/src/main.cjs', bundler = ROLLDOWN) =>
-        runTransform(plugin, code, id, { bundler, isEntry: true }).result.code
-
-      assert.equal(entry('module.exports = 1\n'), `${FIRST_REQUIRE}module.exports = 1\n`)
-      assert.equal(entry('\'use strict\'\nmain()\n'), `'use strict';${FIRST_REQUIRE}\nmain()\n`)
-      assert.equal(entry('"use strict";\nmain()\n'), `"use strict";${FIRST_REQUIRE}\nmain()\n`)
-      assert.equal(entry('\'use strict\' // why\nmain()\n'), `'use strict';${FIRST_REQUIRE} // why\nmain()\n`)
-      assert.equal(entry('\'use strict\'\n\'use asm\'\n'), `'use strict'\n'use asm';${FIRST_REQUIRE}\n`)
-      assert.equal(
-        entry('/* license */\n// note\n"use strict"; main()\n'),
-        `/* license */\n// note\n"use strict";${FIRST_REQUIRE} main()\n`
-      )
-      assert.equal(entry('\'a\\\'b\'\n'), `'a\\'b';${FIRST_REQUIRE}\n`)
-      // String expressions that are not directives.
-      assert.equal(entry('\'a\'.length\n'), `${FIRST_REQUIRE}'a'.length\n`)
-      assert.equal(entry('\'a\' + b\n'), `${FIRST_REQUIRE}'a' + b\n`)
-      assert.equal(
-        entry('#!/usr/bin/env node\n\'use strict\'\nmain()\n'),
-        `#!/usr/bin/env node\n'use strict';${FIRST_REQUIRE}\nmain()\n`
-      )
-      assert.equal(entry('#!/usr/bin/env node\nmain()\n'), `#!/usr/bin/env node\n${FIRST_REQUIRE}main()\n`)
-      assert.equal(entry('#!/usr/bin/env node'), `#!/usr/bin/env node\n${FIRST_REQUIRE}`)
-      // Rollup converts CommonJS entries through a proxy module, and Rolldown parses other files as mixed modules.
-      assert.equal(entry('\'use strict\'\n', '/app/src/main.cjs', ROLLUP), `${FIRST_IMPORT}'use strict'\n`)
-      assert.equal(entry('\'use strict\'\n', '/app/src/main.js'), `${FIRST_IMPORT}'use strict'\n`)
-      assert.equal(entry('\'use strict\'\n', '/app/src/main.cts'), `${FIRST_IMPORT}'use strict'\n`)
-
-      const required = []
-      const module = { exports: {} }
-      const code = entry('\'use strict\'\nmodule.exports = (function () { return this })()\n')
-      const wrapper = vm.runInNewContext(`(function (exports, require, module) {${code}\n})`, {})
-      wrapper(module.exports, request => { required.push(request) }, module)
-      assert.deepStrictEqual(required, ['virtual:dd-trace-vite/init'])
-      assert.equal(module.exports, undefined)
-    })
-
-    it('instruments a target entry module before prepending the virtual import', () => {
-      const projectDir = createProject()
-      const packageDir = createPackage(projectDir, 'express', { main: 'index.js', version: '4.22.1' })
-      const source = 'module.exports = {}\n'
-      const resourcePath = write(packageDir, 'lib/express.js', source)
-
-      const { result } = runTransform(datadogVite(), source, resourcePath, { isEntry: true })
-
-      assert.equal(result.code.slice(0, FIRST_IMPORT.length + source.length), FIRST_IMPORT + source)
-      assert.match(result.code, /dd-trace:bundler:load/)
-    })
-  })
-
   describe('git metadata', () => {
     it('sets the git metadata banner once per entry chunk', () => {
       const banner = 'process.env.DD_GIT_COMMIT_SHA = "abc123";\n'
@@ -536,16 +453,15 @@ describe('datadogVite', () => {
 })
 
 /**
- * @param {{ getGitMetadataBanner?: Function, instrument?: Function, name?: string }} stubs
+ * @param {{ getGitMetadataBanner?: Function, instrument?: Function }} stubs
  * @returns {{ datadogVite: typeof datadogVite }}
  */
-function loadPlugin ({ getGitMetadataBanner, instrument, name }) {
+function loadPlugin ({ getGitMetadataBanner, instrument }) {
   const stubs = {}
   if (getGitMetadataBanner) {
     stubs['../datadog-instrumentations/src/helpers/bundler-utils'] = { getGitMetadataBanner }
   }
   if (instrument) stubs['../datadog-instrumentations/src/helpers/bundler-transform'] = { instrument }
-  if (name) stubs['../../package.json'] = { name }
   return proxyquire('../index', stubs)
 }
 
@@ -574,11 +490,10 @@ function isExternal (external, id) {
  * @param {object} plugin
  * @param {string} code
  * @param {string} id
- * @param {{ bundler?: object, isEntry?: boolean }} [options]
  */
-function runTransform (plugin, code, id, { bundler = ROLLUP, isEntry = false } = {}) {
+function runTransform (plugin, code, id) {
   const warn = sinon.spy()
-  const context = { ...bundler, getModuleInfo: () => ({ isEntry }), warn }
+  const context = { warn }
   return { result: plugin.transform.handler.call(context, code, id), warn }
 }
 
