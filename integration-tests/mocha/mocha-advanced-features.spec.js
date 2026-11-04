@@ -5700,6 +5700,52 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         ' ci-visibility/test-management/mocha-review-duplicates.js')
     })
 
+    for (const parallel of [false, true]) {
+      for (const feature of ['efd', 'atr', 'attempt-to-fix']) {
+        for (const excludedStatus of ['pass', 'fail']) {
+          for (const excludedFirst of [false, true]) {
+            const run = feature === 'atr' && !supportsMochaRetryEvents ? it.skip : parallel ? parallelIt : it
+            run(`isolates excluded ${excludedStatus} from ${feature} retry status ` +
+              `(first=${excludedFirst}, parallel=${parallel})`, async () => {
+              receiver.setKnownTests({ mocha: {} })
+              receiver.setSettings({
+                flaky_test_retries_enabled: feature === 'atr',
+                known_tests_enabled: feature === 'efd',
+                early_flake_detection: { enabled: feature === 'efd', slow_test_retries: { '5s': 2 } },
+                test_management: { enabled: feature === 'attempt-to-fix', attempt_to_fix_retries: 2 },
+              })
+              receiver.setTestManagementTests({
+                mocha: {
+                  suites: {
+                    'ci-visibility/test-management/mocha-review-retry-duplicates.js': {
+                      tests: { duplicate: { properties: { attempt_to_fix: true } } },
+                    },
+                  },
+                },
+              })
+              const expectedExit = (feature === 'atr' ? 1 : 3) + (excludedStatus === 'fail' ? 1 : 0)
+              await runReviewFixture('mocha-review-retry-duplicates', expectedExit, events => {
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const excluded = tests.filter(test => test.meta['test.test_management.no_auto_retry'] === 'true')
+                const ordinary = tests.filter(test => test.meta['test.test_management.no_auto_retry'] === undefined)
+                assert.strictEqual(excluded.length, 1)
+                assert.strictEqual(excluded[0].meta[TEST_STATUS], excludedStatus)
+                assert.strictEqual(excluded[0].meta[TEST_FINAL_STATUS], excludedStatus)
+                assert.strictEqual(ordinary.length, 3)
+                for (const test of ordinary) assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+                assert.deepStrictEqual(ordinary.map(test => test.meta[TEST_FINAL_STATUS]),
+                  [undefined, undefined, 'fail'])
+              }, {
+                EXCLUSIONS_EXCLUDED_FIRST: excludedFirst ? '1' : '0',
+                EXCLUSIONS_EXCLUDED_FAILS: excludedStatus === 'fail' ? '1' : '0',
+              }, `node node_modules/mocha/bin/mocha ${parallel ? '--parallel --jobs 2' : ''}` +
+                ' ci-visibility/test-management/mocha-review-retry-duplicates.js')
+            })
+          }
+        }
+      }
+    }
+
     it('preserves suite-only mocha-each declarations with the TDD interface', async () => {
       await runReviewFixture('mocha-review-suite-only', 0, events => {
         const tests = events.filter(event => event.type === 'test').map(event => event.content)

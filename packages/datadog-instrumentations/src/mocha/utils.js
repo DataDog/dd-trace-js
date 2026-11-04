@@ -846,12 +846,14 @@ function getTestFinishInfo (test, status, config, error) {
     dynamicAtrRetryCountByTest.set(originalTest, dynamicCount)
   }
 
-  if (testsStatuses.get(testName)) {
-    testsStatuses.get(testName).push(status)
-  } else {
-    testsStatuses.set(testName, [status])
+  // Excluded executions must neither seed nor read the managed history of same-title declarations.
+  const noAutoRetry = test._ddTestAnnotations?.noAutoRetry
+  let testStatuses = noAutoRetry ? undefined : testsStatuses.get(testName)
+  if (!testStatuses) {
+    testStatuses = []
+    if (!noAutoRetry) testsStatuses.set(testName, testStatuses)
   }
-  const testStatuses = testsStatuses.get(testName)
+  testStatuses.push(status)
 
   const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
   const efdRetryCount = efdRetryCountByTestFullName.get(testName) ??
