@@ -1,7 +1,5 @@
 'use strict'
 
-const { types: { isProxy } } = require('node:util')
-
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
@@ -20,25 +18,8 @@ const finishChannel = channel('apm:oracledb:query:finish')
 const poolAcquireStartChannel = channel('apm:oracledb:pool:acquire:start')
 const poolAcquireErrorChannel = channel('apm:oracledb:pool:acquire:error')
 const poolAcquireFinishChannel = channel('apm:oracledb:pool:acquire:finish')
-const poolAcquireUserChannel = channel('apm:oracledb:pool:acquire:user')
 const poolSessionStartChannel = channel('apm:oracledb:pool:session:start')
 const poolSessionFinishChannel = channel('apm:oracledb:pool:session:finish')
-
-/**
- * OracleDB only sets `Connection#user` for standalone connections, and Thick mode leaves the
- * schema fallback empty. Inspect data properties only: OracleDB must evaluate accessors itself.
- *
- * @param {unknown} options
- * @returns {string | undefined}
- */
-function getUser (options) {
-  if (typeof options !== 'object' || options === null || isProxy(options)) {
-    return
-  }
-  const user = Object.getOwnPropertyDescriptor(options, 'user')?.value
-  const username = Object.getOwnPropertyDescriptor(options, 'username')?.value
-  return user ?? username
-}
 
 function finish (ctx) {
   if (ctx.error) {
@@ -50,26 +31,18 @@ function finish (ctx) {
 /** @param {import('oracledb').Pool} pool */
 function bindPoolRequestContexts (pool) {
   const queue = pool._pendingRequestQueue
-  if (!(queue instanceof Set) || (typeof pool.sessionCallback !== 'function' && pool.homogeneous)) return
+  if (!(queue instanceof Set) || typeof pool.sessionCallback !== 'function') return
 
   const contexts = new WeakMap()
   // Each pool creates its own queue, so its insertion method needs a runtime wrapper.
   shimmer.wrap(pool, '_processRequest',
     /** @param {(request: object) => Promise<void>} processRequest */
     processRequest => {
-      /** @param {{ options: { user?: string } }} request */
-      function processWithUser (request) {
-        if (poolAcquireUserChannel.hasSubscribers && !pool.homogeneous && request.options.user !== undefined) {
-          poolAcquireUserChannel.publish(request.options)
-        }
-        return processRequest.apply(this, arguments)
-      }
-
       shimmer.wrap(queue, 'add',
         /** @param {(request: object) => Set<object>} add */
         add => /** @param {object} request */ function (request) {
-          if (startChannel.hasSubscribers || poolAcquireUserChannel.hasSubscribers) {
-            contexts.set(request, AsyncResource.bind(processWithUser))
+          if (startChannel.hasSubscribers) {
+            contexts.set(request, AsyncResource.bind(processRequest))
           }
           return add.apply(this, arguments)
         })
@@ -80,7 +53,7 @@ function bindPoolRequestContexts (pool) {
           contexts.delete(request)
           return processInContext.apply(this, arguments)
         }
-        return processWithUser.apply(this, arguments)
+        return processRequest.apply(this, arguments)
       }
     })
 }
@@ -96,6 +69,7 @@ function wrapPoolGetConnection (getConnection) {
     const pool = this
     const poolAttrs = poolAttributes.get(pool)
     const connectionAttrs = poolConnectionAttributes.get(pool)
+    const options = /** @type {{ user?: string, username?: string } | undefined} */ (args[0])
     const lastArg = args.at(-1)
     const callback = typeof lastArg === 'function' ? lastArg : undefined
     const acquireCtx = poolAcquireStartChannel.hasSubscribers
@@ -103,7 +77,9 @@ function wrapPoolGetConnection (getConnection) {
           pool,
           connectionAttrs,
           poolAttrs,
-          user: connectionAttrs.homogeneous ? connectionAttrs.user : getUser(args[0]) ?? connectionAttrs.user,
+          user: connectionAttrs.homogeneous
+            ? connectionAttrs.user
+            : options?.user ?? options?.username ?? connectionAttrs.user,
         }
       : undefined
     const sessionCtx = connectionAttrs.hasSessionCallback && poolSessionStartChannel.hasSubscribers
@@ -184,17 +160,14 @@ function wrapPoolGetConnection (getConnection) {
  */
 function storePoolAttributes (pool, poolAttrs) {
   // OracleDB 5.0 expands the pool descriptor and changes the service-name case.
-  const connectString = isProxy(poolAttrs)
-    ? undefined
-    : Object.getOwnPropertyDescriptor(poolAttrs, 'connectString')?.value ??
-      Object.getOwnPropertyDescriptor(poolAttrs, 'connectionString')?.value
+  const connectString = poolAttrs.connectString ?? poolAttrs.connectionString
   poolAttributes.set(pool, poolAttrs)
   poolConnectionAttributes.set(pool, {
     connectString: connectString ?? pool.connectString,
     hasSessionCallback: typeof pool.sessionCallback === 'function',
     homogeneous: pool.homogeneous ?? true,
     // OracleDB 5 accepts the `username` alias but only copies `user`/`userName` to `pool.user`.
-    user: pool.user ?? getUser(poolAttrs),
+    user: pool.user ?? poolAttrs.user ?? poolAttrs.username,
   })
   if (Object.hasOwn(pool, 'getConnection')) {
     shimmer.wrap(pool, 'getConnection', wrapPoolGetConnection)

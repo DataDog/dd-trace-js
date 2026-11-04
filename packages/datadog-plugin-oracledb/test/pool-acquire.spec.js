@@ -87,33 +87,6 @@ describe('oracledb pool acquisition without a database service', () => {
       }
     })
 
-    for (const useCallback of [false, true]) {
-      for (const useProxy of [false, true]) {
-        it(`preserves pool option reads with callback=${useCallback}, proxy=${useProxy}`, async () => {
-          const reads = new Map()
-          const options = { poolMin: 0, password: poolConfig.password, connectString: poolConfig.connectString }
-          for (const field of ['user', 'username']) {
-            Object.defineProperty(options, field, {
-              enumerable: true,
-              get () {
-                reads.set(field, (reads.get(field) ?? 0) + 1)
-                if (reads.get(field) > 1) throw new Error(`${field} read again`)
-                return undefined
-              },
-            })
-          }
-          const attrs = useProxy ? new Proxy(options, {}) : options
-          const create = useCallback ? promisify(oracledb.createPool).bind(oracledb) : oracledb.createPool
-          const created = await create(attrs)
-          try {
-            assert.deepStrictEqual(reads, new Map([['user', 1], ['username', 1]]))
-          } finally {
-            await created.close(0)
-          }
-        })
-      }
-    }
-
     describe('pool acquisition naming', () => {
       let fullConfig
 
