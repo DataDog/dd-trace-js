@@ -155,7 +155,7 @@ describe('AgentlessConfigurationSource', () => {
       assert.strictEqual(requests.length, 2)
       for (const request of requests) {
         const expected = capabilities.includes('dependent-flag-variant-key-v1') ? 'v1' : null
-        assert.strictEqual(request.options.url.searchParams.get('dependent-flags-variant-key'), expected)
+        assert.strictEqual(request.options.url.searchParams.get('cap_dependent-flags-variant-key'), expected)
         assert.strictEqual(request.options.url.searchParams.get('token'), 'preserved')
         assert.strictEqual(request.options.headers['X-DD-FEATURE-FLAGS-CAPABILITIES'], undefined)
       }

@@ -164,7 +164,7 @@ class AgentlessConfigurationSource {
     let endpoint = this.#config.endpoint
     if (getEvaluatorCapabilities().includes(DEPENDENT_FLAG_VARIANT_KEY_V1)) {
       endpoint = new URL(endpoint)
-      endpoint.searchParams.set('dependent-flags-variant-key', 'v1')
+      endpoint.searchParams.set('cap_dependent-flags-variant-key', 'v1')
     }
     if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
     if (this.#etag) headers['If-None-Match'] = this.#etag
