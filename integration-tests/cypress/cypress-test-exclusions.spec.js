@@ -94,6 +94,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       throw error
     })
     assert.strictEqual(exitCode, expectedExit, output)
+    return output
   }
   const named = (tests, name) => tests.filter(test => test.meta['test.name'] === name)
 
@@ -810,7 +811,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
     })
   }
 
-  for (const mode of ['duplicate-skipped', 'duplicate-mixed']) {
+  for (const mode of ['duplicate-skipped', 'duplicate-mixed', 'duplicate-skipped-first']) {
     it(`retains separate annotations for ${mode} declarations with identical titles`, async () => {
       await run(mode, 0, tests => {
         assert.strictEqual(tests.length, 3)
@@ -818,7 +819,7 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
           test.meta['test.status'], test.meta[protection], test.meta[exclusion],
         ])).sort()
         const expected = [
-          [mode === 'duplicate-mixed' ? 'pass' : 'skip', 'true', undefined],
+          [mode !== 'duplicate-skipped' ? 'pass' : 'skip', 'true', undefined],
           ['skip', undefined, 'true'],
           ['skip', undefined, undefined],
         ].map(test => JSON.stringify(test)).sort()
@@ -826,6 +827,62 @@ describeSupported(`Cypress ${version} ${moduleType} v${DD_MAJOR} test automation
       })
     })
   }
+
+  for (const protectedSkip of [false, true]) {
+    it(`keeps skipped ATF management notes consistent with protection (protected=${protectedSkip})`, async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      properties({ 'skipped atf': { properties: { disabled: true, quarantined: true, attempt_to_fix: true } } })
+      const output = await run(protectedSkip ? 'protected-skipped-atf' : 'ordinary-skipped-atf', 0, tests => {
+        assert.strictEqual(tests.length, 1)
+        const [test] = tests
+        assert.strictEqual(test.meta['test.status'], 'skip')
+        assert.strictEqual(test.meta['test.final_status'], 'skip')
+        assert.strictEqual(test.meta[protection], protectedSkip ? 'true' : undefined)
+        for (const flag of ['is_test_disabled', 'is_quarantined', 'is_attempt_to_fix']) {
+          assert.strictEqual(test.meta[`test.test_management.${flag}`], 'true')
+        }
+      }, { DD_TEST_MANAGEMENT_REPORT_ENABLED: 'true' })
+      assert.match(output, /Attempt to fix passed/)
+      for (const flag of ['disabled', 'quarantined']) {
+        assert.strictEqual(output.includes(`marked as ${flag}`), !protectedSkip)
+      }
+    })
+  }
+
+  it('restores native partial JSON retry counts without an extra attempt', async () => {
+    const command = './node_modules/.bin/cypress run ' +
+      '--config-file ci-visibility/cypress-late-native-retries/config.js'
+    const ledger = join(cwd, 'late-native-retry-executions.json')
+    const reads = join(cwd, 'returned-retry-json-reads.json')
+    const expected = { 'late native excluded': 5, 'late native control': 5, 'explicit local excluded': 2 }
+    childProcess = exec(command, {
+      cwd,
+      env: {
+        ...cypressEnvironment(),
+        NODE_OPTIONS: '',
+        DD_TRACE_ENABLED: 'false',
+        CYPRESS_LATE_NATIVE_RETRIES_MODE: 'returned-json',
+      },
+    })
+    let output = ''
+    childProcess.stdout.on('data', chunk => { output += chunk })
+    childProcess.stderr.on('data', chunk => { output += chunk })
+    const [exitCode] = await once(childProcess, 'exit')
+    assert.strictEqual(exitCode, 3, output)
+    assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
+    assert.deepStrictEqual(JSON.parse(readFileSync(reads, 'utf8')), { reads: 1 })
+    rmSync(ledger)
+    receiver.setSettings({ flaky_test_retries_enabled: true })
+    await run('returned-json', 3, tests => {
+      assert.deepStrictEqual(JSON.parse(readFileSync(ledger, 'utf8')), expected)
+      assert.deepStrictEqual(JSON.parse(readFileSync(reads, 'utf8')), { reads: 1 })
+      assert.strictEqual(tests.length, 12)
+      for (const test of tests) {
+        assert.strictEqual(test.meta['test.status'], 'fail')
+        assert.strictEqual(test.meta[exclusion], test.meta['test.name'] === 'late native control' ? undefined : 'true')
+      }
+    }, { CYPRESS_LATE_NATIVE_RETRIES_MODE: 'returned-json', DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '4' }, command)
+  })
 
   it('restores ordinary quarantine policy when the annotation is removed', async () => {
     receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: false })

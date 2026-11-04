@@ -62,6 +62,24 @@ module.exports = function observeSetupHandoff (onHandoff, normalizeIdentity = va
           }
           return envelope[propertyKey]
         }
+        /**
+         * @param {unknown} original
+         * @param {unknown} cached
+         */
+        const selectOverrides = (original, cached) => {
+          if (!original || typeof original !== 'object' || !cached || typeof cached !== 'object') return cached
+          const prototype = Object.getPrototypeOf(original)
+          const source = originals.get(cached) || normalizeIdentity(cached)
+          if ((prototype !== Object.prototype && prototype !== null) || normalizeIdentity(original) === source ||
+            typeof Object.getOwnPropertyDescriptor(original, 'toJSON')?.value === 'function') return cached
+          // Keep partial-override membership, taking values from the occurrence already sent to Cypress.
+          return Object.fromEntries(Object.keys(original).flatMap(key => {
+            const property = Object.getOwnPropertyDescriptor(cached, key)
+            return property
+              ? [[key, selectOverrides(Object.getOwnPropertyDescriptor(original, key).value, property.value)]]
+              : []
+          }))
+        }
         if (wireConfig && typeof wireConfig === 'object') {
           const cached = materialize(wireConfig, 'setupConfig')
           if (cached !== wireConfig) {
@@ -87,10 +105,7 @@ module.exports = function observeSetupHandoff (onHandoff, normalizeIdentity = va
           const wireRetry = wireConfig && typeof wireConfig === 'object' &&
             Object.getOwnPropertyDescriptor(wireConfig, 'retries')
           const wireValue = wireRetry && 'value' in wireRetry ? wireRetry.value : undefined
-          const wireOriginal = originals.get(wireValue) || normalizeIdentity(wireValue)
-          const cached = wireRetry?.enumerable && normalizeIdentity(original) === wireOriginal
-            ? wireValue
-            : materialize(original, 'retries')
+          const cached = returnedConfig === wireConfig ? wireValue : selectOverrides(original, wireValue)
           observedConfig = original === cached && 'value' in returnedDescriptor ? returnedConfig : { retries: cached }
         }
         onHandoff(observedConfig, message.event, {

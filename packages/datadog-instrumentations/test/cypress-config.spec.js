@@ -144,6 +144,125 @@ describe('Cypress before:run handlers', () => {
   }
 })
 
+describe('Cypress retry accessor receivers', () => {
+  for (const [key, value, nested] of [
+    ['runMode', 2, false], ['openMode', 1, false],
+    ['experimentalStrategy', 'detect-flake-but-always-fail', false],
+    ['maxRetries', 2, true], ['stopIfAnyPassed', true, true],
+  ]) {
+    it(`preserves the native Node accessor receiver for ${key}`, () => {
+      let reads = 0
+      class RetrySettings {
+        #value = value
+        constructor () {
+          Object.defineProperty(this, key, {
+            enumerable: true,
+            get () { reads++; return this.#value },
+          })
+        }
+      }
+      const raw = new RetrySettings()
+      assert.strictEqual(raw[key], value)
+      const config = { retries: nested ? { experimentalOptions: raw } : raw }
+      const observer = observeRetryConfig(config, () => {})
+      try {
+        const observed = nested ? config.retries.experimentalOptions : config.retries
+        assert.strictEqual(observed[key], value)
+        assert.strictEqual(reads, 2)
+      } finally {
+        observer.stop(false)
+      }
+    })
+  }
+})
+
+describe('Cypress partial retry JSON handoff', () => {
+  for (const conversion of ['root', 'nested', 'scalar', 'scalar-zero', 'omitted', 'plain', 'nested-plain']) {
+    it(`uses one wire occurrence for fresh partial retries (${conversion})`, async () => {
+      const CypressPlugin = require('../../datadog-plugin-cypress/src/cypress-plugin').constructor
+      const plugin = new CypressPlugin()
+      const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-partial-json-'))
+      const descriptor = Object.getOwnPropertyDescriptor(process, 'send')
+      let wire
+      let reads = 0
+      process.send = message => { wire = JSON.parse(JSON.stringify(message)).args[0].setupConfig }
+      const tracer = {
+        _tracer: {
+          _config: { isServiceUserProvided: false },
+          _exporter: {
+            getLibraryConfiguration: (_config, callback) => callback(null, {
+              isFlakyTestRetriesEnabled: true, flakyTestRetriesCount: 4,
+            }),
+          },
+        },
+      }
+      const initial = conversion.startsWith('nested')
+        ? {
+            runMode: true,
+            openMode: false,
+            experimentalStrategy: 'detect-flake-but-always-fail',
+            experimentalOptions: { maxRetries: 2, stopIfAnyPassed: false },
+          }
+        : { runMode: 2, openMode: 0 }
+      const resolved = { projectRoot: project, supportFile: false, version: '14.5.4', retries: initial }
+      const partial = conversion.endsWith('plain')
+        ? conversion === 'plain' ? { openMode: 1 } : { stopIfAnyPassed: true }
+        : {
+            toJSON () {
+              reads++
+              if (conversion === 'omitted') return undefined
+              if (conversion === 'scalar-zero') return 0
+              if (conversion === 'scalar') return 3 + reads
+              return { [conversion === 'nested' ? 'maxRetries' : 'runMode']: 3 + reads }
+            },
+          }
+      const wrapped = wrapConfig({
+        e2e: {
+          async setupNodeEvents (_on, config) {
+            await plugin.init(tracer, config)
+            return { retries: conversion.startsWith('nested') ? { experimentalOptions: partial } : partial }
+          },
+        },
+      })
+      try {
+        const result = await wrapped.e2e.setupNodeEvents(() => {}, resolved)
+        process.send({ event: 'setupTestingType:reply', args: [{ setupConfig: result }] })
+        assert.strictEqual(reads, conversion.endsWith('plain') ? 0 : 1)
+        if (conversion === 'plain') {
+          assert.deepStrictEqual(wire.retries, { runMode: 4, openMode: 1 })
+          assert.deepStrictEqual(plugin.originalCypressRetries, { runMode: 2, openMode: 1 })
+        } else if (conversion === 'nested-plain') {
+          assert.deepStrictEqual(wire.retries.experimentalOptions, { maxRetries: 4, stopIfAnyPassed: true })
+          assert.deepStrictEqual(plugin.originalCypressRetries, {
+            ...initial, experimentalOptions: { maxRetries: 2, stopIfAnyPassed: true },
+          })
+        } else if (conversion === 'nested') {
+          assert.deepStrictEqual(wire.retries.experimentalOptions, { maxRetries: 4 })
+          assert.deepStrictEqual(plugin.originalCypressRetries, {
+            ...initial, experimentalOptions: { maxRetries: 4, stopIfAnyPassed: false },
+          })
+        } else if (conversion === 'root') {
+          assert.deepStrictEqual(wire.retries, { runMode: 4 })
+          assert.deepStrictEqual(plugin.originalCypressRetries, { runMode: 4, openMode: 0 })
+        } else if (conversion.startsWith('scalar')) {
+          const expected = conversion === 'scalar' ? 4 : 0
+          assert.strictEqual(wire.retries, expected)
+          assert.strictEqual(plugin.originalCypressRetries, expected)
+        } else {
+          assert.strictEqual(wire.retries, undefined)
+          assert.deepStrictEqual(plugin.originalCypressRetries, initial)
+        }
+      } finally {
+        plugin.retryConfigObserver?.stop(false)
+        plugin.stopSetupHandoff?.()
+        if (descriptor) Object.defineProperty(process, 'send', descriptor)
+        else delete process.send
+        fs.rmSync(project, { recursive: true, force: true })
+      }
+    })
+  }
+})
+
 describe('Cypress returned retry getters', () => {
   for (const asynchronous of [false, true]) {
     it(`uses the once-materialized retry value at IPC (async=${asynchronous})`, async () => {

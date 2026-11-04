@@ -45,11 +45,14 @@ if (['browser-field-accessor', 'experimental-native-field-accessor'].includes(mo
   let ready = false
   const retries = Cypress.config('retries')
   const options = mode === 'experimental-native-field-accessor'
+  const raw = Object.getOwnPropertyDescriptor(Cypress.config(), 'retries').value
+  const receiver = options ? Object.getOwnPropertyDescriptor(raw, 'experimentalOptions').value : raw
   Object.defineProperty(options ? retries.experimentalOptions : retries, options ? 'maxRetries' : 'runMode', {
     configurable: true,
     enumerable: true,
     get () {
       if (!ready) throw new Error('retry accessor evaluated during declaration')
+      if (this !== receiver) throw new Error('retry accessor received a different settings object')
       retryAccessorReads++
       if (getTestEnvironment('ACCESSOR_DIAGNOSTICS')) retryAccessorStacks.push(new Error().stack)
       return 3

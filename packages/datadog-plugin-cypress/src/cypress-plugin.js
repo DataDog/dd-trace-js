@@ -1729,8 +1729,9 @@ class CypressPlugin {
     // Get tests that didn't go through `dd:afterEach`
     // and create a skipped test span for each of them
     const annotationOffsets = new Map()
-    for (const { title } of cypressTests) {
-      const cypressTestName = title.join(' ')
+    const matchedCypressTests = new Set()
+    for (const cypressTest of cypressTests) {
+      const cypressTestName = cypressTest.title.join(' ')
       const declarationIndex = annotationOffsets.get(cypressTestName) || 0
       const annotations = this.testAnnotationsBySuite.get(spec.relative)?.get(cypressTestName)?.[declarationIndex]
       annotationOffsets.set(cypressTestName, declarationIndex + 1)
@@ -1741,6 +1742,7 @@ class CypressPlugin {
       if (isTestFinished) {
         continue
       }
+      matchedCypressTests.add(cypressTest)
 
       const isSkippedByItr = this.testsToSkip.some(test =>
         cypressTestName === test.name && spec.relative === test.suite
@@ -1787,8 +1789,8 @@ class CypressPlugin {
           testSuite: spec.relative,
           testName: cypressTestName,
           status: 'skip',
-          isDisabled,
-          isQuarantined,
+          isDisabled: isDisabled && !annotations?.mustFail,
+          isQuarantined: isQuarantined && !annotations?.mustFail,
         })
       }
 
@@ -1812,7 +1814,6 @@ class CypressPlugin {
       finishedTestAttempts.push(finishedTest)
     }
 
-    const matchedCypressTests = new Set()
     for (const finishedTestAttempts of finishedTestsByTest.values()) {
       const { testName } = finishedTestAttempts[0]
       // Cypress reports one result per original runnable, including Datadog-managed clones.

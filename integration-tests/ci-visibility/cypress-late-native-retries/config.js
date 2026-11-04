@@ -53,6 +53,14 @@ module.exports = defineConfig({
       if (mode === 'during-init-partial') config.retries = { openMode: 1 }
       if (mode === 'freeze-during-init') Object.freeze(config)
       const result = await pending
+      if (mode === 'returned-json') {
+        let reads = 0
+        on('before:run', () => {
+          require('node:fs').writeFileSync(join(config.projectRoot, 'returned-retry-json-reads.json'),
+            JSON.stringify({ reads }))
+        })
+        return { retries: { toJSON () { reads++; return { runMode: 3 + reads } } } }
+      }
       if (mode === 'freeze-during-init' || mode === 'readonly-before-init' || mode?.startsWith('getter-')) return result
       if (mode === 'freeze-retries' || mode === 'seal-retries') {
         if (mode === 'freeze-retries') Object.freeze(result.retries)

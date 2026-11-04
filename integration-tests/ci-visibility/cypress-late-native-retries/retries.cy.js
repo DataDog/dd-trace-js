@@ -3,10 +3,13 @@
 /* global cy */
 
 const { noAutoRetry } = require('dd-trace/ci/test-annotations')
+const { getTestEnvironment } = require('../../cypress/support/test-environment')
 const executions = {}
 const record = name => {
   executions[name] = (executions[name] || 0) + 1
-  return cy.writeFile('late-native-retry-executions.json', executions, { log: false })
+  return cy.writeFile('late-native-retry-executions.json', executions, { log: false }).then(() => {
+    if (getTestEnvironment('LATE_MODE') === 'returned-json') throw new Error('serialized retry failure')
+  })
 }
 
 it('late native excluded', noAutoRetry(function () {

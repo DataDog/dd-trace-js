@@ -31,6 +31,7 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_FRAMEWORK,
   TEST_SESSION_EMPTY_REASON,
+  formatAttemptToFixSummary,
   TEST_SKIP_REASON,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
@@ -1132,6 +1133,32 @@ moduleTypes.forEach(({
       return { testModuleSpan, testSessionSpan, createSpan }
     }
 
+    for (const mustFail of [false, true]) {
+      for (const noAutoRetry of [false, true]) {
+        const description = `protected=${mustFail}, excluded=${noAutoRetry}`
+        it(`keeps recovered ATF notes consistent with protection (${description})`, () => {
+          const { createSpan } = prepareRunFinalization()
+          const testSuite = 'cypress/e2e/protected-skip.js'
+          cypressPlugin.testSuiteSpan = createSpan()
+          sinon.stub(cypressPlugin, 'getTestSpan').callsFake(createSpan)
+          sinon.stub(cypressPlugin, 'getTestProperties').returns({
+            isAttemptToFix: true, isDisabled: true, isQuarantined: true,
+          })
+          cypressPlugin.getTasks()['dd:testDeclarations']({
+            testSuite, testAnnotations: [{ testName: 'skipped', mustFail, noAutoRetry }],
+          })
+          cypressPlugin.afterSpec({ relative: testSuite }, {
+            tests: [{ title: ['skipped'], state: 'pending', attempts: [] }], stats: { tests: 1, pending: 1 },
+          })
+          const summary = formatAttemptToFixSummary(cypressPlugin.attemptToFixExecutions)
+          assert.strictEqual(cypressPlugin.attemptToFixExecutions.size, noAutoRetry ? 0 : 1)
+          for (const flag of ['disabled', 'quarantined']) {
+            assert.strictEqual(summary.includes(`marked as ${flag}`), !mustFail && !noAutoRetry)
+          }
+        })
+      }
+    }
+
     for (const uploadFails of [false, true]) {
       it(`waits for recovered screenshot-only spans before closing the run (uploadFails=${uploadFails})`, async () => {
         const { testSessionSpan, createSpan } = prepareRunFinalization()
@@ -1773,6 +1800,59 @@ moduleTypes.forEach(({
       assert.deepStrictEqual(hooks, registered)
       assert.strictEqual(context.Cypress.config('retries'), observedRetries)
     })
+
+    for (const fields of [
+      ['runMode'], ['openMode'], ['experimentalStrategy'],
+      ['experimentalOptions', 'maxRetries'], ['experimentalOptions', 'stopIfAnyPassed'], [],
+    ]) {
+      it(`preserves the native browser accessor receiver for ${fields.join('.') || 'retries'}`, () => {
+        const state = {
+          retries: {
+            runMode: 2,
+            openMode: 1,
+            experimentalStrategy: 'detect-flake-but-always-fail',
+            experimentalOptions: { maxRetries: 2, stopIfAnyPassed: true },
+          },
+          isTextTerminal: true,
+        }
+        const target = fields.length === 2 ? state.retries.experimentalOptions : fields.length ? state.retries : state
+        const key = fields.at(-1) || 'retries'
+        const value = target[key]
+        let reads = 0
+        Object.defineProperty(target, key, {
+          configurable: true,
+          enumerable: true,
+          get () { reads++; return this === target ? value : undefined },
+        })
+        const root = { file: 'test.cy.js', eachTest () {} }
+        const context = {
+          Cypress: {
+            _: { isEqual, cloneDeep },
+            config: name => name === undefined ? state : state[name],
+            state () {},
+            on () {},
+            mocha: { getRunner: () => ({ runTests () {}, suite: { ctx: {} } }), getRootSuite: () => root },
+          },
+          cy: { on () {} },
+          before () {},
+          beforeEach () {},
+          afterEach () {},
+          after () {},
+        }
+        runInNewContext(fs.readFileSync(
+          path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+        ), context)
+        const before = reads
+        const observed = context.Cypress.config()
+        const result = fields.reduce((current, field) => current[field], observed.retries)
+        if (fields.length) assert.strictEqual(result, value)
+        else {
+          assert.notStrictEqual(result, value)
+          assert.deepStrictEqual(JSON.parse(JSON.stringify(result)), value)
+        }
+        assert.strictEqual(reads, before + 1)
+      })
+    }
 
     it('does not evaluate a retries root accessor during ordinary teardown', async () => {
       const state = { retries: 0, isTextTerminal: true }

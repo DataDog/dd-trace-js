@@ -312,8 +312,8 @@ function observeBrowserRetries (raw) {
           ownsNestedPath(metadata.raw, path, target)) metadata.reconcileOnRead = true
         return property
       },
-      get (target, key, receiver) {
-        const result = Reflect.get(target, key, receiver)
+      get (target, key) {
+        const result = Reflect.get(target, key)
         if (computingNativeRetries && !path.length && key === 'experimentalStrategy') {
           nativeRetryExperimental = Boolean(result)
         }
@@ -452,8 +452,8 @@ function observeBrowserConfig (state) {
       if (key === 'retries' && property && 'value' in property) observeLockedBrowserRetries(property.value)
       return property
     },
-    get (target, key, receiver) {
-      const value = Reflect.get(target, key, receiver)
+    get (target, key) {
+      const value = Reflect.get(target, key)
       const property = Object.getOwnPropertyDescriptor(target, key)
       if (key === 'retries') recordBrowserRetryAccessorRead(value)
       if (property && !property.configurable && !property.writable && 'value' in property) {

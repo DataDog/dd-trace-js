@@ -24,6 +24,12 @@ if (getTestEnvironment('EXCLUSIONS_MODE') === 'mode-selection') {
 } else if (getTestEnvironment('EXCLUSIONS_MODE') === 'all-skipped') {
   // Verify annotation reporting when every declaration is skipped.
   it.skip('annotated skip', preventFailureSuppression(noAutoRetry(fail)))
+} else if (['protected-skipped-atf', 'ordinary-skipped-atf'].includes(getTestEnvironment('EXCLUSIONS_MODE'))) {
+  const callback = getTestEnvironment('EXCLUSIONS_MODE') === 'protected-skipped-atf'
+    ? preventFailureSuppression(fail)
+    : fail
+  // Explicit skips retain backend assignments without an execution or a protection override.
+  it.skip('skipped atf', callback)
 } else if (getTestEnvironment('EXCLUSIONS_MODE') === 'duplicate-skipped') {
   // Keep protection attached to the first skipped declaration with this title.
   it.skip('duplicate declaration', preventFailureSuppression(fail))
@@ -36,6 +42,12 @@ if (getTestEnvironment('EXCLUSIONS_MODE') === 'mode-selection') {
   // Retry exclusion belongs only to this skipped declaration.
   it.skip('duplicate declaration', noAutoRetry(fail))
   // An unannotated skip must not inherit its sibling's metadata.
+  it.skip('duplicate declaration', fail)
+} else if (getTestEnvironment('EXCLUSIONS_MODE') === 'duplicate-skipped-first') {
+  // Recovery must not consume the later executed declaration's result.
+  it.skip('duplicate declaration', noAutoRetry(fail))
+  it('duplicate declaration', preventFailureSuppression(() => {}))
+  // Keep an unannotated skipped sibling independent as well.
   it.skip('duplicate declaration', fail)
 } else if (getTestEnvironment('EXCLUSIONS_MODE') === 'removed') {
   it('sole', fail)

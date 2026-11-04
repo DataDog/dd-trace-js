@@ -158,8 +158,8 @@ module.exports = function observeRetryConfig (config, onChange, options) {
     }
     if (metadata.proxies.has(value)) return metadata.proxies.get(value)
     const proxy = new Proxy(value, {
-      get (target, key, receiver) {
-        const result = Reflect.get(target, key, receiver)
+      get (target, key) {
+        const result = Reflect.get(target, key)
         const property = Object.getOwnPropertyDescriptor(target, key)
         // Frozen values must be returned unchanged to preserve Proxy invariants.
         return property && !property.configurable && !property.writable && 'value' in property
