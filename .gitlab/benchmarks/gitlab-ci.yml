@@ -44,7 +44,7 @@ variables:
     - if: '$CI_COMMIT_REF_NAME =~ /^mq-working-branch-master-/'
       interruptible: true
       variables:
-        MANUAL_BASELINE_BRANCH: master
+        BASELINE_BRANCH: master
     - interruptible: true
   timeout: 30m  # TODO: Reduce this once GitLab CI runner availability improves
   script:

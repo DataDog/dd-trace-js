@@ -29,10 +29,10 @@ GitLab CI configuration for the benchmarks that run on the
 Merge queue runs (`mq-working-branch-master-*`) apply the same regression check as the queued PR,
 on top of the latest `master`.
 
-- `.benchmarks` sets `MANUAL_BASELINE_BRANCH: master`. bp-runner otherwise finds the baseline by
-  searching for the branch's PR, and merge queue branches have none. The search pages through
-  every PR in the repository, which takes minutes, can exhaust the shared GitHub App rate limit,
-  and leaves the run without a baseline. The baseline is now the merge-base with `master`.
+- `.benchmarks` sets `BASELINE_BRANCH: master`, which bp-runner uses as the `run_microbenchmarks`
+  baseline branch. Without it, bp-runner finds the baseline by looking up the branch's PR, and
+  merge queue branches have none, so the run has no baseline. The baseline is now the merge-base
+  with `master`.
 - `check-big-regressions` honors the queued PR's `performance/ignore-performance-regression`
   label. `github-should-ignore-regression` falls back to the PR in `DDCI_PULL_REQUEST_NUMBER` (the
   queued PR) when the branch has no PR. This needs `MICROBENCHMARKS_CI_IMAGE` built from
