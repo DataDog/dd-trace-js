@@ -13,6 +13,8 @@ const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 const patched = new WeakSet()
 const mochaConstructors = new WeakMap()
 
+// Mocha#ui installs the interface's pre-require listeners. Attach ours afterward so we can wrap
+// declarations before it.skip/test.skip discard their callbacks and the annotations attached to them.
 tracingChannel('orchestrion:mocha:ui').end.subscribe(({ self, error }) => {
   if (error) return
   let prototype = Object.getPrototypeOf(self)

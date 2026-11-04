@@ -887,7 +887,7 @@ function handle () {
 ## Mocha test automation exclusions
 
 Mocha supports the same `preventFailureSuppression` and `noAutoRetry` callback annotations
-from `dd-trace/test-optimization` shown below for Jest. Apply them to `it`, `test`, and
+from `dd-trace/ci/test-annotations` shown below for Jest. Apply them to `it`, `test`, and
 parameterized callbacks, including `only` and `skip` declarations. The annotations are
 preserved in serial and parallel workers. Native Mocha retries remain available when
 `noAutoRetry` excludes Datadog ATR, EFD, and Attempt to Fix.

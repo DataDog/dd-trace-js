@@ -1,6 +1,6 @@
 'use strict'
 
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 function callback () {
   if (process.env.EXCLUSION_COUNT_ATTEMPTS === '1') process.stdout.write('exclusion-body-attempt\n')

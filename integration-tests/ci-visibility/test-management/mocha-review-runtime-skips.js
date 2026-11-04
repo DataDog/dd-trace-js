@@ -3,7 +3,7 @@
 const tracer = require('dd-trace')
 const assert = require('node:assert/strict')
 const dc = require('node:diagnostics_channel')
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 const started = new Set()
 const finished = new Set()

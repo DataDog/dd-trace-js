@@ -1,7 +1,7 @@
 'use strict'
 
 const forEach = require('mocha-each')
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 const declare = rows => {
   const cases = forEach(rows)
