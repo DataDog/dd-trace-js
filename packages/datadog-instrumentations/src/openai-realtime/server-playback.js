@@ -25,6 +25,7 @@ class ServerPlayback {
   #onReady
   #turns = new Map()
   #items = new Map()
+  #inputs = new WeakMap()
   #requests = new Map()
   #active
   #scheduled
@@ -56,20 +57,38 @@ class ServerPlayback {
   /** @param {import('./turns').InputTurn} input */
   rememberInput (input) {
     if (input.itemId !== undefined) {
+      const previous = this.#inputs.get(input)
+      if (previous && previous.id !== input.itemId) {
+        this.#items.delete(previous.id)
+        for (const [id, item] of this.#requests) {
+          if (item === previous) this.#requests.delete(id)
+        }
+        input.audio.clear()
+        input.transcript = ''
+      }
       input.audio.present = true
-      this.#bind(input.itemId, input, undefined, 'user')
+      const item = this.#bind(input.itemId, input, undefined, 'user')
+      if (item) this.#inputs.set(input, item)
     }
   }
 
   /**
    * @param {string} id
    * @param {import('./turns').ResponseTurn} turn
+   * @param {object} [response]
    */
-  start (id, turn) {
+  start (id, turn, response) {
     if (this.#closed) return
     if (this.#turns.size >= MAX_TURNS && !this.#evictHeld(Date.now())) return
+    const format = response?.audio?.output?.format ?? response?.output_audio_format
     const entry = {
       id,
+      format: format
+        ? {
+            mimeType: realtimeAudioFormatToMime(format),
+            sampleRate: typeof format.rate === 'number' ? format.rate : this.#outputFormat.sampleRate,
+          }
+        : this.#outputFormat,
       turn,
       output: new Map(),
       held: false,
@@ -160,7 +179,21 @@ class ServerPlayback {
         if (typeof endMs === 'number' && Number.isFinite(endMs) && endMs >= 0) {
           const index = event.content_index ?? 0
           item.caps.set(index, Math.min(item.caps.get(index) ?? endMs, endMs))
-          if (item.entry) item.entry.truncated = true
+          if (item.entry) {
+            item.entry.truncated = true
+            let after = false
+            for (const output of item.entry.output.values()) {
+              if (after) {
+                output.lastContentIndex = -1
+                output.parts.clear()
+                output.wanted = false
+              }
+              if (output === item) {
+                output.lastContentIndex = Math.min(output.lastContentIndex, index)
+                after = true
+              }
+            }
+          }
           this.#rebuild(item, now)
           this.#want(item)
           this.#check(item.entry, now)
@@ -195,6 +228,7 @@ class ServerPlayback {
         const active = this.#active
         active.ambiguous = true
         active.stopped = true
+        active.cleared = type === 'output_audio_buffer.cleared'
         active.turn.serverSpeech = {}
         this.#check(active, now)
         if (entry) entry.ambiguous = true
@@ -305,6 +339,8 @@ class ServerPlayback {
         side,
         entry,
         role,
+        format: role === 'user' ? this.#inputFormat : entry.format,
+        lastContentIndex: role === 'assistant' && entry.truncated ? -1 : Infinity,
         parts: new Map(),
         expected: new Set(),
         hasAudio: role === 'user',
@@ -322,13 +358,14 @@ class ServerPlayback {
 
   /** @param {object} item */
   #want (item) {
-    if (item.failed || item.attempts >= 2 || !this.#shouldRetainAudio() || !this.#requestItem || item.inFlight) return
+    if (item.lastContentIndex < 0 || item.failed || item.attempts >= 2 ||
+        !this.#shouldRetainAudio() || !this.#requestItem || item.inFlight) return
     item.wanted = true
     if (this.#scheduled || this.#closed) return
     this.#scheduled = setImmediate(() => {
       this.#scheduled = undefined
       for (const candidate of this.#items.values()) {
-        if (!candidate.wanted || candidate.inFlight) continue
+        if (!candidate.wanted || candidate.inFlight || candidate.lastContentIndex < 0) continue
         candidate.wanted = false
         if (!this.#shouldRetainAudio()) { this.#check(candidate.entry, Date.now()); continue }
         const eventId = this.#requestPrefix + (++this.#sequence)
@@ -359,22 +396,29 @@ class ServerPlayback {
     if (message.content) {
       let index = 0
       for (const part of message.content) {
-        if (typeof part.audio === 'string') {
-          const fallback = item.role === 'user' ? this.#inputFormat : this.#outputFormat
+        if (typeof part.audio === 'string' && index <= item.lastContentIndex) {
+          const fallback = item.format
+          const current = item.role === 'user' ? this.#inputFormat : this.#outputFormat
+          // The protocol does not say whether retrieval transcodes older clips.
+          // Without an explicit format, omit audio when the two possible codecs differ.
+          const knownFormat = part.format ||
+            (fallback.mimeType === current.mimeType && fallback.sampleRate === current.sampleRate)
           const mimeType = part.format ? realtimeAudioFormatToMime(part.format) : fallback.mimeType
           const sampleRate = typeof part.format?.rate === 'number' ? part.format.rate : fallback.sampleRate
           const cap = item.caps.get(index)
           const rate = bytesPerSecond(mimeType, sampleRate)
           const count = Buffer.byteLength(part.audio, 'base64')
           const bytes = cap === undefined || !rate ? count : Math.min(count, Math.floor(cap * rate / 1000))
-          const retained = bytes <= LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES && this.#shouldRetainAudio()
+          const retained = knownFormat && bytes <= LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES && this.#shouldRetainAudio()
             ? Buffer.from(part.audio.slice(0, Math.ceil(bytes / 3) * 4), 'base64').subarray(0, bytes)
             : undefined
           item.parts.set(index, { bytes, buffer: retained, mimeType, sampleRate })
           item.expected.add(index)
           item.hasAudio = true
         }
-        if (item.role === 'user' && part.transcript && !item.side.transcript) item.side.transcript = part.transcript
+        if (item.role === 'user' && item.id === item.side.itemId && part.transcript && !item.side.transcript) {
+          item.side.transcript = part.transcript
+        }
         index++
       }
     }
@@ -391,12 +435,16 @@ class ServerPlayback {
     const parts = []
     let complete = !item.entry?.audioIncomplete
     for (const owned of items) {
-      if (!owned.hasAudio) continue
+      if (!owned.hasAudio || owned.lastContentIndex < 0) continue
       if (owned.parts.size === 0) complete = false
       for (const index of owned.expected) {
-        if (!owned.parts.has(index)) complete = false
+        if (index <= owned.lastContentIndex && !owned.parts.has(index)) complete = false
       }
       for (const [index, part] of owned.parts) {
+        if (index > owned.lastContentIndex) {
+          owned.parts.delete(index)
+          continue
+        }
         const cap = owned.caps.get(index)
         const rate = bytesPerSecond(part.mimeType, part.sampleRate)
         if (cap !== undefined && rate) {
@@ -425,7 +473,7 @@ class ServerPlayback {
     if (!this.#shouldRetainAudio()) return true
     const input = this.#items.get(entry.turn.input.itemId)
     for (const item of [input, ...entry.output.values()]) {
-      if (item && (item.wanted || item.inFlight)) return false
+      if (item && item.lastContentIndex >= 0 && (item.wanted || item.inFlight)) return false
     }
     return true
   }

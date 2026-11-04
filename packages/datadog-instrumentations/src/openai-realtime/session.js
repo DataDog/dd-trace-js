@@ -745,7 +745,7 @@ class RealtimeSession {
 
     this.#captureContext(turn)
     this.#responses.set(String(responseId), turn)
-    this.#playback?.start(String(responseId), turn)
+    this.#playback?.start(String(responseId), turn, response)
   }
 
   /**

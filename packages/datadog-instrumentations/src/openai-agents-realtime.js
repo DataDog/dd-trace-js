@@ -32,6 +32,12 @@ function listen (ctx) {
     // its body, so wrap this instance to filter only tracer-owned request failures.
     // Raw events still reach the session before any SDK/application listeners.
     shimmer.wrap(transport, 'emit', emit => function (name, event) {
+      if (name === 'connection_change' && event === 'disconnected') {
+        // SDK listeners can reconnect before the old socket's close callback runs.
+        // Keep that callback's record alive so it still classifies the close code.
+        const record = records.get(this)
+        if (record) record.detached = true
+      }
       if (name === '*' || name === 'error') {
         const record = records.get(this)
         if (record) {
@@ -56,7 +62,7 @@ function connect (ctx) {
     const transport = ctx.self
     const options = ctx.arguments?.[0] || {}
     const previous = records.get(transport)
-    if (previous && !previous.closed) return
+    if (previous && !previous.closed && !previous.detached) return
     // Match the SDK's precedence. An explicit URL wins even when callId is also supplied.
     const effective = options.url
       ? connectionOptions(options.url)
@@ -77,6 +83,7 @@ function connect (ctx) {
     const record = {
       session: connection.session,
       closed: false,
+      detached: false,
       finalize: failed => {
         if (record.closed) return
         record.closed = true
@@ -111,9 +118,14 @@ function sent (ctx) {
   if (record && !record.closed && !ctx.error) record.session.onClientEvent(ctx.arguments[0], Date.now())
 }
 
+/** @param {{ self: object, realtimeConnection?: { finalize: (failed?: boolean) => void } }} ctx */
+function closing (ctx) {
+  ctx.realtimeConnection = records.get(ctx.self)
+}
+
 /** @param {object} ctx */
 function closed (ctx) {
-  records.get(ctx.self)?.finalize(false)
+  ctx.realtimeConnection?.finalize(false)
 }
 
 /** @param {object} ctx */
@@ -129,5 +141,7 @@ if (realtimeEnabled()) {
   connection.asyncEnd.subscribe(connected)
   connection.error.subscribe(failed)
   dc.tracingChannel('orchestrion:@openai/agents-realtime:send').end.subscribe(sent)
-  dc.tracingChannel('orchestrion:@openai/agents-realtime:close').end.subscribe(closed)
+  const close = dc.tracingChannel('orchestrion:@openai/agents-realtime:close')
+  close.start.subscribe(closing)
+  close.end.subscribe(closed)
 }

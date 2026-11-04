@@ -304,7 +304,12 @@ When LLM Observability consumes audio, sideband instrumentation can request stor
 conversation items. Errors for tracer-owned retrieval requests stay internal; SDK
 and application request errors retain their normal behavior. Retrieval is bounded
 and falls back to transcripts when unavailable, incomplete, or too large.
-Interrupted items honor the server truncation boundary.
+Interrupted items honor the server truncation boundary. Successful retrievals use
+the SDK's shared transport, so application listeners can receive additional
+`conversation.item.retrieved` and SDK history-update events, including the retrieved
+audio payload. Only errors belonging to tracer-owned requests are intercepted.
+If a formatless retrieval could use a different codec from the captured item,
+the recording is omitted and any available transcript is retained.
 Input clips use paired VAD offsets to include prefix padding at the correct start,
 with wall-clock precision limited by sideband event delivery.
 Unknown per-response boundaries in continuous playback are omitted rather than

@@ -27,8 +27,8 @@ function harness ({ retain = true } = {}) {
     status,
     content: [{ type: 'output_audio', transcript: 'synthetic output' }],
   })
-  const start = (id = 'r1', ids = ['a1'], playback = true) => {
-    send({ type: 'response.created', response: { id, conversation_id: 'conversation' } })
+  const start = (id = 'r1', ids = ['a1'], playback = true, response = {}) => {
+    send({ type: 'response.created', response: { ...response, id, conversation_id: 'conversation' } })
     for (const itemId of ids) {
       send({ type: 'response.output_item.added', response_id: id, item: item(itemId, 'in_progress') })
     }
@@ -39,7 +39,7 @@ function harness ({ retain = true } = {}) {
       item_id: ids[0],
       transcript: 'synthetic output',
     })
-    send({ type: 'response.done', response: { id, status: 'completed', output: ids.map(id => item(id)) } })
+    send({ type: 'response.done', response: { ...response, id, status: 'completed', output: ids.map(id => item(id)) } })
     clock.tick(0)
   }
   const retrieve = (id, bytes = 48000, sample = 1) => send({
@@ -49,7 +49,7 @@ function harness ({ retain = true } = {}) {
       content: [{ type: 'output_audio', format: 'pcm16', audio: Buffer.alloc(bytes, sample).toString('base64') }],
     },
   })
-  return { clock, session, send, start, retrieve, requests, emitted }
+  return { clock, session, send, start, retrieve, requests, emitted, item }
 }
 
 describe('OpenAI server-owned playback lifecycle edges', () => {
@@ -379,5 +379,236 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
     assert.strictEqual(h.emitted[0].usage.input_tokens, 99)
     assert.strictEqual(h.emitted[0].output.audioPresent, true)
     h.session.finishSession(h.clock.now)
+  })
+
+  for (const truncate of [true, false]) {
+    it('holds a cross-response clear until the earlier truncation or timeout (truncate=' + truncate + ')', () => {
+      const h = harness()
+      h.start('r1', ['a1'])
+      h.retrieve('a1')
+      h.start('r2', ['a2'], false)
+      h.retrieve('a2')
+      h.clock.tick(500)
+      h.send({ type: 'output_audio_buffer.cleared', response_id: 'r2' })
+      assert.strictEqual(h.emitted.length, 0)
+      if (truncate) {
+        h.send({ type: 'conversation.item.truncated', item_id: 'a1', content_index: 0, audio_end_ms: 500 })
+        h.clock.tick(0)
+        h.retrieve('a1')
+        assert.strictEqual(h.emitted.length, 1)
+        assert.strictEqual(h.emitted[0].output.audio.length, 24000)
+      } else {
+        h.clock.tick(5000)
+        assert.strictEqual(h.emitted.length, 2)
+        assert.ok(h.emitted.every(turn => turn.output.audio.length === 0))
+      }
+      h.session.finishSession(h.clock.now)
+    })
+  }
+
+  for (const laterRetrieved of [true, false]) {
+    it('excludes later audio items without waiting for them (retrieved=' + laterRetrieved + ')', () => {
+      const h = harness()
+      h.start('r1', ['a1', 'a2'])
+      h.retrieve('a1')
+      if (laterRetrieved) h.retrieve('a2')
+      h.send({ type: 'output_audio_buffer.cleared', response_id: 'r1' })
+      h.send({ type: 'conversation.item.truncated', item_id: 'a1', content_index: 0, audio_end_ms: 500 })
+      h.clock.tick(0)
+      h.retrieve('a1')
+      assert.strictEqual(h.emitted.length, 1)
+      assert.strictEqual(h.emitted[0].output.audio.length, 24000)
+      assert.strictEqual(h.emitted[0].output.audioPresent, true)
+      h.retrieve('a2')
+      assert.strictEqual(h.emitted.length, 1, 'a delayed excluded retrieval must not re-emit the turn')
+    })
+  }
+
+  for (const contentIndex of [0, 1]) {
+    it('keeps only content parts up to the interruption boundary ' + contentIndex, () => {
+      const h = harness()
+      h.start()
+      const content = [0, 1].map(() => ({
+        type: 'output_audio', format: 'pcm16', audio: Buffer.alloc(48000, 1).toString('base64'),
+      }))
+      const retrieve = () => h.send({ type: 'conversation.item.retrieved', item: { ...h.item('a1'), content } })
+      h.send({ type: 'response.output_item.done', response_id: 'r1', item: { ...h.item('a1'), content } })
+      retrieve()
+      h.send({ type: 'output_audio_buffer.cleared', response_id: 'r1' })
+      h.send({ type: 'conversation.item.truncated', item_id: 'a1', content_index: contentIndex, audio_end_ms: 500 })
+      h.clock.tick(0)
+      retrieve()
+      assert.strictEqual(h.emitted.length, 1)
+      assert.strictEqual(h.emitted[0].output.audio.length, contentIndex * 48000 + 24000)
+    })
+  }
+
+  it('does not request an output item bound after an earlier truncation', () => {
+    const h = harness()
+    h.send({ type: 'response.created', response: { id: 'r1' } })
+    h.send({ type: 'response.output_item.added', response_id: 'r1', item: h.item('a1') })
+    h.send({ type: 'output_audio_buffer.started', response_id: 'r1' })
+    h.clock.tick(0)
+    h.retrieve('a1')
+    h.send({ type: 'output_audio_buffer.cleared', response_id: 'r1' })
+    h.send({ type: 'conversation.item.truncated', item_id: 'a1', content_index: 0, audio_end_ms: 500 })
+    h.send({ type: 'response.output_item.added', response_id: 'r1', item: h.item('a2') })
+    h.send({
+      type: 'response.done',
+      response: { id: 'r1', status: 'completed', output: [h.item('a1'), h.item('a2')] },
+    })
+    h.clock.tick(0)
+    h.retrieve('a1')
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].output.audio.length, 24000)
+    assert.ok(h.requests.every(request => request.itemId !== 'a2'))
+  })
+
+  for (const role of ['user', 'assistant']) {
+    for (const explicit of [true, false]) {
+      it('handles a ' + role + ' format change during retrieval (explicit=' + explicit + ')', () => {
+        const h = harness()
+        h.send({
+          type: 'session.created',
+          session: {
+            audio: {
+              input: { format: { type: 'audio/pcm', rate: 24000 } },
+              output: { format: { type: 'audio/pcm', rate: 24000 } },
+            },
+          },
+        })
+        const id = role === 'user' ? 'u1' : 'a1'
+        if (role === 'user') {
+          h.send({ type: 'input_audio_buffer.committed', item_id: id })
+          h.send({ type: 'response.created', response: { id: 'r1' } })
+        } else {
+          h.start()
+        }
+        h.send({
+          type: 'session.updated',
+          session: {
+            audio: {
+              input: { format: { type: 'audio/pcmu' } }, output: { format: { type: 'audio/pcmu' } },
+            },
+          },
+        })
+        const part = {
+          type: role === 'user' ? 'input_audio' : 'output_audio',
+          audio: Buffer.alloc(48000, 1).toString('base64'),
+        }
+        if (explicit) part.format = 'pcm16'
+        h.send({ type: 'conversation.item.retrieved', item: { id, type: 'message', role, content: [part] } })
+        if (role === 'user') {
+          h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+        } else {
+          h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+        }
+        assert.strictEqual(h.emitted.length, 1)
+        const side = role === 'user' ? h.emitted[0].input : h.emitted[0].output
+        assert.strictEqual(side.audio.length, explicit ? 48000 : 0)
+        assert.strictEqual(side.audioPresent, true)
+        if (explicit) assert.strictEqual(side.mimeType, 'audio/pcm')
+      })
+    }
+  }
+
+  for (const explicit of [true, false]) {
+    it('requires codec evidence for a response override (explicit=' + explicit + ')', () => {
+      const h = harness()
+      h.send({ type: 'session.created', session: { audio: { output: { format: { type: 'audio/pcm' } } } } })
+      h.start('r1', ['a1'], true, { audio: { output: { format: { type: 'audio/pcmu' } } } })
+      const part = { type: 'output_audio', audio: Buffer.alloc(8000, 1).toString('base64') }
+      if (explicit) part.format = 'g711_ulaw'
+      const retrieve = () => h.send({
+        type: 'conversation.item.retrieved', item: { ...h.item('a1'), content: [part] },
+      })
+      retrieve()
+      h.send({ type: 'output_audio_buffer.cleared', response_id: 'r1' })
+      h.send({ type: 'conversation.item.truncated', item_id: 'a1', content_index: 0, audio_end_ms: 500 })
+      h.clock.tick(0)
+      retrieve()
+      assert.strictEqual(h.emitted.length, 1)
+      assert.strictEqual(h.emitted[0].output.audio.length, explicit ? 4000 : 0)
+      assert.strictEqual(h.emitted[0].output.audioPresent, true)
+      assert.strictEqual(h.emitted[0].output.transcript, 'synthetic output')
+    })
+  }
+
+  for (const firstRetrieved of [true, false]) {
+    it('retires superseded input bindings (first retrieved=' + firstRetrieved + ')', () => {
+      const h = harness()
+      const retrieve = (id, transcript, sample) => h.send({
+        type: 'conversation.item.retrieved',
+        item: {
+          id,
+          type: 'message',
+          role: 'user',
+          content: [{
+            type: 'input_audio', format: 'pcm16', audio: Buffer.alloc(4, sample).toString('base64'), transcript,
+          }],
+        },
+      })
+      h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+      h.send({
+        type: 'conversation.item.done',
+        item: { id: 'u1', type: 'message', role: 'user', content: [{ type: 'input_audio' }] },
+      })
+      if (firstRetrieved) retrieve('u1', 'older input', 1)
+      h.send({ type: 'input_audio_buffer.committed', item_id: 'u2' })
+      h.send({ type: 'response.created', response: { id: 'r1' } })
+      retrieve('u1', 'older input', 1)
+      h.send({
+        type: 'conversation.item.input_audio_transcription.completed', item_id: 'u2', transcript: 'latest input',
+      })
+      retrieve('u2', 'latest input', 2)
+      retrieve('u1', 'older input', 1)
+      h.clock.tick(0)
+      assert.ok(h.requests.every(request => request.itemId !== 'u1'), 'the superseded request must not be sent')
+      h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+      assert.strictEqual(h.emitted.length, 1)
+      assert.strictEqual(h.emitted[0].input.transcript, 'latest input')
+      assert.deepStrictEqual(h.emitted[0].input.audio, Buffer.alloc(4, 2))
+    })
+  }
+  it('retains formatless audio when the capture and current codecs agree', () => {
+    const h = harness()
+    h.start()
+    h.send({
+      type: 'conversation.item.retrieved',
+      item: { ...h.item('a1'), content: [{ type: 'output_audio', audio: Buffer.alloc(48000, 1).toString('base64') }] },
+    })
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].output.audio.length, 48000)
+    assert.strictEqual(h.emitted[0].output.mimeType, 'audio/pcm')
+  })
+
+  it('ignores a superseded input reply after its retrieval was already sent', () => {
+    const h = harness()
+    const retrieve = (id, sample) => h.send({
+      type: 'conversation.item.retrieved',
+      item: {
+        id,
+        type: 'message',
+        role: 'user',
+        content: [{
+          type: 'input_audio', format: 'pcm16', audio: Buffer.alloc(4, sample).toString('base64'),
+        }],
+      },
+    })
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+    h.send({
+      type: 'conversation.item.done',
+      item: { id: 'u1', type: 'message', role: 'user', content: [{ type: 'input_audio' }] },
+    })
+    h.clock.tick(0)
+    assert.strictEqual(h.requests[0].itemId, 'u1')
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u2' })
+    h.send({ type: 'response.created', response: { id: 'r1' } })
+    retrieve('u2', 2)
+    retrieve('u1', 1)
+    h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.deepStrictEqual(h.emitted[0].input.audio, Buffer.alloc(4, 2))
   })
 })

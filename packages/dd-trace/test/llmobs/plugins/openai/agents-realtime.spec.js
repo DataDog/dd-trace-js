@@ -32,9 +32,10 @@ function loadFixture (name) {
 async function loadSdk (mode, version) {
   if (mode === 'esm') require('../../../../../../register')
   const versionModule = require('../../../../../../versions/@openai/agents-realtime@' + version)
-  return mode === 'cjs'
-    ? versionModule.get()
-    : import(pathToFileURL(versionModule.getPath().replace(/index\\.js$/, 'index.mjs')).href)
+  if (mode === 'cjs') return versionModule.get()
+  const sdkPath = versionModule.getPath().replace(/index\.js$/, 'index.mjs')
+  assert.match(sdkPath, /\/index\.mjs$/, 'the ESM case must load the ESM build')
+  return import(pathToFileURL(sdkPath).href)
 }
 
 function firstGeneration (fixture) {
@@ -49,6 +50,7 @@ function firstGeneration (fixture) {
 
 class ReplaySocket extends EventTarget {
   readyState = 0
+  closeCode = 1000
   sent = []
 
   constructor () {
@@ -67,11 +69,11 @@ class ReplaySocket extends EventTarget {
     this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(event) }))
   }
 
-  close () {
+  close (code = this.closeCode) {
     if (this.readyState === 3) return
     this.readyState = 3
     const event = new Event('close')
-    Object.defineProperty(event, 'code', { value: 1000 })
+    Object.defineProperty(event, 'code', { value: code })
     this.dispatchEvent(event)
   }
 }
@@ -208,6 +210,58 @@ describe('Agents SDK realtime automatic tracing', () => {
           channel.start.unsubscribe(observe)
         }
       })
+
+      for (const notification of ['disconnected', 'connection_change']) {
+        for (const cause of ['normal', 'abnormal', 'error', 'close']) {
+          it(mode + ' traces reconnect from ' + notification + ' after ' + cause, async () => {
+            const sdk = await loadSdk(mode, version)
+            const turns = []
+            const channel = dc.tracingChannel('apm:openai:realtime:turn')
+            const observe = ctx => turns.push(ctx.turn)
+            channel.start.subscribe(observe)
+            let socket
+            let reconnect
+            transport = new sdk.OpenAIRealtimeSIP({
+              createWebSocket: () => {
+                socket = new ReplaySocket()
+                return Promise.resolve(socket)
+              },
+            })
+            transport.on('error', () => {})
+            const listener = status => {
+              if (notification === 'connection_change' && status !== 'disconnected') return
+              transport.off(notification, listener)
+              reconnect = transport.connect({ callId: 'replacement-call', apiKey: 'synthetic-key' })
+            }
+            try {
+              await transport.connect({ callId: 'original-call', apiKey: 'synthetic-key' })
+              socket.deliver({ type: 'response.created', response: { id: 'original-response' } })
+              transport.on(notification, listener)
+              if (cause === 'close') transport.close()
+              else if (cause === 'error') {
+                socket.closeCode = 1006
+                socket.dispatchEvent(new Event('error'))
+              } else socket.close(cause === 'abnormal' ? 1006 : 1000)
+              assert.ok(reconnect, 'the SDK must accept the reconnect from its disconnect notification')
+              await reconnect
+              socket.deliver({ type: 'response.created', response: { id: 'replacement-response' } })
+              socket.deliver({
+                type: 'response.done',
+                response: { id: 'replacement-response', status: 'completed', output: [] },
+              })
+              assert.strictEqual(turns.length, 2)
+              assert.strictEqual(turns[0].sessionId, 'original-call')
+              assert.strictEqual(turns[0].failed, cause === 'abnormal' || cause === 'error')
+              assert.strictEqual(turns[1].sessionId, 'replacement-call')
+              assert.strictEqual(turns[1].failed, false)
+              await getEvents(4)
+            } finally {
+              transport.off(notification, listener)
+              channel.start.unsubscribe(observe)
+            }
+          })
+        }
+      }
 
       it(mode + ' keeps tracer retrieval failures out of transport/session listeners', async () => {
         const sdk = await loadSdk(mode, version)
