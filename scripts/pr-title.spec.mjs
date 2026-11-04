@@ -62,35 +62,34 @@ const validate = async (title, files = []) => {
 }
 
 /**
+ * @typedef {{
+ *   query: string,
+ *   variables: Record<string, string | { pullRequestId: string, labelIds: string[] }>
+ * }} LabelRequest
+ */
+
+/**
  * @param {{
  *   title: string,
  *   labels?: Array<{ name: string, node_id: string }>,
- *   action?: string,
- *   previousTitle?: string,
- *   repositoryLabels?: Record<string, string>
+ *   repositoryLabels?: Record<string, string>,
+ *   requests?: LabelRequest[]
  * }} options
  */
-const runLabelSync = async ({ title, labels = [], action = 'opened', previousTitle, repositoryLabels = {} }) => {
-  const requests = []
-  const payload = { action, pull_request: { node_id: 'PR_1', title, labels } }
-  if (previousTitle !== undefined) payload.changes = { title: { from: previousTitle } }
+const runLabelSync = async ({ title, labels = [], repositoryLabels = {}, requests = [] }) => {
+  const payload = { action: 'opened', pull_request: { node_id: 'PR_1', title, labels } }
   const context = { repo: { owner: 'DataDog', repo: 'dd-trace-js' }, payload }
   const github = {
     /**
      * @param {string} query
-     * @param {Record<string, string | { pullRequestId: string, labelIds: string[] }>} variables
+     * @param {LabelRequest['variables']} variables
      */
     graphql: (query, variables) => {
       requests.push({ query, variables: structuredClone(variables) })
       if (!query.startsWith('query')) return {}
 
-      const repository = {}
-      for (const [key, name] of Object.entries(variables)) {
-        if (key.startsWith('label') && query.includes(`${key}: label(name: $${key}) { id }`)) {
-          repository[key] = Object.hasOwn(repositoryLabels, name) ? { id: repositoryLabels[name] } : null
-        }
-      }
-      return { repository }
+      const id = repositoryLabels[variables.name]
+      return { repository: { label: id ? { id } : null } }
     },
   }
   const process = { env: { PR_TITLE_PATTERN: job.env.PR_TITLE_PATTERN } }
@@ -179,102 +178,113 @@ describe('PR title workflow', () => {
     assert.doesNotMatch(validation.with.script, /\bgithub\./)
   })
 
-  it('syncs each label in a scope list', async () => {
-    const requests = await runLabelSync({
-      title: 'fix(http, tests): change',
-      repositoryLabels: {
-        fix: 'L_fix',
-        http: 'L_http',
-        tests: 'L_tests',
-        'semver-patch': 'L_semver-patch',
-      },
-    })
+  const semverCases = [
+    ['feat(http, tests): change', 'semver-minor'],
+    ['fix(http, unknown): change', 'semver-patch'],
+    ['docs: change', 'semver-patch'],
+    ['perf: change', 'semver-patch'],
+    ['style: change', 'semver-patch'],
+    ['refactor: change', 'semver-patch'],
+    ['test: change', 'semver-patch'],
+    ['bench: change', 'semver-patch'],
+    ['build: change', 'semver-patch'],
+    ['ci: change', 'semver-patch'],
+    ['chore(deps): change', 'semver-patch'],
+    ['fix!: change', 'semver-major'],
+    ['feat(http)!: change', 'semver-major'],
+    ['revert: feat(http)!: change', 'semver-patch'],
+    ['revert!: feat(http): change', 'semver-major'],
+  ]
 
-    assert.strictEqual(requests.length, 2)
-    assert.deepStrictEqual(requests[0].variables, {
-      owner: 'DataDog',
-      repo: 'dd-trace-js',
-      label0: 'fix',
-      label1: 'http',
-      label2: 'tests',
-      label3: 'semver-patch',
-    })
-    assert.match(requests[0].query, /repository\(owner: \$owner, name: \$repo\)/)
-    assert.deepStrictEqual(requests[1].variables, {
-      input: { pullRequestId: 'PR_1', labelIds: ['L_fix', 'L_http', 'L_tests', 'L_semver-patch'] },
-    })
-    assert.match(requests[1].query, /updatePullRequest/)
-  })
+  for (const [title, semver] of semverCases) {
+    it(`syncs only ${semver} for "${title}"`, async () => {
+      const requests = await runLabelSync({
+        title,
+        repositoryLabels: { [semver]: 'L_semver', feat: 'L_feat', http: 'L_http', tests: 'L_tests' },
+      })
 
-  it('skips GitHub API calls when the title labels are already present', async () => {
-    const requests = await runLabelSync({
-      title: 'fix(http): change',
-      labels: [
-        { name: 'fix', node_id: 'L_fix' },
-        { name: 'http', node_id: 'L_http' },
-        { name: 'semver-patch', node_id: 'L_semver-patch' },
-      ],
+      assert.strictEqual(requests.length, 2)
+      assert.deepStrictEqual(requests[0].variables, { owner: 'DataDog', repo: 'dd-trace-js', name: semver })
+      assert.match(requests[0].query, /repository\(owner: \$owner, name: \$repo\)/)
+      assert.match(requests[0].query, /label\(name: \$name\)\s*\{ id \}/)
+      assert.deepStrictEqual(requests[1].variables, {
+        input: { pullRequestId: 'PR_1', labelIds: ['L_semver'] },
+      })
+      assert.match(requests[1].query, /updatePullRequest/)
     })
+  }
 
-    assert.deepStrictEqual(requests, [])
-  })
-
-  it('replaces stale title labels and preserves unrelated labels', async () => {
+  it('replaces stale semver labels and preserves every other label', async () => {
     const requests = await runLabelSync({
       title: 'feat(db): change',
-      action: 'edited',
-      previousTitle: 'fix(http): change',
       labels: [
         { name: 'fix', node_id: 'L_fix' },
         { name: 'http', node_id: 'L_http' },
         { name: 'semver-patch', node_id: 'L_semver-patch' },
+        { name: 'semver-major', node_id: 'L_semver-major' },
         { name: 'dependencies', node_id: 'L_dependencies' },
+        { name: 'semver-custom', node_id: 'L_semver-custom' },
       ],
       repositoryLabels: { feat: 'L_feat', db: 'L_db', 'semver-minor': 'L_semver-minor' },
     })
 
     assert.strictEqual(requests.length, 2)
     assert.deepStrictEqual(requests[1].variables, {
-      input: { pullRequestId: 'PR_1', labelIds: ['L_dependencies', 'L_feat', 'L_db', 'L_semver-minor'] },
+      input: {
+        pullRequestId: 'PR_1',
+        labelIds: ['L_fix', 'L_http', 'L_dependencies', 'L_semver-custom', 'L_semver-minor'],
+      },
     })
   })
 
-  it('ignores scope labels that do not exist in the repository', async () => {
-    const requests = await runLabelSync({
-      title: 'fix(http, unknown): change',
-      labels: [
-        { name: 'fix', node_id: 'L_fix' },
-        { name: 'http', node_id: 'L_http' },
-        { name: 'semver-patch', node_id: 'L_semver-patch' },
-      ],
+  it('skips GitHub API calls when only the expected semver label is present', async () => {
+    await Promise.all(semverCases.map(async ([title, semver]) => {
+      const requests = await runLabelSync({
+        title,
+        labels: [
+          { name: semver, node_id: 'L_semver' },
+          { name: 'unrelated', node_id: 'L_unrelated' },
+        ],
+      })
+
+      assert.deepStrictEqual(requests, [], title)
+    }))
+  })
+
+  it('removes conflicting semver labels without looking up an existing label', async () => {
+    await Promise.all(semverCases.map(async ([title, semver]) => {
+      const requests = await runLabelSync({
+        title,
+        labels: [
+          { name: 'semver-major', node_id: 'L_semver-major' },
+          { name: 'semver-minor', node_id: 'L_semver-minor' },
+          { name: 'semver-patch', node_id: 'L_semver-patch' },
+          { name: 'unrelated', node_id: 'L_unrelated' },
+        ],
+      })
+
+      assert.strictEqual(requests.length, 1, title)
+      assert.match(requests[0].query, /updatePullRequest/)
+      assert.deepStrictEqual(requests[0].variables, {
+        input: { pullRequestId: 'PR_1', labelIds: ['L_unrelated', `L_${semver}`] },
+      })
+    }))
+  })
+
+  it('skips label synchronization for an invalid title', async () => {
+    assert.deepStrictEqual(await runLabelSync({ title: 'invalid title' }), [])
+  })
+
+  it('fails before mutation when the required semver label does not exist', async () => {
+    const requests = []
+
+    await assert.rejects(runLabelSync({ title: 'fix: change', requests }), {
+      name: 'Error',
+      message: 'Missing repository label: semver-patch',
     })
 
     assert.strictEqual(requests.length, 1)
-    assert.strictEqual(requests[0].variables.label0, 'unknown')
-  })
-
-  it('does not mutate a dependency PR when its title labels do not exist', async () => {
-    const requests = await runLabelSync({
-      title: 'chore(deps): bump dependencies',
-      labels: [
-        { name: 'semver-patch', node_id: 'L_semver-patch' },
-        { name: 'dependencies', node_id: 'L_dependencies' },
-        { name: 'github_actions', node_id: 'L_github_actions' },
-        { name: 'dependabot', node_id: 'L_dependabot' },
-      ],
-    })
-
-    assert.strictEqual(requests.length, 1)
-    assert.deepStrictEqual(requests[0].variables, {
-      owner: 'DataDog',
-      repo: 'dd-trace-js',
-      label0: 'chore',
-      label1: 'deps',
-    })
-  })
-
-  it('fails when the required semver label does not exist', async () => {
-    await assert.rejects(runLabelSync({ title: 'fix: change' }), /Missing repository label: semver-patch/)
+    assert.match(requests[0].query, /^query\(/)
   })
 
   it('inspects files for every event unless the title was auto-renamed', () => {
