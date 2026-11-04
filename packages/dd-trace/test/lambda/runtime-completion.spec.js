@@ -375,6 +375,121 @@ describe('Lambda runtime completion handoff', () => {
     assertExactlyOneLambdaSpan(traces)
   })
 
+  describe('late callbacks during outer post-processing', () => {
+    for (const mode of ['auto', 'callback']) {
+      for (const outcome of ['promise', 'reject', 'throw', 'thenable']) {
+        for (const callbackFails of [false, true]) {
+          it(`keeps ${outcome} selected in ${mode} mode with late callback failure ${callbackFails}`, async () => {
+            const ric = runtime()
+            const native = sinon.spy(ric.callback)
+            const innerError = new Error('inner failure')
+            const outerError = new Error('outer transformed failure')
+            const failed = outcome === 'reject' || outcome === 'throw'
+            let callback
+            let finishOuter
+            const wrapped = facade.wrap((_event, _context, done) => {
+              callback = done
+              if (outcome === 'throw') throw innerError
+              if (outcome === 'reject') return Promise.reject(innerError)
+              if (outcome === 'thenable') return { then: resolve => resolve('inner') }
+              return Promise.resolve('inner')
+            }, { handlerCompletion: mode })
+            const result = ric.invoke((event, context) => wrapped(event, context, native).then(value => {
+              assert.strictEqual(value, 'inner')
+              return new Promise(resolve => { finishOuter = () => resolve(value + ' transformed') })
+            }, error => {
+              assert.strictEqual(error, innerError)
+              return new Promise((resolve, reject) => { finishOuter = () => reject(outerError) })
+            }))
+            const observed = failed ? assert.rejects(result, error => error === outerError) : result
+            await clock.tickAsync(0)
+            assert.strictEqual(typeof finishOuter, 'function')
+            assert.strictEqual(ric.posts.length, 0)
+            const span = assertExactlyOneLambdaSpan(traces)
+            assert.strictEqual(span.error, failed ? 1 : 0)
+            callback(callbackFails ? new Error('late callback') : null, 'late callback')
+            assert.strictEqual(native.callCount, 0, 'a losing callback must not reach the runtime')
+            assert.strictEqual(ric.posts.length, 0)
+            finishOuter()
+            if (failed) await observed
+            else assert.strictEqual(await observed, 'inner transformed')
+            await clock.tickAsync(0)
+            assert.strictEqual(ric.posts.length, 1)
+            if (failed) assert.strictEqual(ric.posts[0].error, outerError)
+            else assert.strictEqual(ric.posts[0].value, 'inner transformed')
+            assertExactlyOneLambdaSpan(traces)
+            assert.strictEqual(clock.countTimers(), 0)
+          })
+        }
+      }
+
+      for (const wait of [false, true]) {
+        it(`preserves callback-first completion and event-loop wait ${wait} in ${mode} mode`, async () => {
+          const ric = runtime()
+          ric.context.callbackWaitsForEmptyEventLoop = wait
+          let callback
+          let rejectPromise
+          let finishOuter
+          const wrapped = facade.wrap((_event, _context, done) => {
+            callback = done
+            return new Promise((resolve, reject) => { rejectPromise = reject })
+          }, { handlerCompletion: mode })
+          const result = ric.invoke((...args) => wrapped(...args).then(value => {
+            return new Promise(resolve => { finishOuter = () => resolve(value + ' transformed') })
+          }))
+          callback(null, 'callback')
+          await clock.tickAsync(0)
+          assert.strictEqual(typeof finishOuter, 'function')
+          assert.strictEqual(ric.posts.length, wait ? 0 : 1)
+          assert.strictEqual(traces.length, wait ? 0 : 1)
+          assert.strictEqual(clock.countTimers(), wait ? 1 : 0)
+          rejectPromise(new Error('losing returned Promise'))
+          finishOuter()
+          assert.strictEqual(await result, 'callback transformed')
+          await clock.tickAsync(0)
+          assert.strictEqual(ric.posts.length, wait ? 0 : 1)
+          if (wait) {
+            assert.strictEqual(traces.length, 0)
+            assert.strictEqual(clock.countTimers(), 1)
+            globalThis[BEFORE_EXIT]()
+            await clock.tickAsync(0)
+          }
+          assert.strictEqual(ric.posts.length, 1)
+          assert.strictEqual(ric.posts[0].value, 'callback')
+          assertExactlyOneLambdaSpan(traces)
+          assert.strictEqual(clock.countTimers(), 0)
+        })
+      }
+    }
+
+    for (const monitor of [false, true]) {
+      it(`ignores losing callbacks with tracing disabled and timeout monitoring ${monitor}`, async () => {
+        tracer.use('aws-lambda', { enabled: false })
+        const ric = runtime()
+        if (!monitor) ric.context.getRemainingTimeInMillis = () => NaN
+        let callback
+        let finishOuter
+        const wrapped = facade.wrap((_event, _context, done) => {
+          callback = done
+          return Promise.resolve('inner')
+        })
+        const result = ric.invoke((...args) => wrapped(...args).then(value => {
+          return new Promise(resolve => { finishOuter = () => resolve(value + ' transformed') })
+        }))
+        await clock.tickAsync(0)
+        callback(null, 'late callback')
+        assert.strictEqual(ric.posts.length, 0)
+        finishOuter()
+        assert.strictEqual(await result, 'inner transformed')
+        await clock.tickAsync(0)
+        assert.strictEqual(ric.posts.length, 1)
+        assert.strictEqual(ric.posts[0].value, 'inner transformed')
+        assert.strictEqual(traces.length, 0)
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+  })
+
   it('does not overwrite a customer replacement when restoring context methods', async () => {
     const ric = runtime()
     let callback

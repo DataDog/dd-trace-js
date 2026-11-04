@@ -66,7 +66,9 @@ function invokeHandler (handler, receiver, args, completionMode, invocation) {
         if (failed) reject(error)
         else resolve(result)
       }
-      if (!invocation || nativeCompleted || (callback && !acceptsCallback)) return
+      // Return completion can precede an outer wrapper's final result. Ignore late callbacks,
+      // but allow context methods to deliver that result through the runtime's Promise continuation.
+      if (!invocation || nativeCompleted || (callback && (!acceptsCallback || invocation.completed))) return
       // The monitor observes a supplied callback, including a runtime's event-loop-drain policy.
       // Context methods and synthetic callbacks complete the lifecycle here before native delivery.
       if (first && !(callback && invocation.callbackObserved)) invocation.complete(error, result, failed)
