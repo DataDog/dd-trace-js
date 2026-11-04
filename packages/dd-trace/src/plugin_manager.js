@@ -227,8 +227,14 @@ module.exports = class PluginManager {
       site,
       url,
       headers: headerTags || [],
-      DD_TRACE_HTTP_CLIENT_ERROR_STATUSES,
-      DD_TRACE_HTTP_SERVER_ERROR_STATUSES,
+      DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: DD_TRACE_HTTP_CLIENT_ERROR_STATUSES === undefined ||
+        tracerConfig.getOrigin('DD_TRACE_HTTP_CLIENT_ERROR_STATUSES') === 'default'
+        ? undefined
+        : DD_TRACE_HTTP_CLIENT_ERROR_STATUSES,
+      DD_TRACE_HTTP_SERVER_ERROR_STATUSES: DD_TRACE_HTTP_SERVER_ERROR_STATUSES === undefined ||
+        tracerConfig.getOrigin('DD_TRACE_HTTP_SERVER_ERROR_STATUSES') === 'default'
+        ? undefined
+        : DD_TRACE_HTTP_SERVER_ERROR_STATUSES,
       clientIpHeader,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
@@ -239,15 +245,6 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       tracing,
       resourceRenamingEnabled: DD_TRACE_RESOURCE_RENAMING_ENABLED,
-    }
-
-    if (DD_TRACE_HTTP_CLIENT_ERROR_STATUSES !== undefined &&
-        tracerConfig.getOrigin('DD_TRACE_HTTP_CLIENT_ERROR_STATUSES') === 'default') {
-      sharedConfig.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = undefined
-    }
-    if (DD_TRACE_HTTP_SERVER_ERROR_STATUSES !== undefined &&
-        tracerConfig.getOrigin('DD_TRACE_HTTP_SERVER_ERROR_STATUSES') === 'default') {
-      sharedConfig.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = undefined
     }
 
     if (logInjection !== undefined) {

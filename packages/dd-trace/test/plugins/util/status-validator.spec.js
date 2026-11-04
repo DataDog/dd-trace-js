@@ -112,16 +112,6 @@ describe('plugins/util/status-validator', () => {
       assert.deepStrictEqual(errorCodes(validate, [599, 600, 999]), [599, 600, 999])
     })
 
-    // `Config` gives this option a default value, so an unset option still arrives as '400-499'
-    // and has to be read as unset rather than as a chosen range.
-    it('should widen past the Datadog default value when it was never chosen', () => {
-      const validate = getClientStatusValidator({
-        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
-      })
-
-      assert.deepStrictEqual(errorCodes(validate, [399, 400, 500, 599]), [400, 500, 599])
-    })
-
     it('should preserve an explicitly configured default-shaped client range', () => {
       const validate = getClientStatusValidator({
         DD_TRACE_OTEL_SEMANTICS_ENABLED: true,

@@ -322,19 +322,35 @@ describe('Plugin', () => {
         })
       })
 
-      for (const configuredStatuses of [undefined, '500-599']) {
-        const rangeDescription = configuredStatuses === undefined ? 'default' : 'explicit default-shaped'
-        describe(`with ${rangeDescription} server statuses`, () => {
+      for (const { description, statuses, validateStatus, errorStatuses, otelSemantics } of [
+        { description: 'default', errorStatuses: [500, 599, 600], otelSemantics: false },
+        {
+          description: 'explicit default-shaped',
+          statuses: '500-599',
+          errorStatuses: [500, 599],
+          otelSemantics: false,
+        },
+        { description: 'default', errorStatuses: [500, 599, 600], otelSemantics: true },
+        { description: 'explicit default-shaped', statuses: '500-599', errorStatuses: [500, 599], otelSemantics: true },
+        { description: 'custom', statuses: '200', errorStatuses: [200], otelSemantics: true },
+        {
+          description: 'custom validation',
+          validateStatus: () => true,
+          errorStatuses: /** @type {number[]} */ ([]),
+          otelSemantics: true,
+        },
+      ]) {
+        describe(`with ${description} server statuses and OTel semantics ${otelSemantics}`, () => {
           let responseStatus
 
           beforeEach(async () => {
-            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'false'
-            if (configuredStatuses === undefined) {
+            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = String(otelSemantics)
+            if (statuses === undefined) {
               delete process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES
             } else {
-              process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = configuredStatuses
+              process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = statuses
             }
-            await agent.load('http', { client: false })
+            await agent.load('http', { client: false, server: validateStatus ? { validateStatus } : {} })
             http = require(pluginToBeLoaded)
             appListener = new http.Server((req, res) => {
               res.writeHead(responseStatus)
@@ -350,16 +366,21 @@ describe('Plugin', () => {
             delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
           })
 
-          for (const status of [499, 500, 599, 600]) {
+          for (const status of [200, 499, 500, 599, 600]) {
             it(`classifies status ${status} using the configured range origin`, async () => {
               responseStatus = status
-              const expectedError = status >= 500 && (configuredStatuses === undefined || status <= 599) ? 1 : 0
+              const expectedError = errorStatuses.includes(status) ? 1 : 0
               await Promise.all([
                 agent.assertFirstTraceSpan(span => {
                   assert.strictEqual(span.error, expectedError)
-                  assert.strictEqual(span.meta['http.status_code'], String(status))
+                  if (otelSemantics) {
+                    assert.strictEqual(span.meta['error.type'], expectedError ? String(status) : undefined)
+                    assert.strictEqual(span.metrics['http.response.status_code'], status)
+                  } else {
+                    assert.strictEqual(span.meta['http.status_code'], String(status))
+                  }
                 }),
-                httpRequest.get(`http://localhost:${port}/user`, { validateStatus: () => true }),
+                httpRequest.request(`http://localhost:${port}/user`, { validateStatus: () => true }),
               ])
             })
           }

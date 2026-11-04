@@ -6,6 +6,7 @@
 /* eslint-disable sonarjs/no-identical-functions */
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -106,6 +107,71 @@ describe('Plugin', () => {
           })
         })
       })
+
+      for (const { description, statuses, validateStatus, errorStatuses } of [
+        { description: 'default', errorStatuses: [400, 499, 500, 599] },
+        { description: 'explicit default-shaped', statuses: '400-499', errorStatuses: [400, 499] },
+        { description: 'custom', statuses: '200', errorStatuses: [200] },
+        {
+          description: 'custom validation',
+          statuses: '400-599',
+          validateStatus: () => true,
+          errorStatuses: /** @type {number[]} */ ([]),
+        },
+      ]) {
+        describe(`with OTel semantics and ${description} client statuses`, () => {
+          let responseStatus
+
+          beforeEach(async () => {
+            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+            if (statuses === undefined) {
+              delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+            } else {
+              process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = statuses
+            }
+            await agent.load('http2', { server: false, client: validateStatus ? { validateStatus } : {} })
+            http2 = require(loadPlugin)
+            appListener = server(stream => {
+              stream.respond({ ':status': responseStatus })
+              stream.end()
+            }, () => {})
+            await once(appListener, 'listening')
+          })
+
+          afterEach(() => {
+            delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+            delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          })
+
+          for (const status of [200, 399, 400, 499, 500, 599]) {
+            it(`classifies status ${status} using the configured range origin`, async () => {
+              responseStatus = status
+              const port = appListener.address().port
+              const expectedError = errorStatuses.includes(status) ? 1 : 0
+              const client = http2.connect(`${protocol}://localhost:${port}`)
+              try {
+                await Promise.all([
+                  agent.assertFirstTraceSpan(span => {
+                    assert.strictEqual(span.error, expectedError)
+                    assert.strictEqual(span.meta['error.type'], expectedError ? String(status) : undefined)
+                    assert.strictEqual(span.metrics['http.response.status_code'], status)
+                  }),
+                  (async () => {
+                    const request = client.request({ ':path': '/user' })
+                    request.end()
+                    const [headers] = await once(request, 'response')
+                    request.resume()
+                    await once(request, 'end')
+                    assert.strictEqual(headers[':status'], status)
+                  })(),
+                ])
+              } finally {
+                client.close()
+              }
+            })
+          }
+        })
+      }
 
       describe('without configuration', () => {
         beforeEach(() => {

@@ -152,6 +152,65 @@ describe('Plugin', () => {
         })
       })
 
+      for (const { description, statuses, validateStatus, errorStatuses } of [
+        { description: 'default', errorStatuses: [400, 499, 500, 599, 600] },
+        { description: 'explicit default-shaped', statuses: '400-499', errorStatuses: [400, 499] },
+        { description: 'custom', statuses: '200', errorStatuses: [200] },
+        {
+          description: 'custom validation',
+          statuses: '400-599',
+          validateStatus: () => true,
+          errorStatuses: /** @type {number[]} */ ([]),
+        },
+      ]) {
+        describe(`with OTel semantics and ${description} client statuses`, () => {
+          let responseStatus
+
+          beforeEach(async () => {
+            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+            if (statuses === undefined) {
+              delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+            } else {
+              process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = statuses
+            }
+            await agent.load('http', { server: false, client: validateStatus ? { validateStatus } : {} })
+            http = require(pluginToBeLoaded)
+            appListener = server((req, res) => {
+              res.writeHead(responseStatus)
+              res.end()
+            }, () => {})
+            await once(appListener, 'listening')
+          })
+
+          afterEach(() => {
+            delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+            delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          })
+
+          for (const status of [200, 399, 400, 499, 500, 599, 600]) {
+            it(`classifies status ${status} using the configured range origin`, async () => {
+              responseStatus = status
+              const port = appListener.address().port
+              const expectedError = errorStatuses.includes(status) ? 1 : 0
+              await Promise.all([
+                agent.assertFirstTraceSpan(span => {
+                  assert.strictEqual(span.error, expectedError)
+                  assert.strictEqual(span.meta['error.type'], expectedError ? String(status) : undefined)
+                  assert.strictEqual(span.metrics['http.response.status_code'], status)
+                }),
+                (async () => {
+                  const request = http.get(`${protocol}://localhost:${port}/user`)
+                  const [response] = await once(request, 'response')
+                  response.resume()
+                  await once(response, 'end')
+                  assert.strictEqual(response.statusCode, status)
+                })(),
+              ])
+            })
+          }
+        })
+      }
+
       describe('without configuration', () => {
         beforeEach(async () => {
           tracer = await agent.load('http', { server: false })
