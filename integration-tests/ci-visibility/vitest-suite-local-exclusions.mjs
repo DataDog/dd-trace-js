@@ -1,11 +1,14 @@
 import { describe, expect } from 'vitest'
 import { noAutoRetry, preventFailureSuppression } from 'dd-trace/ci/test-annotations'
 
-/** @param {(name: string, callback: Function) => Function} tracked */
-export function declareSuiteLocalTests (tracked) {
+/**
+ * @param {(name: string, callback: Function) => Function} tracked
+ * @param {typeof describe} [declareSuite]
+ */
+export function declareSuiteLocalTests (tracked, declareSuite = describe) {
   const fail = () => { throw new Error('suite-local failure') }
   const protect = name => preventFailureSuppression(noAutoRetry(tracked(name, fail)))
-  describe('local', localTest => {
+  declareSuite('local', localTest => {
     localTest('direct', protect('local direct'))
     const cases = localTest.each([1, 2])
     cases('each %s', protect('local each'))

@@ -1,7 +1,8 @@
 'use strict'
 
 const declarationMethods = new Set([
-  'concurrent', 'sequential', 'skip', 'only', 'todo', 'fails', 'each', 'for', 'extend', 'skipIf', 'runIf',
+  'concurrent', 'sequential', 'shuffle', 'skip', 'only', 'todo', 'fails', 'each', 'for', 'extend',
+  'skipIf', 'runIf', 'describe', 'suite',
 ])
 const wrappedDeclarations = new WeakMap()
 const capturedCollectors = new WeakSet()

@@ -98,6 +98,19 @@ for (const version of versions) {
         properties(assignments)
         await run('suite-local', 1, check, { POOL_CONFIG: pool }, executions)
       })
+
+      for (const method of ['shuffle', 'describe', 'suite']) {
+        it(`captures suite-local annotations when ${method} declares the first suite in ${pool}`, async function () {
+          if (method !== 'shuffle' && version !== 'latest') {
+            // test.describe/test.suite are absent from the tested Vitest 1.6 and 3.2 releases.
+            this.skip()
+          }
+          receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
+          const { assignments, check, executions } = suiteLocalExpectations(version !== '1.6.0')
+          properties(assignments)
+          await run(`suite-local-${method}`, 1, check, { POOL_CONFIG: pool }, executions)
+        })
+      }
     }
 
     it('keeps a protection-only failure blocking without implying retry exclusion', async () => {

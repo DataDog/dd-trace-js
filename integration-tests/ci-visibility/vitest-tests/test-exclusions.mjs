@@ -25,8 +25,10 @@ function tracked (name, callback = fail) {
   }
 }
 
-if (process.env.EXCLUSIONS_MODE === 'suite-local') {
-  declareSuiteLocalTests(tracked)
+if (process.env.EXCLUSIONS_MODE?.startsWith('suite-local')) {
+  const method = process.env.EXCLUSIONS_MODE.slice('suite-local'.length)
+  const declareSuite = method === '-shuffle' ? describe.shuffle : method ? test[method.slice(1)] : describe
+  declareSuiteLocalTests(tracked, declareSuite)
 } else if (process.env.EXCLUSIONS_MODE === 'declaration-variants') {
   const protect = callback => preventFailureSuppression(noAutoRetry(callback))
   const generated = test.skipIf(false).concurrent.each([1, 2])
