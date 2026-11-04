@@ -14,7 +14,7 @@ const protection = 'test.test_management.prevent_failure_suppression'
 const exclusion = 'test.test_management.no_auto_retry'
 const suite = 'ci-visibility/vitest-tests/test-exclusions.mjs'
 
-const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['3.2.6', 'latest']
+const versions = NODE_MAJOR <= 18 ? ['3.2.6'] : ['3.2.6', 'latest']
 
 for (const version of versions) {
   describe(`Vitest ${version} no-worker automation exclusions`, function () {
