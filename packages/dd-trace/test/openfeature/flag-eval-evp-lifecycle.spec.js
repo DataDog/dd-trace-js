@@ -2,8 +2,8 @@
 
 const assert = require('node:assert/strict')
 
-const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
 const { ErrorCode, OpenFeature } = require('@openfeature/server-sdk')
+const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -22,11 +22,18 @@ describe('FlaggingProvider EVP lifecycle', () => {
   let Provider
   let handlers
   let config
+  let exposureChannel
+  let exposures
+  let onExposure
   let snapshotContext
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({ now })
     handlers = new Set(globalThis[Symbol.for('dd-trace')].beforeExitHandlers)
+    exposures = []
+    onExposure = exposure => exposures.push(exposure)
+    exposureChannel = channel('ffe:exposure:submit')
+    exposureChannel.subscribe(onExposure)
     request = sinon.stub().callsFake((body, options, callback) => callback(null, '', 202))
     const BaseWriter = proxyquire('../../src/openfeature/writers/base', {
       '../../exporters/common/request': request,
@@ -50,7 +57,6 @@ describe('FlaggingProvider EVP lifecycle', () => {
     Provider = proxyquire('../../src/openfeature/flagging_provider', {
       './writers/flag-eval-evp-hook': Hook,
       './configuration_source': { create: sinon.stub() },
-      '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
     })
     config = {
       url: new URL('http://localhost:8126'),
@@ -64,6 +70,7 @@ describe('FlaggingProvider EVP lifecycle', () => {
 
   afterEach(async () => {
     provider?.onClose()
+    exposureChannel.unsubscribe(onExposure)
     await OpenFeature.clearProviders()
     assert.deepStrictEqual(globalThis[Symbol.for('dd-trace')].beforeExitHandlers, handlers)
     clock.runMicrotasks()
@@ -289,11 +296,32 @@ describe('FlaggingProvider EVP lifecycle', () => {
     sinon.assert.calledOnce(request)
     const rows = JSON.parse(request.firstCall.args[0]).flagEvaluations
     assert.deepStrictEqual(rows.map(row => row.flag.key), ['prerequisite', 'missing', 'root'])
+    assert.deepStrictEqual(exposures, [])
     assert.strictEqual(rows[0].error, undefined)
     for (const row of rows.slice(1)) {
       assert.deepStrictEqual(row.error, { message: 'FLAG_NOT_FOUND' })
       assert.strictEqual(row.runtime_default_used, true)
     }
+  })
+
+  it('retains dependency evaluations but rolls back exposures after an application hook fails', async () => {
+    provider = new Provider({}, config)
+    provider.setConfiguration(dependentConfiguration(false))
+    await OpenFeature.setProviderAndWait('evp-lifecycle', provider)
+    const client = OpenFeature.getClient('evp-lifecycle')
+    client.addHooks({ after () { throw new Error('application hook failed') } })
+    enable()
+
+    const result = await client.getBooleanDetails('root', false, { targetingKey: 'customer' })
+    assert.strictEqual(result.value, false)
+    assert.strictEqual(result.reason, 'ERROR')
+    assert.strictEqual(result.errorCode, ErrorCode.GENERAL)
+    provider.onClose()
+
+    sinon.assert.calledOnce(request)
+    const rows = JSON.parse(request.firstCall.args[0]).flagEvaluations
+    assert.deepStrictEqual(rows.map(row => row.flag.key), ['prerequisite', 'root'])
+    assert.deepStrictEqual(exposures, [])
   })
 
   it('records errors for dependency ancestors affected by a missing descendant', async () => {

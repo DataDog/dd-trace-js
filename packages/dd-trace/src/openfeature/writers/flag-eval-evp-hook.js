@@ -34,6 +34,17 @@ class FlagEvalEVPHook {
   }
 
   /**
+   * Retain an invocation-local alias before a later application hook can replace
+   * the successful result and its metadata with an error result.
+   *
+   * @param {import('@openfeature/core').HookContext} hookContext
+   * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
+   */
+  after (hookContext, evaluationDetails) {
+    this.#dependencyTelemetrySidecar?.associateDependencyEvaluations(hookContext, evaluationDetails.flagMetadata)
+  }
+
+  /**
    * Provider hooks run in finally even when the SDK short-circuits before resolution.
    * Consent belongs to the captured result, never the provider's current configuration.
    *
