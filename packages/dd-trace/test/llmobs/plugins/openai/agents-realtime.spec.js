@@ -91,7 +91,13 @@ describe('Agents SDK realtime automatic tracing', () => {
     let transport
 
     const turnChannel = dc.tracingChannel('apm:openai:realtime:turn')
-    const debugChannel = dc.channel('datadog:log:debug')
+    const warningChannel = dc.channel('datadog:log:warn')
+    const errorChannel = dc.channel('datadog:log:error')
+    const finishChannel = dc.channel('dd-trace:span:finish')
+    let Tagger
+    const observeFinish = span => {
+      if (Tagger.tagMap.has(span)) diagnostics.registeredAtFinish++
+    }
     const observeTurn = () => { diagnostics.turns++ }
     const observeTrace = traces => { diagnostics.apmSpans += traces.flat().length }
     const observeLog = record => {
@@ -102,10 +108,42 @@ describe('Agents SDK realtime automatic tracing', () => {
     }
 
     beforeEach(() => {
-      diagnostics = { expected: 0, turns: 0, apmSpans: 0, written: {}, received: {}, payloadBytes: [], errors: [] }
+      diagnostics = {
+        expected: 0,
+        turns: 0,
+        apmSpans: 0,
+        registeredAtFinish: 0,
+        processCalls: 0,
+        formatted: {},
+        written: {},
+        received: {},
+        payloadBytes: [],
+        errors: [],
+      }
+      const tracer = require('../../../../../..')
+      Tagger = require('../../../../src/llmobs/tagger')
+      diagnostics.enabled = tracer.llmobs.enabled
+      diagnostics.sameRegistry = Tagger.tagMap === tracer.llmobs._tagger?.constructor.tagMap
+      diagnostics.sameLifecycle = tracer.llmobs._llmobsModule === require('../../../../src/llmobs')
+      diagnostics.finishHadSubscribers = finishChannel.hasSubscribers
       turnChannel.start.subscribe(observeTurn)
-      debugChannel.subscribe(observeLog)
+      warningChannel.subscribe(observeLog)
+      errorChannel.subscribe(observeLog)
+      finishChannel.subscribe(observeFinish)
       agent.subscribe(observeTrace)
+      const Processor = require('../../../../src/llmobs/span_processor')
+      const processSpan = Processor.prototype.process
+      const format = Processor.prototype.format
+      sinon.replace(Processor.prototype, 'process', function (span) {
+        diagnostics.processCalls++
+        return processSpan.call(this, span)
+      })
+      sinon.replace(Processor.prototype, 'format', function (span) {
+        const event = format.call(this, span)
+        const name = event?.name || 'dropped'
+        diagnostics.formatted[name] = (diagnostics.formatted[name] || 0) + 1
+        return event
+      })
       const Writer = require('../../../../src/llmobs/writers/spans')
       const append = Writer.prototype.append
       sinon.replace(Writer.prototype, 'append', function (event, routing) {
@@ -132,7 +170,9 @@ describe('Agents SDK realtime automatic tracing', () => {
         process.stderr.write('Agents realtime delivery diagnostics: ' + JSON.stringify(diagnostics) + '\n')
       }
       turnChannel.start.unsubscribe(observeTurn)
-      debugChannel.unsubscribe(observeLog)
+      warningChannel.unsubscribe(observeLog)
+      errorChannel.unsubscribe(observeLog)
+      finishChannel.unsubscribe(observeFinish)
       agent.unsubscribe(observeTrace)
       transport?.close()
       flushLiveSessions()
