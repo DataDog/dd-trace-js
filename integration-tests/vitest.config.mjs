@@ -177,7 +177,7 @@ if (process.env.VITEST_MIXED_BROWSER_MODE) {
             name: `browser-${browserName}`,
           }],
         },
-        include: ['ci-visibility/vitest-browser-tests/browser-reporting.mjs'],
+        include: [process.env.TEST_DIR || 'ci-visibility/vitest-browser-tests/browser-reporting.mjs'],
         name: 'browser-project',
       },
     },

@@ -1,6 +1,5 @@
 'use strict'
 
-const { readFileSync } = require('node:fs')
 const path = require('node:path')
 
 const satisfies = require('../../../vendor/dist/semifies')
@@ -74,20 +73,10 @@ const VITEST_NO_WORKER_INIT_V5_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-v5-setup.mjs'
 )
-const DECLARATION_ANNOTATIONS_MODULE = 'virtual:dd-vitest-test-declaration-annotations'
-const declarationAnnotationsSource = readFileSync(
-  require.resolve('../../dd-trace/src/ci-visibility/test-declaration-annotations'), 'utf8'
-).replace('module.exports = { wrapDeclaration, captureDeclarations }', 'export { captureDeclarations }')
 const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
   name: 'datadog:vitest-browser-setup-file',
   config: configureVitestBrowserSetupFile,
   configResolved: allowVitestBrowserSetupFile,
-  resolveId (id) {
-    if (id === DECLARATION_ANNOTATIONS_MODULE) return `\0${id}`
-  },
-  load (id) {
-    if (id === `\0${DECLARATION_ANNOTATIONS_MODULE}`) return declarationAnnotationsSource
-  },
 }
 const VITEST_NO_WORKER_INIT_ISOLATE_WARNING =
   `${VITEST_NO_WORKER_INIT_REQUEST_ENV} is ignored because Vitest isolate is disabled. ` +
@@ -527,6 +516,8 @@ function allowVitestBrowserSetupFile (viteConfig) {
     VITEST_NO_WORKER_INIT_SETUP_FILE,
     VITEST_NO_WORKER_INIT_RUNNER_SETUP_FILE,
     VITEST_NO_WORKER_INIT_V5_SETUP_FILE,
+    path.join(__dirname, '..', '..', '..', 'ci', 'vitest-no-worker-init-annotations.mjs'),
+    require.resolve('../../dd-trace/src/ci-visibility/test-declaration-annotations'),
   ]
   for (const setupFile of setupFiles) {
     if (!allow.includes(setupFile)) {

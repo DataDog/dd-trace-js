@@ -1033,21 +1033,29 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
     return counts
   }
 
-  it('honors browser suite-local annotations', async () => {
-    const testSuite = 'ci-visibility/vitest-browser-tests/browser-exclusions-suite-local.mjs'
-    const { assignments, check, executions } = suiteLocalExpectations(true)
-    receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
-    receiver.setTestManagementTests({ vitest: { suites: { [testSuite]: { tests: assignments } } } })
-    const runPromise = runVitest('browser-exclusions-suite-local.mjs', {
-      DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
-    }, 1)
-    const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
-      ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-        check(getEventContents(getEvents(payloads), 'test'))
-      })
-    await Promise.all([runPromise, eventsPromise])
-    assert.deepStrictEqual(readBrowserExecutions(), executions)
-  })
+  for (const mixed of [false, true]) {
+    it(`honors browser suite-local annotations (mixed projects=${mixed})`, async () => {
+      const testSuite = 'ci-visibility/vitest-browser-tests/browser-exclusions-suite-local.mjs'
+      const { assignments, check, executions } = suiteLocalExpectations(true)
+      receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
+      receiver.setTestManagementTests({ vitest: { suites: { [testSuite]: { tests: assignments } } } })
+      const runPromise = runVitest('browser-exclusions-suite-local.mjs', {
+        DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+        VITEST_BROWSER_MODE: mixed ? undefined : '1',
+        VITEST_MIXED_BROWSER_MODE: mixed ? '1' : undefined,
+      }, 1)
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = getEventContents(getEvents(payloads), 'test')
+          check(tests.filter(test => test.meta[TEST_TYPE] === 'browser'))
+          const nodeTests = tests.filter(test => test.meta[TEST_TYPE] !== 'browser')
+          assert.strictEqual(nodeTests.length, mixed ? 1 : 0)
+          if (mixed) assert.strictEqual(nodeTests[0].meta[TEST_STATUS], 'pass')
+        })
+      await Promise.all([runPromise, eventsPromise])
+      assert.deepStrictEqual(readBrowserExecutions(), executions)
+    })
+  }
 
   for (const tags of [false, true]) {
     const nativeRetryIt = tags && isLegacyBrowserProvider ? it.skip : it

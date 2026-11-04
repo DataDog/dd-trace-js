@@ -133,4 +133,9 @@ function wrapDeclaration (declaration, getCurrentSuite) {
   return wrapped
 }
 
-module.exports = { wrapDeclaration, captureDeclarations }
+// Browser Mode serves this dependency as ESM without CommonJS conversion in independent projects.
+if (typeof module === 'undefined') {
+  globalThis[Symbol.for('dd-trace.vitest.declaration-annotations')] = { captureDeclarations }
+} else {
+  module.exports = { wrapDeclaration, captureDeclarations }
+}
