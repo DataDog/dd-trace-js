@@ -300,6 +300,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
+<h5 id="react-router"></h5>
 <h5 id="redis"></h5>
 <h5 id="restify"></h5>
 <h5 id="rhea"></h5>
@@ -389,6 +390,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 * [postgres](./interfaces/plugins.postgres.html)
 * [prisma](./interfaces/plugins.prisma.html)
 * [protobufjs](./interfaces/plugins.protobufjs.html)
+* [react-router](./interfaces/plugins.react_router.html)
 * [redis](./interfaces/plugins.redis.html)
 * [restify](./interfaces/plugins.restify.html)
 * [rhea](./interfaces/plugins.rhea.html)
