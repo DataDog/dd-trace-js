@@ -547,16 +547,19 @@ describe('evaluation telemetry opt-out', () => {
     assert.deepStrictEqual(signals(), { evaluations: 1, metrics: 1, spanTags: 2, exposures: 1, customerHooks: 1 })
   })
 
-  it('wraps only hooks that implement finally alone', () => {
+  it('wraps only the stages implemented by owned telemetry hooks', () => {
     for (const Hook of [
       require('../../src/openfeature/eval-metrics-hook'),
       require('../../src/openfeature/span-enrichment-hook'),
-      require('../../src/openfeature/writers/flag-eval-evp-hook'),
     ]) {
       for (const stage of ['before', 'after', 'error']) {
-        // The wrapper forwards only finally, so another stage would run only with activation disabled.
         assert.strictEqual(Hook.prototype[stage], undefined, `${Hook.name}.${stage} would be skipped by the wrapper`)
       }
     }
+
+    const FlagEvalEVPHook = require('../../src/openfeature/writers/flag-eval-evp-hook')
+    assert.strictEqual(typeof FlagEvalEVPHook.prototype.after, 'function')
+    assert.strictEqual(FlagEvalEVPHook.prototype.before, undefined)
+    assert.strictEqual(FlagEvalEVPHook.prototype.error, undefined)
   })
 })
