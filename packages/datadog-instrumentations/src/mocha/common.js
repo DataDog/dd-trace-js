@@ -1,6 +1,6 @@
 'use strict'
 
-const { addHook, channel, tracingChannel } = require('../helpers/instrument')
+const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { getTestAnnotations, copyTestAnnotations } = require('../../../dd-trace/src/ci-visibility/test-annotations')
 const { getCallSites } = require('../../../dd-trace/src/plugins/util/stacktrace')
@@ -11,17 +11,6 @@ const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 const patched = new WeakSet()
-const mochaConstructors = new WeakMap()
-
-// Mocha#ui installs the interface's pre-require listeners. Attach ours afterward so we can wrap
-// declarations before it.skip/test.skip discard their callbacks and the annotations attached to them.
-tracingChannel('orchestrion:mocha:ui').end.subscribe(({ self, error }) => {
-  if (error) return
-  let prototype = Object.getPrototypeOf(self)
-  while (prototype && !mochaConstructors.has(prototype)) prototype = Object.getPrototypeOf(prototype)
-  const Mocha = mochaConstructors.get(prototype)
-  if (Mocha) self.suite.on('pre-require', context => preserveDeclarationAnnotations(context, Mocha))
-})
 
 /** @typedef {{ moduleBaseDir?: string }} MochaHookMeta */
 
@@ -50,7 +39,13 @@ function addMochaRunHooks (versions, wrapMochaRun) {
     }
     metadata = { moduleBaseDir: hookMeta?.moduleBaseDir }
     patchedMochaConstructors.set(Mocha, metadata)
-    mochaConstructors.set(Mocha.prototype, Mocha)
+    // ui is exposed on the constructor already observed by the require hooks, so no source rewrite is needed.
+    // Attach our listener after the interface installs its declarations, before skipped callbacks are discarded.
+    shimmer.wrap(Mocha.prototype, 'ui', ui => function () {
+      const result = ui.apply(this, arguments)
+      this.suite.on('pre-require', context => preserveDeclarationAnnotations(context, Mocha))
+      return result
+    })
     return wrapMochaRun(Mocha, frameworkVersion, metadata)
   }
 
