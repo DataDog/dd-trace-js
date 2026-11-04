@@ -747,7 +747,7 @@ async function createSandbox (
   }
 
   if (DEBUG !== 'true') {
-    addFlags.push('--silent')
+    addFlags.push('--no-progress')
   }
 
   if (cappedDependencies.length > 0) {
