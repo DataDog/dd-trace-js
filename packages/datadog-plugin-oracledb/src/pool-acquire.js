@@ -1,18 +1,9 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const StoragePlugin = require('../../dd-trace/src/plugins/storage')
 
 let parser
-
-/**
- * @param {unknown} message
- */
-function setResolvedUser (message) {
-  const ctx = /** @type {{ user: string }} */ (message)
-  storage('legacy').getStore()?.span?.setTag('db.user', ctx.user)
-}
 
 class OracledbPoolAcquirePlugin extends StoragePlugin {
   static id = 'oracledb'
@@ -23,15 +14,6 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
 
   /** @type {WeakMap<object, { dbInstance?: string, hostname?: string, port?: string }>} */
   #poolMetadata = new WeakMap()
-
-  /**
-   * @param {object} tracer
-   * @param {import('../../dd-trace/src/config/config-base')} tracerConfig
-   */
-  constructor (tracer, tracerConfig) {
-    super(tracer, tracerConfig)
-    this.addSub('apm:oracledb:pool:acquire:user', setResolvedUser)
-  }
 
   /**
    * @param {{
