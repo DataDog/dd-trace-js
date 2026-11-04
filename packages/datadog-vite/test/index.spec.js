@@ -16,6 +16,7 @@ const { datadogVite } = require('../../../vite')
 const ROLLDOWN = { meta: { rolldownVersion: '1.0.0', viteVersion: '8.0.0' } }
 const ROLLUP = { meta: { rollupVersion: '4.0.0', viteVersion: '7.0.0' } }
 const FIRST_IMPORT = 'import "virtual:dd-trace-vite/init";'
+const FIRST_REQUIRE = 'require("virtual:dd-trace-vite/init");'
 const OPTIONAL_DEPENDENCIES = Object.keys(require('../../../package.json').optionalDependencies)
 const directories = []
 
@@ -451,6 +452,44 @@ describe('datadogVite', () => {
       }
     })
 
+    it('requires the virtual module after the directive prologue of CommonJS entries on Rolldown', () => {
+      const plugin = datadogVite()
+      const entry = (code, id = '/app/src/main.cjs', bundler = ROLLDOWN) =>
+        runTransform(plugin, code, id, { bundler, isEntry: true }).result.code
+
+      assert.equal(entry('module.exports = 1\n'), `${FIRST_REQUIRE}module.exports = 1\n`)
+      assert.equal(entry('\'use strict\'\nmain()\n'), `'use strict';${FIRST_REQUIRE}\nmain()\n`)
+      assert.equal(entry('"use strict";\nmain()\n'), `"use strict";${FIRST_REQUIRE}\nmain()\n`)
+      assert.equal(entry('\'use strict\' // why\nmain()\n'), `'use strict';${FIRST_REQUIRE} // why\nmain()\n`)
+      assert.equal(entry('\'use strict\'\n\'use asm\'\n'), `'use strict'\n'use asm';${FIRST_REQUIRE}\n`)
+      assert.equal(
+        entry('/* license */\n// note\n"use strict"; main()\n'),
+        `/* license */\n// note\n"use strict";${FIRST_REQUIRE} main()\n`
+      )
+      assert.equal(entry('\'a\\\'b\'\n'), `'a\\'b';${FIRST_REQUIRE}\n`)
+      // String expressions that are not directives.
+      assert.equal(entry('\'a\'.length\n'), `${FIRST_REQUIRE}'a'.length\n`)
+      assert.equal(entry('\'a\' + b\n'), `${FIRST_REQUIRE}'a' + b\n`)
+      assert.equal(
+        entry('#!/usr/bin/env node\n\'use strict\'\nmain()\n'),
+        `#!/usr/bin/env node\n'use strict';${FIRST_REQUIRE}\nmain()\n`
+      )
+      assert.equal(entry('#!/usr/bin/env node\nmain()\n'), `#!/usr/bin/env node\n${FIRST_REQUIRE}main()\n`)
+      assert.equal(entry('#!/usr/bin/env node'), `#!/usr/bin/env node\n${FIRST_REQUIRE}`)
+      // Rollup converts CommonJS entries through a proxy module, and Rolldown parses other files as mixed modules.
+      assert.equal(entry('\'use strict\'\n', '/app/src/main.cjs', ROLLUP), `${FIRST_IMPORT}'use strict'\n`)
+      assert.equal(entry('\'use strict\'\n', '/app/src/main.js'), `${FIRST_IMPORT}'use strict'\n`)
+      assert.equal(entry('\'use strict\'\n', '/app/src/main.cts'), `${FIRST_IMPORT}'use strict'\n`)
+
+      const required = []
+      const module = { exports: {} }
+      const code = entry('\'use strict\'\nmodule.exports = (function () { return this })()\n')
+      const wrapper = vm.runInNewContext(`(function (exports, require, module) {${code}\n})`, {})
+      wrapper(module.exports, request => { required.push(request) }, module)
+      assert.deepStrictEqual(required, ['virtual:dd-trace-vite/init'])
+      assert.equal(module.exports, undefined)
+    })
+
     it('instruments a target entry module before prepending the virtual import', () => {
       const projectDir = createProject()
       const packageDir = createPackage(projectDir, 'express', { main: 'index.js', version: '4.22.1' })
@@ -535,11 +574,11 @@ function isExternal (external, id) {
  * @param {object} plugin
  * @param {string} code
  * @param {string} id
- * @param {{ isEntry?: boolean }} [moduleInfo]
+ * @param {{ bundler?: object, isEntry?: boolean }} [options]
  */
-function runTransform (plugin, code, id, { isEntry = false } = {}) {
+function runTransform (plugin, code, id, { bundler = ROLLUP, isEntry = false } = {}) {
   const warn = sinon.spy()
-  const context = { getModuleInfo: () => ({ isEntry }), warn }
+  const context = { ...bundler, getModuleInfo: () => ({ isEntry }), warn }
   return { result: plugin.transform.handler.call(context, code, id), warn }
 }
 
