@@ -21,10 +21,12 @@ const {
   getServerlessPlatform,
   getServerlessPlatformTags,
   IS_SERVERLESS,
+  IS_AWS_LAMBDA,
   getIsGCPFunction,
   getIsAzureFunction,
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
+const { usesOtlpTraceExporter } = require('../exporter')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
 const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
@@ -429,10 +431,8 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
-    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
-      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
-      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
-    }
+    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
+      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
 
     if (this.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL) {
       setAndTrack(this, 'telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL',
@@ -463,10 +463,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_TRACE_OTEL_CTX_ENABLED', true)
     }
 
-    if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
-      setAndTrack(this, 'spanComputePeerService', true)
-    }
-
     if (!this.apmTracingEnabled) {
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
     } else if (!trackedConfigOrigins.has('stats.DD_TRACE_STATS_COMPUTATION_ENABLED')) {
@@ -491,7 +487,7 @@ class Config extends ConfigBase {
       setAndTrack(this, 'tracePropagationStyle.extract', this.tracePropagationStyle.extract)
     }
 
-    if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
+    if (IS_AWS_LAMBDA && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
       setAndTrack(this, 'flushInterval', 0)
     }
 
@@ -515,23 +511,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
 
-    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
-      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-
-    // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
-    // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
-    // that don't set the sampler still get parent-based sampling. Electron exporter spans go over
-    // the Electron SDK's IPC bridge rather than OTLP (see opentracing/tracer.js), so an
-    // OTEL_TRACES_EXPORTER=otlp set for an unrelated telemetry pipeline shouldn't also override
-    // dd-trace's own sampling policy in that case.
-    if (!trackedConfigOrigins.has('sampleRate') &&
-        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
-          (this.OTEL_TRACES_EXPORTER === 'otlp' &&
-            this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'))) {
-      setAndTrack(this, 'sampleRate',
-        getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
-    }
-
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
       try {
         // TODO: Should we log a warning in case this is defined next to spanSamplingRules?
@@ -539,14 +518,6 @@ class Config extends ConfigBase {
       } catch (error) {
         log.warn('Error reading span sampling rules file %s; %o', this.DD_SPAN_SAMPLING_RULES_FILE, error)
       }
-    }
-
-    // All sampler options are tracked as individual values. No need to track the sampler object as a whole.
-    this.sampler = {
-      rules: this.samplingRules,
-      rateLimit: this.rateLimit,
-      sampleRate: this.sampleRate,
-      spanSamplingRules: this.spanSamplingRules,
     }
 
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
@@ -708,10 +679,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting
       setAndTrack(this, 'reportHostname', true)
-      // Disable rate limiting - server-side sampling will be used
-      setAndTrack(this, 'sampler.rateLimit', -1)
-      // Clear sampling rules - server-side sampling handles this
-      setAndTrack(this, 'sampler.rules', [])
       // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation
       if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
         setAndTrack(this, 'traceId128BitGenerationEnabled', false)
@@ -729,6 +696,75 @@ class Config extends ConfigBase {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
         setAndTrack(this, configName, this[alias])
       }
+    }
+
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      let warning
+
+      if (this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === exporters.ELECTRON) {
+        warning = 'DD_TRACE_EXPERIMENTAL_EXPORTER=electron is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+          'DD_TRACE_OTEL_SEMANTICS_ENABLED deactivated'
+      } else if (this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === exporters.AGENTLESS) {
+        warning = 'Agentless tracing is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+          'DD_TRACE_OTEL_SEMANTICS_ENABLED deactivated'
+      } else if (this.isCiVisibility) {
+        warning = 'Test Optimization is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+          'Deactivating DD_TRACE_OTEL_SEMANTICS_ENABLED'
+      } else if (this.OTEL_TRACES_EXPORTER === 'none') {
+        warning = 'DD_TRACE_OTEL_SEMANTICS_ENABLED is deactivated due to OTEL_TRACES_EXPORTER set to "none"'
+      }
+
+      if (warning) {
+        log.warn(warning)
+        setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+      } else {
+        setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'otlp')
+      }
+    }
+
+    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
+      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
+      if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+      }
+    }
+
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      if (this.spanAttributeSchema !== 'v0') {
+        log.warn('DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to be "v0". Resetting')
+      }
+      if (this.spanComputePeerService) {
+        log.warn(
+          'DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to be false. Resetting'
+        )
+      }
+      setAndTrack(this, 'spanAttributeSchema', 'v0')
+      setAndTrack(this, 'spanComputePeerService', false)
+    } else if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
+      setAndTrack(this, 'spanComputePeerService', true)
+    }
+
+    // An explicit OTel sampler also applies to native trace exporters.
+    if (!trackedConfigOrigins.has('sampleRate') &&
+        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') || usesOtlpTraceExporter(this))) {
+      setAndTrack(this, 'sampleRate',
+        getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
+    }
+
+    // All sampler options are tracked as individual values. No need to track the sampler object as a whole.
+    this.sampler = {
+      rules: this.samplingRules,
+      rateLimit: this.rateLimit,
+      sampleRate: this.sampleRate,
+      spanSamplingRules: this.spanSamplingRules,
+    }
+
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
+      // Disable rate limiting - server-side sampling will be used
+      setAndTrack(this, 'sampler.rateLimit', -1)
+      // Clear sampling rules - server-side sampling handles this
+      setAndTrack(this, 'sampler.rules', [])
     }
 
     // TODO: This could likely be moved to the base class and allow easier GRPC handling
@@ -762,7 +798,7 @@ class Config extends ConfigBase {
       assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
     }
 
-    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
+    const autoTraceMetrics = usesOtlpTraceExporter(this) && this.DD_METRICS_OTEL_ENABLED === true
     setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
 
     if (this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
