@@ -36,6 +36,8 @@ const {
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION,
+  TEST_MANAGEMENT_NO_AUTO_RETRY,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
@@ -436,6 +438,7 @@ class JestPlugin extends CiPlugin {
       attemptToFixFailed,
       isAtrRetry,
       finalStatus,
+      deferredFinish,
       earlyFlakeAbortReason,
       promises,
     }) => {
@@ -467,6 +470,20 @@ class JestPlugin extends CiPlugin {
         'test',
         this.getTestTelemetryTags(span)
       )
+
+      if (deferredFinish) {
+        // Native describe retries can stop after later process errors or hooks.
+        // Delay publication, not the execution's monotonic end time or child cleanup.
+        const finishTime = span._getTime()
+        finishAllTraceSpans(span)
+        this.activeTestSpan = null
+        deferredFinish.finish = finalStatus => {
+          if (finalStatus) span.setTag(TEST_FINAL_STATUS, finalStatus)
+          span.finish(finishTime)
+          if (finalStatus) this.cancelDiBreakpointHitWait()
+        }
+        return
+      }
 
       const finish = () => {
         span.finish()
@@ -562,6 +579,9 @@ class JestPlugin extends CiPlugin {
       isQuarantined,
       isModified,
       hasDynamicName,
+      mustFail,
+      noAutoRetry,
+      assignedManagementProperties,
       testSuiteAbsolutePath,
     } = test
 
@@ -570,6 +590,8 @@ class JestPlugin extends CiPlugin {
       [TEST_PARAMETERS]: testParameters,
       [TEST_FRAMEWORK_VERSION]: frameworkVersion,
     }
+    if (mustFail) extraTags[TEST_MANAGEMENT_PREVENT_FAILURE_SUPPRESSION] = 'true'
+    if (noAutoRetry) extraTags[TEST_MANAGEMENT_NO_AUTO_RETRY] = 'true'
     if (testStartLine) {
       extraTags[TEST_SOURCE_START] = testStartLine
     }
@@ -580,7 +602,7 @@ class JestPlugin extends CiPlugin {
       extraTags[JEST_DISPLAY_NAME] = displayName
     }
 
-    if (isAttemptToFix) {
+    if (assignedManagementProperties?.isAttemptToFix ?? isAttemptToFix) {
       extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
     }
 
@@ -595,11 +617,11 @@ class JestPlugin extends CiPlugin {
       extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.ext
     }
 
-    if (isDisabled) {
+    if (assignedManagementProperties?.isDisabled ?? isDisabled) {
       extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
     }
 
-    if (isQuarantined) {
+    if (assignedManagementProperties?.isQuarantined ?? isQuarantined) {
       extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
     }
 
