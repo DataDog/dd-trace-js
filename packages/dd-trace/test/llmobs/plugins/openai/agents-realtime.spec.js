@@ -6,7 +6,7 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const dc = require('dc-polyfill')
-const { afterEach, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { flushLiveSessions } = require('../../../../../datadog-instrumentations/src/openai-realtime')
@@ -80,12 +80,24 @@ class ReplaySocket extends EventTarget {
 }
 
 describe('Agents SDK realtime automatic tracing', () => {
+  const setup = sinon.createSandbox()
+  let activeWriter
+  before(() => {
+    const Processor = require('../../../../src/llmobs/span_processor')
+    const setWriter = Processor.prototype.setWriter
+    setup.replace(Processor.prototype, 'setWriter', function (writer) {
+      activeWriter = writer
+      return setWriter.call(this, writer)
+    })
+  })
   const helper = useLlmObs({ plugin: 'openai' })
   let diagnostics
   const getEvents = count => {
     diagnostics.expected = count
     return helper.getEvents(count)
   }
+
+  after(() => setup.restore())
 
   withVersions('openai', '@openai/agents-realtime', '0.20.0', version => {
     let transport
@@ -144,9 +156,25 @@ describe('Agents SDK realtime automatic tracing', () => {
         diagnostics.formatted[name] = (diagnostics.formatted[name] || 0) + 1
         return event
       })
+      const telemetry = require('../../../../src/llmobs/telemetry')
+      const finished = telemetry.incrementLLMObsSpanFinishedCount
+      diagnostics.telemetryCalls = 0
+      sinon.replace(telemetry, 'incrementLLMObsSpanFinishedCount', function (span, value) {
+        diagnostics.telemetryCalls++
+        try {
+          return finished.call(this, span, value)
+        } catch (error) {
+          diagnostics.errors.push('finish telemetry: ' + error.message)
+          throw error
+        }
+      })
       const Writer = require('../../../../src/llmobs/writers/spans')
-      const append = Writer.prototype.append
-      sinon.replace(Writer.prototype, 'append', function (event, routing) {
+      diagnostics.writerCaptured = Boolean(activeWriter)
+      diagnostics.writerClass = activeWriter?.constructor.name
+      diagnostics.writerMatches = activeWriter instanceof Writer
+      const writer = activeWriter || Writer.prototype
+      const append = writer.append
+      sinon.replace(writer, 'append', function (event, routing) {
         diagnostics.written[event.name] = (diagnostics.written[event.name] || 0) + 1
         return append.call(this, event, routing)
       })
@@ -167,6 +195,7 @@ describe('Agents SDK realtime automatic tracing', () => {
 
     afterEach(function () {
       if (this.currentTest.state === 'failed') {
+        diagnostics.writerUrl = activeWriter?.url
         process.stderr.write('Agents realtime delivery diagnostics: ' + JSON.stringify(diagnostics) + '\n')
       }
       turnChannel.start.unsubscribe(observeTurn)
