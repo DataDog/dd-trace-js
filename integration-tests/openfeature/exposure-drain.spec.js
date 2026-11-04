@@ -4,11 +4,8 @@ const assert = require('node:assert/strict')
 const { execFile } = require('node:child_process')
 const http = require('node:http')
 const path = require('node:path')
-const { promisify } = require('node:util')
 
 const { describe, it } = require('mocha')
-
-const execFileAsync = promisify(execFile)
 
 describe('exposure delivery during natural process exit', function () {
   this.timeout(20000)
@@ -32,9 +29,14 @@ describe('exposure delivery during natural process exit', function () {
         await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
         try {
           const url = `http://127.0.0.1:${server.address().port}`
-          const { stdout } = await execFileAsync(process.execPath, [
-            path.join(__dirname, 'fixtures/exposure-drain.js'), url, String(count), String(applicationMs),
-          ], { timeout: 15000, env: { ...process.env, DD_TRACE_ENABLED: 'false' } })
+          const stdout = await new Promise((resolve, reject) => {
+            execFile(process.execPath, [
+              path.join(__dirname, 'fixtures/exposure-drain.js'), url, String(count), String(applicationMs),
+            ], { timeout: 15000, env: { ...process.env, DD_TRACE_ENABLED: 'false' } }, (error, stdout) => {
+              if (error) reject(error)
+              else resolve(stdout)
+            })
+          })
           const result = JSON.parse(stdout.trim())
           assert.strictEqual(received + result.dropped, count)
           if (applicationMs) {
