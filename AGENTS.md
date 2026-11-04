@@ -103,8 +103,6 @@ The tracer runs in user applications and hot paths:
 - Use `packages/dd-trace/src/log/index.js` with printf-style formatting; use callback formatting for expensive data.
 - Do not add promise machinery to synchronous library paths or inactive and hot paths. Inherently asynchronous APIs,
   control-plane code, and worker threads may follow their upstream asynchronous contract; keep inactive paths cheap.
-  Exception: the as-is Lambda migration may retain the shim's Promise-based `promisifiedHandler` completion adapter
-  to preserve handler semantics; redesigning it to eliminate Promises is outside the migration scope.
 - Avoid unnecessary allocations, closures, listeners, parsing, and per-call compilation. Cache reusable work.
 - Avoid try/catch in hot paths when inputs can be validated early.
 - Use `.once()` for one terminal event on a conforming Node.js `EventEmitter`. Multiple terminal names need a shared
