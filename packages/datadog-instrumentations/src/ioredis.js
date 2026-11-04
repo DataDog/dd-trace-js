@@ -12,10 +12,11 @@ const errorCh = channel('apm:ioredis:command:error')
 
 const connectionOptionsCache = new WeakMap()
 let replayPromises
+let replaying = false
 
 function wrapRedis (Redis) {
   shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
-    if (!startCh.hasSubscribers || !command?.promise || replayPromises?.has(command.promise)) {
+    if (!startCh.hasSubscribers || !command?.promise || (replaying && replayPromises.has(command.promise))) {
       return sendCommand.call(this, command, stream)
     }
 
@@ -76,16 +77,62 @@ function trackQueue (queue) {
 function trackReplay (promise) {
   const promises = replayPromises ??= new WeakSet()
   promises.add(promise)
+  if (!replaying) {
+    replaying = true
+    queueMicrotask(clearReplayScope)
+  }
+}
+
+function clearReplayScope () {
+  replaying = false
+}
+
+/** @param {((bucket: string) => void) | (() => void)} callback */
+function wrapReplay (callback) {
+  return function () {
+    if (!replayPromises || !startCh.hasSubscribers) return callback.apply(this, arguments)
+    const previous = replaying
+    replaying = true
+    try {
+      return callback.apply(this, arguments)
+    } finally {
+      replaying = previous
+    }
+  }
+}
+
+/** @param {typeof import('ioredis/built/cluster/DelayQueue').default} DelayQueue */
+function wrapDelayQueue (DelayQueue) {
+  const execute = DelayQueue.prototype.execute ? 'execute' : '_execute'
+  shimmer.wrap(DelayQueue.prototype, execute, wrapReplay)
+  return DelayQueue
+}
+
+/** @param {typeof import('ioredis').Cluster} Cluster */
+function wrapCluster (Cluster) {
+  shimmer.wrap(Cluster.prototype, 'executeOfflineCommands', wrapReplay)
+  return Cluster
 }
 
 addHook({ name: 'ioredis', versions: ['>=6'], file: 'built/himport/HimportCoordinator.js' }, exports => {
-  shimmer.wrap(exports, 'interceptHimportCommand', intercept => function (redis, command, ready, resumeSend) {
-    if (!startCh.hasSubscribers) return intercept.apply(this, arguments)
-    return intercept.call(this, redis, command, ready, () => {
-      if (startCh.hasSubscribers) trackReplay(command.promise)
-      return resumeSend()
-    })
+  shimmer.wrap(exports.default.prototype, 'allowNextSend', allowNextSend => function (redis, command) {
+    if (startCh.hasSubscribers) trackReplay(command.promise)
+    return allowNextSend.apply(this, arguments)
   })
+  return exports
+})
+
+addHook({ name: 'ioredis', versions: ['>=2 <4'], file: 'lib/cluster/delay_queue.js' }, wrapDelayQueue)
+
+addHook({ name: 'ioredis', versions: ['>=4'], file: 'built/cluster/DelayQueue.js' }, exports => {
+  wrapDelayQueue(exports.default)
+  return exports
+})
+
+addHook({ name: 'ioredis', versions: ['>=2 <4'], file: 'lib/cluster/index.js' }, wrapCluster)
+
+addHook({ name: 'ioredis', versions: ['>=4'], file: 'built/cluster/index.js' }, exports => {
+  wrapCluster(exports.default || exports)
   return exports
 })
 

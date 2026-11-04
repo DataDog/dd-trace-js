@@ -78,6 +78,7 @@ describe('ioredis replay', () => {
         sinon.spy(WeakMap.prototype, 'has'),
         sinon.spy(WeakMap.prototype, 'set'),
         sinon.spy(WeakMap.prototype, 'delete'),
+        sinon.spy(WeakSet.prototype, 'has'),
         sinon.spy(WeakSet.prototype, 'add'),
         sinon.spy(WeakSet.prototype, 'delete'),
       ]
@@ -247,9 +248,6 @@ describe('ioredis replay', () => {
         let attempts = 0
         await withServer(Parser, (args, port, socket) => {
           const name = args[0].toString().toLowerCase()
-          if (name === 'cluster') {
-            return `*1\r\n*3\r\n:0\r\n:16383\r\n*3\r\n$9\r\n127.0.0.1\r\n:${port}\r\n$4\r\nnode\r\n`
-          }
           if (name === 'get' && ['replay-cluster', 'replay-untraced'].includes(args[1].toString())) {
             attempts++
             if (error === 'CONNECTION_CLOSED' && attempts === 1) {
@@ -293,6 +291,42 @@ describe('ioredis replay', () => {
         })
       })
     }
+
+    it('does no command bookkeeping while another client waits for a delayed Cluster retry', async () => {
+      let attempts = 0
+      let observed
+      const failed = new Promise(resolve => { observed = resolve })
+      await withServer(Parser, args => {
+        if (args[0].toString().toLowerCase() === 'get' && args[1].toString() === 'replay-delayed') {
+          return ++attempts === 1 ? '-TRYAGAIN retry later\r\n' : '$5\r\nvalue\r\n'
+        }
+        return '+OK\r\n'
+      }, async port => {
+        redis = new Redis.Cluster([{ host: '127.0.0.1', port }], {
+          enableReadyCheck: false,
+          retryDelayOnTryAgain: 1,
+          redisOptions: { enableReadyCheck: false, disableClientInfo: true, reconnectOnError: () => observed() },
+        })
+        other = new Redis()
+        await Promise.all([once(redis, 'ready'), once(other, 'ready')])
+        const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+        try {
+          async function sendWhileWaiting () {
+            await failed
+            assert.equal(attempts, 1)
+            await sendWithoutBookkeeping(other, new Redis.Command('get', ['replay-during-retry']))
+            await clock.tickAsync(1)
+          }
+          const [value] = await Promise.all([redis.get('replay-delayed'), sendWhileWaiting()])
+          assert.equal(value, 'value')
+          assert.equal(attempts, 2)
+        } finally {
+          clock.restore()
+        }
+        await assertSpans('GET replay-delayed')
+        await assertSpans('GET replay-during-retry')
+      })
+    })
 
     for (const failure of [false, true]) {
       for (const disabled of [false, true]) {
@@ -350,6 +384,79 @@ describe('ioredis replay', () => {
         redis.disconnect()
       })
     })
+
+    for (const cluster of [false, true]) {
+      it(`traces a managed HIMPORT ${cluster ? 'Cluster ' : ''}pipeline after preparation`, async function () {
+        if (semver.lt(resolvedVersion, '6.0.0')) this.skip()
+        let preparations = 0
+        await withServer(Parser, args => {
+          if (args[0].toString().toLowerCase() === 'reset') return '+RESET\r\n'
+          if (args[1]?.toString().toLowerCase() === 'prepare') preparations++
+          return args[0].toString().toLowerCase() === 'himport' && args[1].toString().toLowerCase() === 'set'
+            ? ':1\r\n'
+            : '+OK\r\n'
+        }, async port => {
+          const options = {
+            enableReadyCheck: false,
+            disableClientInfo: true,
+            himportFieldsets: [{ name: 'review', fields: ['field'] }],
+          }
+          redis = cluster
+            ? new Redis.Cluster([{ host: '127.0.0.1', port }], {
+              ...options,
+              redisOptions: { enableReadyCheck: false, disableClientInfo: true },
+            })
+            : new Redis({ ...options, host: '127.0.0.1', port })
+          await once(redis, 'ready')
+          await redis.call('reset')
+          const prepared = preparations
+          const pipeline = redis.pipeline()
+          pipeline.call('himport', 'SET', 'replay-pipeline', 'review', 'value')
+          const results = await pipeline.exec()
+          assert.deepEqual(results, [[null, 1]])
+          assert.equal(preparations, prepared + 1)
+          await assertSpans('HIMPORT SET replay-pipeline review value')
+          await assertSpans('HIMPORT PREPARE review field', preparations)
+        })
+      })
+    }
+
+    it('traces each native HIMPORT control command sent to a Cluster master', async function () {
+      if (semver.lt(resolvedVersion, '6.0.0')) this.skip()
+      await withServer(Parser, () => '+OK\r\n', async port => {
+        redis = new Redis.Cluster([{ host: '127.0.0.1', port }], {
+          enableReadyCheck: false,
+          redisOptions: { enableReadyCheck: false, disableClientInfo: true },
+        })
+        await once(redis, 'ready')
+        for (const args of [['PREPARE', 'review', 'field'], ['DISCARD', 'review'], ['DISCARDALL']]) {
+          assert.equal(await redis.call('himport', ...args), 'OK')
+          await assertSpans(`HIMPORT ${args.join(' ')}`)
+        }
+      })
+    })
+
+    it('deduplicates a managed HIMPORT command after an asynchronous ASK preparation', async function () {
+      if (semver.lt(resolvedVersion, '6.0.0')) this.skip()
+      let attempts = 0
+      await withServer(Parser, (args, port) => {
+        if (args[0].toString().toLowerCase() === 'himport' && args[1].toString().toLowerCase() === 'set') {
+          return ++attempts === 1 ? `-ASK 0 127.0.0.1:${port}\r\n` : ':1\r\n'
+        }
+        return '+OK\r\n'
+      }, async port => {
+        redis = new Redis.Cluster([{ host: '127.0.0.1', port }], {
+          enableReadyCheck: false,
+          himportFieldsets: [{ name: 'review', fields: ['field'] }],
+          redisOptions: { enableReadyCheck: false, disableClientInfo: true },
+        })
+        await once(redis, 'ready')
+        assert.equal(await redis.call('himport', 'SET', 'replay-himport-ask', 'review', 'value'), 1)
+        assert.equal(attempts, 2)
+        await assertSpans('HIMPORT SET replay-himport-ask review value')
+        assert.ok(spans.some(span => span.meta['redis.raw_command'] === 'ASKING'))
+      })
+    })
   })
 })
 
@@ -378,7 +485,10 @@ async function withServer (Parser, reply, run) {
     socket.once('close', () => sockets.delete(socket))
     const parser = new Parser({
       returnReply: args => {
-        const response = reply(args, server.address().port, socket)
+        const port = server.address().port
+        const response = args[0].toString().toLowerCase() === 'cluster'
+          ? `*1\r\n*3\r\n:0\r\n:16383\r\n*3\r\n$9\r\n127.0.0.1\r\n:${port}\r\n$4\r\nnode\r\n`
+          : reply(args, port, socket)
         if (response !== undefined) socket.write(response)
       },
       returnError (error) { throw error },
