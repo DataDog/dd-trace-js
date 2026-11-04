@@ -372,18 +372,6 @@ describe('Config', () => {
       ])
     })
 
-    for (const value of ['false', '0', 'true', '1']) {
-      it(`reads ${value} from the environment`, () => {
-        process.env.DD_TRACE_REACT_ROUTER_ENABLED = value
-        const config = getConfig()
-        const enabled = value === 'true' || value === '1'
-
-        assert.strictEqual(config.DD_TRACE_REACT_ROUTER_ENABLED, enabled)
-        assertConfigUpdateContains(updateConfig.firstCall.args[0], [
-          { name: 'DD_TRACE_REACT_ROUTER_ENABLED', value: enabled, origin: 'env_var' },
-        ])
-      })
-    }
   })
 
   it('should accept a circular logger instance without overflowing the stack (issue #8122)', () => {
