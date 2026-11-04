@@ -634,7 +634,65 @@ describe('Config', () => {
     assertObjectContains(config, {
       OTEL_EXPORTER_OTLP_HEADERS: { Authorization: 'Basic dXNlcjpwYXNz==', 'x-tenant': 'a,b' },
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: { Authorization: 'Basic dXNlcjpwYXNz==', 'x-tenant': 'a,b' },
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: { Authorization: 'Basic dXNlcjpwYXNz==', 'x-tenant': 'a,b' },
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS: { Authorization: 'Basic dXNlcjpwYXNz==', 'x-tenant': 'a,b' },
     })
+  })
+
+  for (const name of [
+    'OTEL_EXPORTER_OTLP_HEADERS',
+    'OTEL_EXPORTER_OTLP_LOGS_HEADERS',
+    'OTEL_EXPORTER_OTLP_METRICS_HEADERS',
+    'OTEL_EXPORTER_OTLP_TRACES_HEADERS',
+  ]) {
+    it(`should preserve decoded entry order in ${name}`, () => {
+      process.env[name] = 'x-tenant=first,x%2Dtenant=second,x-tenant=last,x-percent=100%25,x-plus=a+b'
+
+      const config = getConfig()
+
+      assert.deepStrictEqual(config[name], { 'x-tenant': 'last', 'x-percent': '100%', 'x-plus': 'a+b' })
+    })
+
+    for (const invalid of ['x-invalid=%ZZ,x-invalid=ok', 'x%ZZ=invalid']) {
+      it(`should reject the whole ${name} for ${invalid}`, () => {
+        process.env[name] = `Authorization=Bearer%20secret,${invalid}`
+
+        const config = getConfig()
+
+        assert.strictEqual(config[name], undefined)
+        assert.ok(log.warn.calledWith(
+          `Invalid MAP input: '<redacted>' for ${name} (source: env_var), picked default`
+        ))
+        assert.ok(log.warn.getCalls().every(call => !call.args[0].includes('secret')))
+      })
+    }
+  }
+
+  for (const signal of ['LOGS', 'METRICS', 'TRACES']) {
+    it(`should use generic OTLP headers when ${signal} headers fail to percent-decode`, () => {
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = 'Authorization=Bearer%20global'
+      process.env[`OTEL_EXPORTER_OTLP_${signal}_HEADERS`] = 'Authorization=Bearer%20signal,x-invalid=%'
+
+      const config = getConfig()
+
+      assert.deepStrictEqual(config[`OTEL_EXPORTER_OTLP_${signal}_HEADERS`], { Authorization: 'Bearer global' })
+      assert.ok(log.warn.calledWith(
+        `Invalid MAP input: '<redacted>' for OTEL_EXPORTER_OTLP_${signal}_HEADERS (source: env_var), picked default`
+      ))
+    })
+  }
+
+  it('should retain agentless API-key injection when OTLP headers fail to percent-decode', () => {
+    process.env.DD_AGENTLESS_ENABLED = 'true'
+    process.env.DD_API_KEY = 'test-api-key'
+    process.env.OTEL_EXPORTER_OTLP_HEADERS = 'Authorization=Bearer%20secret,x-invalid=%'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS, undefined)
+    for (const signal of ['LOGS', 'METRICS', 'TRACES']) {
+      assert.deepStrictEqual(config[`OTEL_EXPORTER_OTLP_${signal}_HEADERS`], { 'dd-api-key': 'test-api-key' })
+    }
   })
 
   it('should discard OTLP exporter headers that fail to percent-decode', () => {
@@ -642,8 +700,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.['x-invalid'], undefined)
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS?.['x-valid'], undefined)
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS, undefined)
   })
 
   it('should reject malformed and unsupported OTLP HTTP endpoints', () => {
@@ -943,6 +1000,34 @@ describe('Config', () => {
           emoji: '\u{1F680}',
         },
       })
+    })
+
+    it('preserves decoded resource attribute order', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES = 'team.name=first,team%2Ename=second,team.name=last,value=a%252Cb'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.tags['team.name'], 'last')
+      assert.strictEqual(config.tags.value, 'a%2Cb')
+    })
+
+    it('rejects resource attributes when a malformed entry is overwritten', () => {
+      process.env.OTEL_RESOURCE_ATTRIBUTES = 'service.name=otel-service,team=%ZZ,team=valid'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.tags.team, undefined)
+      assert.notStrictEqual(config.service, 'otel-service')
+      assert.ok(log.warn.calledWithMatch('Invalid MAP input:'))
+    })
+
+    it('keeps percent-encoded Datadog tags literal', () => {
+      process.env.DD_TAGS = 'team:100%,value:a%2Cb'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.tags.team, '100%')
+      assert.strictEqual(config.tags.value, 'a%2Cb')
     })
 
     it('keeps DD_ENV precedence over deployment environment resource attributes', () => {
