@@ -360,6 +360,42 @@ const lambdaHandler = lambda.wrap(async (event: { value: string }) => event.valu
   enhancedMetrics: false,
 });
 lambdaHandler({ value: 'ok' });
+const synchronousLambdaHandler = lambda.wrap((_event: { value: string }): void => {}, {
+  handlerCompletion: 'return',
+});
+synchronousLambdaHandler({ value: 'ok' });
+const automaticLambdaOptions: lambda.LambdaWrapOptions = { handlerCompletion: 'auto' };
+lambda.wrap(() => 'done', automaticLambdaOptions);
+const callbackLambdaHandler = lambda.wrap((_event: { value: string }, _context: object,
+  callback: (error: Error | null, result: string) => void = () => {}) => {
+  callback(null, 'done');
+  return { incidental: true };
+}, { handlerCompletion: 'callback' });
+callbackLambdaHandler({ value: 'ok' }, {});
+// Compile-only checks: the wrapper always returns a Promise and preserves its callable inputs and metadata.
+function checkLambdaWrapperTypes() {
+  const sync = lambda.wrap((event: { value: number }) => event.value);
+  const syncResult: Promise<number> = sync({ value: 42 });
+  // @ts-expect-error The invocation result is a Promise, not the handler's synchronous number.
+  sync({ value: 42 }).toFixed();
+  // @ts-expect-error Handler parameter types are preserved.
+  sync({ value: 'invalid' });
+  const asyncResult: Promise<string> = lambda.wrap(async (value: string) => value)('result');
+  const thenableResult: Promise<number> = lambda.wrap((): PromiseLike<number> => Promise.resolve(42))();
+  const callbackResult: Promise<void> = lambda.wrap((_event: object, _context: object,
+    callback: (error: Error | null, value: number) => void): void => { callback(null, 42); })({}, {}, () => {});
+  const withMetadata = Object.assign(function (this: { base: number }, value: number, extra?: number) {
+    return this.base + value + (extra ?? 0);
+  }, { version: 1 });
+  const wrapped = lambda.wrap(withMetadata);
+  const boundResult: Promise<number> = wrapped.call({ base: 1 }, 2);
+  const version: number = wrapped.version;
+  // @ts-expect-error An explicit handler receiver is preserved.
+  wrapped.call({ base: 'invalid' }, 2);
+  void [syncResult, asyncResult, thenableResult, callbackResult, boundResult, version];
+}
+void checkLambdaWrapperTypes;
+
 const lambdaTraceHeaders: Record<string, string> = lambda.getTraceHeaders();
 // Type-check the reserved APIs without executing their migration stubs.
 function checkLambdaMetricsTypes () {

@@ -68,8 +68,10 @@ function crashFlush () {
  *
  * @param {Function} lambdaHandler a Lambda handler function.
  * @param {boolean} normalized whether a completion adapter owns completion selection.
+ * @param {(receiver: object, clear: Function, callbackObserved: boolean) => object} [observe]
+ * Optional observer for native completion and event-loop drain; existing shim adapters omit it.
  */
-exports.datadog = function datadog (lambdaHandler, normalized = false) {
+exports.datadog = function datadog (lambdaHandler, normalized = false, observe) {
   function monitored (...args) {
     const context = extractContext(args)
     if (!context || monitoredContexts.has(context)) return Reflect.apply(lambdaHandler, this, args)
@@ -93,22 +95,30 @@ exports.datadog = function datadog (lambdaHandler, normalized = false) {
         }
       }
     }
-    const clearOnHandlerCompletion = normalized
-      ? clear
-      : () => {
-          // Once a native callback selects event-loop drain, later handler signals are ignored by RIC.
-          if (!callbackPending) clear()
-        }
-
     const contextIndex = args.indexOf(context)
     const callbackObservable = contextIndex !== 2 && typeof args[2] === 'function'
+    const observer = observe?.(this, clear, callbackObservable)
+    const clearOnHandlerCompletion = (error, result, failed = false) => {
+      // Old normalized shim adapters retain their selected-Promise policy. Native forwarding keeps
+      // monitoring while the runtime waits for event-loop drain, even if the adapter Promise settles.
+      if ((normalized && !observer) || !callbackPending) {
+        clear()
+        observer?.complete(error, result, failed)
+      }
+    }
     if (!normalized) {
       for (const name of ['done', 'succeed', 'fail']) {
         wrapCompletion(context, name, clearOnHandlerCompletion, completionMethods)
       }
     }
     // Legacy Lambda runtimes complete idle invocations through this callback instead of the handler's callback.
-    wrapCompletion(globalThis, BEFORE_EXIT, clear, completionMethods)
+    const idleCompletion = observer
+      ? () => {
+          clear()
+          observer.complete(undefined, null, false)
+        }
+      : clear
+    wrapCompletion(globalThis, BEFORE_EXIT, idleCompletion, completionMethods)
 
     if (callbackObservable) {
       const callback = args[2]
@@ -125,19 +135,28 @@ exports.datadog = function datadog (lambdaHandler, normalized = false) {
         } catch (error) {
           log.error('Error reading Lambda callback completion: %s', error)
         }
-        if (typeof beforeExit !== 'function') clear()
+        const clearCallback = observer
+          ? () => {
+              clear()
+              observer.complete(callbackArgs[0], callbackArgs[1], callbackArgs[0] != null)
+            }
+          : clear
+        if (typeof beforeExit !== 'function') clearCallback()
         try {
           const result = Reflect.apply(callback, this, callbackArgs)
           if (!completed) {
             // A successful legacy callback installs a new listener while waiting for event-loop drain.
             const replacement = getDataProperty(globalThis, BEFORE_EXIT)
             if (typeof replacement !== 'function' || replacement === beforeExit ||
-                !wrapCompletion(globalThis, BEFORE_EXIT, clear, completionMethods)) clear()
-            else callbackPending = true
+                !wrapCompletion(globalThis, BEFORE_EXIT, clearCallback, completionMethods)) clearCallback()
+            else {
+              callbackPending = true
+              observer?.pending()
+            }
           }
           return result
         } catch (error) {
-          clear()
+          clearCallback()
           throw error
         }
       }
@@ -149,10 +168,10 @@ exports.datadog = function datadog (lambdaHandler, normalized = false) {
       const result = Reflect.apply(lambdaHandler, this, args)
       if (result && typeof result.then === 'function') {
         return result.then(value => {
-          clearOnHandlerCompletion()
+          clearOnHandlerCompletion(undefined, value)
           return value
         }, error => {
-          clearOnHandlerCompletion()
+          clearOnHandlerCompletion(error, undefined, true)
           throw error
         })
       }
@@ -160,7 +179,7 @@ exports.datadog = function datadog (lambdaHandler, normalized = false) {
       if (!callbackObservable) clear()
       return result
     } catch (error) {
-      clearOnHandlerCompletion()
+      clearOnHandlerCompletion(error, undefined, true)
       throw error
     } finally {
       monitoredContexts.delete(context)

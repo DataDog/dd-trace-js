@@ -470,6 +470,25 @@ describe('Config', () => {
   })
 
   describe('AWS Lambda configuration', () => {
+    for (const ddMajor of [5, 6, 7]) {
+      for (const [value, expected] of [
+        [undefined, 'auto'], ['auto', 'auto'], ['return', 'return'], ['RETURN', 'return'], ['invalid', 'auto'],
+        ['callback', 'callback'], ['CALLBACK', 'callback'],
+      ]) {
+        it(`parses Lambda handler completion ${value} on v${ddMajor}`, () => {
+          if (value === undefined) delete process.env.DD_LAMBDA_HANDLER_COMPLETION
+          else process.env.DD_LAMBDA_HANDLER_COMPLETION = value
+          const config = getConfig(undefined, { ddMajor })
+          assert.strictEqual(config.DD_LAMBDA_HANDLER_COMPLETION, expected)
+          if (expected !== 'auto') {
+            assertConfigUpdateContains(updateConfig.lastCall.args[0], [{
+              name: 'DD_LAMBDA_HANDLER_COMPLETION', value, origin: 'env_var',
+            }])
+          }
+        })
+      }
+    }
+
     it('owns the datadog-lambda-js defaults in the Config singleton', () => {
       const config = getConfig()
 

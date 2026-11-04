@@ -77,7 +77,11 @@ describeSupported('Lambda trace headers', () => {
         assert.deepStrictEqual(after, before, 'the facade must not change general-purpose injection')
         return 'done'
       })
-      assert.strictEqual(await handler(), 'done')
+      const received = agent.assertSomeTraces(([trace]) => {
+        assert.strictEqual(trace[0].name, 'aws.lambda')
+      })
+      const [result] = await Promise.all([handler(), received])
+      assert.strictEqual(result, 'done')
       assert.deepStrictEqual(lambda.getTraceHeaders(), {})
     })
   }
@@ -90,6 +94,9 @@ describeSupported('Lambda trace headers', () => {
         'x-datadog-trace-id': '1234',
         'x-datadog-parent-id': '5678',
         'x-datadog-sampling-priority': String(priority),
+      })
+      const received = agent.assertSomeTraces(([trace]) => {
+        assert.deepStrictEqual(trace.map(span => span.name).sort(), ['headers.child', 'headers.parented'])
       })
       tracer.trace('headers.parented', { childOf: parent }, active => {
         const activeHeaders = lambda.getTraceHeaders()
@@ -106,6 +113,7 @@ describeSupported('Lambda trace headers', () => {
         })
         assert.deepStrictEqual(lambda.getTraceHeaders(), activeHeaders)
       })
+      await received
     })
   }
 
@@ -121,6 +129,9 @@ describeSupported('Lambda trace headers', () => {
       })
       assert.strictEqual(context._sampling.priority, undefined, 'reading headers does not sample the trace')
     })
-    await handler()
+    const received = agent.assertSomeTraces(([trace]) => {
+      assert.strictEqual(trace[0].name, 'aws.lambda')
+    })
+    await Promise.all([handler(), received])
   })
 })

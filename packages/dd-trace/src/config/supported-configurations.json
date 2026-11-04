@@ -1599,6 +1599,16 @@
         "default": null
       }
     ],
+    "DD_LAMBDA_HANDLER_COMPLETION": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "auto",
+        "allowed": "auto|return|callback",
+        "transform": "toLowerCase",
+        "description": "Completion policy for dd-trace Lambda wrappers. auto preserves legacy callback/context selection; return uses only the returned value or Promise, including undefined. callback ignores ordinary returns and waits for callback/context completion; returned Promises still race callbacks."
+      }
+    ],
     "DD_LANGCHAIN_SPAN_CHAR_LIMIT": [
       {
         "implementation": "A",

@@ -17,6 +17,7 @@ function lambdaEnv (extra) {
     ...extra,
   }
   delete process.env.DD_SERVICE
+  delete process.env.DD_SERVICE_MAPPING
   delete process.env.DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED
   for (const [key, value] of Object.entries(extra || {})) process.env[key] = value
 }
@@ -99,6 +100,65 @@ describe('Plugin', () => {
         await invoke()
         await traces
       })
+    })
+
+    describe('configured service overrides', () => {
+      for (const { name, env, config = {}, expected } of [
+        {
+          name: 'uses the aws-lambda service mapping',
+          env: { DD_SERVICE_MAPPING: 'aws-lambda:mapped-lambda' },
+          expected: 'mapped-lambda',
+        },
+        {
+          name: 'uses the programmatic plugin service without normalization',
+          config: { service: 'Configured-Service' },
+          expected: 'Configured-Service',
+        },
+        {
+          name: 'prefers the service mapping over DD_SERVICE',
+          env: { DD_SERVICE_MAPPING: 'aws-lambda:mapped-lambda', DD_SERVICE: 'application-service' },
+          expected: 'mapped-lambda',
+        },
+        {
+          name: 'prefers the service mapping over the legacy representation',
+          env: { DD_SERVICE_MAPPING: 'aws-lambda:mapped-lambda', DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: 'false' },
+          expected: 'mapped-lambda',
+        },
+        {
+          name: 'prefers the plugin service over mapping, DD_SERVICE, and legacy representation',
+          env: {
+            DD_SERVICE_MAPPING: 'aws-lambda:mapped-lambda',
+            DD_SERVICE: 'application-service',
+            DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: 'false',
+          },
+          config: { service: 'plugin-service' },
+          expected: 'plugin-service',
+        },
+        {
+          name: 'falls back to trimmed DD_SERVICE when the plugin service is empty',
+          env: { DD_SERVICE: '  application-service  ' },
+          config: { service: '' },
+          expected: 'application-service',
+        },
+        {
+          name: 'keeps the raw function name when a different integration is mapped',
+          env: { DD_SERVICE_MAPPING: 'http:mapped-http' },
+          expected: 'MyMixedCase-Function',
+        },
+      ]) {
+        it(name, async () => {
+          lambdaEnv(env)
+          await agent.load('aws-lambda', config, { experimental: { exporter: 'agent' } })
+          const traces = agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+            assert.strictEqual(span.service, expected)
+            assert.strictEqual(span.resource, 'MyMixedCase-Function')
+          })
+
+          await invoke()
+          await traces
+        })
+      }
     })
 
     describe('error handling', () => {

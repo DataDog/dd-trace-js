@@ -2,10 +2,13 @@
 
 const dc = require('dc-polyfill')
 
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const log = require('../../dd-trace/src/log')
+
 const {
   HANDLER_STREAMING,
   STREAM_RESPONSE,
-  promisifiedHandler,
+  invokeHandler,
   copyHandlerMetadata,
   getDataProperty,
 } = require('./helpers/lambda-handler')
@@ -25,7 +28,7 @@ const invocationChannel = dc.tracingChannel('datadog:aws-lambda:invoke')
  *
  * @param {Function} handler Customer Lambda handler.
  * @param {Record<string, unknown>} [config] Per-handler configuration overrides.
- * @param {(handler: Function, normalized: boolean) => Function} [monitor] Monitors selected completion.
+ * @param {Function} [monitor] Monitors selected completion and native event-loop drain.
  * @returns {Function} Wrapped handler, or the existing wrapper when already marked.
  */
 function wrapHandler (handler, config, monitor) {
@@ -36,8 +39,12 @@ function wrapHandler (handler, config, monitor) {
   if (existing !== undefined && config?.forceWrap !== true) return existing
 
   const isResponseStream = getDataProperty(handler, HANDLER_STREAMING) === STREAM_RESPONSE
-  const completion = promisifiedHandler(handler)
-  const invoke = monitor ? monitor(completion, true) : completion
+  const completionMode = config?.handlerCompletion ?? getValueFromEnvSources('DD_LAMBDA_HANDLER_COMPLETION')
+  const mode = isResponseStream ? 'return' : completionMode
+  function completion (...args) {
+    return invokeHandler(handler, this.receiver, args, mode, this)
+  }
+  const invoke = monitor ? monitor(completion, true, observeCompletion) : completion
 
   function wrappedHandler (...args) {
     const contextIndex = isResponseStream ? 2 : findContextIndex(args)
@@ -45,12 +52,33 @@ function wrapHandler (handler, config, monitor) {
     const invocationContext = {
       config,
       context,
+      receiver: this,
+      complete: completeInvocation,
+      pending: pendingCallback,
       event: args[0],
       isResponseStream,
       responseStream: isResponseStream ? args[1] : undefined,
     }
 
-    return invocationChannel.tracePromise(invoke, invocationContext, this, ...args)
+    // Equivalent to tracePromise, with a shared completion guard for native callbacks and Promises.
+    // Native callbacks may hand control back to AWS synchronously, before a Promise reaction can run.
+    return invocationChannel.start.runStores(invocationContext, () => {
+      try {
+        return Reflect.apply(invoke, invocationContext, args).then(result => {
+          if (!invocationContext.waiting) invocationContext.complete(undefined, result, false)
+          return result
+        }, error => {
+          if (!invocationContext.waiting) invocationContext.complete(error, undefined, true)
+          throw error
+        })
+      } catch (error) {
+        invocationContext.complete(error, undefined, true)
+        throw error
+      } finally {
+        invocationContext.dispatched = true
+        invocationChannel.end.publish(invocationContext)
+      }
+    })
   }
 
   wrappers.set(handler, wrappedHandler)
@@ -59,6 +87,57 @@ function wrapHandler (handler, config, monitor) {
   copyHandlerMetadata(handler, wrappedHandler)
 
   return wrappedHandler
+}
+
+/**
+ * Connects timeout cleanup to this invocation without giving the monitor span ownership.
+ *
+ * @param {object} invocation Internal invocation state.
+ * @param {Function} clear Timeout cleanup.
+ * @param {boolean} callbackObserved Whether the monitor wraps a supplied callback.
+ * @returns {object} Completion observer.
+ */
+function observeCompletion (invocation, clear, callbackObserved) {
+  invocation.clearTimeout = clear
+  invocation.callbackObserved = callbackObserved
+  return invocation
+}
+
+function pendingCallback () {
+  this.waiting = true
+}
+
+/**
+ * Publishes selected completion once, before a native completion method can send the response.
+ *
+ * @param {unknown} error Selected failure.
+ * @param {unknown} result Selected response.
+ * @param {boolean} failed Whether completion failed, including falsy error values.
+ */
+function completeInvocation (error, result, failed) {
+  // A synchronous callback can finish before RIC reads the context methods for its Promise continuation.
+  // Keep the guarded methods installed until dispatch returns, so that continuation cannot deliver twice.
+  if (this.dispatched) {
+    const restore = this.restore
+    this.restore = undefined
+    try {
+      restore?.()
+    } catch (error) {
+      log.error('Error restoring Lambda context completion methods: %s', error)
+    }
+  }
+  if (this.completed) return
+  this.completed = true
+  this.clearTimeout?.()
+  if (failed) {
+    this.error = error
+    invocationChannel.error.publish(this)
+  } else {
+    this.result = result
+  }
+  invocationChannel.asyncStart.runStores(this, () => {
+    invocationChannel.asyncEnd.publish(this)
+  })
 }
 
 /**

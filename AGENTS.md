@@ -114,6 +114,8 @@ The tracer runs in user applications and hot paths:
 - Never crash a user application. Catch and log errors, then resume safely or disable the affected subsystem.
 - Use `packages/dd-trace/src/log/index.js` with printf-style formatting; use callback formatting for expensive data.
 - Do not add promises or `async`/`await` to shipped production code. They are allowed in tests and worker threads.
+  Exception: the as-is Lambda migration may retain the shim's Promise-based `promisifiedHandler` completion adapter
+  to preserve handler semantics; redesigning it to eliminate Promises is outside the migration scope.
 - Avoid unnecessary allocations, closures, listeners, parsing, and per-call compilation. Cache reusable work.
 - Avoid try/catch in hot paths when inputs can be validated early.
 - Use `.once()` for one-shot events. Register process `beforeExit` work in

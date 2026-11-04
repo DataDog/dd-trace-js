@@ -33,6 +33,7 @@ describe('Lambda facade and hook composition', () => {
     }
     delete process.env.DD_LAMBDA_HANDLER
     delete process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS
+    delete process.env.DD_LAMBDA_HANDLER_COMPLETION
     tracer = await agent.load('aws-lambda', {}, { experimental: { exporter: 'agent' } })
     facade = require('../../../../lambda')
     traces = []
@@ -65,6 +66,312 @@ describe('Lambda facade and hook composition', () => {
     if (branch === 'layer') return hooks[0]({ handler }).handler
     return hooks[0]({ datadog }).datadog(handler)
   }
+
+  for (const mode of ['return', 'callback']) {
+    it(`keeps response streaming arguments and metadata in ${mode} mode`, async () => {
+      const stream = {}
+      const handler = (_event, responseStream, ctx) => {
+        assert.strictEqual(responseStream, stream)
+        assert.strictEqual(ctx, context)
+        return Promise.resolve('stream result')
+      }
+      handler[HANDLER_STREAMING] = STREAM_RESPONSE
+      const wrapped = facade.wrap(handler, { handlerCompletion: mode })
+      assert.strictEqual(wrapped[HANDLER_STREAMING], STREAM_RESPONSE)
+      assert.strictEqual(await wrapped({}, stream, context), 'stream result')
+      assertExactlyOneLambdaSpan(traces)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+  }
+
+  describe('explicit callback completion', () => {
+    for (const entry of ['facade', 'layer', 'npm']) {
+      for (const shape of ['rest', 'default']) {
+        for (const failure of [false, true]) {
+          it(`waits for a ${shape} callback through ${entry} with failure ${failure}`, async () => {
+            process.env.DD_LAMBDA_HANDLER_COMPLETION = 'CALLBACK'
+            process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
+            let complete
+            let active
+            let child
+            const capture = callback => {
+              complete = callback
+              active = tracer.scope().active()
+              child = tracer.startSpan('callback.child', { childOf: active })
+              return { incidental: true }
+            }
+            const handler = shape === 'rest'
+              ? (...args) => capture(args[2])
+              : (_event, _context, callback = () => {}) => capture(callback)
+            const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+            const error = new Error('callback completion failure')
+            let settled = false
+            const result = wrapped({}, context)
+            const observed = result.then(value => {
+              settled = true
+              assert.strictEqual(value, 'done')
+            }, caught => {
+              settled = true
+              assert.strictEqual(caught, error)
+            })
+            await clock.tickAsync(0)
+            assert.strictEqual(settled, false)
+            assert.strictEqual(traces.length, 0)
+            assert.strictEqual(clock.countTimers(), 1)
+            child.finish()
+            complete(failure ? error : null, 'done')
+            complete(new Error('ignored duplicate'))
+            await observed
+            const span = assertExactlyOneLambdaSpan(traces)
+            assert.strictEqual(span.span_id.toString(10), active.context().toSpanId())
+            assert.strictEqual(span.error, failure ? 1 : 0)
+            const exportedChild = traces.flat().find(span => span.name === 'callback.child')
+            assert.strictEqual(exportedChild.parent_id.toString(), span.span_id.toString())
+            assert.strictEqual(clock.countTimers(), 0)
+            clock.tick(100)
+            assertExactlyOneLambdaSpan(traces)
+            assert.notStrictEqual(span.meta['error.type'], 'Impending Timeout')
+          })
+        }
+      }
+    }
+
+    it('lets a per-handler callback option override return mode and keeps the first wrapper policy', async () => {
+      process.env.DD_LAMBDA_HANDLER_COMPLETION = 'return'
+      let complete
+      const handler = (...args) => { complete = args[2]; return 'incidental' }
+      const wrapped = facade.wrap(handler, { handlerCompletion: 'callback' })
+      assert.strictEqual(facade.wrap(handler, { handlerCompletion: 'return' }), wrapped)
+      let settled = false
+      const observed = wrapped({}, context).then(value => { settled = true; return value })
+      await clock.tickAsync(0)
+      assert.strictEqual(settled, false)
+      complete(null, 'callback result')
+      assert.strictEqual(await observed, 'callback result')
+      assertExactlyOneLambdaSpan(traces)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    for (const mode of ['auto', 'return']) {
+      it(`lets per-handler ${mode} override callback mode`, async () => {
+        process.env.DD_LAMBDA_HANDLER_COMPLETION = 'callback'
+        const wrapped = facade.wrap(() => 'return result', { handlerCompletion: mode })
+        let settled = false
+        const observed = wrapped({}, context).then(value => { settled = true; return value })
+        await clock.tickAsync(0)
+        assert.strictEqual(settled, true)
+        assert.strictEqual(await observed, 'return result')
+        assertExactlyOneLambdaSpan(traces)
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+
+    it('publishes completion with the Lambda plugin disabled', async () => {
+      tracer.use('aws-lambda', { enabled: false })
+      const ended = sinon.spy()
+      invocationChannel.asyncEnd.subscribe(ended)
+      try {
+        let complete
+        const wrapped = facade.wrap((...args) => {
+          complete = args[2]
+          return 'incidental'
+        }, { handlerCompletion: 'callback' })
+        const result = wrapped({}, context)
+        await clock.tickAsync(0)
+        assert.strictEqual(ended.callCount, 0)
+        complete(null, 'done')
+        assert.strictEqual(await result, 'done')
+        assert.strictEqual(ended.callCount, 1)
+        assert.strictEqual(traces.length, 0)
+        assert.strictEqual(clock.countTimers(), 0)
+      } finally {
+        invocationChannel.asyncEnd.unsubscribe(ended)
+      }
+    })
+
+    it('keeps timeout monitoring until the callback completes', async () => {
+      let complete
+      const wrapped = facade.wrap((...args) => {
+        complete = args[2]
+        tracer.startSpan('callback.unfinished', { childOf: tracer.scope().active() })
+        clock.tick(75)
+        return 'incidental'
+      }, { handlerCompletion: 'callback' })
+      let settled = false
+      const observed = wrapped({}, context).then(value => { settled = true; return value })
+      await clock.tickAsync(0)
+      assert.strictEqual(settled, false)
+      const span = assertExactlyOneLambdaSpan(traces)
+      assert.strictEqual(span.meta['error.type'], 'Impending Timeout')
+      const child = traces.flat().find(span => span.name === 'callback.unfinished')
+      assert.strictEqual(child.parent_id.toString(), span.span_id.toString())
+      complete(null, 'late result')
+      assert.strictEqual(await observed, 'late result')
+      assertExactlyOneLambdaSpan(traces)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    for (const entry of ['layer', 'npm']) {
+      it(`leaves synchronous returns with the ${entry} gate off`, async () => {
+        process.env.DD_LAMBDA_HANDLER_COMPLETION = 'callback'
+        const shim = h => tracer.wrap('aws.lambda', {}, promisifiedHandler(h))
+        let wrapped = patch(entry, () => 'legacy result', shim)
+        if (entry === 'layer') wrapped = shim(wrapped)
+        assert.strictEqual(await wrapped({}, context), 'legacy result')
+        const span = assertExactlyOneLambdaSpan(traces)
+        assert.strictEqual(span.meta.component, undefined)
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+  })
+
+  describe('explicit return completion', () => {
+    for (const entry of ['facade', 'layer', 'npm']) {
+      for (const outcome of ['undefined', 'throw', 'reject', 'promise']) {
+        it(`finishes ${outcome} through ${entry} without a stale timeout`, async () => {
+          process.env.DD_LAMBDA_HANDLER_COMPLETION = 'return'
+          process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
+          const error = new Error('return completion failure')
+          const receiver = {}
+          const event = {}
+          let active
+          const handler = function (input, ctx) {
+            assert.strictEqual(this, receiver)
+            assert.strictEqual(input, event)
+            assert.strictEqual(ctx, context)
+            active = tracer.scope().active()
+            const child = tracer.startSpan('return.child', { childOf: active })
+            child.finish()
+            if (outcome === 'throw') throw error
+            if (outcome === 'reject') return Promise.reject(error)
+            if (outcome === 'promise') return Promise.resolve('done')
+          }
+          const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+          let settled = false
+          const result = wrapped.call(receiver, event, context, () => {})
+          const observed = result.then(value => {
+            settled = true
+            return value
+          }, failure => {
+            settled = true
+            assert.strictEqual(failure, error)
+          })
+          await clock.tickAsync(0)
+          assert.strictEqual(settled, true, 'the returned Promise must settle without callback/context completion')
+          assert.strictEqual(await observed, outcome === 'promise' ? 'done' : undefined)
+          const span = assertExactlyOneLambdaSpan(traces)
+          assert.strictEqual(span.span_id.toString(10), active.context().toSpanId())
+          assert.strictEqual(span.error, outcome === 'throw' || outcome === 'reject' ? 1 : 0)
+          const child = traces.flat().find(span => span.name === 'return.child')
+          assert.strictEqual(child.parent_id.toString(), span.span_id.toString())
+          assert.strictEqual(clock.countTimers(), 0)
+          clock.tick(100)
+          assertExactlyOneLambdaSpan(traces)
+          assert.notStrictEqual(span.meta['error.type'], 'Impending Timeout')
+        })
+      }
+    }
+
+    it('accepts a per-handler option and leaves context completion methods untouched', async () => {
+      const original = { ...context, done: () => {}, succeed: () => {}, fail: () => {} }
+      Object.assign(context, original)
+      const wrapped = facade.wrap(() => undefined, { handlerCompletion: 'return' })
+      let settled = false
+      const observed = wrapped({}, context).then(() => { settled = true })
+      await clock.tickAsync(0)
+      assert.strictEqual(settled, true)
+      await observed
+      assert.deepStrictEqual(context, original)
+      assertExactlyOneLambdaSpan(traces)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('lets a per-handler auto option preserve delayed context completion over the environment', async () => {
+      process.env.DD_LAMBDA_HANDLER_COMPLETION = 'return'
+      const wrapped = facade.wrap(() => undefined, { handlerCompletion: 'auto' })
+      let settled = false
+      const observed = wrapped({}, context).then(value => { settled = true; return value })
+      await clock.tickAsync(0)
+      assert.strictEqual(settled, false)
+      assert.strictEqual(clock.countTimers(), 1)
+      context.succeed('context result')
+      assert.strictEqual(await observed, 'context result')
+      assertExactlyOneLambdaSpan(traces)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('selects completion when constructing the first wrapper', async () => {
+      process.env.DD_LAMBDA_HANDLER_COMPLETION = 'RETURN'
+      const handler = () => undefined
+      const wrapped = facade.wrap(handler)
+      delete process.env.DD_LAMBDA_HANDLER_COMPLETION
+      assert.strictEqual(facade.wrap(handler, { handlerCompletion: 'auto' }), wrapped)
+      let settled = false
+      const observed = wrapped({}, context).then(() => { settled = true })
+      await clock.tickAsync(0)
+      assert.strictEqual(settled, true)
+      await observed
+      assertExactlyOneLambdaSpan(traces)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('publishes completion without creating spans when the Lambda plugin is disabled', async () => {
+      tracer.use('aws-lambda', { enabled: false })
+      const started = sinon.spy()
+      invocationChannel.start.subscribe(started)
+      try {
+        const wrapped = facade.wrap(() => undefined, { handlerCompletion: 'return' })
+        let settled = false
+        const observed = wrapped({}, context).then(() => { settled = true })
+        await clock.tickAsync(0)
+        assert.strictEqual(settled, true)
+        await observed
+        assert.strictEqual(started.callCount, 1)
+        assert.strictEqual(traces.length, 0)
+        assert.strictEqual(clock.countTimers(), 0)
+      } finally {
+        invocationChannel.start.unsubscribe(started)
+      }
+    })
+
+    it('keeps timeout monitoring until a returned Promise completes', async () => {
+      let complete
+      const wrapped = facade.wrap(() => {
+        const child = tracer.startSpan('return.unfinished', { childOf: tracer.scope().active() })
+        assert.ok(child)
+        clock.tick(75)
+        return new Promise(resolve => { complete = resolve })
+      }, { handlerCompletion: 'return' })
+      const result = wrapped({}, context)
+      const span = assertExactlyOneLambdaSpan(traces)
+      assert.strictEqual(span.meta['error.type'], 'Impending Timeout')
+      const child = traces.flat().find(span => span.name === 'return.unfinished')
+      assert.strictEqual(child.parent_id.toString(), span.span_id.toString())
+      complete('late result')
+      assert.strictEqual(await result, 'late result')
+      assertExactlyOneLambdaSpan(traces)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    for (const entry of ['layer', 'npm']) {
+      it(`leaves legacy context completion with the ${entry} gate off`, async () => {
+        process.env.DD_LAMBDA_HANDLER_COMPLETION = 'return'
+        let complete
+        const handler = (_event, ctx) => { complete = ctx.succeed }
+        const shim = h => tracer.wrap('aws.lambda', {}, promisifiedHandler(h))
+        let wrapped = patch(entry, handler, shim)
+        if (entry === 'layer') wrapped = shim(wrapped)
+        const result = wrapped({}, context)
+        await clock.tickAsync(0)
+        assert.strictEqual(traces.length, 0)
+        complete('legacy result')
+        assert.strictEqual(await result, 'legacy result')
+        const span = assertExactlyOneLambdaSpan(traces)
+        assert.strictEqual(span.meta.component, undefined)
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+  })
 
   for (const entry of ['facade', 'layer', 'npm']) {
     for (const owner of entry === 'facade' ? ['plugin'] : ['shim', 'plugin']) {

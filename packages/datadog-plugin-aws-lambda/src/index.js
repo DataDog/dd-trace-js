@@ -49,6 +49,16 @@ class AwsLambdaPlugin extends TracingPlugin {
   }
 
   /**
+   * Restores invocation scope when completion arrives through an externally invoked callback.
+   *
+   * @param {object} context Invocation channel context.
+   * @returns {object} Invocation trace store.
+   */
+  bindAsyncStart (context) {
+    return context.currentStore
+  }
+
+  /**
    * Publishes the completed invocation and finishes its span.
    *
    * @param {object} context Invocation channel context.
@@ -62,17 +72,19 @@ class AwsLambdaPlugin extends TracingPlugin {
 }
 
 /**
- * Resolves the `aws.lambda` span service exactly as datadog-lambda-js does.
+ * Honors explicit plugin service overrides before applying datadog-lambda-js service defaults.
  *
- * Ported from `datadog-lambda-js/src/trace/listener.ts:386-397`. The service-naming schema's
+ * Fallbacks ported from `datadog-lambda-js/src/trace/listener.ts:386-397`. The service-naming schema's
  * `identityService` would hand back dd-trace's `Config.service`, which inside a Lambda is
  * `normalizeService(AWS_LAMBDA_FUNCTION_NAME)` — lowercased. `DD_SERVICE` is read raw and trimmed
  * for the same reason. Customers key dashboards and monitors off this value.
  *
  * @param {string} functionName Lambda function name.
- * @param {{ serviceRepresentationEnabled?: boolean }} config Plugin configuration.
+ * @param {{ service?: string, serviceRepresentationEnabled?: boolean }} config Plugin configuration.
  */
 function resolveServiceName (functionName, config) {
+  if (config.service) return config.service
+
   const envService = getEnvironmentVariable('DD_SERVICE')
   if (envService && envService.trim().length > 0) return envService.trim()
 
