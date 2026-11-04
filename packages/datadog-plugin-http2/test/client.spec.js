@@ -85,7 +85,7 @@ describe('Plugin', () => {
                 meta: {
                   'span.kind': 'client',
                   'http.request.method': 'GET',
-                  'url.full': `${protocol}://localhost:${port}/user`,
+                  'url.full': `${protocol}://localhost:${port}/user?page=2`,
                   'server.address': 'localhost',
                 },
                 metrics: {
@@ -100,7 +100,41 @@ describe('Plugin', () => {
             }).then(done).catch(done)
 
             const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
-            const req = client.request({ ':path': '/user', ':method': 'GET' })
+            const req = client.request({ ':path': '/user?page=2', ':method': 'GET' })
+            req.on('error', done)
+            req.end()
+          })
+        })
+      })
+
+      describe('with OTel semantics and query string tagging disabled', () => {
+        beforeEach(() => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          process.env.DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING = 'false'
+          return agent.load('http2', { server: false })
+            .then(() => {
+              http2 = require(loadPlugin)
+            })
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          delete process.env.DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING
+        })
+
+        it('omits the query string from url.full', done => {
+          const app = (stream, headers) => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          }
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan({
+              meta: { 'url.full': `${protocol}://localhost:${port}/user` },
+            }).then(done).catch(done)
+
+            const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
+            const req = client.request({ ':path': '/user?page=2', ':method': 'GET' })
             req.on('error', done)
             req.end()
           })
@@ -247,7 +281,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should remove the query string from the URL', done => {
+        it('should report a repeated query schema without retaining values', done => {
           const app = (stream, headers) => {
             stream.respond({
               ':status': 200,
@@ -256,21 +290,32 @@ describe('Plugin', () => {
           }
 
           appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
-              })
-              .then(done)
-              .catch(done)
-
             const client = http2
               .connect(`${protocol}://localhost:${port}`)
               .on('error', done)
+            const strippedUrl = `${protocol}://localhost:${port}/user`
 
-            const req = client.request({ ':path': '/user?foo=bar' })
-            req.on('error', done)
+            /**
+             * @param {number} page
+             * @param {string} expectedUrl
+             * @returns {Promise<void>}
+             */
+            function sendRequest (page, expectedUrl) {
+              const trace = agent.assertFirstTraceSpan({ meta: { 'http.url': expectedUrl } })
+              const req = client.request({ ':path': `/user?page=${page}` })
+              req.on('error', done)
+              req.end()
+              return trace
+            }
 
-            req.end()
+            async function run () {
+              await sendRequest(1, strippedUrl)
+              await sendRequest(2, strippedUrl)
+              await sendRequest(3, `${strippedUrl}?page=<number>`)
+              done()
+            }
+
+            run().catch(done)
           })
         })
 
