@@ -906,7 +906,7 @@ The annotation and assigned Test Management span tags follow the callback API be
 ## Playwright test automation exclusions
 
 Playwright 1.38 and later support the `preventFailureSuppression` and `noAutoRetry`
-callback annotations from `dd-trace/test-optimization`. Apply them to individual
+callback annotations from `dd-trace/ci/test-annotations`. Apply them to individual
 `test` callbacks, including generated cases, `test.only`, and `test.skip`. Callback
 fixture parameters remain available. Exclusions are resolved in the coordinator
 before disabling and retries; worker spans retain both annotation and backend

@@ -1,7 +1,7 @@
 'use strict'
 
 const { test } = require('@playwright/test')
-const { noAutoRetry } = require('dd-trace/test-optimization')
+const { noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 test.describe('serial group', () => {
   test.describe.configure({ mode: 'serial' })

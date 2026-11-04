@@ -1,7 +1,7 @@
 'use strict'
 
 const { test, expect } = require('@playwright/test')
-const { preventFailureSuppression, noAutoRetry } = require('dd-trace/test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 async function failure ({ baseURL }, testInfo) {
   expect({ title: testInfo.title, baseURL }).toEqual({ title: 'this intentionally fails' })

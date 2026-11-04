@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { test } = require('@playwright/test')
-const { noAutoRetry } = require('dd-trace/test-optimization')
+const { noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 let initialized = false
 
