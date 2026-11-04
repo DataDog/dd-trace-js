@@ -86,13 +86,11 @@ class ExposuresWriter extends BaseFFEWriter {
   #deliveryCount = 0
   /** @type {{ payload: string, eventCount: number, bytes: number }[]} */
   #deliveryQueue = []
-  /** @type {ReturnType<typeof setImmediate> | undefined} */
-  #deliveryImmediate
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  #deliveryTimer
   #shutdownDeadline = Infinity
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   #shutdownTimer
-
-  #shutdownDropLogged = false
 
   /**
    * @param {import('../../config/config-base')} config - Tracer configuration object
@@ -229,19 +227,6 @@ class ExposuresWriter extends BaseFFEWriter {
   }
 
   /**
-   * Reports exposures that shutdown cannot flush because delivery never became enabled.
-   */
-  destroy () {
-    const undelivered = this.#enabled ? 0 : this.#pendingEvents.length + this._buffer.length
-    super.destroy()
-    if (undelivered > 0 && !this.#shutdownDropLogged) {
-      this.#shutdownDropLogged = true
-      log.warn('%s dropped %d exposure event(s) at shutdown because exposure delivery was not enabled',
-        this.constructor.name, undelivered)
-    }
-  }
-
-  /**
    * Flushes buffered exposure events to the agent
    */
   flush () {
@@ -260,16 +245,16 @@ class ExposuresWriter extends BaseFFEWriter {
     this.#shutdownDeadline = Date.now() + this._timeout
     this.#shutdownTimer = setTimeout(() => {
       this.#shutdownTimer = undefined
-      const before = this._droppedEvents
-      this.#discardDelivery()
-      const dropped = this._droppedEvents - before
-      if (dropped > 0) {
-        log.warn('%s shutdown deadline reached, dropping %d queued events', this.constructor.name, dropped)
-      }
+      this.#expireShutdown()
     }, this._timeout)
     this.#shutdownTimer.unref?.()
     if (!this.#enabled) {
-      this._droppedEvents += this.#pendingEvents.length + this._buffer.length
+      const undelivered = this.#pendingEvents.length + this._buffer.length
+      if (undelivered > 0) {
+        log.warn('%s dropped %d exposure event(s) at shutdown because exposure delivery was not enabled',
+          this.constructor.name, undelivered)
+      }
+      this._droppedEvents += undelivered
       this.#pendingEvents = []
       this._buffer = []
       this._bufferSize = 0
@@ -304,13 +289,23 @@ class ExposuresWriter extends BaseFFEWriter {
       if (!this.#inFlight) this.#cancelShutdownTimer()
       return
     }
-    if (!this.#enabled || this.#inFlight || this.#deliveryImmediate) return
+    if (!this.#enabled || this.#inFlight || this.#deliveryTimer) return
+    // A timer yields past socket completion so Node can reach beforeExit between requests.
     // Only the bounded shutdown drain should keep an otherwise idle process alive.
-    this.#deliveryImmediate = setImmediate(() => {
-      this.#deliveryImmediate = undefined
+    this.#deliveryTimer = setTimeout(() => {
+      this.#deliveryTimer = undefined
       this.#drainDelivery()
     })
-    if (!this.#closed) this.#deliveryImmediate.unref?.()
+    if (!this.#closed) this.#deliveryTimer.unref?.()
+  }
+
+  #expireShutdown () {
+    const before = this._droppedEvents
+    this.#discardDelivery()
+    const dropped = this._droppedEvents - before
+    if (dropped > 0) {
+      log.warn('%s shutdown deadline reached, dropping %d queued events', this.constructor.name, dropped)
+    }
   }
 
   #cancelShutdownTimer () {
@@ -319,9 +314,9 @@ class ExposuresWriter extends BaseFFEWriter {
   }
 
   #cancelDelivery () {
-    if (!this.#deliveryImmediate) return
-    clearImmediate(this.#deliveryImmediate)
-    this.#deliveryImmediate = undefined
+    if (!this.#deliveryTimer) return
+    clearTimeout(this.#deliveryTimer)
+    this.#deliveryTimer = undefined
   }
 
   #discardDelivery () {
@@ -338,7 +333,7 @@ class ExposuresWriter extends BaseFFEWriter {
   #drainDelivery () {
     this.#cancelDelivery()
     if (Date.now() >= this.#shutdownDeadline) {
-      this.#discardDelivery()
+      this.#expireShutdown()
       return
     }
     if (!this.#enabled || this.#inFlight) return

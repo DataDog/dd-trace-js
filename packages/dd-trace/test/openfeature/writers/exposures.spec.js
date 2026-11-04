@@ -388,6 +388,34 @@ describe('OpenFeature Exposures Writer', () => {
       sinon.assert.calledOnce(request)
     })
 
+    for (const dispatcherFirst of [false, true]) {
+      const source = dispatcherFirst ? 'dispatch' : 'the timer'
+      it(`warns once about queued drops when ${source} expires shutdown`, async () => {
+        request.resetBehavior()
+        writer.append(event('in-flight'))
+        writer.flush()
+        writer.append(event('queued'))
+        writer.flush()
+        writer.destroy()
+        if (dispatcherFirst) {
+          clock.setSystemTime(Date.now() + 5001)
+          writer.flush()
+        } else {
+          await clock.tickAsync(5000)
+        }
+        assert.strictEqual(writer.droppedEventCount, 1)
+        sinon.assert.calledWith(log.warn,
+          '%s shutdown deadline reached, dropping %d queued events', 'ExposuresWriter', 1)
+        const warnings = log.warn.callCount
+        writer.flush()
+        request.firstCall.args[2](null, '', 200)
+        await clock.tickAsync(5001)
+        assert.strictEqual(log.warn.callCount, warnings)
+        assert.strictEqual(writer.droppedEventCount, 1)
+        assert.strictEqual(clock.countTimers(), 0)
+      })
+    }
+
     it('stops launching queued requests at the deadline while allowing the in-flight request to finish', async () => {
       request.resetBehavior()
       request.callsFake((payload, options, callback) => {
@@ -1024,9 +1052,14 @@ describe('OpenFeature Exposures Writer', () => {
 
       writer.destroy()
       writer.destroy()
+      sinon.assert.calledTwice(log.warn)
+      sinon.assert.calledWithExactly(log.warn,
+        '%s dropped %d events (buffer capacity, size limits, serialization or delivery failures)',
+        'ExposuresWriter', 2)
+      assert.strictEqual(writer.droppedEventCount, 2)
 
       sinon.assert.notCalled(request)
-      sinon.assert.calledOnceWithExactly(log.warn,
+      sinon.assert.calledWithExactly(log.warn,
         '%s dropped %d exposure event(s) at shutdown because exposure delivery was not enabled',
         'ExposuresWriter', 2)
     })
