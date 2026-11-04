@@ -16,8 +16,9 @@ merge_method: squash
 # Prevent users from overriding the repository's squash-only policy.
 allowed_merge_methods:
   - squash
-# Reuse existing checks for merge bases up to 48 hours old to avoid redundant CI runs.
-noqueue_use_current_commit_tests_threshold_in_minutes: 2880
+# Always reuse existing checks instead of creating a merge queue working branch.
+# Ten years comfortably exceeds the age of any realistic merge base.
+noqueue_use_current_commit_tests_threshold_in_minutes: 5256000
 # Always wait for GitLab CI instead of relying on automatic detection.
 gitlab_check_enable: true
 # Retry supported GitLab jobs to recover from transient infrastructure failures.
