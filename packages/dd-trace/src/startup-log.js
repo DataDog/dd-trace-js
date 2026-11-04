@@ -3,7 +3,7 @@
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
-const { warn } = require('./log/writer')
+const { info, warn } = require('./log/writer')
 
 const errors = {}
 let config
@@ -27,7 +27,7 @@ function startupLog () {
 
   const out = configInfo()
 
-  warn('DATADOG TRACER CONFIGURATION - ' + out)
+  info('DATADOG TRACER CONFIGURATION - ' + out)
 }
 
 /**
@@ -41,7 +41,7 @@ function logIntegrations () {
 
   integrationsAlreadyRan = true
 
-  warn('DATADOG TRACER INTEGRATIONS LOADED - ' + JSON.stringify(Object.keys(pluginManager._pluginsByName)))
+  info('DATADOG TRACER INTEGRATIONS LOADED - ' + JSON.stringify(Object.keys(pluginManager._pluginsByName)))
 }
 
 /**
