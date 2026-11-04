@@ -161,8 +161,10 @@ class AgentlessConfigurationSource {
   #request (signal) {
     const headers = getClientLibraryHeaders()
     headers['Accept-Encoding'] = 'gzip'
+    let endpoint = this.#config.endpoint
     if (getEvaluatorCapabilities().includes(DEPENDENT_FLAG_VARIANT_KEY_V1)) {
-      headers['X-DD-FEATURE-FLAGS-CAPABILITIES'] = DEPENDENT_FLAG_VARIANT_KEY_V1
+      endpoint = new URL(endpoint)
+      endpoint.searchParams.set('dependent-flags-variant-key', 'v1')
     }
     if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
     if (this.#etag) headers['If-None-Match'] = this.#etag
@@ -187,7 +189,7 @@ class AgentlessConfigurationSource {
       }
 
       request('', {
-        url: this.#config.endpoint,
+        url: endpoint,
         method: 'GET',
         headers,
         retry: false,
