@@ -6,10 +6,11 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const dc = require('dc-polyfill')
-const { afterEach, describe, it } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { flushLiveSessions } = require('../../../../../datadog-instrumentations/src/openai-realtime')
+const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
 const { useLlmObs } = require('../../util')
 
@@ -79,12 +80,60 @@ class ReplaySocket extends EventTarget {
 }
 
 describe('Agents SDK realtime automatic tracing', () => {
-  const { getEvents } = useLlmObs({ plugin: 'openai' })
+  const helper = useLlmObs({ plugin: 'openai' })
+  let diagnostics
+  const getEvents = count => {
+    diagnostics.expected = count
+    return helper.getEvents(count)
+  }
 
   withVersions('openai', '@openai/agents-realtime', '0.20.0', version => {
     let transport
 
-    afterEach(() => {
+    const turnChannel = dc.tracingChannel('apm:openai:realtime:turn')
+    const debugChannel = dc.channel('datadog:log:debug')
+    const observeTurn = () => { diagnostics.turns++ }
+    const observeTrace = traces => { diagnostics.apmSpans += traces.flat().length }
+    const observeLog = record => {
+      const message = typeof record === 'string' ? record : record?.message
+      if (typeof message === 'string' && /error|fail|dropp/i.test(message) && diagnostics.errors.length < 10) {
+        diagnostics.errors.push(message.slice(0, 1000))
+      }
+    }
+
+    beforeEach(() => {
+      diagnostics = { expected: 0, turns: 0, apmSpans: 0, written: {}, received: {}, payloadBytes: [], errors: [] }
+      turnChannel.start.subscribe(observeTurn)
+      debugChannel.subscribe(observeLog)
+      agent.subscribe(observeTrace)
+      const Writer = require('../../../../src/llmobs/writers/spans')
+      const append = Writer.prototype.append
+      sinon.replace(Writer.prototype, 'append', function (event, routing) {
+        diagnostics.written[event.name] = (diagnostics.written[event.name] || 0) + 1
+        return append.call(this, event, routing)
+      })
+      const read = agent.getLlmObsSpanEventsRequests
+      sinon.replace(agent, 'getLlmObsSpanEventsRequests', function (clear) {
+        const requests = read.call(this, clear)
+        for (const payload of requests) {
+          diagnostics.payloadBytes.push(Buffer.byteLength(JSON.stringify(payload)))
+          for (const envelope of payload) {
+            for (const event of envelope.spans) {
+              diagnostics.received[event.name] = (diagnostics.received[event.name] || 0) + 1
+            }
+          }
+        }
+        return requests
+      })
+    })
+
+    afterEach(function () {
+      if (this.currentTest.state === 'failed') {
+        process.stderr.write('Agents realtime delivery diagnostics: ' + JSON.stringify(diagnostics) + '\n')
+      }
+      turnChannel.start.unsubscribe(observeTurn)
+      debugChannel.unsubscribe(observeLog)
+      agent.unsubscribe(observeTrace)
       transport?.close()
       flushLiveSessions()
       sinon.restore()
