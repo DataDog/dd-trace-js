@@ -11,13 +11,11 @@ const finishCh = channel('apm:ioredis:command:finish')
 const errorCh = channel('apm:ioredis:command:error')
 
 const connectionOptionsCache = new WeakMap()
-let pendingReplays = 0
 let replayPromises
 
 function wrapRedis (Redis) {
   shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
-    if (!startCh.hasSubscribers || !command?.promise ||
-        (pendingReplays !== 0 && replayPromises.has(command.promise))) {
+    if (!startCh.hasSubscribers || !command?.promise || replayPromises?.has(command.promise)) {
       return sendCommand.call(this, command, stream)
     }
 
@@ -77,11 +75,7 @@ function trackQueue (queue) {
 /** @param {import('ioredis').Command['promise']} promise */
 function trackReplay (promise) {
   const promises = replayPromises ??= new WeakSet()
-  if (promises.has(promise)) return
   promises.add(promise)
-  pendingReplays++
-  const clear = () => { pendingReplays-- }
-  promise.then(clear, clear)
 }
 
 addHook({ name: 'ioredis', versions: ['>=6'], file: 'built/himport/HimportCoordinator.js' }, exports => {

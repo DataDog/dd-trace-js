@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
 const { once } = require('node:events')
 const net = require('node:net')
 
@@ -77,7 +78,6 @@ describe('ioredis replay', () => {
         sinon.spy(WeakMap.prototype, 'has'),
         sinon.spy(WeakMap.prototype, 'set'),
         sinon.spy(WeakMap.prototype, 'delete'),
-        sinon.spy(WeakSet.prototype, 'has'),
         sinon.spy(WeakSet.prototype, 'add'),
         sinon.spy(WeakSet.prototype, 'delete'),
       ]
@@ -95,7 +95,7 @@ describe('ioredis replay', () => {
       return pending
     }
 
-    it('does not mark commands or consult command collections on an idle connection', async () => {
+    it('does not mark commands on an idle connection', async () => {
       redis = new Redis()
       await once(redis, 'ready')
       await sendWithoutBookkeeping(redis, new Redis.Command('get', ['replay-ready']))
@@ -157,6 +157,54 @@ describe('ioredis replay', () => {
         assert.ok(spans.some(span => span.meta['redis.raw_command'] === 'GET replay-activation-marker'))
       })
     })
+
+    for (const ready of [false, true]) {
+      it(`preserves unhandled rejections after activation, ready=${ready}`, () => {
+        const script = `
+          const net = require('node:net')
+          const tracer = require(${JSON.stringify(require.resolve('../../dd-trace'))}).init({
+            plugins: false, startupLogs: false, telemetry: false, remoteConfig: false, flushInterval: 0,
+          })
+          tracer.use('ioredis', { enabled: false })
+          const Redis = require(${JSON.stringify(require.resolve(`../../../versions/ioredis@${version}`))}).get()
+          const Parser = require(${JSON.stringify(require.resolve('../../../versions/ioredis@5'))}).get('redis-parser')
+          process.once('unhandledRejection', error => console.log(error.message))
+          const server = net.createServer(socket => {
+            if (!${ready}) return socket.destroy()
+            const parser = new Parser({
+              returnReply: args => socket.write(args[1]?.toString() === 'replay-rejection'
+                ? '-ERR replay rejected\\r\\n' : '+OK\\r\\n'),
+              returnError: error => { throw error },
+            })
+            socket.on('data', data => parser.execute(data))
+          })
+          server.listen(0, '127.0.0.1', () => {
+            const client = new Redis({
+              host: '127.0.0.1', port: server.address().port, lazyConnect: true,
+              retryStrategy: null, enableReadyCheck: ${!ready}, disableClientInfo: true,
+            })
+            client.on('error', () => {})
+            client.once('end', () => server.close())
+            function send () {
+              client.get('replay-rejection')
+              tracer.use('ioredis', { enabled: true })
+              if (${ready}) client.get('replay-marker').then(() => client.disconnect())
+            }
+            if (${ready}) {
+              client.once('ready', send)
+              client.connect().catch(error => { throw error })
+            } else {
+              send()
+            }
+          })
+        `
+        const child = spawnSync(process.execPath, ['--eval', script], {
+          encoding: 'utf8', timeout: 10000,
+        })
+        assert.equal(child.stdout.trim(), ready ? 'ERR replay rejected' : 'Connection is closed.')
+        assert.equal(child.status, 0, child.stderr)
+      })
+    }
 
     it('bypasses resend bookkeeping when tracing is disabled', async () => {
       redis = new Redis()
@@ -249,7 +297,7 @@ describe('ioredis replay', () => {
     for (const failure of [false, true]) {
       for (const disabled of [false, true]) {
         const outcome = failure ? 'rejection' : 'success'
-        it(`restores the numeric fast path after ${outcome}, disabled=${disabled}`, async () => {
+        it(`does not mark new commands after ${outcome}, disabled=${disabled}`, async () => {
           redis = new Redis({ lazyConnect: true })
           const ready = once(redis, 'ready')
           const command = new Redis.Command('get', failure ? [] : ['replay-cleanup'])
