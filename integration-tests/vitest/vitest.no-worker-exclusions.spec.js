@@ -8,7 +8,7 @@ const { sandboxCwd, useSandbox, getCiVisAgentlessConfig, stopCiVisTestEnv } = re
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
 const {
-  expectedExecutions, prepareExecutionLedger, readExecutions, suiteLocalExpectations,
+  expectedExecutions, prepareExecutionLedger, readExecutions, suiteLocalExpectations, assertDeclarationLocations,
 } = require('./exclusion-executions')
 const protection = 'test.test_management.prevent_failure_suppression'
 const exclusion = 'test.test_management.no_auto_retry'
@@ -73,6 +73,17 @@ for (const version of versions) {
       assert.deepStrictEqual(readExecutions(ledger), executions, output)
     }
     const named = (tests, name) => tests.filter(test => test.meta['test.name'] === name)
+
+    // Source-line reporting through the main-process reporter requires supported no-worker mode.
+    const sourceLocationsIt = version === '1.6.0' ? it.skip : it
+    for (const hasStack of [true, false]) {
+      sourceLocationsIt(`preserves declaration source locations (stack available=${hasStack})`, async () => {
+        await run(hasStack ? 'locations' : 'locations-no-stack', 0,
+          tests => assertDeclarationLocations(tests, version !== '1.6.0', hasStack), {
+            TEST_DIR: 'ci-visibility/vitest-tests/declaration-locations.mjs',
+          }, {})
+      })
+    }
 
     for (const pool of ['forks', 'threads']) {
       it(`honors suite-local annotations in ${pool}`, async () => {

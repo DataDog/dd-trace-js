@@ -6,6 +6,7 @@ const declarationMethods = new Set([
 const wrappedDeclarations = new WeakMap()
 const capturedCollectors = new WeakSet()
 const declarationFactories = ['each', 'for', 'extend', 'skipIf', 'runIf']
+let captureLocations = false
 
 /**
  * @typedef {{
@@ -18,6 +19,8 @@ const declarationFactories = ['each', 'for', 'extend', 'skipIf', 'runIf']
  * @param {() => Collector} getCurrentSuite
  */
 function captureDeclarations (test, getCurrentSuite) {
+  // The setup-based main-process reporter requests declaration locations.
+  captureLocations = true
   captureFactories(test, getCurrentSuite)
   captureCollector(getCurrentSuite())
 }
@@ -44,23 +47,15 @@ function captureCollector (collector) {
   const wrapped = wrapDeclaration(declaration, getCollector)
   captureFactories(collector.test, getCollector)
   // Vitest's exported test dispatches through .fn.call; suite-local chains close over .fn and use .apply.
-  // Intercept both invocations without replacing the callable or its non-configurable .fn property.
+  // Native bindings avoid an extra stack frame inside Vitest's bounded declaration-location capture.
   Object.defineProperties(declaration, {
     call: {
-      /**
-       * @param {unknown} receiver
-       * @param {unknown[]} args
-       */
-      value (receiver, ...args) { return Reflect.apply(wrapped, receiver, args) },
+      value: Function.prototype.call.bind(wrapped),
       writable: true,
       configurable: true,
     },
     apply: {
-      /**
-       * @param {unknown} receiver
-       * @param {unknown[]} args
-       */
-      value (receiver, args) { return Reflect.apply(wrapped, receiver, args) },
+      value: Function.prototype.apply.bind(wrapped),
       writable: true,
       configurable: true,
     },
@@ -69,6 +64,10 @@ function captureCollector (collector) {
   collector.tasks.push = function (...tasks) {
     for (const task of tasks) {
       if (task.type === 'collector') captureCollector(task)
+      else if (captureLocations && task.type === 'test' && !task.location) {
+        const location = getDeclarationLocation(task.file?.filepath)
+        if (location) task.location = location
+      }
     }
     return push.apply(this, tasks)
   }
@@ -131,6 +130,35 @@ function wrapDeclaration (declaration, getCurrentSuite) {
   wrappedDeclarations.set(wrapped, wrapped)
   wrappedDeclarations.set(declaration, wrapped)
   return wrapped
+}
+
+/**
+ * @param {string|undefined} filepath
+ * @returns {{ line: number, column: number }|undefined}
+ */
+function getDeclarationLocation (filepath) {
+  if (!filepath) return
+  try {
+    const limit = Error.stackTraceLimit
+    let error
+    try {
+      // Vitest's ten-frame budget can omit callers behind generated declarations and fixture chains.
+      Error.stackTraceLimit = 25
+      error = new Error('Datadog Vitest declaration')
+    } finally {
+      Error.stackTraceLimit = limit
+    }
+    if (typeof error.stack !== 'string') return
+    for (let frame of error.stack.split('\n')) {
+      if (!frame.includes(filepath)) {
+        try { frame = decodeURIComponent(frame) } catch { continue }
+      }
+      const start = frame.lastIndexOf(filepath)
+      if (start === -1) continue
+      const location = frame.slice(start + filepath.length).match(/^(?:[?#].*?)?:(\d+):(\d+)\)?$/)
+      if (location) return { line: Number(location[1]), column: Number(location[2]) }
+    }
+  } catch {}
 }
 
 // Browser Mode serves this dependency as ESM without CommonJS conversion in independent projects.

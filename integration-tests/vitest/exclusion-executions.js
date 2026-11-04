@@ -101,4 +101,30 @@ function suiteLocalExpectations (hasFor) {
   }
 }
 
-module.exports = { expectedExecutions, prepareExecutionLedger, readExecutions, suiteLocalExpectations }
+/**
+ * @param {Array<{ meta: Record<string, string>, metrics: Record<string, number> }>} tests
+ * @param {boolean} hasFor
+ * @param {boolean} [hasStack]
+ */
+function assertDeclarationLocations (tests, hasFor, hasStack = true) {
+  const file = 'ci-visibility/vitest-tests/declaration-locations.mjs'
+  const lines = readFileSync(path.join(__dirname, '..', file), 'utf8').split('\n')
+  const locations = lines.flatMap((line, index) => {
+    const marker = line.match(/\/\/ location: (.+)$/)?.[1]
+    return marker && (hasFor || !marker.startsWith('for ')) ? [[marker, index + 1]] : []
+  })
+  assert.strictEqual(tests.length, locations.length * 2)
+  for (const test of tests) {
+    const name = test.meta['test.name']
+    const location = locations.find(([suffix]) => name.endsWith(` ${suffix}`))
+    assert.ok(location, name)
+    assert.strictEqual(test.meta['test.source.file'], file, name)
+    assert.strictEqual(test.metrics['test.source.start'], hasStack ? location[1] : 1, name)
+    assert.strictEqual(test.meta['test.test_management.no_auto_retry'],
+      name.includes('annotated') ? 'true' : undefined, name)
+  }
+}
+
+module.exports = {
+  expectedExecutions, prepareExecutionLedger, readExecutions, suiteLocalExpectations, assertDeclarationLocations,
+}

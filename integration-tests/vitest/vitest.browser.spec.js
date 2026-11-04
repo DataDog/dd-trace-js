@@ -47,7 +47,7 @@ const {
 const { NODE_MAJOR } = require('../../version')
 
 const latestVersions = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies
-const { suiteLocalExpectations } = require('./exclusion-executions')
+const { suiteLocalExpectations, assertDeclarationLocations } = require('./exclusion-executions')
 
 const isLegacyBrowserProvider = process.env.VITEST_BROWSER_LEGACY === '1' || NODE_MAJOR <= 18
 const browserProvider = process.env.VITEST_BROWSER_PROVIDER || 'playwright'
@@ -1032,6 +1032,17 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
     }
     return counts
   }
+
+  it('preserves declaration source locations', async () => {
+    const runPromise = runVitest(undefined, {
+      TEST_DIR: 'ci-visibility/vitest-tests/declaration-locations.mjs',
+    })
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        assertDeclarationLocations(getEventContents(getEvents(payloads), 'test'), true)
+      })
+    await Promise.all([runPromise, eventsPromise])
+  })
 
   for (const mixed of [false, true]) {
     it(`honors browser suite-local annotations (mixed projects=${mixed})`, async () => {
