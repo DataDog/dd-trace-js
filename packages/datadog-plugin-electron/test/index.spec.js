@@ -162,6 +162,7 @@ describe('Plugin', () => {
             const span = traces.flat().find(s => s.name === 'electron.main.receive')
             assert.ok(span, 'expected electron.main.receive span')
             assert.strictEqual(span.resource, 'set-title-untraced')
+            assert.strictEqual(span.parent_id.toString(), '0')
           }, { timeoutMs: TRACE_TIMEOUT_MS })
           const completionPromise = new Promise(resolve => {
             const onMessage = msg => {
