@@ -30,6 +30,7 @@ describe('vitest worker env', () => {
       expect(globalThis._ddtrace).toBeUndefined()
       const require = createRequire(import.meta.url)
       expect(Object.keys(require.cache).some(id => /[/\\]import-in-the-middle[/\\]/.test(id))).toBe(false)
+      expect(Object.keys(require.cache).some(id => id.endsWith('vitest-test-annotations.js'))).toBe(false)
       expect(process.env.NODE_OPTIONS || '').not.toContain('vitest-annotations-register')
     }
 

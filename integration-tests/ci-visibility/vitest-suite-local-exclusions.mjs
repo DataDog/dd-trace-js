@@ -1,5 +1,5 @@
 import { describe, expect } from 'vitest'
-import { noAutoRetry, preventFailureSuppression } from 'dd-trace/ci/test-annotations.js'
+import { noAutoRetry, preventFailureSuppression } from 'dd-trace/ci/test-annotations'
 
 /** @param {(name: string, callback: Function) => Function} tracked */
 export function declareSuiteLocalTests (tracked) {

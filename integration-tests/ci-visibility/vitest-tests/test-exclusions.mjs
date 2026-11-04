@@ -3,7 +3,7 @@ import { appendFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
 import { describe, test } from 'vitest'
-import { preventFailureSuppression, noAutoRetry } from 'dd-trace/ci/test-annotations.js'
+import { preventFailureSuppression, noAutoRetry } from 'dd-trace/ci/test-annotations'
 
 import { declareSuiteLocalTests } from '../vitest-suite-local-exclusions.mjs'
 

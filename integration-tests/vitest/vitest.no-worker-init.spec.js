@@ -159,6 +159,19 @@ describe('vitest no-worker init instrumentation selection', () => {
   })
 
   describe('shouldUse', () => {
+    it('does not register declaration hooks in an active no-worker process', () => {
+      const entrypoint = require.resolve('../../packages/datadog-instrumentations/src/vitest')
+      execFileSync(process.execPath, ['-e', `
+        const assert = require('node:assert/strict')
+        require(${JSON.stringify(entrypoint)})
+        const loaded = Object.keys(require.cache)
+        assert.ok(!loaded.some(id => id.endsWith('vitest-test-annotations.js')))
+        assert.ok(!loaded.some(id => id.endsWith('vitest-worker.js')))
+      `], {
+        env: { ...process.env, NODE_OPTIONS: '', DD_VITEST_WORKER: '1', DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1' },
+      })
+    })
+
     it('rejects runs when the feature was not requested', () => {
       delete process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV]
 

@@ -516,7 +516,7 @@ function allowVitestBrowserSetupFile (viteConfig) {
     VITEST_NO_WORKER_INIT_SETUP_FILE,
     VITEST_NO_WORKER_INIT_RUNNER_SETUP_FILE,
     VITEST_NO_WORKER_INIT_V5_SETUP_FILE,
-    path.join(__dirname, '..', '..', '..', 'ci', 'vitest-no-worker-init-annotations.mjs'),
+    require.resolve('../../../ci/vitest-no-worker-init-annotations.mjs'),
     require.resolve('../../dd-trace/src/ci-visibility/test-declaration-annotations'),
   ]
   for (const setupFile of setupFiles) {
