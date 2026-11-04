@@ -62,7 +62,10 @@ describe('FlagEvalEVPHook', () => {
     stopDeliveryStrategy = sinon.spy()
     selectRoute = sinon.stub().returns(stopDeliveryStrategy)
     snapshotContext = sinon.spy(snapshotEvaluationContext)
-    dependencyTelemetrySidecar = { takeDependencyEvaluations: sinon.stub().returns([]) }
+    dependencyTelemetrySidecar = {
+      associateDependencyEvaluations: sinon.stub(),
+      takeDependencyEvaluations: sinon.stub().returns([]),
+    }
     Hook = proxyquire('../../../src/openfeature/writers/flag-eval-evp-hook', {
       './flag-evaluations': Writer,
       './flag-evaluation-context': { snapshotEvaluationContext: snapshotContext },
@@ -336,6 +339,7 @@ describe('FlagEvalEVPHook', () => {
       const result = await client.getBooleanDetails('flag', false, {
         targetingKey: 'customer', plan: 'pro',
       })
+      if (terminal === 'success') assert.strictEqual(result.errorCode, undefined)
       sinon.assert.calledOnce(writer.enqueue)
       const [event] = writer.enqueue.firstCall.args
       assert.strictEqual(event.flagKey, 'flag')
