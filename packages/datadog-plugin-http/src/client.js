@@ -10,6 +10,7 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const { clientResourceName } = require('../../dd-trace/src/plugins/util/path-quantization')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
@@ -40,6 +41,8 @@ class HttpClientPlugin extends ClientPlugin {
 
     const method = (options.method || 'GET').toUpperCase()
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const resourceName = clientResourceName(method, path,
+      this.config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE)
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
@@ -49,7 +52,7 @@ class HttpClientPlugin extends ClientPlugin {
       meta: {
         [COMPONENT]: this.component,
         'span.kind': 'client',
-        'resource.name': method,
+        'resource.name': resourceName,
         'span.type': 'http',
         'http.method': method,
         'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, pathname, uri) : uri,
