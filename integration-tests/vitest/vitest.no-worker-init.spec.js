@@ -3,7 +3,8 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { exec, execSync } = require('node:child_process')
+const Module = require('node:module')
+const { exec, execFileSync, execSync } = require('node:child_process')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
@@ -158,6 +159,19 @@ describe('vitest no-worker init instrumentation selection', () => {
   })
 
   describe('shouldUse', () => {
+    it('does not register declaration hooks in an active no-worker process', () => {
+      const entrypoint = require.resolve('../../packages/datadog-instrumentations/src/vitest')
+      execFileSync(process.execPath, ['-e', `
+        const assert = require('node:assert/strict')
+        require(${JSON.stringify(entrypoint)})
+        const loaded = Object.keys(require.cache)
+        assert.ok(!loaded.some(id => id.endsWith('vitest-test-annotations.js')))
+        assert.ok(!loaded.some(id => id.endsWith('vitest-worker.js')))
+      `], {
+        env: { ...process.env, NODE_OPTIONS: '', DD_VITEST_WORKER: '1', DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1' },
+      })
+    })
+
     it('rejects runs when the feature was not requested', () => {
       delete process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV]
 
@@ -173,6 +187,19 @@ describe('vitest no-worker init instrumentation selection', () => {
         assert.strictEqual(noWorkerInit.shouldUse({ config: { pool } }, '3.2.6', undefined, options), true)
       })
     }
+
+    it('accepts isolated workers without module.register', () => {
+      const descriptor = Object.getOwnPropertyDescriptor(Module, 'register')
+      Object.defineProperty(Module, 'register', { value: undefined, configurable: true })
+      try {
+        for (const pool of ['forks', 'threads']) {
+          assert.strictEqual(noWorkerInit.shouldUse({ config: { pool } }, '3.2.6', undefined, options), true)
+        }
+      } finally {
+        if (descriptor) Object.defineProperty(Module, 'register', descriptor)
+        else delete Module.register
+      }
+    })
 
     it('rejects root projects with isolate disabled', () => {
       assert.strictEqual(
@@ -421,10 +448,12 @@ describe('vitest no-worker init instrumentation selection', () => {
       accessPlugin.configResolved(resolvedConfig)
 
       assert.strictEqual(resolvedConfig.server.fs.allow[0], '/repo')
-      assert.strictEqual(resolvedConfig.server.fs.allow.length, 4)
+      assert.strictEqual(resolvedConfig.server.fs.allow.length, 6)
       assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[1]), 'vitest-no-worker-init-setup.mjs')
       assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[2]), 'vitest-no-worker-init-runner-setup.mjs')
       assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[3]), 'vitest-no-worker-init-v5-setup.mjs')
+      assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[4]), 'vitest-no-worker-init-annotations.mjs')
+      assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[5]), 'test-declaration-annotations.js')
     })
 
     it('does not install the Vite access plugin for Node test projects', () => {
@@ -876,7 +905,85 @@ describe('vitest no-worker init instrumentation selection', () => {
     })
   })
 
+  describe('browser declaration plugin', () => {
+    it('installs only once when start and create reuse the same Vite overrides', () => {
+      const existing = { name: 'existing plugin' }
+      const overrides = { plugins: [existing] }
+      assert.strictEqual(noWorkerInit.addBrowserAnnotationPlugin(overrides), overrides)
+      noWorkerInit.addBrowserAnnotationPlugin(overrides)
+      assert.strictEqual(overrides.plugins.length, 2)
+      assert.strictEqual(overrides.plugins[0], existing)
+    })
+  })
+
   describe('configureWorkerEnv', () => {
+    const runWithNodeOptions = options => execFileSync(process.execPath, [
+      '-e', 'process.stdout.write(globalThis.annotationOption)',
+    ], {
+      env: { ...process.env, NODE_OPTIONS: options },
+      encoding: 'utf8',
+    })
+
+    for (const nodeOptions of [
+      "--import=data:text/javascript,globalThis.annotationOption='ok'",
+      '  --import "data:text/javascript,globalThis.annotationOption=\'ok\'"  ',
+    ]) {
+      it(`preserves ordinary worker NODE_OPTIONS verbatim: ${nodeOptions}`, () => {
+        assert.strictEqual(runWithNodeOptions(nodeOptions), 'ok')
+        const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: nodeOptions })
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), 'ok')
+        assert.strictEqual(env.NODE_OPTIONS, nodeOptions)
+      })
+    }
+
+    const uncPath = String.raw`\\server\share\worker-options.js`
+    const regexpImport = String.raw`data:text/javascript,globalThis.annotationOption=/\p{L}/u.test('a')&&'ok'`
+    const uncImport = `data:text/javascript,globalThis.annotationOption=${JSON.stringify(uncPath)}`
+    for (const [name, userOptions, expected] of [
+      ['unquoted backslashes', `--import=${regexpImport}`, 'ok'],
+      ['quoted backslashes', `--import=${JSON.stringify(regexpImport)}`, 'ok'],
+      ['UNC separators', `--import=${JSON.stringify(uncImport)}`, uncPath],
+      ['quoted whitespace', "--import=\"data:text/javascript,globalThis.annotationOption=\n'ok'\"", 'ok'],
+    ]) {
+      it(`preserves ${name} when stripping and restoring Datadog worker bootstraps`, () => {
+        assert.strictEqual(runWithNodeOptions(userOptions), expected)
+        const originalOptions = `${userOptions} -r dd-trace/ci/init`
+        const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: originalOptions }, true)
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), expected)
+        const firstOptions = env.NODE_OPTIONS
+        noWorkerInit.configureWorkerEnv(env, true)
+        assert.strictEqual(runWithNodeOptions(env.NODE_OPTIONS), expected)
+        assert.strictEqual(env.NODE_OPTIONS, firstOptions)
+        noWorkerInit.configureWorkerEnv(env)
+        assert.strictEqual(env.NODE_OPTIONS, originalOptions)
+      })
+    }
+
+    it('preserves inherited NODE_OPTIONS while respecting explicit empty worker options', () => {
+      const original = process.env.NODE_OPTIONS
+      process.env.NODE_OPTIONS = DEFAULT_NODE_OPTIONS
+      try {
+        const inherited = noWorkerInit.configureWorkerEnv({}, true)
+        assert.match(inherited.NODE_OPTIONS, /--no-warnings/)
+        assert.doesNotMatch(inherited.NODE_OPTIONS, /dd-trace\/ci\/init/)
+        const empty = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: '' }, true)
+        assert.doesNotMatch(empty.NODE_OPTIONS, /--no-warnings/)
+      } finally {
+        if (original === undefined) delete process.env.NODE_OPTIONS
+        else process.env.NODE_OPTIONS = original
+      }
+    })
+
+    it('adds no worker preload when configuring a reused no-worker environment', () => {
+      const env = noWorkerInit.configureWorkerEnv({ NODE_OPTIONS: DEFAULT_NODE_OPTIONS }, true)
+      const first = env.NODE_OPTIONS
+      assert.strictEqual(first, '--no-warnings')
+      noWorkerInit.configureWorkerEnv(env, true)
+      assert.strictEqual(env.NODE_OPTIONS, first)
+      noWorkerInit.configureWorkerEnv(env)
+      assert.strictEqual(env.NODE_OPTIONS, DEFAULT_NODE_OPTIONS)
+    })
+
     it('restores Datadog NODE_OPTIONS when no-worker mode falls back', () => {
       const noWorkerEnv = noWorkerInit.configureWorkerEnv({
         NODE_OPTIONS: DEFAULT_NODE_OPTIONS,
@@ -902,6 +1009,7 @@ SUPPORTED_VERSIONS.forEach((version) => {
 
     useSandbox([
       `vitest@${version}`,
+      ...(NODE_MAJOR <= 18 ? ['vite@6.4.1'] : []),
       'tinypool',
     ], true)
 
