@@ -236,6 +236,12 @@ describe('TraceState', () => {
     assert.strictEqual(ts.toString(), 'dd=s:2,a=1,b=2')
   })
 
+  it('should keep the first valid dd member within the limit', () => {
+    const ts = TraceState.fromString('dd=s:1,other=value,dd=s:2')
+
+    assert.strictEqual(ts.toString(), 'dd=s:1,other=value')
+  })
+
   it('should keep dd beyond the first 32 members in place of the last other member', () => {
     const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
     const ts = TraceState.fromString(`${other.join(',')},dd=s:2,k32=v32`)
@@ -292,6 +298,42 @@ describe('TraceState', () => {
     ts.forVendor('other', state => state.set('c', '4'))
 
     assert.strictEqual(ts.toString(), 'other=c:4;a:1;dd:2;b:3')
+  })
+
+  it('should ignore missing or empty keys without consuming a later member separator', () => {
+    const ts = TraceState.fromString('missing,=missing,,a=1,missing,b=2,missing,missing')
+
+    assert.strictEqual(ts.toString(), 'a=1,b=2')
+  })
+
+  it('should ignore missing or empty keys in vendor data', () => {
+    const ts = TraceState.fromString('other=missing;:missing;;a:1;missing;b:2;missing;missing')
+
+    ts.forVendor('other', state => state.set('c', '3'))
+
+    assert.strictEqual(ts.toString(), 'other=c:3;a:1;b:2')
+  })
+
+  it('should count empty members toward the limit when retaining dd', () => {
+    const ts = TraceState.fromString(`${','.repeat(32)}other=value,dd=s:2`)
+
+    assert.strictEqual(ts.toString(), 'dd=s:2')
+  })
+
+  it('should skip incomplete dd members beyond the limit', () => {
+    const ts = TraceState.fromString(`${','.repeat(32)}dd-missing,=dd,dd=,dd=s:2,dd=s:1`)
+
+    assert.strictEqual(ts.toString(), 'dd=s:2')
+  })
+
+  it('should preserve 256-character vendor keys', () => {
+    const other = Array.from({ length: 31 }, (_, index) => {
+      const key = `k${index}`.padEnd(256, 'x')
+      return `${key}=value`
+    })
+    const ts = TraceState.fromString(`${other.join(',')},dd=s:2`)
+
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.join(',')}`)
   })
 
   it('should accept internal spaces but drop tabs in tracestate values per W3C Trace Context §3.3.1.3.2', () => {

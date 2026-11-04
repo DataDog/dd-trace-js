@@ -27,12 +27,16 @@ function parseEntries (
   let ddEntry
   let start = 0
   let memberCount = 0
+  let splitIndex = -1
 
   while (start <= value.length && memberCount < maxEntries) {
     const separatorIndex = value.indexOf(fieldSeparator, start)
     const end = separatorIndex === -1 ? value.length : separatorIndex
-    let splitIndex = start
-    while (splitIndex < end && value[splitIndex] !== pairSeparator) splitIndex++
+    // Reuse the next separator (or end) so malformed members do not rescan the suffix.
+    if (splitIndex < start && start < end) {
+      splitIndex = value.indexOf(pairSeparator, start)
+      if (splitIndex === -1) splitIndex = value.length
+    }
     const key = splitIndex > start && splitIndex < end ? value.slice(start, splitIndex).trim() : undefined
     if (key && !WHITESPACE.test(key)) {
       // W3C §3.3.1.3.2: value = 0*255(chr) nblk-chr; chr = %x20 / nblk-chr (no tab).
@@ -63,11 +67,11 @@ function parseEntries (
       const segmentStart = value.lastIndexOf(',', position) + 1
       const separatorIndex = value.indexOf(',', position)
       const end = separatorIndex === -1 ? value.length : separatorIndex
-      let splitIndex = position + 2
-      while (splitIndex < end && value[splitIndex] !== '=') splitIndex++
+      const segment = value.slice(segmentStart, end)
+      const splitIndex = segment.indexOf('=')
 
-      if (splitIndex < end && value.slice(segmentStart, splitIndex).trim() === 'dd') {
-        const entryValue = value.slice(splitIndex + 1, end).trimEnd()
+      if (splitIndex > 0 && segment.slice(0, splitIndex).trim() === 'dd') {
+        const entryValue = segment.slice(splitIndex + 1).trimEnd()
         if (entryValue && entryValue.length <= maxValueLength && !entryValue.includes('\t')) {
           ddEntry = ['dd', entryValue]
           break
