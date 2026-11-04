@@ -19,19 +19,26 @@ const {
 
 const { getLatestMochaSpecifier } = require('../integration-tests/mocha/versions')
 const { getLatestPlaywrightSpecifier } = require('../integration-tests/playwright/versions')
+const seleniumVersions = require('../integration-tests/selenium/versions')
+const { getVitestVersions } = require('../integration-tests/vitest/versions')
 
 const NODE_RANGE_FLAG = '--node-range'
 const FETCH_TIMEOUT_MS = 10_000
 const FETCH_CONCURRENCY = 10
 const TEST_COMMAND = /\bnpm run test:(?:plugins:ci|instrumentations(?::ci)?|integration:plugins(?::coverage)?)(?:\s|$)/
 
-const FRAMEWORK_COMMAND = /\bnpm run test:integration:(jest|mocha|playwright|cucumber):coverage(?:\s|$)/
 const FRAMEWORK_PACKAGES = {
   jest: '@jest/core',
   mocha: 'mocha',
   playwright: '@playwright/test,playwright',
   cucumber: '@cucumber/cucumber',
+  cypress: 'cypress',
+  selenium: 'selenium-webdriver',
+  vitest: 'vitest',
 }
+const FRAMEWORK_COMMAND = new RegExp(
+  String.raw`\bnpm run test:integration:(${Object.keys(FRAMEWORK_PACKAGES).join('|')}):coverage(?:\s|$)`
+)
 
 const ROOT = path.join(__dirname, '..')
 const PLUGINS_INDEX = path.join(ROOT, 'packages/dd-trace/src/plugins/index.js')
@@ -486,6 +493,28 @@ function readTestDeclarations (dependency, integration, plugins) {
 }
 
 /**
+ * @param {string} framework
+ * @param {string} selector
+ * @param {string} nodeVersion
+ */
+function readFrameworkVersions (framework, selector, nodeVersion) {
+  if (framework === 'selenium') return seleniumVersions
+  if (framework === 'vitest') {
+    const versions = getVitestVersions(semver.major(nodeVersion))
+    if (selector === 'all') return versions
+    if (selector === 'oldest') return [versions[0]]
+    if (selector === 'latest') return [versions.at(-1)]
+  }
+  if (selector === 'oldest') return []
+  if (selector === 'latest') {
+    if (framework === 'cucumber') return []
+    if (framework === 'mocha') return [getLatestMochaSpecifier(nodeVersion)]
+    if (framework === 'playwright') return [getLatestPlaywrightSpecifier(semver.major(nodeVersion))]
+  }
+  return [selector]
+}
+
+/**
  * @param {string} dependency
  * @param {InstrumentationDeclaration[]} declarations
  * @param {string} nodeVersion
@@ -508,20 +537,13 @@ function resolveDependencyVersions (
 
   for (const { env, framework } of testEnvironments) {
     if (framework) {
-      let range = env[`${framework.toUpperCase()}_VERSION`]
-      // These selectors have no shared resolver. Leave their versions unclaimed.
-      if (range === 'oldest' || (framework === 'cucumber' && range === 'latest')) continue
-      if (range === 'latest') {
-        if (framework === 'mocha') {
-          range = getLatestMochaSpecifier(nodeVersion)
-        } else if (framework === 'playwright') {
-          range = getLatestPlaywrightSpecifier(semver.major(nodeVersion))
+      const selector = env[`${framework.toUpperCase()}_VERSION`]
+      for (const range of readFrameworkVersions(framework, selector, nodeVersion)) {
+        const version = semver.maxSatisfying(packageVersions, getCappedRange(dependency, range))
+        if (!version) throw new Error(`Could not resolve '${dependency}@${range}' from npm metadata`)
+        if (semver.satisfies(version, supportedRange) && !brokenVersionReason(dependency, version, nodeVersion)) {
+          testedVersions.add(version)
         }
-      }
-      const version = semver.maxSatisfying(packageVersions, range === 'latest' ? '*' : range)
-      if (!version) throw new Error(`Could not resolve '${dependency}@${range}' from npm metadata`)
-      if (semver.satisfies(version, supportedRange) && !brokenVersionReason(dependency, version, nodeVersion)) {
-        testedVersions.add(version)
       }
       continue
     }
