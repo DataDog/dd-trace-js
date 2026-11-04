@@ -2,7 +2,7 @@
 
 /* global cy */
 
-const { noAutoRetry, preventFailureSuppression } = require('dd-trace/test-optimization')
+const { noAutoRetry, preventFailureSuppression } = require('dd-trace/ci/test-annotations')
 const { getTestEnvironment } = require('../support/test-environment')
 
 const mode = getTestEnvironment('EXCLUSIONS_MODE')

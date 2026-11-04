@@ -2,7 +2,7 @@
 
 /* global cy */
 
-const { noAutoRetry } = require('dd-trace/test-optimization')
+const { noAutoRetry } = require('dd-trace/ci/test-annotations')
 const executions = {}
 const record = name => {
   executions[name] = (executions[name] || 0) + 1

@@ -2,7 +2,7 @@
 
 /* global Cypress, cy */
 
-const { noAutoRetry } = require('dd-trace/test-optimization')
+const { noAutoRetry } = require('dd-trace/ci/test-annotations')
 const { getTestEnvironment } = require('../support/test-environment')
 
 const executions = {}

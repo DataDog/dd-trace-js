@@ -967,7 +967,7 @@ when the execution policy is overridden; observed annotation tags are true-only.
 ## Cypress test automation exclusions
 
 With Cypress 12 and later, annotate the callback passed to `it` or `specify` using
-`preventFailureSuppression` and `noAutoRetry` from `dd-trace/test-optimization`.
+`preventFailureSuppression` and `noAutoRetry` from `dd-trace/ci/test-annotations`.
 Both helpers compose in the same way as the Jest examples above. Skipped declarations,
 loop-generated cases, and allowed native retries retain their annotation tags.
 

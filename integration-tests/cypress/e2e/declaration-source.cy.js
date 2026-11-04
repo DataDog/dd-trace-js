@@ -2,7 +2,7 @@
 
 /* global expect */
 
-const { noAutoRetry } = require('dd-trace/test-optimization')
+const { noAutoRetry } = require('dd-trace/ci/test-annotations')
 
 let ordinaryLine
 it('ordinary declaration source', function () {
