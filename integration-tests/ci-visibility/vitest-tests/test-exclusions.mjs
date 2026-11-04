@@ -1,7 +1,7 @@
 import { appendFileSync } from 'node:fs'
 
 import { describe, test } from 'vitest'
-import { preventFailureSuppression, noAutoRetry } from 'dd-trace/test-optimization.js'
+import { preventFailureSuppression, noAutoRetry } from 'dd-trace/ci/test-annotations.js'
 
 function fail () { throw new Error('excluded failure') }
 

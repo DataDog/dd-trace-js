@@ -953,7 +953,7 @@ Framework support is described in the framework-specific sections. The legacy Je
 ## Vitest test automation exclusions
 
 Annotate callbacks with `preventFailureSuppression` and `noAutoRetry` from
-`dd-trace/test-optimization`. These declarations apply to all generated `test.each`
+`dd-trace/ci/test-annotations`. These declarations apply to all generated `test.each`
 cases and work with Vitest's test modifiers, worker processes and supported
 browser/no-worker modes. Annotation flags travel with test task metadata before
 Vitest replaces callbacks for fixtures or parameterization.

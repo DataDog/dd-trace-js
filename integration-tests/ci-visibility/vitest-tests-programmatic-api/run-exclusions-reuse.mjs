@@ -19,7 +19,7 @@ function writeStage ({ name, annotated, retry }) {
   const declaration = annotated ? `preventFailureSuppression(noAutoRetry(${callback}))` : callback
   writeFileSync(file, `import { appendFileSync } from 'node:fs'
 import { test } from 'vitest'
-import { noAutoRetry, preventFailureSuppression } from 'dd-trace/test-optimization.js'
+import { noAutoRetry, preventFailureSuppression } from 'dd-trace/ci/test-annotations.js'
 test('reused', ${retry === undefined ? '' : `{ retry: ${retry} }, `}${declaration})
 `)
 }

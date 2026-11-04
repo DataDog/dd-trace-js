@@ -1,5 +1,5 @@
 import { test } from 'vitest'
-import { noAutoRetry } from 'dd-trace/test-optimization.js'
+import { noAutoRetry } from 'dd-trace/ci/test-annotations.js'
 
 import { tracked } from './browser-exclusions-ledger.mjs'
 
