@@ -104,7 +104,7 @@ describe('telemetry logs', () => {
           add: logCollectorAdd,
         },
       })
-      logs.start(defaultConfig)
+      logs.start(defaultConfig, { errorCodes: new Set(['ERR_EXAMPLE_TIMEOUT']) })
     })
 
     afterEach(() => logs.stop())
@@ -192,12 +192,9 @@ describe('telemetry logs', () => {
         sinon.assert.notCalled(logCollectorAdd)
       })
 
-      it('should report bounded Test Optimization error codes without exposing arbitrary codes', () => {
+      it('should report configured error codes without exposing arbitrary codes', () => {
         for (const code of [
-          'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL',
-          'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT',
-          'ERR_DD_TEST_OPTIMIZATION_REQUEST_TIMEOUT',
-          'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT',
+          'ERR_EXAMPLE_TIMEOUT',
           'customer-secret',
         ]) {
           logCollectorAdd.resetHistory()
@@ -212,6 +209,18 @@ describe('telemetry logs', () => {
             tags: code === 'customer-secret' ? undefined : `error_code:${code}`,
           }))
         }
+      })
+
+      it('should not retain an error-code allowlist after restarting without options', () => {
+        logs.stop()
+        logs.start(defaultConfig)
+        errorLog.publish({
+          message: 'Request failed',
+          cause: Object.assign(new Error('customer-secret'), { code: 'ERR_EXAMPLE_TIMEOUT' }),
+          sendViaTelemetry: true,
+        })
+
+        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({ message: 'Request failed', tags: undefined }))
       })
     })
   })
@@ -242,7 +251,8 @@ describe('telemetry logs', () => {
 
     afterEach(() => logs.stop())
 
-    it('should drain logCollector and call sendData', () => {
+    it('should send logs without implicit product metadata', () => {
+      defaultConfig.isCiVisibility = true
       logs.start(defaultConfig)
 
       logs.send(defaultConfig, application, host)
@@ -261,8 +271,28 @@ describe('telemetry logs', () => {
       sinon.assert.notCalled(sendData)
     })
 
+    it('should retain the initial default tags until stopped', () => {
+      logs.start(defaultConfig, { tags: 'component:initial' })
+      logs.start(defaultConfig, { tags: 'component:replacement' })
+
+      logs.send(defaultConfig, application, host)
+
+      sinon.assert.calledOnceWithExactly(sendData, defaultConfig, application, host, 'logs', {
+        logs: [{ message: 'message', level: 'ERROR', tags: 'component:initial' }],
+      })
+    })
+
+    it('should clear default tags when restarted without options', () => {
+      logs.start(defaultConfig, { tags: 'component:example' })
+      logs.stop()
+      logs.start(defaultConfig)
+
+      logs.send(defaultConfig, application, host)
+
+      sinon.assert.calledOnceWithExactly(sendData, defaultConfig, application, host, 'logs', { logs: collectedLogs })
+    })
+
     it('should tag copies without mutating immutable collected logs', () => {
-      defaultConfig.isCiVisibility = true
       collectedLogs = [
         Object.freeze({ message: 'frozen', level: 'ERROR' }),
         Object.seal({ message: 'sealed', level: 'WARN' }),
@@ -272,39 +302,38 @@ describe('telemetry logs', () => {
       ]
       const originalLogs = collectedLogs.map(entry => ({ ...entry }))
       logCollectorDrain.returns(collectedLogs)
-      logs.start(defaultConfig)
+      logs.start(defaultConfig, { tags: 'component:example' })
 
       logs.send(defaultConfig, application, host)
 
       assert.deepStrictEqual(collectedLogs, originalLogs)
       sinon.assert.calledOnceWithExactly(sendData, defaultConfig, application, host, 'logs', {
         logs: [
-          { message: 'frozen', level: 'ERROR', tags: 'test_optimization_enabled:true' },
-          { message: 'sealed', level: 'WARN', tags: 'test_optimization_enabled:true' },
+          { message: 'frozen', level: 'ERROR', tags: 'component:example' },
+          { message: 'sealed', level: 'WARN', tags: 'component:example' },
           {
             message: 'non-writable tags',
             level: 'ERROR',
             count: 2,
-            tags: 'log_type:diagnostic,test_optimization_enabled:true',
+            tags: 'log_type:diagnostic,component:example',
           },
         ],
       })
     })
 
-    it('should identify all logs from Test Optimization while preserving existing tags', () => {
-      defaultConfig.isCiVisibility = true
+    it('should apply default tags while preserving existing tags', () => {
       collectedLogs.push({ message: 'AppSec diagnostic', level: 'WARN', tags: 'log_type:diagnostic' })
-      logs.start(defaultConfig)
+      logs.start(defaultConfig, { tags: 'component:example' })
 
       logs.send(defaultConfig, application, host)
 
       sinon.assert.calledOnceWithExactly(sendData, defaultConfig, application, host, 'logs', {
         logs: [
-          { message: 'message', level: 'ERROR', tags: 'test_optimization_enabled:true' },
+          { message: 'message', level: 'ERROR', tags: 'component:example' },
           {
             message: 'AppSec diagnostic',
             level: 'WARN',
-            tags: 'log_type:diagnostic,test_optimization_enabled:true',
+            tags: 'log_type:diagnostic,component:example',
           },
         ],
       })

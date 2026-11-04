@@ -7,13 +7,13 @@ const logCollector = require('./log-collector')
 const telemetryLog = dc.channel('datadog:telemetry:log')
 const errorLog = dc.channel('datadog:log:error:record')
 
-const TEST_OPTIMIZATION_ERROR_CODES = new Set([
-  'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL',
-  'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT',
-  'ERR_DD_TEST_OPTIMIZATION_REQUEST_TIMEOUT',
-  'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT',
-])
+/**
+ * @typedef {object} TelemetryLogOptions
+ * @property {string} [tags] Default tags appended to every outgoing log.
+ * @property {ReadonlySet<string>} [errorCodes] Error codes permitted in the error_code tag.
+ */
 
+let logOptions
 let enabled = false
 
 /**
@@ -61,11 +61,13 @@ function onErrorLog (msg) {
     } catch {
       return
     }
-    try {
-      const code = cause.code
-      if (TEST_OPTIMIZATION_ERROR_CODES.has(code)) telLog.tags = `error_code:${code}`
-    } catch {
-      // Error-like causes may expose unreadable properties.
+    if (logOptions?.errorCodes) {
+      try {
+        const code = cause.code
+        if (logOptions.errorCodes.has(code)) telLog.tags = `error_code:${code}`
+      } catch {
+        // Error-like causes may expose unreadable properties.
+      }
     }
     telLog.errorType = getErrorType(cause)
   }
@@ -81,10 +83,15 @@ function getErrorType (cause) {
   }
 }
 
-function start (config) {
+/**
+ * @param {import('../../config/config-base')} config
+ * @param {TelemetryLogOptions} [options]
+ */
+function start (config, options) {
   if (!config.telemetry.DD_TELEMETRY_LOG_COLLECTION_ENABLED || enabled) return
 
   enabled = true
+  logOptions = options
 
   telemetryLog.subscribe(onLog)
 
@@ -93,6 +100,7 @@ function start (config) {
 
 function stop () {
   enabled = false
+  logOptions = undefined
 
   if (telemetryLog.hasSubscribers) {
     telemetryLog.unsubscribe(onLog)
@@ -106,12 +114,11 @@ function send (config, application, host) {
 
   let logs = logCollector.drain()
   if (logs) {
-    if (config.isCiVisibility) {
+    const tags = logOptions?.tags
+    if (tags) {
       logs = logs.map(entry => ({
         ...entry,
-        tags: entry.tags
-          ? `${entry.tags},test_optimization_enabled:true`
-          : 'test_optimization_enabled:true',
+        tags: entry.tags ? `${entry.tags},${tags}` : tags,
       }))
     }
     sendData(config, application, host, 'logs', { logs })

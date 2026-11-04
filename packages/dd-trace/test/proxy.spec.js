@@ -1048,11 +1048,35 @@ describe('TracerProxy', () => {
         )
       })
 
-      it('should start telemetry', () => {
+      it('should start telemetry without product metadata for ordinary tracing', () => {
         proxy.init()
 
-        sinon.assert.called(telemetry.start)
+        sinon.assert.calledOnceWithExactly(telemetry.start, config, pluginManager, undefined)
       })
+
+      for (const enabled of [true, false]) {
+        it(`provides Test Optimization log metadata only with telemetry enabled (${enabled})`, () => {
+          config.isCiVisibility = true
+          config.telemetry = { DD_INSTRUMENTATION_TELEMETRY_ENABLED: enabled }
+
+          proxy.init()
+
+          const options = telemetry.start.firstCall.args[2]
+          if (enabled) {
+            assert.deepStrictEqual(options, {
+              tags: 'test_optimization_enabled:true',
+              errorCodes: new Set([
+                'ERR_DD_TEST_OPTIMIZATION_QUEUE_FULL',
+                'ERR_DD_TEST_OPTIMIZATION_BACKPRESSURE_TIMEOUT',
+                'ERR_DD_TEST_OPTIMIZATION_REQUEST_TIMEOUT',
+                'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT',
+              ]),
+            })
+          } else {
+            assert.strictEqual(options, undefined)
+          }
+        })
+      }
 
       it('should configure standalone', () => {
         const standalone = {

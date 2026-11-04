@@ -197,7 +197,10 @@ class Tracer extends NoopProxy {
         require('./heap_snapshots').start(config)
       }
 
-      telemetry.start(config, this._pluginManager)
+      const telemetryLogOptions = config.isCiVisibility && config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED
+        ? require('./ci-visibility/telemetry-logs')
+        : undefined
+      telemetry.start(config, this._pluginManager, telemetryLogOptions)
 
       if (config.dogstatsd && !config.DD_AGENTLESS_ENABLED && !isOfflineTestOptimizationValidation()) {
         // Custom Metrics

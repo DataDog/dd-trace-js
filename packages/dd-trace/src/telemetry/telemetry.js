@@ -316,8 +316,9 @@ function extendedHeartbeat (config) {
 /**
  * @param {import('../config/config-base')} aConfig
  * @param {PluginManager} thePluginManager
+ * @param {import('./logs').TelemetryLogOptions} [logOptions]
  */
-function start (aConfig, thePluginManager) {
+function start (aConfig, thePluginManager, logOptions) {
   if (!aConfig.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED) {
     if (aConfig.appsec.DD_APPSEC_SCA_ENABLED) {
       logger.warn('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
@@ -331,7 +332,7 @@ function start (aConfig, thePluginManager) {
   integrations = getIntegrations()
 
   dependencies.start(config, application, host, getRetryData, updateRetryData)
-  telemetryLogger.start(config)
+  telemetryLogger.start(config, logOptions)
   endpoints.start(config, application, host, getRetryData, updateRetryData)
   sessionPropagation.start(config)
 

@@ -5,6 +5,7 @@ const http = require('node:http')
 const { once } = require('node:events')
 const os = require('node:os')
 
+const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -14,6 +15,9 @@ require('../setup/core')
 const { storage } = require('../../../datadog-core')
 const tracerVersion = require('../../../../package.json').version
 const processTags = require('../../src/process-tags')
+const logCollector = require('../../src/telemetry/logs/log-collector')
+const telemetryLogs = require('../../src/telemetry/logs')
+const { ddBasePath } = require('../../src/util')
 
 const DEFAULT_HEARTBEAT_INTERVAL = 60000
 const DEFAULT_EXTENDED_HEARTBEAT_INTERVAL = 86400000
@@ -92,6 +96,7 @@ describe('telemetry', () => {
       }).listen(0, done)
     })
 
+    logCollector.reset()
     traceAgent.reqs = []
     traceAgentSeqBase = undefined
 
@@ -124,6 +129,7 @@ describe('telemetry', () => {
     telemetry.start({
       telemetry: {
         DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_LOG_COLLECTION_ENABLED: true,
         DD_TELEMETRY_HEARTBEAT_INTERVAL: DEFAULT_HEARTBEAT_INTERVAL,
         DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
@@ -149,10 +155,15 @@ describe('telemetry', () => {
       DD_INSTRUMENTATION_INSTALL_TIME: '1703188212',
     }, {
       _pluginsByName: pluginsByName,
+    }, {
+      tags: 'component:example',
+      errorCodes: new Set(['ERR_EXAMPLE_TIMEOUT']),
     })
   })
 
   after(() => {
+    telemetryLogs.stop()
+    logCollector.reset()
     traceAgent.close()
   })
 
@@ -250,6 +261,37 @@ describe('telemetry', () => {
     return testSeq(5, 'app-closing', payload => {
       assert.deepStrictEqual(payload, {})
     })
+  })
+
+  it('should apply startup log metadata to producer logs and shared errors', async () => {
+    logCollector.reset()
+    dc.channel('datadog:telemetry:log').publish(Object.freeze({
+      message: 'Product diagnostic', level: 'WARN', tags: 'log_type:diagnostic',
+    }))
+    const cause = Object.assign(new TypeError('customer-secret'), { code: 'ERR_EXAMPLE_TIMEOUT' })
+    cause.stack = `TypeError: customer-secret\n    at request (${ddBasePath}request.js:1:2)`
+    dc.channel('datadog:log:error:record').publish({
+      message: 'Shared request failed', cause, sendViaTelemetry: true,
+    })
+
+    telemetry.appClosing()
+
+    let request
+    while (!request) {
+      request = traceAgent.reqs.find(({ body }) => body.request_type === 'logs' &&
+        body.payload.logs.some(entry => entry.message === 'Shared request failed'))
+      if (!request) await once(traceAgent, 'handled-req')
+    }
+    assert.deepStrictEqual(request.body.payload.logs, [
+      { message: 'Product diagnostic', level: 'WARN', tags: 'log_type:diagnostic,component:example' },
+      {
+        message: 'Shared request failed',
+        level: 'ERROR',
+        count: 1,
+        stack_trace: 'TypeError: redacted\n    at request (request.js:1:2)',
+        tags: 'error_code:ERR_EXAMPLE_TIMEOUT,component:example',
+      },
+    ])
   })
 
   it('should do nothing when not enabled', (done) => {
