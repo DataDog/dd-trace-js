@@ -23,6 +23,7 @@ function createHash (logEntry) {
   let result = logEntry.level ? hashCode(logEntry.level) : 0
   result = (((prime * result) | 0) + (logEntry.message ? hashCode(logEntry.message) : 0)) | 0
   result = (((prime * result) | 0) + (logEntry.stack_trace ? hashCode(logEntry.stack_trace) : 0)) | 0
+  result = (((prime * result) | 0) + (logEntry.tags ? hashCode(logEntry.tags) : 0)) | 0
   return result
 }
 

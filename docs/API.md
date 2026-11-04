@@ -77,6 +77,46 @@ evaluation-context snapshot. To disable aggregated `flagevaluation` events as we
 Span enrichment, OpenTelemetry evaluation metrics, and debug logging retain their own settings; this switch does not
 disable all Feature Flagging telemetry.
 
+<h2 id="feature-flag-exposures-in-your-own-data-store">Feature Flag Exposures in Your Own Data Store</h2>
+
+Use the `ExposureHook` to receive every feature flag evaluation with the same deduplication decision the tracer uses, so your application can
+record exposures in its own data store:
+
+```javascript
+const tracer = require('dd-trace').init()
+const { OpenFeature } = require('@openfeature/server-sdk')
+const { ExposureHook } = require('dd-trace/openfeature/exposure-hook')
+
+OpenFeature.addHooks(new ExposureHook((evaluation) => {
+  if (!evaluation.shouldSend()) return
+  // Queue for your own writer; the callback runs on the evaluation thread and must not do I/O.
+  recordExposure({
+    flag: evaluation.flagKey,
+    variant: evaluation.variant,
+    allocation: evaluation.allocation,
+    targetingKey: evaluation.targetingKey,
+    features: evaluation.getFeatures(),
+  })
+}))
+
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+```
+
+Register the hook with `OpenFeature.addHooks` or on a client. The callback runs for every evaluation, including errors and repeats:
+
+- `isExposure()`: the evaluation succeeded and selected an allocation that logs exposures, whether or not this subject was already exposed.
+- `isCacheHit()`: this exposure repeats one already recorded for this subject (same flag, allocation, variant and serial id).
+- `shouldSend()`: a new or changed exposure; exactly what the tracer sends to Datadog.
+- `getFeatures()`: the read-only `__dd_feature.<key>` metadata of the selected split, such as `holdout.key`, `holdout.assignment_group` and
+  `holdout.should_include_in_holdout_analysis`.
+
+The callback runs on the evaluation thread: hand the data to a background queue instead of writing it from the callback. An exception from the
+callback does not affect the evaluation; the first failure is logged at warn level and later ones at debug level.
+
+To stop sending exposures to Datadog while the hook keeps working, see
+[Feature Flag Exposure Logging](#feature-flag-exposure-logging). The hook still receives every evaluation with the same
+`shouldSend()` decision, and exposure deduplication keeps running.
+
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 
 The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
@@ -896,3 +936,69 @@ function handle () {
   })
 }
 ```
+
+## Mocha test automation exclusions
+
+Mocha supports the same `preventFailureSuppression` and `noAutoRetry` callback annotations
+from `dd-trace/ci/test-annotations` shown below for Jest. Apply them to `it`, `test`, and
+parameterized callbacks, including `only` and `skip` declarations. The annotations are
+preserved in serial and parallel workers. Native Mocha retries remain available when
+`noAutoRetry` excludes Datadog ATR, EFD, and Attempt to Fix.
+
+## Cucumber test automation exclusions
+
+Use the native Gherkin tags `@datadog:prevent_failure_suppression` and
+`@datadog:no_auto_retry` on a `Scenario` or `Scenario Outline`. Outline tags apply
+to every example. These are tracer declaration annotations, resolved before
+Datadog disabling, quarantine, ATR, EFD, and Attempt to Fix. Explicit `--retry`
+settings remain available. Parallel Test Management exclusions require Cucumber 11 or later,
+which exposes the worker `runTestCase` lifecycle; serial scenarios support Cucumber 7 or later.
+Cucumber's normal tag selection and dry runs still apply.
+The annotation and assigned Test Management span tags follow the callback API below.
+
+## Playwright test automation exclusions
+
+Playwright 1.38 and later support the `preventFailureSuppression` and `noAutoRetry`
+callback annotations from `dd-trace/ci/test-annotations`. Apply them to individual
+`test` callbacks, including generated cases, `test.only`, and `test.skip`. Callback
+fixture parameters remain available. Exclusions are resolved in the coordinator
+before disabling and retries; worker spans retain both annotation and backend
+assignment tags. Explicit project and suite retry settings remain available.
+Playwright retries serial groups together, so a group containing `noAutoRetry` also
+excludes Datadog automatic retries for its other members. Explicit native group
+and project retries remain available.
+
+## Jest test automation exclusions
+
+With the `jest-circus` runner, annotate test callbacks using `dd-trace/ci/test-annotations`:
+
+```javascript
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
+
+test('critical check', preventFailureSuppression(noAutoRetry(() => {
+  expect(check()).toBe(true)
+})))
+
+test.each(cases)('critical case %s', preventFailureSuppression(value => {
+  expect(check(value)).toBe(true)
+}))
+```
+
+`preventFailureSuppression(callback)` prevents Datadog quarantine and disabling from applying to that callback.
+It does not override Test Impact Analysis, developer skips, or test selection, and does not prevent retries.
+
+`noAutoRetry(callback)` prevents Datadog Auto Test Retries, Early Flake Detection retries, and Attempt to Fix retries.
+It does not turn off test discovery or flakiness reporting. Explicit `jest.retryTimes(...)` calls remain available.
+To protect a failure from both quarantine/disable and automatic retries, combine the helpers.
+
+Each helper returns an annotated callback without modifying the original. Callback arguments, return values,
+errors, `this`, and arity are preserved. Apply the helper to the callback passed to `test.each` to protect every case.
+The helpers can be imported without initializing the tracer; enforcement requires the corresponding Jest, Mocha, or Playwright instrumentation.
+
+Test events report `test.test_management.prevent_failure_suppression` and `test.test_management.no_auto_retry`
+as `true` when the corresponding annotation is present; absent annotations omit the tag.
+These describe annotations observed on that execution, on any branch. Management-property tags retain backend
+assignments even when annotations override their runtime behavior. Default-branch synchronization and UI restrictions require backend support;
+these helpers do not update remote test properties. Files skipped by Test Impact Analysis produce no new observation.
+
+Framework support is described in the framework-specific sections. The legacy Jest Jasmine runner does not enforce these helpers.

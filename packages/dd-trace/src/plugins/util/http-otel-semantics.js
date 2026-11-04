@@ -27,7 +27,7 @@ const KNOWN_METHODS = new Set([
 
 // Datadog HTTP meta keys replaced by OTel names — omitted when rebuilding meta.
 const DD_HTTP_META_KEYS = new Set([
-  'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.endpoint', 'http.url', 'out.host',
+  'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.url', 'out.host',
 ])
 const NETWORK_DESTINATION_PORT = 'network.destination.port'
 
@@ -155,7 +155,7 @@ function defaultPortForUrl (url) {
  * `span_format`) when `DD_TRACE_OTEL_SEMANTICS_ENABLED` is set, so every HTTP
  * integration is covered from one place. No-op for non-HTTP spans. The span
  * keeps the Datadog tag names throughout its lifetime — only the serialized
- * output is renamed — so runtime consumers (peer.service, AppSec, trace stats)
+ * output is renamed — so runtime consumers (peer.service, AppSec)
  * are unaffected.
  *
  * @param {FormattedHttpSpan} formattedSpan
@@ -218,8 +218,6 @@ function applyHttpOtelSemantics (formattedSpan) {
 
   const clientIp = meta['http.client_ip']
   if (clientIp !== undefined) newMeta[CLIENT_ADDRESS] = clientIp
-
-  // http.endpoint is Datadog-only (omitted above); it has no OTel equivalent.
 
   if (kind === 'server') {
     // FIXME: some server frameworks (e.g. Next.js — `packages/datadog-plugin-next`)

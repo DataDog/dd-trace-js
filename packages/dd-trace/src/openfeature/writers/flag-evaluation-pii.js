@@ -1,6 +1,7 @@
 'use strict'
 
 const { hashTargetingKey: digestTargetingKey } = require('../encoding')
+const { snapshotFeatures } = require('./split-features')
 
 // Keep this vocabulary explicit: an upstream enum addition needs a privacy review.
 const ERROR_CODES = new Set([
@@ -90,6 +91,7 @@ function normalizeFlagEvaluationEvent (event, targetingKey) {
     flagKey: normalizeTargetingKey(event.flagKey),
     variant: optionalKey(event.variant),
     allocationKey: optionalKey(event.allocationKey),
+    features: snapshotFeatures(event.features),
     runtimeDefault: event.runtimeDefault === true,
     errorCode: protectedErrorCode(event.errorCode),
     targetingKey,
