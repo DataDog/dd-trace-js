@@ -633,15 +633,10 @@ describe('Plugin', () => {
           })
 
           it('should instrument pool.getConnection with a callback', async () => {
-            const result = await Promise.all([
-              agent.assertFirstTraceSpan(expectedPoolAcquireSpan, {
-                spanResourceMatch: /^oracle\.pool\.acquire$/,
-              }),
-              new Promise((resolve, reject) => {
-                pool.getConnection((error, conn) => error ? reject(error) : resolve(conn))
-              }),
-            ])
-            const callbackConnection = result[1]
+            const getConnection = promisify(pool.getConnection)
+            const callbackConnection = await getTracedConnection({
+              getConnection: () => getConnection.call(pool),
+            })
 
             try {
               await Promise.all([
@@ -1075,13 +1070,8 @@ describe('Plugin', () => {
         it('can enable acquisition tracing between calls', async () => {
           tracer.use('oracledb', { poolAcquire: true })
 
-          const result = await Promise.all([
-            agent.assertFirstTraceSpan(expectedPoolAcquireSpan, {
-              spanResourceMatch: /^oracle\.pool\.acquire$/,
-            }),
-            pool.getConnection(),
-          ])
-          await result[1].close()
+          const acquiredConnection = await getTracedConnection(pool)
+          await acquiredConnection.close()
         })
       })
 
@@ -1166,13 +1156,13 @@ describe('Plugin', () => {
           }
         })
 
-        for (const useCallback of [false, true]) {
+        for (const [useCallback, poolAcquire] of [[false, true], [true, true], [false, false], [true, false]]) {
           for (const queued of [false, true]) {
             const api = useCallback ? 'callback' : 'Promise'
             const timing = queued ? 'queued' : 'immediate'
 
-            it(`suppresses ${timing} ${api} session queries`, async () => {
-              tracer.use('oracledb', { dbmPropagationMode: 'service' })
+            it(`suppresses ${timing} ${api} session queries with poolAcquire=${poolAcquire}`, async () => {
+              tracer.use('oracledb', { poolAcquire, dbmPropagationMode: 'service' })
               let sessionResult
               let sessionCalls = 0
               let injected
@@ -1261,8 +1251,8 @@ describe('Plugin', () => {
         after(() => agent.close())
 
         for (const enabled of [true, false]) {
-          it(`preserves queued requests with the plugin enabled=${enabled}`, async () => {
-            tracer.use('oracledb', { enabled })
+          it(`preserves queued contexts with poolAcquire=false and enabled=${enabled}`, async () => {
+            tracer.use('oracledb', { enabled, poolAcquire: false })
             const parents = [tracer.startSpan('first'), tracer.startSpan('second')]
             const contexts = []
             let heldConnection

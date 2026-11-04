@@ -1,23 +1,17 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const StoragePlugin = require('../../dd-trace/src/plugins/storage')
 
 let parser
 
 /**
- * @typedef {{
- *   user: string,
- *   currentStore?: { span: import('../../dd-trace/src/opentracing/span') }
- * }} ResolvedUserContext
- */
-
-/**
  * @param {unknown} message
  */
 function setResolvedUser (message) {
-  const ctx = /** @type {ResolvedUserContext} */ (message)
-  ctx.currentStore?.span.setTag('db.user', ctx.user)
+  const ctx = /** @type {{ user: string }} */ (message)
+  storage('legacy').getStore()?.span?.setTag('db.user', ctx.user)
 }
 
 class OracledbPoolAcquirePlugin extends StoragePlugin {

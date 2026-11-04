@@ -6,14 +6,14 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 let parser
 
-/** @typedef {{ poolAttrs: object, store?: object, parentStore?: object }} PoolSessionContext */
+/** @typedef {{ poolAttrs: object, parentStore?: object }} PoolSessionContext */
 
 /**
  * @param {unknown} message
  */
 function bindPoolAttributes (message) {
   const ctx = /** @type {PoolSessionContext} */ (message)
-  ctx.parentStore = Object.hasOwn(ctx, 'store') ? ctx.store : storage('legacy').getStore()
+  ctx.parentStore = storage('legacy').getStore()
   return {
     ...ctx.parentStore,
     oracledbPoolAttrs: ctx.poolAttrs,
