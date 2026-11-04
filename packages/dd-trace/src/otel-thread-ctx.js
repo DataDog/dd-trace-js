@@ -129,7 +129,7 @@ function traceFlagsOf (spanContext) {
 //
 // Fields:
 //   context:  ThreadContext from @datadog/pprof.otelThreadCtx — built the first
-//             time onEnter activates the span, and cleared on span finish.
+//             time onEnter activates the span.
 //   webTags:  the web-server tag bag the record's endpoint comes from, or is
 //             waiting on; undefined while the span has no web-server ancestry.
 //   endpointIndex: slot in pendingEndpoints, or NOT_WAITING / AWAITING_OWN_ENDPOINT.
@@ -309,7 +309,6 @@ function onSpanFinished (span) {
   // overwrite the record, and in ACF mode there is no `before` hook either, so
   // they would keep exposing the finished span's IDs.
   context.invalidate()
-  cached.context = undefined
   // Also detach from the current frame when it is the holder, so the record
   // becomes unreachable and collectable instead of lingering as an invalid one
   // for the rest of the frame's life.
@@ -342,7 +341,7 @@ function onEndpointResolved (span) {
   if (endpoint === undefined) return
   if (ownWaits) {
     own.endpointIndex = NOT_WAITING
-    if (own.context !== undefined && own.webTags === webTags) appendEndpoint(own.context, endpoint)
+    appendEndpoint(own.context, endpoint)
   }
   if (waiting === undefined) return
   pendingEndpoints.delete(webTags)
