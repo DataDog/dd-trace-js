@@ -363,6 +363,17 @@ describe('Config', () => {
     })
   })
 
+  describe('DD_TRACE_REACT_ROUTER_ENABLED', () => {
+    it('defaults to true', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_REACT_ROUTER_ENABLED, true)
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_REACT_ROUTER_ENABLED', value: true, origin: 'default' },
+      ])
+    })
+  })
+
   it('should accept a circular logger instance without overflowing the stack (issue #8122)', () => {
     // Shape mirrors winston: log methods, transports with a parent back-reference,
     // and stream-state self-references (Transform's _readableState.pipes).
