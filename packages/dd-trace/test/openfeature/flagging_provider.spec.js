@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
+const { DatadogNodeServerProvider, DependencyTelemetrySidecar } = require('@datadog/openfeature-node-server')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -30,6 +30,7 @@ describe('FlaggingProvider', () => {
   let debugChannel
   let mockEVPHook
   let mockEVPHookClass
+  let dependencyTelemetrySidecarArguments
 
   beforeEach(() => {
     mockTracer = {
@@ -82,6 +83,13 @@ describe('FlaggingProvider', () => {
     mockSpanEnrichmentHookClass = sinon.stub().returns(mockSpanEnrichmentHook)
     mockEVPHook = { destroy: sinon.spy() }
     mockEVPHookClass = sinon.stub().returns(mockEVPHook)
+    dependencyTelemetrySidecarArguments = []
+    class MockDependencyTelemetrySidecar extends DependencyTelemetrySidecar {
+      constructor (...args) {
+        super(...args)
+        dependencyTelemetrySidecarArguments.push(args)
+      }
+    }
 
     debugChannel = { hasSubscribers: true }
 
@@ -96,7 +104,10 @@ describe('FlaggingProvider', () => {
       './debug-logging-hook': mockDebugLoggingHookClass,
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
       './writers/flag-eval-evp-hook': mockEVPHookClass,
-      '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
+      '../../../../vendor/dist/@datadog/openfeature-node-server': {
+        DatadogNodeServerProvider,
+        DependencyTelemetrySidecar: MockDependencyTelemetrySidecar,
+      },
     })
   })
 
@@ -148,9 +159,24 @@ describe('FlaggingProvider', () => {
   })
 
   describe('hooks', () => {
+    const assertTracerHooks = (provider, expected) => {
+      assert.strictEqual(provider.hooks[0].constructor.name, 'ExposureLoggingHook')
+      const tracerHooks = new Set([
+        mockEvalMetricsHook,
+        mockDebugLoggingHook,
+        mockSpanEnrichmentHook,
+        mockEVPHook,
+      ])
+
+      assert.deepStrictEqual(provider.hooks.filter(hook => tracerHooks.has(hook)), expected)
+    }
+
     it('creates the owned EVP hook only when evaluation counts are enabled', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
-      sinon.assert.calledOnceWithExactly(mockEVPHookClass, mockConfig)
+      sinon.assert.calledOnce(mockEVPHookClass)
+      assert.strictEqual(mockEVPHookClass.firstCall.args[0], mockConfig)
+      assert.strictEqual(typeof mockEVPHookClass.firstCall.args[1].takeDependencyEvaluations, 'function')
+      assert.deepStrictEqual(dependencyTelemetrySidecarArguments, [[true]])
       assert.ok(provider.hooks.includes(mockEVPHook))
       provider.onClose()
       provider.onClose()
@@ -159,11 +185,9 @@ describe('FlaggingProvider', () => {
       mockEVPHookClass.resetHistory()
       mockConfig.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED = false
       const disabled = new FlaggingProvider(mockTracer, mockConfig)
-      assert.strictEqual(disabled.hooks[0].constructor.name, 'ExposureLoggingHook')
-      assert.deepStrictEqual(disabled.hooks.slice(1), [
-        mockEvalMetricsHook, mockDebugLoggingHook, mockSpanEnrichmentHook,
-      ])
+      assertTracerHooks(disabled, [mockEvalMetricsHook, mockDebugLoggingHook, mockSpanEnrichmentHook])
       sinon.assert.notCalled(mockEVPHookClass)
+      assert.deepStrictEqual(dependencyTelemetrySidecarArguments, [[true], [false]])
       disabled.onClose()
     })
 
@@ -199,10 +223,11 @@ describe('FlaggingProvider', () => {
       mockConfig.DD_METRICS_OTEL_ENABLED = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      assert.strictEqual(provider.hooks[0].constructor.name, 'ExposureLoggingHook')
-      assert.deepStrictEqual(provider.hooks.slice(1), [mockDebugLoggingHook, mockSpanEnrichmentHook, mockEVPHook])
+      assertTracerHooks(provider, [mockDebugLoggingHook, mockSpanEnrichmentHook, mockEVPHook])
       sinon.assert.calledOnceWithExactly(mockSpanEnrichmentHookClass, mockTracer)
-      sinon.assert.calledOnceWithExactly(mockEVPHookClass, mockConfig)
+      sinon.assert.calledOnce(mockEVPHookClass)
+      assert.strictEqual(mockEVPHookClass.firstCall.args[0], mockConfig)
+      assert.strictEqual(typeof mockEVPHookClass.firstCall.args[1].takeDependencyEvaluations, 'function')
     })
 
     it('should create SpanEnrichmentHook with tracer when span enrichment is enabled', () => {
@@ -228,18 +253,14 @@ describe('FlaggingProvider', () => {
     it('should register EvalMetricsHook, DebugLoggingHook, SpanEnrichmentHook, and the EVP hook when enabled', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      assert.strictEqual(provider.hooks[0].constructor.name, 'ExposureLoggingHook')
-      assert.deepStrictEqual(provider.hooks.slice(1), [
-        mockEvalMetricsHook, mockDebugLoggingHook, mockSpanEnrichmentHook, mockEVPHook,
-      ])
+      assertTracerHooks(provider, [mockEvalMetricsHook, mockDebugLoggingHook, mockSpanEnrichmentHook, mockEVPHook])
     })
 
     it('should register EvalMetricsHook and DebugLoggingHook when span enrichment is disabled', () => {
       mockConfig.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      assert.strictEqual(provider.hooks[0].constructor.name, 'ExposureLoggingHook')
-      assert.deepStrictEqual(provider.hooks.slice(1), [mockEvalMetricsHook, mockDebugLoggingHook, mockEVPHook])
+      assertTracerHooks(provider, [mockEvalMetricsHook, mockDebugLoggingHook, mockEVPHook])
     })
 
     it('should register DebugLoggingHook when debug logging is enabled', () => {
@@ -253,8 +274,7 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       sinon.assert.notCalled(mockDebugLoggingHookClass)
-      assert.strictEqual(provider.hooks[0].constructor.name, 'ExposureLoggingHook')
-      assert.deepStrictEqual(provider.hooks.slice(1), [mockEvalMetricsHook, mockSpanEnrichmentHook, mockEVPHook])
+      assertTracerHooks(provider, [mockEvalMetricsHook, mockSpanEnrichmentHook, mockEVPHook])
     })
 
     it('should not register DebugLoggingHook when the debug channel has no subscribers', () => {
@@ -262,8 +282,7 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       sinon.assert.notCalled(mockDebugLoggingHookClass)
-      assert.strictEqual(provider.hooks[0].constructor.name, 'ExposureLoggingHook')
-      assert.deepStrictEqual(provider.hooks.slice(1), [mockEvalMetricsHook, mockSpanEnrichmentHook, mockEVPHook])
+      assertTracerHooks(provider, [mockEvalMetricsHook, mockSpanEnrichmentHook, mockEVPHook])
     })
 
     it('warns once that debug logs include raw evaluation data when the DebugLoggingHook is registered', async () => {

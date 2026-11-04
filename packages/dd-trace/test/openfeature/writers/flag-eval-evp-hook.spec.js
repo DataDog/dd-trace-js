@@ -47,6 +47,7 @@ describe('FlagEvalEVPHook', () => {
   let selectRoute
   let stopDeliveryStrategy
   let snapshotContext
+  let dependencyTelemetrySidecar
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({ now })
@@ -61,12 +62,13 @@ describe('FlagEvalEVPHook', () => {
     stopDeliveryStrategy = sinon.spy()
     selectRoute = sinon.stub().returns(stopDeliveryStrategy)
     snapshotContext = sinon.spy(snapshotEvaluationContext)
+    dependencyTelemetrySidecar = { takeDependencyEvaluations: sinon.stub().returns([]) }
     Hook = proxyquire('../../../src/openfeature/writers/flag-eval-evp-hook', {
       './flag-evaluations': Writer,
       './flag-evaluation-context': { snapshotEvaluationContext: snapshotContext },
       './util': { setExposureDeliveryStrategy: selectRoute },
     })
-    hook = new Hook(config)
+    hook = new Hook(config, dependencyTelemetrySidecar)
   })
 
   afterEach(async () => {
@@ -109,6 +111,34 @@ describe('FlagEvalEVPHook', () => {
     sinon.assert.calledOnce(writer.enqueue)
     assert.deepStrictEqual({ ...writer.enqueue.firstCall.args[0].attrs }, { 'nested.plan': 'pro' })
     assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'unavailable'), 0)
+  })
+
+  it('captures staged prerequisite evaluations before the root', () => {
+    enable()
+    dependencyTelemetrySidecar.takeDependencyEvaluations.returns([
+      { flagKey: 'prerequisite', details: details() },
+    ])
+    hook.finally({ flagKey: 'root', context: { targetingKey: 'customer' } }, details())
+
+    sinon.assert.calledTwice(writer.enqueue)
+    assert.strictEqual(writer.enqueue.firstCall.args[0].flagKey, 'prerequisite')
+    assert.strictEqual(writer.enqueue.firstCall.args[0].targetingKey, 'customer')
+    assert.strictEqual(writer.enqueue.secondCall.args[0].flagKey, 'root')
+  })
+
+  it('captures a root error after dependency graph failure', () => {
+    enable()
+    const result = details()
+    result.value = false
+    result.variant = undefined
+    result.reason = 'ERROR'
+    result.errorCode = 'FLAG_NOT_FOUND'
+    hook.finally({ flagKey: 'root', context: { targetingKey: 'customer' } }, result)
+
+    sinon.assert.calledOnce(writer.enqueue)
+    assert.strictEqual(writer.enqueue.firstCall.args[0].flagKey, 'root')
+    assert.strictEqual(writer.enqueue.firstCall.args[0].errorCode, 'FLAG_NOT_FOUND')
+    assert.strictEqual(writer.enqueue.firstCall.args[0].runtimeDefault, true)
   })
 
   it('reuses route selection and captures detached context with evaluation-time metadata', () => {
@@ -166,7 +196,7 @@ describe('FlagEvalEVPHook', () => {
 
   it('uses the default-enabled path when the featureFlags group is absent', () => {
     hook.destroy()
-    hook = new Hook({ ...config, featureFlags: undefined })
+    hook = new Hook({ ...config, featureFlags: undefined }, dependencyTelemetrySidecar)
     selectRoute.lastCall.args[1](true, route)
     hook.finally({ flagKey: 'flag', context: {} }, details())
     assert.strictEqual(writer.enqueue.lastCall.args[0].flagKey, 'flag')
@@ -207,7 +237,7 @@ describe('FlagEvalEVPHook', () => {
     })
     hook = new RecoveringHook({
       ...config, featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
-    })
+    }, dependencyTelemetrySidecar)
     discover.firstCall.args[2](null, route)
     const initialRoute = writer.setEnabled.lastCall.args[1]
     initialRoute.onUnavailable()

@@ -36,6 +36,35 @@ function configuration (consent = false) {
           splits: [{ variationKey: 'on', shards: [], serialId: 42 }],
         }],
       },
+      prerequisite: {
+        key: 'prerequisite',
+        enabled: true,
+        variationType: 'BOOLEAN',
+        variations: { on: { key: 'on', value: true } },
+        allocations: [{
+          key: 'prerequisite-experiment',
+          doLog: true,
+          splits: [{ variationKey: 'on', shards: [] }],
+        }],
+      },
+      dependent: {
+        key: 'dependent',
+        enabled: true,
+        variationType: 'BOOLEAN',
+        variations: { on: { key: 'on', value: true } },
+        allocations: [{
+          key: 'dependent-experiment',
+          doLog: true,
+          rules: [{
+            conditions: [{
+              flagEvaluation: { key: 'prerequisite' },
+              operator: 'ONE_OF',
+              value: ['on'],
+            }],
+          }],
+          splits: [{ variationKey: 'on', shards: [] }],
+        }],
+      },
     },
   }
 }
@@ -156,6 +185,17 @@ describe('evaluation telemetry opt-out', () => {
     })
     assert.deepStrictEqual(signals(), { evaluations: 0, metrics: 0, spanTags: 0, exposures: 1, customerHooks: 1 })
     assert.deepStrictEqual(exposures[0].subject.attributes, { [parameter]: true })
+  })
+
+  it('suppresses prerequisite and root telemetry together for an opted-out subject', async () => {
+    const { client } = await register(true, true)
+    const details = await client.getBooleanDetails('dependent', false, {
+      targetingKey: 'opted-out',
+      [parameter]: true,
+    })
+
+    assert.strictEqual(details.value, true)
+    assert.deepStrictEqual(signals(), { evaluations: 0, metrics: 0, spanTags: 0, exposures: 2, customerHooks: 1 })
   })
 
   for (const enabled of [false, true]) {

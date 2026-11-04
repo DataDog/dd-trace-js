@@ -2,7 +2,6 @@
 
 const { MAX_EVALUATION_TIMESTAMP_MS } = require('../constants/constants')
 const { snapshotFeatures } = require('./split-features')
-
 const { snapshotEvaluationContext } = require('./flag-evaluation-context')
 const {
   recordContextTruncated, recordDropped, recordHookError, recordTargetingKeyOmitted,
@@ -16,15 +15,18 @@ class FlagEvalEVPHook {
   #writer
   #closed = false
   #stopDeliveryStrategy
+  #dependencyTelemetrySidecar
 
   /**
    * The provider only constructs this hook when evaluation counts are enabled.
    *
    * @param {import('../../config/config-base')} config
+   * @param {import('@datadog/openfeature-node-server').DependencyTelemetrySidecar} dependencyTelemetrySidecar
    */
-  constructor (config) {
+  constructor (config, dependencyTelemetrySidecar) {
     const writer = new FlagEvaluationsWriter(config)
     this.#writer = writer
+    this.#dependencyTelemetrySidecar = dependencyTelemetrySidecar
     this.#stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
       if (this.#closed) return
       writer.setEnabled(enabled, route)
@@ -39,6 +41,28 @@ class FlagEvalEVPHook {
    * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
    */
   finally (hookContext, evaluationDetails) {
+    const dependencies = this.#dependencyTelemetrySidecar.takeDependencyEvaluations(
+      evaluationDetails.flagMetadata,
+      hookContext
+    )
+    for (const dependency of dependencies) {
+      this.#capture(dependency.flagKey, hookContext, {
+        ...dependency.details,
+        flagKey: dependency.flagKey,
+        flagMetadata: dependency.details.flagMetadata ?? {},
+      })
+    }
+    this.#capture(hookContext.flagKey, hookContext, evaluationDetails)
+  }
+
+  /**
+   * Capture a root or prerequisite evaluation with the same privacy and capacity rules.
+   *
+   * @param {string} flagKey
+   * @param {{ context?: import('@openfeature/core').EvaluationContext }} hookContext
+   * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
+   */
+  #capture (flagKey, hookContext, evaluationDetails) {
     try {
       const unavailableReason = this.#closed ? 'closed' : this.#writer.getUnavailableReason()
       if (unavailableReason !== undefined) {
@@ -81,7 +105,7 @@ class FlagEvalEVPHook {
       }
 
       this.#writer.enqueue({
-        flagKey: hookContext.flagKey,
+        flagKey,
         variant: evaluationDetails.variant,
         allocationKey: typeof metadata?.__dd_allocation_key === 'string' ? metadata.__dd_allocation_key : undefined,
         features: metadata?.__dd_has_evaluation_features === true
