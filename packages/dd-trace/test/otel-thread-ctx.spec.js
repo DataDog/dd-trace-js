@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
+const { promisify } = require('node:util')
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -13,6 +15,8 @@ const id = require('../src/id')
 const SpanContext = require('../src/opentracing/span_context')
 const TextMapPropagator = require('../src/opentracing/propagation/text_map')
 const { getConfigFresh } = require('./helpers/config')
+
+const execFileAsync = promisify(execFile)
 
 const TRACE_ID_HEX = '0102030405060708090a0b0c0d0e0f10'
 const SPAN_ID_HEX = '1112131415161718'
@@ -702,6 +706,32 @@ describe('otel-thread-ctx', () => {
       sinon.assert.calledOnce(parentContext.appendAttributes)
     })
 
+    it('updates the remaining descendants after waiters finish out of order', () => {
+      const webTags = { 'span.type': 'web', 'http.method': 'GET' }
+      const parent = makeSpan({ tags: webTags })
+      const children = Array.from({ length: 5 }, () => makeSpan())
+      for (const child of children) {
+        cachedWebTags.set(child, webTags)
+        activeSpan = child
+        enterCh.publish()
+      }
+
+      for (const index of [1, 4, 0]) spanFinishCh.publish(children[index])
+      webTags['http.route'] = '/stream'
+      endpointResolvedCh.publish(parent)
+
+      for (const [index, context] of constructedContexts.entries()) {
+        if (index === 2 || index === 3) {
+          assert.equal(context.attributes[1], 'GET /stream')
+          sinon.assert.calledOnce(context.appendAttributes)
+        } else {
+          assert.equal(context.attributes[1], undefined)
+          sinon.assert.notCalled(context.appendAttributes)
+        }
+      }
+      for (const child of children) spanFinishCh.publish(child)
+    })
+
     it('appends the endpoint only once per record', () => {
       const { parent, child, webTags } = makeWebSpanWithChild({ 'span.type': 'web', 'http.method': 'GET' })
       cachedWebTags.set(parent, webTags)
@@ -846,6 +876,30 @@ describe('otel-thread-ctx', () => {
       assert.equal(context.attributes[1], 'GET /inner')
     })
 
+    it('moves a live waiter between unresolved requests', () => {
+      const outerTags = { 'span.type': 'web', 'http.method': 'GET' }
+      const innerTags = { 'span.type': 'web', 'http.method': 'GET' }
+      const outer = makeSpan({ tags: outerTags })
+      const inner = makeSpan({ tags: innerTags })
+      activeSpan = makeSpan()
+      cachedWebTags.set(activeSpan, outerTags)
+      enterCh.publish()
+      const [context] = constructedContexts
+
+      cachedWebTags.set(activeSpan, innerTags)
+      webTagsResolvedCh.publish(activeSpan)
+      outerTags['http.route'] = '/outer'
+      endpointResolvedCh.publish(outer)
+      assert.equal(context.attributes[1], undefined)
+      sinon.assert.notCalled(context.appendAttributes)
+
+      innerTags['http.route'] = '/inner'
+      endpointResolvedCh.publish(inner)
+      assert.equal(context.attributes[1], 'GET /inner')
+      sinon.assert.calledOnce(context.appendAttributes)
+      spanFinishCh.publish(activeSpan)
+    })
+
     it('keeps showing the outer endpoint until a nearer request settles its own', () => {
       // The unavoidable window: the record already carries the outer request's
       // settled endpoint, and the nearer web-server span that supersedes it has
@@ -983,5 +1037,20 @@ describe('otel-thread-ctx', () => {
       assert.equal(m.start(), true)
       assert.throws(() => m.getThreadLocalMetadata(), /unsupported value type/)
     })
+  })
+})
+
+describe('otel-thread-ctx waiter retention', () => {
+  it('releases finished and retargeted waiters before the request ends', async () => {
+    await Promise.all(['finish', 'retarget'].map(scenario => execFileAsync(process.execPath, [
+      '--expose-gc', require.resolve('./fixtures/otel-thread-ctx-retention'), scenario,
+    ], {
+      env: {
+        ...process.env,
+        DD_CRASHTRACKING_ENABLED: 'false',
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+        DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+      },
+    })))
   })
 })
