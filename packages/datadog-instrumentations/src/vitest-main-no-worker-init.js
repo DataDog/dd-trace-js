@@ -77,7 +77,7 @@ const VITEST_NO_WORKER_INIT_V5_SETUP_FILE = path.join(
 const DECLARATION_ANNOTATIONS_MODULE = 'virtual:dd-vitest-test-declaration-annotations'
 const declarationAnnotationsSource = readFileSync(
   require.resolve('../../dd-trace/src/ci-visibility/test-declaration-annotations'), 'utf8'
-).replace('module.exports = { wrapDeclaration }', 'export { wrapDeclaration }')
+).replace('module.exports = { wrapDeclaration, captureDeclarations }', 'export { captureDeclarations }')
 const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
   name: 'datadog:vitest-browser-setup-file',
   config: configureVitestBrowserSetupFile,
@@ -88,40 +88,7 @@ const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
   load (id) {
     if (id === `\0${DECLARATION_ANNOTATIONS_MODULE}`) return declarationAnnotationsSource
   },
-  transform: transformBrowserTestDeclarations,
 }
-/**
- * Captures browser declarations before fixture and parameterized callback wrappers replace the annotated callback.
- *
- * @param {string} code
- * @param {string} id
- */
-function transformBrowserTestDeclarations (code, id) {
-  if (!/(?:@vitest\/runner\/dist\/(?:index|chunk[^/]*)|vitest\/dist\/chunks\/run[^/]*|\.vite\/.*\/deps\/[^/]+)\.js$/
-    .test(id.split('?')[0]) || !code.includes('function getCurrentSuite(')) return
-  const bindings = new Set()
-  const transformed = code.replaceAll(/export\s*\{([^}]+)\}/g, (statement, specifiers) => {
-    const replacements = specifiers.split(',').map(specifier => {
-      const matched = /^\s*(test|it)(?:\s+as\s+(\w+))?\s*$/.exec(specifier)
-      if (!matched) return specifier
-      const [, local, exported = local] = matched
-      bindings.add(local)
-      return ` __ddAnnotated_${local} as ${exported}`
-    })
-    return `export {${replacements.join(',')}}`
-  })
-  if (!bindings.size) return
-  let declarations = ''
-  for (const name of bindings) {
-    declarations += `const __ddAnnotated_${name} = __ddWrapDeclaration(${name}, getCurrentSuite)\n`
-  }
-  return {
-    code: `import { wrapDeclaration as __ddWrapDeclaration } from '${DECLARATION_ANNOTATIONS_MODULE}'\n` +
-      `${transformed}\n${declarations}\n`,
-    map: null,
-  }
-}
-
 const VITEST_NO_WORKER_INIT_ISOLATE_WARNING =
   `${VITEST_NO_WORKER_INIT_REQUEST_ENV} is ignored because Vitest isolate is disabled. ` +
   'The lighter Vitest worker path only works when each test file runs in an isolated worker.'
@@ -504,7 +471,7 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
 }
 
 /**
- * Installs declaration capture before Vitest creates its Vite server and dependency optimizer.
+ * Makes the annotation helper available to browser setup before Vitest creates its Vite server.
  *
  * @param {{ plugins?: object[] }|undefined} viteOverrides
  */
@@ -528,50 +495,6 @@ function addBrowserAnnotationPlugin (viteOverrides = {}) {
  * }} viteConfig
  */
 function configureVitestBrowserSetupFile (viteConfig) {
-  viteConfig.optimizeDeps ||= {}
-  let viteMajor = 0
-  try {
-    // Vite belongs to the test project; the tracer does not depend on it.
-    // eslint-disable-next-line n/no-missing-require
-    const vitePackage = require.resolve('vite/package.json', { paths: [viteConfig.root || process.cwd()] })
-    viteMajor = JSON.parse(readFileSync(vitePackage, 'utf8')).version.split('.')[0]
-  } catch {}
-  if (viteMajor >= 8) {
-    viteConfig.optimizeDeps.rolldownOptions ||= {}
-    viteConfig.optimizeDeps.rolldownOptions.plugins ||= []
-    if (!viteConfig.optimizeDeps.rolldownOptions.plugins.some(plugin =>
-      plugin?.name === 'datadog:vitest-browser-declarations')) {
-      viteConfig.optimizeDeps.rolldownOptions.plugins.push({
-        name: 'datadog:vitest-browser-declarations',
-        resolveId: VITEST_BROWSER_SETUP_FILE_PLUGIN.resolveId,
-        load: VITEST_BROWSER_SETUP_FILE_PLUGIN.load,
-        transform: transformBrowserTestDeclarations,
-      })
-    }
-  } else {
-    viteConfig.optimizeDeps.esbuildOptions ||= {}
-    viteConfig.optimizeDeps.esbuildOptions.plugins ||= []
-    if (!viteConfig.optimizeDeps.esbuildOptions.plugins.some(plugin =>
-      plugin.name === 'datadog-vitest-browser-declarations')) {
-      viteConfig.optimizeDeps.esbuildOptions.plugins.push({
-        name: 'datadog-vitest-browser-declarations',
-        setup (build) {
-          build.onResolve({ filter: /^virtual:dd-vitest-test-declaration-annotations$/ }, () => ({
-            path: DECLARATION_ANNOTATIONS_MODULE,
-            namespace: 'dd-vitest-annotations',
-          }))
-          build.onLoad({ filter: /.*/, namespace: 'dd-vitest-annotations' }, () => ({
-            contents: declarationAnnotationsSource,
-            loader: 'js',
-          }))
-          build.onLoad({ filter: /(?:@vitest\/runner\/dist\/(?:index|chunk[^/]*)|vitest\/dist\/chunks\/run[^/]*)\.js$/ }, args => {
-            const transformed = transformBrowserTestDeclarations(readFileSync(args.path, 'utf8'), args.path)
-            if (transformed) return { contents: transformed.code, loader: 'js', resolveDir: path.dirname(args.path) }
-          })
-        },
-      })
-    }
-  }
   viteConfig.resolve ||= {}
   viteConfig.resolve.dedupe ||= []
 

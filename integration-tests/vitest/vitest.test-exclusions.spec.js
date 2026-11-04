@@ -7,7 +7,9 @@ const { once } = require('node:events')
 const { sandboxCwd, useSandbox, getCiVisAgentlessConfig, stopCiVisTestEnv } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
-const { expectedExecutions, prepareExecutionLedger, readExecutions } = require('./exclusion-executions')
+const {
+  expectedExecutions, prepareExecutionLedger, readExecutions, suiteLocalExpectations,
+} = require('./exclusion-executions')
 const protection = 'test.test_management.prevent_failure_suppression'
 const exclusion = 'test.test_management.no_auto_retry'
 const suite = 'ci-visibility/vitest-tests/test-exclusions.mjs'
@@ -70,6 +72,33 @@ for (const version of versions) {
       assert.deepStrictEqual(readExecutions(ledger), executions, output)
     }
     const named = (tests, name) => tests.filter(test => test.meta['test.name'] === name)
+
+    it('keeps native declaration exports when Test Optimization is inactive', () => {
+      const result = spawnSync(process.execPath, ['./node_modules/vitest/vitest.mjs', 'run'], {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/init',
+          DD_CIVISIBILITY_ENABLED: 'false',
+          DD_CIVISIBILITY_AGENTLESS_ENABLED: 'false',
+          DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+          DD_TRACE_STARTUP_LOGS: 'false',
+          TEST_DIR: 'ci-visibility/vitest-tests/annotations-inactive.mjs',
+        },
+        encoding: 'utf8',
+      })
+      assert.strictEqual(result.status, 0, result.stdout + result.stderr)
+      assert.match(result.stdout, /1 passed/)
+    })
+
+    for (const pool of ['forks', 'threads']) {
+      it(`honors suite-local annotations in ${pool}`, async () => {
+        receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
+        const { assignments, check, executions } = suiteLocalExpectations(version !== '1.6.0')
+        properties(assignments)
+        await run('suite-local', 1, check, { POOL_CONFIG: pool }, executions)
+      })
+    }
 
     it('keeps a protection-only failure blocking without implying retry exclusion', async () => {
       receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: false })

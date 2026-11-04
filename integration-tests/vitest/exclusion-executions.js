@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const { readFileSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 
@@ -46,4 +47,58 @@ function readExecutions (filename) {
   return counts
 }
 
-module.exports = { expectedExecutions, prepareExecutionLedger, readExecutions }
+/** @param {boolean} hasFor */
+function suiteLocalExpectations (hasFor) {
+  const attempts = {
+    'local direct': 1,
+    'local each 1': 1,
+    'local each 2': 1,
+    'local concurrent': 1,
+    'local conditional': 1,
+    'local fixture': 1,
+    ...(hasFor ? { 'local for 1': 1, 'local for 2': 1 } : {}),
+    'local native': 2,
+    'local inherited native': 2,
+    'local protected retries': 3,
+    'local control': 3,
+  }
+  return {
+    assignments: Object.fromEntries(Object.keys(attempts).filter(name => name !== 'local control').map(name => [
+      name, { properties: { disabled: true, quarantined: true, attempt_to_fix: name !== 'local protected retries' } },
+    ])),
+    executions: {
+      'local direct': 1,
+      'local each': 2,
+      'local concurrent': 1,
+      'local conditional': 1,
+      'local fixture': 1,
+      ...(hasFor ? { 'local for': 2 } : {}),
+      'local native': 2,
+      'local inherited native': 2,
+      'local protected retries': 3,
+      'local control': 3,
+    },
+    /** @param {Array<{ meta: Record<string, string> }>} tests */
+    check (tests) {
+      assert.strictEqual(tests.length, Object.values(attempts).reduce((sum, count) => sum + count, 0))
+      for (const [name, count] of Object.entries(attempts)) {
+        const matches = tests.filter(test => test.meta['test.name'] === name)
+        assert.strictEqual(matches.length, count, name)
+        assert.strictEqual(matches.at(-1).meta['test.final_status'], 'fail', name)
+        for (const test of matches) {
+          assert.strictEqual(test.meta['test.status'], 'fail', name)
+          assert.strictEqual(test.meta['test.test_management.prevent_failure_suppression'],
+            name !== 'local control' ? 'true' : undefined, name)
+          const noRetry = !['local control', 'local protected retries'].includes(name)
+          assert.strictEqual(test.meta['test.test_management.no_auto_retry'], noRetry ? 'true' : undefined, name)
+          if (noRetry) {
+            assert.ok(!['auto_test_retry', 'early_flake_detection', 'attempt_to_fix']
+              .includes(test.meta['test.retry_reason']), name)
+          }
+        }
+      }
+    },
+  }
+}
+
+module.exports = { expectedExecutions, prepareExecutionLedger, readExecutions, suiteLocalExpectations }

@@ -47,6 +47,7 @@ const {
 const { NODE_MAJOR } = require('../../version')
 
 const latestVersions = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies
+const { suiteLocalExpectations } = require('./exclusion-executions')
 
 const isLegacyBrowserProvider = process.env.VITEST_BROWSER_LEGACY === '1' || NODE_MAJOR <= 18
 const browserProvider = process.env.VITEST_BROWSER_PROVIDER || 'playwright'
@@ -1008,17 +1009,19 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
 
   // Legacy browser jobs use Vite 6/esbuild; Rolldown optimizer plugins are supported by Vite 8.
   const rolldownPluginsIt = isLegacyBrowserProvider ? it.skip : it
-  rolldownPluginsIt('starts browser mode with empty Rolldown optimizer plugin entries', async () => {
-    const runPromise = runVitest('browser-reporting.mjs', { VITEST_OPTIONAL_OPTIMIZER_PLUGINS: '1' })
-    const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
-      ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-        const tests = getEventContents(getEvents(payloads), 'test')
-        assert.strictEqual(tests.length, 2, testOutput)
-        assert.strictEqual(getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
-          .meta[TEST_STATUS], 'pass')
-      })
-    await Promise.all([runPromise, eventsPromise])
-  })
+  for (const [name, option] of [['empty', '1'], ['scalar', 'scalar'], ['promised', 'promised']]) {
+    rolldownPluginsIt(`starts browser mode with ${name} Rolldown optimizer plugin entries`, async () => {
+      const runPromise = runVitest('browser-reporting.mjs', { VITEST_OPTIONAL_OPTIMIZER_PLUGINS: option })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = getEventContents(getEvents(payloads), 'test')
+          assert.strictEqual(tests.length, 2, testOutput)
+          assert.strictEqual(getTestByName(tests, 'vitest browser reporting runs the test body in the browser')
+            .meta[TEST_STATUS], 'pass')
+        })
+      await Promise.all([runPromise, eventsPromise])
+    })
+  }
 
   function readBrowserExecutions () {
     const counts = {}
@@ -1029,6 +1032,22 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
     }
     return counts
   }
+
+  it('honors browser suite-local annotations', async () => {
+    const testSuite = 'ci-visibility/vitest-browser-tests/browser-exclusions-suite-local.mjs'
+    const { assignments, check, executions } = suiteLocalExpectations(true)
+    receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
+    receiver.setTestManagementTests({ vitest: { suites: { [testSuite]: { tests: assignments } } } })
+    const runPromise = runVitest('browser-exclusions-suite-local.mjs', {
+      DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+    }, 1)
+    const eventsPromise = receiver.gatherPayloadsUntilChildExit(childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        check(getEventContents(getEvents(payloads), 'test'))
+      })
+    await Promise.all([runPromise, eventsPromise])
+    assert.deepStrictEqual(readBrowserExecutions(), executions)
+  })
 
   for (const tags of [false, true]) {
     const nativeRetryIt = tags && isLegacyBrowserProvider ? it.skip : it

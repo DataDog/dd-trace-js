@@ -5,6 +5,8 @@ import { createRequire } from 'node:module'
 import { describe, test } from 'vitest'
 import { preventFailureSuppression, noAutoRetry } from 'dd-trace/ci/test-annotations.js'
 
+import { declareSuiteLocalTests } from '../vitest-suite-local-exclusions.mjs'
+
 if (process.env.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE === '1') {
   const require = createRequire(import.meta.url)
   assert.equal(globalThis._ddtrace, undefined)
@@ -23,7 +25,9 @@ function tracked (name, callback = fail) {
   }
 }
 
-if (process.env.EXCLUSIONS_MODE === 'declaration-variants') {
+if (process.env.EXCLUSIONS_MODE === 'suite-local') {
+  declareSuiteLocalTests(tracked)
+} else if (process.env.EXCLUSIONS_MODE === 'declaration-variants') {
   const protect = callback => preventFailureSuppression(noAutoRetry(callback))
   const generated = test.skipIf(false).concurrent.each([1, 2])
   generated('generated %s', protect(tracked('generated')))

@@ -34,8 +34,14 @@ if (['native-tags', 'plain-tags'].includes(process.env.EXCLUSIONS_MODE)) {
 }
 
 if (process.env.VITEST_OPTIONAL_OPTIMIZER_PLUGINS) {
+  const plugin = { name: 'user-optimizer-plugin' }
+  const plugins = process.env.VITEST_OPTIONAL_OPTIMIZER_PLUGINS === 'scalar'
+    ? plugin
+    : process.env.VITEST_OPTIONAL_OPTIMIZER_PLUGINS === 'promised'
+      ? Promise.resolve(plugin)
+      : [null, undefined, false, []]
   config.optimizeDeps = {
-    rolldownOptions: { plugins: [null, undefined, false, []] },
+    rolldownOptions: { plugins },
   }
 }
 

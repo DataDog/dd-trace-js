@@ -2,14 +2,15 @@
 
 const { wrapDeclaration } = require('../../dd-trace/src/ci-visibility/test-declaration-annotations')
 const { addHook } = require('./helpers/instrument')
-const { findExportByName } = require('./vitest-util')
+const { findExportByName, testSessionStartCh } = require('./vitest-util')
 
 /** @param {Record<string, unknown>} pkg */
 function captureDeclarations (pkg) {
+  if (!testSessionStartCh.hasSubscribers) return pkg
   const getCurrentSuite = findExportByName(pkg, 'getCurrentSuite')?.value
   if (!getCurrentSuite) return pkg
   for (const [name, value] of Object.entries(pkg)) {
-    if (typeof value !== 'function' || !('each' in value) || !('extend' in value)) continue
+    if (typeof value !== 'function' || !('each' in value)) continue
     pkg[name] = wrapDeclaration(value, getCurrentSuite)
   }
   return pkg

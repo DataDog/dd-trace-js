@@ -7,7 +7,9 @@ const { once } = require('node:events')
 const { sandboxCwd, useSandbox, getCiVisAgentlessConfig, stopCiVisTestEnv } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
-const { expectedExecutions, prepareExecutionLedger, readExecutions } = require('./exclusion-executions')
+const {
+  expectedExecutions, prepareExecutionLedger, readExecutions, suiteLocalExpectations,
+} = require('./exclusion-executions')
 const protection = 'test.test_management.prevent_failure_suppression'
 const exclusion = 'test.test_management.no_auto_retry'
 const suite = 'ci-visibility/vitest-tests/test-exclusions.mjs'
@@ -71,6 +73,15 @@ for (const version of versions) {
       assert.deepStrictEqual(readExecutions(ledger), executions, output)
     }
     const named = (tests, name) => tests.filter(test => test.meta['test.name'] === name)
+
+    for (const pool of ['forks', 'threads']) {
+      it(`honors suite-local annotations in ${pool}`, async () => {
+        receiver.setSettings({ test_management: { enabled: true }, flaky_test_retries_enabled: true })
+        const { assignments, check, executions } = suiteLocalExpectations(version !== '1.6.0')
+        properties(assignments)
+        await run('suite-local', 1, check, { POOL_CONFIG: pool }, executions)
+      })
+    }
 
     for (const pool of ['forks', 'threads']) {
       // test.for is available on the supported no-worker path, starting with Vitest 3.2.6.
