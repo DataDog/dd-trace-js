@@ -46,7 +46,7 @@ class ElectronRendererReceivePlugin extends ConsumerPlugin {
 
     if (channel?.startsWith('datadog:')) return
 
-    let childOf
+    let childOf = null
     const carrier = args.at(-1)
     if (carrier !== undefined) {
       childOf = this._tracer.extract('text_map', carrier)
