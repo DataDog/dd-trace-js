@@ -98,6 +98,57 @@ describe('Test Optimization callback annotations', () => {
       assert.strictEqual(annotated({ value: 42 }), 42)
     })
 
+    it('preserves custom toString methods and their mutability', () => {
+      for (const writable of [false, true]) {
+        for (const configurable of [false, true]) {
+          const receivers = []
+          function render () { receivers.push(this); return 'custom source' }
+          const callback = Object.defineProperty(function callback () {}, 'toString', {
+            value: render, writable, configurable, enumerable: true,
+          })
+          const annotated = helper(helper(callback))
+          assert.deepStrictEqual(Object.getOwnPropertyDescriptor(annotated, 'toString'),
+            Object.getOwnPropertyDescriptor(callback, 'toString'))
+          assert.strictEqual(annotated.toString, render)
+          assert.strictEqual(annotated.toString(), 'custom source')
+          assert.deepStrictEqual(receivers, [annotated])
+          const replacement = () => 'replacement source'
+          if (writable) {
+            annotated.toString = replacement
+            assert.strictEqual(annotated.toString, replacement)
+          } else {
+            assert.throws(() => { annotated.toString = replacement }, { name: 'TypeError' })
+          }
+          assert.strictEqual(callback.toString, render)
+        }
+      }
+    })
+
+    it('preserves custom toString accessors without evaluating them during annotation', () => {
+      for (const frozen of [false, true]) {
+        const reads = []
+        const writes = []
+        const render = () => 'custom source'
+        const callback = Object.defineProperty(function callback () {}, 'toString', {
+          get () { reads.push(this); return render },
+          /** @param {() => string} value */
+          set (value) { writes.push([this, value]) },
+          configurable: true,
+          enumerable: true,
+        })
+        if (frozen) Object.freeze(callback)
+        const annotated = helper(helper(callback))
+        assert.deepStrictEqual(reads, [])
+        assert.deepStrictEqual(Object.getOwnPropertyDescriptor(annotated, 'toString'),
+          Object.getOwnPropertyDescriptor(callback, 'toString'))
+        assert.strictEqual(annotated.toString, render)
+        assert.deepStrictEqual(reads, [annotated])
+        annotated.toString = render
+        assert.deepStrictEqual(writes, [[annotated, render]])
+        assert.strictEqual(Object.isFrozen(annotated), frozen)
+      }
+    })
+
     it('preserves done callbacks', done => {
       const annotated = helper(callback => callback())
       assert.strictEqual(annotated.length, 1)

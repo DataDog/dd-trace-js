@@ -35,10 +35,10 @@ function annotate (fn, annotation) {
   }
   Object.setPrototypeOf(annotated, Object.getPrototypeOf(fn))
   Object.defineProperties(annotated, {
+    toString: { value: () => fn.toString() },
     ...Object.getOwnPropertyDescriptors(fn),
     length: { value: fn.length },
     name: { value: fn.name },
-    toString: { value: () => fn.toString() },
     [annotationsKey]: {
       value: Object.freeze({
         ...inherited,
