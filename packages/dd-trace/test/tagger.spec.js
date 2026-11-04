@@ -67,6 +67,18 @@ describe('tagger', () => {
     assert.strictEqual(carrier.baz, 'qux')
   })
 
+  it('should decode string entries before assigning them', () => {
+    tagger.add(carrier, 'key=first,k%65y=last,,=ignored%,value=a%252Cb,', '=', true)
+
+    assert.deepStrictEqual(carrier, { key: 'last', value: 'a%2Cb' })
+  })
+
+  it('should keep string entries literal by default', () => {
+    tagger.add(carrier, 'key:100%,value:a%2Cb')
+
+    assert.deepStrictEqual(carrier, { key: '100%', value: 'a%2Cb' })
+  })
+
   it('should store the original values', () => {
     tagger.add(carrier, { foo: 123 })
 
