@@ -35,6 +35,7 @@ describe('debugger/index', () => {
     Worker.prototype.once = sinon.stub().returnsThis()
     Worker.prototype.unref = sinon.stub()
     Worker.prototype.terminate = sinon.stub()
+    Worker.prototype.postMessage = sinon.stub()
     Worker.prototype.removeAllListeners = sinon.stub()
 
     readFileStub = sinon.stub()
@@ -453,6 +454,66 @@ describe('debugger/index', () => {
       // Telemetry distributions have a relative accuracy of 1%
       assert.ok(Math.abs(actual - expected) <= expected * 0.01, `Expected ${actual} to be ~${expected}`)
     }
+  })
+
+  describe('process shutdown', () => {
+    let clock
+    let worker
+    let drain
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers()
+      const handlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+      const previousHandlers = new Set(handlers)
+      DynamicInstrumentation.start(config, rc)
+      worker = Worker.lastCall.returnValue
+      drain = [...handlers].find(handler => !previousHandlers.has(handler))
+    })
+
+    afterEach(() => {
+      DynamicInstrumentation.stop()
+      clock.restore()
+    })
+
+    it('waits for the worker to acknowledge the drain before terminating it', () => {
+      drain()
+      drain()
+      sinon.assert.calledOnceWithExactly(worker.postMessage, 'drain')
+      sinon.assert.notCalled(worker.terminate)
+      const acknowledge = worker.once.getCalls().find(call => call.args[0] === 'message').args[1]
+      acknowledge('drained')
+      sinon.assert.calledOnce(worker.terminate)
+      clock.tick(5000)
+      sinon.assert.calledOnce(worker.terminate)
+      assert.ok(!globalThis[Symbol.for('dd-trace')].beforeExitHandlers.has(drain))
+    })
+
+    it('bounds shutdown when the worker never acknowledges', () => {
+      drain()
+      clock.tick(4999)
+      sinon.assert.notCalled(worker.terminate)
+      clock.tick(1)
+      sinon.assert.calledOnce(worker.terminate)
+      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+    })
+
+    it('contains failures to send the drain request', () => {
+      worker.postMessage.throws(new Error('worker unavailable'))
+      drain()
+      sinon.assert.calledOnce(worker.terminate)
+      clock.tick(5000)
+      sinon.assert.calledOnce(worker.terminate)
+    })
+
+    it('clears the shutdown deadline when the worker exits unexpectedly', () => {
+      drain()
+      const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
+      onExit(1)
+      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+      assert.ok(!globalThis[Symbol.for('dd-trace')].beforeExitHandlers.has(drain))
+      clock.tick(5000)
+      sinon.assert.notCalled(worker.terminate)
+    })
   })
 
   describe('stop', () => {

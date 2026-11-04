@@ -36,6 +36,7 @@ const { configureProbeSampler, installProbeSampler, uninstallProbeSampler } = re
 const TELEMETRY_APP_CLOSING_CHANNEL = 'datadog:telemetry:app-closing'
 
 const WORKER_FILENAME = join(__dirname, 'devtools_client', 'index.js')
+const SHUTDOWN_TIMEOUT_MS = 5000
 
 let worker = null
 let configChannel = null
@@ -48,6 +49,7 @@ let guardrailMetrics = null
 /** @type {PauseDurationHistogram | null} */
 let pauseDurations = null
 let metricsFlushTimer = null
+let shutdownTimer = null
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
@@ -187,7 +189,21 @@ function start (config, rcInstance) {
     logChannel.port2.unref?.()
     configChannel.port1.unref?.()
     configChannel.port2.unref?.()
+    debuggerGlobals.beforeExitHandlers.add(drainOnExit)
   })
+}
+
+function drainOnExit () {
+  if (worker === null || shutdownTimer !== null) return
+  uninstallProbeSampler()
+  shutdownTimer = setTimeout(stop, SHUTDOWN_TIMEOUT_MS)
+  worker.once('message', stop)
+  try {
+    worker.postMessage('drain')
+  } catch (err) {
+    log.error('[debugger] Error requesting shutdown flush', err)
+    stop()
+  }
 }
 
 /**
@@ -270,6 +286,9 @@ function stop () {
  * @param {Error} [error] - Optional error to pass to pending ack callbacks (for unexpected exits)
  */
 function cleanup (error) {
+  globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(drainOnExit)
+  clearTimeout(shutdownTimer)
+  shutdownTimer = null
   if (rc) {
     rc.removeProductHandler('LIVE_DEBUGGING')
     rc = null
