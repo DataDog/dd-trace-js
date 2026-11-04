@@ -27,6 +27,7 @@ const {
 } = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
+const telemetry = require('../../telemetry')
 const { getSegment } = require('../../util')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -264,7 +265,8 @@ class CiVisibilityExporter extends BufferingExporter {
       }
     })
 
-    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.flush(() => {}))
+    // Final upload errors are recorded after telemetry's initial app-closing drain.
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.flush(() => telemetry.flush()))
   }
 
   shouldRequestSkippableSuites () {
@@ -624,7 +626,7 @@ class CiVisibilityExporter extends BufferingExporter {
         repositoryUrl,
         (err) => {
           if (err) {
-            log.error('Error uploading git metadata: %s', err.message)
+            log.error('Error uploading git metadata', err)
           } else {
             log.debug('Successfully uploaded git metadata')
           }

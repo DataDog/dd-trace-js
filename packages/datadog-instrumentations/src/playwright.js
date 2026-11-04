@@ -188,7 +188,7 @@ function isAutomaticFailureVideoAttachment (attachment) {
 }
 
 function isValidKnownTests (receivedKnownTests) {
-  return !!receivedKnownTests.playwright
+  return !!receivedKnownTests?.playwright
 }
 
 function getTestFullyQualifiedName (test) {
@@ -1556,11 +1556,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
           isKnownTestsEnabled = false
         } else {
           knownTests = receivedKnownTests
-        }
-        if (!isValidKnownTests(receivedKnownTests)) {
-          isEarlyFlakeDetectionFaulty = true
-          isEarlyFlakeDetectionEnabled = false
-          isKnownTestsEnabled = false
+          if (!isValidKnownTests(receivedKnownTests)) {
+            isEarlyFlakeDetectionFaulty = true
+            isEarlyFlakeDetectionEnabled = false
+            isKnownTestsEnabled = false
+          }
         }
       } catch (err) {
         isEarlyFlakeDetectionEnabled = false
