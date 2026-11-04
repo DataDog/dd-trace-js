@@ -22,12 +22,13 @@ function lambdaEnv (extra) {
   for (const [key, value] of Object.entries(extra || {})) process.env[key] = value
 }
 
-function invoke () {
+function invoke (config) {
+  const { wrap } = require('../../../lambda')
   const context = {
     functionName: process.env.AWS_LAMBDA_FUNCTION_NAME,
     getRemainingTimeInMillis: () => 30_000,
   }
-  const wrapped = wrapHandler((_event, _context) => ({ statusCode: 200 }))
+  const wrapped = wrap((_event, _context) => ({ statusCode: 200 }), config)
   return wrapped({}, context)
 }
 
@@ -103,7 +104,7 @@ describe('Plugin', () => {
     })
 
     describe('configured service overrides', () => {
-      for (const { name, env, config = {}, expected } of [
+      for (const { name, env, config = {}, handlerConfig, expected } of [
         {
           name: 'uses the aws-lambda service mapping',
           env: { DD_SERVICE_MAPPING: 'aws-lambda:mapped-lambda' },
@@ -141,6 +142,57 @@ describe('Plugin', () => {
           expected: 'application-service',
         },
         {
+          name: 'uses the per-handler service without normalization',
+          handlerConfig: { service: 'Handler-Service' },
+          expected: 'Handler-Service',
+        },
+        {
+          name: 'prefers the per-handler service over DD_SERVICE',
+          env: { DD_SERVICE: 'application-service' },
+          handlerConfig: { service: 'handler-service' },
+          expected: 'handler-service',
+        },
+        {
+          name: 'prefers the per-handler service over plugin, mapping, and legacy defaults',
+          env: {
+            DD_SERVICE_MAPPING: 'aws-lambda:mapped-lambda',
+            DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: 'false',
+          },
+          config: { service: 'plugin-service' },
+          handlerConfig: { service: 'handler-service' },
+          expected: 'handler-service',
+        },
+        {
+          name: 'inherits the plugin service when per-handler service is undefined',
+          config: { service: 'plugin-service' },
+          handlerConfig: { service: undefined, handlerCompletion: 'return' },
+          expected: 'plugin-service',
+        },
+        {
+          name: 'uses service defaults when per-handler service is explicitly empty',
+          env: { DD_SERVICE: '  application-service  ' },
+          config: { service: 'plugin-service' },
+          handlerConfig: { service: '' },
+          expected: 'application-service',
+        },
+        {
+          name: 'uses the per-handler legacy service representation',
+          handlerConfig: { serviceRepresentationEnabled: false },
+          expected: 'aws.lambda',
+        },
+        {
+          name: 'lets per-handler service representation override the global setting',
+          env: { DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: 'false' },
+          handlerConfig: { serviceRepresentationEnabled: true },
+          expected: 'MyMixedCase-Function',
+        },
+        {
+          name: 'inherits service representation when its per-handler option is undefined',
+          config: { serviceRepresentationEnabled: false },
+          handlerConfig: { serviceRepresentationEnabled: undefined },
+          expected: 'aws.lambda',
+        },
+        {
           name: 'keeps the raw function name when a different integration is mapped',
           env: { DD_SERVICE_MAPPING: 'http:mapped-http' },
           expected: 'MyMixedCase-Function',
@@ -155,8 +207,43 @@ describe('Plugin', () => {
             assert.strictEqual(span.resource, 'MyMixedCase-Function')
           })
 
-          await invoke()
+          await invoke(handlerConfig)
           await traces
+        })
+      }
+
+      for (const { name, config, handlerConfig, baseline, overridden } of [
+        {
+          name: 'service',
+          config: { service: 'plugin-service' },
+          handlerConfig: { service: 'handler-service' },
+          baseline: 'plugin-service',
+          overridden: 'handler-service',
+        },
+        {
+          name: 'service representation',
+          config: { serviceRepresentationEnabled: false },
+          handlerConfig: { serviceRepresentationEnabled: true },
+          baseline: 'aws.lambda',
+          overridden: 'MyMixedCase-Function',
+        },
+      ]) {
+        it(`keeps ${name} overrides isolated between handlers`, async () => {
+          lambdaEnv()
+          await agent.load('aws-lambda', config, { experimental: { exporter: 'agent' } })
+          Object.freeze(handlerConfig)
+          for (const [options, expected] of [
+            [undefined, baseline],
+            [handlerConfig, overridden],
+            [{}, baseline],
+            [handlerConfig, overridden],
+          ]) {
+            const traces = agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].service, expected)
+            })
+            await invoke(options)
+            await traces
+          }
         })
       }
     })

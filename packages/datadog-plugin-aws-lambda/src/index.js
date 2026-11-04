@@ -29,7 +29,7 @@ class AwsLambdaPlugin extends TracingPlugin {
       childOf: null,
       kind: 'server',
       resource: functionName,
-      service: resolveServiceName(functionName, this.config),
+      service: resolveServiceName(functionName, this.config, context.config),
       type: 'serverless',
     }, context)
 
@@ -72,7 +72,7 @@ class AwsLambdaPlugin extends TracingPlugin {
 }
 
 /**
- * Honors explicit plugin service overrides before applying datadog-lambda-js service defaults.
+ * Honors per-handler and plugin service overrides before applying datadog-lambda-js service defaults.
  *
  * Fallbacks ported from `datadog-lambda-js/src/trace/listener.ts:386-397`. The service-naming schema's
  * `identityService` would hand back dd-trace's `Config.service`, which inside a Lambda is
@@ -81,14 +81,17 @@ class AwsLambdaPlugin extends TracingPlugin {
  *
  * @param {string} functionName Lambda function name.
  * @param {{ service?: string, serviceRepresentationEnabled?: boolean }} config Plugin configuration.
+ * @param {{ service?: string, serviceRepresentationEnabled?: boolean }} [overrides] Per-handler configuration.
  */
-function resolveServiceName (functionName, config) {
-  if (config.service) return config.service
+function resolveServiceName (functionName, config, overrides) {
+  const service = overrides?.service ?? config.service
+  if (service) return service
 
   const envService = getEnvironmentVariable('DD_SERVICE')
   if (envService && envService.trim().length > 0) return envService.trim()
 
-  if (config.serviceRepresentationEnabled === false) return 'aws.lambda'
+  const serviceRepresentationEnabled = overrides?.serviceRepresentationEnabled ?? config.serviceRepresentationEnabled
+  if (serviceRepresentationEnabled === false) return 'aws.lambda'
 
   return functionName || 'aws.lambda'
 }
