@@ -283,6 +283,7 @@
 /packages/datadog-plugin-google-cloud-vertexai/ @DataDog/ml-observability
 /packages/datadog-plugin-langchain/ @DataDog/ml-observability
 /packages/datadog-plugin-openai/ @DataDog/ml-observability
+/packages/dd-trace/src/exporters/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/src/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/test/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/test/plugins/util/llm.spec.js @DataDog/ml-observability
@@ -432,6 +433,7 @@
 /packages/dd-trace/src/web-tags-cache.js @DataDog/profiling-js
 /packages/dd-trace/test/exporters/common/form-data.spec.js @DataDog/profiling-js
 /packages/dd-trace/test/otel-thread-ctx.spec.js @DataDog/profiling-js
+/packages/dd-trace/test/fixtures/otel-thread-ctx-retention.js @DataDog/profiling-js
 /packages/dd-trace/test/profiler.spec.js @DataDog/profiling-js
 /packages/dd-trace/test/storage-channels.spec.js @DataDog/profiling-js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/web-tags-cache.spec.js @DataDog/profiling-js

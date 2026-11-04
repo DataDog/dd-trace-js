@@ -7,7 +7,7 @@ const satisfies = require('../../../vendor/dist/semifies')
 const { getDynamicAtrRetryCount } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const { EMPTY_EFD_RETRY_POLICY, hasEfdRetries } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   DYNAMIC_NAME_RE,
@@ -412,14 +412,12 @@ function configureWorkerEnv (workerEnv, shouldSkipWorkerInit = false) {
   }
 
   workerEnv[VITEST_NO_WORKER_INIT_ACTIVE_ENV] = '1'
-  rememberDatadogTestOptimizationNodeOptions(workerEnv.NODE_OPTIONS)
+  // Pool env objects omit inherited variables; retain the parent's non-Datadog options.
+  const inheritedNodeOptions = workerEnv.NODE_OPTIONS ?? getEnvironmentVariable('NODE_OPTIONS')
+  rememberDatadogTestOptimizationNodeOptions(inheritedNodeOptions)
 
-  const nodeOptions = removeDatadogTestOptimizationNodeOptions(workerEnv.NODE_OPTIONS)
-  if (nodeOptions) {
-    workerEnv.NODE_OPTIONS = nodeOptions
-  } else {
-    delete workerEnv.NODE_OPTIONS
-  }
+  const nodeOptions = removeDatadogTestOptimizationNodeOptions(inheritedNodeOptions)
+  if (nodeOptions !== undefined) workerEnv.NODE_OPTIONS = nodeOptions
   return workerEnv
 }
 
@@ -462,6 +460,23 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
 }
 
 /**
+ * Makes the annotation helper available to browser setup before Vitest creates its Vite server.
+ *
+ * @param {{ plugins?: object[] }|undefined} viteOverrides
+ */
+function addBrowserAnnotationPlugin (viteOverrides = {}) {
+  if (!viteOverrides.plugins || !Object.isExtensible(viteOverrides) ||
+    !Object.isExtensible(viteOverrides.plugins)) {
+    viteOverrides = { ...viteOverrides, plugins: [...(viteOverrides.plugins || [])] }
+  }
+  viteOverrides.plugins ||= []
+  if (!viteOverrides.plugins.includes(VITEST_BROWSER_SETUP_FILE_PLUGIN)) {
+    viteOverrides.plugins.push(VITEST_BROWSER_SETUP_FILE_PLUGIN)
+  }
+  return viteOverrides
+}
+
+/**
  * Resolves the Vitest runner from the browser project's dependency tree.
  *
  * @param {{
@@ -501,6 +516,8 @@ function allowVitestBrowserSetupFile (viteConfig) {
     VITEST_NO_WORKER_INIT_SETUP_FILE,
     VITEST_NO_WORKER_INIT_RUNNER_SETUP_FILE,
     VITEST_NO_WORKER_INIT_V5_SETUP_FILE,
+    require.resolve('../../../ci/vitest-no-worker-init-annotations.mjs'),
+    require.resolve('../../dd-trace/src/ci-visibility/test-declaration-annotations'),
   ]
   for (const setupFile of setupFiles) {
     if (!allow.includes(setupFile)) {
@@ -919,7 +936,8 @@ function createMainProcessReporter (reporterState) {
     )
     const knownTests = testProperties?.knownTests
     const testManagementProperties = testProperties?.testManagementTests?.[testName] || {}
-    const isAttemptToFix = testManagementProperties.isAttemptToFix
+    const annotations = task.meta?.__ddTestOptAnnotations || {}
+    const isAttemptToFix = testManagementProperties.isAttemptToFix && !annotations.noAutoRetry
     const isNew = !!(
       !isAttemptToFix &&
       state.isKnownTestsEnabled &&
@@ -929,20 +947,23 @@ function createMainProcessReporter (reporterState) {
     )
     const isModified = testProperties?.isModified === true
     const { flakyTestRetriesConfiguration } = testOptimizationData
-    const isFlakyTestRetries = !!flakyTestRetriesConfiguration && isFlakyTestRetriesEnabledForTask({
-      isFlakyTestRetriesEnabled: state.isFlakyTestRetriesEnabled,
-      isDynamicAtrEnabled: state.isDynamicAtrEnabled,
-      flakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
-      flakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
-      flakyTestRetriesUseRetryMarker: flakyTestRetriesConfiguration.usesRetryMarker,
-    }, task)
+    const isFlakyTestRetries = !annotations.noAutoRetry && !!flakyTestRetriesConfiguration &&
+      isFlakyTestRetriesEnabledForTask({
+        isFlakyTestRetriesEnabled: state.isFlakyTestRetriesEnabled,
+        isDynamicAtrEnabled: state.isDynamicAtrEnabled,
+        flakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
+        flakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
+        flakyTestRetriesUseRetryMarker: flakyTestRetriesConfiguration.usesRetryMarker,
+      }, task)
 
     return {
       isAttemptToFix,
-      isDisabled: testManagementProperties.isDisabled,
+      annotations,
+      assignedProperties: testManagementProperties,
+      isDisabled: testManagementProperties.isDisabled && !annotations.mustFail,
       isEarlyFlakeDetection: task.meta?.__ddTestOptEfdRetries !== undefined,
       isFlakyTestRetries,
-      isQuarantined: testManagementProperties.isQuarantined,
+      isQuarantined: testManagementProperties.isQuarantined && !annotations.mustFail,
       isModified,
       isNew,
       testSuite,
@@ -1283,12 +1304,13 @@ function reportFinalTestAttempt (testReport) {
     } = getRumCorrelation(task, attemptIndex)
     testSkipCh.publish({
       ...browserEnvironment,
+      annotations: testProperties.annotations,
       testName,
       testSuiteAbsolutePath,
       isNew: testProperties.isNew,
-      isAttemptToFix: testProperties.isAttemptToFix,
-      isDisabled: testProperties.isDisabled,
-      isQuarantined: testProperties.isQuarantined,
+      isAttemptToFix: testProperties.assignedProperties.isAttemptToFix,
+      isDisabled: testProperties.assignedProperties.isDisabled,
+      isQuarantined: testProperties.assignedProperties.isQuarantined,
       isRumActive,
       isTestFrameworkWorker: true,
       requestErrorTags: state.requestErrorTags,
@@ -1369,9 +1391,10 @@ function reportTestAttempt (testReport, attempt) {
     isRetry: attempt.isRetry,
     isNew: testProperties.isNew,
     hasDynamicName: testProperties.hasDynamicName,
-    isAttemptToFix: testProperties.isAttemptToFix,
-    isDisabled: testProperties.isDisabled,
-    isQuarantined: testProperties.isQuarantined,
+    annotations: testProperties.annotations,
+    isAttemptToFix: testProperties.assignedProperties.isAttemptToFix,
+    isDisabled: testProperties.assignedProperties.isDisabled,
+    isQuarantined: testProperties.assignedProperties.isQuarantined,
     isModified: testProperties.isModified,
     isRetryReasonEfd: attempt.isRetryReasonEfd,
     isRetryReasonAttemptToFix: testProperties.isAttemptToFix && attempt.isRetry,
@@ -1607,9 +1630,9 @@ function splitNodeOptions (nodeOptions) {
     const char = nodeOptions[index]
 
     if (quote) {
-      if (char === '\\' && nodeOptions[index + 1] === quote) {
-        token += quote
-        index++
+      // Node treats a backslash inside double quotes as escaping the next character.
+      if (char === '\\' && index + 1 < nodeOptions.length) {
+        token += nodeOptions[++index]
         continue
       }
 
@@ -1621,7 +1644,8 @@ function splitNodeOptions (nodeOptions) {
       continue
     }
 
-    if (char === '"' || char === "'") {
+    // NODE_OPTIONS uses double quotes for grouping; apostrophes belong to option values.
+    if (char === '"') {
       quote = char
       continue
     }
@@ -1649,7 +1673,8 @@ function serializeNodeOptions (tokens) {
   for (const token of tokens) {
     if (hasSerializedToken) serializedTokens += ' '
     if (NODE_OPTIONS_QUOTE_RE.test(token)) {
-      serializedTokens += JSON.stringify(token)
+      // Escape only Node's grouping syntax; JSON would turn literal whitespace into escape letters.
+      serializedTokens += `"${token.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)}"`
     } else {
       serializedTokens += token
     }
@@ -1868,6 +1893,7 @@ function safeWorkspaceProject (ctx) {
 }
 
 module.exports = {
+  addBrowserAnnotationPlugin,
   configure,
   deactivate,
   configureWorkerEnv,

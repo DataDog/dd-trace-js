@@ -6,11 +6,10 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const dc = require('dc-polyfill')
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { flushLiveSessions } = require('../../../../../datadog-instrumentations/src/openai-realtime')
-const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
 const { useLlmObs } = require('../../util')
 
@@ -80,129 +79,12 @@ class ReplaySocket extends EventTarget {
 }
 
 describe('Agents SDK realtime automatic tracing', () => {
-  const setup = sinon.createSandbox()
-  let activeWriter
-  before(() => {
-    const Processor = require('../../../../src/llmobs/span_processor')
-    const setWriter = Processor.prototype.setWriter
-    setup.replace(Processor.prototype, 'setWriter', function (writer) {
-      activeWriter = writer
-      return setWriter.call(this, writer)
-    })
-  })
-  const helper = useLlmObs({ plugin: 'openai' })
-  let diagnostics
-  const getEvents = count => {
-    diagnostics.expected = count
-    return helper.getEvents(count)
-  }
-
-  after(() => setup.restore())
+  const { getEvents } = useLlmObs({ plugin: 'openai' })
 
   withVersions('openai', '@openai/agents-realtime', '0.20.0', version => {
     let transport
 
-    const turnChannel = dc.tracingChannel('apm:openai:realtime:turn')
-    const warningChannel = dc.channel('datadog:log:warn')
-    const errorChannel = dc.channel('datadog:log:error')
-    const finishChannel = dc.channel('dd-trace:span:finish')
-    let Tagger
-    const observeFinish = span => {
-      if (Tagger.tagMap.has(span)) diagnostics.registeredAtFinish++
-    }
-    const observeTurn = () => { diagnostics.turns++ }
-    const observeTrace = traces => { diagnostics.apmSpans += traces.flat().length }
-    const observeLog = record => {
-      const message = typeof record === 'string' ? record : record?.message
-      if (typeof message === 'string' && /error|fail|dropp/i.test(message) && diagnostics.errors.length < 10) {
-        diagnostics.errors.push(message.slice(0, 1000))
-      }
-    }
-
-    beforeEach(() => {
-      diagnostics = {
-        expected: 0,
-        turns: 0,
-        apmSpans: 0,
-        registeredAtFinish: 0,
-        processCalls: 0,
-        formatted: {},
-        written: {},
-        received: {},
-        payloadBytes: [],
-        errors: [],
-      }
-      const tracer = require('../../../../../..')
-      Tagger = require('../../../../src/llmobs/tagger')
-      diagnostics.enabled = tracer.llmobs.enabled
-      diagnostics.sameRegistry = Tagger.tagMap === tracer.llmobs._tagger?.constructor.tagMap
-      diagnostics.sameLifecycle = tracer.llmobs._llmobsModule === require('../../../../src/llmobs')
-      diagnostics.finishHadSubscribers = finishChannel.hasSubscribers
-      turnChannel.start.subscribe(observeTurn)
-      warningChannel.subscribe(observeLog)
-      errorChannel.subscribe(observeLog)
-      finishChannel.subscribe(observeFinish)
-      agent.subscribe(observeTrace)
-      const Processor = require('../../../../src/llmobs/span_processor')
-      const processSpan = Processor.prototype.process
-      const format = Processor.prototype.format
-      sinon.replace(Processor.prototype, 'process', function (span) {
-        diagnostics.processCalls++
-        return processSpan.call(this, span)
-      })
-      sinon.replace(Processor.prototype, 'format', function (span) {
-        const event = format.call(this, span)
-        const name = event?.name || 'dropped'
-        diagnostics.formatted[name] = (diagnostics.formatted[name] || 0) + 1
-        return event
-      })
-      const telemetry = require('../../../../src/llmobs/telemetry')
-      const finished = telemetry.incrementLLMObsSpanFinishedCount
-      diagnostics.telemetryCalls = 0
-      sinon.replace(telemetry, 'incrementLLMObsSpanFinishedCount', function (span, value) {
-        diagnostics.telemetryCalls++
-        try {
-          return finished.call(this, span, value)
-        } catch (error) {
-          diagnostics.errors.push('finish telemetry: ' + error.message)
-          throw error
-        }
-      })
-      const Writer = require('../../../../src/llmobs/writers/spans')
-      diagnostics.writerCaptured = Boolean(activeWriter)
-      diagnostics.writerClass = activeWriter?.constructor.name
-      diagnostics.writerMatches = activeWriter instanceof Writer
-      const writer = activeWriter || Writer.prototype
-      const append = writer.append
-      sinon.replace(writer, 'append', function (event, routing) {
-        diagnostics.written[event.name] = (diagnostics.written[event.name] || 0) + 1
-        return append.call(this, event, routing)
-      })
-      const read = agent.getLlmObsSpanEventsRequests
-      sinon.replace(agent, 'getLlmObsSpanEventsRequests', function (clear) {
-        const requests = read.call(this, clear)
-        for (const payload of requests) {
-          diagnostics.payloadBytes.push(Buffer.byteLength(JSON.stringify(payload)))
-          for (const envelope of payload) {
-            for (const event of envelope.spans) {
-              diagnostics.received[event.name] = (diagnostics.received[event.name] || 0) + 1
-            }
-          }
-        }
-        return requests
-      })
-    })
-
-    afterEach(function () {
-      if (this.currentTest.state === 'failed') {
-        diagnostics.writerUrl = activeWriter?.url
-        process.stderr.write('Agents realtime delivery diagnostics: ' + JSON.stringify(diagnostics) + '\n')
-      }
-      turnChannel.start.unsubscribe(observeTurn)
-      warningChannel.unsubscribe(observeLog)
-      errorChannel.unsubscribe(observeLog)
-      finishChannel.unsubscribe(observeFinish)
-      agent.unsubscribe(observeTrace)
+    afterEach(() => {
       transport?.close()
       flushLiveSessions()
       sinon.restore()
