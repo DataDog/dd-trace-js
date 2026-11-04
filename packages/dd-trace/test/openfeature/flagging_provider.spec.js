@@ -2,10 +2,14 @@
 
 const assert = require('node:assert/strict')
 
-const { DatadogNodeServerProvider, DependencyTelemetrySidecar } = require('@datadog/openfeature-node-server')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
+const {
+  DatadogNodeServerProvider,
+  DependencyTelemetrySidecar,
+} = require('../../../../vendor/dist/@datadog/openfeature-node-server')
 
 require('../setup/core')
 
