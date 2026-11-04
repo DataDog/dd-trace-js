@@ -2,6 +2,7 @@
 # sirun publishes no arm64 binary and CPython is pinned to the x86_64 build, so the
 # build-benchmark-ci-images job pins BASE_CI_IMAGE_PLATFORM=linux/amd64 (see
 # .gitlab/benchmarks/gitlab-ci.yml). Pinned to the 24.04 manifest-list digest.
+# Internal mirror, so image builds don't depend on Docker Hub availability or rate limits.
 FROM registry.ddbuild.io/images/mirror/ubuntu:24.04@sha256:786a8b558f7be160c6c8c4a54f9a57274f3b4fb1491cf65146521ae77ff1dc54
 
 ARG CI_JOB_TOKEN
