@@ -203,7 +203,12 @@ function appClosing () {
   telemetryAppClosingChannel.publish()
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
-  // We flush before shutting down.
+  flush()
+}
+
+function flush () {
+  if (!config?.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED) return
+
   metricsManager.send(config, application, host)
   telemetryLogger.send(config, application, host)
 }
@@ -398,4 +403,5 @@ module.exports = {
   updateIntegrations,
   updateConfig,
   appClosing,
+  flush,
 }

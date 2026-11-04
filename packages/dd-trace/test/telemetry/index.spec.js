@@ -39,11 +39,17 @@ describe('telemetry (proxy)', () => {
       updateIntegrations () {},
       updateConfig () {},
       appClosing () {},
+      flush () {},
     })
 
     proxy = proxyquire('../../src/telemetry', {
       './telemetry': telemetry,
     })
+  })
+
+  it('does not flush before telemetry is started', () => {
+    proxy.flush()
+    sinon.assert.notCalled(telemetry.flush)
   })
 
   it('should proxy when enabled', () => {
@@ -53,11 +59,13 @@ describe('telemetry (proxy)', () => {
     proxy.updateIntegrations()
     proxy.updateConfig([], config)
     proxy.appClosing()
+    proxy.flush()
 
     sinon.assert.calledWith(telemetry.start, config)
     sinon.assert.called(telemetry.updateIntegrations)
     sinon.assert.called(telemetry.updateConfig)
     sinon.assert.called(telemetry.appClosing)
+    sinon.assert.called(telemetry.flush)
   })
 
   it('should proxy when enabled from updateConfig', () => {
@@ -66,10 +74,12 @@ describe('telemetry (proxy)', () => {
     proxy.updateConfig([], config)
     proxy.updateIntegrations()
     proxy.appClosing()
+    proxy.flush()
 
     sinon.assert.called(telemetry.updateIntegrations)
     sinon.assert.calledWith(telemetry.updateConfig, [], config)
     sinon.assert.called(telemetry.appClosing)
+    sinon.assert.called(telemetry.flush)
   })
 })
 
@@ -263,7 +273,8 @@ describe('telemetry', () => {
     })
   })
 
-  it('should apply startup log metadata to producer logs and shared errors', async () => {
+  it('should flush logs with startup metadata after app-closing', async () => {
+    telemetry.appClosing()
     logCollector.reset()
     dc.channel('datadog:telemetry:log').publish(Object.freeze({
       message: 'Product diagnostic', level: 'WARN', tags: 'log_type:diagnostic',
@@ -274,7 +285,7 @@ describe('telemetry', () => {
       message: 'Shared request failed', cause, sendViaTelemetry: true,
     })
 
-    telemetry.appClosing()
+    telemetry.flush()
 
     let request
     while (!request) {
@@ -316,7 +327,7 @@ describe('telemetry', () => {
     })
   })
 
-  it('should not send app-closing if telemetry is not enabled', () => {
+  it('should not send app-closing or flush if telemetry is not enabled', () => {
     const sendDataStub = sinon.stub()
     const notEnabledTelemetry = proxyquire('../../src/telemetry/telemetry', {
       './send-data': {
@@ -336,6 +347,7 @@ describe('telemetry', () => {
       _pluginsByName: pluginsByName,
     })
     notEnabledTelemetry.appClosing()
+    notEnabledTelemetry.flush()
     assert.strictEqual(sendDataStub.called, false)
   })
 })
