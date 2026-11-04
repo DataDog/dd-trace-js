@@ -371,7 +371,6 @@ describe('Config', () => {
         { name: 'DD_TRACE_REACT_ROUTER_ENABLED', value: true, origin: 'default' },
       ])
     })
-
   })
 
   it('should accept a circular logger instance without overflowing the stack (issue #8122)', () => {
