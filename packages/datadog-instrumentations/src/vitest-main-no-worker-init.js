@@ -81,6 +81,11 @@ const VITEST_NO_WORKER_INIT_V5_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-v5-setup.mjs'
 )
+const VITEST_NO_WORKER_INIT_ENTRYPOINTS = new Set([
+  VITEST_NO_WORKER_INIT_NODE_SETUP_FILE,
+  VITEST_NO_WORKER_INIT_RUNNER_SETUP_FILE,
+  VITEST_NO_WORKER_INIT_V5_SETUP_FILE,
+])
 const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
   name: 'datadog:vitest-browser-setup-file',
   config: configureVitestBrowserSetupFile,
@@ -456,13 +461,10 @@ function addSetupFileToVitestConfigs (ctx, browserSetupFile, testSpecifications)
       config.setupFiles = [config.setupFiles]
     }
 
-    const setupFileIndex = config.setupFiles.indexOf(setupFile)
-    if (setupFileIndex !== 0) {
-      if (setupFileIndex > 0) {
-        config.setupFiles.splice(setupFileIndex, 1)
-      }
-      config.setupFiles.unshift(setupFile)
+    for (let index = config.setupFiles.length - 1; index >= 0; index--) {
+      if (VITEST_NO_WORKER_INIT_ENTRYPOINTS.has(config.setupFiles[index])) config.setupFiles.splice(index, 1)
     }
+    config.setupFiles.unshift(setupFile)
   }
 }
 

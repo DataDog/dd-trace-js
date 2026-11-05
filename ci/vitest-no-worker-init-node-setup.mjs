@@ -1,17 +1,17 @@
 import { createRequire } from 'node:module'
-import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
 
 import { captureDeclarations } from './vitest-no-worker-init-annotations.mjs'
 
-// Prefer the project's Vitest, with a fallback for tooling installed below the configured test root.
-const packageJsonPath = createRequire(import.meta.url).resolve('vitest/package.json', {
-  paths: [globalThis.__vitest_worker__.config.root, path.dirname(fileURLToPath(import.meta.url))],
-})
-const vitestRequire = createRequire(packageJsonPath)
-// require.resolve('vitest') selects its CommonJS entrypoint, which rejects require().
-const { module: entrypoint } = vitestRequire(packageJsonPath)
-const vitest = await import(new URL(entrypoint, pathToFileURL(packageJsonPath)).href)
+// Vitest's resolver selects the running installation even when config.root contains another copy.
+const worker = globalThis.__vitest_worker__
+// Vitest 3 uses Vite Node's resolveId RPC; Vitest 4+ uses Vite's named environments.
+const { id } = worker.moduleCache
+  ? await worker.rpc.resolveId('vitest', undefined, 'ssr')
+  : await worker.rpc.resolve('vitest', undefined, '__vitest__')
+const vitestUrl = id.startsWith('file:') ? id : pathToFileURL(id).href
+const vitestRequire = createRequire(vitestUrl)
+const vitest = await import(vitestUrl)
 const vitestRunner = vitest.TestRunner || await import(pathToFileURL(vitestRequire.resolve('vitest/suite')).href)
 
 globalThis[Symbol.for('dd-trace.vitest.api')] = vitest
