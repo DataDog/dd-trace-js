@@ -49,6 +49,12 @@ for (const external of Object.keys(externals)) {
 run()
 
 async function run () {
+  // Resolving every declared range throws for a hooked package without a pinned latest version, so lint can catch
+  // the missing pin before CI reaches the install step.
+  if (process.argv.includes('--check')) {
+    for (const { name, range } of collectPackages(findModuleNames())) getCappedRange(name, range)
+    return
+  }
   await assertPrerequisites()
   install()
   const changed = await assertPeerDependencies(join(__dirname, '..', 'versions'))
@@ -57,12 +63,14 @@ async function run () {
   if (changed) install()
 }
 
-async function assertPrerequisites () {
+function findModuleNames () {
   const filter = process.env.PLUGINS?.split('|')
 
-  const moduleNames = getInstrumentationNames().filter(name => !filter || filter.includes(name))
+  return getInstrumentationNames().filter(name => !filter || filter.includes(name))
+}
 
-  const packages = collectPackages(moduleNames)
+async function assertPrerequisites () {
+  const packages = collectPackages(findModuleNames())
 
   await mapWithConcurrency(packages, FS_CONCURRENCY, ({ name, version, range, external }) =>
     assertPackage(name, version, range, external))
