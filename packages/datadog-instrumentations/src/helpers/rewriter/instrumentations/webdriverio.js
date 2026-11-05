@@ -459,6 +459,18 @@ module.exports = [
       filePath: 'build/index.js',
     },
     functionQuery: {
+      expressionName: 'runSpec',
+      kind: 'Sync',
+    },
+    channelName: 'runSpec',
+  },
+  {
+    module: {
+      name: '@wdio/utils',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    functionQuery: {
       expressionName: 'testFrameworkFnWrapper',
       kind: 'Async',
     },
