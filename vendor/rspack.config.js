@@ -15,6 +15,7 @@ const { dependencies } = require('./package.json')
 
 const include = new Set([
   ...Object.keys(dependencies),
+  '@datadog/openfeature-node-server/rules-based',
   'mutexify/promise',
   'protobufjs/minimal', // peer dependency for `@datadog/sketches-js`
   'source-map/lib/util', // TODO: remove usage of dependency internals
@@ -78,6 +79,10 @@ module.exports = {
     }),
     new CopyRspackPlugin({
       patterns: [
+        {
+          from: '@datadog/openfeature-node-server/rules-based.d.ts',
+          to: '@datadog/openfeature-node-server/rules-based/index.d.ts',
+        },
         // Binaries need to be copied manually.
         {
           from: 'source-map/lib/mappings.wasm',

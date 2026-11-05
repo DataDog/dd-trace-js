@@ -533,7 +533,7 @@ class DogStatsDClient {
       for (const [key, value] of Object.entries(config.tags)) {
         // Skip runtime-id unless enabled as cardinality may be too high
         if (typeof value === 'string' && (key !== 'runtime-id' || config.runtimeMetricsRuntimeId)) {
-          // https://docs.datadoghq.com/tagging/#defining-tags
+          // https://docs.datadoghq.com/getting_started/tagging/#define-tags
           const valueStripped = value.replaceAll(/[^a-z0-9_:./-]/ig, '_')
 
           tags.push(`${key}:${valueStripped}`)

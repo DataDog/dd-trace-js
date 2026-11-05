@@ -54,9 +54,22 @@ const missingInstrumentationHooks = [
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
   'langchain',
   'langgraph',
+  'postgres',
+  'react-router',
+  'supabase',
+  'typesafe',
 ]
 
-const hooklessOrchestrionPlugins = new Set(['azure-cosmos', 'bullmq', 'langchain', 'langgraph'])
+const hooklessOrchestrionPlugins = new Set([
+  'azure-cosmos',
+  'bullmq',
+  'langchain',
+  'langgraph',
+  'postgres',
+  'react-router',
+  'supabase',
+  'typesafe',
+])
 
 function extractPluginIds (source, re, index) {
   const ids = new Set()
@@ -188,7 +201,20 @@ describe('Plugin Structure Validation', () => {
   })
 
   it('registers pure Orchestrion integrations only as rewrite targets', () => {
-    const names = ['@azure/cosmos', '@langchain/core', '@langchain/langgraph', 'bullmq', 'mercurius']
+    const names = [
+      '@azure/cosmos',
+      '@langchain/core',
+      '@langchain/langgraph',
+      '@supabase/auth-js',
+      '@supabase/functions-js',
+      '@supabase/postgrest-js',
+      '@supabase/realtime-js',
+      '@supabase/storage-js',
+      'bullmq',
+      'mercurius',
+      'postgres',
+      'react-router',
+    ]
 
     for (const name of names) {
       assert.equal(hooks[name], undefined)

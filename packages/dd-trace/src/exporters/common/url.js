@@ -1,7 +1,7 @@
 'use strict'
 
 const net = require('node:net')
-const { format } = require('node:url')
+const { format, URL } = require('node:url')
 
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 
@@ -21,7 +21,7 @@ function isLoopbackHost (hostname) {
 
 /**
  * @param {string|undefined} protocol
- * @param {string|undefined} hostname
+ * @param {string|undefined|null} hostname
  */
 function canSendApiKey (protocol, hostname) {
   return protocol === 'https:' || protocol === 'unix:' ||

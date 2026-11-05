@@ -45,7 +45,7 @@ addHook({ name: 'mongodb', versions: ['>=4.6.0 <6.4.0'], file: 'lib/cmap/connect
 
 addHook({ name: 'mongodb', versions: ['>=6.4.0'], file: 'lib/cmap/connection.js' }, Connection => {
   const proto = Connection.Connection.prototype
-  shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command', undefined, instrumentPromise))
+  shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command', instrumentPromise))
 })
 
 addHook({ name: 'mongodb', versions: ['>=3.3 <4'], file: 'lib/core/wireprotocol/index.js' }, wp => wrapWp(wp))
@@ -95,8 +95,8 @@ function wrapUnifiedCommand (command, operation, name) {
   }
 }
 
-function wrapConnectionCommand (command, operation, name, instrumentFn = instrument) {
-  const opts = { name }
+function wrapConnectionCommand (command, operation, instrumentFn = instrument) {
+  const opts = { name: undefined }
   return function (ns, ops) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)

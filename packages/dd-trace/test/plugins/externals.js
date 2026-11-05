@@ -99,7 +99,7 @@ module.exports = {
     },
     {
       name: '@aws-sdk/client-bedrock-runtime',
-      versions: ['>=3.422.0'],
+      versions: ['>=3.422.0', '>=3.785.0'],
     },
   ],
   bullmq: [
@@ -480,14 +480,21 @@ module.exports = {
       versions: ['>= 2'],
     },
     {
+      // TODO: ldapjs-promise 4 bundles its own LDAP client instead of wrapping ldapjs, so it is not instrumented yet.
       name: 'ldapjs-promise',
-      versions: ['>=2'],
+      versions: ['>=2 <4'],
     },
   ],
   'light-my-request': [
     {
       name: 'fastify',
+      versions: ['>=3 <5'],
+      node: '<22.12.0',
+    },
+    {
+      name: 'fastify',
       versions: ['>=3'],
+      node: '>=22.12.0',
     },
   ],
   mariadb: [
@@ -726,6 +733,16 @@ module.exports = {
       versions: ['2'],
     },
   ],
+  'react-router': [
+    {
+      name: 'axios',
+      versions: ['>=1.0.0'],
+    },
+    {
+      name: 'react',
+      dep: true,
+    },
+  ],
   redis: [
     {
       name: 'redis',
@@ -782,26 +799,12 @@ module.exports = {
       versions: ['1.20.1'],
     },
   ],
-  '@supabase/supabase-js': [
+  supabase: [
     {
-      name: '@supabase/auth-js',
+      name: '@supabase/supabase-js',
       versions: ['>=2.112.2'],
-    },
-    {
-      name: '@supabase/functions-js',
-      versions: ['>=2.112.2'],
-    },
-    {
-      name: '@supabase/postgrest-js',
-      versions: ['>=2.112.2'],
-    },
-    {
-      name: '@supabase/realtime-js',
-      versions: ['>=2.112.2'],
-    },
-    {
-      name: '@supabase/storage-js',
-      versions: ['>=2.112.2'],
+      // This package is the Supabase test target even though it differs from the integration key above.
+      honourEnvRange: true,
     },
   ],
 }

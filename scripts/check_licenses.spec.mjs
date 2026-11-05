@@ -247,12 +247,11 @@ const validBunLock = `{
  */
 
 /**
- * @param {string[]} dependencies
  * @param {string} excluded
  */
-function withoutDependency (dependencies, excluded) {
+function withoutDependency (excluded) {
   const remaining = []
-  for (const dependency of dependencies) {
+  for (const dependency of expectedDependencies) {
     if (dependency !== excluded) remaining.push(dependency)
   }
   return remaining
@@ -350,7 +349,7 @@ describe('check_licenses', () => {
 
   it('reports missing and extraneous licenses', () => {
     writeFixture({
-      licenses: [...withoutDependency(expectedDependencies, 'regular'), 'extraneous'],
+      licenses: [...withoutDependency('regular'), 'extraneous'],
     })
 
     const result = runChecker()
@@ -363,7 +362,7 @@ describe('check_licenses', () => {
   it('checks repositories without manually vendored dependencies', () => {
     writeFixture({
       includeVendoredDependencies: false,
-      licenses: withoutDependency(expectedDependencies, 'manually-vendored'),
+      licenses: withoutDependency('manually-vendored'),
     })
 
     const result = runChecker()

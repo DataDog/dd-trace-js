@@ -39,6 +39,27 @@ describe('Tracing Remote Config', () => {
       enable(rc, config, onConfigUpdated)
 
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
+      sinon.assert.calledWithExactly(
+        rc.updateCapabilities,
+        RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION,
+        true
+      )
+      sinon.assert.calledWithExactly(
+        rc.updateCapabilities,
+        RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING,
+        true
+      )
+      sinon.assert.calledWithExactly(
+        rc.updateCapabilities,
+        RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN,
+        true
+      )
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.SDK_CONFIGURATION, true)
     })
 

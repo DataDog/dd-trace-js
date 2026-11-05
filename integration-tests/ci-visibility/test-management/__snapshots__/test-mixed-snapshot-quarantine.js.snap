@@ -1,0 +1,17 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`mixed snapshots quarantined snapshot 1`] = `"stored"`;
+
+exports[`mixed snapshots quarantined unused snapshot 1`] = `"stored"`;
+
+exports[`mixed snapshots quarantined unused snapshot: response 1`] = `"stored"`;
+
+exports[`mixed snapshots quarantined unused snapshot: response 2`] = `"stored"`;
+
+exports[`mixed snapshots quarantined unused snapshot: response: body 1`] = `"stored"`;
+
+exports[`mixed snapshots quarantined unused snapshot: ordinary 1`] = `"stored"`;
+
+exports[`mixed snapshots quarantined unused snapshot: ordinary: response 1`] = `"stored"`;
+
+exports[`mixed snapshots ordinary snapshot 1`] = `"stored"`;

@@ -8,15 +8,18 @@ const dc = require('dc-polyfill')
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
 const telemetryMetrics = require('../telemetry/metrics')
+const { logGenericError } = require('../startup-log')
 const getDebuggerConfig = require('./config')
 const {
   DEBUGGER_DIAGNOSTICS_V1,
   DEBUGGER_INPUT_DIRECT,
   DEBUGGER_INPUT_V2,
-  GUARDRAIL_METRICS_FLUSH_INTERVAL_MS,
   INSPECT_SEGMENT_GLOBAL_PROPERTY,
+  METRICS_FLUSH_INTERVAL_MS,
+  WORKER_ERROR_REASON,
 } = require('./constants')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
+const { PauseDurationHistogram } = require('./pause-duration-histogram')
 const { configureProbeSampler, installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
@@ -32,6 +35,8 @@ const { configureProbeSampler, installProbeSampler, uninstallProbeSampler } = re
 // be lost when the application exits on its own.
 const TELEMETRY_APP_CLOSING_CHANNEL = 'datadog:telemetry:app-closing'
 
+const WORKER_FILENAME = join(__dirname, 'devtools_client', 'index.js')
+
 let worker = null
 let configChannel = null
 let ackId = 0
@@ -40,7 +45,9 @@ let rc = null
 let inputPath = null
 /** @type {GuardrailMetrics | null} */
 let guardrailMetrics = null
-let guardrailMetricsTimer = null
+/** @type {PauseDurationHistogram | null} */
+let pauseDurations = null
+let metricsFlushTimer = null
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
@@ -93,9 +100,11 @@ function start (config, rcInstance) {
 
   const guardrailMetricsBuffer = GuardrailMetrics.createBuffer()
   guardrailMetrics = new GuardrailMetrics(guardrailMetricsBuffer)
-  guardrailMetricsTimer = setInterval(flushGuardrailMetrics, GUARDRAIL_METRICS_FLUSH_INTERVAL_MS)
-  guardrailMetricsTimer.unref?.()
-  dc.subscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
+  const pauseDurationBuffer = PauseDurationHistogram.createBuffer()
+  pauseDurations = new PauseDurationHistogram(pauseDurationBuffer)
+  metricsFlushTimer = setInterval(flushMetrics, METRICS_FLUSH_INTERVAL_MS)
+  metricsFlushTimer.unref?.()
+  dc.subscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushMetrics)
 
   const probeSamplerBuffer = installProbeSampler(guardrailMetrics, config)
 
@@ -134,7 +143,7 @@ function start (config, rcInstance) {
     inputPath = _inputPath
 
     worker = new Worker(
-      join(__dirname, 'devtools_client', 'index.js'),
+      WORKER_FILENAME,
       {
         name: 'dd-debugger',
         execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
@@ -147,6 +156,7 @@ function start (config, rcInstance) {
           configPort: configChannel.port1,
           probeSamplerBuffer,
           guardrailMetricsBuffer,
+          pauseDurationBuffer,
         },
         transferList: [probeChannel.port1, logChannel.port1, configChannel.port1],
       }
@@ -159,12 +169,7 @@ function start (config, rcInstance) {
       )
     })
 
-    const threadPausedMetric = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
-      .distribution('execution.pause.duration')
-    worker.on('message', (/** @type {{ type: string, durationMs: number }} */ { type, durationMs }) => {
-      if (type === 'thread-paused') threadPausedMetric.track(durationMs)
-    })
-    worker.on('error', (err) => logWorkerError(err))
+    worker.on('error', onWorkerError)
     worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 
     worker.once('exit', (code) => {
@@ -183,6 +188,24 @@ function start (config, rcInstance) {
     configChannel.port1.unref?.()
     configChannel.port2.unref?.()
   })
+}
+
+/**
+ * @param {Error & { code?: unknown, requireStack?: unknown }} error - The error emitted by the worker thread
+ */
+function onWorkerError (error) {
+  // Node.js reports an empty require stack when the module it cannot find is the worker entry point itself, rather
+  // than one of its dependencies. This happens when the dd-trace files are not on disk where dd-trace expects them,
+  // e.g. because dd-trace was bundled into the application, or because some of its files were not deployed.
+  if (error.code === 'MODULE_NOT_FOUND' && Array.isArray(error.requireStack) && error.requireStack.length === 0) {
+    logGenericError(
+      `Dynamic Instrumentation is disabled, because its worker thread could not load ${WORKER_FILENAME}. ` +
+      'Make sure dd-trace is installed as regular files on disk and is not bundled into the application.'
+    )
+    logWorkerError(error, WORKER_ERROR_REASON.WORKER_ENTRY_POINT_NOT_FOUND)
+    return
+  }
+  logWorkerError(error)
 }
 
 /**
@@ -259,18 +282,19 @@ function cleanup (error) {
   configChannel = null
   inputPath = null
 
-  if (guardrailMetricsTimer !== null) {
-    clearInterval(guardrailMetricsTimer)
-    guardrailMetricsTimer = null
+  if (metricsFlushTimer !== null) {
+    clearInterval(metricsFlushTimer)
+    metricsFlushTimer = null
   }
   if (guardrailMetrics !== null) {
-    dc.unsubscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
-    // Report what the worker counted up until it was stopped. Known limitation: `Worker#terminate()` interrupts the
-    // worker asynchronously, so anything it counts between this drain and its actual termination is lost. That only
-    // concerns events still sitting in the worker's upload buffer, which die with the worker anyway, so it isn't worth
-    // deferring the drain until the worker has exited.
-    flushGuardrailMetrics()
+    dc.unsubscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushMetrics)
+    // Report what the worker recorded up until it was stopped. Known limitation: `Worker#terminate()` interrupts the
+    // worker asynchronously, so anything it records between this drain and its actual termination is lost. That only
+    // concerns events still sitting in the worker's upload buffer, which die with the worker anyway, and a pause that
+    // might still be in progress, so it isn't worth deferring the drain until the worker has exited.
+    flushMetrics()
     guardrailMetrics = null
+    pauseDurations = null
   }
 
   // Call any pending ack callbacks
@@ -286,13 +310,18 @@ function cleanup (error) {
 }
 
 /**
- * Convert the guardrail counters accumulated by the probe sampler and the worker into telemetry metrics.
+ * Convert the guardrail counters accumulated by the probe sampler and the worker, and the pause durations recorded by
+ * the worker, into telemetry metrics.
  */
-function flushGuardrailMetrics () {
-  if (guardrailMetrics === null) return
+function flushMetrics () {
+  if (guardrailMetrics === null || pauseDurations === null) return
   const namespace = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
   guardrailMetrics.drain((metric, tags, count) => {
     namespace.count(metric, tags).inc(count)
+  })
+  const pauseDurationMetric = namespace.distribution('execution.pause.duration')
+  pauseDurations.drain((durationMs, count) => {
+    pauseDurationMetric.track(durationMs, count)
   })
 }
 

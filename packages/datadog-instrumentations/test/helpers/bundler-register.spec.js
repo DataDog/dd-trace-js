@@ -1,14 +1,16 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const Module = require('node:module')
-
+const vm = require('node:vm')
+const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
 
 const instrumentationUtils = require('../../src/helpers/instrumentation-utils')
-
 const CHANNEL = 'dd-trace:bundler:load'
-
+const registerPath = require.resolve('../../src/helpers/bundler-register')
+const registerSource = fs.readFileSync(registerPath, 'utf8')
 describe('bundler register', () => {
   let originalRequire
 
@@ -19,6 +21,86 @@ describe('bundler register', () => {
   afterEach(() => {
     Module.prototype.require = originalRequire
     sinon.restore()
+  })
+
+  describe('loaded built-ins in a bundled tracer', () => {
+    const REGISTERED_BUILTINS = [['http'], ['https'], ['dns'], ['fs']]
+    let moduleLoadListDescriptor
+
+    beforeEach(() => {
+      moduleLoadListDescriptor = Object.getOwnPropertyDescriptor(process, 'moduleLoadList')
+    })
+
+    afterEach(() => {
+      Object.defineProperty(process, 'moduleLoadList', moduleLoadListDescriptor)
+    })
+
+    it('re-requires every loaded registered built-in, then syncs ESM exports once', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true })
+
+      assert.deepStrictEqual(requireBuiltin.args, REGISTERED_BUILTINS)
+      sinon.assert.calledOnce(sync)
+      for (const call of requireBuiltin.getCalls()) assert.ok(call.calledBefore(sync.firstCall))
+    })
+
+    it('does not touch built-ins in an unbundled process', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: false })
+
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
+    })
+
+    it('skips registered built-ins that were never loaded', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, loaded: ['http', 'fs'] })
+
+      assert.deepStrictEqual(requireBuiltin.args, [['http'], ['fs']])
+      sinon.assert.calledOnce(sync)
+    })
+
+    it('re-requires every registered built-in when the loaded built-ins are unknown', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, moduleLoadListMissing: true })
+
+      assert.deepStrictEqual(requireBuiltin.args, REGISTERED_BUILTINS)
+      sinon.assert.calledOnce(sync)
+    })
+
+    it('only re-requires built-ins that register.js hooked', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, registered: ['https', 'fs'] })
+
+      assert.deepStrictEqual(requireBuiltin.args, [['https'], ['fs']])
+      sinon.assert.calledOnce(sync)
+    })
+
+    it('does not sync when register.js hooked no built-ins', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, registered: [] })
+
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
+    })
+
+    it('does not sync when nothing was patched', () => {
+      const { requireBuiltin, sync } = loadBuiltinRegister({ bundled: true, loaded: [] })
+
+      sinon.assert.notCalled(requireBuiltin)
+      sinon.assert.notCalled(sync)
+    })
+
+    it('does not sync when every require fails', () => {
+      const error = new Error('unavailable')
+      const failing = { http: error, https: error, dns: error, fs: error }
+      const { sync, log } = loadBuiltinRegister({ bundled: true, failing })
+
+      sinon.assert.notCalled(sync)
+      sinon.assert.notCalled(log.error)
+    })
+
+    it('logs a failing ESM synchronization instead of throwing', () => {
+      const error = new Error('sync failed')
+      const { log } = loadBuiltinRegister({ bundled: true, syncError: error })
+
+      sinon.assert.calledWithExactly(log.error, 'Error synchronizing bundled built-in ESM exports: %s',
+        error.message, error)
+    })
   })
 
   it('patches modules published by existing bundlers', () => {
@@ -121,10 +203,66 @@ describe('bundler register', () => {
     sinon.assert.notCalled(log.error)
   })
 
+  it('passes metadata to activation setup before publishing for every bundled module in a group', () => {
+    const setup = sinon.stub()
+    const { activate, loadChannel, log, publish } = loadBundlerRegister({
+      rewriteActivationEnabled: new Set(['first', 'second']),
+      activationSetups: new Map([['first', setup], ['second', setup]]),
+      hooks: {},
+      instrumentations: {},
+    })
+
+    publish({ activate: true, package: 'first', version: '1.0.0' })
+    publish({ activate: true, package: 'second', version: '2.0.0' })
+    publish({ activate: true, package: 'first', version: '1.0.1' })
+
+    assert.deepStrictEqual(setup.args, [
+      [{ moduleName: 'first', version: '1.0.0' }],
+      [{ moduleName: 'second', version: '2.0.0' }],
+      [{ moduleName: 'first', version: '1.0.1' }],
+    ])
+    sinon.assert.callOrder(setup, loadChannel.publish)
+    assert.ok(setup.getCall(1).calledBefore(loadChannel.publish.getCall(1)))
+    assert.ok(setup.getCall(2).calledBefore(loadChannel.publish.getCall(2)))
+    assert.deepStrictEqual(activate.args, [['first', '1.0.0'], ['second', '2.0.0'], ['first', '1.0.1']])
+    assert.deepStrictEqual(loadChannel.publish.args,
+      [[{ name: 'first' }], [{ name: 'second' }], [{ name: 'first' }]])
+    sinon.assert.notCalled(log.error)
+  })
+
+  it('does not publish or retry bundled group activation when setup fails', () => {
+    const error = new Error('setup failed')
+    const setup = sinon.stub().throws(error)
+    const { loadChannel, log, publish, telemetry } = loadBundlerRegister({
+      rewriteActivationEnabled: new Set(['first', 'second']),
+      activationSetups: new Map([['first', setup], ['second', setup]]),
+      hooks: {},
+      instrumentations: {},
+    })
+
+    publish({ activate: true, package: 'first' })
+    publish({ activate: true, package: 'second' })
+    publish({ activate: true, package: 'first' })
+
+    sinon.assert.calledOnceWithExactly(setup, { moduleName: 'first', version: undefined })
+    sinon.assert.notCalled(loadChannel.publish)
+    sinon.assert.calledOnceWithExactly(log.error,
+      'Error during activation setup of %s: %s', 'first', 'setup failed', error)
+    sinon.assert.calledOnceWithExactly(telemetry, 'error', [
+      'error_type:Error', 'integration:first', 'integration_version:unknown',
+    ], {
+      result: 'error',
+      result_class: 'internal_error',
+      result_reason: 'Error during activation of first: setup failed',
+    })
+  })
+
   it('does not activate a disabled hookless source-rewritten integration', () => {
+    const setup = sinon.stub()
     const { loadChannel, publish } = loadBundlerRegister({
       disabled: new Set(['test-hookless']),
       rewriteActivationEnabled: new Set(['test-hookless']),
+      activationSetups: new Map([['test-hookless', setup]]),
       hooks: {},
       instrumentations: {},
     })
@@ -132,6 +270,7 @@ describe('bundler register', () => {
     publish({ activate: true, package: 'test-hookless' })
 
     sinon.assert.notCalled(loadChannel.publish)
+    sinon.assert.notCalled(setup)
   })
 
   it('does not report activation-only integrations as missing export hooks', () => {
@@ -259,9 +398,58 @@ function throwValue (value) {
 }
 
 /**
+ * Execute the real CommonJS entrypoint with the module wrapper supplied by Node or a bundler.
+ * @param {{
+ *   bundled: boolean,
+ *   registered?: string[],
+ *   loaded?: string[],
+ *   moduleLoadListMissing?: boolean,
+ *   failing?: Record<string, Error>,
+ *   syncError?: Error
+ * }} options
+ */
+function loadBuiltinRegister ({
+  bundled,
+  registered = ['http', 'https', 'dns', 'fs'],
+  loaded = ['http', 'https', 'dns', 'fs'],
+  moduleLoadListMissing = false,
+  failing = {},
+  syncError,
+}) {
+  Object.defineProperty(process, 'moduleLoadList', {
+    value: moduleLoadListMissing ? undefined : loaded.map(name => `NativeModule ${name}`),
+    configurable: true,
+  })
+  const requireBuiltin = sinon.stub(Module.prototype, 'require').returns({})
+  for (const [name, error] of Object.entries(failing)) requireBuiltin.withArgs(name).throws(error)
+  const sync = sinon.stub(Module, 'syncBuiltinESMExports')
+  if (syncError) sync.throws(syncError)
+  const log = { error: sinon.stub() }
+  const stubs = {
+    module: Module,
+    'dc-polyfill': { subscribe: sinon.stub() },
+    '../../../dd-trace/src/log': log,
+    './register.js': { registeredBuiltinNames: registered },
+    './instrumentation-utils': { getDisabledInstrumentations: () => new Set() },
+    './hooks': {},
+    './instrumentations': {},
+    './rewriter/targets': {},
+  }
+  // Naming the script after the real file attributes its coverage to that file.
+  const wrapped = vm.runInThisContext(Module.wrap(registerSource), { filename: registerPath })
+  const mod = bundled ? { exports: {} } : new Module(__filename)
+  wrapped(mod.exports, name => {
+    assert.ok(Object.hasOwn(stubs, name), `Unexpected startup dependency: ${name}`)
+    return stubs[name]
+  }, mod, __filename, __dirname)
+  return { requireBuiltin, sync, log }
+}
+
+/**
  * @param {{
  *   disabled?: Set<string>,
  *   rewriteActivationEnabled?: Set<string>,
+ *   activationSetups?: Map<string, (activation: { moduleName: string, version?: string }) => void>,
  *   hooks: Record<string, Function|{ fn: Function }>,
  *   instrumentations: Record<string, Array<object>>
  * }} options
@@ -269,6 +457,7 @@ function throwValue (value) {
 function loadBundlerRegister ({
   disabled = new Set(),
   rewriteActivationEnabled = new Set(),
+  activationSetups = new Map(),
   hooks,
   instrumentations,
 }) {
@@ -276,13 +465,34 @@ function loadBundlerRegister ({
   const originalRequire = Module.prototype.require
   const loadChannel = { publish: sinon.stub() }
   const log = { error: sinon.stub() }
+  const telemetry = sinon.stub()
   const dc = {
     subscribe: (channel, callback) => {
       if (channel === CHANNEL) bundledModuleSubscriber = callback
     },
   }
   let bundledModuleSubscriber
-  const register = { loadChannel }
+  const register = proxyquire('../../src/helpers/register', {
+    './hooks': {},
+    './hook': sinon.stub(),
+    './instrumentations': {},
+    './instrumentation-utils': {
+      ...instrumentationUtils,
+      getDisabledInstrumentations: () => disabled,
+    },
+    './check-require-cache': { checkForRequiredModules: sinon.stub(), checkForPotentialConflicts: sinon.stub() },
+    './rewriter': { disable: sinon.stub() },
+    './rewriter/instrumentation-registry': { getActivationSetup: name => activationSetups.get(name) },
+    '../fetch': {},
+    '../process': {},
+    '../console': {},
+    '../../../dd-trace/src/log': log,
+    '../../../dd-trace/src/guardrails/telemetry': telemetry,
+    'dc-polyfill': {
+      channel: name => name === 'dd-trace:instrumentation:load' ? loadChannel : { subscribe: sinon.stub() },
+    },
+  })
+  const activate = sinon.spy(register, 'activate')
 
   Module.prototype.require = function (request) {
     if (this.filename === bundlerRegisterPath) {
@@ -309,9 +519,11 @@ function loadBundlerRegister ({
   Module.prototype.require = originalRequire
 
   return {
+    activate,
     dc,
     loadChannel,
     log,
+    telemetry,
     publish: message => bundledModuleSubscriber(message),
   }
 }

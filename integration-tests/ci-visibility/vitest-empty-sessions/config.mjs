@@ -5,5 +5,6 @@ export default {
     include: [scenario.startsWith('no-candidates') ? 'no-matching-tests.mjs' : 'vitest-empty-sessions/test.mjs'],
     passWithNoTests: ['empty-shard', 'empty-file', 'no-candidates', 'no-candidates-sharded'].includes(scenario),
     globalSetup: scenario === 'setup-error' ? ['vitest-empty-sessions/setup.mjs'] : [],
+    runner: scenario === 'collected-only' ? 'vitest-empty-sessions/collect-only-runner.mjs' : undefined,
   },
 }

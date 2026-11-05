@@ -1,6 +1,6 @@
 'use strict'
 
-const { getMessageSize } = require('../../dd-trace/src/datastreams')
+const { getHeadersSize, getSizeOrZero } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { storage } = require('../../datadog-core')
 const reconstructPubSubRequestContext = require('./pubsub-request-context')
@@ -82,7 +82,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     const { span } = ctx.currentStore
     const subscription = message._subscriber._subscription
     const topic = subscription?.metadata?.topic || message.attributes?.['pubsub.topic']
-    const payloadSize = getMessageSize(message)
+    const payloadSize = getSizeOrZero(message.data) + getHeadersSize(message.attributes)
     this.tracer.decodeDataStreamsContext(message.attributes)
     this.tracer
       .setCheckpoint(['direction:in', `topic:${topic}`, 'type:google-pubsub'], span, payloadSize)

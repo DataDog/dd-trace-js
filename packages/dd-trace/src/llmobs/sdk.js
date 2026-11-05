@@ -29,6 +29,8 @@ const {
   getFunctionArguments,
   validateKind,
 } = require('./util')
+const { buildAgentDeclaration, toAgentVersion } = require('./agent-manifest')
+/** @typedef {import('./agent-manifest').AgentDeclaration} AgentDeclaration */
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
@@ -161,7 +163,7 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this.#extractOptions(options)
+    } = this.#extractOptions(options, kind)
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
@@ -191,7 +193,7 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this.#extractOptions(options)
+    } = this.#extractOptions(options, kind)
 
     const llmobs = this
 
@@ -300,7 +302,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions, agent } = options
 
       const hasInputOrOutput = spanKind === 'experiment'
         ? inputData !== undefined || outputData !== undefined
@@ -337,6 +339,15 @@ class LLMObs extends NoopLLMObs {
       }
       if (toolDefinitions != null) {
         this._tagger.tagToolDefinitions(span, toolDefinitions)
+      }
+      if (agent != null) {
+        if (spanKind === 'agent') {
+          this._tagger.tagAgent(span, agent)
+        } else {
+          logger.warn(
+            'Dropping agent annotation on non-agent span kind, annotating agents is only supported for agent spans.'
+          )
+        }
       }
     } catch (e) {
       if (e.ddErrorTag) {
@@ -602,14 +613,20 @@ class LLMObs extends NoopLLMObs {
   annotationContext (options, fn) {
     if (!this.enabled) return fn()
 
+    /** @type {{ annotationContext?: object, agentDeclarations?: AgentDeclaration[] } | undefined} */
     const currentStore = storage.getStore()
-
+    const { agent, ...contextOptions } = options ?? {}
+    /** @type {{ annotationContext: object, agentDeclarations?: AgentDeclaration[] }} */
     const store = {
       ...currentStore,
-      annotationContext: {
-        ...currentStore?.annotationContext,
-        ...options,
-      },
+      annotationContext: { ...currentStore?.annotationContext, ...contextOptions },
+    }
+
+    if (agent != null) {
+      const declaration = buildAgentDeclaration(agent)
+      // Outside `annotationContext`, whose keys come from the caller. Outermost first, so nested declarations fold
+      // onto the outer ones.
+      if (declaration) store.agentDeclarations = [...(currentStore?.agentDeclarations ?? []), declaration]
     }
 
     return storage.run(store, fn)
@@ -640,7 +657,8 @@ class LLMObs extends NoopLLMObs {
   flush () {
     if (!this.enabled) return
 
-    flushCh.publish()
+    flushCh.publish() // communicates with llmobs-specific writers
+    this._tracer.flushAll?.() // trigger any flushes for meta_struct-bound llmobs spans
   }
 
   #autoAnnotate (span, kind, input, output) {
@@ -702,21 +720,32 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  #extractOptions (options) {
+  #extractOptions (options, kind) {
     const {
       modelName,
       modelProvider,
       sessionId,
       mlApp,
+      version,
       _decorator,
       ...spanOptions
     } = options
+
+    let agentVersion
+    if (version !== undefined) {
+      if (kind === 'agent') {
+        agentVersion = toAgentVersion(version)
+      } else {
+        logger.warn('Dropping the version option on a %s span, it is only supported for agent spans.', kind)
+      }
+    }
 
     return {
       mlApp,
       modelName,
       modelProvider,
       sessionId,
+      agentVersion,
       _decorator,
       spanOptions,
     }

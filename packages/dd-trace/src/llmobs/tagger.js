@@ -3,6 +3,7 @@
 const log = require('../log')
 const Sampler = require('../sampler')
 const { formatKnuthRate } = require('../util')
+const { SPAN_TYPE } = require('../../../../ext/tags')
 const {
   MODEL_NAME,
   MODEL_PROVIDER,
@@ -18,6 +19,8 @@ const {
   OUTPUT_VALUE,
   METADATA,
   COST_TAGS,
+  AGENT_MANIFEST,
+  AGENT_VERSION,
   METRICS,
   TOOL_DEFINITIONS,
   PARENT_ID_KEY,
@@ -27,6 +30,7 @@ const {
   NAME,
   PARENT_AGENT_NAME,
   PARENT_AGENT_SPAN_ID,
+  PARENT_AGENT_VERSION,
   PROPAGATED_PARENT_ID_KEY,
   PROPAGATED_PARENT_AGENT_ID_KEY,
   PROPAGATED_PARENT_AGENT_NAME_KEY,
@@ -53,6 +57,7 @@ const {
   TRACE_ID,
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
+const { buildAgentDeclaration } = require('./agent-manifest')
 const { storage } = require('./storage')
 const {
   findGenAIAncestorSpanId,
@@ -114,10 +119,11 @@ class LLMObsTagger {
     kind,
     name,
     integration,
+    agentVersion,
     _decorator,
   } = {}) {
-    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
-    if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
+    // Do not register it in the map if it does not have an LLMObs span kind.
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED || !kind) return
 
     const spanMlApp =
       mlApp ||
@@ -187,6 +193,13 @@ class LLMObsTagger {
       this.tagCostTags(span, annotationContext.costTags, 'annotation_context')
     }
 
+    const agentDeclarations = /** @type {import('./agent-manifest').AgentDeclaration[] | undefined} */ (
+      storage.getStore()?.agentDeclarations
+    )
+    if (agentDeclarations) this.#applyAgentDeclarations(span, agentDeclarations)
+    // The span's own version wins over the enclosing contexts.
+    if (agentVersion) this._setTag(span, AGENT_VERSION, agentVersion)
+
     // apply annotation context name
     const annotationContextName = annotationContext?.name
     if (annotationContextName) this._setTag(span, NAME, annotationContextName)
@@ -202,6 +215,46 @@ class LLMObsTagger {
         this._setTag(span, ROUTING_SITE, routing.site)
       }
     }
+  }
+
+  /**
+   * Applies the agents declared by the enclosing annotation contexts, outermost first, to every span in the block.
+   * Both are emitted only if the span is an agent when it finishes, since some integrations promote a span to an
+   * agent after registration.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {import('./agent-manifest').AgentDeclaration[]} declarations
+   */
+  #applyAgentDeclarations (span, declarations) {
+    for (const declaration of declarations) {
+      if (declaration.version) this._setTag(span, AGENT_VERSION, declaration.version)
+      if (declaration.manifest) this.#tagAgentManifestFields(span, declaration.manifest)
+    }
+  }
+
+  /**
+   * Tags the agent a caller declared on an agent span, merged onto what earlier annotations declared.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} agent
+   */
+  tagAgent (span, agent) {
+    const declaration = buildAgentDeclaration(agent)
+    if (!declaration) return
+    if (declaration.version) this._setTag(span, AGENT_VERSION, declaration.version)
+    if (declaration.manifest) this.#tagAgentManifestFields(span, declaration.manifest)
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {import('./agent-manifest').AgentManifestFields} manifest
+   */
+  #tagAgentManifestFields (span, manifest) {
+    // A shallow update, matching dd-trace-py: each declaration is already validated, so a later field replaces an
+    // earlier one whole (`model_settings` included) and an unset or invalid one leaves it in place. Declarations are
+    // never mutated, so the first one is stored without a copy.
+    const existing = registry.get(span)?.[AGENT_MANIFEST]
+    this._setTag(span, AGENT_MANIFEST, existing ? { ...existing, ...manifest } : manifest)
   }
 
   #tagSamplingDecision (span, parent) {
@@ -232,8 +285,9 @@ class LLMObsTagger {
 
   /**
    * Store the nearest agent ancestor on the span so it can be surfaced as
-   * `meta.agent_attribution` at finish. Resolved once here, at registration, so downstream
-   * children inherit it with a single lookup rather than walking the ancestor chain.
+   * `meta.agent_attribution` at finish, along with that agent's version, which the agent panel reads
+   * off each span to attribute its spend. Resolved once here, at registration, so downstream children
+   * inherit it with a single lookup rather than walking the ancestor chain.
    *
    * @param {import('../opentracing/span')} span
    * @param {import('../opentracing/span')} [parent] the LLMObs parent span, if any
@@ -241,10 +295,10 @@ class LLMObsTagger {
   // TODO: spans whose kind changes after registration (e.g. claude-agent-sdk tools promoted to
   // sub-agents) will not retroactively update already-finished children's attribution. Follow up.
   #tagAgentAttribution (span, parent) {
-    let name, spanId
+    let name, spanId, version
     if (registry.has(parent)) {
       // Local LLMObs parent: attribute to it if it is an agent, else inherit its resolution.
-      ({ name, spanId } = resolveAgentAttribution(registry.get(parent), parent))
+      ({ name, spanId, version } = resolveAgentAttribution(registry.get(parent), parent))
     } else if (span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY]) {
       // Distributed LLMObs parent: inherit the nearest agent propagated from upstream. The
       // name may be absent when the upstream hop ran an older SDK or its name was not
@@ -256,6 +310,7 @@ class LLMObsTagger {
 
     if (name != null) this._setTag(span, PARENT_AGENT_NAME, name)
     if (spanId != null) this._setTag(span, PARENT_AGENT_SPAN_ID, spanId)
+    if (version) this._setTag(span, PARENT_AGENT_VERSION, version)
   }
 
   // TODO: similarly for the following `tag` methods,
@@ -337,7 +392,16 @@ class LLMObsTagger {
     if (currentTags) {
       Object.assign(currentTags, tags)
     } else {
-      this._setTag(span, TAGS, tags)
+      // Copied so a later annotation cannot write into a caller's object shared by an annotation context. The copy
+      // reads caller getters and Proxy traps during span registration, so it must not throw into the application.
+      let copy
+      try {
+        copy = { ...tags }
+      } catch {
+        log.warn('Dropping span tags that could not be read.')
+        return
+      }
+      this._setTag(span, TAGS, copy)
     }
   }
 
@@ -957,6 +1021,8 @@ class LLMObsTagger {
       this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
       return
     }
+
+    span.setTag(SPAN_TYPE, 'llm')
 
     registry.set(span, {})
   }

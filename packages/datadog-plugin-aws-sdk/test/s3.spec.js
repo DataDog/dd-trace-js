@@ -2,13 +2,13 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
 const { after, before, describe, it } = require('mocha')
 
 const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 const { rawExpectedSchema } = require('./s3-naming')
 const { callViaCallback, setup, withAwsSdkVersions } = require('./spec_helpers')
 
@@ -17,7 +17,7 @@ const bucketName = 's3-bucket-name-test'
 /* eslint-disable no-console */
 async function resetLocalStackS3 () {
   try {
-    await axios.post('http://localhost:4566/reset')
+    await httpRequest.post('http://localhost:4566/reset')
     console.log('LocalStack S3 reset successful')
   } catch (error) {
     console.error('Error resetting LocalStack S3:', error.message)

@@ -228,11 +228,11 @@ for (const hook of getHooks('ai').values()) {
 
         // The SDK builds a model from a string id, in which case only the resolved instance is
         // worth wrapping; when the caller passed an instance, that is the one the SDK calls.
-        if (typeof model !== 'string' && model !== ctx.result) {
+        if (typeof model === 'string' || model === ctx.result) {
+          wrapModel(ctx.result)
+        } else {
           wrapModel(model)
           wrappedModels.add(ctx.result)
-        } else {
-          wrapModel(ctx.result)
         }
       },
     })

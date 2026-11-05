@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const axios = require('axios')
 const semver = require('semver')
 const {
   FakeAgent,
@@ -14,6 +13,7 @@ const {
   stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../../dd-trace/test/setup/helpers/http-client')
 
 describe('Plugin (ESM)', () => {
   describe('graphql (ESM)', () => {
@@ -71,7 +71,7 @@ describe('Plugin (ESM)', () => {
         `
 
         try {
-          await axios.post(`${proc.url}/graphql`, {
+          await httpRequest.post(`${proc.url}/graphql`, {
             query,
           })
         } catch {
@@ -110,7 +110,7 @@ describe('Plugin (ESM)', () => {
           `
 
           try {
-            await axios.post(`${proc.url}/graphql`, {
+            await httpRequest.post(`${proc.url}/graphql`, {
               query,
             })
           } catch {
@@ -141,7 +141,7 @@ describe('Plugin (ESM)', () => {
           `
 
           try {
-            await axios.post(`${proc.url}/graphql`, {
+            await httpRequest.post(`${proc.url}/graphql`, {
               query,
             }, {
               headers: {
@@ -162,7 +162,7 @@ describe('Plugin (ESM)', () => {
     let agent
     let proc
 
-    withVersions('graphql', 'graphql-jit', '0.8.5 || >=0.8.7 <0.9.0', (version, moduleName, resolvedVersion) => {
+    withVersions('graphql', 'graphql-jit', '0.8.5 || >=0.8.7 <0.10.0', (version, moduleName, resolvedVersion) => {
       useSandbox([`'graphql-jit@${resolvedVersion}'`, "'graphql@17.0.2'"], false, [
         './packages/datadog-plugin-graphql/test/esm-test/*'])
 
@@ -196,7 +196,7 @@ describe('Plugin (ESM)', () => {
         )
 
         await Promise.all([res, (async () => {
-          const response = await axios.get(`${proc.url}/graphql`)
+          const response = await httpRequest.get(`${proc.url}/graphql`)
           assert.deepStrictEqual(response.data, {
             data: {
               hello: 'world',

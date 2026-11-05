@@ -223,7 +223,7 @@ module.exports = class CiPlugin extends Plugin {
           this.libraryConfig = undefined
           this.itrCorrelationId = undefined
           this.skippableSuitesCoverage = undefined
-          log.error('Library configuration could not be fetched. %s', err.message)
+          log.error('Library configuration could not be fetched', err)
           this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS, err)
         } else {
           this.libraryConfig = effectiveLibraryConfig
@@ -263,7 +263,7 @@ module.exports = class CiPlugin extends Plugin {
         },
         (err, skippableSuites, itrCorrelationId, skippableSuitesCoverage) => {
           if (err) {
-            log.error('Skippable suites could not be fetched. %s', err.message)
+            log.error('Skippable suites could not be fetched', err)
             this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, err)
           } else {
             this.itrCorrelationId = itrCorrelationId
@@ -378,7 +378,7 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
-          log.error('Known tests could not be fetched. %s', err.message)
+          log.error('Known tests could not be fetched', err)
           this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS, err)
           if (this.libraryConfig) {
             this.libraryConfig = Object.freeze({
@@ -402,7 +402,7 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getTestManagementTests(this.testConfiguration, (err, testManagementTests) => {
         if (err) {
-          log.error('Test management tests could not be fetched. %s', err.message)
+          log.error('Test management tests could not be fetched', err)
           this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS, err)
           if (this.libraryConfig) {
             this.libraryConfig = Object.freeze({

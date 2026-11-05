@@ -26,8 +26,8 @@ const hostname = getHostname()
 const message = 'my-message'
 const logger = { logger: true }
 const dd = { dd: true }
-const snapshot = { snapshot: true, probe: { id: 'my-probe-id' } }
-const MAX_LOG_PAYLOAD_SIZE_BYTES = 1024 * 1024 // Mirrors the limit in send.js
+const snapshot = { snapshot: true, timestamp: 1_700_000_000_000, probe: { id: 'my-probe-id' } }
+const MAX_LOG_PAYLOAD_SIZE_BYTES = 1024 * 1024 - 4 * 1024 // Mirrors the limit in send.js
 
 describe('input message http requests', function () {
   /** @type {sinon.SinonFakeTimers} */
@@ -332,6 +332,15 @@ describe('input message http requests', function () {
     done()
   })
 
+  it('should include the snapshot timestamp at root level', function () {
+    send(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+
+    const written = JSON.parse(jsonBufferWrite.getCall(0).args[0])
+
+    assert.strictEqual(written.timestamp, snapshot.timestamp)
+    assert.strictEqual(written.debugger.snapshot.timestamp, snapshot.timestamp)
+  })
+
   it('should include process_tags at root level when provided', function () {
     const processTags = 'entrypoint.name:banana,entrypoint.type:script'
     send(message, logger, dd, snapshot, processTags, EVENT_TYPE.LOG, 0)
@@ -397,7 +406,7 @@ describe('input message http requests', function () {
       sinon.assert.notCalled(pruneSnapshotStub)
     })
 
-    it('should attempt to prune if payload exceeds 1MB', function () {
+    it('should attempt to prune if payload exceeds the size limit', function () {
       pruneSnapshotStub.returns(JSON.stringify(prunedPayload))
 
       send(message, logger, dd, largeSnapshot, undefined, EVENT_TYPE.LOG, 0)
@@ -407,6 +416,33 @@ describe('input message http requests', function () {
       assert.strictEqual(typeof call.args[0], 'string') // json
       assert.strictEqual(typeof call.args[1], 'number') // currentSize
       assert.strictEqual(call.args[2], MAX_LOG_PAYLOAD_SIZE_BYTES) // maxSize
+    })
+
+    it('should not prune a payload exactly at the size limit', function () {
+      const atLimit = snapshotOfPayloadSize(MAX_LOG_PAYLOAD_SIZE_BYTES)
+
+      send(message, logger, dd, atLimit, undefined, EVENT_TYPE.SNAPSHOT, 0)
+
+      sinon.assert.notCalled(pruneSnapshotStub)
+      sinon.assert.calledOnceWithExactly(
+        jsonBufferWrite, payloadJsonOfSize(MAX_LOG_PAYLOAD_SIZE_BYTES), MAX_LOG_PAYLOAD_SIZE_BYTES
+      )
+      sinon.assert.notCalled(guardrailMetrics.captureIncomplete)
+    })
+
+    it('should prune a payload one byte over the size limit', function () {
+      const overLimit = snapshotOfPayloadSize(MAX_LOG_PAYLOAD_SIZE_BYTES + 1)
+      pruneSnapshotStub.returns(JSON.stringify(prunedPayload))
+
+      send(message, logger, dd, overLimit, undefined, EVENT_TYPE.SNAPSHOT, 0)
+
+      sinon.assert.calledOnce(pruneSnapshotStub)
+      const call = pruneSnapshotStub.getCall(0)
+      assert.strictEqual(call.args[1], MAX_LOG_PAYLOAD_SIZE_BYTES + 1) // currentSize
+      assert.strictEqual(call.args[2], MAX_LOG_PAYLOAD_SIZE_BYTES) // maxSize
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.captureIncomplete, INCOMPLETE_REASON.PAYLOAD_TOO_LARGE, EVENT_TYPE.SNAPSHOT
+      )
     })
 
     it('should use pruned snapshot if pruning succeeds', function () {
@@ -637,6 +673,7 @@ function getPayload (_message = message, _snapshot = snapshot) {
     ddsource,
     hostname,
     service,
+    timestamp: _snapshot.timestamp,
     message: _message,
     logger,
     dd,
@@ -645,14 +682,30 @@ function getPayload (_message = message, _snapshot = snapshot) {
 }
 
 /**
+ * Build a snapshot whose serialized payload is an exact size, by padding a single stack frame.
+ *
+ * @param {number} bytes - The size of the serialized payload in bytes
+ * @returns {object} - The snapshot
+ */
+function snapshotOfPayloadSize (bytes) {
+  const padded = { id: '123', stack: [''], captures: { pruned: true } }
+  const baseline = Buffer.byteLength(JSON.stringify(getPayload(message, padded)))
+
+  padded.stack[0] = 'x'.repeat(bytes - baseline)
+
+  // Guard the padding arithmetic: an off-by-one here would silently defeat the boundary assertions
+  assert.strictEqual(Buffer.byteLength(JSON.stringify(getPayload(message, padded))), bytes)
+
+  return padded
+}
+
+/**
  * Build a payload-shaped JSON document of an exact size, by padding a single stack frame.
  *
  * @param {number} bytes - The size of the returned document in bytes
  */
 function payloadJsonOfSize (bytes) {
-  const json = JSON.stringify(getPayload(message, { id: '123', stack: [''], captures: { pruned: true } }))
-  const padding = 'x'.repeat(bytes - Buffer.byteLength(json))
-  return json.replace('"stack":[""]', `"stack":["${padding}"]`)
+  return JSON.stringify(getPayload(message, snapshotOfPayloadSize(bytes)))
 }
 
 /**

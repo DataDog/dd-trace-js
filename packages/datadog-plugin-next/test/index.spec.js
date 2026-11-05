@@ -1,17 +1,19 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
 const path = require('node:path')
 const http = require('node:http')
 const { execSync, spawn } = require('node:child_process')
 const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
-const axios = require('axios')
+const { rm } = require('node:fs/promises')
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const { satisfies } = require('semver')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
@@ -166,7 +168,7 @@ describe('Plugin', function () {
 
           server.kill()
 
-          await axios.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
+          await httpRequest.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
           await agent.close()
         })
       }
@@ -236,7 +238,7 @@ describe('Plugin', function () {
         }
       })
 
-      after(function () {
+      after(async function () {
         this.timeout(5000)
         const files = [
           'package.json',
@@ -244,13 +246,12 @@ describe('Plugin', function () {
           '.next',
           'yarn.lock',
         ]
-        const paths = files.map(file => path.join(__dirname, file))
-        execSync(`rm -rf ${paths.join(' ')}`)
+        await Promise.all(files.map(file => rm(path.join(__dirname, file), { recursive: true, force: true })))
       })
 
       withNamingSchema(
         (done) => {
-          axios
+          httpRequest
             .get(`http://127.0.0.1:${port}/api/hello/world`)
             // skip catch due to socket hang up when server is killed, unsure if this catch is needed
             // .catch(done)
@@ -291,7 +292,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/hello/world`)
               .catch(done)
           })
@@ -312,14 +313,14 @@ describe('Plugin', function () {
                 .then(done)
                 .catch(done)
 
-              axios
+              httpRequest
                 .get(`http://127.0.0.1:${port}${url}`)
                 .catch(done)
             })
           })
 
           it('should propagate context', done => {
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/hello/world`)
               .then(res => {
                 assert.strictEqual(res.data.name, 'next.request')
@@ -348,13 +349,13 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/missing`)
               .catch(() => {})
           })
 
-          it('should handle invalid catch all parameters', done => {
-            agent
+          it('should handle invalid catch all parameters', async () => {
+            const tracingPromise = agent
               .assertSomeTraces(traces => {
                 const spans = traces[0]
 
@@ -366,18 +367,20 @@ describe('Plugin', function () {
                   meta: {
                     'span.kind': 'server',
                     'http.method': 'GET',
-                    // Next.js 16 surfaces a malformed request URL as a 500 instead of a 400.
-                    'http.status_code': satisfies(pkg.version, '>=16') ? '500' : '400',
                     component: 'next',
                   },
                 })
-              })
-              .then(done)
-              .catch(done)
 
-            axios
-              .get(`http://127.0.0.1:${port}/api/invalid/%ff`)
-              .catch(() => {})
+                return spans[1]
+              })
+
+            const [span, response] = await Promise.all([
+              tracingPromise,
+              httpRequest.get(`http://127.0.0.1:${port}/api/invalid/%ff`, { validateStatus: null }),
+            ])
+
+            assert.ok(response.status >= 400 && response.status < 600)
+            assert.strictEqual(span.meta['http.status_code'], String(response.status))
           })
 
           it('should pass resource path to parent span', done => {
@@ -394,7 +397,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/hello/world`)
               .catch(done)
           })
@@ -413,7 +416,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/hello/world`, {
                 headers: { 'x-test-upstream-route': '/upstream/[id]' },
               })
@@ -448,7 +451,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/hello/world?createChildSpan=true`)
               .catch(done)
           })
@@ -477,7 +480,7 @@ describe('Plugin', function () {
               })
 
               return Promise.all([
-                axios.get(`http://127.0.0.1:${port}/api/hello/downstream`),
+                httpRequest.get(`http://127.0.0.1:${port}/api/hello/downstream`),
                 tracingPromise,
               ])
             })
@@ -506,7 +509,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/hello/world`)
               .catch(done)
           })
@@ -534,7 +537,7 @@ describe('Plugin', function () {
                 .then(done)
                 .catch(done)
 
-              axios.get(`http://127.0.0.1:${port}${url}`)
+              httpRequest.get(`http://127.0.0.1:${port}${url}`)
             })
           })
 
@@ -558,7 +561,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/missing`)
               .catch(() => {})
           })
@@ -574,7 +577,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/hello/world`)
               .catch(done)
           })
@@ -598,7 +601,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios.get(`http://127.0.0.1:${port}/error/get_server_side_props`)
+            httpRequest.get(`http://127.0.0.1:${port}/error/get_server_side_props`)
           })
         })
 
@@ -622,7 +625,7 @@ describe('Plugin', function () {
                 })
               })
 
-            return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
+            return Promise.all([httpRequest.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
           })
 
           it('should do automatic instrumentation for static chunks', () => {
@@ -644,7 +647,7 @@ describe('Plugin', function () {
                 })
               })
 
-            return Promise.all([axios.get(`http://127.0.0.1:${port}/_next/static/chunks/${file}`), tracingPromise])
+            return Promise.all([httpRequest.get(`http://127.0.0.1:${port}/_next/static/chunks/${file}`), tracingPromise])
           })
 
           it('should pass resource path to parent span', () => {
@@ -656,7 +659,7 @@ describe('Plugin', function () {
                 assert.strictEqual(spans[0].resource, 'GET /public/*')
               })
 
-            return Promise.all([axios.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
+            return Promise.all([httpRequest.get(`http://127.0.0.1:${port}/test.txt`), tracingPromise])
           })
 
           it('should not replace an upstream parent route for static files', () => {
@@ -672,7 +675,7 @@ describe('Plugin', function () {
               })
 
             return Promise.all([
-              axios.get(`http://127.0.0.1:${port}/test.txt`, {
+              httpRequest.get(`http://127.0.0.1:${port}/test.txt`, {
                 headers: { 'x-test-upstream-route': '/upstream/[id]' },
               }),
               tracingPromise,
@@ -707,7 +710,7 @@ describe('Plugin', function () {
               })
 
             return Promise.all([
-              axios
+              httpRequest
                 .get(`http://127.0.0.1:${port}/api/error/boom`)
                 .catch(error => assert.strictEqual(error.response?.status, 500)),
               tracingPromise,
@@ -732,7 +735,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/appDir/hello`)
               .catch(done)
           })
@@ -748,7 +751,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios.get(`http://127.0.0.1:${port}/appDir/hello`)
+            httpRequest.get(`http://127.0.0.1:${port}/appDir/hello`)
           })
 
           if (satisfies(pkg.version, '>=15.4.1')) {
@@ -772,7 +775,7 @@ describe('Plugin', function () {
               })
 
               return Promise.all([
-                axios.get(`http://127.0.0.1:${port}/api/appRouteTrace/123`),
+                httpRequest.get(`http://127.0.0.1:${port}/api/appRouteTrace/123`),
                 tracePromise,
               ])
             })
@@ -794,7 +797,7 @@ describe('Plugin', function () {
               })
 
               return Promise.all([
-                axios.get(`http://127.0.0.1:${port}/appPageTraceShape/test`),
+                httpRequest.get(`http://127.0.0.1:${port}/appPageTraceShape/test`),
                 tracePromise,
               ])
             })
@@ -814,7 +817,7 @@ describe('Plugin', function () {
               })
 
               const [response] = await Promise.all([
-                axios.get(`http://127.0.0.1:${port}/cached`),
+                httpRequest.get(`http://127.0.0.1:${port}/cached`),
                 tracePromise,
               ])
               assert.strictEqual(response.headers['x-nextjs-cache'], 'HIT')
@@ -841,7 +844,7 @@ describe('Plugin', function () {
                 .then(done)
                 .catch(done)
 
-              axios
+              httpRequest
                 .get(`http://127.0.0.1:${port}/appDir/page-error`)
                 .catch(error => {
                   if (error.response?.status !== 500) done(error)
@@ -869,7 +872,7 @@ describe('Plugin', function () {
                 },
               })
             }),
-            axios.get(`http://127.0.0.1:${port}/api/hello/world`),
+            httpRequest.get(`http://127.0.0.1:${port}/api/hello/world`),
           ])
         })
       })
@@ -904,7 +907,7 @@ describe('Plugin', function () {
             .then(done)
             .catch(done)
 
-          axios
+          httpRequest
             .get(`http://127.0.0.1:${port}/api/hello/world`)
             .catch(done)
         })
@@ -929,7 +932,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/appDir/error`)
               .catch(err => {
                 if (err.response.status !== 500) done(err)
@@ -957,7 +960,7 @@ describe('Plugin', function () {
               .then(done)
               .catch(done)
 
-            axios
+            httpRequest
               .get(`http://127.0.0.1:${port}/api/appDir/throw`)
               .catch(err => {
                 if (err.response.status !== 500) done(err)
@@ -1001,7 +1004,7 @@ describe('Plugin', function () {
                   })
                 })
 
-              return Promise.all([axios.get(`http://127.0.0.1:${port}${resource}`), promise])
+              return Promise.all([httpRequest.get(`http://127.0.0.1:${port}${resource}`), promise])
             }).timeout(5000)
             // increase timeout for longer test in CI
             // locally, do not see any slowdowns
@@ -1024,7 +1027,7 @@ describe('Plugin', function () {
         for (const path of ['http://[:::1]', '//[::1']) {
           it(`keeps serving requests after a request with path "${path}"`, async () => {
             await sendPath(path).catch(() => {})
-            const response = await axios.get(`http://127.0.0.1:${port}/api/hello/world`)
+            const response = await httpRequest.get(`http://127.0.0.1:${port}/api/hello/world`)
             assert.strictEqual(response.status, 200)
           })
         }
@@ -1046,7 +1049,7 @@ describe('Plugin', function () {
             .then(done)
             .catch(done)
 
-          axios
+          httpRequest
             .get(`http://127.0.0.1:${port}/api/hello/world`, {
               headers: {
                 'x-datadog-trace-id': '1234',

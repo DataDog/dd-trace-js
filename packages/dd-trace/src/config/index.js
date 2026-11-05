@@ -12,19 +12,24 @@ const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to 
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const log = require('../log')
+const { warn } = require('../log/writer')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
+  getServerlessPlatform,
   getServerlessPlatformTags,
   IS_SERVERLESS,
+  IS_AWS_LAMBDA,
   getIsGCPFunction,
   getIsAzureFunction,
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
+const { usesOtlpTraceExporter } = require('../exporter')
 const { appendRules } = require('../payload-tagging/config')
 const { createSiteUrl } = require('../exporters/common/url')
+const { getUnsupportedRuntime } = require('../debugger/unsupported-runtime')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -124,6 +129,8 @@ const changeTracker = {
  */
 function undo (config, source) {
   for (const name of changeTracker[source]) {
+    if (trackedConfigOrigins.get(name) !== source) continue
+
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
@@ -199,6 +206,12 @@ class Config extends ConfigBase {
   #parsedDdTags
 
   /**
+   * Options already explained as deactivated, so recalculating the config doesn't repeat the explanation
+   * @type {Set<ConfigPath>}
+   */
+  #explainedDeactivations = new Set()
+
+  /**
    * @type {Record<string, string>}
    */
   get parsedDdTags () {
@@ -248,9 +261,9 @@ class Config extends ConfigBase {
     const { experimental, ...rest } = options
     if (experimental) {
       // @ts-expect-error - Difficult to type this correctly.
-      this.#applyOptions(experimental, 'code', 'experimental')
+      this.#applyOptions(experimental, 'experimental')
     }
-    this.#applyOptions(rest, 'code')
+    this.#applyOptions(rest)
     this.#applyCalculated()
 
     warnWrongOtelSettings()
@@ -280,10 +293,9 @@ class Config extends ConfigBase {
 
   /**
    * @param {TracerOptions} options
-   * @param {'code'} source
    * @param {string} [root]
    */
-  #applyOptions (options, source, root = '') {
+  #applyOptions (options, root = '') {
     for (const [name, value] of Object.entries(options)) {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
@@ -300,7 +312,7 @@ class Config extends ConfigBase {
             // Defining an option that receives an object as value may not contain a property that is also
             // potentially a nested property!
             if (Object.hasOwn(value, nestedProperty)) {
-              this.#applyOptions(value, source, fullName)
+              this.#applyOptions(value, fullName)
               matched = true
               break
             }
@@ -316,7 +328,7 @@ class Config extends ConfigBase {
             // TracePropagationStyle is special. It is a single option that is used to set both inject and extract.
             // TODO: Consider what to do with this later
             // @ts-expect-error - Difficult to type this correctly.
-            this.#applyOptions({ inject: value, extract: value }, source, 'tracePropagationStyle')
+            this.#applyOptions({ inject: value, extract: value }, 'tracePropagationStyle')
           } else {
             log.warn('Unknown option %s with value %o', fullName, value)
           }
@@ -325,12 +337,12 @@ class Config extends ConfigBase {
       }
       const coerced = programmaticTypeCoercions[entry.type](value)
       if (coerced === undefined && value !== undefined) {
-        warnInvalidValue(value, fullName, source, `Invalid ${entry.type} input`)
+        warnInvalidValue(value, fullName, 'code', `Invalid ${entry.type} input`)
       }
       const transformed = coerced !== undefined && entry.transformer
-        ? entry.transformer(coerced, fullName, source)
+        ? entry.transformer(coerced, fullName, 'code')
         : coerced
-      setAndTrack(this, entry.property ?? name, transformed, value, source)
+      setAndTrack(this, entry.property ?? name, transformed, value, 'code')
     }
   }
 
@@ -419,10 +431,8 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
-    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
-      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
-      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
-    }
+    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
+      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
 
     if (this.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL) {
       setAndTrack(this, 'telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL',
@@ -442,8 +452,15 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.DD_APPSEC_ENABLED ?? false)
     }
 
-    if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
-      setAndTrack(this, 'spanComputePeerService', true)
+    // Enable the thread context writer when appsec is enabled and only
+    // if DD_TRACE_OTEL_CTX_ENABLED is not explicitly set. The writer is started once
+    // at init, so appsec enabled later through remote config does not start it.
+    // Serverless functions and Vercel are left out: the eBPF reader cannot run there.
+    if (!trackedConfigOrigins.has('DD_TRACE_OTEL_CTX_ENABLED') &&
+        this.appsec.DD_APPSEC_ENABLED &&
+        !IS_SERVERLESS &&
+        !getServerlessPlatform().isVercel) {
+      setAndTrack(this, 'DD_TRACE_OTEL_CTX_ENABLED', true)
     }
 
     if (!this.apmTracingEnabled) {
@@ -470,7 +487,7 @@ class Config extends ConfigBase {
       setAndTrack(this, 'tracePropagationStyle.extract', this.tracePropagationStyle.extract)
     }
 
-    if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
+    if (IS_AWS_LAMBDA && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
       setAndTrack(this, 'flushInterval', 0)
     }
 
@@ -494,23 +511,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
 
-    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
-      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-
-    // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
-    // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
-    // that don't set the sampler still get parent-based sampling. Electron exporter spans go over
-    // the Electron SDK's IPC bridge rather than OTLP (see opentracing/tracer.js), so an
-    // OTEL_TRACES_EXPORTER=otlp set for an unrelated telemetry pipeline shouldn't also override
-    // dd-trace's own sampling policy in that case.
-    if (!trackedConfigOrigins.has('sampleRate') &&
-        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
-          (this.OTEL_TRACES_EXPORTER === 'otlp' &&
-            this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'))) {
-      setAndTrack(this, 'sampleRate',
-        getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
-    }
-
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
       try {
         // TODO: Should we log a warning in case this is defined next to spanSamplingRules?
@@ -520,14 +520,6 @@ class Config extends ConfigBase {
       }
     }
 
-    // All sampler options are tracked as individual values. No need to track the sampler object as a whole.
-    this.sampler = {
-      rules: this.samplingRules,
-      rateLimit: this.rateLimit,
-      sampleRate: this.sampleRate,
-      spanSamplingRules: this.spanSamplingRules,
-    }
-
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
     if (!this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
@@ -535,6 +527,14 @@ class Config extends ConfigBase {
         trackedConfigOrigins.has('llmobs.DD_LLMOBS_ML_APP') ||
         trackedConfigOrigins.has('llmobs.DD_LLMOBS_PROJECT_NAME'))) {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
+    }
+
+    if (this.llmobs.DD_LLMOBS_ENABLED) {
+      // LLMObs payloads use APM structured metadata, which is only supported by protocol v0.4.
+      if (this.protocolVersion !== '0.4') {
+        log.warn('LLM Observability requires protocol version 0.4 - overriding choice of %s', this.protocolVersion)
+      }
+      setAndTrack(this, 'protocolVersion', '0.4')
     }
 
     if (this.OTEL_RESOURCE_ATTRIBUTES) {
@@ -638,6 +638,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
+    if (this.isCiVisibility) {
+      // Test Optimization reports its metrics through instrumentation telemetry, not DogStatsD.
+      set(this, 'dogstatsd', undefined)
+      setAndTrack(this, 'runtimeMetrics.enabled', false)
+    }
+
     const isTestOptimizationWorker = this.isCiVisibility &&
       TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (isTestOptimizationWorker) {
@@ -673,10 +679,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting
       setAndTrack(this, 'reportHostname', true)
-      // Disable rate limiting - server-side sampling will be used
-      setAndTrack(this, 'sampler.rateLimit', -1)
-      // Clear sampling rules - server-side sampling handles this
-      setAndTrack(this, 'sampler.rules', [])
       // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation
       if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
         setAndTrack(this, 'traceId128BitGenerationEnabled', false)
@@ -694,6 +696,75 @@ class Config extends ConfigBase {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
         setAndTrack(this, configName, this[alias])
       }
+    }
+
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      let warning
+
+      if (this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === exporters.ELECTRON) {
+        warning = 'DD_TRACE_EXPERIMENTAL_EXPORTER=electron is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+          'DD_TRACE_OTEL_SEMANTICS_ENABLED deactivated'
+      } else if (this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === exporters.AGENTLESS) {
+        warning = 'Agentless tracing is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+          'DD_TRACE_OTEL_SEMANTICS_ENABLED deactivated'
+      } else if (this.isCiVisibility) {
+        warning = 'Test Optimization is incompatible with DD_TRACE_OTEL_SEMANTICS_ENABLED. ' +
+          'Deactivating DD_TRACE_OTEL_SEMANTICS_ENABLED'
+      } else if (this.OTEL_TRACES_EXPORTER === 'none') {
+        warning = 'DD_TRACE_OTEL_SEMANTICS_ENABLED is deactivated due to OTEL_TRACES_EXPORTER set to "none"'
+      }
+
+      if (warning) {
+        log.warn(warning)
+        setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+      } else {
+        setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'otlp')
+      }
+    }
+
+    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
+      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
+      if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+      }
+    }
+
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      if (this.spanAttributeSchema !== 'v0') {
+        log.warn('DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to be "v0". Resetting')
+      }
+      if (this.spanComputePeerService) {
+        log.warn(
+          'DD_TRACE_OTEL_SEMANTICS_ENABLED requires DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to be false. Resetting'
+        )
+      }
+      setAndTrack(this, 'spanAttributeSchema', 'v0')
+      setAndTrack(this, 'spanComputePeerService', false)
+    } else if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
+      setAndTrack(this, 'spanComputePeerService', true)
+    }
+
+    // An explicit OTel sampler also applies to native trace exporters.
+    if (!trackedConfigOrigins.has('sampleRate') &&
+        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') || usesOtlpTraceExporter(this))) {
+      setAndTrack(this, 'sampleRate',
+        getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
+    }
+
+    // All sampler options are tracked as individual values. No need to track the sampler object as a whole.
+    this.sampler = {
+      rules: this.samplingRules,
+      rateLimit: this.rateLimit,
+      sampleRate: this.sampleRate,
+      spanSamplingRules: this.spanSamplingRules,
+    }
+
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
+      // Disable rate limiting - server-side sampling will be used
+      setAndTrack(this, 'sampler.rateLimit', -1)
+      // Clear sampling rules - server-side sampling handles this
+      setAndTrack(this, 'sampler.rules', [])
     }
 
     // TODO: This could likely be moved to the base class and allow easier GRPC handling
@@ -727,7 +798,7 @@ class Config extends ConfigBase {
       assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
     }
 
-    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
+    const autoTraceMetrics = usesOtlpTraceExporter(this) && this.DD_METRICS_OTEL_ENABLED === true
     setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
 
     if (this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
@@ -749,10 +820,41 @@ class Config extends ConfigBase {
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
     }
 
+    const unsupportedRuntime = getUnsupportedRuntime()
+    if (unsupportedRuntime !== undefined) {
+      this.#deactivateOnUnsupportedRuntime(
+        'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED',
+        `Live Debugger/Dynamic Instrumentation is disabled, because it is not supported on ${unsupportedRuntime}.`
+      )
+      this.#deactivateOnUnsupportedRuntime(
+        'testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED',
+        'Failed Test Replay is disabled, ' +
+          `because Live Debugger/Dynamic Instrumentation is not supported on ${unsupportedRuntime}.`
+      )
+    }
+
     // Single tags update is tracked as a calculated value.
     setAndTrack(this, 'tags', this.tags)
 
     telemetry.updateConfig([...configWithOrigin.values()], this)
+  }
+
+  /**
+   * Only explains the deactivation of an option that was explicitly set, since Failed Test Replay is enabled by
+   * default.
+   *
+   * @param {ConfigPath} name
+   * @param {string} reason
+   */
+  #deactivateOnUnsupportedRuntime (name, reason) {
+    if (!get(this, name)) return
+
+    if (this.startupLogs && trackedConfigOrigins.has(name) && !this.#explainedDeactivations.has(name)) {
+      this.#explainedDeactivations.add(name)
+      // `log.warn` only prints with debug logging enabled, so write the diagnostic like the startup logs do
+      warn(`DATADOG TRACER DIAGNOSTIC - ${reason}`)
+    }
+    setAndTrack(this, name, false)
   }
 }
 
@@ -810,7 +912,7 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
 function warnWrongOtelSettings () {
   // This mostly works for non-aliased environment variables only.
   // TODO: Adjust this to work across all sources.
-  for (const [otelEnvVar, ddEnvVar, key] of [
+  for (const [otelEnvVar, ddEnvVar, key = otelEnvVar] of [
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL', 'logLevel'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
@@ -827,7 +929,7 @@ function warnWrongOtelSettings () {
   ]) {
     // eslint-disable-next-line eslint-rules/eslint-process-env
     const envs = process.env
-    const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key ?? otelEnvVar))
+    const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key))
     const otelEnvValue = envs[otelEnvVar]
     if (otelEnvValue) {
       if (envs[ddEnvVar]) {

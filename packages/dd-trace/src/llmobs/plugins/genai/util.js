@@ -84,8 +84,7 @@ function determineRole (candidate, parts = []) {
  * @param {string} role
  */
 function normalizeRole (role) {
-  if (role === ROLES.MODEL) return ROLES.ASSISTANT
-  if (role === ROLES.ASSISTANT) return ROLES.ASSISTANT
+  if (role === ROLES.MODEL || role === ROLES.ASSISTANT) return ROLES.ASSISTANT
   if (role === ROLES.USER) return ROLES.USER
   if (role === ROLES.REASONING) return ROLES.REASONING
   return ROLES.USER // default
@@ -122,10 +121,10 @@ function extractMetrics (response) {
 /**
  * Extract metadata from config
  * @param {object} config
- * @returns {object}
+ * @returns {object | undefined}
  */
 function extractMetadata (config) {
-  if (!config) return {}
+  if (!config) return
 
   const fieldMap = {
     temperature: 'temperature',
@@ -144,9 +143,13 @@ function extractMetadata (config) {
     automatic_function_calling: 'automaticFunctionCalling',
   }
 
-  const metadata = {}
+  let metadata
   for (const [metadataKey, configKey] of Object.entries(fieldMap)) {
-    metadata[metadataKey] = config[configKey] ?? null
+    const value = config[configKey]
+    if (value != null) {
+      metadata ??= {}
+      metadata[metadataKey] = value
+    }
   }
 
   return metadata

@@ -352,11 +352,11 @@ class Profiler extends EventEmitter {
   _capture (timeout, start) {
     if (!this.enabled) return
     this.#lastStart = start
-    if (!this.#timer || timeout !== this._timeoutInterval) {
+    if (this.#timer && timeout === this._timeoutInterval) {
+      this.#timer.refresh()
+    } else {
       this.#timer = setTimeout(() => this._collect(snapshotKinds.PERIODIC), timeout)
       this.#timer.unref?.()
-    } else {
-      this.#timer.refresh()
     }
   }
 
@@ -366,10 +366,8 @@ class Profiler extends EventEmitter {
     if (!isWebServerSpan(tags)) return
 
     const endpointName = endpointNameFromTags(tags)
-    if (!endpointName) return
-
     // Make sure this is the outermost web span, just in case so we don't overcount
-    if (findWebSpan(getStartedSpans(context), context._parentId)) return
+    if (!endpointName || findWebSpan(getStartedSpans(context), context._parentId)) return
 
     let counter = this.#endpointCounts.get(endpointName)
     if (counter === undefined) {

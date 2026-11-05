@@ -6,9 +6,14 @@ const { fsOperationStart, incomingHttpRequestStart, expressResponseRenderStart }
 const { storage } = require('../../../../datadog-core')
 const web = require('../../plugins/util/web')
 const { FS_OPERATION_PATH } = require('../addresses')
-const { getRequest } = require('../store')
+const { getActiveRequest } = require('../store')
 const waf = require('../waf')
-const { enable: enableFsPlugin, disable: disableFsPlugin, RASP_MODULE } = require('./fs-plugin')
+const {
+  APPSEC_FS_STORAGE,
+  enable: enableFsPlugin,
+  disable: disableFsPlugin,
+  RASP_MODULE,
+} = require('./fs-plugin')
 const { RULE_TYPES, handleResult } = require('./utils')
 
 let config
@@ -59,11 +64,10 @@ function analyzeLfiInResponseRender (ctx) {
 }
 
 function analyzeLfi (ctx) {
-  const store = storage('legacy').getStore()
-  const fs = store?.fs
+  const fs = storage(APPSEC_FS_STORAGE).getStore()
   if (!fs) return
 
-  const req = getRequest(store)
+  const req = getActiveRequest()
   if (!req) return
 
   const res = web.getContext(req)?.res

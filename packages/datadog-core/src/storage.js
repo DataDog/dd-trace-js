@@ -56,11 +56,27 @@ const isACFActive = (() => {
 if (!isACFActive) {
   const superGetStore = AsyncLocalStorage.prototype.getStore
   const superEnterWith = AsyncLocalStorage.prototype.enterWith
+  // @ts-expect-error Node calls this undocumented AsyncLocalStorage hook.
+  const superPropagate = AsyncLocalStorage.prototype._propagate
 
   // Without ACF, ALS writes the entered value onto the async resource. Keep the
   // real store off the resource by entering a small handle and mapping it to
   // the store through a WeakMap, then reversing the lookup on read.
   const stores = new WeakMap()
+
+  /**
+   * Node can omit the trigger resource while the inspector is paused. Guard
+   * the shared hook because every enabled AsyncLocalStorage receives the call.
+   *
+   * @param {object} resource
+   * @param {object | undefined} triggerResource
+   * @param {string} type
+   */
+  AsyncLocalStorage.prototype._propagate = function _propagate (resource, triggerResource, type) {
+    if (triggerResource) {
+      superPropagate.call(this, resource, triggerResource, type)
+    }
+  }
 
   /**
    * @param {Store<unknown>} [store]
@@ -112,7 +128,7 @@ if (!isACFActive) {
  * For convenience, we use the `storage` function as a registry of namespaces
  * corresponding to DatadogStorage instances. This lets us have separate
  * storages for separate purposes.
- * @type {Map<string, DatadogStorage>}
+ * @type {Record<string, DatadogStorage>}
  */
 const storages = Object.create(null)
 

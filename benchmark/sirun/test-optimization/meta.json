@@ -7,16 +7,16 @@
   "instructions": true,
   "variants": {
     "small-suite": {
-      "env": { "VARIANT": "small-suite", "OPERATIONS": "20000" }
+      "env": { "VARIANT": "small-suite", "OPERATIONS": "17500" }
     },
     "large-suite": {
       "run": "node --predictable-gc-schedule index.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule index.js\"",
       "iterations": 12,
-      "env": { "VARIANT": "large-suite", "OPERATIONS": "2400" }
+      "env": { "VARIANT": "large-suite", "OPERATIONS": "2050" }
     },
     "wide-tags": {
-      "env": { "VARIANT": "wide-tags", "OPERATIONS": "6000" }
+      "env": { "VARIANT": "wide-tags", "OPERATIONS": "5200" }
     }
   }
 }

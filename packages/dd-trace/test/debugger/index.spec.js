@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { join } = require('node:path')
 const { inspect } = require('node:util')
 const { Worker: NativeWorker } = require('node:worker_threads')
 
@@ -13,6 +14,7 @@ require('../setup/mocha')
 
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('../../src/debugger/guardrail-metrics')
+const { PauseDurationHistogram } = require('../../src/debugger/pause-duration-histogram')
 const telemetryLogs = require('../../src/telemetry/logs')
 const logCollector = require('../../src/telemetry/logs/log-collector')
 const { DDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
@@ -24,6 +26,7 @@ describe('debugger/index', () => {
   let rc
   let fetchAgentInfo
   let readFileStub
+  let logGenericError
   let messageChannels
 
   beforeEach(() => {
@@ -35,6 +38,7 @@ describe('debugger/index', () => {
     Worker.prototype.removeAllListeners = sinon.stub()
 
     readFileStub = sinon.stub()
+    logGenericError = sinon.stub()
     fetchAgentInfo = sinon.stub().callsFake((url, callback) => {
       callback(null, { endpoints: ['/debugger/v2/input'] })
     })
@@ -46,6 +50,9 @@ describe('debugger/index', () => {
       },
       '../agent/info': {
         fetchAgentInfo,
+      },
+      '../startup-log': {
+        logGenericError,
       },
       './config': proxyquire('../../src/debugger/config', {
         '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
@@ -184,6 +191,46 @@ describe('debugger/index', () => {
       assert.strictEqual(DynamicInstrumentation.isStarted(), false)
     })
 
+    it('should explain a worker that cannot load its entry point', async () => {
+      const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
+      const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
+      const [workerFilename, { execArgv, env }] = Worker.lastCall.args
+      const failingWorker = new NativeWorker(join(__dirname, 'missing-worker-entry-point.js'), { execArgv, env })
+      failingWorker.on('error', onError)
+      failingWorker.once('exit', onExit)
+      const exitCode = await new Promise(resolve => failingWorker.once('exit', resolve))
+
+      assert.strictEqual(exitCode, 1)
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.deepStrictEqual(entries.map(entry => entry.message), [
+        '[debugger] worker thread error name=Error code=MODULE_NOT_FOUND reason=worker_entry_point_not_found',
+        '[debugger] worker thread exited unexpectedly exit_code=1',
+      ])
+      sinon.assert.calledOnceWithExactly(logGenericError,
+        `Dynamic Instrumentation is disabled, because its worker thread could not load ${workerFilename}. ` +
+        'Make sure dd-trace is installed as regular files on disk and is not bundled into the application.')
+    })
+
+    it('should not explain a missing worker dependency as a missing entry point', async () => {
+      const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
+      const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
+      const { execArgv, env } = Worker.lastCall.args[1]
+      const failingWorker = new NativeWorker("require('./missing-worker-dependency')", { eval: true, execArgv, env })
+      failingWorker.on('error', onError)
+      failingWorker.once('exit', onExit)
+      const exitCode = await new Promise(resolve => failingWorker.once('exit', resolve))
+
+      assert.strictEqual(exitCode, 1)
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.deepStrictEqual(entries.map(entry => entry.message), [
+        '[debugger] worker thread error name=Error code=MODULE_NOT_FOUND reason=unknown',
+        '[debugger] worker thread exited unexpectedly exit_code=1',
+      ])
+      sinon.assert.notCalled(logGenericError)
+    })
+
     it('should report a rejected probe without terminating the worker', () => {
       const ack = sinon.spy()
       rc.setProductHandler.lastCall.args[1]('apply', { id: 'probe1' }, 'config-id', ack)
@@ -296,58 +343,116 @@ describe('debugger/index', () => {
   })
 
   describe('pause duration telemetry', () => {
+    const appClosingChannel = dc.channel('datadog:telemetry:app-closing')
+    /** @type {sinon.SinonFakeTimers} */
+    let clock
+
     beforeEach(() => {
+      clock = sinon.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
       telemetryMetrics.manager.delete(TELEMETRY_NAMESPACE)
     })
 
     afterEach(() => {
       DynamicInstrumentation.stop()
+      clock.restore()
       telemetryMetrics.manager.delete(TELEMETRY_NAMESPACE)
     })
 
-    it('should aggregate worker pause durations into an untagged distribution', () => {
+    it('should share the pause durations with the worker instead of receiving a message per pause', () => {
       DynamicInstrumentation.start(config, rc)
-      const onMessage = Worker.lastCall.returnValue.on.args.find(([event]) => event === 'message')[1]
-      onMessage({ type: 'thread-paused', durationMs: 0 })
-      onMessage({ type: 'thread-paused', durationMs: 1.25 })
-      onMessage({ type: 'thread-paused', durationMs: 3.5 })
+
+      const { workerData } = Worker.firstCall.args[1]
+      assert.ok(workerData.pauseDurationBuffer instanceof SharedArrayBuffer)
+      sinon.assert.neverCalledWith(Worker.lastCall.returnValue.on, 'message')
+    })
+
+    it('should periodically report the recorded durations as an untagged distribution', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerPauseDurations = getWorkerPauseDurations()
+      workerPauseDurations.record(1.25)
+      workerPauseDurations.record(1.25)
+      workerPauseDurations.record(3.5)
+
+      assert.strictEqual(getPauseDurationSketch(), undefined, 'should not report before the flush interval')
+
+      clock.tick(10_000)
 
       const { metrics, sketches } = telemetryMetrics.manager.get(TELEMETRY_NAMESPACE).toJSON()
       assert.strictEqual(metrics, undefined)
-      assert.strictEqual(sketches.namespace, 'live_debugger')
+      assert.strictEqual(sketches.namespace, 'debugger')
       assert.strictEqual(sketches.series.length, 1)
       const [series] = sketches.series
       assert.strictEqual(series.metric, 'execution.pause.duration')
       assert.strictEqual(series.common, true)
       assert.deepStrictEqual(series.tags, [])
-      const sketch = DDSketch.fromProto(Buffer.from(series.sketch_b64, 'base64'))
-      assert.strictEqual(sketch.count, 3)
-      assert.strictEqual(sketch.getValueAtQuantile(0), 0)
-      assert.ok(Math.abs(sketch.getValueAtQuantile(0.5) - 1.25) < 0.0125)
-      assert.ok(Math.abs(sketch.getValueAtQuantile(1) - 3.5) < 0.035)
+      const sketch = getPauseDurationSketch()
+      assert.strictEqual(sketch?.count, 3)
+      assertApproximately(sketch.getValueAtQuantile(0), 1.25)
+      assertApproximately(sketch.getValueAtQuantile(0.5), 1.25)
+      assertApproximately(sketch.getValueAtQuantile(1), 3.5)
+
+      workerPauseDurations.record(2)
+      clock.tick(10_000)
+
+      assert.strictEqual(getPauseDurationSketch()?.count, 4, 'should accumulate into the same distribution')
     })
 
     it('should continue recording after a telemetry flush', () => {
       DynamicInstrumentation.start(config, rc)
-      const onMessage = Worker.lastCall.returnValue.on.args.find(([event]) => event === 'message')[1]
-      onMessage({ type: 'thread-paused', durationMs: 2 })
-      const namespace = telemetryMetrics.manager.get(TELEMETRY_NAMESPACE)
-      namespace.reset()
-      onMessage({ type: 'thread-paused', durationMs: 3 })
+      const workerPauseDurations = getWorkerPauseDurations()
+      workerPauseDurations.record(2)
+      clock.tick(10_000)
+      telemetryMetrics.manager.get(TELEMETRY_NAMESPACE).reset()
+      workerPauseDurations.record(3)
+      clock.tick(10_000)
 
-      const [series] = namespace.toJSON().sketches.series
-      const sketch = DDSketch.fromProto(Buffer.from(series.sketch_b64, 'base64'))
-      assert.strictEqual(sketch.count, 1)
-      assert.ok(Math.abs(sketch.getValueAtQuantile(0.5) - 3) < 0.03)
+      const sketch = getPauseDurationSketch()
+      assert.strictEqual(sketch?.count, 1)
+      assertApproximately(sketch.getValueAtQuantile(0.5), 3)
     })
 
-    it('should ignore other worker messages', () => {
+    it('should report the remaining durations when stopped', () => {
       DynamicInstrumentation.start(config, rc)
-      const onMessage = Worker.lastCall.returnValue.on.args.find(([event]) => event === 'message')[1]
-      onMessage({ type: 'other', durationMs: 2 })
+      const workerPauseDurations = getWorkerPauseDurations()
+      workerPauseDurations.record(2)
+      DynamicInstrumentation.stop()
 
-      assert.strictEqual(telemetryMetrics.manager.get(TELEMETRY_NAMESPACE).toJSON().sketches, undefined)
+      assert.strictEqual(getPauseDurationSketch()?.count, 1)
     })
+
+    it('should report the durations when telemetry is about to send its final metrics', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerPauseDurations = getWorkerPauseDurations()
+      workerPauseDurations.record(2)
+      appClosingChannel.publish()
+
+      assert.strictEqual(getPauseDurationSketch()?.count, 1, 'should report without waiting for the flush interval')
+
+      DynamicInstrumentation.stop()
+      workerPauseDurations.record(3)
+      appClosingChannel.publish()
+
+      assert.strictEqual(getPauseDurationSketch()?.count, 1, 'should stop listening once stopped')
+    })
+
+    function getWorkerPauseDurations () {
+      return new PauseDurationHistogram(Worker.firstCall.args[1].workerData.pauseDurationBuffer)
+    }
+
+    function getPauseDurationSketch () {
+      const series = telemetryMetrics.manager.get(TELEMETRY_NAMESPACE)?.toJSON().sketches?.series
+      if (series === undefined) return
+      return DDSketch.fromProto(Buffer.from(series[0].sketch_b64, 'base64'))
+    }
+
+    /**
+     * @param {number} actual
+     * @param {number} expected
+     */
+    function assertApproximately (actual, expected) {
+      // Telemetry distributions have a relative accuracy of 1%
+      assert.ok(Math.abs(actual - expected) <= expected * 0.01, `Expected ${actual} to be ~${expected}`)
+    }
   })
 
   describe('stop', () => {

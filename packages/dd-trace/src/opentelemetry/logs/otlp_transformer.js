@@ -52,7 +52,7 @@ function encodeHrTime (hrTime) {
  * OtlpTransformer transforms log records to OTLP format.
  *
  * This implementation follows the OTLP Logs v1.7.0 Data Model specification:
- * https://opentelemetry.io/docs/specs/otlp/#log-data-model
+ * https://github.com/open-telemetry/opentelemetry-proto/blob/v1.7.0/opentelemetry/proto/logs/v1/logs.proto
  *
  * @class OtlpTransformer
  * @augments OtlpTransformerBase

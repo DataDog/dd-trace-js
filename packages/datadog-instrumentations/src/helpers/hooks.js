@@ -2,12 +2,6 @@
 
 module.exports = {
   // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
-  '@supabase/auth-js': { esmFirst: true, fn: () => require('../supabase') },
-  '@supabase/functions-js': { esmFirst: true, fn: () => require('../supabase') },
-  '@supabase/postgrest-js': { esmFirst: true, fn: () => require('../supabase') },
-  '@supabase/realtime-js': { esmFirst: true, fn: () => require('../supabase') },
-  '@supabase/storage-js': { esmFirst: true, fn: () => require('../supabase') },
-  '@supabase/supabase-js': { esmFirst: true, fn: () => require('../supabase') },
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
   dns: () => require('../dns'),
@@ -92,7 +86,7 @@ module.exports = {
   'find-my-way': () => require('../find-my-way'),
   'generic-pool': () => require('../generic-pool'),
   graphql: () => require('../graphql'),
-  'graphql-jit': () => require('../graphql'),
+  'graphql-jit': { esmFirst: true, fn: () => require('../graphql') },
   grpc: () => require('../grpc'),
   handlebars: () => require('../handlebars'),
   hapi: () => require('../hapi'),
@@ -103,6 +97,7 @@ module.exports = {
   'jest-config': () => require('../jest'),
   'jest-environment-node': () => require('../jest'),
   'jest-environment-jsdom': () => require('../jest'),
+  'jest-runner': () => require('../jest'),
   'jest-runtime': () => require('../jest'),
   'jest-worker': () => require('../jest'),
   knex: () => require('../knex'),
@@ -142,7 +137,6 @@ module.exports = {
   'pino-pretty': () => require('../pino'),
   playwright: () => require('../playwright'),
   'playwright-core': () => require('../playwright'),
-  postgres: { esmFirst: true, fn: () => require('../postgres') },
   'promise-js': () => require('../promise-js'),
   promise: () => require('../promise'),
   protobufjs: () => require('../protobufjs'),

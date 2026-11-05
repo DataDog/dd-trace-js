@@ -8,14 +8,24 @@ const { pathToFileURL, fileURLToPath } = require('node:url')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const { createBundlerRewriter } = require('../datadog-instrumentations/src/helpers/rewriter')
+const { getRewriteTarget, isRewriteTargetName } = require('../datadog-instrumentations/src/helpers/rewriter/targets')
+const { getValueFromEnvSources } = require('../dd-trace/src/config/helper')
 const log = require('./src/log')
 const { createEsmResolver } = require('./src/resolver')
 const { isESMFile, processModule } = require('./src/utils')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
+// User bundles may not have dc-polyfill next to the target package.
+const DC_MODULE = require.resolve('dc-polyfill').replaceAll('\\', '/')
+const DC_MODULE_LITERAL = JSON.stringify(DC_MODULE)
+// Keep the marker split so source-map scanners do not treat this literal as this file's map.
+// eslint-disable-next-line unicorn/no-useless-concat
+const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
 
 let rewriter
+let bundlerRewrite
 
 for (const hook of Object.values(hooks)) {
   if (hook !== null && typeof hook === 'object') {
@@ -60,6 +70,7 @@ for (const builtin of builtinModules) {
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
+const DD_BUNDLER_INJECT_GIT_METADATA = getValueFromEnvSources('DD_BUNDLER_INJECT_GIT_METADATA') !== false
 
 module.exports.name = 'datadog-esbuild'
 
@@ -143,26 +154,30 @@ globalThis.__dirname ??= $dd_dirname(globalThis.__filename);
 ${build.initialOptions.banner.js}`
   }
 
-  // Get git metadata at build time and add it to the banner for both ESM and CommonJS builds
-  const gitMetadata = getGitMetadata()
-  if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
-    build.initialOptions.banner ??= {}
-    build.initialOptions.banner.js ??= ''
+  // Bake DD_GIT_* into the banner unless DD_BUNDLER_INJECT_GIT_METADATA=false (stable artifact hashes).
+  if (DD_BUNDLER_INJECT_GIT_METADATA) {
+    const gitMetadata = getGitMetadata()
+    if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
+      build.initialOptions.banner ??= {}
+      build.initialOptions.banner.js ??= ''
 
-    build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null &&
+      build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null &&
     process.env !== null && typeof process.env === 'object') {
   ${gitMetadata.repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = '${gitMetadata.repositoryURL}';` : ''}
   ${gitMetadata.commitSHA ? `process.env.DD_GIT_COMMIT_SHA = '${gitMetadata.commitSHA}';` : ''}
 }
 ${build.initialOptions.banner.js}`
 
-    log.debug(
-      'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
-      gitMetadata.repositoryURL || 'not available',
-      gitMetadata.commitSHA || 'not available'
-    )
+      log.debug(
+        'Automatically injected git metadata (DD_GIT_REPOSITORY_URL: %s, DD_GIT_COMMIT_SHA: %s)',
+        gitMetadata.repositoryURL || 'not available',
+        gitMetadata.commitSHA || 'not available'
+      )
+    } else {
+      log.warn('No git metadata available - skipping injection')
+    }
   } else {
-    log.warn('No git metadata available - skipping injection')
+    log.debug('Skipping git metadata injection (DD_BUNDLER_INJECT_GIT_METADATA=false)')
   }
 
   let resolver
@@ -183,6 +198,7 @@ ${build.initialOptions.banner.js}`
     // TODO: Should this also check for namespace === 'file'?
     if (!modulesOfInterest.has(args.path) &&
         args.path.startsWith('@') &&
+        !isRewriteTargetName(args.path.split('/', 2).join('/')) &&
         !args.importer.includes('node_modules/')) {
       // This is the Next.js convention for loading local files
       log.debug('@LOCAL: %s', args.path)
@@ -214,6 +230,9 @@ ${build.initialOptions.banner.js}`
     const extracted = extractPackageAndModulePath(fullPathToModule)
 
     const internal = builtins.has(args.path)
+    const target = getRewriteTarget(fullPathToModule.replaceAll('\\', '/'))
+    const isModuleOfInterest = modulesOfInterest.has(args.path) ||
+      modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`)
 
     // Only the generated wrapper module, and the real module importing itself, must reach the real module unwrapped.
     // Every other importer must get the wrapper regardless of whether it has already been loaded: onLoad runs
@@ -222,9 +241,7 @@ ${build.initialOptions.banner.js}`
     // wrapper cycle that can hit the wrapper's exports in their temporal dead zone.
     const isInterceptedImporter = args.importer.endsWith(ESM_INTERCEPTED_SUFFIX) || args.importer === fullPathToModule
 
-    if (args.namespace === 'file' && (
-      modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
-    ) {
+    if (args.namespace === 'file' && (isModuleOfInterest || target !== undefined)) {
       // Internal module like http/fs is imported and the build output is ESM
       if (internal && args.kind === 'import-statement' && esmBuild && !isInterceptedImporter) {
         fullPathToModule = `${INTERNAL_ESM_INTERCEPTED_PREFIX}${fullPathToModule}${ESM_INTERCEPTED_SUFFIX}`
@@ -268,7 +285,10 @@ ${build.initialOptions.banner.js}`
         const packageJson = JSON.parse(fs.readFileSync(/** @type {string} */(pathToPackageJson)).toString())
 
         const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
-        if (isESM && !isInterceptedImporter) {
+        // ESM targets with export hooks still need the IITM wrapper to run those hooks; the wrapper's import of the
+        // real module then resolves without the suffix and is rewritten.
+        const needsExportHook = !target || (isModuleOfInterest && !target.activate)
+        if (isESM && needsExportHook && !isInterceptedImporter) {
           fullPathToModule += ESM_INTERCEPTED_SUFFIX
         }
 
@@ -284,6 +304,7 @@ ${build.initialOptions.banner.js}`
             full: fullPathToModule,
             raw: args.path,
             pkgOfInterest: true,
+            rewriteOnly: !isModuleOfInterest,
             kind: args.kind,
             internal,
             isESM,
@@ -318,8 +339,44 @@ ${build.initialOptions.banner.js}`
 
       // Read the content of the module file of interest
       let contents
+      let sourceMap
+      const target = getRewriteTarget(args.path.replaceAll('\\', '/'))
 
-      if (data.isESM) {
+      if (target) {
+        const source = fs.readFileSync(args.path, 'utf8')
+        bundlerRewrite ??= createBundlerRewriter(DC_MODULE)
+        const result = bundlerRewrite(source, args.path, data.isESM ? 'module' : 'commonjs', target)
+        contents = /** @type {string} */(result.code)
+        if (result.map) {
+          const map = typeof result.map === 'string' ? JSON.parse(result.map) : result.map
+          // Inline maps resolve sources relative to the loaded file, not the package root.
+          sourceMap = {
+            ...map,
+            sources: [path.basename(args.path)],
+            sourcesContent: [source],
+          }
+        }
+
+        if (contents !== source && target.activate) {
+          const payload = JSON.stringify({
+            activate: true,
+            package: target.moduleName,
+            version: data.version,
+            path: `${target.moduleName}/${target.filePath}`,
+          })
+          let channel = `;{\n  const __dd_ch = require(${DC_MODULE_LITERAL}).channel('${CHANNEL}');\n`
+          if (data.isESM) {
+            let binding = '__dd_dc'
+            let suffix = 0
+            while (contents.includes(binding)) binding = `__dd_dc${++suffix}`
+            channel = `import ${binding} from ${DC_MODULE_LITERAL};\n;{\n` +
+              `  const __dd_ch = ${binding}.channel('${CHANNEL}');\n`
+          }
+          contents += `\n${channel}` +
+            `  if (__dd_ch.hasSubscribers) __dd_ch.publish(${payload});\n` +
+            '}\n'
+        }
+      } else if (data.isESM) {
         if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
           args.path = args.path.slice(0, -ESM_INTERCEPTED_SUFFIX.length)
 
@@ -356,7 +413,12 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
           contents = fs.readFileSync(args.path, 'utf8')
         }
       } else {
-        const fileCode = fs.readFileSync(args.path, 'utf8')
+        contents = fs.readFileSync(args.path, 'utf8')
+      }
+
+      // Rewrite-only targets have no export hook. ESM export hooks run through the IITM wrapper instead.
+      if (!data.isESM && !data.rewriteOnly && !target?.activate) {
+        const fileCode = contents
         // Don't spread `...arguments`: esbuild's minifier can rewrite the surrounding
         // `__commonJS` factory into an arrow function whose `arguments` resolves to the
         // ESM top-level scope (see issue #8681). Pass `(module.exports, module)`
@@ -364,7 +426,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
         // resolution inside `fileCode` is preserved through the factory's closure.
         contents = `
         (function() {
-          ${fileCode}
+${fileCode}
         })(module.exports, module);
         {
           const dc = require('dc-polyfill');
@@ -380,6 +442,13 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
           module.exports = payload.module;
       }
       `
+        if (sourceMap) {
+          sourceMap.mappings = `;;${sourceMap.mappings}`
+        }
+      }
+
+      if (sourceMap) {
+        contents += `\n${SOURCE_MAP_PREFIX}${Buffer.from(JSON.stringify(sourceMap)).toString('base64')}`
       }
 
       // https://esbuild.github.io/plugins/#on-load-results

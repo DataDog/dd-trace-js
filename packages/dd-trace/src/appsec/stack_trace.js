@@ -34,8 +34,9 @@ function getCallSiteList (maxDepth = 100, constructorOpt) {
 
 function filterOutFramesFromLibrary (callSiteList) {
   return callSiteList.filter(callSite => {
-    if (globalThis.__DD_ESBUILD_IAST_WITH_NO_SM) {
-      // bundled and no SourceMap, not possible to discriminate if the frame comes from dd-trace code or not
+    if (globalThis.__DD_ESBUILD_IAST_WITH_NO_SM || ddBasePath === undefined) {
+      // bundled without a SourceMap, or dd-trace's location is unknown: not possible to discriminate if the frame
+      // comes from dd-trace code or not
       return true
     }
 
@@ -81,8 +82,7 @@ function getCallsiteFrames (maxDepth = 32, constructorOpt = getCallsiteFrames, c
 }
 
 function reportStackTrace (rootSpan, stackId, frames, namespace = STACK_TRACE_NAMESPACES.RASP) {
-  if (!rootSpan) return
-  if (!Array.isArray(frames)) return
+  if (!rootSpan || !Array.isArray(frames)) return
 
   if (!rootSpan.meta_struct) {
     rootSpan.meta_struct = {}

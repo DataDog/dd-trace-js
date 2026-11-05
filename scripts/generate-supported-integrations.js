@@ -1,40 +1,82 @@
+#!/usr/bin/env node
 'use strict'
 
-const { readFileSync, writeFileSync } = require('node:fs')
+const { execFileSync } = require('node:child_process')
+const { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } = require('node:fs')
 const { builtinModules } = require('node:module')
+const { tmpdir } = require('node:os')
 const path = require('node:path')
 
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
+const YAML = require('yaml')
 
-const CHECK_FLAG = '--check'
-const FETCH_TIMEOUT_MS = 3000
+const {
+  brokenVersionReason,
+  getCappedRange,
+  resolvePluginVersions,
+} = require('../packages/dd-trace/test/plugins/versions')
+
+const { isLatestCucumberSupported } = require('../integration-tests/cucumber/versions')
+const { oldest: oldestJestVersion } = require('../integration-tests/jest/versions')
+const { getLatestMochaSpecifier, oldest: oldestMochaVersion } = require('../integration-tests/mocha/versions')
+const {
+  getLatestPlaywrightSpecifier,
+  oldest: oldestPlaywrightVersion,
+} = require('../integration-tests/playwright/versions')
+const seleniumVersions = require('../integration-tests/selenium/versions')
+const { getVitestVersions } = require('../integration-tests/vitest/versions')
+const { getWebdriverioVersions } = require('../integration-tests/webdriverio/versions')
+const { DD_MAJOR } = require('../version')
+
+const NODE_RANGE_FLAG = '--node-range'
+const FETCH_TIMEOUT_MS = 10_000
+const FETCH_CONCURRENCY = 10
+const TEST_COMMAND = /\bnpm run test:(?:plugins:ci|instrumentations(?::ci)?|integration:plugins(?::coverage)?)(?:\s|$)/
+
+const FRAMEWORK_PACKAGES = {
+  jest: '@jest/core',
+  mocha: 'mocha',
+  playwright: '@playwright/test,playwright',
+  cucumber: '@cucumber/cucumber',
+  cypress: 'cypress',
+  selenium: 'selenium-webdriver',
+  vitest: 'vitest',
+  webdriverio: '@wdio/local-runner',
+}
+const FRAMEWORK_COMMAND = new RegExp(
+  String.raw`\bnpm run test:integration:(${Object.keys(FRAMEWORK_PACKAGES).join('|')}):coverage(?:\s|$)`
+)
 
 const ROOT = path.join(__dirname, '..')
 const PLUGINS_INDEX = path.join(ROOT, 'packages/dd-trace/src/plugins/index.js')
 const ROOT_PACKAGE = path.join(ROOT, 'package.json')
+const ROOT_VERSION = path.join(ROOT, 'version.js')
 const VERSIONS_PACKAGE = path.join(ROOT, 'packages/dd-trace/test/plugins/versions/package.json')
-const INSTRUMENTATION_HOOKS = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/hooks.js')
-const INSTRUMENTATION_REGISTRY = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/instrumentations.js')
+const TEST_EXTERNALS = path.join(ROOT, 'packages/dd-trace/test/plugins/externals.js')
+const INSTRUMENTATION_SOURCE = path.join(ROOT, 'packages/datadog-instrumentations/src') + path.sep
+const INSTRUMENTATION_HELPERS = path.join(INSTRUMENTATION_SOURCE, 'helpers') + path.sep
+const INSTRUMENTATION_HOOKS = path.join(INSTRUMENTATION_HELPERS, 'hooks.js')
+const INSTRUMENTATION_REGISTRY = path.join(INSTRUMENTATION_HELPERS, 'instrumentations.js')
 const {
   isRewriteActivationEnabled,
   instrumentations: rewriterInstrumentations,
 } = require(
   '../packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry'
 )
+const mapWithConcurrency = require('./helpers/concurrency')
 
-const JSON_OUTPUT_PATH = path.join(ROOT, 'supported_versions_output.json')
-const CSV_OUTPUT_PATH = path.join(ROOT, 'supported_versions_table.csv')
+const JSON_OUTPUT_PATH = path.join(ROOT, 'supported_versions.json')
 
-const COLUMNS = [
-  'dependency',
-  'integration',
-  'minimum_tracer_supported',
-  'max_tracer_supported',
-  'auto-instrumented',
-]
+const NODE_BUILTINS = new Set(builtinModules.map(name => name.replace(/^node:/, '')))
 
-const NODE_BUILTINS = new Set(builtinModules)
+// Umbrella packages users install directly while the tracer only hooks their
+// subpackages, so they have no runtime hook or plugin getter of their own.
+// Maps the umbrella dependency to its integration; the supported range comes
+// from that integration's test externals entry for the umbrella package.
+const PACKAGE_ALIASES = new Map([
+  ['@supabase/supabase-js', 'supabase'],
+])
 
 // Capture `get '<key>' () { return require('.../datadog-plugin-<name>/src') }`
 // (and the bare-key form) from packages/dd-trace/src/plugins/index.js. Keys
@@ -43,8 +85,43 @@ const NODE_BUILTINS = new Set(builtinModules)
 const PLUGIN_GETTER =
   /get\s+(?:'((?!\.{1,2}\/|global:)[^']+)'|((?!\.{1,2}\/|global:)[\w$]+))\s*\(\s*\)\s*\{\s*return\s+require\([^)]*datadog-plugin-([^'")]+?)\/src/g
 
+/**
+ * @typedef {object} PackageInfo
+ * @property {{ node?: string }} [engines]
+ * @property {number} [nodeMaxMajor]
+ */
+
+/**
+ * @typedef {object} InstrumentationDeclaration
+ * @property {string[]} [versions]
+ * @property {string} [node]
+ * @property {boolean|string} [dep]
+ */
+
+/**
+ * @typedef {object} GenerationOptions
+ * @property {string} [nodeRange]
+ * @property {Map<string, string>} [plugins]
+ * @property {PackageInfo} [packageInfo]
+ * @property {Record<string, string>} [versions]
+ * @property {string[]} [nodeVersions]
+ * @property {Map<string, Map<string, InstrumentationDeclaration[]>>} [instrumentations]
+ * @property {(dependency: string) => Promise<string[]>} [getPackageVersions]
+ * @property {string} [outputPath]
+ */
+
+/**
+ * @param {string} dependency
+ */
 function isBuiltin (dependency) {
-  return dependency.startsWith('node:') || NODE_BUILTINS.has(dependency)
+  return NODE_BUILTINS.has(dependency.replace(/^node:/, ''))
+}
+
+/**
+ * @param {string} dependency
+ */
+function normalizeDependency (dependency) {
+  return dependency.startsWith('node:') || !isBuiltin(dependency) ? dependency : `node:${dependency}`
 }
 
 /**
@@ -54,7 +131,7 @@ function readPluginMap () {
   const source = readFileSync(PLUGINS_INDEX, 'utf8')
   const map = new Map()
   for (const [, quoted, bare, plugin] of source.matchAll(PLUGIN_GETTER)) {
-    map.set(quoted ?? bare, plugin)
+    map.set(normalizeDependency(quoted ?? bare), plugin)
   }
   if (map.size === 0) {
     throw new Error(`No plugin getters in ${path.relative(ROOT, PLUGINS_INDEX)}`)
@@ -63,219 +140,612 @@ function readPluginMap () {
 }
 
 /**
- * @param {{ min: string, maxMajor: number | undefined }} engines
- * @returns {Map<string, Set<string>>}
+ * @param {string} cached
  */
-function readInstrumentationRanges (engines) {
-  const profiles = new Set()
-  if (engines.min) profiles.add(engines.min)
-  if (engines.maxMajor !== undefined) profiles.add(`${engines.maxMajor}.0.0`)
+function isRuntimeSpecificInstrumentation (cached) {
+  return (cached.startsWith(INSTRUMENTATION_SOURCE) && !cached.startsWith(INSTRUMENTATION_HELPERS)) ||
+    cached === ROOT_VERSION
+}
 
+/**
+ * @param {string[]} nodeVersions
+ * @returns {Map<string, Map<string, InstrumentationDeclaration[]>>}
+ */
+function readInstrumentations (nodeVersions) {
   const registry = require(INSTRUMENTATION_REGISTRY)
   const hookFactories = Object.values(require(INSTRUMENTATION_HOOKS))
-  const ranges = new Map()
+  const originalNodeVersion = Object.getOwnPropertyDescriptor(process.versions, 'node')
+  const originalRegistry = { ...registry }
+  const originalCache = new Map()
+  const instrumentations = new Map()
 
-  for (const profile of profiles) {
-    Object.defineProperty(process.versions, 'node', { value: profile, configurable: true })
+  for (const cached of Object.keys(require.cache)) {
+    if (isRuntimeSpecificInstrumentation(cached)) originalCache.set(cached, require.cache[cached])
+  }
 
-    // `helpers/instrument.js` closes over the registry reference, so reset
-    // the registry in place; drop the other instrumentation sources so they
-    // re-execute and re-evaluate `MIN_VERSION` under the simulated Node.
+  try {
+    for (const nodeVersion of nodeVersions) {
+      Object.defineProperty(process.versions, 'node', { value: nodeVersion, configurable: true })
+
+      // Hook modules evaluate their Node.js gates at load time, while addHook closes over this registry object.
+      for (const key of Object.keys(registry)) delete registry[key]
+      for (const cached of Object.keys(require.cache)) {
+        if (isRuntimeSpecificInstrumentation(cached)) delete require.cache[cached]
+      }
+
+      for (const value of hookFactories) {
+        const factory = typeof value === 'function' ? value : value.fn
+        factory?.()
+      }
+
+      const byDependency = new Map()
+      for (const [name, entries] of Object.entries(registry)) {
+        byDependency.set(name, [...entries])
+      }
+
+      for (const { module } of rewriterInstrumentations) {
+        if (!module?.versionRange || !isRewriteActivationEnabled(module.name)) continue
+        const declarations = byDependency.get(module.name) ?? []
+        declarations.push({ versions: [module.versionRange] })
+        byDependency.set(module.name, declarations)
+      }
+      instrumentations.set(nodeVersion, byDependency)
+    }
+  } finally {
     for (const key of Object.keys(registry)) delete registry[key]
+    Object.assign(registry, originalRegistry)
+
     for (const cached of Object.keys(require.cache)) {
-      if ((cached.includes('/datadog-instrumentations/src/') && !cached.includes('/helpers/')) ||
-          cached.endsWith('/version.js')) {
-        delete require.cache[cached]
+      if (isRuntimeSpecificInstrumentation(cached)) delete require.cache[cached]
+    }
+    for (const [cached, module] of originalCache) require.cache[cached] = module
+
+    if (originalNodeVersion) Object.defineProperty(process.versions, 'node', originalNodeVersion)
+  }
+
+  return instrumentations
+}
+
+/**
+ * Add `PACKAGE_ALIASES` to the plugin and instrumentation maps, taking each alias range from the test externals
+ * that install the umbrella package for its integration.
+ *
+ * @param {Map<string, string>} plugins
+ * @param {Map<string, Map<string, InstrumentationDeclaration[]>>} instrumentations
+ * @param {Map<string, string>} [aliases]
+ */
+function addPackageAliases (plugins, instrumentations, aliases = PACKAGE_ALIASES) {
+  const externals = require(TEST_EXTERNALS)
+  const integrations = new Set(plugins.values())
+
+  for (const [dependency, integration] of aliases) {
+    if (plugins.has(dependency)) {
+      throw new Error(`Package alias ${dependency} has a plugin getter; remove the alias`)
+    }
+    if (!integrations.has(integration)) {
+      throw new Error(`Package alias ${dependency} targets unknown integration ${integration}`)
+    }
+
+    const versions = []
+    const integrationExternals = externals[integration]
+    if (integrationExternals) {
+      for (const { name, versions: ranges } of integrationExternals) {
+        if (name !== dependency || !Array.isArray(ranges)) continue
+        versions.push(...ranges.filter(Boolean))
       }
     }
-
-    for (const value of hookFactories) {
-      const factory = typeof value === 'function' ? value : value.fn
-      factory?.()
+    if (versions.length === 0) {
+      throw new Error(`Package alias ${dependency} has no versions in the ${integration} test externals`)
     }
 
-    for (const [name, entries] of Object.entries(registry)) {
-      const set = ranges.get(name) ?? new Set()
-      for (const { versions } of entries) {
-        if (!Array.isArray(versions)) continue
-        for (const range of versions) {
-          if (range) set.add(range)
+    plugins.set(dependency, integration)
+    for (const byDependency of instrumentations.values()) {
+      byDependency.set(dependency, [{ versions, honourEnvRange: true }])
+    }
+  }
+}
+
+/**
+ * @param {PackageInfo} packageInfo
+ * @param {Record<string, string>} versions
+ * @param {string} nodeRange
+ * @returns {string[]}
+ */
+function readNodeVersions (packageInfo, versions, nodeRange) {
+  const releaseRange = [
+    packageInfo.engines?.node,
+    packageInfo.nodeMaxMajor === undefined ? undefined : `<${packageInfo.nodeMaxMajor}`,
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  if (!semver.validRange(nodeRange)) throw new Error(`Invalid Node.js version range: ${nodeRange}`)
+
+  const nodeVersions = []
+  for (const [name, alias] of Object.entries(versions)) {
+    const match = alias.match(/^npm:node@(\d+\.\d+\.\d+)$/)
+    if (!/^node-\d+$/.test(name) || !match) continue
+
+    const version = match[1]
+    if (releaseRange && !semver.satisfies(version, releaseRange)) continue
+    if (semver.satisfies(version, nodeRange)) nodeVersions.push(version)
+  }
+
+  if (nodeVersions.length === 0) {
+    throw new Error(`No tested Node.js versions satisfy '${releaseRange}' and '${nodeRange}'`)
+  }
+  return nodeVersions.sort(semver.compare)
+}
+
+/**
+ * @param {string} dependency
+ * @returns {Promise<string[]>}
+ */
+async function fetchPackageVersions (dependency) {
+  const response = await fetch(
+    `https://registry.npmjs.org/${encodeURIComponent(dependency)}`,
+    { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
+  )
+  if (!response.ok) {
+    throw new Error(`Could not read npm metadata for '${dependency}': ${response.status} ${response.statusText}`)
+  }
+
+  const packument = await response.json()
+  return Object.keys(packument.versions ?? {})
+}
+
+/**
+ * @param {string} supportedRange
+ */
+function simplifySupportedRange (supportedRange) {
+  const ranges = supportedRange.split(' || ')
+  return ranges.filter((range, index) => !ranges.some((other, otherIndex) =>
+    otherIndex !== index && semver.subset(range, other) &&
+    (!semver.subset(other, range) || otherIndex < index)
+  )).join(' || ')
+}
+
+/**
+ * @typedef {Record<string, string | number | boolean>} WorkflowValues
+ * @typedef {{ matrix: WorkflowValues, inputs: WorkflowValues }} WorkflowContext
+ * @typedef {{ uses?: string, run?: string, if?: string, with?: WorkflowValues,
+ *   env?: WorkflowValues }} WorkflowStep
+ * @typedef {{ nodeRange: string, env: typeof process.env, framework?: string }} TestRun
+ */
+
+/**
+ * @param {Record<string, Array<string | number | boolean | WorkflowValues>> | undefined} matrix
+ */
+function expandTestMatrix (matrix = {}) {
+  const axes = Object.entries(matrix).filter(([key]) => key !== 'include' && key !== 'exclude')
+  let rows = axes.length ? [{}] : []
+  for (const [key, values] of axes) {
+    rows = rows.flatMap(row => values.map(value => ({ ...row, [key]: value })))
+  }
+  if (matrix.exclude) {
+    rows = rows.filter(row => !matrix.exclude.some(excluded =>
+      Object.entries(excluded).every(([key, value]) => row[key] === value)
+    ))
+  }
+  const originals = rows.map(row => ({ ...row }))
+  if (matrix.include) {
+    for (const included of matrix.include) {
+      let matched = false
+      for (let index = 0; index < originals.length; index++) {
+        if (Object.entries(included).every(([key, value]) =>
+          originals[index][key] === undefined || originals[index][key] === value
+        )) {
+          Object.assign(rows[index], included)
+          matched = true
         }
       }
-      if (set.size > 0) ranges.set(name, set)
-    }
-
-    for (const { module } of rewriterInstrumentations) {
-      if (!module?.versionRange || !isRewriteActivationEnabled(module.name)) continue
-      const set = ranges.get(module.name) ?? new Set()
-      set.add(module.versionRange)
-      ranges.set(module.name, set)
+      if (!matched) rows.push({ ...included })
     }
   }
-  return ranges
+  if (!axes.length && !matrix.include) rows.push({})
+  return rows
 }
 
 /**
- * @param {Set<string> | undefined} ranges
+ * @param {string | number | boolean} value
+ * @param {WorkflowContext} context
  */
-function lowestVersion (ranges) {
-  let lowest
-  if ((ranges) != null) {
-    for (const range of ranges) {
-      const candidate = semver.minVersion(range)
-      if (candidate && (!lowest || semver.lt(candidate, lowest))) lowest = candidate
-    }
-  }
-  return lowest?.version ?? ''
+function expandTestValue (value, context) {
+  const expanded = String(value).replaceAll(/\$\{\{\s*(matrix|inputs)\.([\w-]+)\s*\}\}/g,
+    (match, source, key) => String(context[source][key] ?? ''))
+  if (expanded.includes('${{')) throw new Error(`Unsupported test workflow expression: ${value}`)
+  return expanded
 }
 
 /**
- * Resolve the lower bound and the highest tracked major from a semver range
- * (e.g. `>=18 <26` -> `{ min: '18.0.0', maxMajor: 25 }`).
- *
- * @param {string} engines
- * @returns {{ min: string, maxMajor: number | undefined }}
+ * @param {string | undefined} condition
+ * @param {WorkflowContext} context
  */
-function parseEnginesRange (engines) {
-  let maxMajor
-  for (const comparators of new semver.Range(engines).set) {
-    for (const { operator, semver: bound } of comparators) {
-      if (!bound || (operator !== '<' && operator !== '<=')) continue
-      const candidate = operator === '<' ? bound.major - 1 : bound.major
-      if (maxMajor === undefined || candidate > maxMajor) maxMajor = candidate
-    }
-  }
-  return { min: semver.minVersion(engines)?.version ?? '', maxMajor }
+function testStepEnabled (condition, context) {
+  if (condition === undefined) return true
+  const trimmed = condition.trim()
+  const expression = trimmed.startsWith('${{') && trimmed.endsWith('}}') ? trimmed.slice(3, -2).trim() : trimmed
+  return expression.split('||').some(alternative => alternative.split('&&').every(term => {
+    const match = term.trim().match(/^(matrix|inputs)\.([\w-]+)\s*(==|!=)\s*'([^']*)'$/)
+    if (!match) throw new Error(`Unsupported test workflow condition: ${condition}`)
+    const [, source, key, operator, expected] = match
+    const equal = String(context[source][key] ?? '') === expected
+    return operator === '==' ? equal : !equal
+  }))
 }
 
-/**
- * Latest released patch on the given Node.js major line, looked up via the
- * tiny SHASUMS256 file that nodejs.org redirects to the newest release.
- * Returns `undefined` on any network/parse failure.
- *
- * @param {number} major
- * @returns {Promise<string | undefined>}
- */
-async function fetchLatestNodeVersion (major) {
+function readTestRuns () {
+  const runs = []
+  const actions = new Map()
+  const nodeRanges = new Map()
+  const setup = YAML.parse(readFileSync(path.join(ROOT, '.github/actions/node/setup/action.yml'), 'utf8'))
+  const nodeVersionCommand = setup.runs.steps.find(step => step.id === 'node-version').run
+  const directory = mkdtempSync(path.join(tmpdir(), 'dd-supported-versions-'))
+  const output = path.join(directory, 'output')
+
+  /**
+   * @param {WorkflowStep[]} steps
+   * @param {WorkflowContext} context
+   * @param {WorkflowValues} inheritedEnv
+   * @param {{ nodeRange?: string }} state
+   */
+  function collect (steps, context, inheritedEnv, state) {
+    for (const step of steps) {
+      const nodeAction = step.uses === './.github/actions/node'
+      const localAction = /^\.\/\.github\/actions\/(?:node|plugins|instrumentations)\//.test(step.uses ?? '')
+      const tracerVersion = step.run?.match(/^npm pkg set version=(\d+)\.\d+\.\d+$/)?.[1]
+      const framework = (step.run ?? '').match(FRAMEWORK_COMMAND)?.[1]
+      const test = framework || TEST_COMMAND.test(step.run ?? '')
+      if ((!nodeAction && !localAction && !tracerVersion && !test) || !testStepEnabled(step.if, context)) continue
+      const env = { ...inheritedEnv, ...step.env }
+      if (tracerVersion) {
+        if (Number(tracerVersion) !== DD_MAJOR) return
+      } else if (nodeAction) {
+        const version = expandTestValue(step.with?.version ?? 'latest', context)
+        if (!nodeRanges.has(version)) {
+          writeFileSync(output, '')
+          execFileSync('bash', ['-c', nodeVersionCommand], {
+            cwd: ROOT,
+            env: { ...process.env, VERSION: version, LATEST_VERSION: '', GITHUB_OUTPUT: output },
+            encoding: 'utf8',
+          })
+          const range = readFileSync(output, 'utf8').trim().replace(/^version=/, '')
+          if (!semver.validRange(range)) throw new Error(`Invalid test Node.js version: ${range}`)
+          nodeRanges.set(version, range)
+        }
+        state.nodeRange = nodeRanges.get(version)
+      } else if (localAction) {
+        if (!actions.has(step.uses)) {
+          actions.set(step.uses, YAML.parse(readFileSync(path.join(ROOT, step.uses, 'action.yml'), 'utf8')))
+        }
+        const action = actions.get(step.uses)
+        const inputs = {}
+        for (const name of ['version', 'node-floor']) {
+          const value = step.with?.[name] ?? action.inputs?.[name]?.default
+          if (value !== undefined) inputs[name] = expandTestValue(value, context)
+        }
+        collect(action.runs.steps, { ...context, inputs }, env, state)
+      } else {
+        if (!state.nodeRange) throw new Error('Test workflow runs without an explicit Node.js version')
+        const testEnv = {}
+        for (const name of ['PLUGINS', 'PACKAGE_NAMES', 'PACKAGE_VERSION_RANGE']) {
+          if (env[name] !== undefined) testEnv[name] = expandTestValue(env[name], context)
+        }
+        if (framework) {
+          testEnv.PLUGINS = framework
+          testEnv.PACKAGE_NAMES = FRAMEWORK_PACKAGES[framework]
+          const selector = `${framework.toUpperCase()}_VERSION`
+          testEnv[selector] = expandTestValue(env[selector] ?? 'latest', context)
+        }
+        runs.push({ nodeRange: state.nodeRange, env: testEnv, framework })
+      }
+    }
+  }
+
   try {
-    const response = await fetch(
-      `https://nodejs.org/dist/latest-v${major}.x/SHASUMS256.txt`,
-      { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
-    )
-    if (!response.ok) return
-    const body = await response.text()
-    return body.match(/node-v(\d+\.\d+\.\d+)-/)?.[1]
-  } catch { /* offline or transient: fall through to the persisted value */ }
+    for (const file of readdirSync(path.join(ROOT, '.github/workflows')).sort()) {
+      if (!file.endsWith('.yml')) continue
+      const workflow = YAML.parse(readFileSync(path.join(ROOT, '.github/workflows', file), 'utf8'))
+      for (const job of Object.values(workflow.jobs)) {
+        if (!job.env?.PLUGINS && !job.steps?.some(step =>
+          step.env?.PLUGINS || FRAMEWORK_COMMAND.test(step.run ?? '')
+        )) continue
+        for (const matrix of expandTestMatrix(job.strategy?.matrix)) {
+          collect(job.steps, { matrix, inputs: {} }, { ...workflow.env, ...job.env }, {})
+        }
+      }
+    }
+    return runs
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 }
 
 /**
- * @returns {string | undefined} Last `max_tracer_supported` recorded for a
- *   node built-in, used as the offline fallback for `fetchLatestNodeVersion`.
+ * @param {string} dependency
+ * @param {string} integration
+ * @param {string} nodeVersion
+ * @param {TestRun[]} runs
  */
-function readPersistedBuiltinMax () {
-  try {
-    for (const row of JSON.parse(readFileSync(JSON_OUTPUT_PATH, 'utf8'))) {
-      if (row.max_tracer_supported && isBuiltin(row.dependency)) return row.max_tracer_supported
+function readTestEnvironments (dependency, integration, nodeVersion, runs) {
+  const environments = []
+  for (const run of runs) {
+    const testIntegration = run.framework ?? integration
+    const { nodeRange, env } = run
+    if (!semver.satisfies(nodeVersion, nodeRange)) continue
+    const plugins = env.PLUGINS?.split('|')
+    if (!plugins?.includes(testIntegration) && !plugins?.includes(dependency.replace(/^node:/, ''))) continue
+    if (env.PACKAGE_NAMES && !env.PACKAGE_NAMES.split(',').includes(dependency)) continue
+    environments.push(run)
+  }
+  return environments
+}
+
+/**
+ * @param {string} dependency
+ * @param {string} integration
+ * @param {Map<string, string>} plugins
+ * @returns {InstrumentationDeclaration[]}
+ */
+function readTestDeclarations (dependency, integration, plugins) {
+  const names = new Set([integration])
+  for (const [name, plugin] of plugins) {
+    if (plugin === integration) names.add(name)
+  }
+
+  const externals = require(TEST_EXTERNALS)
+  const declarations = []
+  for (const name of names) {
+    if (externals[name]) {
+      for (const external of externals[name]) {
+        if (external.name === dependency) declarations.push(external)
+      }
     }
-  } catch { /* missing or unreadable */ }
+  }
+  return declarations
+}
+
+/**
+ * @param {string} framework
+ * @param {string} selector
+ * @param {string} nodeVersion
+ */
+function readFrameworkVersions (framework, selector, nodeVersion) {
+  if (framework === 'selenium') return seleniumVersions
+  if (framework === 'vitest') {
+    const versions = getVitestVersions(semver.major(nodeVersion))
+    if (selector === 'all') return versions
+    if (selector === 'oldest') return [versions[0]]
+    if (selector === 'latest') return [versions.at(-1)]
+  } else if (framework === 'webdriverio') {
+    return getWebdriverioVersions(selector)
+  }
+  if (selector === 'oldest') {
+    if (framework === 'jest') return [oldestJestVersion]
+    if (framework === 'mocha') return [oldestMochaVersion]
+    if (framework === 'playwright') return [oldestPlaywrightVersion]
+  } else if (selector === 'latest') {
+    if (framework === 'cucumber' && !isLatestCucumberSupported(semver.major(nodeVersion))) return []
+    if (framework === 'mocha') return [getLatestMochaSpecifier(nodeVersion)]
+    if (framework === 'playwright') return [getLatestPlaywrightSpecifier(semver.major(nodeVersion))]
+  }
+  return [selector]
+}
+
+/**
+ * @param {string} dependency
+ * @param {InstrumentationDeclaration[]} declarations
+ * @param {string} nodeVersion
+ * @param {string[]} packageVersions
+ * @param {InstrumentationDeclaration[]} testDeclarations
+ * @param {TestRun[]} testEnvironments
+ * @returns {{ supportedRange: string|undefined, tested: string[] }}
+ */
+function resolveDependencyVersions (
+  dependency, declarations, nodeVersion, packageVersions, testDeclarations, testEnvironments
+) {
+  const { unversioned: supportedRange } = resolvePluginVersions({
+    name: dependency,
+    declarations,
+    nodeVersion,
+    env: {},
+  })
+  if (supportedRange === undefined) return { supportedRange, tested: [] }
+  const testedVersions = new Set()
+
+  const dependencyDeclarations = testDeclarations.filter(declaration => declaration.dep)
+  const testedDeclarations = dependencyDeclarations.length
+    ? dependencyDeclarations
+    : [...declarations, ...testDeclarations]
+
+  for (const { env, framework } of testEnvironments) {
+    if (framework) {
+      const selector = env[`${framework.toUpperCase()}_VERSION`]
+      for (const range of readFrameworkVersions(framework, selector, nodeVersion)) {
+        const version = semver.maxSatisfying(packageVersions, getCappedRange(dependency, range))
+        if (!version) throw new Error(`Could not resolve '${dependency}@${range}' from npm metadata`)
+        if (!brokenVersionReason(dependency, version, nodeVersion)) {
+          testedVersions.add(version)
+        }
+      }
+      continue
+    }
+    const { versionList } = resolvePluginVersions({
+      name: dependency,
+      declarations: testedDeclarations,
+      nodeVersion,
+      env,
+    })
+    for (const { versionKey } of versionList) {
+      const range = getCappedRange(dependency, versionKey)
+      const version = semver.maxSatisfying(packageVersions, range)
+      if (!version) throw new Error(`Could not resolve '${dependency}@${range}' from npm metadata`)
+      if (!brokenVersionReason(dependency, version, nodeVersion)) testedVersions.add(version)
+    }
+  }
+
+  return {
+    supportedRange: simplifySupportedRange(supportedRange),
+    tested: [...testedVersions].sort(semver.compare),
+  }
 }
 
 /**
  * @param {Map<string, string>} plugins
- * @param {Map<string, Set<string>>} ranges
- * @param {Record<string, string>} versions
- * @param {{ min: string, max: string }} nodeRange
+ * @param {string[]} nodeVersions
+ * @param {Map<string, Map<string, InstrumentationDeclaration[]>>} instrumentations
+ * @param {(dependency: string) => Promise<string[]>} getPackageVersions
+ * @returns {Promise<object[]>}
  */
-function buildRows (plugins, ranges, versions, nodeRange) {
+async function buildRows (plugins, nodeVersions, instrumentations, getPackageVersions) {
+  const dependencies = new Set()
+  for (const [dependency] of plugins) {
+    if (isBuiltin(dependency)) continue
+    for (const nodeVersion of nodeVersions) {
+      if (instrumentations.get(nodeVersion)?.has(dependency)) {
+        dependencies.add(dependency)
+        break
+      }
+    }
+  }
+
+  const availableVersions = new Map()
+  await mapWithConcurrency([...dependencies], FETCH_CONCURRENCY, async dependency => {
+    availableVersions.set(dependency, await getPackageVersions(dependency))
+  })
+
+  const runs = readTestRuns()
   const rows = []
   for (const [dependency, integration] of plugins) {
     const builtin = isBuiltin(dependency)
-    const min = builtin ? nodeRange.min : lowestVersion(ranges.get(dependency))
-    const max = builtin ? nodeRange.max : versions[dependency] ?? ''
-    if (min && max) {
+    const versionsBySupport = new Map()
+    const testDeclarations = readTestDeclarations(dependency, integration, plugins)
+
+    for (const nodeVersion of nodeVersions) {
+      const testEnvironments = readTestEnvironments(dependency, integration, nodeVersion, runs)
+      if (testEnvironments.length === 0) continue
+      let supportedRange = '*'
+      let tested = []
+
+      if (!builtin) {
+        const declarations = instrumentations.get(nodeVersion)?.get(dependency)
+        if (!declarations) continue
+        const resolved = resolveDependencyVersions(
+          dependency,
+          declarations,
+          nodeVersion,
+          availableVersions.get(dependency),
+          testDeclarations,
+          testEnvironments
+        )
+        if (resolved.tested.length === 0) continue
+        supportedRange = resolved.supportedRange
+        tested = resolved.tested
+      }
+
+      const supportKey = JSON.stringify([supportedRange, tested])
+      let versionSupport = versionsBySupport.get(supportKey)
+      if (!versionSupport) {
+        versionSupport = {
+          testedRuntimes: { node: [] },
+          supportedRange,
+          tested,
+        }
+        versionsBySupport.set(supportKey, versionSupport)
+      }
+      versionSupport.testedRuntimes.node.push(nodeVersion)
+    }
+
+    if (versionsBySupport.size > 0) {
+      const versions = [...versionsBySupport.values()]
+      for (const versionSupport of versions) {
+        versionSupport.testedRuntimes.node.sort(semver.rcompare)
+      }
+      versions.sort((left, right) =>
+        semver.rcompare(left.testedRuntimes.node[0], right.testedRuntimes.node[0])
+      )
+
       rows.push({
-        dependency,
-        integration,
-        minimum_tracer_supported: min,
-        max_tracer_supported: max,
-        'auto-instrumented': 'True',
+        dependencyName: normalizeDependency(dependency),
+        integrationName: integration,
+        autoInstrumented: true,
+        versions,
       })
     }
   }
-  return rows.sort((a, b) =>
-    a.dependency.localeCompare(b.dependency) || a.integration.localeCompare(b.integration)
+
+  return rows.sort((left, right) =>
+    left.integrationName.localeCompare(right.integrationName) ||
+    left.dependencyName.localeCompare(right.dependencyName)
   )
 }
 
-function toCsv (rows) {
-  const header = COLUMNS.join(',')
-  const body = rows.map(row => COLUMNS.map(column => row[column]).join(','))
-  return [header, ...body, ''].join('\n')
-}
-
-async function generateSupportedIntegrations () {
-  const pkg = JSON.parse(readFileSync(ROOT_PACKAGE, 'utf8'))
-  const plugins = readPluginMap()
-  const engines = parseEnginesRange(pkg.engines.node)
-  if (engines.maxMajor === undefined && pkg.nodeMaxMajor !== undefined) {
-    engines.maxMajor = pkg.nodeMaxMajor - 1
+/**
+ * @param {GenerationOptions} [options]
+ * @returns {Promise<{ rows: object[], json: string }>}
+ */
+async function generateSupportedIntegrations (options = {}) {
+  const packageInfo = options.packageInfo ?? JSON.parse(readFileSync(ROOT_PACKAGE, 'utf8'))
+  const versions = options.versions ??
+    JSON.parse(readFileSync(VERSIONS_PACKAGE, 'utf8')).dependencies
+  const nodeVersions = options.nodeVersions ?? readNodeVersions(packageInfo, versions, options.nodeRange ?? '*')
+  const plugins = options.plugins ?? readPluginMap()
+  const instrumentations = options.instrumentations ?? readInstrumentations(nodeVersions)
+  if (!options.instrumentations) {
+    const integrations = new Set(plugins.values())
+    // A custom plugin map can select a subset of integrations; only add aliases for that subset.
+    const aliases = options.plugins
+      ? new Map([...PACKAGE_ALIASES].filter(([, integration]) => integrations.has(integration)))
+      : PACKAGE_ALIASES
+    addPackageAliases(plugins, instrumentations, aliases)
   }
-  const ranges = readInstrumentationRanges(engines)
-  const versions = JSON.parse(readFileSync(VERSIONS_PACKAGE, 'utf8')).dependencies ?? {}
-
-  const max = engines.maxMajor === undefined
-    ? ''
-    : await fetchLatestNodeVersion(engines.maxMajor) ||
-      readPersistedBuiltinMax() ||
-      `${engines.maxMajor}.0.0`
-
-  const rows = buildRows(plugins, ranges, versions, { min: engines.min, max })
+  const rows = await buildRows(
+    plugins,
+    nodeVersions,
+    instrumentations,
+    options.getPackageVersions ?? fetchPackageVersions
+  )
 
   return {
     rows,
-    json: JSON.stringify(rows, null, 2) + '\n',
-    csv: toCsv(rows),
+    json: JSON.stringify(rows, null, 4) + '\n',
   }
 }
 
-async function writeSupportedIntegrations () {
-  const { json, csv } = await generateSupportedIntegrations()
-  writeFileSync(JSON_OUTPUT_PATH, json)
-  writeFileSync(CSV_OUTPUT_PATH, csv)
+/**
+ * @param {GenerationOptions} [options]
+ * @returns {Promise<void>}
+ */
+async function writeSupportedIntegrations (options = {}) {
+  const { json } = await generateSupportedIntegrations(options)
+  writeFileSync(options.outputPath ?? JSON_OUTPUT_PATH, json)
 }
 
-function reportDrift (file, expected) {
-  if (readFileSync(file, 'utf8').replaceAll('\r\n', '\n') === expected) return false
-  // eslint-disable-next-line no-console
-  console.error(`Out of date: ${path.relative(ROOT, file)}`)
-  return true
+/**
+ * @param {string[]} args
+ */
+function readNodeRange (args) {
+  const index = args.indexOf(NODE_RANGE_FLAG)
+  if (index === -1) return '*'
+  const range = args[index + 1]
+  if (!range || range.startsWith('--')) throw new Error(`${NODE_RANGE_FLAG} requires a semver range`)
+  return range
 }
 
-async function checkSupportedIntegrations () {
-  const { json, csv } = await generateSupportedIntegrations()
-  // Run both checks before short-circuiting so all stale paths are reported.
-  const jsonStale = reportDrift(JSON_OUTPUT_PATH, json)
-  const csvStale = reportDrift(CSV_OUTPUT_PATH, csv)
-  if (!jsonStale && !csvStale) return true
-  // eslint-disable-next-line no-console
-  console.error('\nRun: npm run generate:supported-integrations')
-  return false
+/** @returns {Promise<void>} */
+async function main () {
+  await writeSupportedIntegrations({ nodeRange: readNodeRange(process.argv.slice(2)) })
 }
 
 if (require.main === module) {
-  if (process.argv.includes(CHECK_FLAG)) {
-    checkSupportedIntegrations().then(ok => {
-      process.exitCode = ok ? 0 : 1
-    })
-  } else {
-    writeSupportedIntegrations()
-  }
+  main().catch(error => {
+    // eslint-disable-next-line no-console
+    console.error(error)
+    process.exitCode = 1
+  })
 }
 
 module.exports = {
-  CSV_OUTPUT_PATH,
-  JSON_OUTPUT_PATH,
-  checkSupportedIntegrations,
   generateSupportedIntegrations,
   writeSupportedIntegrations,
 }

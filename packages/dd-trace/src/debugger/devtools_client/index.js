@@ -1,11 +1,12 @@
 'use strict'
 
 const { randomUUID } = require('crypto')
-const { parentPort, workerData: { probeSamplerBuffer } } = require('worker_threads')
+const { workerData: { probeSamplerBuffer, pauseDurationBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
 const processTags = require('../../process-tags')
 const { INSPECT_SEGMENT_GLOBAL_PROPERTY, WORKER_ERROR_REASON } = require('../constants')
 const { EVENT_TYPE, INCOMPLETE_REASON } = require('../guardrail-metrics')
+const { PauseDurationHistogram } = require('../pause-duration-histogram')
 const {
   CONDITION_ERROR_FLAG,
   MAX_SAMPLED_PROBES_PER_PAUSE,
@@ -21,6 +22,7 @@ const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./sna
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')
+const WorkerError = require('./worker-error')
 const config = require('./config')
 const log = require('./log')
 
@@ -42,6 +44,7 @@ const getDDTagsExpression = `(() => {
 const threadId = config.parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${config.parentThreadId}`
 const threadName = config.parentThreadId === 0 ? 'MainThread' : `WorkerThread:${config.parentThreadId}`
 const sampledProbeIndexes = new Int32Array(probeSamplerBuffer)
+const pauseDurations = new PauseDurationHistogram(pauseDurationBuffer)
 
 // WARNING: The code above the line `await session.post('Debugger.resume')` is highly optimized. Please edit with care!
 session.on('Debugger.paused', async ({ params }) => {
@@ -49,9 +52,10 @@ session.on('Debugger.paused', async ({ params }) => {
 
   if (params.reason !== 'other') {
     // This error should not be caught, and should exit the worker thread, effectively stopping the debugging session
-    throw Object.assign(new Error(`Unexpected Debugger.paused reason: ${params.reason}`), {
-      reason: WORKER_ERROR_REASON.UNEXPECTED_PAUSE_REASON,
-    })
+    throw new WorkerError(
+      `Unexpected Debugger.paused reason: ${params.reason}`,
+      WORKER_ERROR_REASON.UNEXPECTED_PAUSE_REASON
+    )
   }
 
   let maxReferenceDepth = 0
@@ -402,7 +406,7 @@ session.on('Debugger.paused', async ({ params }) => {
  */
 function reportPauseDuration (start) {
   const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000
-  parentPort.postMessage({ type: 'thread-paused', durationMs })
+  pauseDurations.record(durationMs)
   log.debug('[debugger:devtools_client] Finished processing breakpoints - instrumented thread paused for: ~%d ms',
     durationMs)
 }

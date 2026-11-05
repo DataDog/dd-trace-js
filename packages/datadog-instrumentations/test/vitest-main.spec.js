@@ -116,6 +116,74 @@ describe('vitest utilities', () => {
 })
 
 describe('vitest main instrumentation', () => {
+  for (const method of ['startVitest', 'createVitest']) {
+    for (const legacy of [false, true]) {
+      for (const active of [false, true]) {
+        const state = active ? 'active' : 'inactive'
+        const signature = legacy ? 'legacy' : 'current'
+        it(`preserves ${state} ${method} browser overrides (${signature})`, () => {
+          const hooks = []
+          const starts = []
+          proxyquire('../src/vitest-main', {
+            './helpers/instrument': {
+              ...require('../src/helpers/instrument'),
+              addHook (target, hook) { hooks.push({ target, hook }) },
+            },
+            './vitest-util': {
+              ...require('../src/vitest-util'),
+              testSessionStartCh: {
+                hasSubscribers: active,
+                publish (payload) { starts.push(payload) },
+              },
+            },
+          })
+          const api = {
+            startVitest (...args) { return args },
+            createVitest (...args) { return args },
+          }
+          const hook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/cli-api.*').hook
+          hook(api, legacy ? '3.2.6' : '5.0.1')
+
+          // Repeated calls must still inject into active sessions after the start event was published.
+          for (let call = 0; call < 2; call++) {
+            const overrides = active ? { plugins: [] } : Object.freeze({ plugins: Object.freeze([]) })
+            const args = legacy ? ['test', {}] : [{}]
+            if (method === 'startVitest') args.splice(legacy ? 1 : 0, 0, [])
+            args.push(overrides)
+            const result = api[method](...args)
+            assert.strictEqual(result[result.length - 1], overrides)
+            assert.strictEqual(overrides.plugins.length, active ? 1 : 0)
+            if (active) assert.strictEqual(overrides.plugins[0].name, 'datadog:vitest-browser-setup-file')
+          }
+          for (const descriptor of [
+            { get: () => undefined },
+            { value: undefined, writable: false },
+            { value: null, writable: false },
+          ]) {
+            for (const inherited of [false, true]) {
+              const readOnly = Object.defineProperty({}, 'plugins', { ...descriptor, enumerable: true })
+              const overrides = inherited ? Object.create(readOnly) : readOnly
+              const args = legacy ? ['test', {}] : [{}]
+              if (method === 'startVitest') args.splice(legacy ? 1 : 0, 0, [])
+              args.push(overrides)
+              const result = api[method](...args)
+              const supplied = result[result.length - 1]
+              if (active) {
+                assert.notStrictEqual(supplied, overrides)
+                assert.strictEqual(supplied.plugins.length, 1)
+                assert.strictEqual(supplied.plugins[0].name, 'datadog:vitest-browser-setup-file')
+              } else {
+                assert.strictEqual(supplied, overrides)
+              }
+              assert.strictEqual(overrides.plugins, 'value' in descriptor ? descriptor.value : undefined)
+            }
+          }
+          assert.strictEqual(starts.length, active ? 1 : 0)
+        })
+      }
+    }
+  }
+
   for (const method of ['start', 'reportCoverage']) {
     it(`preserves ${method} results and synchronous errors without subscribers`, () => {
       const hooks = []
@@ -152,6 +220,78 @@ describe('vitest main instrumentation', () => {
       }
       result = new Error('synchronous failure')
       assert.throws(() => vitest[method]('argument'), result)
+    })
+  }
+
+  const scenarios = [
+    { name: 'collected', tasks: [{ mode: 'run' }] },
+    { name: 'result without state', tasks: [{ mode: 'run', result: {} }] },
+    { name: 'queued', tasks: [{ mode: 'run', result: { state: 'queued' } }] },
+    { name: 'running', tasks: [{ mode: 'run', result: { state: 'run' } }] },
+    { name: 'skipped result', tasks: [{ mode: 'run', result: { state: 'skip' } }] },
+    { name: 'todo result', tasks: [{ mode: 'run', result: { state: 'todo' } }] },
+    { name: 'skipped mode', tasks: [{ mode: 'skip' }] },
+    { name: 'todo mode', tasks: [{ mode: 'todo' }] },
+    { name: 'passed', tasks: [{ mode: 'run', result: { state: 'pass' } }], status: 'pass' },
+    { name: 'failed', tasks: [{ mode: 'run', result: { state: 'fail' } }], status: 'fail' },
+    {
+      name: 'mixed collected and passed',
+      tasks: [{ mode: 'run' }, { mode: 'run', result: { state: 'pass' } }],
+      status: 'pass',
+    },
+  ]
+  for (const { name, tasks, status = 'skip' } of scenarios) {
+    it(`reports ${name} tasks as ${status}`, async () => {
+      const hooks = []
+      const finishes = []
+      const testSessionFinishCh = { hasSubscribers: true }
+      proxyquire('../src/vitest-main', {
+        './helpers/instrument': {
+          ...require('../src/helpers/instrument'),
+          addHook (target, hook) { hooks.push({ target, hook }) },
+        },
+        './helpers/channel': {
+          getChannelPromise (channel, payload) {
+            if (channel === testSessionFinishCh) finishes.push(payload)
+            return Promise.resolve()
+          },
+        },
+        './vitest-util': {
+          ...require('../src/vitest-util'),
+          testSessionFinishCh,
+        },
+      })
+      class Vitest {
+        config = { passWithNoTests: false }
+        state = {
+          pathsSet: new Set(['/repo/test.mjs']),
+          getFailedFilepaths: () => status === 'fail' ? ['/repo/test.mjs'] : [],
+          getFiles: () => [{ type: 'suite', tasks: tasks.map(task => ({ type: 'test', ...task })) }],
+          getCountOfFailedTests: () => status === 'fail' ? 1 : 0,
+          getUnhandledErrors: () => [],
+        }
+
+        start () { return Promise.resolve() }
+        close () {}
+        exit () {}
+        reportCoverage () {}
+        runFiles () {}
+      }
+      const hook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/cli-api.*').hook
+      hook({ Vitest, startVitest () {} })
+      const vitest = new Vitest()
+
+      await vitest.start()
+      await vitest.close()
+
+      assert.strictEqual(finishes.length, 1)
+      assert.strictEqual(finishes[0].status, status)
+      assert.strictEqual(finishes[0].testSessionEmptyReason, status === 'skip' ? 'all_tests_skipped' : undefined)
+      if (status === 'fail') {
+        assert.strictEqual(finishes[0].error.message, 'Test suites failed: 1.')
+      } else {
+        assert.strictEqual(finishes[0].error, undefined)
+      }
     })
   }
 
@@ -404,11 +544,27 @@ describe('vitest main instrumentation', () => {
         this[event] = callback
       }
     }
-    const VitestV5 = class Vitest {}
+    class ForksPoolWorker {
+      constructor () {
+        this.env = { VITEST: 'true' }
+      }
+
+      start () {
+        return this.env
+      }
+
+      on () { /* empty */ }
+    }
+    class ThreadsPoolWorker extends ForksPoolWorker {}
     const vitestV5IndexHook = hooks.find(({ target }) =>
       target.filePattern === 'dist/chunks/index.*' && target.versions[0] === '>=5.0.0'
     ).hook
-    vitestV5IndexHook({ TypecheckPoolWorker, Vitest: VitestV5 }, '5.0.0')
+    vitestV5IndexHook({ ForksPoolWorker, ThreadsPoolWorker, TypecheckPoolWorker }, '5.0.4')
+
+    const forksPoolWorker = new ForksPoolWorker()
+    assert.strictEqual(forksPoolWorker.start().DD_VITEST_WORKER, '1')
+    const threadsPoolWorker = new ThreadsPoolWorker()
+    assert.strictEqual(threadsPoolWorker.start().DD_VITEST_WORKER, '1')
 
     const typecheckPoolWorker = new TypecheckPoolWorker()
     typecheckPoolWorker.on('message', () => {})

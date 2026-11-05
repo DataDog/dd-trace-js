@@ -93,11 +93,11 @@ function collectPackages (moduleNames) {
   }
 
   /**
-   * @param {Array<{ name: string, versions?: string[], node?: string }>} instrumentations
+   * @param {Array<{ name: string, versions?: string[], node?: string, honourEnvRange?: boolean }>} instrumentations
    * @param {boolean} external
    * @param {string} [pluginName] The plugin key an external entry belongs to. Same-name externals (e.g. the aerospike
    *   entry mirroring the addHook versions) honour `PACKAGE_VERSION_RANGE` so per-major CI matrices do not force every
-   *   major to install on every job.
+   *   major to install on every job. An external declaration can also opt in when it is itself the sharded test target.
    */
   const addInstrumentations = (instrumentations, external, pluginName) => {
     const declarationsByName = new Map()
@@ -213,9 +213,7 @@ async function collectPeerDependencyFolders (rootFolder, parent = '') {
 
     // eslint-disable-next-line no-await-in-loop
     const folderStat = await lstat(current)
-    if (!folderStat.isDirectory()) continue
-    if (entry === 'node_modules') continue
-    if (!isGeneratedWorkspace(entry, parent)) continue
+    if (!folderStat.isDirectory() || entry === 'node_modules' || !isGeneratedWorkspace(entry, parent)) continue
     if (entry.startsWith('@')) {
       // eslint-disable-next-line no-await-in-loop
       folders.push(...await collectPeerDependencyFolders(current, parent ? join(parent, entry) : entry))
