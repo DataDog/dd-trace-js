@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { noAutoRetry } = require('dd-trace/test-optimization')
+const { noAutoRetry } = require('dd-trace/ci/test-annotations')
 const recordExecution = require('./exclusions-execution-ledger')
 
 describe('WebdriverIO passing exclusions', () => {

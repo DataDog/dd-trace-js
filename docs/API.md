@@ -986,7 +986,7 @@ observed callback, and effective execution/final status follows the exclusions.
 ## WebdriverIO Jasmine test automation exclusions
 
 With the WebdriverIO Jasmine adapter (WebdriverIO 9 and later), apply
-`preventFailureSuppression` and `noAutoRetry` from `dd-trace/test-optimization`
+`preventFailureSuppression` and `noAutoRetry` from `dd-trace/ci/test-annotations`
 to callbacks passed to `it` or `xit`. The helpers compose as in the Jest example.
 They apply to every declaration generated in a loop and retain annotation tags
 on explicit skips and permitted native retries.

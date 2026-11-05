@@ -20,7 +20,7 @@ const log = require('../../dd-trace/src/log')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
 const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
-const { preventFailureSuppression, noAutoRetry } = require('../../../test-optimization')
+const { preventFailureSuppression, noAutoRetry } = require('../../../ci/test-annotations')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { detectRum, stopRumSession, stopRumSessionAndReportActivity } = require('../src/rum-browser-scripts')
 const {
