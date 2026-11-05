@@ -251,15 +251,9 @@ function applyHttpOtelSemantics (formattedSpan) {
     }
   }
 
-  // OTel error semantics for an error response (no-clobber on an exception-derived
-  // type): server spans are errors on 5xx only (4xx MUST be left unset per the
-  // spec); client spans on any status >= 400.
-  if (status !== undefined && newMeta[ERROR_TYPE] === undefined) {
-    const isError = statusCode >= (kind === 'server' ? 500 : 400)
-    if (isError) {
-      newMeta[ERROR_TYPE] = status
-      formattedSpan.error = 1
-    }
+  if (status !== undefined && formattedSpan.error &&
+      newMeta[ERROR_TYPE] === undefined && Number.isFinite(statusCode)) {
+    newMeta[ERROR_TYPE] = status
   }
 
   formattedSpan.meta = newMeta
