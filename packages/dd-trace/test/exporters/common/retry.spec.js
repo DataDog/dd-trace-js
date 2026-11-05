@@ -92,6 +92,34 @@ describe('retry', () => {
       assert.strictEqual(retry.getMaxAttempts(agent), 5)
     })
 
+    for (const [name, url, prepared] of [
+      ['HTTP string', 'http://agent:8126/path', { hostname: 'agent', port: 8126 }],
+      ['HTTP URL', new URL('http://agent:8126/path'), { hostname: 'agent', port: 8126 }],
+      ['HTTPS default port', new URL('https://intake/path'), { hostname: 'intake' }],
+      ['IPv6', new URL('http://[::1]:8126/path'), { hostname: '::1', port: 8126 }],
+      ['Unix string', 'unix:/tmp/agent.sock', { socketPath: '/tmp/agent.sock' }],
+      ['Unix URL', new URL('unix:/tmp/agent.sock'), { socketPath: '/tmp/agent.sock' }],
+      ['named pipe string', 'unix://./pipe/apm', { socketPath: '//./pipe/apm' }],
+      ['named pipe URL', new URL('unix://./pipe/apm'), { socketPath: '//./pipe/apm' }],
+    ]) {
+      it(`shares endpoint identity between ${name} and prepared options`, () => {
+        const sourceOptions = {
+          url,
+          hostname: 'stale',
+          port: 1234,
+          socketPath: '/tmp/stale.sock',
+        }
+        const retry = loadRetry()
+        assert.strictEqual(retry.getMaxAttempts(sourceOptions), 5)
+
+        retry.markEndpointReached(prepared)
+
+        assert.strictEqual(retry.getMaxAttempts(sourceOptions), 2)
+        assertSingleJitteredRange(retry.getRetryDelay(sourceOptions, 1))
+        assert.strictEqual(retry.getMaxAttempts({ hostname: 'other', port: 8126 }), 5)
+      })
+    }
+
     it('falls back to options.host when options.hostname is absent', () => {
       const retry = loadRetry()
       const hostOnly = { host: 'agent', port: 8126 }
