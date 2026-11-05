@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
-import { createRequire } from 'node:module'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-import { describe, it } from 'mocha'
+import { afterEach, describe, it } from 'mocha'
 import YAML from 'yaml'
-
-const require = createRequire(import.meta.url)
-const { renamePullRequest } = require('./pr-title/rename')
-const { graphqlWithGh, syncLabels } = require('./pr-title/sync-labels')
-const { validateTitle } = require('./pr-title/validate')
 
 const workflow = YAML.parse(fs.readFileSync(new URL('../.github/workflows/pr-title.yml', import.meta.url), 'utf8'))
 const job = workflow.jobs['conventional-commit']
@@ -20,52 +18,133 @@ const checkout = steps.get('Checkout base revision')
 const fetchHead = steps.get('Fetch pull request head')
 const validation = steps.get('Validate PR title and release-note context')
 const labelSync = steps.get('Sync labels with PR title')
-const env = {
+const repositoryRoot = fileURLToPath(new URL('..', import.meta.url))
+const scripts = {
+  rename: fileURLToPath(new URL('pr-title/rename.js', import.meta.url)),
+  syncLabels: fileURLToPath(new URL('pr-title/sync-labels.js', import.meta.url)),
+  validate: fileURLToPath(new URL('pr-title/validate.js', import.meta.url)),
+}
+const workflowEnv = {
   PR_TITLE_PATTERN: job.env.PR_TITLE_PATTERN,
   SEMVER_MAJOR_LABEL_ID: job.env.SEMVER_MAJOR_LABEL_ID,
   SEMVER_MINOR_LABEL_ID: job.env.SEMVER_MINOR_LABEL_ID,
   SEMVER_PATCH_LABEL_ID: job.env.SEMVER_PATCH_LABEL_ID,
 }
-const validate = async (title, files = []) => {
-  const failures = []
-  const commands = []
-  const context = {
-    payload: {
-      pull_request: {
-        title,
-        base: { sha: 'base-sha' },
-      },
-    },
-  }
-  const core = {
-    info: Function.prototype,
-    setFailed: message => failures.push(message),
-  }
-  const runGit = (command, args, options) => {
-    commands.push({ command, args: [...args], options: { ...options } })
-    return `${files.join('\0')}${files.length ? '\0' : ''}`
-  }
+const commandShim = String.raw`#!/usr/bin/env node
+'use strict'
+const fs = require('node:fs')
+const path = require('node:path')
+const command = path.basename(process.argv[1])
+const prefix = 'PR_TITLE_' + command.toUpperCase()
+fs.appendFileSync(process.env.PR_TITLE_COMMAND_LOG, JSON.stringify({
+  command,
+  args: process.argv.slice(2),
+}) + '\n')
+const outputFile = process.env[prefix + '_OUTPUT_FILE']
+if (outputFile) process.stdout.write(fs.readFileSync(outputFile))
+process.exitCode = Number(process.env[prefix + '_EXIT_CODE'] || 0)
+`
+const temporaryDirectories = []
 
-  await validateTitle({ context, core, env, runGit })
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
 
-  return { commands, failures }
+const pullRequestEvent = ({ title, labels = [], action = 'opened', previousTitle }) => ({
+  action,
+  changes: previousTitle === undefined ? undefined : { title: { from: previousTitle } },
+  pull_request: {
+    number: 1,
+    node_id: 'pull-request-id',
+    title,
+    labels,
+    base: { sha: 'base-sha' },
+  },
+})
+
+const readCommands = (logPath) => {
+  const contents = fs.readFileSync(logPath, 'utf8').trim()
+  return contents ? contents.split('\n').map(line => JSON.parse(line)) : []
 }
 
+const runCli = ({ script, event, gitOutput = '', ghOutput = { data: {} }, env = {} }) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-pr-title-'))
+  temporaryDirectories.push(directory)
+
+  const binDirectory = path.join(directory, 'bin')
+  const eventPath = path.join(directory, 'event.json')
+  const outputPath = path.join(directory, 'github-output')
+  const commandLogPath = path.join(directory, 'commands.jsonl')
+  const gitOutputPath = path.join(directory, 'git-output')
+  const ghOutputPath = path.join(directory, 'gh-output')
+  fs.mkdirSync(binDirectory)
+  fs.writeFileSync(eventPath, JSON.stringify(event))
+  fs.writeFileSync(outputPath, '')
+  fs.writeFileSync(commandLogPath, '')
+  fs.writeFileSync(gitOutputPath, gitOutput)
+  fs.writeFileSync(ghOutputPath, typeof ghOutput === 'string' ? ghOutput : JSON.stringify(ghOutput))
+
+  for (const command of ['gh', 'git']) {
+    const commandPath = path.join(binDirectory, command)
+    fs.writeFileSync(commandPath, commandShim)
+    fs.chmodSync(commandPath, 0o755)
+  }
+
+  const result = spawnSync(process.execPath, [script], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      ...workflowEnv,
+      GITHUB_EVENT_PATH: eventPath,
+      GITHUB_OUTPUT: outputPath,
+      GITHUB_REPOSITORY: 'DataDog/dd-trace-js',
+      GH_TOKEN: 'test-token',
+      PATH: `${binDirectory}${path.delimiter}${process.env.PATH || ''}`,
+      PR_TITLE_COMMAND_LOG: commandLogPath,
+      PR_TITLE_GIT_OUTPUT_FILE: gitOutputPath,
+      PR_TITLE_GH_OUTPUT_FILE: ghOutputPath,
+      ...env,
+    },
+  })
+
+  return {
+    commands: readCommands(commandLogPath),
+    output: fs.readFileSync(outputPath, 'utf8'),
+    result,
+  }
+}
+
+const runValidation = (title, files = []) => runCli({
+  script: scripts.validate,
+  event: pullRequestEvent({ title }),
+  gitOutput: `${files.join('\0')}${files.length ? '\0' : ''}`,
+})
+
+const runLabelSync = ({ title, labels = [], action = 'opened', previousTitle, ...options }) => runCli({
+  script: scripts.syncLabels,
+  event: pullRequestEvent({ title, labels, action, previousTitle }),
+  ...options,
+})
+
 describe('PR title workflow', () => {
-  it('rejects public release-note types for internal-only changes', async () => {
-    await Promise.all(['feat', 'fix', 'perf', 'docs'].map(async (type) => {
-      const { failures } = await validate(`${type}(http): change`, [
+  it('rejects public release-note types for internal-only changes', () => {
+    for (const type of ['feat', 'fix', 'perf', 'docs']) {
+      const { result } = runValidation(`${type}(http): change`, [
         'scripts/pr-title.spec.mjs',
         'packages/dd-trace/test/index.spec.js',
       ])
-      assert.deepStrictEqual(failures, [
+      assert.strictEqual(result.status, 1)
+      assert.match(result.stderr, new RegExp(
         `PR title type "${type}" is public, but every changed file is internal. ` +
-        'Use test, bench, ci, or chore.',
-      ])
-    }))
+        'Use test, bench, ci, or chore.'
+      ))
+    }
   })
 
-  it('allows public release-note types when any changed file is public', async () => {
+  it('allows public release-note types when any changed file is public', () => {
     const titles = [
       'feat(http): change',
       'fix(http): change',
@@ -73,26 +152,35 @@ describe('PR title workflow', () => {
       'docs(test): change',
     ]
 
-    await Promise.all(titles.map(async (title) => {
-      const { failures } = await validate(title, [
+    for (const title of titles) {
+      const { result } = runValidation(title, [
         'scripts/pr-title.spec.mjs',
         'packages/dd-trace/src/index.js',
       ])
-      assert.deepStrictEqual(failures, [], title)
-    }))
+      assert.strictEqual(result.status, 0, result.stderr)
+    }
   })
 
-  it('skips file inspection for internal title types', async () => {
-    await Promise.all(['test', 'bench', 'ci', 'chore'].map(async (type) => {
-      const { commands, failures } = await validate(`${type}(http): change`)
-      assert.deepStrictEqual(failures, [])
+  it('rejects invalid titles through the CLI exit status', () => {
+    const { commands, result } = runValidation('invalid title')
+
+    assert.strictEqual(result.status, 1)
+    assert.match(result.stderr, /PR title does not follow Conventional Commits format/)
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it('skips file inspection for internal title types', () => {
+    for (const type of ['test', 'bench', 'ci', 'chore']) {
+      const { commands, result } = runValidation(`${type}(http): change`)
+      assert.strictEqual(result.status, 0, result.stderr)
       assert.deepStrictEqual(commands, [])
-    }))
+    }
   })
 
-  it('derives changed paths from the fetched PR ref without a GitHub API call', async () => {
-    const { commands } = await validate('fix(http): change', ['packages/dd-trace/src/index.js'])
+  it('derives changed paths from the fetched PR ref without a GitHub API call', () => {
+    const { commands, result } = runValidation('fix(http): change', ['packages/dd-trace/src/index.js'])
 
+    assert.strictEqual(result.status, 0, result.stderr)
     assert.deepStrictEqual(commands, [{
       command: 'git',
       args: [
@@ -102,151 +190,119 @@ describe('PR title workflow', () => {
         '-z',
         'base-sha...refs/remotes/pull-request/head',
       ],
-      options: { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 },
     }])
   })
 
-  it('auto-renames GitHub revert titles', async () => {
-    const titles = []
-    const outputs = []
-    const context = {
-      payload: {
-        pull_request: { title: 'Revert "fix(http): change"' },
-      },
-    }
-
-    await renamePullRequest({
-      context,
-      updateTitle: title => titles.push(title),
-      setOutput: (name, value) => outputs.push({ name, value }),
+  it('auto-renames GitHub revert titles through the CLI', () => {
+    const { commands, output, result } = runCli({
+      script: scripts.rename,
+      event: pullRequestEvent({ title: 'Revert "fix(http): change"' }),
     })
 
-    assert.deepStrictEqual(titles, ['revert: fix(http): change'])
-    assert.deepStrictEqual(outputs, [{ name: 'renamed', value: 'true' }])
-  })
-
-  it('syncs only the semver label in one GraphQL request', async () => {
-    const requests = []
-    const context = {
-      repo: { owner: 'DataDog', repo: 'dd-trace-js' },
-      payload: {
-        action: 'opened',
-        pull_request: {
-          number: 1,
-          node_id: 'pull-request-id',
-          title: 'fix(http, tests): change',
-          labels: [
-            { name: 'fix', node_id: 'fix-id' },
-            { name: 'http', node_id: 'http-id' },
-            { name: 'semver-minor', node_id: job.env.SEMVER_MINOR_LABEL_ID },
-          ],
-        },
-      },
-    }
-    const github = {
-      graphql: (query, variables) => requests.push({ query, variables }),
-    }
-
-    await syncLabels({ context, github, env })
-
-    assert.strictEqual(requests.length, 1)
-    assert.match(requests[0].query, /addLabelsToLabelable/)
-    assert.match(requests[0].query, /removeLabelsFromLabelable/)
-    assert.deepStrictEqual({
-      ...requests[0].variables,
-      addLabelIds: [...requests[0].variables.addLabelIds],
-      removeLabelIds: [...requests[0].variables.removeLabelIds],
-    }, {
-      pullRequestId: 'pull-request-id',
-      addLabelIds: [job.env.SEMVER_PATCH_LABEL_ID],
-      removeLabelIds: [job.env.SEMVER_MAJOR_LABEL_ID, job.env.SEMVER_MINOR_LABEL_ID],
-    })
-  })
-
-  it('sends the label mutations through one gh GraphQL request', () => {
-    const commands = []
-    const runCommand = (command, args, options) => {
-      commands.push({ command, args, options })
-      return JSON.stringify({ data: {} })
-    }
-
-    graphqlWithGh('mutation Test { test }', {
-      pullRequestId: 'pull-request-id',
-      addLabelIds: ['add-id'],
-      removeLabelIds: ['remove-id-1', 'remove-id-2'],
-    }, runCommand)
-
-    assert.strictEqual(commands.length, 1)
-    assert.deepStrictEqual(commands[0], {
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.match(result.stdout, /Auto-renaming PR title to: revert: fix\(http\): change/)
+    assert.strictEqual(output, 'renamed=true\n')
+    assert.deepStrictEqual(commands, [{
       command: 'gh',
       args: [
         'api',
-        'graphql',
         '--method',
-        'POST',
+        'PATCH',
+        'repos/DataDog/dd-trace-js/pulls/1',
         '--raw-field',
-        'query=mutation Test { test }',
-        '--field',
-        'pullRequestId=pull-request-id',
-        '--field',
-        'addLabelIds[]=add-id',
-        '--field',
-        'removeLabelIds[]=remove-id-1',
-        '--field',
-        'removeLabelIds[]=remove-id-2',
+        'title=revert: fix(http): change',
+        '--silent',
       ],
-      options: { encoding: 'utf8' },
-    })
+    }])
   })
 
-  it('syncs same-semver edits when the event labels are missing or incorrect', async () => {
+  it('propagates title update failures through the CLI exit status', () => {
+    const { output, result } = runCli({
+      script: scripts.rename,
+      event: pullRequestEvent({ title: 'Revert "fix(http): change"' }),
+      env: { PR_TITLE_GH_EXIT_CODE: '1' },
+    })
+
+    assert.strictEqual(result.status, 1)
+    assert.strictEqual(output, '')
+  })
+
+  it('syncs only the semver label in one GraphQL request', () => {
+    const { commands, result } = runLabelSync({
+      title: 'fix(http, tests): change',
+      labels: [
+        { name: 'fix', node_id: 'fix-id' },
+        { name: 'http', node_id: 'http-id' },
+        { name: 'semver-minor', node_id: job.env.SEMVER_MINOR_LABEL_ID },
+      ],
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(commands.length, 1)
+    assert.strictEqual(commands[0].command, 'gh')
+    assert.deepStrictEqual(commands[0].args.slice(0, 4), ['api', 'graphql', '--method', 'POST'])
+    const query = commands[0].args[commands[0].args.indexOf('--raw-field') + 1]
+    assert.match(query, /addLabelsToLabelable/)
+    assert.match(query, /removeLabelsFromLabelable/)
+    const fields = commands[0].args.filter((arg, index, args) => args[index - 1] === '--field')
+    assert.deepStrictEqual(fields, [
+      'pullRequestId=pull-request-id',
+      `addLabelIds[]=${job.env.SEMVER_PATCH_LABEL_ID}`,
+      `removeLabelIds[]=${job.env.SEMVER_MAJOR_LABEL_ID}`,
+      `removeLabelIds[]=${job.env.SEMVER_MINOR_LABEL_ID}`,
+    ])
+  })
+
+  it('syncs same-semver edits when the event labels are missing or incorrect', () => {
     const labelSets = [
       [],
       [{ name: 'semver-minor' }],
       [{ name: 'semver-patch' }, { name: 'semver-minor' }],
     ]
 
-    await Promise.all(labelSets.map(async (labels) => {
-      const requests = []
-      const context = {
-        payload: {
-          action: 'edited',
-          changes: { title: { from: 'fix(http): before' } },
-          pull_request: {
-            node_id: 'pull-request-id',
-            title: 'fix(express): after',
-            labels,
-          },
-        },
-      }
-      const github = {
-        graphql: (query, variables) => requests.push({ query, variables }),
-      }
-
-      await syncLabels({ context, github, env })
-
-      assert.strictEqual(requests.length, 1)
-    }))
+    for (const labels of labelSets) {
+      const { commands, result } = runLabelSync({
+        title: 'fix(express): after',
+        labels,
+        action: 'edited',
+        previousTitle: 'fix(http): before',
+      })
+      assert.strictEqual(result.status, 0, result.stderr)
+      assert.strictEqual(commands.length, 1)
+    }
   })
 
-  it('does not sync same-semver edits when the event already has the valid semver label', async () => {
-    const context = {
-      payload: {
-        action: 'edited',
-        changes: { title: { from: 'fix(http): before' } },
-        pull_request: {
-          node_id: 'pull-request-id',
-          title: 'fix(express): after',
-          labels: [
-            { name: 'http' },
-            { name: 'semver-patch' },
-          ],
-        },
-      },
-    }
-    const github = { graphql: assert.fail }
+  it('does not sync same-semver edits when the event already has the valid semver label', () => {
+    const { commands, result } = runLabelSync({
+      title: 'fix(express): after',
+      labels: [
+        { name: 'http' },
+        { name: 'semver-patch' },
+      ],
+      action: 'edited',
+      previousTitle: 'fix(http): before',
+    })
 
-    await syncLabels({ context, github, env })
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it('skips label synchronization for invalid titles', () => {
+    const { commands, result } = runLabelSync({ title: 'invalid title' })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.deepStrictEqual(commands, [])
+  })
+
+  it('propagates GraphQL errors through the CLI exit status', () => {
+    const { commands, result } = runLabelSync({
+      title: 'fix: change',
+      ghOutput: { errors: [{ message: 'mutation failed' }] },
+    })
+
+    assert.strictEqual(commands.length, 1)
+    assert.strictEqual(result.status, 1)
+    assert.match(result.stderr, /mutation failed/)
   })
 
   it('inspects files for every event unless the title was auto-renamed', () => {

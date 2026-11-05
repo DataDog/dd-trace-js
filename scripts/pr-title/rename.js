@@ -41,5 +41,3 @@ if (require.main === module) {
     process.exitCode = 1
   })
 }
-
-module.exports = { renamePullRequest }
