@@ -1072,6 +1072,27 @@ SUPPORTED_VERSIONS.forEach((version) => {
     }
 
     for (const poolConfig of ['forks', 'threads']) {
+      it(`resolves Vitest installed below the test root in ${poolConfig} workers`, async () => {
+        const root = path.dirname(cwd)
+        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+          assertEventCounts(events, { test_session_end: 1, test_module_end: 1, test_suite_end: 1, test: 1 })
+          assert.strictEqual(getEventContents(events, 'test')[0].meta[TEST_STATUS], 'pass')
+        })
+        const [exitCode] = await Promise.all([
+          runVitest({
+            TEST_DIR: `${path.basename(cwd)}/ci-visibility/vitest-tests/vitest-worker-env.mjs`,
+            POOL_CONFIG: poolConfig,
+            EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
+            EXPECT_NO_DD_TRACE_INIT: '1',
+          }, [
+            path.join(cwd, 'node_modules/vitest/vitest.mjs'), 'run', '--root', root,
+            '--config', path.join(cwd, 'vitest.config.mjs'),
+          ]),
+          payloadsPromise,
+        ])
+        assert.strictEqual(exitCode, 0, testOutput)
+      })
+
       it(`resolves Vitest from the project with an external tracer in ${poolConfig} workers`, async () => {
         const externalRoot = fs.mkdtempSync(path.join(path.dirname(cwd), 'external-dd-trace-'))
         const externalModules = path.join(externalRoot, 'node_modules')
@@ -1085,6 +1106,16 @@ SUPPORTED_VERSIONS.forEach((version) => {
             if (name === 'dd-trace' || name === 'vitest' || name === '@vitest' || name.startsWith('.')) continue
             fs.symlinkSync(path.join(projectModules, name), path.join(externalModules, name), 'junction')
           }
+          const fallbackVitest = path.join(externalModules, 'vitest')
+          fs.mkdirSync(fallbackVitest)
+          fs.writeFileSync(path.join(fallbackVitest, 'package.json'), JSON.stringify({
+            name: 'vitest',
+            version: '0.0.0',
+            module: './index.mjs',
+            exports: { './package.json': './package.json' },
+          }))
+          fs.writeFileSync(path.join(fallbackVitest, 'index.mjs'),
+            'throw new Error("Loaded Vitest from the tracer instead of the test project")\n')
 
           const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
             assertEventCounts(events, { test_session_end: 1, test_module_end: 1, test_suite_end: 1, test: 1 })
