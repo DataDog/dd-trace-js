@@ -329,9 +329,7 @@ class BaseFFEWriter {
    * @param {(delivered: boolean) => void} [onComplete] - True only for a successful final response
    */
   #sendRequest (payload, eventCount, route, fallbackRoute, onComplete) {
-    // The request helper mutates headers. Concurrent envelopes must not share them.
-    const requestOptions = { ...route.requestOptions, headers: { ...route.requestOptions.headers } }
-    request(payload, requestOptions, (error, response, statusCode) => {
+    request(payload, route.requestOptions, (error, response, statusCode) => {
       const errorMessage = error && (this.#formatError
         ? this.#formatError(error, statusCode)
         : error.message)
