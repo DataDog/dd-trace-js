@@ -12,6 +12,9 @@ const DD_CYPRESS_TASK_HANDLER = Symbol.for('dd-trace.cypress.task.handler')
 const DD_CYPRESS_NOOP_TASK_HANDLER = Symbol.for('dd-trace.cypress.noop-task.handler')
 
 const noopTask = {
+  'dd:testDeclarations': () => {
+    return null
+  },
   'dd:testSuiteStart': () => {
     return null
   },
@@ -44,6 +47,13 @@ module.exports = function CypressPlugin (on, config) {
     // We still need to register these tasks or the support file will fail
     on('task', noopTask)
     return config
+  }
+
+  // Browser retry intent must be observed before any user support code executes.
+  // Cypress 6's plugin process uses Node 12 and retains its existing manual path.
+  if (satisfies(config.version, '>=12.0.0')) {
+    const { installManualSupportFile } = require('../../datadog-instrumentations/src/cypress-config')
+    installManualSupportFile(config)
   }
 
   on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
