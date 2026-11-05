@@ -1,35 +1,30 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
-import vm from 'node:vm'
 
 import { describe, it } from 'mocha'
 import YAML from 'yaml'
+
+const require = createRequire(import.meta.url)
+const { renamePullRequest } = require('./pr-title/rename')
+const { graphqlWithGh, syncLabels } = require('./pr-title/sync-labels')
+const { validateTitle } = require('./pr-title/validate')
 
 const workflow = YAML.parse(fs.readFileSync(new URL('../.github/workflows/pr-title.yml', import.meta.url), 'utf8'))
 const job = workflow.jobs['conventional-commit']
 const steps = new Map()
 for (const step of job.steps) steps.set(step.name, step)
 
+const rename = steps.get('Auto-rename GitHub revert title to Conventional Commit')
 const checkout = steps.get('Checkout base revision')
 const fetchHead = steps.get('Fetch pull request head')
 const validation = steps.get('Validate PR title and release-note context')
 const labelSync = steps.get('Sync labels with PR title')
-const validateTitle = vm.runInNewContext(
-  `(async function validateTitle (context, core, process, require) {\n${validation.with.script}\n})`
-)
-const syncLabels = vm.runInNewContext(
-  `(async function syncLabels (context, github, process) {\n${labelSync.with.script}\n})`
-)
-const require = createRequire(import.meta.url)
-const { isInternalOnly } = require('./release/changelog')
-const process = {
-  env: {
-    PR_TITLE_PATTERN: job.env.PR_TITLE_PATTERN,
-    SEMVER_MAJOR_LABEL_ID: job.env.SEMVER_MAJOR_LABEL_ID,
-    SEMVER_MINOR_LABEL_ID: job.env.SEMVER_MINOR_LABEL_ID,
-    SEMVER_PATCH_LABEL_ID: job.env.SEMVER_PATCH_LABEL_ID,
-  },
+const env = {
+  PR_TITLE_PATTERN: job.env.PR_TITLE_PATTERN,
+  SEMVER_MAJOR_LABEL_ID: job.env.SEMVER_MAJOR_LABEL_ID,
+  SEMVER_MINOR_LABEL_ID: job.env.SEMVER_MINOR_LABEL_ID,
+  SEMVER_PATCH_LABEL_ID: job.env.SEMVER_PATCH_LABEL_ID,
 }
 const validate = async (title, files = []) => {
   const failures = []
@@ -46,20 +41,12 @@ const validate = async (title, files = []) => {
     info: Function.prototype,
     setFailed: message => failures.push(message),
   }
-  const loadModule = (id) => {
-    if (id === 'node:child_process') {
-      return {
-        execFileSync: (command, args, options) => {
-          commands.push({ command, args: [...args], options: { ...options } })
-          return `${files.join('\0')}${files.length ? '\0' : ''}`
-        },
-      }
-    }
-    if (id === './scripts/release/changelog') return { isInternalOnly }
-    assert.fail(`Unexpected module: ${id}`)
+  const runGit = (command, args, options) => {
+    commands.push({ command, args: [...args], options: { ...options } })
+    return `${files.join('\0')}${files.length ? '\0' : ''}`
   }
 
-  await validateTitle(context, core, process, loadModule)
+  await validateTitle({ context, core, env, runGit })
 
   return { commands, failures }
 }
@@ -117,7 +104,25 @@ describe('PR title workflow', () => {
       ],
       options: { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 },
     }])
-    assert.doesNotMatch(validation.with.script, /\bgithub\./)
+  })
+
+  it('auto-renames GitHub revert titles', async () => {
+    const titles = []
+    const outputs = []
+    const context = {
+      payload: {
+        pull_request: { title: 'Revert "fix(http): change"' },
+      },
+    }
+
+    await renamePullRequest({
+      context,
+      updateTitle: title => titles.push(title),
+      setOutput: (name, value) => outputs.push({ name, value }),
+    })
+
+    assert.deepStrictEqual(titles, ['revert: fix(http): change'])
+    assert.deepStrictEqual(outputs, [{ name: 'renamed', value: 'true' }])
   })
 
   it('syncs only the semver label in one GraphQL request', async () => {
@@ -142,7 +147,7 @@ describe('PR title workflow', () => {
       graphql: (query, variables) => requests.push({ query, variables }),
     }
 
-    await syncLabels(context, github, process)
+    await syncLabels({ context, github, env })
 
     assert.strictEqual(requests.length, 1)
     assert.match(requests[0].query, /addLabelsToLabelable/)
@@ -156,10 +161,75 @@ describe('PR title workflow', () => {
       addLabelIds: [job.env.SEMVER_PATCH_LABEL_ID],
       removeLabelIds: [job.env.SEMVER_MAJOR_LABEL_ID, job.env.SEMVER_MINOR_LABEL_ID],
     })
-    assert.doesNotMatch(labelSync.with.script, /github\.rest|github\.paginate/)
   })
 
-  it('does not sync when the title keeps the same semver level', async () => {
+  it('sends the label mutations through one gh GraphQL request', () => {
+    const commands = []
+    const runCommand = (command, args, options) => {
+      commands.push({ command, args, options })
+      return JSON.stringify({ data: {} })
+    }
+
+    graphqlWithGh('mutation Test { test }', {
+      pullRequestId: 'pull-request-id',
+      addLabelIds: ['add-id'],
+      removeLabelIds: ['remove-id-1', 'remove-id-2'],
+    }, runCommand)
+
+    assert.strictEqual(commands.length, 1)
+    assert.deepStrictEqual(commands[0], {
+      command: 'gh',
+      args: [
+        'api',
+        'graphql',
+        '--method',
+        'POST',
+        '--raw-field',
+        'query=mutation Test { test }',
+        '--field',
+        'pullRequestId=pull-request-id',
+        '--field',
+        'addLabelIds[]=add-id',
+        '--field',
+        'removeLabelIds[]=remove-id-1',
+        '--field',
+        'removeLabelIds[]=remove-id-2',
+      ],
+      options: { encoding: 'utf8' },
+    })
+  })
+
+  it('syncs same-semver edits when the event labels are missing or incorrect', async () => {
+    const labelSets = [
+      [],
+      [{ name: 'semver-minor' }],
+      [{ name: 'semver-patch' }, { name: 'semver-minor' }],
+    ]
+
+    await Promise.all(labelSets.map(async (labels) => {
+      const requests = []
+      const context = {
+        payload: {
+          action: 'edited',
+          changes: { title: { from: 'fix(http): before' } },
+          pull_request: {
+            node_id: 'pull-request-id',
+            title: 'fix(express): after',
+            labels,
+          },
+        },
+      }
+      const github = {
+        graphql: (query, variables) => requests.push({ query, variables }),
+      }
+
+      await syncLabels({ context, github, env })
+
+      assert.strictEqual(requests.length, 1)
+    }))
+  })
+
+  it('does not sync same-semver edits when the event already has the valid semver label', async () => {
     const context = {
       payload: {
         action: 'edited',
@@ -167,39 +237,32 @@ describe('PR title workflow', () => {
         pull_request: {
           node_id: 'pull-request-id',
           title: 'fix(express): after',
-          labels: [],
-        },
-      },
-    }
-    const github = { graphql: assert.fail }
-
-    await syncLabels(context, github, process)
-  })
-
-  it('does not sync when the event already has the valid semver label', async () => {
-    const context = {
-      payload: {
-        action: 'opened',
-        pull_request: {
-          node_id: 'pull-request-id',
-          title: 'feat(http): change',
           labels: [
             { name: 'http' },
-            { name: 'semver-minor' },
+            { name: 'semver-patch' },
           ],
         },
       },
     }
     const github = { graphql: assert.fail }
 
-    await syncLabels(context, github, process)
+    await syncLabels({ context, github, env })
   })
 
   it('inspects files for every event unless the title was auto-renamed', () => {
     const inspectionCondition = "steps.rename.outputs.renamed != 'true'"
 
-    for (const step of [checkout, fetchHead, validation]) {
+    for (const step of [fetchHead, validation]) {
       assert.strictEqual(step.if.replaceAll(/\s+/g, ' '), inspectionCondition)
+    }
+  })
+
+  it('runs commands without inline workflow JavaScript', () => {
+    assert.strictEqual(rename.run, 'node scripts/pr-title/rename.js')
+    assert.strictEqual(validation.run, 'node scripts/pr-title/validate.js')
+    assert.strictEqual(labelSync.run, 'node scripts/pr-title/sync-labels.js')
+    for (const step of job.steps) {
+      assert.doesNotMatch(step.uses || '', /actions\/github-script/)
     }
   })
 
@@ -215,6 +278,8 @@ describe('PR title workflow', () => {
   })
 
   it('checks out only the trusted base and fetches the PR head without checking it out', () => {
+    assert.strictEqual(job.steps[0], checkout)
+    assert.strictEqual(checkout.if, undefined)
     assert.strictEqual(checkout.with.ref, '$' + '{{ github.sha }}')
     assert.strictEqual(checkout.with['fetch-depth'], 0)
     assert.strictEqual(checkout.with['persist-credentials'], false)

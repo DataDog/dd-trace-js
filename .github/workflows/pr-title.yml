@@ -17,8 +17,7 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      # Shared between both steps. Must stay portable across bash ERE and JS
-      # regex (no lookarounds, named groups, or other JS-only features).
+      # Shared by the validation and label synchronization commands.
       # Revert PRs always get semver-patch regardless of the original change's type.
       PR_TITLE_PATTERN: '^(revert(!)?: .+|(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+)'
       # Repository label node IDs avoid a lookup request before the GraphQL mutation.
@@ -26,31 +25,19 @@ jobs:
       SEMVER_MINOR_LABEL_ID: MDU6TGFiZWwzMTYxOTczNTE0
       SEMVER_PATCH_LABEL_ID: MDU6TGFiZWwzMTE0Njc4MTgx
     steps:
-      - name: Auto-rename GitHub revert title to Conventional Commit
-        id: rename
-        if: startsWith(github.event.pull_request.title, 'Revert "')
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const title = context.payload.pull_request.title
-            const m = title.match(/^Revert "(.+)"$/)
-            if (!m) return
-            const newTitle = `revert: ${m[1]}`
-            core.notice(`Auto-renaming PR title to: ${newTitle}`)
-            await github.rest.pulls.update({
-              ...context.repo,
-              pull_number: context.payload.pull_request.number,
-              title: newTitle,
-            })
-            core.setOutput('renamed', 'true')
-
       - name: Checkout base revision
-        if: steps.rename.outputs.renamed != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Auto-rename GitHub revert title to Conventional Commit
+        id: rename
+        if: startsWith(github.event.pull_request.title, 'Revert "')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/pr-title/rename.js
 
       # Fetch the PR head as Git objects only. The privileged pull_request_target
       # job must never check out or execute code from this ref.
@@ -64,37 +51,7 @@ jobs:
 
       - name: Validate PR title and release-note context
         if: steps.rename.outputs.renamed != 'true'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const pullRequest = context.payload.pull_request
-            const title = pullRequest.title || ''
-            const match = title.match(new RegExp(process.env.PR_TITLE_PATTERN))
-            if (!match) {
-              core.setFailed('PR title does not follow Conventional Commits format.')
-              return
-            }
-            core.info(`PR title OK: ${title}`)
-
-            const type = match[3]
-            if (!/^(?:feat|fix|perf|docs)$/.test(type)) return
-
-            const { execFileSync } = require('node:child_process')
-            const { isInternalOnly } = require('./scripts/release/changelog')
-            // Treat renames as delete/add pairs so both paths affect classification.
-            const output = execFileSync('git', [
-              'diff',
-              '--name-only',
-              '--no-renames',
-              '-z',
-              `${pullRequest.base.sha}...refs/remotes/pull-request/head`,
-            ], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 })
-            const files = output.split('\0').filter(Boolean)
-
-            if (isInternalOnly(files)) {
-              core.setFailed(`PR title type "${type}" is public, but every changed file is internal. ` +
-                'Use test, bench, ci, or chore.')
-            }
+        run: node scripts/pr-title/validate.js
 
       - name: Sync labels with PR title
         if: >-
@@ -104,58 +61,6 @@ jobs:
           (github.event.action == 'opened' ||
           github.event.action == 'reopened' ||
           (github.event.action == 'edited' && github.event.changes.title != null))
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const pattern = new RegExp(process.env.PR_TITLE_PATTERN)
-            const parse = (title) => {
-              const m = (title || '').match(pattern)
-              if (!m) return {}
-              const isRevert = !m[3]
-              return {
-                type: isRevert ? 'revert' : m[3],
-                breaking: isRevert ? m[2] === '!' : m[6] === '!',
-              }
-            }
-
-            // Reverts are always semver-patch regardless of the original change's type.
-            const semverFor = ({ type, breaking }) => {
-              if (!type) return undefined
-              if (breaking) return 'semver-major'
-              if (type === 'feat') return 'semver-minor'
-              return 'semver-patch'
-            }
-
-            const pr = context.payload.pull_request
-            const semver = semverFor(parse(pr.title))
-            if (!semver) return
-
-            const previousTitle = context.payload.changes?.title?.from
-            if (previousTitle != null && semverFor(parse(previousTitle)) === semver) return
-
-            const semverLabels = new Map([
-              ['semver-major', process.env.SEMVER_MAJOR_LABEL_ID],
-              ['semver-minor', process.env.SEMVER_MINOR_LABEL_ID],
-              ['semver-patch', process.env.SEMVER_PATCH_LABEL_ID],
-            ])
-            const current = (pr.labels || []).filter(label => semverLabels.has(label.name))
-            if (current.length === 1 && current[0].name === semver) return
-
-            const removeLabelIds = [...semverLabels]
-              .filter(([name]) => name !== semver)
-              .map(([, id]) => id)
-
-            await github.graphql(`
-              mutation SyncSemverLabel($pullRequestId: ID!, $addLabelIds: [ID!]!, $removeLabelIds: [ID!]!) {
-                addLabelsToLabelable(input: { labelableId: $pullRequestId, labelIds: $addLabelIds }) {
-                  clientMutationId
-                }
-                removeLabelsFromLabelable(input: { labelableId: $pullRequestId, labelIds: $removeLabelIds }) {
-                  clientMutationId
-                }
-              }
-            `, {
-              pullRequestId: pr.node_id,
-              addLabelIds: [semverLabels.get(semver)],
-              removeLabelIds,
-            })
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/pr-title/sync-labels.js
