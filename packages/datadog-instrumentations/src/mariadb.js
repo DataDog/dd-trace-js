@@ -15,7 +15,8 @@ const {
   takePoolWaitTime,
   wrapPoolQueryMethod,
 } = require('./helpers/pool-acquire')
-const { normalizeSql, runSqlCommand, wrapCallbackBundle, wrapPromiseBundle } = require('./mariadb-bundle')
+const { normalizeSql, runSqlCommand, withInjectedSql, wrapCallbackBundle, wrapPromiseBundle } =
+  require('./mariadb-bundle')
 
 const commandAddCh = channel('apm:mariadb:command:add')
 const connectionStartCh = channel('apm:mariadb:connection:start')
@@ -100,7 +101,7 @@ function wrapCommand (Command, execute) {
   }
 }
 
-function createWrapQuery (options, commandOptions) {
+function createWrapQuery (options) {
   return function wrapQuery (query) {
     return function (sql) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
@@ -110,21 +111,17 @@ function createWrapQuery (options, commandOptions) {
       const poolWaitTime = takePoolWaitTime(this)
       if (poolWaitTime !== undefined) ctx.poolWaitTime = poolWaitTime
 
-      return finishPromiseQuery(ctx, startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql,
-        undefined, undefined, commandOptions))
+      return finishPromiseQuery(ctx, startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql))
     }
   }
 }
 
-function createWrapQueryCallback (options, commandOptions) {
+function createWrapQueryCallback (options) {
   return function wrapQuery (query) {
     return function (sql) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
-      const callbackIndex = commandOptions !== undefined && typeof arguments[1] === 'function'
-        ? 1
-        : arguments.length - 1
-      const cb = arguments[callbackIndex]
+      const cb = arguments[arguments.length - 1]
       const originalSql = normalizeSql(sql)
       const ctx = { sql: originalSql, conf: options }
       const wrapper = (cb) => function (err) {
@@ -139,16 +136,13 @@ function createWrapQueryCallback (options, commandOptions) {
       }
 
       if (typeof cb === 'function') {
-        arguments[callbackIndex] = shimmer.wrapCallback(cb, wrapper)
-      } else if (commandOptions !== undefined && arguments.length >= 3 && arguments[2] == null) {
-        arguments[2] = wrapper()
+        arguments[arguments.length - 1] = shimmer.wrapCallback(cb, wrapper)
       } else {
         arguments.length += 1
         arguments[arguments.length - 1] = wrapper()
       }
 
-      return startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql,
-        undefined, commandOptions !== undefined, commandOptions)
+      return startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql)
     }
   }
 }
@@ -221,46 +215,64 @@ function runPreparedExecute (ctx, execute, args) {
 
 /**
  * @param {Function} Driver
- * @param {boolean} callback
+ * @param {boolean} callbackApi
  */
-function wrapLegacyExecute (Driver, callback) {
-  const commands = new WeakMap()
+function wrapLegacyExecute (Driver, callbackApi) {
+  /** @param {Function} execute */
   shimmer.wrap(Driver, '_EXECUTE_CMD', execute => {
-    const normalized = callback && execute.length === 2
+    const normalized = callbackApi && execute.length === 2
+    /**
+     * @param {{ sql: unknown }} ctx
+     * @param {ArgumentsLike} args
+     * @param {unknown} originalSql
+     */
+    function runExecute (ctx, args, originalSql) {
+      const command = args[1]
+      if (typeof originalSql === 'string' && originalSql && typeof ctx.sql === 'string') {
+        const original = normalized ? command.opts ?? command.sql : command
+        const injected = withInjectedSql(original, ctx.sql, originalSql, normalized)
+        const options = typeof injected === 'string' ? { sql: injected } : injected
+        executeCommands.add(options)
+        if (normalized) {
+          command.sql = ctx.sql
+          command.opts = options
+        } else {
+          args[1] = options
+        }
+      }
+      return execute.apply(this, args)
+    }
+
     /**
      * @param {{ opts: object, prepareExecute?: Function }} connection
      * @param {unknown} cmdParam
      */
     return function (connection, cmdParam) {
-      if (!startCh.hasSubscribers || (!normalized && cmdParam === null) || (!callback && connection.prepareExecute)) {
+      if (!startCh.hasSubscribers || (!normalized && cmdParam === null) ||
+          (!callbackApi && connection.prepareExecute)) {
         return execute.apply(this, arguments)
       }
 
-      let command = commands.get(connection)
-      if (command === undefined) {
-        const forward = normalized
-          /**
-           * @param {unknown} sql
-           * @param {unknown} values
-           * @param {Function} callback
-           */
-          ? function (sql, values, callback) {
-            this.sql = normalizeSql(sql)
-            this.opts = sql
-            this.values = values
-            this.callback = callback
-            return execute.call(Driver, connection, this)
+      const originalSql = normalizeSql(cmdParam)
+      const ctx = { sql: originalSql, conf: connection.opts }
+      if (callbackApi) {
+        const target = normalized ? cmdParam : arguments
+        const index = normalized ? 'callback' : typeof arguments[2] === 'function' ? 2 : 3
+        const callback = target[index]
+        /** @param {Error | null} error */
+        target[index] = function (error) {
+          if (error) {
+            ctx.error = error
+            errorCh.publish(ctx)
           }
-          : function () { return execute.call(Driver, connection, ...arguments) }
-        const createWrapper = callback ? createWrapQueryCallback : createWrapQuery
-        const wrap = createWrapper(connection.opts, executeCommands)
-        command = wrap(forward)
-        commands.set(connection, command)
+          return typeof callback === 'function'
+            ? finishCh.runStores(ctx, callback, this, ...arguments)
+            : finishCh.publish(ctx)
+        }
       }
 
-      return normalized
-        ? command.call(cmdParam, cmdParam.opts ?? cmdParam.sql, cmdParam.values, cmdParam.callback)
-        : command.apply(Driver, Array.prototype.slice.call(arguments, 1))
+      const result = startCh.runStores(ctx, runExecute, this, ctx, arguments, originalSql)
+      return callbackApi ? result : finishPromiseQuery(ctx, result)
     }
   })
   return Driver

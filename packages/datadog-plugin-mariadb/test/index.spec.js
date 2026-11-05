@@ -811,7 +811,10 @@ describe('Plugin', () => {
                         for (const object of [false, true]) {
                           const marker = `dbm_execute_${callback}_${object}_${Date.now()}`
                           const sql = `SELECT ? AS ${marker}`
-                          const command = object ? { sql } : sql
+                          let reads = 0
+                          const command = object
+                            ? Object.defineProperty({}, 'sql', { get () { reads++; return sql } })
+                            : sql
                           const execute = callback
                             ? promisify(callbackClient.execute).bind(callbackClient)
                             : client.execute.bind(client)
@@ -821,7 +824,10 @@ describe('Plugin', () => {
                             assert.strictEqual(Number(rows[0][marker]), value)
                             assert.match(await receivedQuery(marker), /^\/\*dddb='db',dddbs='serviced',/)
                           }
-                          if (object) assert.strictEqual(command.sql, sql)
+                          if (object) {
+                            assert.strictEqual(reads, 2)
+                            assert.strictEqual(command.sql, sql)
+                          }
                           const commands = await connection.query(
                             'SELECT command_type, COUNT(*) AS count FROM mysql.general_log ' +
                             "WHERE command_type IN ('Prepare', 'Execute') AND argument LIKE ? " +

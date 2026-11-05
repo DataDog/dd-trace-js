@@ -111,15 +111,14 @@ function normalizeSql (command) {
  * @param {unknown} injected
  * @param {unknown} originalSql
  * @param {boolean} [mirrorOptions]
- * @param {boolean} [forceOptions]
  * @returns {unknown}
  */
-function withInjectedSql (original, injected, originalSql, mirrorOptions, forceOptions) {
+function withInjectedSql (original, injected, originalSql, mirrorOptions) {
   if (typeof originalSql !== 'string' || !originalSql || typeof injected !== 'string') {
     return original
   }
 
-  if (typeof original === 'string') return forceOptions ? { sql: injected } : injected
+  if (typeof original === 'string') return injected
 
   const command = { ...original, sql: injected }
   if (!Object.hasOwn(command, 'values') && 'values' in original) {
@@ -147,13 +146,10 @@ function withInjectedSql (original, injected, originalSql, mirrorOptions, forceO
  * @param {unknown} originalSql
  * @param {unknown} [preparedSql]
  * @param {boolean} [mirrorOptions]
- * @param {WeakSet<object>} [commandOptions]
  */
-function runSqlCommand (ctx, command, args, originalSql, preparedSql, mirrorOptions, commandOptions) {
-  if (preparedSql === undefined && (ctx.sql !== originalSql || commandOptions !== undefined)) {
-    const original = args[0]
-    args[0] = withInjectedSql(original, ctx.sql, originalSql, mirrorOptions, commandOptions !== undefined)
-    if (args[0] !== original && args[0] !== null && typeof args[0] === 'object') commandOptions?.add(args[0])
+function runSqlCommand (ctx, command, args, originalSql, preparedSql, mirrorOptions) {
+  if (preparedSql === undefined && ctx.sql !== originalSql) {
+    args[0] = withInjectedSql(args[0], ctx.sql, originalSql, mirrorOptions)
   }
   return command.apply(this, args)
 }
@@ -1637,4 +1633,4 @@ function wrapCallbackBundle (mariadb) {
   ])
 }
 
-module.exports = { normalizeSql, runSqlCommand, wrapCallbackBundle, wrapPromiseBundle }
+module.exports = { normalizeSql, runSqlCommand, withInjectedSql, wrapCallbackBundle, wrapPromiseBundle }
