@@ -46,7 +46,7 @@ async function prepareEsmRequest (versionKey, agentPort, host = 'http', env) {
     const nodeModules = path.join(directory, 'node_modules')
     await mkdir(nodeModules)
     await symlink(
-      path.resolve(__dirname, `../../../versions/react-router@${versionKey}/node_modules/react-router`),
+      path.dirname(require(`../../../versions/react-router@${versionKey}`).pkgJsonPath()),
       path.join(nodeModules, 'react-router'),
       'dir'
     )
@@ -68,7 +68,9 @@ async function prepareEsmRequest (versionKey, agentPort, host = 'http', env) {
     const closed = once(child, 'close')
     const [message] = await Promise.race([
       once(child, 'message'),
-      closed.then(([code]) => { throw new Error(`Request child exited before ready: ${code}`) }),
+      closed.then(([code]) => {
+        throw new Error(`Request child exited before ready: ${code}: ${Buffer.concat(stderr)}`)
+      }),
     ])
     assert.equal(message, 'ready')
     /** @param {Promise<void>} trace */

@@ -8,6 +8,7 @@ const PROJECT_ROOT = resolve(__dirname, '..', '..')
 const BUN_INSTALL = join(PROJECT_ROOT, 'node_modules', '.cache', 'bun')
 const BUN = join(PROJECT_ROOT, 'node_modules', '.bin', 'bun')
 const BUN_CONFIG = join(PROJECT_ROOT, 'bunfig.toml')
+const YARN_MODERN = `"${BUN}" x --package=@yarnpkg/cli-dist@${dependencies['@yarnpkg/cli-dist']} yarn`
 const YARN = `"${BUN}" x yarn@${dependencies.yarn}`
 
 /**
@@ -18,4 +19,4 @@ function withBun (env = process.env) {
   return { ...env, BUN_INSTALL }
 }
 
-module.exports = { BUN, BUN_CONFIG, YARN, withBun }
+module.exports = { BUN, BUN_CONFIG, YARN, YARN_MODERN, withBun }

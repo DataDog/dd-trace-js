@@ -72,6 +72,7 @@ updates:
       - "/"
       - "/docs"
       - "/.github/all-green"
+      - "/.github/workflow-job-names"
       - "/.github/actions/datadog-ci"
     schedule:
       interval: "weekly"

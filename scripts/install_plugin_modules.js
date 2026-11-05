@@ -104,7 +104,8 @@ function buildInstallStages (packages) {
   })
   orderedPackages.sort((left, right) => semver.rcompare(left.maximum, right.maximum))
 
-  // Bun collapses overlapping workspace ranges to one version. Lock higher ranges before adding intersecting floors.
+  // Bun merges overlapping workspace ranges onto one version. Lock each ceiling before adding its intersecting
+  // floors, so the fixtures test distinct versions instead of resolving every workspace to the same release.
   for (const { entry, range } of orderedPackages) {
     let stageIndex = 0
 

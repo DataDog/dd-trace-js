@@ -18,6 +18,8 @@
     "vendor/bun.lock",
     ".github/all-green/package.json",
     ".github/all-green/bun.lock",
+    ".github/workflow-job-names/package.json",
+    ".github/workflow-job-names/bun.lock",
     "packages/dd-trace/test/plugins/versions/package.json",
     "integration-tests/esbuild/package.json",
     "integration-tests/appsec/iast-esbuild-cjs/package.json",
