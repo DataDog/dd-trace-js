@@ -96,6 +96,12 @@ class InputTurn {
    */
   speechStartOffsetMs = undefined
 
+  /** @type {string | undefined} */
+  speechItemId = undefined
+
+  /** @type {number | undefined} */
+  speechEndOffsetMs = undefined
+
   /**
    * Wall clock (epoch ms) when the input audio was committed (roughly the end of user speech). Lets
    * response latency be measured from real speech-end rather than the padded buffer end.
@@ -118,6 +124,15 @@ class InputTurn {
    * @type {ToolResult[]}
    */
   toolResults = []
+
+  /** Retire a superseded clip without discarding pending text or tool results. */
+  resetSpeech () {
+    this.discardAudio()
+    this.transcript = ''
+    this.speechItemId = undefined
+    this.speechEndOffsetMs = undefined
+    this.speechEndTime = undefined
+  }
 
   /**
    * The input audio buffer was cleared: drop the buffered audio and the speech onset derived from

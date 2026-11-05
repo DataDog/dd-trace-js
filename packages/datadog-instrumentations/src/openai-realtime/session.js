@@ -245,6 +245,7 @@ class RealtimeSession {
       this.#playback = new ServerPlayback({
         shouldRetainAudio,
         requestItem,
+        onTranscript: (itemId, text, now) => this.#onInputTranscript(itemId, text, now),
         onReady: (turn, now) => {
           for (const [id, candidate] of this.#responses) {
             if (candidate === turn) this.#responses.delete(id)
@@ -321,18 +322,24 @@ class RealtimeSession {
           this.#onTruncate(event.item_id, event.audio_end_ms, now)
           return
         case 'input_audio_buffer.speech_started':
-          this.#onSpeechStarted(event.audio_start_ms, now)
+          this.#onSpeechStarted(event.audio_start_ms, now, event.item_id)
           return
         case 'input_audio_buffer.speech_stopped':
-          this.#onSpeechStopped(event.audio_end_ms, now)
+          this.#onSpeechStopped(event.audio_end_ms, now, event.item_id)
           return
-        case 'input_audio_buffer.committed':
-          this.#pendingInput.itemId = event.item_id == null ? undefined : String(event.item_id)
-          if (!this.#playback || this.#pendingInput.speechEndTime === undefined) {
-            this.#pendingInput.speechEndTime = now
+        case 'input_audio_buffer.committed': {
+          const pending = this.#pendingInput
+          const itemId = event.item_id == null ? undefined : String(event.item_id)
+          if (this.#playback && pending.itemId !== undefined && pending.itemId !== itemId) {
+            this.#resetPendingSpeech()
           }
-          this.#playback?.rememberInput(this.#pendingInput)
+          if (pending.itemId !== itemId) this.#inputTranscripts.delete(pending.itemId)
+          pending.itemId = itemId
+          if (this.#playback) pending.speechItemId = itemId
+          this.#playback?.rememberInput(pending)
+          if (!this.#playback || pending.speechEndTime === undefined) pending.speechEndTime = now
           return
+        }
         case 'input_audio_buffer.cleared':
           this.#pendingInput.discardAudio()
           return
@@ -494,14 +501,21 @@ class RealtimeSession {
    * keeping, so the buffered lead-in is trimmed off the front to keep the captured audio and the
    * reported window in step.
    *
-   * Only the first onset of a turn counts: a turn that VAD splits into several speech runs before a
-   * single commit is still one committed item, which began at the first run.
+   * Repeated onsets for the same item keep its first boundary. A new item retires the previous
+   * committed clip, even when automatic response creation is disabled.
    *
    * @param {unknown} audioStartMs
    * @param {number} now
+   * @param {unknown} itemId
    */
-  #onSpeechStarted (audioStartMs, now) {
+  #onSpeechStarted (audioStartMs, now, itemId) {
     const pending = this.#pendingInput
+    if (this.#playback) {
+      const item = itemId == null ? undefined : String(itemId)
+      const current = pending.speechItemId ?? pending.itemId
+      if (current !== undefined && item !== current) this.#resetPendingSpeech()
+      pending.speechItemId = item
+    }
     if (pending.speechStartTime !== undefined) return
 
     const onset = this.#bufferOffsetToWallTime(audioStartMs, now)
@@ -527,26 +541,42 @@ class RealtimeSession {
    *
    * @param {unknown} audioEndMs
    * @param {number} now
+   * @param {unknown} itemId
    */
-  #onSpeechStopped (audioEndMs, now) {
+  #onSpeechStopped (audioEndMs, now, itemId) {
     const pending = this.#pendingInput
-    if (pending.speechEndTime !== undefined) return
-
     if (this.#playback) {
+      const item = itemId == null ? undefined : String(itemId)
+      const current = pending.speechItemId ?? pending.itemId
+      if (item !== undefined && current !== undefined && item !== current) return
       const endMs = toFiniteNumber(audioEndMs)
+      if (pending.speechEndTime !== undefined &&
+          (endMs === undefined || endMs < 0 || endMs <= (pending.speechEndOffsetMs ?? -1))) return
+      const firstStop = pending.speechEndOffsetMs === undefined
+      pending.speechItemId ??= item
+      if (endMs !== undefined && endMs >= 0) pending.speechEndOffsetMs = endMs
       const startMs = pending.speechStartOffsetMs
-      if (startMs !== undefined && endMs !== undefined && endMs >= startMs &&
+      if (firstStop && startMs !== undefined && endMs !== undefined && endMs >= startMs &&
           pending.speechStartTime !== undefined) {
         // AIDEV-NOTE: both offsets include VAD padding. Removing silence from the
         // duration as well would shift the caller forward and erase barge-in overlap.
         pending.speechStartTime = Math.min(pending.speechStartTime, Math.max(0, now - (endMs - startMs)))
       }
-      pending.speechEndTime = Math.max(pending.speechStartTime ?? 0, now - this.#vadSilenceMs)
+      pending.speechEndTime = Math.max(pending.speechEndTime ?? 0,
+        pending.speechStartTime ?? 0, now - this.#vadSilenceMs)
     } else {
       // Existing WebSocket clients anchor the start from their observed input frames;
       // the subsequent commit remains their authoritative speech end.
-      pending.speechEndTime = now
+      pending.speechEndTime ??= now
     }
+  }
+
+  #resetPendingSpeech () {
+    const pending = this.#pendingInput
+    this.#playback.forgetInput(pending)
+    this.#inputTranscripts.delete(pending.itemId)
+    pending.resetSpeech()
+    pending.itemId = undefined
   }
 
   /**

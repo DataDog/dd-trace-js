@@ -611,4 +611,179 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
     assert.strictEqual(h.emitted.length, 1)
     assert.deepStrictEqual(h.emitted[0].input.audio, Buffer.alloc(4, 2))
   })
+
+  for (const beforeDone of [true, false]) {
+    it('releases a retrieved pending transcript (before done=' + beforeDone + ')', () => {
+      const h = harness()
+      h.send({ type: 'session.updated', session: { input_audio_transcription: { model: 'whisper-1' } } })
+      h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+      h.send({ type: 'response.created', response: { id: 'r1' } })
+      const retrieve = () => h.send({
+        type: 'conversation.item.retrieved',
+        item: { id: 'u1', role: 'user', content: [{ type: 'input_audio', transcript: 'retrieved text' }] },
+      })
+      if (beforeDone) retrieve()
+      h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+      if (!beforeDone) {
+        assert.strictEqual(h.emitted.length, 0)
+        retrieve()
+      }
+      assert.strictEqual(h.emitted.length, 1)
+      assert.strictEqual(h.emitted[0].input.transcript, 'retrieved text')
+      h.clock.tick(5000)
+      assert.strictEqual(h.emitted.length, 1)
+    })
+  }
+
+  for (const extra of [0, 1]) {
+    it('checks aggregate part size before decoding (extra=' + extra + ')', () => {
+      const h = harness()
+      h.start()
+      const part = bytes => ({ type: 'output_audio', format: 'pcm16', audio: Buffer.alloc(bytes).toString('base64') })
+      const content = [part(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES / 2),
+        part(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES / 2 + extra)]
+      const decode = sinon.spy(Buffer, 'from')
+      h.send({ type: 'conversation.item.retrieved', item: { ...h.item('a1'), content } })
+      h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+      assert.strictEqual(decode.getCalls().filter(call => call.args[1] === 'base64').length, extra ? 0 : 2)
+      assert.strictEqual(h.emitted.length, 1)
+      assert.strictEqual(h.emitted[0].output.audio.length, extra ? 0 : LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+      assert.strictEqual(h.emitted[0].output.audioPresent, true)
+    })
+  }
+
+  it('includes existing output items in the pre-decode audio budget', () => {
+    const h = harness()
+    h.start('r1', ['a1', 'a2'])
+    h.retrieve('a1', LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+    const audio = Buffer.alloc(1).toString('base64')
+    const decode = sinon.spy(Buffer, 'from')
+    h.send({
+      type: 'conversation.item.retrieved',
+      item: {
+        ...h.item('a2'), content: [{ type: 'output_audio', format: 'pcm16', audio }],
+      },
+    })
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+    assert.strictEqual(decode.getCalls().filter(call => call.args[1] === 'base64').length, 0)
+    assert.strictEqual(h.emitted[0].output.audio.length, 0)
+    assert.strictEqual(h.emitted[0].output.audioPresent, true)
+  })
+
+  it('replaces the speech window when a later VAD item supersedes a committed input', () => {
+    const h = harness()
+    const vad = (type, id, offset) => h.send({
+      type: 'input_audio_buffer.speech_' + type,
+      item_id: id,
+      [type === 'started' ? 'audio_start_ms' : 'audio_end_ms']: offset,
+    })
+    vad('started', 'u1', 0)
+    h.clock.tick(1000)
+    vad('stopped', 'u1', 1000)
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+    h.clock.tick(2000)
+    vad('started', 'u2', 3000)
+    h.clock.tick(1000)
+    vad('stopped', 'u2', 4000)
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u2' })
+    h.clock.tick(100)
+    vad('stopped', 'u1', 9000)
+    h.send({ type: 'response.created', response: { id: 'r1' } })
+    h.send({
+      type: 'conversation.item.retrieved',
+      item: {
+        id: 'u2',
+        role: 'user',
+        content: [{
+          type: 'input_audio', format: 'pcm16', audio: Buffer.alloc(48000).toString('base64'), transcript: 'latest',
+        }],
+      },
+    })
+    h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].userSpeech.startTime, 1003000)
+    assert.strictEqual(h.emitted[0].userSpeech.finishTime, 1004000)
+    assert.strictEqual(h.emitted[0].llm.startTime, 1004000)
+  })
+
+  it('advances current-item VAD stops but ignores stale and backward offsets', () => {
+    const h = harness()
+    h.send({ type: 'input_audio_buffer.speech_started', item_id: 'u1', audio_start_ms: 0 })
+    h.clock.tick(1000)
+    h.send({ type: 'input_audio_buffer.speech_stopped', item_id: 'u1', audio_end_ms: 1000 })
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+    h.clock.tick(1000)
+    h.send({ type: 'input_audio_buffer.speech_stopped', item_id: 'u1', audio_end_ms: 2000 })
+    h.clock.tick(500)
+    for (const end of [2000, 1500]) {
+      h.send({ type: 'input_audio_buffer.speech_stopped', item_id: 'u1', audio_end_ms: end })
+    }
+    h.send({ type: 'input_audio_buffer.speech_stopped', item_id: 'older', audio_end_ms: 9000 })
+    h.send({ type: 'response.created', response: { id: 'r1' } })
+    h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+    assert.strictEqual(h.emitted[0].llm.startTime, 1002000)
+  })
+
+  it('uses the latest manual commit while preserving pending text and tool results', () => {
+    const h = harness()
+    h.session.onClientEvent({
+      type: 'conversation.item.create',
+      item: {
+        type: 'message', role: 'user', content: [{ type: 'input_text', text: 'context' }],
+      },
+    }, h.clock.now)
+    h.session.onClientEvent({
+      type: 'conversation.item.create',
+      item: {
+        type: 'function_call_output', call_id: 'call1', output: 'result',
+      },
+    }, h.clock.now)
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+    h.clock.tick(2000)
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u2' })
+    h.send({ type: 'response.created', response: { id: 'r1' } })
+    h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+    assert.strictEqual(h.emitted[0].llm.startTime, 1002000)
+    assert.strictEqual(h.emitted[0].input.text, 'context')
+    assert.strictEqual(h.emitted[0].input.toolResults[0].result, 'result')
+  })
+
+  it('keeps waiting when retrieval has no transcript', () => {
+    const h = harness()
+    h.send({ type: 'session.updated', session: { input_audio_transcription: { model: 'whisper-1' } } })
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+    h.send({ type: 'response.created', response: { id: 'r1' } })
+    h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+    h.send({
+      type: 'conversation.item.retrieved',
+      item: {
+        id: 'u1', role: 'user', content: [{ type: 'input_audio', transcript: '' }],
+      },
+    })
+    assert.strictEqual(h.emitted.length, 0)
+    h.send({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u1', transcript: 'ASR' })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].input.transcript, 'ASR')
+  })
+
+  it('subtracts replaced audio parts from the decode budget', () => {
+    const h = harness()
+    h.start()
+    h.retrieve('a1', LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES, 1)
+    h.retrieve('a1', LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES, 2)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+    assert.strictEqual(h.emitted[0].output.audio.length, LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+    assert.strictEqual(h.emitted[0].output.audio[0], 2)
+  })
+
+  it('preserves active VAD timing when a manual commit assigns a different item ID', () => {
+    const h = harness()
+    h.send({ type: 'input_audio_buffer.speech_started', item_id: 'vad1', audio_start_ms: 0 })
+    h.clock.tick(1000)
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'manual1' })
+    h.send({ type: 'response.created', response: { id: 'r1' } })
+    h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+    assert.strictEqual(h.emitted[0].userSpeech.startTime, 1000000)
+    assert.strictEqual(h.emitted[0].userSpeech.finishTime, 1001000)
+  })
 })

@@ -23,6 +23,7 @@ class ServerPlayback {
   #shouldRetainAudio
   #requestItem
   #onReady
+  #onTranscript
   #turns = new Map()
   #items = new Map()
   #inputs = new WeakMap()
@@ -37,12 +38,14 @@ class ServerPlayback {
 
   /**
    * @param {{ shouldRetainAudio: () => boolean, requestItem?: (itemId: string, eventId: string) => void,
+   *   onTranscript?: (itemId: string, transcript: string, now: number) => void,
    *   onReady: (turn: import('./turns').ResponseTurn, now: number) => void }} options
    */
-  constructor ({ shouldRetainAudio, requestItem, onReady }) {
+  constructor ({ shouldRetainAudio, requestItem, onReady, onTranscript }) {
     this.#shouldRetainAudio = shouldRetainAudio
     this.#requestItem = requestItem
     this.#onReady = onReady
+    this.#onTranscript = onTranscript
   }
 
   /**
@@ -59,16 +62,23 @@ class ServerPlayback {
     if (input.itemId !== undefined) {
       const previous = this.#inputs.get(input)
       if (previous && previous.id !== input.itemId) {
-        this.#items.delete(previous.id)
-        for (const [id, item] of this.#requests) {
-          if (item === previous) this.#requests.delete(id)
-        }
-        input.audio.clear()
-        input.transcript = ''
+        this.forgetInput(input)
+        input.resetSpeech()
       }
       input.audio.present = true
       const item = this.#bind(input.itemId, input, undefined, 'user')
       if (item) this.#inputs.set(input, item)
+    }
+  }
+
+  /** @param {import('./turns').InputTurn} input */
+  forgetInput (input) {
+    const previous = this.#inputs.get(input)
+    if (!previous) return
+    this.#inputs.delete(input)
+    this.#items.delete(previous.id)
+    for (const [id, item] of this.#requests) {
+      if (item === previous) this.#requests.delete(id)
     }
   }
 
@@ -393,7 +403,16 @@ class ServerPlayback {
     const item = this.#items.get(String(message?.id))
     if (!item) return
     item.inFlight = item.wanted = false
+    let receivedTranscript = false
     if (message.content) {
+      const items = item.role === 'assistant' ? item.entry.output.values() : [item]
+      let total = 0
+      for (const owned of items) {
+        for (const [index, part] of owned.parts) {
+          if (index <= owned.lastContentIndex) total += part.bytes
+        }
+      }
+      const updates = []
       let index = 0
       for (const part of message.content) {
         if (typeof part.audio === 'string' && index <= item.lastContentIndex) {
@@ -409,20 +428,29 @@ class ServerPlayback {
           const rate = bytesPerSecond(mimeType, sampleRate)
           const count = Buffer.byteLength(part.audio, 'base64')
           const bytes = cap === undefined || !rate ? count : Math.min(count, Math.floor(cap * rate / 1000))
-          const retained = knownFormat && bytes <= LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES && this.#shouldRetainAudio()
-            ? Buffer.from(part.audio.slice(0, Math.ceil(bytes / 3) * 4), 'base64').subarray(0, bytes)
-            : undefined
-          item.parts.set(index, { bytes, buffer: retained, mimeType, sampleRate })
+          total += bytes - (item.parts.get(index)?.bytes ?? 0)
+          updates.push({ index, audio: part.audio, bytes, mimeType, sampleRate, knownFormat })
           item.expected.add(index)
           item.hasAudio = true
         }
-        if (item.role === 'user' && item.id === item.side.itemId && part.transcript && !item.side.transcript) {
-          item.side.transcript = part.transcript
+        if (item.role === 'user' && item.id === item.side.itemId &&
+            typeof part.transcript === 'string' && part.transcript) {
+          item.side.transcript ||= part.transcript
+          receivedTranscript = true
         }
         index++
       }
+      // Preflight the entire logical clip, including other items, before allocating decoded audio.
+      const retain = total <= LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES && this.#shouldRetainAudio()
+      for (const { index, audio, bytes, mimeType, sampleRate, knownFormat } of updates) {
+        const buffer = retain && knownFormat
+          ? Buffer.from(audio.slice(0, Math.ceil(bytes / 3) * 4), 'base64').subarray(0, bytes)
+          : undefined
+        item.parts.set(index, { bytes, buffer, mimeType, sampleRate })
+      }
     }
     this.#rebuild(item, now)
+    if (receivedTranscript) this.#onTranscript?.(item.id, item.side.transcript, now)
     this.#check(item.entry, now)
   }
 
