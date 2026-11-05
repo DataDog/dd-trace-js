@@ -150,6 +150,7 @@ tracer.init({
 tracer.init({
   runtimeMetrics: {
     enabled: true,
+    otelEnabled: false,
     gc: true,
     eventLoop: false
   },

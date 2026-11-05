@@ -309,12 +309,14 @@
 
 /integration-tests/automatic-log-submission.spec.js @DataDog/apm-sdk-capabilities
 /integration-tests/fixtures/automatic-log-submission/ @DataDog/apm-sdk-capabilities
+/integration-tests/fixtures/runtime-metrics-transport.js @DataDog/apm-sdk-capabilities
 /integration-tests/log_injection/ @DataDog/apm-sdk-capabilities
 /integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities
 /integration-tests/opentelemetry-logs.spec.js @DataDog/apm-sdk-capabilities
 /integration-tests/opentelemetry-traces.spec.js @DataDog/apm-sdk-capabilities
 /integration-tests/opentelemetry.spec.js @DataDog/apm-sdk-capabilities
+/integration-tests/runtime-metrics-transport.spec.js @DataDog/apm-sdk-capabilities
 /integration-tests/remote_config/ @DataDog/apm-sdk-capabilities
 /integration-tests/remote_config.spec.js @DataDog/apm-sdk-capabilities
 /integration-tests/telemetry-forwarder.sh @DataDog/apm-sdk-capabilities

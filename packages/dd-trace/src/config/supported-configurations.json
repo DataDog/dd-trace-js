@@ -1944,6 +1944,16 @@
         "default": "true"
       }
     ],
+    "DD_RUNTIME_METRICS_OTEL_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "runtimeMetrics.otelEnabled"
+        ],
+        "default": "true"
+      }
+    ],
     "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED": [
       {
         "implementation": "A",

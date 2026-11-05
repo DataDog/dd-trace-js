@@ -734,6 +734,7 @@ OpenTelemetry Metrics API. In TypeScript, intersect the provider type with
 The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
 
 - `DD_METRICS_OTEL_ENABLED` - Enable OpenTelemetry metrics (default: `false`)
+- `DD_RUNTIME_METRICS_OTEL_ENABLED` - Allow enabled runtime metrics to use OTLP when `DD_METRICS_OTEL_ENABLED=true` (default: `true`). Set to `false` to use DogStatsD for runtime metrics while keeping OTel API metrics enabled. Also configurable at startup as `runtimeMetrics.otelEnabled`; it does not enable runtime collection or the OTel metrics pipeline by itself.
 - `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` - OTLP endpoint URL for metrics. Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT` with `/v1/metrics` appended (default: `http://localhost:4318/v1/metrics`)
 - `OTEL_EXPORTER_OTLP_METRICS_HEADERS` - Optional headers for metrics in JSON format. Falls back to `OTEL_EXPORTER_OTLP_HEADERS` (default: `{}`)
 - `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` - OTLP protocol for metrics. Options: `http/protobuf`, `http/json`. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL` (default: `http/protobuf`)
@@ -744,6 +745,9 @@ The Datadog SDK supports many of the configurations supported by the OpenTelemet
 - `OTEL_METRIC_EXPORT_TIMEOUT` - [NOT YET SUPPORTED] Time to export metrics including retries
 
 For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+
+Agent-backed runtime metrics use the existing DogStatsD transport: the Agent HTTP proxy when available, with UDP
+fallback. The runtime transport setting does not change the Agent endpoint or enable live transport switching.
 
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 

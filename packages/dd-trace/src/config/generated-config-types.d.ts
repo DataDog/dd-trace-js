@@ -533,6 +533,7 @@ export interface GeneratedConfig {
     eventLoop: boolean;
     gc: boolean;
     native: boolean;
+    otelEnabled: boolean;
   };
   runtimeMetricsRuntimeId: boolean;
   sampleRate: number | undefined;
@@ -834,6 +835,7 @@ export interface GeneratedEnvVarConfig {
   DD_RUNTIME_METRICS_FLUSH_INTERVAL: number;
   DD_RUNTIME_METRICS_GC_ENABLED: boolean;
   DD_RUNTIME_METRICS_NATIVE: boolean;
+  DD_RUNTIME_METRICS_OTEL_ENABLED: boolean;
   DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED: boolean;
   DD_SERVICE: string | undefined;
   DD_SERVICE_MAPPING: Record<string, string>;

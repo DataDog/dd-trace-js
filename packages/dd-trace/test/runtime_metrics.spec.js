@@ -66,6 +66,7 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
   describe(`runtimeMetrics ${nativeMetrics ? 'with' : 'without'} native metrics`, () => {
     describe('runtimeMetrics (proxy)', () => {
       let runtimeMetrics
+      let otlpMetrics
       let proxy
       let config
 
@@ -93,10 +94,36 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           flush (done) { done?.() },
         })
 
+        otlpMetrics = { start: sinon.spy(), stop: sinon.spy() }
         proxy = proxyquire('../src/runtime_metrics', {
           './runtime_metrics': runtimeMetrics,
+          './otlp_runtime_metrics': otlpMetrics,
         })
       })
+
+      const transportCases = [
+        { metrics: false, runtime: undefined, backend: 'DogStatsD' },
+        { metrics: false, runtime: false, backend: 'DogStatsD' },
+        { metrics: false, runtime: true, backend: 'DogStatsD' },
+        { metrics: true, runtime: undefined, backend: 'OTLP' },
+        { metrics: true, runtime: false, backend: 'DogStatsD' },
+        { metrics: true, runtime: true, backend: 'OTLP' },
+      ]
+      for (const { metrics, runtime, backend } of transportCases) {
+        it(`selects ${backend} with OTel=${metrics}, runtime=${runtime}`, () => {
+          config.DD_METRICS_OTEL_ENABLED = metrics
+          config.runtimeMetrics.enabled = true
+          config.runtimeMetrics.otelEnabled = runtime
+          proxy.start(config)
+          proxy.stop()
+
+          const selected = backend === 'OTLP' ? otlpMetrics : runtimeMetrics
+          const unused = backend === 'OTLP' ? runtimeMetrics : otlpMetrics
+          sinon.assert.calledOnceWithExactly(selected.start, config)
+          sinon.assert.calledOnce(selected.stop)
+          sinon.assert.notCalled(unused.start)
+        })
+      }
 
       it('should be noop when disabled', () => {
         proxy.start()

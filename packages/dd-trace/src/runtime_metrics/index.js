@@ -23,7 +23,7 @@ module.exports = {
   start (config) {
     if (!config?.runtimeMetrics.enabled) return
 
-    runtimeMetrics = config.DD_METRICS_OTEL_ENABLED
+    runtimeMetrics = config.DD_METRICS_OTEL_ENABLED && config.runtimeMetrics.otelEnabled !== false
       ? require('./otlp_runtime_metrics')
       : require('./runtime_metrics')
 

@@ -127,11 +127,11 @@ Update every supported public TypeScript surface for new public APIs unless the 
 For new top-level tracer options or environment variables, update these surfaces.
 Other settings update only their owning surfaces:
 
-1. Add the default in `packages/dd-trace/src/config/defaults.js`.
-2. Map the environment variable in `packages/dd-trace/src/config/index.js`.
+1. Register the default, type and programmatic name in `packages/dd-trace/src/config/supported-configurations.json`.
+2. Defaults, environment parsing and canonical telemetry are generated from that registry; add custom logic only when needed.
 3. Update both supported public TypeScript surfaces when applicable.
-4. Add the telemetry name mapping in `packages/dd-trace/src/telemetry/telemetry.js` when applicable.
-5. Update `packages/dd-trace/src/config/supported-configurations.json`.
+4. Test configuration telemetry when adding or changing a configuration source.
+5. Run `npm run generate:config:types` and commit the generated configuration types.
 6. Document non-internal, non-experimental options in `docs/API.md` when it owns the public surface.
 7. Test the option in `packages/dd-trace/test/config/index.spec.js`.
 

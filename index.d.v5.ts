@@ -774,6 +774,11 @@ declare namespace tracer {
        */
       enabled?: boolean,
 
+      /** Use OTLP when OTel metrics are enabled; false uses DogStatsD without disabling OTel API metrics.
+       * @default true
+       * @env DD_RUNTIME_METRICS_OTEL_ENABLED */
+      otelEnabled?: boolean,
+
       /**
        * @env DD_RUNTIME_METRICS_GC_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.

@@ -437,6 +437,37 @@ describe('Config', () => {
     assert.strictEqual(samplingRules[0].tags.status, tag)
   })
 
+  describe('runtime metrics transport', () => {
+    it('allows OTLP by default without enabling either metrics pipeline', () => {
+      const config = getConfig()
+      assert.strictEqual(config.runtimeMetrics.otelEnabled, true)
+      assert.strictEqual(config.runtimeMetrics.enabled, false)
+      assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+    })
+
+    it('disables runtime OTLP independently from OTel API metrics', () => {
+      process.env.DD_METRICS_OTEL_ENABLED = 'true'
+      process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+      process.env.DD_RUNTIME_METRICS_OTEL_ENABLED = 'false'
+      const config = getConfig()
+      assert.strictEqual(config.runtimeMetrics.otelEnabled, false)
+      assert.strictEqual(config.runtimeMetrics.enabled, true)
+      assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
+      assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+        { name: 'DD_RUNTIME_METRICS_OTEL_ENABLED', value: false, origin: 'env_var' },
+      ])
+    })
+
+    it('gives programmatic configuration precedence over the environment', () => {
+      process.env.DD_RUNTIME_METRICS_OTEL_ENABLED = 'false'
+      const config = getConfig({ runtimeMetrics: { otelEnabled: true } })
+      assert.strictEqual(config.runtimeMetrics.otelEnabled, true)
+      assertConfigUpdateContains(updateConfig.lastCall.args[0], [
+        { name: 'DD_RUNTIME_METRICS_OTEL_ENABLED', value: true, origin: 'code' },
+      ])
+    })
+  })
+
   it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
     process.env.DD_SERVICE = 'service'
     process.env.OTEL_SERVICE_NAME = 'otel_service'
