@@ -58,6 +58,25 @@ evaluation-context snapshot. To disable aggregated <code>flagevaluation</code> e
 <code>DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false</code>.
 Span enrichment, OpenTelemetry evaluation metrics, and debug logging retain their own settings; this switch does not
 disable all Feature Flagging telemetry.</p>
+<h2 id="feature-flag-exposures-in-your-own-data-store">Feature Flag Exposures in Your Own Data Store</h2>
+<p>Use the <code>ExposureHook</code> to receive every feature flag evaluation with the same deduplication decision the tracer uses, so your application can
+record exposures in its own data store:</p>
+<pre><code class="javascript"><span class="hl-4">const</span><span class="hl-1"> </span><span class="hl-6">tracer</span><span class="hl-1"> = </span><span class="hl-5">require</span><span class="hl-1">(</span><span class="hl-3">&#39;dd-trace&#39;</span><span class="hl-1">).</span><span class="hl-5">init</span><span class="hl-1">()</span><br/><span class="hl-4">const</span><span class="hl-1"> { </span><span class="hl-6">OpenFeature</span><span class="hl-1"> } = </span><span class="hl-5">require</span><span class="hl-1">(</span><span class="hl-3">&#39;@openfeature/server-sdk&#39;</span><span class="hl-1">)</span><br/><span class="hl-4">const</span><span class="hl-1"> { </span><span class="hl-6">ExposureHook</span><span class="hl-1"> } = </span><span class="hl-5">require</span><span class="hl-1">(</span><span class="hl-3">&#39;dd-trace/openfeature/exposure-hook&#39;</span><span class="hl-1">)</span><br/><br/><span class="hl-2">OpenFeature</span><span class="hl-1">.</span><span class="hl-5">addHooks</span><span class="hl-1">(</span><span class="hl-4">new</span><span class="hl-1"> </span><span class="hl-5">ExposureHook</span><span class="hl-1">((</span><span class="hl-2">evaluation</span><span class="hl-1">) </span><span class="hl-4">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-0">if</span><span class="hl-1"> (!</span><span class="hl-2">evaluation</span><span class="hl-1">.</span><span class="hl-5">shouldSend</span><span class="hl-1">()) </span><span class="hl-0">return</span><br/><span class="hl-1">  </span><span class="hl-7">// Queue for your own writer; the callback runs on the evaluation thread and must not do I/O.</span><br/><span class="hl-1">  </span><span class="hl-5">recordExposure</span><span class="hl-1">({</span><br/><span class="hl-1">    </span><span class="hl-2">flag:</span><span class="hl-1"> </span><span class="hl-2">evaluation</span><span class="hl-1">.</span><span class="hl-2">flagKey</span><span class="hl-1">,</span><br/><span class="hl-1">    </span><span class="hl-2">variant:</span><span class="hl-1"> </span><span class="hl-2">evaluation</span><span class="hl-1">.</span><span class="hl-2">variant</span><span class="hl-1">,</span><br/><span class="hl-1">    </span><span class="hl-2">allocation:</span><span class="hl-1"> </span><span class="hl-2">evaluation</span><span class="hl-1">.</span><span class="hl-2">allocation</span><span class="hl-1">,</span><br/><span class="hl-1">    </span><span class="hl-2">targetingKey:</span><span class="hl-1"> </span><span class="hl-2">evaluation</span><span class="hl-1">.</span><span class="hl-2">targetingKey</span><span class="hl-1">,</span><br/><span class="hl-1">    </span><span class="hl-2">features:</span><span class="hl-1"> </span><span class="hl-2">evaluation</span><span class="hl-1">.</span><span class="hl-5">getFeatures</span><span class="hl-1">(),</span><br/><span class="hl-1">  })</span><br/><span class="hl-1">}))</span><br/><br/><span class="hl-0">await</span><span class="hl-1"> </span><span class="hl-2">OpenFeature</span><span class="hl-1">.</span><span class="hl-5">setProviderAndWait</span><span class="hl-1">(</span><span class="hl-2">tracer</span><span class="hl-1">.</span><span class="hl-2">openfeature</span><span class="hl-1">)</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Register the hook with <code>OpenFeature.addHooks</code> or on a client. The callback runs for every evaluation, including errors and repeats:</p>
+<ul>
+<li><code>isExposure()</code>: the evaluation succeeded and selected an allocation that logs exposures, whether or not this subject was already exposed.</li>
+<li><code>isCacheHit()</code>: this exposure repeats one already recorded for this subject (same flag, allocation, variant and serial id).</li>
+<li><code>shouldSend()</code>: a new or changed exposure; exactly what the tracer sends to Datadog.</li>
+<li><code>getFeatures()</code>: the read-only <code>__dd_feature.&lt;key&gt;</code> metadata of the selected split, such as <code>holdout.key</code>, <code>holdout.assignment_group</code> and
+<code>holdout.should_include_in_holdout_analysis</code>.</li>
+</ul>
+<p>The callback runs on the evaluation thread: hand the data to a background queue instead of writing it from the callback. An exception from the
+callback does not affect the evaluation; the first failure is logged at warn level and later ones at debug level.</p>
+<p>To stop sending exposures to Datadog while the hook keeps working, see
+<a href="#feature-flag-exposure-logging">Feature Flag Exposure Logging</a>. The hook still receives every evaluation with the same
+<code>shouldSend()</code> decision, and exposure deduplication keeps running.</p>
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 <p>The tracer-managed Datadog OpenFeature provider emits aggregated <code>flagevaluation</code> track EVP events by default. Set
 <code>DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false</code> to disable this collection. This setting does not disable
@@ -114,7 +133,7 @@ The option does not change protected/full-data reporting consent or debug loggin
 </code><button type="button">Copy</button></pre>
 
 <p>LLM Observability integrations accept an <code>llmobs</code> option. Setting it to <code>false</code> stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.</p>
-<p>The option is supported by <code>ai</code>, <code>anthropic</code>, <code>aws-sdk</code> (Bedrock Runtime only), <code>claude-agent-sdk</code>, <code>google-cloud-vertexai</code>, <code>google-genai</code>, <code>langchain</code>, <code>langgraph</code>, <code>modelcontextprotocol-sdk</code>, <code>openai</code>, and <code>openai-agents</code>.</p>
+<p>The option is supported by <code>ai</code>, <code>anthropic</code>, <code>aws-sdk</code> (Bedrock Runtime only), <code>claude-agent-sdk</code>, <code>google-cloud-vertexai</code>, <code>google-genai</code>, <code>langchain</code>, <code>langgraph</code>, <code>modelcontextprotocol-sdk</code>, <code>openai</code>, <code>openai-agents</code>, and <code>typesafe</code>.</p>
 <pre><code class="javascript"><span class="hl-7">// Keep APM tracing for OpenAI, but let another integration own the LLM Observability spans.</span><br/><span class="hl-2">tracer</span><span class="hl-1">.</span><span class="hl-5">use</span><span class="hl-1">(</span><span class="hl-3">&#39;openai&#39;</span><span class="hl-1">, {</span><br/><span class="hl-1">  </span><span class="hl-2">llmobs:</span><span class="hl-1"> </span><span class="hl-4">false</span><br/><span class="hl-1">})</span>
 </code><button type="button">Copy</button></pre>
 
@@ -195,6 +214,7 @@ The option does not change protected/full-data reporting consent or debug loggin
 <h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
+<h5 id="react-router"></h5>
 <h5 id="redis"></h5>
 <h5 id="restify"></h5>
 <h5 id="rhea"></h5>
@@ -203,6 +223,7 @@ The option does not change protected/full-data reporting consent or debug loggin
 <h5 id="sharedb"></h5>
 <h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
+<h5 id="typesafe"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
 <h5 id="web"></h5>
@@ -283,6 +304,7 @@ The option does not change protected/full-data reporting consent or debug loggin
 <li><a href="./interfaces/plugins.postgres.html">postgres</a></li>
 <li><a href="./interfaces/plugins.prisma.html">prisma</a></li>
 <li><a href="./interfaces/plugins.protobufjs.html">protobufjs</a></li>
+<li><a href="./interfaces/plugins.react_router.html">react-router</a></li>
 <li><a href="./interfaces/plugins.redis.html">redis</a></li>
 <li><a href="./interfaces/plugins.restify.html">restify</a></li>
 <li><a href="./interfaces/plugins.rhea.html">rhea</a></li>
@@ -291,6 +313,7 @@ The option does not change protected/full-data reporting consent or debug loggin
 <li><a href="./interfaces/plugins.sharedb.html">sharedb</a></li>
 <li><a href="./interfaces/plugins.supabase.html">supabase</a></li>
 <li><a href="./interfaces/plugins.tedious.html">tedious</a></li>
+<li><a href="./interfaces/plugins.typesafe.html">typesafe</a></li>
 <li><a href="./interfaces/plugins.undici.html">undici</a></li>
 <li><a href="./interfaces/plugins.vitest.html">vitest</a></li>
 <li><a href="./interfaces/plugins.web.html">web</a></li>
@@ -506,6 +529,85 @@ You have to pass an object with at least an <code>id</code> property.</p>
 <pre><code class="javascript"><span class="hl-4">const</span><span class="hl-1"> </span><span class="hl-6">tracer</span><span class="hl-1"> = </span><span class="hl-5">require</span><span class="hl-1">(</span><span class="hl-3">&#39;dd-trace&#39;</span><span class="hl-1">).</span><span class="hl-5">init</span><span class="hl-1">()</span><br/><br/><span class="hl-4">function</span><span class="hl-1"> </span><span class="hl-5">handle</span><span class="hl-1"> () {</span><br/><span class="hl-1">  </span><span class="hl-2">tracer</span><span class="hl-1">.</span><span class="hl-5">setUser</span><span class="hl-1">({</span><br/><span class="hl-1">    </span><span class="hl-2">id:</span><span class="hl-1"> </span><span class="hl-3">&#39;123456789&#39;</span><span class="hl-1">, </span><span class="hl-7">// *REQUIRED* Unique identifier of the user.</span><br/><br/><span class="hl-1">    </span><span class="hl-7">// All other fields are optional.</span><br/><span class="hl-1">    </span><span class="hl-2">email:</span><span class="hl-1"> </span><span class="hl-3">&#39;jane.doe@example.com&#39;</span><span class="hl-1">, </span><span class="hl-7">// Email of the user.</span><br/><span class="hl-1">    </span><span class="hl-2">name:</span><span class="hl-1"> </span><span class="hl-3">&#39;Jane Doe&#39;</span><span class="hl-1">, </span><span class="hl-7">// User-friendly name of the user.</span><br/><span class="hl-1">    </span><span class="hl-2">session_id:</span><span class="hl-1"> </span><span class="hl-3">&#39;987654321&#39;</span><span class="hl-1">, </span><span class="hl-7">// Session ID of the user.</span><br/><span class="hl-1">    </span><span class="hl-2">role:</span><span class="hl-1"> </span><span class="hl-3">&#39;admin&#39;</span><span class="hl-1">, </span><span class="hl-7">// Role the user is making the request under.</span><br/><span class="hl-1">    </span><span class="hl-2">scope:</span><span class="hl-1"> </span><span class="hl-3">&#39;read:message, write:files&#39;</span><span class="hl-1">, </span><span class="hl-7">// Scopes or granted authorizations the user currently possesses.</span><br/><br/><span class="hl-1">    </span><span class="hl-7">// Arbitrary fields are also accepted to attach custom data to the user (RBAC, Oauth, etc…)</span><br/><span class="hl-1">    </span><span class="hl-2">custom_tag:</span><span class="hl-1"> </span><span class="hl-3">&#39;custom data&#39;</span><br/><span class="hl-1">  })</span><br/><span class="hl-1">}</span>
 </code><button type="button">Copy</button></pre>
 
+<h2 id="mocha-test-automation-exclusions" class="tsd-anchor-link">Mocha test automation exclusions<a href="#mocha-test-automation-exclusions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Mocha supports the same <code>preventFailureSuppression</code> and <code>noAutoRetry</code> callback annotations
+from <code>dd-trace/ci/test-annotations</code> shown below for Jest. Apply them to <code>it</code>, <code>test</code>, and
+parameterized callbacks, including <code>only</code> and <code>skip</code> declarations. The annotations are
+preserved in serial and parallel workers. Native Mocha retries remain available when
+<code>noAutoRetry</code> excludes Datadog ATR, EFD, and Attempt to Fix.</p>
+<h2 id="cucumber-test-automation-exclusions" class="tsd-anchor-link">Cucumber test automation exclusions<a href="#cucumber-test-automation-exclusions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Use the native Gherkin tags <code>@datadog:prevent_failure_suppression</code> and
+<code>@datadog:no_auto_retry</code> on a <code>Scenario</code> or <code>Scenario Outline</code>. Outline tags apply
+to every example. These are tracer declaration annotations, resolved before
+Datadog disabling, quarantine, ATR, EFD, and Attempt to Fix. Explicit <code>--retry</code>
+settings remain available. Parallel Test Management exclusions require Cucumber 11 or later,
+which exposes the worker <code>runTestCase</code> lifecycle; serial scenarios support Cucumber 7 or later.
+Cucumber's normal tag selection and dry runs still apply.
+The annotation and assigned Test Management span tags follow the callback API below.</p>
+<h2 id="playwright-test-automation-exclusions" class="tsd-anchor-link">Playwright test automation exclusions<a href="#playwright-test-automation-exclusions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Playwright 1.38 and later support the <code>preventFailureSuppression</code> and <code>noAutoRetry</code>
+callback annotations from <code>dd-trace/ci/test-annotations</code>. Apply them to individual
+<code>test</code> callbacks, including generated cases, <code>test.only</code>, and <code>test.skip</code>. Callback
+fixture parameters remain available. Exclusions are resolved in the coordinator
+before disabling and retries; worker spans retain both annotation and backend
+assignment tags. Explicit project and suite retry settings remain available.
+Playwright retries serial groups together, so a group containing <code>noAutoRetry</code> also
+excludes Datadog automatic retries for its other members. Explicit native group
+and project retries remain available.</p>
+<h2 id="jest-test-automation-exclusions" class="tsd-anchor-link">Jest test automation exclusions<a href="#jest-test-automation-exclusions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>With the <code>jest-circus</code> runner, annotate test callbacks using <code>dd-trace/ci/test-annotations</code>:</p>
+<pre><code class="javascript"><span class="hl-4">const</span><span class="hl-1"> { </span><span class="hl-6">preventFailureSuppression</span><span class="hl-1">, </span><span class="hl-6">noAutoRetry</span><span class="hl-1"> } = </span><span class="hl-5">require</span><span class="hl-1">(</span><span class="hl-3">&#39;dd-trace/ci/test-annotations&#39;</span><span class="hl-1">)</span><br/><br/><span class="hl-5">test</span><span class="hl-1">(</span><span class="hl-3">&#39;critical check&#39;</span><span class="hl-1">, </span><span class="hl-5">preventFailureSuppression</span><span class="hl-1">(</span><span class="hl-5">noAutoRetry</span><span class="hl-1">(() </span><span class="hl-4">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-5">expect</span><span class="hl-1">(</span><span class="hl-5">check</span><span class="hl-1">()).</span><span class="hl-5">toBe</span><span class="hl-1">(</span><span class="hl-4">true</span><span class="hl-1">)</span><br/><span class="hl-1">})))</span><br/><br/><span class="hl-2">test</span><span class="hl-1">.</span><span class="hl-5">each</span><span class="hl-1">(</span><span class="hl-2">cases</span><span class="hl-1">)(</span><span class="hl-3">&#39;critical case %s&#39;</span><span class="hl-1">, </span><span class="hl-5">preventFailureSuppression</span><span class="hl-1">(</span><span class="hl-2">value</span><span class="hl-1"> </span><span class="hl-4">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-5">expect</span><span class="hl-1">(</span><span class="hl-5">check</span><span class="hl-1">(</span><span class="hl-2">value</span><span class="hl-1">)).</span><span class="hl-5">toBe</span><span class="hl-1">(</span><span class="hl-4">true</span><span class="hl-1">)</span><br/><span class="hl-1">}))</span>
+</code><button type="button">Copy</button></pre>
+
+<p><code>preventFailureSuppression(callback)</code> prevents Datadog quarantine and disabling from applying to that callback.
+It does not override Test Impact Analysis, developer skips, or test selection, and does not prevent retries.</p>
+<p><code>noAutoRetry(callback)</code> prevents Datadog Auto Test Retries, Early Flake Detection retries, and Attempt to Fix retries.
+It does not turn off test discovery or flakiness reporting. Explicit <code>jest.retryTimes(...)</code> calls remain available.
+To protect a failure from both quarantine/disable and automatic retries, combine the helpers.</p>
+<p>Each helper returns an annotated callback without modifying the original. Callback arguments, return values,
+errors, <code>this</code>, and arity are preserved. Apply the helper to the callback passed to <code>test.each</code> to protect every case.
+The helpers can be imported without initializing the tracer; enforcement requires the corresponding test framework instrumentation.</p>
+<p>Test events report <code>test.test_management.prevent_failure_suppression</code> and <code>test.test_management.no_auto_retry</code>
+as <code>true</code> when the corresponding annotation is present; absent annotations omit the tag.
+These describe annotations observed on that execution, on any branch. Management-property tags retain backend
+assignments even when annotations override their runtime behavior. Default-branch synchronization and UI restrictions require backend support;
+these helpers do not update remote test properties. Files skipped by Test Impact Analysis produce no new observation.</p>
+<p>Framework support is described in the framework-specific sections. The legacy Jest Jasmine runner does not enforce these helpers.</p>
+<h2 id="vitest-test-automation-exclusions" class="tsd-anchor-link">Vitest test automation exclusions<a href="#vitest-test-automation-exclusions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Annotate callbacks with <code>preventFailureSuppression</code> and <code>noAutoRetry</code> from
+<code>dd-trace/ci/test-annotations</code>. These declarations apply to all generated <code>test.each</code>
+cases and work with Vitest's test modifiers, worker processes and supported
+browser/no-worker modes. Annotation flags travel with test task metadata before
+Vitest replaces callbacks for fixtures or parameterization.</p>
+<p>Protection overrides Datadog quarantine/disabling; retry exclusion blocks Datadog
+ATR, EFD and Attempt to Fix. Explicit native retries on a test or suite remain
+available and are reported as framework retries. Developer skips and TIA retain
+their ordinary selection semantics. Backend-assigned property tags remain visible
+when the execution policy is overridden; observed annotation tags are true-only.</p>
+<h2 id="cypress-test-automation-exclusions" class="tsd-anchor-link">Cypress test automation exclusions<a href="#cypress-test-automation-exclusions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>With Cypress 12 and later, annotate the callback passed to <code>it</code> or <code>specify</code> using
+<code>preventFailureSuppression</code> and <code>noAutoRetry</code> from <code>dd-trace/ci/test-annotations</code>.
+Both helpers compose in the same way as the Jest examples above. Skipped declarations,
+loop-generated cases, and allowed native retries retain their annotation tags.</p>
+<p><code>preventFailureSuppression</code> overrides Datadog quarantine and disabling while preserving
+normal test selection, explicit skips, and Test Impact Analysis. <code>noAutoRetry</code> excludes
+Datadog ATR, EFD, and Attempt to Fix. Explicit Cypress retries configured on a test,
+suite, or globally remain available and are reported as framework retries. Test isolation
+must remain enabled for Datadog automatic retry controls to apply.</p>
+<p>Management tags continue to describe backend assignments. Annotation tags describe the
+observed callback, and effective execution/final status follows the exclusions.</p>
+<h2 id="webdriverio-test-automation-exclusions" class="tsd-anchor-link">WebdriverIO test automation exclusions<a href="#webdriverio-test-automation-exclusions" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>With the WebdriverIO Mocha or Jasmine adapter (WebdriverIO 9 and later), apply
+<code>preventFailureSuppression</code> and <code>noAutoRetry</code> from <code>dd-trace/ci/test-annotations</code>
+to callbacks passed to <code>it</code> or <code>xit</code>. The helpers compose as in the Jest example.
+They apply to every declaration generated in a loop and retain annotation tags
+on explicit skips and permitted native retries.</p>
+<p><code>preventFailureSuppression</code> overrides Datadog quarantine and disabling without
+blocking retries. <code>noAutoRetry</code> excludes Datadog ATR, EFD, and Attempt to Fix;
+native Mocha retries and explicit WebdriverIO Jasmine retries remain available and
+are reported as framework retries.
+Both helpers preserve ordinary selection and expected-failure behavior. Management
+property tags retain backend assignments even when their execution policy is overridden.</p>
 </div></div>
 <div class="col-sidebar">
 <div class="page-menu">
@@ -519,7 +621,12 @@ You have to pass an object with at least an <code>id</code> property.</p>
 <div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
 <details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg>
 <h3>On This Page</h3></summary>
-<div class="tsd-accordion-details"><a href="#supported-configuration"><span>Supported <wbr/>Configuration</span></a><a href="#supported-configuration-1"><span>Supported <wbr/>Configuration</span></a></div></details></div>
+<div class="tsd-accordion-details">
+<ul>
+<li>
+<ul>
+<li><a href="#supported-configuration"><span>Supported <wbr/>Configuration</span></a></li>
+<li><a href="#supported-configuration-1"><span>Supported <wbr/>Configuration</span></a></li></ul></li></ul><a href="#mocha-test-automation-exclusions"><span>Mocha test automation exclusions</span></a><a href="#cucumber-test-automation-exclusions"><span>Cucumber test automation exclusions</span></a><a href="#playwright-test-automation-exclusions"><span>Playwright test automation exclusions</span></a><a href="#jest-test-automation-exclusions"><span>Jest test automation exclusions</span></a><a href="#vitest-test-automation-exclusions"><span>Vitest test automation exclusions</span></a><a href="#cypress-test-automation-exclusions"><span>Cypress test automation exclusions</span></a><a href="#webdriverio-test-automation-exclusions"><span>Webdriver<wbr/>IO test automation exclusions</span></a></div></details></div>
 <div class="site-menu">
 <nav class="tsd-navigation"><a href="modules.html">dd-trace</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">

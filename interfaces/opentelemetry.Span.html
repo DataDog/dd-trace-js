@@ -20,14 +20,14 @@ may have children.</p>
 <p>Spans are created by the <a href="opentelemetry.Tracer.html#startspan" class="tsd-kind-method">Tracer.startSpan</a> method.</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Span</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#addevent-1">addEvent</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">name</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">attributesOrStartTime</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">TimeInput</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Attributes</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">startTime</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">TimeInput</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">this</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#addlink-1">addLink</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">link</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Link</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">this</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#addlinks-1">addLinks</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">links</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Link</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">this</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#end-1">end</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">endTime</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">TimeInput</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#isrecording-1">isRecording</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#recordexception-1">recordException</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">exception</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Exception</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">time</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">TimeInput</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setattribute-1">setAttribute</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">key</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">value</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">AttributeValue</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">this</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setattributes-1">setAttributes</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">attributes</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Attributes</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">this</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setstatus-1">setStatus</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">status</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">SpanStatus</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">this</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#spancontext-1">spanContext</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="../modules/opentelemetry.html" class="tsd-signature-type tsd-kind-namespace">opentelemetry</a><span class="tsd-signature-symbol">.</span><a href="opentelemetry.SpanContext.html" class="tsd-signature-type tsd-kind-interface">SpanContext</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#updatename-1">updateName</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">name</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">this</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
-<section class="tsd-panel tsd-hierarchy" data-refl="2132">
+<section class="tsd-panel tsd-hierarchy" data-refl="2148">
 <h4>Hierarchy</h4>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><span class="tsd-signature-type">Span</span>
 <ul class="tsd-hierarchy">
 <li class="tsd-hierarchy-item"><span class="tsd-hierarchy-target">Span</span></li></ul></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3507">index.d.ts:3507</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3526">index.d.ts:3526</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -75,7 +75,7 @@ if type is <a href="../types/opentelemetry.TimeInput.html" class="tsd-kind-type-
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">this</span></h4><aside class="tsd-sources">
 <p>Overrides otel.Span.addEvent</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3548">index.d.ts:3548</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3567">index.d.ts:3567</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="addlink"><span>add<wbr/>Link</span><a href="#addlink" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -95,7 +95,7 @@ It is preferred span links be added at span creation.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">this</span></h4><aside class="tsd-sources">
 <p>Overrides otel.Span.addLink</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3609">index.d.ts:3609</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3628">index.d.ts:3628</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="addlinks"><span>add<wbr/>Links</span><a href="#addlinks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -115,7 +115,7 @@ It is preferred span links be added at span creation.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">this</span></h4><aside class="tsd-sources">
 <p>Overrides otel.Span.addLinks</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3619">index.d.ts:3619</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3638">index.d.ts:3638</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="end"><span>end</span><a href="#end" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -138,7 +138,7 @@ use the current time as the span's end time.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Overrides otel.Span.end</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3583">index.d.ts:3583</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3602">index.d.ts:3602</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="isrecording"><span>is<wbr/>Recording</span><a href="#isrecording" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -152,7 +152,7 @@ with the <code>AddEvent</code> operation and attributes using <code>setAttribute
 <aside class="tsd-sources">
 <p>Overrides otel.Span.isRecording</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3591">index.d.ts:3591</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3610">index.d.ts:3610</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="recordexception"><span>record<wbr/>Exception</span><a href="#recordexception" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -174,7 +174,7 @@ use the current time.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <p>Overrides otel.Span.recordException</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3599">index.d.ts:3599</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3618">index.d.ts:3618</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="setattribute"><span>set<wbr/>Attribute</span><a href="#setattribute" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -197,7 +197,7 @@ undefined is invalid and will result in undefined behavior.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">this</span></h4><aside class="tsd-sources">
 <p>Overrides otel.Span.setAttribute</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3528">index.d.ts:3528</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3547">index.d.ts:3547</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="setattributes"><span>set<wbr/>Attributes</span><a href="#setattributes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -217,7 +217,7 @@ are invalid and will result in undefined behavior.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">this</span></h4><aside class="tsd-sources">
 <p>Overrides otel.Span.setAttributes</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3537">index.d.ts:3537</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3556">index.d.ts:3556</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="setstatus"><span>set<wbr/>Status</span><a href="#setstatus" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -237,7 +237,7 @@ of previous calls to SetStatus on the Span.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">this</span></h4><aside class="tsd-sources">
 <p>Overrides otel.Span.setStatus</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3557">index.d.ts:3557</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3576">index.d.ts:3576</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="spancontext"><span>span<wbr/>Context</span><a href="#spancontext" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -253,7 +253,7 @@ span ends.</p>
 <aside class="tsd-sources">
 <p>Overrides otel.Span.spanContext</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3517">index.d.ts:3517</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3536">index.d.ts:3536</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="updatename"><span>update<wbr/>Name</span><a href="#updatename" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -274,7 +274,7 @@ the implementation.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">this</span></h4><aside class="tsd-sources">
 <p>Overrides otel.Span.updateName</p>
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/f4e760f25dde420fbc66d91ee83ac71203d23cff/index.d.ts#L3569">index.d.ts:3569</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/a8e23ec271447bc682e16a395b1a5869765f9188/index.d.ts#L3588">index.d.ts:3588</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
