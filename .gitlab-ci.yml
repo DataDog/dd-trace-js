@@ -59,6 +59,7 @@ variables:
   # One pipeline injection package size ratchet
   OCI_PACKAGE_MAX_SIZE_BYTES: 30_000_000
   LIB_INJECTION_IMAGE_MAX_SIZE_BYTES: 50_000_000
+  SUPPORTED_VERSIONS_GENERATOR: "scripts/generate-supported-integrations.js"
 
 "llm validation":
   variables:
@@ -113,3 +114,8 @@ requirements_json_test:
   variables:
     REQUIREMENTS_BLOCK_JSON_PATH: ".gitlab/requirements_block.json"
     REQUIREMENTS_ALLOW_JSON_PATH: ".gitlab/requirements_allow.json"
+
+generate-supported-versions:
+  before_script:
+    # The packaging image has no yarn; lifecycle scripts must run to build the vendored bundle instrumentations load.
+    - npx --yes yarn@1 install --frozen-lockfile --non-interactive

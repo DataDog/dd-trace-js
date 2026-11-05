@@ -67,8 +67,8 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { SAMPLING_PRIORITY } = require('../../ext/tags')
 const { AUTO_KEEP } = require('../../ext/priority')
-const { NODE_MAJOR } = require('../../version')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../packages/dd-trace/src/constants')
+const { isLatestCucumberSupported } = require('./versions')
 
 const cucumberWorkerThreadsPreloadPath = path.join(
   __dirname,
@@ -76,7 +76,6 @@ const cucumberWorkerThreadsPreloadPath = path.join(
 )
 
 const version = process.env.CUCUMBER_VERSION || 'latest'
-const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 
 const onlyLatestIt = version === 'latest' ? it : it.skip
 const rejectsFormatterErrorsIt = version === '7.0.0' ? it : it.skip
@@ -85,7 +84,7 @@ const runTestsCommand = './node_modules/.bin/cucumber-js ci-visibility/features/
 const parallelModeCommand = './node_modules/.bin/cucumber-js ci-visibility/features/*.feature --parallel 2'
 const featuresPath = 'ci-visibility/features/'
 
-const shouldTestCucumberWorkerThreadsPreload = version === 'latest' && isLatestCucumberSupported
+const shouldTestCucumberWorkerThreadsPreload = version === 'latest' && isLatestCucumberSupported()
 
 describe('cucumber worker threads preload', () => {
   const test = shouldTestCucumberWorkerThreadsPreload ? it : it.skip
@@ -217,7 +216,7 @@ for (const cucumberWorkerVersion of ['13.1.1', 'latest']) {
 
 // TODO: add esm tests
 describe(`cucumber@${version} commonJS`, () => {
-  if (!isLatestCucumberSupported && version === 'latest') return
+  if (!isLatestCucumberSupported() && version === 'latest') return
 
   let cwd, receiver, childProcess, testOutput
 
