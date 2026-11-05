@@ -3233,7 +3233,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "400-499"
+        "default": null
       }
     ],
     "DD_TRACE_HTTP_ENABLED": [
@@ -3247,7 +3247,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "500-599",
+        "default": null,
         "aliases": [
           "DD_HTTP_SERVER_ERROR_STATUSES"
         ]
