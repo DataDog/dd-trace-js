@@ -239,8 +239,7 @@ describe('Plugin', function () {
           return agent.load('next')
         })
 
-        before(function (done) {
-          this.timeout(300 * 1000)
+        const launchServer = () => new Promise((resolve, reject) => {
           const cwd = standalone
             ? path.join(__dirname, '.next/standalone')
             : __dirname
@@ -269,7 +268,7 @@ describe('Plugin', function () {
             },
           })
 
-          server.once('error', done)
+          server.once('error', reject)
 
           function waitUntilServerStarted (chunk) {
             const chunkStr = chunk.toString()
@@ -279,7 +278,7 @@ describe('Plugin', function () {
             if (match) {
               port = Number(match[1])
               server.stdout.off('data', waitUntilServerStarted)
-              done()
+              resolve()
             }
           }
           server.stdout.on('data', waitUntilServerStarted)
@@ -288,14 +287,22 @@ describe('Plugin', function () {
           server.stdout.on('data', chunk => process.stdout.write(chunk))
         })
 
+        before(async function () {
+          this.timeout(300 * 1000)
+          await launchServer()
+        })
+
         after(async function () {
           this.timeout(30 * 1000)
 
           await stopProc(server)
-
-          await httpRequest.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
           await agent.close()
         })
+
+        return async () => {
+          await stopProc(server)
+          await launchServer()
+        }
       }
 
       before(async function () {
@@ -392,7 +399,7 @@ describe('Plugin', function () {
       )
 
       describe('without configuration', () => {
-        startServer({ withConfig: false, standalone: false })
+        const restartServer = startServer({ withConfig: false, standalone: false })
 
         describe('for api routes', () => {
           it('should do automatic instrumentation', done => {
@@ -733,21 +740,25 @@ describe('Plugin', function () {
         describe('for the image optimizer', () => {
           it('names image optimizer cache misses and hits', async () => {
             await assertImageRequest(pkg.version, port, 64, 'MISS')
+            await restartServer()
             await assertImageRequest(pkg.version, port, 64, 'HIT')
           })
 
           it('names image optimizer HEAD cache hits', async () => {
             await assertImageRequest(pkg.version, port, 384, 'MISS')
+            await restartServer()
             await assertImageRequest(pkg.version, port, 384, 'HIT', { method: 'HEAD' })
           })
 
           it('names rewritten image optimizer requests', async () => {
             await assertImageRequest(pkg.version, port, 640, 'MISS', { pathname: '/image-optimizer' })
+            await restartServer()
             await assertImageRequest(pkg.version, port, 640, 'HIT', { pathname: '/image-optimizer' })
           })
 
           it('preserves the optimizer route when an API route serves the image', async () => {
             await assertImageRequest(pkg.version, port, 32, 'MISS', { source: '/api/image' })
+            await restartServer()
             await assertImageRequest(pkg.version, port, 32, 'HIT', { source: '/api/image' })
           })
 
@@ -779,6 +790,7 @@ describe('Plugin', function () {
 
           it('preserves an upstream parent route for image optimizer requests', async () => {
             await assertImageRequest(pkg.version, port, 256, 'MISS', { parentRoute: '/upstream/[id]' })
+            await restartServer()
             await assertImageRequest(pkg.version, port, 256, 'HIT', { parentRoute: '/upstream/[id]' })
           })
 
@@ -1158,10 +1170,11 @@ describe('Plugin', function () {
       // TODO investigate this further - traces appear in the UI for a small test app
       if (satisfiesStandalone(pkg.version) && !satisfies(pkg.version, '13.4.13 - 13.4.18')) {
         describe('with standalone', () => {
-          startServer({ withConfig: false, standalone: true })
+          const restartServer = startServer({ withConfig: false, standalone: true })
 
           it('names image optimizer cache misses and hits in standalone mode', async () => {
             await assertImageRequest(pkg.version, port, 96, 'MISS', { standalone: true })
+            await restartServer()
             await assertImageRequest(pkg.version, port, 96, 'HIT', { standalone: true })
           })
 
@@ -1222,10 +1235,11 @@ describe('Plugin', function () {
       })
 
       describe('without HTTP instrumentation', () => {
-        startServer({ withConfig: false, standalone: false, withHttp: false })
+        const restartServer = startServer({ withConfig: false, standalone: false, withHttp: false })
 
         it('names image optimizer cache misses and hits without HTTP instrumentation', async () => {
           await assertImageRequest(pkg.version, port, 128, 'MISS', { withHttp: false })
+          await restartServer()
           await assertImageRequest(pkg.version, port, 128, 'HIT', { withHttp: false })
         })
 
