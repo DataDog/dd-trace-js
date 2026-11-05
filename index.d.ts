@@ -357,6 +357,7 @@ interface Plugins {
   "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
+  "react-router": tracer.plugins.react_router;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
   "rhea": tracer.plugins.rhea;
@@ -365,6 +366,7 @@ interface Plugins {
   "sharedb": tracer.plugins.sharedb;
   "supabase": tracer.plugins.supabase;
   "tedious": tracer.plugins.tedious;
+  "typesafe": tracer.plugins.typesafe;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
   "web": tracer.plugins.web;
@@ -3249,6 +3251,17 @@ declare namespace tracer {
     interface protobufjs extends Integration {}
 
     /**
+     * This plugin automatically instruments
+     * [React Router](https://reactrouter.com/) Framework Mode via the
+     * ServerInstrumentation API (`createRequestHandler`), tagging Express/http
+     * spans with parameterized routes and creating loader/action child spans.
+     *
+     * Requires `react-router` >= 7.9.5 (stable `instrumentations` in >= 7.15).
+     * Configure request span options on `http` or the host framework integration.
+     */
+    interface react_router extends Pick<Instrumentation, 'enabled' | 'measured'> {}
+
+    /**
      * This plugin automatically instruments the
      * [redis](https://github.com/NodeRedis/node_redis) module.
      */
@@ -3352,6 +3365,12 @@ declare namespace tracer {
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
     interface tedious extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@typesafe-ai/sdk](https://www.npmjs.com/package/@typesafe-ai/sdk) module.
+     */
+    interface typesafe extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the

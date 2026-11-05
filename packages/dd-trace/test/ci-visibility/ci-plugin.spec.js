@@ -48,6 +48,7 @@ describe('CiPlugin', () => {
   let getRepositoryRoot
   let getTestEnvironmentMetadata
   let incrementCountMetric
+  let logError
 
   beforeEach(() => {
     distributionMetric = sinon.stub()
@@ -55,8 +56,10 @@ describe('CiPlugin', () => {
     getRepositoryRoot = sinon.stub()
     getTestEnvironmentMetadata = sinon.stub().returns(getTestEnvironmentMetadataPayload())
     incrementCountMetric = sinon.stub()
+    logError = sinon.spy()
 
     CiPlugin = proxyquire('../../src/plugins/ci_plugin', {
+      '../log': { error: logError },
       '../ci-visibility/telemetry': {
         ...require('../../src/ci-visibility/telemetry'),
         distributionMetric,
@@ -145,6 +148,30 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnce(getLibraryConfiguration)
     sinon.assert.calledOnce(onDone)
   })
+
+  for (const [method, channel, message] of [
+    ['getLibraryConfiguration', 'library-configuration', 'Library configuration could not be fetched'],
+    ['getSkippableSuites', 'test-suite:skippable', 'Skippable suites could not be fetched'],
+    ['getKnownTests', 'known-tests', 'Known tests could not be fetched'],
+    ['getTestManagementTests', 'test-management-tests', 'Test management tests could not be fetched'],
+  ]) {
+    it(`retains the original cause when ${method} fails`, () => {
+      const error = new Error('Request failed')
+      const plugin = createPlugin('vitest_worker', true)
+      plugin.tracer._exporter[method] = sinon.stub().callsArgWith(1, error)
+      plugin.tracer._exporter.addMetadataTags = sinon.stub()
+      const onDone = sinon.spy()
+
+      try {
+        dc.channel(`ci:vitest:${channel}`).publish({ onDone })
+
+        sinon.assert.calledOnceWithExactly(logError, message, error)
+        sinon.assert.calledOnceWithMatch(onDone, { err: error })
+      } finally {
+        plugin.configure(false)
+      }
+    })
+  }
 
   it('does not consider line coverage for Vitest skippable suites', () => {
     const getSkippableSuites = sinon.stub().callsArgWith(1, null, [])

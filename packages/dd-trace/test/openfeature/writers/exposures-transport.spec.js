@@ -47,11 +47,14 @@ describe('OpenFeature Exposures Writer transport', () => {
       }
       const infoRequest = nock('http://localhost:8126').get('/agent-prefix/info').reply(status, info)
       const deliveries = []
+      let onDelivered
+      const delivered = new Promise(resolve => { onDelivered = resolve })
       const local = nock('http://localhost:8126')
         .post('/agent-prefix/evp_proxy/v2/api/v2/exposures')
         .twice()
         .reply(function (path, body) {
           deliveries.push({ body, headers: this.req.headers })
+          if (deliveries.length === 2) onDelivered()
           return [202, '']
         })
       const direct = nock('https://event-platform-intake.datadoghq.com').post('/api/v2/exposures').reply(202)
@@ -77,7 +80,7 @@ describe('OpenFeature Exposures Writer transport', () => {
         writer.flush()
       }
       if (enabled) {
-        await waitFor(() => deliveries.length === 2)
+        await delivered
         local.done()
         assert.deepStrictEqual(deliveries.map(({ body }) => body.exposures[0].subject.id), ['customer-1', 'customer-2'])
         for (const { headers } of deliveries) {

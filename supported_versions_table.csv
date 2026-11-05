@@ -41,6 +41,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @supabase/realtime-js,supabase,2.112.2,2.116.0,True
 @supabase/storage-js,supabase,2.112.2,2.116.0,True
 @supabase/supabase-js,supabase,2.112.2,2.116.0,True
+@typesafe-ai/sdk,typesafe,0.6.0,0.7.0,True
 @wdio/local-runner,mocha,9.0.0,9.31.9,True
 aerospike,aerospike,4.0.0,6.7.1,True
 ai,ai,4.0.0,7.0.108,True
@@ -111,6 +112,7 @@ pino-pretty,pino,1.0.0,13.1.3,True
 playwright,playwright,1.38.0,1.63.0,True
 postgres,postgres,3.0.0,3.4.9,True
 protobufjs,protobufjs,6.8.0,8.8.0,True
+react-router,react-router,7.9.5,8.4.0,True
 redis,redis,0.12.0,6.2.1,True
 restify,restify,3.0.0,12.0.0,True
 rhea,rhea,1.0.0,3.0.5,True

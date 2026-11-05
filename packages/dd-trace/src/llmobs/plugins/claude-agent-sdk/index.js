@@ -9,7 +9,7 @@ const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 const subagentToolIds = new Set()
 
 function normalizeToolOutputString (raw) {
-  const footerIndex = raw.search(/agentId: \S+ \(use SendMessage\b/)
+  const footerIndex = raw.search(/agentId: \S+ \(use SendMessage\b|(?:^|\n)agentId: \S+\n<usage>/)
   if (footerIndex === -1) return raw
 
   return raw.slice(0, footerIndex).trimEnd()

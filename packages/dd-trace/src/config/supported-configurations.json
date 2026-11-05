@@ -143,6 +143,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "allowed": ".+",
         "default": null,
         "aliases": [
           "DATADOG_API_KEY"
@@ -497,6 +498,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "allowed": ".+",
         "default": null,
         "sensitive": true
       }
@@ -4017,6 +4019,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_REACT_ROUTER_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_REDIS_CLIENT_ENABLED": [
       {
         "implementation": "A",
@@ -4223,6 +4232,13 @@
       }
     ],
     "DD_TRACE_TEDIOUS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_TYPESAFE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

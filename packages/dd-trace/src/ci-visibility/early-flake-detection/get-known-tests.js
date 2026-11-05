@@ -1,8 +1,6 @@
 'use strict'
 
 const getConfig = require('../../config')
-const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
-const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const id = require('../../id')
 const log = require('../../log')
 const {
@@ -16,6 +14,7 @@ const {
 } = require('../../ci-visibility/telemetry')
 const { getNumFromKnownTests } = require('../../plugins/util/test')
 const request = require('../requests/request')
+const { createApiRequestRoute } = require('../requests/route')
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
 const { validateKnownTestsResponse } = require('../test-optimization-http-cache-schema')
 
@@ -147,30 +146,24 @@ function fetchFromApi ({
   custom,
   cacheKey,
 }, done) {
+  const path = '/api/v2/ci/libraries/tests'
+  const route = createApiRequestRoute(getConfig(), { url, path, isEvpProxy, evpProxyPrefix })
+  if (!route) {
+    return done(new Error('Known tests were not fetched because Datadog API key is not defined.'))
+  }
+
   const options = {
-    path: '/api/v2/ci/libraries/tests',
+    ...route,
     method: 'POST',
     headers: {
+      ...route.headers,
       'Content-Type': 'application/json',
     },
     timeout: 20_000,
-    url,
   }
 
   if (isGzipCompatible) {
     options.headers['accept-encoding'] = 'gzip'
-  }
-
-  if (isEvpProxy) {
-    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/ci/libraries/tests')
-    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
-  } else {
-    const { DD_API_KEY } = getConfig()
-    if (!DD_API_KEY) {
-      return done(new Error('Known tests were not fetched because Datadog API key is not defined.'))
-    }
-
-    options.headers['dd-api-key'] = DD_API_KEY
   }
 
   const configurations = {

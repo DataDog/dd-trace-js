@@ -187,6 +187,34 @@ describe('OpenFeature flag evaluations writer', () => {
     writer = undefined
   })
 
+  for (const degraded of [false, true]) {
+    it(`preserves split features and separates assignment groups (degraded=${degraded})`, async () => {
+      const { bodies, received } = captureRequests()
+      writer = new (loadWriter({ FLAG_EVALUATION_PER_FLAG_CAP: degraded ? 0 : 10 }))(config)
+      writer.setEnabled(true, route)
+      const features = { 'holdout.key': 'holdout', 'holdout.assignment_group': 'control', included: false }
+      writer.enqueue(event({ features, observeFullEvaluationData: false }))
+      writer.enqueue(event({
+        features: { included: false, 'holdout.assignment_group': 'control', 'holdout.key': 'holdout' },
+        observeFullEvaluationData: false,
+      }))
+      features['holdout.assignment_group'] = 'treatment'
+      writer.enqueue(event({ features, observeFullEvaluationData: false }))
+      writer.enqueue(event({ features: {}, observeFullEvaluationData: false }))
+      await nextImmediate()
+      writer.flush()
+      await received
+      const rows = bodies.flatMap(({ body }) => body.flagEvaluations)
+      assert.strictEqual(rows.length, 3)
+      const control = rows.find(row => row.features?.['holdout.assignment_group'] === 'control')
+      assert.strictEqual(control.evaluation_count, 2)
+      assert.strictEqual(control.features.included, false)
+      const treatment = rows.find(row => row.features?.['holdout.assignment_group'] === 'treatment')
+      assert.strictEqual(treatment.evaluation_count, 1)
+      assert.strictEqual(rows.find(row => !row.features).evaluation_count, 1)
+    })
+  }
+
   it('aggregates out-of-order observations and enforces privacy at the wire boundary', async () => {
     const { bodies, received } = captureRequests()
     writer = new (loadWriter())(config)
