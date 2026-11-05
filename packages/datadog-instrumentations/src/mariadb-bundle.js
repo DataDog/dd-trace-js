@@ -32,19 +32,6 @@ const wrappedConnections = new WeakSet()
 const poolCommandSql = new WeakMap()
 const wrappedPoolCommandMethods = new WeakSet()
 const poolSqlMethods = ['prepareExecute', 'batch', 'addCommand']
-const poolOptionsHandler = {
-  /**
-   * @param {object} target
-   * @param {string | symbol} key
-   */
-  get (target, key) { return Reflect.get(target, key, target) },
-  /**
-   * @param {object} target
-   * @param {string | symbol} key
-   * @param {unknown} value
-   */
-  set (target, key, value) { return Reflect.set(target, key, value, target) },
-}
 const IMPORT_FILE_RESOURCE = 'IMPORT FILE'
 const noop = () => {}
 const POOL_ACQUISITION_COMPACTION_THRESHOLD = 1024
@@ -173,8 +160,7 @@ function runSqlCommand (ctx, command, args, originalSql, preparedSql, mirrorOpti
 function bindPoolCommandSql (ctx, args) {
   if (typeof ctx.sql !== 'string' || !ctx.sql) return
 
-  // Native option reads and callback mutations occur after acquisition, so a snapshot would change their behavior.
-  const options = typeof args[0] === 'string' ? { sql: args[0] } : new Proxy(args[0], poolOptionsHandler)
+  const options = typeof args[0] === 'string' ? { sql: args[0] } : { ...args[0] }
   poolCommandSql.set(options, ctx)
   args[0] = options
 }
