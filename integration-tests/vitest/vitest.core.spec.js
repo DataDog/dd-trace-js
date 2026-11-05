@@ -58,6 +58,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
+const { getVitestVersions } = require('./versions')
 const { describeDynamicAtr } = require('./dynamic-atr')
 
 const NUM_RETRIES_EFD = 3
@@ -100,8 +101,7 @@ function assertCompleteTestSessionTrace (events, testOutput) {
   }
 }
 
-// vitest@4.x requires Node.js >= 20
-const supportedVersions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const supportedVersions = getVitestVersions()
 const requestedVersion = process.env.VITEST_VERSION
 const versions = requestedVersion && requestedVersion !== 'all'
   ? [requestedVersion === 'oldest'
