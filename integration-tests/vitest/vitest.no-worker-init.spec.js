@@ -496,6 +496,23 @@ describe('vitest no-worker init instrumentation selection', () => {
           'function'
         )
       })
+
+      for (const browserFirst of [false, true]) {
+        it(`keeps Node and browser setup separate for ${description} (browser first=${browserFirst})`, () => {
+          const ctx = getNoWorkerReporterContext()
+          const nodeProject = { config: { pool: 'forks' } }
+          const testSpecifications = [
+            [nodeProject, { filepath: '/repo/node.test.mjs', pool: 'forks' }],
+            [project, { filepath: '/repo/browser.test.mjs', pool }],
+          ]
+          if (browserFirst) testSpecifications.reverse()
+
+          configureNoWorkerReporter(ctx, testSpecifications)
+
+          assert.strictEqual(path.basename(nodeProject.config.setupFiles[0]), 'vitest-no-worker-init-node-setup.mjs')
+          assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-runner-setup.mjs')
+        })
+      }
     }
 
     it('disables RUM correlation when browser files can run in parallel', () => {

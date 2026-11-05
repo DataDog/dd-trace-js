@@ -446,16 +446,9 @@ function restoreDatadogTestOptimizationNodeOptions (workerEnv) {
 
 function addSetupFileToVitestConfigs (ctx, browserSetupFile, testSpecifications) {
   const configs = getNoWorkerInitVitestConfigs(ctx, testSpecifications)
-  const isBrowserMode = Array.isArray(testSpecifications)
-    ? testSpecifications.some(isBrowserTestSpecification)
-    : undefined
 
-  for (const config of configs) {
-    if (!config) continue
-
-    const setupFile = (isBrowserMode ?? config.browser?.enabled)
-      ? browserSetupFile
-      : VITEST_NO_WORKER_INIT_NODE_SETUP_FILE
+  for (const [config, isBrowserMode] of configs) {
+    const setupFile = isBrowserMode ? browserSetupFile : VITEST_NO_WORKER_INIT_NODE_SETUP_FILE
     config.includeTaskLocation = true
     if (config.setupFiles === undefined) {
       config.setupFiles = []
@@ -593,31 +586,32 @@ function addVitestBrowserCommand (config) {
 }
 
 function getNoWorkerInitVitestConfigs (ctx, testSpecifications) {
-  const configs = new Set()
+  const configs = new Map()
+  let fallbackIsBrowserMode
   if (Array.isArray(testSpecifications)) {
-    let shouldAddRootConfig = false
     for (const testSpecification of testSpecifications) {
       const project = getTestSpecificationProject(testSpecification)
       const config = safeConfig(project)
+      const isBrowserMode = isBrowserTestSpecification(testSpecification)
       if (config) {
-        addNoWorkerInitConfig(configs, config)
+        addNoWorkerInitConfig(configs, config, isBrowserMode)
       } else {
-        shouldAddRootConfig = true
+        fallbackIsBrowserMode ||= isBrowserMode
       }
     }
 
-    if (!shouldAddRootConfig && configs.size > 0) {
+    if (fallbackIsBrowserMode === undefined && configs.size > 0) {
       return configs
     }
   }
 
-  addNoWorkerInitConfig(configs, safeConfig(ctx))
-  addNoWorkerInitConfig(configs, safeConfig(safeWorkspaceProject(ctx)))
+  addNoWorkerInitConfig(configs, safeConfig(ctx), fallbackIsBrowserMode)
+  addNoWorkerInitConfig(configs, safeConfig(safeWorkspaceProject(ctx)), fallbackIsBrowserMode)
   return configs
 }
 
-function addNoWorkerInitConfig (configs, config) {
-  if (config) configs.add(config)
+function addNoWorkerInitConfig (configs, config, isBrowserMode = config?.browser?.enabled === true) {
+  if (config && !configs.has(config)) configs.set(config, isBrowserMode)
 }
 
 function getSelectedTestManagementTests (testManagementTestsBySuite, propertyName) {
