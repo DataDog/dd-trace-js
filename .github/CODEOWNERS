@@ -363,6 +363,7 @@
 /scripts/helpers/test-file-index.spec.js @DataDog/apm-sdk-capabilities
 /scripts/verify-exercised-tests.js @DataDog/apm-sdk-capabilities
 /scripts/verify-exercised-tests.spec.mjs @DataDog/apm-sdk-capabilities
+/scripts/test/vendor-licenses.spec.js @DataDog/lang-platform-js
 
 # Feature Flagging
 /integration-tests/esbuild/*openfeature* @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
