@@ -160,23 +160,10 @@ never weaken or delete assertions to make them pass.
 - Commit format: `type(scope): description`.
 - Before opening or updating a PR, read and follow `.github/pull_request_template.md`.
 - All required tests must pass; the repository follows an all-green policy.
-
-### Scope discipline
-
-**Every line in a PR must serve the PR title.** If a hunk can't be justified by pointing at the
-title, it does not belong in this PR. Defer these to a follow-up PR even when obviously
-correct: refactors, renames, and file moves not required by the change; typo, comment,
-formatting, lint, and style fixes in untouched code; unrelated bug fixes; dependency and
-tooling changes unrelated to the title; test coverage for behaviour this PR doesn't touch;
-JSDoc outside the changed functions; and leftover debug logging and scratch files. Two focused
-PRs always beat one mixed PR.
-
-Exceptions, each narrow: a prerequisite refactor lands as its own preparatory PR (inline it
-only when splitting is truly impossible, and say so in the description); mechanical fallout
-needed to keep the tree green moves with the change; and every sibling instance of the same
-bug is fixed together (per "Debugging Failures"). Before opening or updating a PR, re-read
-the diff (`git diff <base>...HEAD`) and drop anything the title doesn't cover. If the title
-needs "and" to describe the diff, the PR needs splitting.
+- **One PR, one purpose**: every change in a PR must serve its title. Defer drive-by typo fixes,
+  refactors, dependency bumps, and unrelated fixes to a follow-up PR, even when obviously correct.
+- Exceptions: a prerequisite refactor lands as its own PR first, and mechanical fallout or sibling
+  instances of the same bug move with the change.
 
 ## Specialized Workflows
 
