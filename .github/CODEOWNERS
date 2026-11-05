@@ -433,6 +433,7 @@
 /packages/dd-trace/src/web-tags-cache.js @DataDog/profiling-js
 /packages/dd-trace/test/exporters/common/form-data.spec.js @DataDog/profiling-js
 /packages/dd-trace/test/otel-thread-ctx.spec.js @DataDog/profiling-js
+/packages/dd-trace/test/fixtures/otel-thread-ctx-retention.js @DataDog/profiling-js
 /packages/dd-trace/test/profiler.spec.js @DataDog/profiling-js
 /packages/dd-trace/test/storage-channels.spec.js @DataDog/profiling-js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/web-tags-cache.spec.js @DataDog/profiling-js
@@ -494,6 +495,7 @@
 /integration-tests/package-guardrails/ @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
 /integration-tests/process-lifecycle.spec.js @DataDog/lang-platform-js
+/integration-tests/sandbox.spec.js @DataDog/lang-platform-js
 /integration-tests/startup/ @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
 /integration-tests/tsconfig.json @DataDog/lang-platform-js

@@ -179,6 +179,26 @@ describe('getIsAzureContainerApp', () => {
   })
 })
 
+describe('IS_AWS_LAMBDA', () => {
+  const environment = process.env
+
+  afterEach(() => {
+    process.env = environment
+  })
+
+  for (const name of [undefined, '', 'my-function']) {
+    it(`detects Lambda with AWS_LAMBDA_FUNCTION_NAME=${name}`, () => {
+      process.env = { ...environment }
+      if (name === undefined) {
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      } else {
+        process.env.AWS_LAMBDA_FUNCTION_NAME = name
+      }
+      assert.strictEqual(getServerlessFresh().IS_AWS_LAMBDA, name !== undefined)
+    })
+  }
+})
+
 describe('IS_STANDARD_AWS_LAMBDA', () => {
   const originalInitType = process.env.AWS_LAMBDA_INITIALIZATION_TYPE
   const originalMicroVm = process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN

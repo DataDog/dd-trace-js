@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const { fork } = require('child_process')
 const { join } = require('path')
@@ -424,52 +425,68 @@ describe('opentelemetry', function () {
 
   it('should work with otel express & http auto instrumentation', async () => {
     const SERVER_PORT = 6666
-    proc = fork(join(cwd, 'opentelemetry/auto-instrumentation.js'), {
-      cwd,
-      env: {
-        DD_TRACE_AGENT_PORT: agent?.port,
-        DD_TRACE_OTEL_ENABLED: '1',
-        SERVER_PORT,
-        DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
-        DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
-      },
-    })
-    await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)
+    const signal = AbortSignal.timeout(10_000)
+    const messages = []
+    const onTraces = messages.push.bind(messages)
+    agent.on('otlp-traces', onTraces)
+    try {
+      proc = fork(join(cwd, 'opentelemetry/auto-instrumentation.js'), {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent?.port,
+          DD_TRACE_OTEL_ENABLED: '1',
+          SERVER_PORT,
+          DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
+          DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
+        },
+      })
+      const [[code]] = await Promise.all([
+        once(proc, 'exit', { signal }),
+        getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000),
+      ])
+      assert.strictEqual(code, 0)
+    } finally {
+      agent.removeListener('otlp-traces', onTraces)
+    }
+    assert.strictEqual(messages.length, 2)
+    for (const { headers } of messages) {
+      assert.strictEqual(headers['content-type'], 'application/json')
+    }
+    const trace = messages.flatMap(({ payload }) => payload.resourceSpans
+      .flatMap(resource => resource.scopeSpans.flatMap(scope => scope.spans)))
+    assert.strictEqual(trace.length, 9)
 
-    await check(agent, proc, 10_000, ({ payload }) => {
-      assert.strictEqual(payload.length, 2)
-      // combine the traces
-      const trace = payload.flat()
-      assert.strictEqual(trace.length, 9)
+    // Should have expected span resource names and ordering
+    assert.ok(eachEqual(trace, [
+      'GET /second-endpoint',
+      'middleware - query',
+      'middleware - expressInit',
+      'request handler - /second-endpoint',
+      'GET /first-endpoint',
+      'middleware - query',
+      'middleware - expressInit',
+      'request handler - /first-endpoint',
+      'GET',
+    ],
+    (span) => span.name))
 
-      // Should have expected span resource names and ordering
-      assert.ok(eachEqual(trace, [
-        'GET /second-endpoint',
-        'middleware - query',
-        'middleware - expressInit',
-        'request handler - /second-endpoint',
-        'GET /first-endpoint',
-        'middleware - query',
-        'middleware - expressInit',
-        'request handler - /first-endpoint',
-        'GET',
-      ],
-      (span) => span.resource))
+    assert.ok(allEqual(trace, span => span.traceId))
 
-      assert.ok(allEqual(trace, (span) => {
-        span.trace_id.toString()
-      }))
-
-      const [get3, query2, init2, handler2, get1, query1, init1, handler1, get2] = trace
-      isChildOf(query1, get1)
-      isChildOf(init1, get1)
-      isChildOf(handler1, get1)
-      isChildOf(get2, get1)
-      isChildOf(get3, get2)
-      isChildOf(query2, get3)
-      isChildOf(init2, get3)
-      isChildOf(handler2, get3)
-    })
+    const [get3, query2, init2, handler2, get1, query1, init1, handler1, get2] = trace
+    for (const [child, parent] of [
+      [query1, get1],
+      [init1, get1],
+      [handler1, get1],
+      [get2, get1],
+      [get3, get2],
+      [query2, get3],
+      [init2, get3],
+      [handler2, get3],
+    ]) {
+      assert.notStrictEqual(child.spanId, parent.spanId)
+      assert.strictEqual(child.parentSpanId, parent.spanId)
+    }
   })
 
   it('should auto-instrument @opentelemetry/sdk-node', async () => {
@@ -502,12 +519,6 @@ describe('opentelemetry', function () {
     })
   })
 })
-
-function isChildOf (childSpan, parentSpan) {
-  assert.strictEqual(childSpan.trace_id.toString(), parentSpan.trace_id.toString())
-  assert.notStrictEqual(childSpan.span_id.toString(), parentSpan.span_id.toString())
-  assert.strictEqual(childSpan.parent_id.toString(), parentSpan.span_id.toString())
-}
 
 function sortMetricTags (metrics) {
   return metrics
