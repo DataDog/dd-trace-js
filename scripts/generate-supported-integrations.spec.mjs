@@ -11,6 +11,7 @@ import sinon from 'sinon'
 import YAML from 'yaml'
 
 const require = createRequire(import.meta.url)
+const { getWebdriverioVersions } = require('../integration-tests/webdriverio/versions')
 const repositoryDirectory = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const generatorPath = path.join(repositoryDirectory, 'scripts/generate-supported-integrations.js')
 const {
@@ -28,6 +29,13 @@ const nodeAliases = {
 }
 
 describe('generate supported integrations', () => {
+  it('shares the default, oldest, latest, and explicit WebdriverIO selections', () => {
+    assert.deepStrictEqual(getWebdriverioVersions(), ['9.0.0', 'latest'])
+    assert.deepStrictEqual(getWebdriverioVersions('oldest'), ['9.0.0'])
+    assert.deepStrictEqual(getWebdriverioVersions('latest'), ['latest'])
+    assert.deepStrictEqual(getWebdriverioVersions('9.1.0'), ['9.1.0'])
+  })
+
   it('intersects the release line and workflow Node.js ranges', async () => {
     const { rows } = await generateSupportedIntegrations({
       packageInfo: { engines: { node: '>=22' }, nodeMaxMajor: 27 },
@@ -495,6 +503,42 @@ describe('generate supported integrations', () => {
     } finally {
       fetch.restore()
     }
+  })
+
+  it('applies the Cucumber latest runtime gate without suppressing explicit versions', async () => {
+    await withTestWorkflow({
+      jobs: {
+        selected: {
+          steps: [{ uses: './.github/actions/node', with: { version: '>=22 <28' } }, {
+            run: 'npm run test:integration:cucumber:coverage',
+            env: { CUCUMBER_VERSION: 'latest' },
+          }, {
+            run: 'npm run test:integration:cucumber:coverage',
+            env: { CUCUMBER_VERSION: '7.0.0' },
+          }],
+        },
+      },
+    }, async () => {
+      const nodeVersions = ['22.22.3', '23.0.0', '24.16.0', '25.0.0', '27.0.0']
+      const { rows } = await generateSupportedIntegrations({
+        nodeVersions,
+        plugins: new Map([['@cucumber/cucumber', 'cucumber']]),
+        instrumentations: testInstrumentations(nodeVersions, {
+          '@cucumber/cucumber': [{ versions: ['>=7'] }],
+        }),
+        getPackageVersions: () => Promise.resolve(['7.0.0', '13.3.0']),
+      })
+
+      assert.deepStrictEqual(rows[0].versions, [{
+        supportedRange: '>=7',
+        tested: ['7.0.0', '13.3.0'],
+        testedRuntimes: { node: ['27.0.0', '24.16.0', '22.22.3'] },
+      }, {
+        supportedRange: '>=7',
+        tested: ['7.0.0'],
+        testedRuntimes: { node: ['25.0.0', '23.0.0'] },
+      }])
+    })
   })
 
   it('reports a tested version missing from npm metadata', async () => {

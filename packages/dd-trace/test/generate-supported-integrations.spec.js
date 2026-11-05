@@ -117,9 +117,9 @@ describe('generate supported integrations', () => {
 
   it('includes framework integration jobs without inventing untested intermediate versions', async () => {
     const packageVersions = {
-      '@jest/core': ['25.5.1', '28.0.0', '29.7.0'],
-      mocha: ['8.0.0', '10.8.2', '11.7.5'],
-      playwright: ['1.38.0', '1.61.0'],
+      '@jest/core': ['24.8.0', '25.5.1', '28.0.0', '29.7.0'],
+      mocha: ['5.2.0', '8.0.0', '10.8.2', '11.7.5'],
+      playwright: ['1.18.0', '1.38.0', '1.61.0'],
       '@cucumber/cucumber': ['7.0.0', '8.0.0'],
       cypress: ['6.7.0', '12.0.0', '14.5.4'],
       'selenium-webdriver': ['4.11.0'],
@@ -141,24 +141,27 @@ describe('generate supported integrations', () => {
     assert.deepStrictEqual(rows.map(row => [row.dependencyName, row.versions.map(version => ({
       node: version.testedRuntimes.node, tested: version.tested,
     }))]), [
-      ['@cucumber/cucumber', [{ node: ['26.2.0', '18.20.8'], tested: ['7.0.0'] }]],
+      ['@cucumber/cucumber', [
+        { node: ['26.2.0'], tested: ['7.0.0', latestVersions['@cucumber/cucumber']] },
+        { node: ['18.20.8'], tested: ['7.0.0'] },
+      ]],
       ['cypress', [
         { node: ['26.2.0'], tested: ['12.0.0', '14.5.4', latestVersions.cypress] },
         { node: ['18.20.8'], tested: ['12.0.0', '14.5.4'] },
       ]],
       ['@jest/core', DD_MAJOR >= 6
-        ? [{ node: ['26.2.0', '18.20.8'], tested: [latestVersions['@jest/core']] }]
+        ? [{ node: ['26.2.0', '18.20.8'], tested: ['28.0.0', latestVersions['@jest/core']] }]
         : [
-            { node: ['26.2.0'], tested: [latestVersions['@jest/core']] },
-            { node: ['18.20.8'], tested: ['25.5.1', latestVersions['@jest/core']] },
+            { node: ['26.2.0'], tested: ['24.8.0', latestVersions['@jest/core']] },
+            { node: ['18.20.8'], tested: ['24.8.0', '25.5.1', latestVersions['@jest/core']] },
           ]],
       ['mocha', [
-        { node: ['26.2.0'], tested: [latestVersions.mocha] },
-        { node: ['18.20.8'], tested: ['11.7.5'] },
+        { node: ['26.2.0'], tested: [DD_MAJOR >= 6 ? '8.0.0' : '5.2.0', latestVersions.mocha] },
+        { node: ['18.20.8'], tested: [DD_MAJOR >= 6 ? '8.0.0' : '5.2.0', '11.7.5'] },
       ]],
       ['playwright', [
-        { node: ['26.2.0'], tested: [latestVersions.playwright] },
-        { node: ['18.20.8'], tested: ['1.61.0'] },
+        { node: ['26.2.0'], tested: [DD_MAJOR >= 6 ? '1.38.0' : '1.18.0', latestVersions.playwright] },
+        { node: ['18.20.8'], tested: [DD_MAJOR >= 6 ? '1.38.0' : '1.18.0', '1.61.0'] },
       ]],
       ['selenium-webdriver', [{
         node: ['26.2.0', '18.20.8'], tested: ['4.11.0', latestVersions['selenium-webdriver']],
@@ -168,6 +171,41 @@ describe('generate supported integrations', () => {
         { node: ['18.20.8'], tested: ['1.6.0', '3.2.6'] },
       ]],
     ])
+  })
+
+  it('reports the Pino Pretty version loaded by the Pino tests', async () => {
+    const { rows } = await generateSupportedIntegrations({
+      nodeVersions: ['26.2.0'],
+      plugins: new Map([['pino-pretty', 'pino']]),
+      getPackageVersions: async () => [
+        ...Array.from({ length: 13 }, (_, index) => `${index + 1}.0.0`), latestVersions['pino-pretty'],
+      ],
+    })
+
+    assert.deepStrictEqual(rows, [supportedIntegration('pino-pretty', 'pino', '>=3 || 1 - 2', ['8.0.0'])])
+  })
+
+  it('reports only the WebdriverIO versions installed by each runtime job', async () => {
+    const { rows } = await generateSupportedIntegrations({
+      nodeVersions: ['18.20.8', '26.2.0'],
+      plugins: new Map([['@wdio/local-runner', 'mocha']]),
+      getPackageVersions: async () => ['9.0.0', '9.33.1', latestVersions['@wdio/local-runner']],
+    })
+
+    assert.deepStrictEqual(rows, [{
+      dependencyName: '@wdio/local-runner',
+      integrationName: 'mocha',
+      autoInstrumented: true,
+      versions: [{
+        supportedRange: '>=9.0.0',
+        tested: [latestVersions['@wdio/local-runner']],
+        testedRuntimes: { node: ['26.2.0'] },
+      }, {
+        supportedRange: '>=9.0.0',
+        tested: ['9.0.0'],
+        testedRuntimes: { node: ['18.20.8'] },
+      }],
+    }])
   })
 
   it('keeps umbrella package aliases out of the runtime hooks and plugin registry', () => {

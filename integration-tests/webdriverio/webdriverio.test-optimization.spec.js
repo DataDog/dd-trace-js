@@ -45,11 +45,9 @@ const {
   TEST_STATUS,
   TEST_SUITE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const OLDEST_WEBDRIVERIO_VERSION = '9.0.0'
+const { getWebdriverioVersions } = require('./versions')
 const requestedVersion = process.env.WEBDRIVERIO_VERSION
-const versions = requestedVersion
-  ? [requestedVersion === 'oldest' ? OLDEST_WEBDRIVERIO_VERSION : requestedVersion]
-  : [OLDEST_WEBDRIVERIO_VERSION, 'latest']
+const versions = getWebdriverioVersions(requestedVersion)
 // CI runs each adapter in its own job; together they exceed the CI time budget.
 const frameworks = process.env.WEBDRIVERIO_ADAPTER ? [process.env.WEBDRIVERIO_ADAPTER] : ['mocha', 'jasmine']
 

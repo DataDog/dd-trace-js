@@ -17,10 +17,17 @@ const {
   resolvePluginVersions,
 } = require('../packages/dd-trace/test/plugins/versions')
 
-const { getLatestMochaSpecifier } = require('../integration-tests/mocha/versions')
-const { getLatestPlaywrightSpecifier } = require('../integration-tests/playwright/versions')
+const { isLatestCucumberSupported } = require('../integration-tests/cucumber/versions')
+const { oldest: oldestJestVersion } = require('../integration-tests/jest/versions')
+const { getLatestMochaSpecifier, oldest: oldestMochaVersion } = require('../integration-tests/mocha/versions')
+const {
+  getLatestPlaywrightSpecifier,
+  oldest: oldestPlaywrightVersion,
+} = require('../integration-tests/playwright/versions')
 const seleniumVersions = require('../integration-tests/selenium/versions')
 const { getVitestVersions } = require('../integration-tests/vitest/versions')
+const { getWebdriverioVersions } = require('../integration-tests/webdriverio/versions')
+const { DD_MAJOR } = require('../version')
 
 const NODE_RANGE_FLAG = '--node-range'
 const FETCH_TIMEOUT_MS = 10_000
@@ -35,6 +42,7 @@ const FRAMEWORK_PACKAGES = {
   cypress: 'cypress',
   selenium: 'selenium-webdriver',
   vitest: 'vitest',
+  webdriverio: '@wdio/local-runner',
 }
 const FRAMEWORK_COMMAND = new RegExp(
   String.raw`\bnpm run test:integration:(${Object.keys(FRAMEWORK_PACKAGES).join('|')}):coverage(?:\s|$)`
@@ -87,6 +95,7 @@ const PLUGIN_GETTER =
  * @typedef {object} InstrumentationDeclaration
  * @property {string[]} [versions]
  * @property {string} [node]
+ * @property {boolean|string} [dep]
  */
 
 /**
@@ -384,11 +393,14 @@ function readTestRuns () {
     for (const step of steps) {
       const nodeAction = step.uses === './.github/actions/node'
       const localAction = /^\.\/\.github\/actions\/(?:node|plugins|instrumentations)\//.test(step.uses ?? '')
+      const tracerVersion = step.run?.match(/^npm pkg set version=(\d+)\.\d+\.\d+$/)?.[1]
       const framework = (step.run ?? '').match(FRAMEWORK_COMMAND)?.[1]
       const test = framework || TEST_COMMAND.test(step.run ?? '')
-      if ((!nodeAction && !localAction && !test) || !testStepEnabled(step.if, context)) continue
+      if ((!nodeAction && !localAction && !tracerVersion && !test) || !testStepEnabled(step.if, context)) continue
       const env = { ...inheritedEnv, ...step.env }
-      if (nodeAction) {
+      if (tracerVersion) {
+        if (Number(tracerVersion) !== DD_MAJOR) return
+      } else if (nodeAction) {
         const version = expandTestValue(step.with?.version ?? 'latest', context)
         if (!nodeRanges.has(version)) {
           writeFileSync(output, '')
@@ -458,10 +470,11 @@ function readTestRuns () {
 function readTestEnvironments (dependency, integration, nodeVersion, runs) {
   const environments = []
   for (const run of runs) {
+    const testIntegration = run.framework ?? integration
     const { nodeRange, env } = run
     if (!semver.satisfies(nodeVersion, nodeRange)) continue
     const plugins = env.PLUGINS?.split('|')
-    if (!plugins?.includes(integration) && !plugins?.includes(dependency.replace(/^node:/, ''))) continue
+    if (!plugins?.includes(testIntegration) && !plugins?.includes(dependency.replace(/^node:/, ''))) continue
     if (env.PACKAGE_NAMES && !env.PACKAGE_NAMES.split(',').includes(dependency)) continue
     environments.push(run)
   }
@@ -504,10 +517,15 @@ function readFrameworkVersions (framework, selector, nodeVersion) {
     if (selector === 'all') return versions
     if (selector === 'oldest') return [versions[0]]
     if (selector === 'latest') return [versions.at(-1)]
+  } else if (framework === 'webdriverio') {
+    return getWebdriverioVersions(selector)
   }
-  if (selector === 'oldest') return []
-  if (selector === 'latest') {
-    if (framework === 'cucumber') return []
+  if (selector === 'oldest') {
+    if (framework === 'jest') return [oldestJestVersion]
+    if (framework === 'mocha') return [oldestMochaVersion]
+    if (framework === 'playwright') return [oldestPlaywrightVersion]
+  } else if (selector === 'latest') {
+    if (framework === 'cucumber' && !isLatestCucumberSupported(semver.major(nodeVersion))) return []
     if (framework === 'mocha') return [getLatestMochaSpecifier(nodeVersion)]
     if (framework === 'playwright') return [getLatestPlaywrightSpecifier(semver.major(nodeVersion))]
   }
@@ -535,13 +553,18 @@ function resolveDependencyVersions (
   if (supportedRange === undefined) return { supportedRange, tested: [] }
   const testedVersions = new Set()
 
+  const dependencyDeclarations = testDeclarations.filter(declaration => declaration.dep)
+  const testedDeclarations = dependencyDeclarations.length
+    ? dependencyDeclarations
+    : [...declarations, ...testDeclarations]
+
   for (const { env, framework } of testEnvironments) {
     if (framework) {
       const selector = env[`${framework.toUpperCase()}_VERSION`]
       for (const range of readFrameworkVersions(framework, selector, nodeVersion)) {
         const version = semver.maxSatisfying(packageVersions, getCappedRange(dependency, range))
         if (!version) throw new Error(`Could not resolve '${dependency}@${range}' from npm metadata`)
-        if (semver.satisfies(version, supportedRange) && !brokenVersionReason(dependency, version, nodeVersion)) {
+        if (!brokenVersionReason(dependency, version, nodeVersion)) {
           testedVersions.add(version)
         }
       }
@@ -549,7 +572,7 @@ function resolveDependencyVersions (
     }
     const { versionList } = resolvePluginVersions({
       name: dependency,
-      declarations: [...declarations, ...testDeclarations],
+      declarations: testedDeclarations,
       nodeVersion,
       env,
     })
