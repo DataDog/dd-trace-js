@@ -2270,7 +2270,9 @@ void generatedResolver
             count: 42,
             empty: null,
             emptyFilter: {},
-            filter: { name: null, size: 7, exact: true },
+            filter: semifies(graphqlJit.version(), '>=0.9.4')
+              ? { size: 7, exact: true }
+              : { name: null, size: 7, exact: true },
             flag: true,
             fixedFilter: { name: 'fixed', size: 8, exact: false },
             fixedTags: ['fixed'],
