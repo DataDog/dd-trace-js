@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -320,6 +321,76 @@ describe('Plugin', () => {
           ])
         })
       })
+
+      for (const { description, statuses, validateStatus, errorStatuses, otelSemantics } of [
+        { description: 'default', errorStatuses: [500, 599], otelSemantics: false },
+        {
+          description: 'explicit default-shaped',
+          statuses: '500-599',
+          errorStatuses: [500, 599],
+          otelSemantics: false,
+        },
+        { description: 'default', errorStatuses: [500, 599], otelSemantics: true },
+        {
+          description: 'explicit default-shaped',
+          statuses: '500-599',
+          errorStatuses: [500, 599],
+          otelSemantics: true,
+        },
+        { description: 'custom', statuses: '200', errorStatuses: [200], otelSemantics: true },
+        {
+          description: 'custom validation',
+          validateStatus: () => true,
+          errorStatuses: /** @type {number[]} */ ([]),
+          otelSemantics: true,
+        },
+      ]) {
+        describe(`with ${description} server statuses and OTel semantics ${otelSemantics}`, () => {
+          let responseStatus
+
+          beforeEach(async () => {
+            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = String(otelSemantics)
+            if (statuses === undefined) {
+              delete process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES
+            } else {
+              process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES = statuses
+            }
+            await agent.load('http', { client: false, server: validateStatus ? { validateStatus } : {} })
+            http = require(pluginToBeLoaded)
+            appListener = new http.Server((req, res) => {
+              res.writeHead(responseStatus)
+              res.end()
+            })
+            appListener.listen(0, 'localhost')
+            await once(appListener, 'listening')
+            port = appListener.address().port
+          })
+
+          afterEach(() => {
+            delete process.env.DD_TRACE_HTTP_SERVER_ERROR_STATUSES
+            delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          })
+
+          for (const status of [200, 499, 500, 599, 600]) {
+            it(`classifies status ${status} using the configured range`, async () => {
+              responseStatus = status
+              const expectedError = errorStatuses.includes(status) ? 1 : 0
+              await Promise.all([
+                agent.assertFirstTraceSpan(span => {
+                  assert.strictEqual(span.error, expectedError)
+                  if (otelSemantics) {
+                    assert.strictEqual(span.meta['error.type'], expectedError ? String(status) : undefined)
+                    assert.strictEqual(span.metrics['http.response.status_code'], status)
+                  } else {
+                    assert.strictEqual(span.meta['http.status_code'], String(status))
+                  }
+                }),
+                httpRequest.request(`http://localhost:${port}/user`, { validateStatus: () => true }),
+              ])
+            })
+          }
+        })
+      }
 
       describe('with a `server` configuration', () => {
         beforeEach(() => {
