@@ -6,6 +6,7 @@
 /* eslint-disable sonarjs/no-identical-functions */
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -104,6 +105,34 @@ describe('Plugin', () => {
             req.on('error', done)
             req.end()
           })
+        })
+        it('redacts credentials in url.full', async () => {
+          const app = stream => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          }
+          appListener = server(app, () => {})
+          await once(appListener, 'listening')
+          const port = appListener.address().port
+          const client = http2.connect(`${protocol}://username:password@localhost:${port}`)
+          try {
+            await once(client, 'connect')
+            const traceReceived = agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(
+                span.meta['url.full'],
+                `${protocol}://REDACTED:REDACTED@localhost:${port}/user`
+              )
+            })
+            const request = client.request({ ':path': '/user' })
+            const responseReceived = once(request, 'response')
+            const requestClosed = once(request, 'close')
+            request.resume()
+            request.end()
+            const [, [headers]] = await Promise.all([traceReceived, responseReceived, requestClosed])
+            assert.strictEqual(headers[':status'], 200)
+          } finally {
+            client.close()
+          }
         })
       })
 

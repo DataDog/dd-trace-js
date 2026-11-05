@@ -31,7 +31,7 @@ describe('Plugin', () => {
     const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
 
     describe(pluginToBeLoaded, () => {
-      function server (app, listener) {
+      function server (app, listener, hostname = 'localhost') {
         let server
         if (pluginToBeLoaded === 'https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
@@ -44,7 +44,7 @@ describe('Plugin', () => {
         } else {
           server = require('node:http').createServer(app)
         }
-        server.listen(0, 'localhost', () => {
+        server.listen(0, hostname, () => {
           listener((/** @type {import('net').AddressInfo} */ (server.address())).port)
         })
         return server
@@ -109,6 +109,55 @@ describe('Plugin', () => {
           const request = http.get(`${protocol}://localhost:${port}/user`, response => response.resume())
           await Promise.all([traceReceived, once(request, 'close')])
         })
+
+        for (const scenario of [
+          { name: 'brackets an IPv6 literal in url.full', hostname: '::1' },
+          { name: 'brackets an IPv6 literal with an implicit default port', hostname: '::1', defaultPort: true },
+          {
+            name: 'brackets an IPv6 literal with an explicit default port',
+            hostname: '::1',
+            defaultPort: true,
+            explicitPort: true,
+          },
+          { name: 'redacts credentials in url.full', auth: 'username:password' },
+          { name: 'uses both OTel placeholders for a colonless auth option', auth: 'username', options: true },
+        ]) {
+          it(scenario.name, async () => {
+            const hostname = scenario.hostname ?? 'localhost'
+            const app = express()
+            app.get('/user', (req, res) => res.status(200).send())
+            appListener = server(app, () => {}, hostname)
+            await once(appListener, 'listening')
+
+            const port = appListener.address().port
+            const defaultPort = protocol === 'https' ? 443 : 80
+            const localAgent = scenario.defaultPort ? new http.Agent() : undefined
+            if (localAgent) localAgent.defaultPort = port
+
+            const urlHost = hostname === '::1' ? '[::1]' : hostname
+            const urlPort = scenario.defaultPort ? '' : `:${port}`
+            const redactedAuth = scenario.auth ? 'REDACTED:REDACTED@' : ''
+            const traceReceived = agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.meta['url.full'], `${protocol}://${redactedAuth}${urlHost}${urlPort}/user`)
+              assert.strictEqual(span.meta['server.address'], hostname)
+              assert.strictEqual(span.metrics['server.port'], scenario.defaultPort ? defaultPort : port)
+            })
+
+            const auth = scenario.auth ? `${scenario.auth}@` : ''
+            const targetPort = scenario.explicitPort ? `:${defaultPort}` : urlPort
+            const target = scenario.options
+              ? { protocol: `${protocol}:`, hostname, port, path: '/user', auth: scenario.auth }
+              : `${protocol}://${auth}${urlHost}${targetPort}/user`
+            const request = http.request(target, { agent: localAgent }, res => res.resume())
+            const requestClosed = once(request, 'close')
+            request.end()
+            try {
+              await Promise.all([traceReceived, requestClosed])
+            } finally {
+              localAgent?.destroy()
+            }
+          })
+        }
 
         it('sets error.type to the status code on a 4xx client response', done => {
           const app = express()
