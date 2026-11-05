@@ -67,6 +67,8 @@ function datadogVite () {
      * @param {ResolvedConfig} config
      */
     configResolved (config) {
+      // Older versions lack the Environment API hooks, so the build would silently miss required configuration.
+      if (!config.environments) throw new Error('dd-trace/vite requires Vite 6 or newer. Refusing to bundle.')
       if (isRolldown(this) || !config.esbuild || !needsEsbuildKeepNames(config)) return
       config.esbuild.keepNames = true
       log.debug('Enabled esbuild keepNames so minification preserves function and class names')

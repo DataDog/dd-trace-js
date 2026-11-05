@@ -42,6 +42,15 @@ describe('datadogVite', () => {
   })
 
   describe('environment gating', () => {
+    it('refuses to bundle with Vite versions lacking the Environment API', () => {
+      const plugin = datadogVite()
+
+      assert.throws(() => plugin.configResolved.call(ROLLUP, { build: {}, esbuild: {} }), {
+        message: 'dd-trace/vite requires Vite 6 or newer. Refusing to bundle.',
+      })
+      plugin.configResolved.call(ROLLUP, { build: {}, environments: {}, esbuild: {} })
+    })
+
     it('applies to server, SSR and library environments only', () => {
       const plugin = datadogVite()
       const applies = (name, consumer, build) => plugin.applyToEnvironment({ name, config: { build, consumer } })
