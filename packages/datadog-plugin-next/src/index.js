@@ -1,5 +1,7 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
@@ -10,6 +12,8 @@ const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 const reusedNextRequestStores = new WeakSet()
 const nextParentRoutes = new WeakMap()
+const requestMeta = Symbol.for('NextInternalRequestMeta')
+const finishChannel = channel('apm:next:request:finish')
 
 /**
  * @typedef {Record<string, unknown> & {
@@ -47,6 +51,33 @@ class NextPlugin extends ServerPlugin {
       backgroundRevalidationRequest: req,
     }))
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
+    for (const operation of ['imageRequest', 'imageRequestWithMiddleware']) {
+      const prefix = `tracing:orchestrion:next:${operation}`
+      this.addBind(`${prefix}:start`, ctx => {
+        const args = ctx.arguments
+        const pathname = (args[3] || args[2])?.pathname
+        if (!pathname?.startsWith('/_next/image')) return storage('legacy').getStore()
+        if (operation === 'imageRequestWithMiddleware' && args[0][requestMeta]?.middlewareInvoke) {
+          return storage('legacy').getStore()
+        }
+
+        ctx.req = args[0].originalRequest || args[0]
+        ctx.res = args[1].originalResponse || args[1]
+        ctx.currentStore = this.bindStart(ctx)
+        return ctx.currentStore
+      })
+      this.addSub(`${prefix}:start`, ctx => {
+        if (ctx.currentStore) this.pageLoad({ page: '/_next/image' })
+      })
+      this.addSub(`${prefix}:asyncEnd`, ctx => {
+        if (!ctx.currentStore) return
+        if (ctx.error && !ctx.res.destroyed && !reusedNextRequestStores.has(ctx.currentStore)) {
+          ctx.res.once('close', () => finishChannel.publish(ctx))
+        } else {
+          this.finish(ctx)
+        }
+      })
+    }
   }
 
   /** @param {NextRequestContext} ctx */
@@ -146,11 +177,11 @@ class NextPlugin extends ServerPlugin {
     // safeguard against missing req in complicated timeout scenarios
     if (!req) return
 
-    // Only use error page names if there's not already a name
+    // Nested requests, static loads, and error pages must preserve the matched route.
     const current = span.context().getTag('next.page')
     const isErrorPage = errorPages.has(page)
 
-    if (current && isErrorPage) {
+    if (current && (isErrorPage || isStatic || reusedNextRequestStores.has(store))) {
       return
     }
 
