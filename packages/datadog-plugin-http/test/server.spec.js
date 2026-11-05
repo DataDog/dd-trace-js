@@ -323,15 +323,20 @@ describe('Plugin', () => {
       })
 
       for (const { description, statuses, validateStatus, errorStatuses, otelSemantics } of [
-        { description: 'default', errorStatuses: [500, 599, 600], otelSemantics: false },
+        { description: 'default', errorStatuses: [500, 599], otelSemantics: false },
         {
           description: 'explicit default-shaped',
           statuses: '500-599',
           errorStatuses: [500, 599],
           otelSemantics: false,
         },
-        { description: 'default', errorStatuses: [500, 599, 600], otelSemantics: true },
-        { description: 'explicit default-shaped', statuses: '500-599', errorStatuses: [500, 599], otelSemantics: true },
+        { description: 'default', errorStatuses: [500, 599], otelSemantics: true },
+        {
+          description: 'explicit default-shaped',
+          statuses: '500-599',
+          errorStatuses: [500, 599],
+          otelSemantics: true,
+        },
         { description: 'custom', statuses: '200', errorStatuses: [200], otelSemantics: true },
         {
           description: 'custom validation',
@@ -367,7 +372,7 @@ describe('Plugin', () => {
           })
 
           for (const status of [200, 499, 500, 599, 600]) {
-            it(`classifies status ${status} using the configured range origin`, async () => {
+            it(`classifies status ${status} using the configured range`, async () => {
               responseStatus = status
               const expectedError = errorStatuses.includes(status) ? 1 : 0
               await Promise.all([

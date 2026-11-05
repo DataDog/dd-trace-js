@@ -1476,13 +1476,10 @@ describe('Config', () => {
   })
 
   describe('HTTP server error statuses', () => {
-    it('should leave the default to the HTTP status validator', () => {
+    it('should default to 500-599', () => {
       const config = getConfig()
 
-      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, undefined)
-      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
-        { name: 'DD_TRACE_HTTP_SERVER_ERROR_STATUSES', value: null, origin: 'default' },
-      ])
+      assert.strictEqual(config.DD_TRACE_HTTP_SERVER_ERROR_STATUSES, '500-599')
     })
 
     it('should initialize from DD_TRACE_HTTP_SERVER_ERROR_STATUSES', () => {

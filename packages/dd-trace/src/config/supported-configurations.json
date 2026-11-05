@@ -3247,7 +3247,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
+        "default": "500-599",
         "aliases": [
           "DD_HTTP_SERVER_ERROR_STATUSES"
         ]

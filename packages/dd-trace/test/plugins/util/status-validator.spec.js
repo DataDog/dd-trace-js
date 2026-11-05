@@ -138,12 +138,6 @@ describe('plugins/util/status-validator', () => {
 
       assert.deepStrictEqual(errorCodes(validate, [399, 400, 599, 600]), [400, 599])
     })
-
-    it('should not change the server range', () => {
-      const validate = getServerStatusValidator({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
-
-      assert.deepStrictEqual(errorCodes(validate, [404, 499, 500, 599]), [500, 599])
-    })
   })
 
   describe('getServerStatusValidator', () => {
@@ -154,21 +148,20 @@ describe('plugins/util/status-validator', () => {
       assert.strictEqual(validateStatus(499), true)
       assert.strictEqual(validateStatus(500), false)
       assert.strictEqual(validateStatus(599), false)
-    })
-
-    it('should bound an explicitly configured default server range at 599', () => {
-      const validateStatus = getServerStatusValidator({ DD_TRACE_HTTP_SERVER_ERROR_STATUSES: '500-599' })
-
-      assert.strictEqual(validateStatus(599), false)
-      assert.strictEqual(validateStatus(600), true)
-    })
-
-    it('should keep the default server range open above 599 when it was never chosen', () => {
-      const validateStatus = getServerStatusValidator({})
-
-      assert.strictEqual(validateStatus(599), false)
       assert.strictEqual(validateStatus(600), false)
     })
+
+    for (const range of ['500-599', ' 500 - 599 ']) {
+      it(`should use the configured server range ${JSON.stringify(range)}`, () => {
+        const validateStatus = getServerStatusValidator({ DD_TRACE_HTTP_SERVER_ERROR_STATUSES: range })
+
+        assert.strictEqual(validateStatus(499), true)
+        assert.strictEqual(validateStatus(500), false)
+        assert.strictEqual(validateStatus(599), false)
+        assert.strictEqual(validateStatus(600), true)
+        assert.strictEqual(validateStatus(999), true)
+      })
+    }
 
     it('should not be affected by the client error statuses', () => {
       const validateStatus = getServerStatusValidator({

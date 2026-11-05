@@ -31,7 +31,6 @@ function isNotOtelClientErrorCode (code) {
  *   validateStatus?: unknown,
  *   DD_TRACE_HTTP_SERVER_ERROR_STATUSES?: unknown,
  *   DD_TRACE_HTTP_CLIENT_ERROR_STATUSES?: unknown,
- *   DD_TRACE_OTEL_SEMANTICS_ENABLED?: unknown,
  * }} config
  * @returns {StatusValidator}
  */
