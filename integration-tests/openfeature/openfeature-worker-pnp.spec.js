@@ -6,11 +6,11 @@ const { existsSync } = require('node:fs')
 const { join } = require('node:path')
 
 const { sandboxCwd, useSandbox } = require('../helpers')
-const { YARN } = require('../helpers/bun')
+const { YARN_MODERN } = require('../helpers/bun')
 
 describe('OpenFeature worker with Yarn Plug\'n\'Play', () => {
   useSandbox([], false, ['./integration-tests/openfeature/app'],
-    `${YARN} set version 4.9.2 --yarn-path && ${YARN} install --mode=skip-build --no-immutable`)
+    `${YARN_MODERN} install --mode=skip-build --no-immutable`)
 
   it('delivers events without inheriting application preloads', async function () {
     this.timeout(15000)

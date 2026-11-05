@@ -373,6 +373,7 @@
 /packages/dd-trace/test/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 
 # CI
+/.github/workflow-job-names/ @Datadog/lang-platform-js
 /.github/actions/**/action.yml @DataDog/lang-platform-js @dd-octo-sts
 /.github/actions/**/action.yaml @DataDog/lang-platform-js @dd-octo-sts
 /.github/actions/upload-coverage-artifact/ @DataDog/ci-app-libraries

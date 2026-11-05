@@ -10,8 +10,7 @@ test -f "$archive"
 mkdir -p packaging/sources
 printf '{}\n' > packaging/sources/package.json
 
-bun_version=$(node -p 'require("./package.json").devDependencies.bun')
-npm exec --yes --package="bun@$bun_version" -- bun add --cwd ./packaging/sources/ "$PWD/$archive"
+npm exec --yes --package=bun -- bun --config="$PWD/bunfig.toml" add --cwd ./packaging/sources/ "$PWD/$archive"
 rm packaging/sources/*.json packaging/sources/bun.lock
 
 if [ -n "$CI_COMMIT_TAG" ] && [ -z "$JS_PACKAGE_VERSION" ]; then
