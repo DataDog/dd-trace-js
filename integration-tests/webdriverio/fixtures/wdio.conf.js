@@ -54,21 +54,21 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
-  jasmineExclusions: {
+  exclusions: {
     maxInstances: 1,
-    specs: ['./jasmine-exclusions.e2e.js'],
+    specs: ['./test-exclusions.e2e.js'],
   },
-  jasmineExclusionsPassing: {
+  exclusionsPassing: {
     maxInstances: 1,
-    specs: ['./jasmine-exclusions-passing.e2e.js'],
+    specs: ['./test-exclusions-passing.e2e.js'],
   },
-  jasmineExclusionsNative: {
+  exclusionsNative: {
     maxInstances: 1,
-    specs: ['./jasmine-exclusions-native.e2e.js'],
+    specs: ['./test-exclusions-native.e2e.js'],
   },
-  jasmineExclusionsProtected: {
+  exclusionsProtected: {
     maxInstances: 1,
-    specs: ['./jasmine-exclusions-protected.e2e.js'],
+    specs: ['./test-exclusions-protected.e2e.js'],
   },
   videosBrowser: {
     injectGlobals: false,

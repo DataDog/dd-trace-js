@@ -5,9 +5,13 @@
 const { appendFileSync } = require('node:fs')
 
 let currentTestName
-jasmine.getEnv().addReporter({
-  specStarted (result) { currentTestName = result.fullName },
-})
+if (process.env.WEBDRIVERIO_FRAMEWORK === 'jasmine') {
+  jasmine.getEnv().addReporter({
+    specStarted (result) { currentTestName = result.fullName },
+  })
+} else {
+  beforeEach(function () { currentTestName = this.currentTest.fullTitle() })
+}
 
 module.exports = function recordExecution () {
   if (process.env.WEBDRIVERIO_EXCLUSIONS_LEDGER) {

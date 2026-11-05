@@ -983,9 +983,9 @@ Management tags continue to describe backend assignments. Annotation tags descri
 observed callback, and effective execution/final status follows the exclusions.
 
 
-## WebdriverIO Jasmine test automation exclusions
+## WebdriverIO test automation exclusions
 
-With the WebdriverIO Jasmine adapter (WebdriverIO 9 and later), apply
+With the WebdriverIO Mocha or Jasmine adapter (WebdriverIO 9 and later), apply
 `preventFailureSuppression` and `noAutoRetry` from `dd-trace/ci/test-annotations`
 to callbacks passed to `it` or `xit`. The helpers compose as in the Jest example.
 They apply to every declaration generated in a loop and retain annotation tags
@@ -993,6 +993,7 @@ on explicit skips and permitted native retries.
 
 `preventFailureSuppression` overrides Datadog quarantine and disabling without
 blocking retries. `noAutoRetry` excludes Datadog ATR, EFD, and Attempt to Fix;
-explicit WebdriverIO retries remain available and are reported as framework retries.
+native Mocha retries and explicit WebdriverIO Jasmine retries remain available and
+are reported as framework retries.
 Both helpers preserve ordinary selection and expected-failure behavior. Management
 property tags retain backend assignments even when their execution policy is overridden.

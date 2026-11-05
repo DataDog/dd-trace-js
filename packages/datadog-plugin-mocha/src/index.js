@@ -16,7 +16,7 @@ const {
   getDynamicAtrRetryCount,
 } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const { FINAL_FLUSH_TIMEOUT } = require('../../dd-trace/src/ci-visibility/final-flush')
-const { getTestAnnotations } = require('../../dd-trace/src/ci-visibility/test-annotations')
+const { getTestAnnotations, copyTestAnnotations } = require('../../dd-trace/src/ci-visibility/test-annotations')
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
@@ -426,7 +426,17 @@ class MochaPlugin extends CiPlugin {
       if (!ctx.result?.id) return
       const annotations = getTestAnnotations(ctx.arguments?.[1])
       if (annotations.mustFail || annotations.noAutoRetry) {
-        this.#webdriverioJasmineAnnotations.set(ctx.result.id, annotations)
+        if (ctx.result.type === 'test') {
+          if (ctx.result.fn) {
+            // Mocha's runnable holds WebdriverIO's wrapper rather than the annotated callback.
+            copyTestAnnotations(ctx.arguments[1], ctx.result.fn)
+          } else {
+            // Mocha discards callbacks inherited from a pending suite.
+            ctx.result._ddDeclaredAnnotations = annotations
+          }
+        } else {
+          this.#webdriverioJasmineAnnotations.set(ctx.result.id, annotations)
+        }
       }
     })
 
