@@ -57,6 +57,14 @@ const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-setup.mjs'
 )
+const VITEST_NO_WORKER_INIT_NODE_SETUP_FILE = path.join(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  'ci',
+  'vitest-no-worker-init-node-setup.mjs'
+)
 const VITEST_NO_WORKER_INIT_RUNNER_SETUP_FILE = path.join(
   __dirname,
   '..',
@@ -436,12 +444,13 @@ function restoreDatadogTestOptimizationNodeOptions (workerEnv) {
   }
 }
 
-function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
+function addSetupFileToVitestConfigs (ctx, browserSetupFile, testSpecifications) {
   const configs = getNoWorkerInitVitestConfigs(ctx, testSpecifications)
 
   for (const config of configs) {
     if (!config) continue
 
+    const setupFile = config.browser?.enabled ? browserSetupFile : VITEST_NO_WORKER_INIT_NODE_SETUP_FILE
     config.includeTaskLocation = true
     if (config.setupFiles === undefined) {
       config.setupFiles = []

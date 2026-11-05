@@ -1,4 +1,5 @@
-import { afterEach, beforeAll, beforeEach, inject } from 'vitest'
+const { afterEach, beforeAll, beforeEach, inject } =
+  globalThis[Symbol.for('dd-trace.vitest.api')] || await import('vitest')
 
 // Instrumentation-less setup for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
 // It applies Test Optimization execution changes without initializing dd-trace and also supports Browser Mode.

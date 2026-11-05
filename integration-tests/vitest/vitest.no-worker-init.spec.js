@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const Module = require('node:module')
-const { exec, execFileSync, execSync } = require('node:child_process')
+const { exec, execFile, execFileSync, execSync } = require('node:child_process')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
@@ -396,7 +396,7 @@ describe('vitest no-worker init instrumentation selection', () => {
       configureNoWorkerReporter(ctx)
 
       assert.strictEqual(ctx.config.includeTaskLocation, true)
-      assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-runner-setup.mjs')
+      assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-node-setup.mjs')
       assert.deepStrictEqual(ctx.config.setupFiles.slice(1), ['/repo/user-setup.mjs'])
     })
 
@@ -1028,14 +1028,9 @@ SUPPORTED_VERSIONS.forEach((version) => {
       await receiver.stop()
     })
 
-    async function runVitest (extraEnv = {}, command = './node_modules/.bin/vitest run') {
-      childProcess = exec(
-        command,
-        {
-          cwd,
-          env: getNoWorkerInitEnv(receiver, extraEnv),
-        }
-      )
+    async function runVitest (extraEnv = {}, command = './node_modules/.bin/vitest run', runCwd = cwd) {
+      const options = { cwd: runCwd, env: getNoWorkerInitEnv(receiver, extraEnv) }
+      childProcess = Array.isArray(command) ? execFile(process.execPath, command, options) : exec(command, options)
 
       childProcess.stdout.on('data', data => { testOutput += data })
       childProcess.stderr.on('data', data => { testOutput += data })
@@ -1057,6 +1052,44 @@ SUPPORTED_VERSIONS.forEach((version) => {
     }
 
     for (const poolConfig of ['forks', 'threads']) {
+      it(`resolves Vitest from the project with an external tracer in ${poolConfig} workers`, async () => {
+        const externalRoot = fs.mkdtempSync(path.join(path.dirname(cwd), 'external-dd-trace-'))
+        const externalModules = path.join(externalRoot, 'node_modules')
+        const externalTracer = path.join(externalModules, 'dd-trace')
+        const projectModules = path.join(cwd, 'node_modules')
+        fs.mkdirSync(externalModules)
+
+        try {
+          fs.cpSync(path.join(projectModules, 'dd-trace'), externalTracer, { recursive: true })
+          for (const name of fs.readdirSync(projectModules)) {
+            if (name === 'dd-trace' || name === 'vitest' || name === '@vitest' || name.startsWith('.')) continue
+            fs.symlinkSync(path.join(projectModules, name), path.join(externalModules, name), 'junction')
+          }
+
+          const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+            assertEventCounts(events, { test_session_end: 1, test_module_end: 1, test_suite_end: 1, test: 1 })
+            assert.strictEqual(getEventContents(events, 'test')[0].meta[TEST_STATUS], 'pass')
+          })
+          const [exitCode] = await Promise.all([
+            runVitest({
+              NODE_OPTIONS: `--no-warnings --import ${JSON.stringify(path.join(externalTracer, 'register.js'))} ` +
+                `-r ${JSON.stringify(path.join(externalTracer, 'ci/init.js'))}`,
+              TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+              POOL_CONFIG: poolConfig,
+              EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
+              EXPECT_NO_DD_TRACE_INIT: '1',
+            }, [
+              path.join(projectModules, 'vitest/vitest.mjs'), 'run', '--root', cwd,
+              '--config', path.join(cwd, 'vitest.config.mjs'),
+            ], path.dirname(cwd)),
+            payloadsPromise,
+          ])
+          assert.strictEqual(exitCode, 0, testOutput)
+        } finally {
+          fs.rmSync(externalRoot, { recursive: true, force: true })
+        }
+      })
+
       it(`runs and reports tests without initializing dd-trace in ${poolConfig} workers`, async () => {
         const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
           assertEventCounts(events, {
