@@ -3231,7 +3231,7 @@
     ],
     "DD_TRACE_HTTP_CLIENT_ERROR_STATUSES": [
       {
-        "implementation": "A",
+        "implementation": "D",
         "type": "string",
         "default": null
       }
