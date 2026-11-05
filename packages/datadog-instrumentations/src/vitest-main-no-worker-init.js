@@ -57,6 +57,14 @@ const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-setup.mjs'
 )
+const VITEST_NO_WORKER_INIT_NODE_SETUP_FILE = path.join(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  'ci',
+  'vitest-no-worker-init-node-setup.mjs'
+)
 const VITEST_NO_WORKER_INIT_RUNNER_SETUP_FILE = path.join(
   __dirname,
   '..',
@@ -73,6 +81,11 @@ const VITEST_NO_WORKER_INIT_V5_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-v5-setup.mjs'
 )
+const VITEST_NO_WORKER_INIT_ENTRYPOINTS = new Set([
+  VITEST_NO_WORKER_INIT_NODE_SETUP_FILE,
+  VITEST_NO_WORKER_INIT_RUNNER_SETUP_FILE,
+  VITEST_NO_WORKER_INIT_V5_SETUP_FILE,
+])
 const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
   name: 'datadog:vitest-browser-setup-file',
   config: configureVitestBrowserSetupFile,
@@ -436,12 +449,11 @@ function restoreDatadogTestOptimizationNodeOptions (workerEnv) {
   }
 }
 
-function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
+function addSetupFileToVitestConfigs (ctx, browserSetupFile, testSpecifications) {
   const configs = getNoWorkerInitVitestConfigs(ctx, testSpecifications)
 
-  for (const config of configs) {
-    if (!config) continue
-
+  for (const [config, isBrowserMode] of configs) {
+    const setupFile = isBrowserMode ? browserSetupFile : VITEST_NO_WORKER_INIT_NODE_SETUP_FILE
     config.includeTaskLocation = true
     if (config.setupFiles === undefined) {
       config.setupFiles = []
@@ -449,13 +461,10 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
       config.setupFiles = [config.setupFiles]
     }
 
-    const setupFileIndex = config.setupFiles.indexOf(setupFile)
-    if (setupFileIndex !== 0) {
-      if (setupFileIndex > 0) {
-        config.setupFiles.splice(setupFileIndex, 1)
-      }
-      config.setupFiles.unshift(setupFile)
+    for (let index = config.setupFiles.length - 1; index >= 0; index--) {
+      if (VITEST_NO_WORKER_INIT_ENTRYPOINTS.has(config.setupFiles[index])) config.setupFiles.splice(index, 1)
     }
+    config.setupFiles.unshift(setupFile)
   }
 }
 
@@ -579,31 +588,32 @@ function addVitestBrowserCommand (config) {
 }
 
 function getNoWorkerInitVitestConfigs (ctx, testSpecifications) {
-  const configs = new Set()
+  const configs = new Map()
+  let fallbackIsBrowserMode
   if (Array.isArray(testSpecifications)) {
-    let shouldAddRootConfig = false
     for (const testSpecification of testSpecifications) {
       const project = getTestSpecificationProject(testSpecification)
       const config = safeConfig(project)
+      const isBrowserMode = isBrowserTestSpecification(testSpecification)
       if (config) {
-        addNoWorkerInitConfig(configs, config)
+        addNoWorkerInitConfig(configs, config, isBrowserMode)
       } else {
-        shouldAddRootConfig = true
+        fallbackIsBrowserMode ||= isBrowserMode
       }
     }
 
-    if (!shouldAddRootConfig && configs.size > 0) {
+    if (fallbackIsBrowserMode === undefined && configs.size > 0) {
       return configs
     }
   }
 
-  addNoWorkerInitConfig(configs, safeConfig(ctx))
-  addNoWorkerInitConfig(configs, safeConfig(safeWorkspaceProject(ctx)))
+  addNoWorkerInitConfig(configs, safeConfig(ctx), fallbackIsBrowserMode)
+  addNoWorkerInitConfig(configs, safeConfig(safeWorkspaceProject(ctx)), fallbackIsBrowserMode)
   return configs
 }
 
-function addNoWorkerInitConfig (configs, config) {
-  if (config) configs.add(config)
+function addNoWorkerInitConfig (configs, config, isBrowserMode = config?.browser?.enabled === true) {
+  if (config && !configs.has(config)) configs.set(config, isBrowserMode)
 }
 
 function getSelectedTestManagementTests (testManagementTestsBySuite, propertyName) {
