@@ -446,11 +446,16 @@ function restoreDatadogTestOptimizationNodeOptions (workerEnv) {
 
 function addSetupFileToVitestConfigs (ctx, browserSetupFile, testSpecifications) {
   const configs = getNoWorkerInitVitestConfigs(ctx, testSpecifications)
+  const isBrowserMode = Array.isArray(testSpecifications)
+    ? testSpecifications.some(isBrowserTestSpecification)
+    : undefined
 
   for (const config of configs) {
     if (!config) continue
 
-    const setupFile = config.browser?.enabled ? browserSetupFile : VITEST_NO_WORKER_INIT_NODE_SETUP_FILE
+    const setupFile = (isBrowserMode ?? config.browser?.enabled)
+      ? browserSetupFile
+      : VITEST_NO_WORKER_INIT_NODE_SETUP_FILE
     config.includeTaskLocation = true
     if (config.setupFiles === undefined) {
       config.setupFiles = []

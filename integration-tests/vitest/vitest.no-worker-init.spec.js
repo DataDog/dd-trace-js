@@ -469,7 +469,7 @@ describe('vitest no-worker init instrumentation selection', () => {
       assert.strictEqual(project.options, undefined)
     })
 
-    for (const [description, project] of [
+    for (const [description, project, pool] of [
       ['the project API', { isBrowserEnabled: () => true }],
       ['serialized configuration', {
         get config () {
@@ -481,12 +481,15 @@ describe('vitest no-worker init instrumentation selection', () => {
           },
         },
       }],
+      ['pool metadata', {}, 'browser'],
     ]) {
-      it(`installs the Vite access plugin for Browser Mode detected through ${description}`, () => {
+      it(`installs browser setup and Vite access for ${description}`, () => {
         const ctx = getNoWorkerReporterContext()
+        ctx.config.browser = { enabled: false }
 
-        configureNoWorkerReporter(ctx, [[project, { filepath: '/repo/test.mjs' }]])
+        configureNoWorkerReporter(ctx, [[project, { filepath: '/repo/test.mjs', pool }]])
 
+        assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-runner-setup.mjs')
         assert.strictEqual(project.options.plugins[0].name, 'datadog:vitest-browser-setup-file')
         assert.strictEqual(
           typeof project.options.browser.commands.__dd_vitest_efd_suite_admission,
