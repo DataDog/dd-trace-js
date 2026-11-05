@@ -14,7 +14,7 @@ const {
 
 const AGENT_INSTRUCTIONS = 'You are a test agent'
 
-function createResponse (output, model = 'gpt-4-0613') {
+function createResponse (output, model = 'gpt-4-0613', tools = []) {
   return {
     id: 'resp_test',
     object: 'response',
@@ -34,7 +34,7 @@ function createResponse (output, model = 'gpt-4-0613') {
     temperature: 1,
     text: { format: { type: 'text' } },
     tool_choice: 'auto',
-    tools: [],
+    tools,
     top_p: 1,
     truncation: 'disabled',
     metadata: {},
@@ -66,14 +66,42 @@ function createFetch (responses) {
   }
 }
 
+function createStreamFetch (text, model = 'gpt-4o') {
+  return async () => {
+    const response = {
+      id: 'resp_stream_test',
+      object: 'response',
+      status: 'completed',
+      output: [createMessageOutput(text)],
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+      model,
+    }
+    const events = [
+      { type: 'response.created', response: { ...response, status: 'in_progress', output: [] } },
+      { type: 'response.output_text.delta', delta: text },
+      { type: 'response.completed', response },
+    ]
+    const body = events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n'
+    return new Response(body, {
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'x-request-id': 'req_stream_test',
+      },
+    })
+  }
+}
+
 describe('integrations', () => {
   describe('openai-agents LLMObs', () => {
-    const { getEvents } = useLlmObs({ plugin: 'openai-agents' })
+    const { getEvents } = useLlmObs({ plugin: ['openai-agents', 'openai'] })
 
     let agentsCore
     let agent
     let chatCompletionsAgent
     let handoffAgent
+    let toolAgent
+    let streamedAgent
     let toolErrorAgent
 
     withVersions('openai-agents', '@openai/agents', (version) => {
@@ -144,6 +172,52 @@ describe('integrations', () => {
             createResponse([createMessageOutput('done')], 'gpt-4o-mini'),
           ]),
         })
+        const toolClient = new OpenAI({
+          apiKey: 'test',
+          baseURL: 'https://api.openai.com/v1',
+          fetch: createFetch([
+            createResponse([{
+              id: 'fc_tool',
+              type: 'function_call',
+              call_id: 'call_tool',
+              name: 'add',
+              arguments: '{"a":1,"b":2}',
+              status: 'completed',
+            }], 'gpt-4o-mini', [{
+              type: 'function',
+              name: 'add',
+              description: 'Adds two numbers.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  a: { type: 'number' },
+                  b: { type: 'number' },
+                },
+                required: ['a', 'b'],
+                additionalProperties: false,
+              },
+            }]),
+            createResponse([createMessageOutput('3')], 'gpt-4o-mini', [{
+              type: 'function',
+              name: 'add',
+              description: 'Adds two numbers.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  a: { type: 'number' },
+                  b: { type: 'number' },
+                },
+                required: ['a', 'b'],
+                additionalProperties: false,
+              },
+            }]),
+          ]),
+        })
+        const streamClient = new OpenAI({
+          apiKey: 'test',
+          baseURL: 'https://api.openai.com/v1',
+          fetch: createStreamFetch('The capital of France is Paris.'),
+        })
 
         agentsCore.setDefaultModelProvider({
           createModel: (modelName) => new OpenAIResponsesModel(mockClient, modelName),
@@ -171,6 +245,30 @@ describe('integrations', () => {
           instructions: 'Hand the request to agent_b',
           model: handoffModel,
           handoffs: [handoffAgentB],
+        })
+        const additionTool = agentsCore.tool({
+          name: 'add',
+          description: 'Adds two numbers.',
+          parameters: {
+            type: 'object',
+            properties: {
+              a: { type: 'number' },
+              b: { type: 'number' },
+            },
+            required: ['a', 'b'],
+          },
+          execute: async ({ a, b }) => a + b,
+        })
+        toolAgent = new agentsCore.Agent({
+          name: 'tool_agent',
+          instructions: 'Use the add tool.',
+          model: new OpenAIResponsesModel(toolClient, 'gpt-4o-mini'),
+          tools: [additionTool],
+        })
+        streamedAgent = new agentsCore.Agent({
+          name: 'streamed_agent',
+          instructions: AGENT_INSTRUCTIONS,
+          model: new OpenAIResponsesModel(streamClient, 'gpt-4o'),
         })
 
         // Tool with a real parameter schema so the model has something to
@@ -223,6 +321,7 @@ describe('integrations', () => {
 
           const { apmSpans, llmobsSpans } = await getEvents(3)
           const workflowEvent = llmobsSpans.find(s => s.meta?.['span.kind'] === 'workflow')
+          const agentEvent = llmobsSpans.find(s => s.name === 'test_agent')
           const workflowApmSpan = apmSpans.find(s => s.name === 'Agent workflow')
 
           assertLlmObsSpanEvent(workflowEvent, {
@@ -231,6 +330,24 @@ describe('integrations', () => {
             name: 'Agent workflow',
             inputValue: 'hello',
             outputValue: MOCK_STRING,
+            tags: { ml_app: 'test', integration: 'openai-agents' },
+          })
+          assertLlmObsSpanEvent(agentEvent, {
+            span: apmSpans.find(s => s.name === 'test_agent'),
+            parentId: workflowApmSpan.span_id,
+            spanKind: 'agent',
+            name: 'test_agent',
+            metadata: {
+              _dd: {
+                agent_manifest: {
+                  framework: 'OpenAI',
+                  name: 'test_agent',
+                  instructions: AGENT_INSTRUCTIONS,
+                  handoff_description: '',
+                },
+              },
+              output_type: 'text',
+            },
             tags: { ml_app: 'test', integration: 'openai-agents' },
           })
         })
@@ -242,7 +359,7 @@ describe('integrations', () => {
           await agentsCore.run(agent, 'hello', { maxTurns: 1 })
 
           const { apmSpans, llmobsSpans } = await getEvents(3)
-          const llmEvent = llmobsSpans.find(s => s.meta?.['span.kind'] === 'llm')
+          const llmEvent = llmobsSpans.find(s => s.name === 'test_agent (LLM)')
           const llmApmSpan = apmSpans.find(s => s.name === 'openai_agents.response')
           const agentApmSpan = apmSpans.find(s => s.name === 'test_agent')
 
@@ -263,6 +380,8 @@ describe('integrations', () => {
             metrics: {
               input_tokens: MOCK_NOT_NULLISH,
               output_tokens: MOCK_NOT_NULLISH,
+              cache_read_input_tokens: MOCK_NOT_NULLISH,
+              reasoning_output_tokens: MOCK_NOT_NULLISH,
               total_tokens: MOCK_NOT_NULLISH,
             },
             metadata: COMMON_RESPONSE_METADATA,
@@ -308,7 +427,7 @@ describe('integrations', () => {
             spanKind: 'workflow',
             name: 'Agent workflow',
             inputValue: 'start',
-            outputValue: 'done',
+            outputValue: MOCK_STRING,
             tags: { ml_app: 'test', integration: 'openai-agents' },
           })
           assertLlmObsSpanEvent(handoffEvent, {
@@ -320,6 +439,133 @@ describe('integrations', () => {
             outputValue: 'agent_b',
             tags: { ml_app: 'test', integration: 'openai-agents' },
           })
+          assertLlmObsSpanEvent(
+            llmobsSpans.find(s => s.name === 'agent_a'),
+            {
+              span: agentAApmSpan,
+              parentId: workflowApmSpan.span_id,
+              spanKind: 'agent',
+              name: 'agent_a',
+              metadata: {
+                _dd: {
+                  agent_manifest: {
+                    framework: 'OpenAI',
+                    name: 'agent_a',
+                    instructions: 'Hand the request to agent_b',
+                    handoff_description: '',
+                    handoffs: [{
+                      agent_name: 'agent_b',
+                      handoff_description: '',
+                    }],
+                  },
+                },
+                handoffs: ['agent_b'],
+                output_type: 'text',
+              },
+              tags: { ml_app: 'test', integration: 'openai-agents' },
+            }
+          )
+          assertLlmObsSpanEvent(
+            llmobsSpans.find(s => s.name === 'agent_b'),
+            {
+              span: agentBApmSpan,
+              parentId: workflowApmSpan.span_id,
+              spanKind: 'agent',
+              name: 'agent_b',
+              metadata: {
+                _dd: {
+                  agent_manifest: {
+                    framework: 'OpenAI',
+                    name: 'agent_b',
+                    instructions: 'Finish the request',
+                    handoff_description: '',
+                  },
+                },
+                output_type: 'text',
+              },
+              tags: { ml_app: 'test', integration: 'openai-agents' },
+            }
+          )
+        })
+
+        it('parents OpenAI LLMObs spans under the agent response span', async () => {
+          await agentsCore.run(agent, 'hello', { maxTurns: 1 })
+          const { apmSpans, llmobsSpans } = await getEvents(4)
+          const responseEvent = llmobsSpans.find(s => s.name === 'test_agent (LLM)')
+          const openaiEvent = llmobsSpans.find(s => s.name === 'OpenAI.createResponse')
+          assertLlmObsSpanEvent(openaiEvent, {
+            span: apmSpans.find(s => s.name === 'openai.request'),
+            parentId: responseEvent.span_id,
+            spanKind: 'llm',
+            name: 'OpenAI.createResponse',
+            modelName: 'gpt-4-0613',
+            modelProvider: 'openai',
+            inputMessages: [
+              { role: 'system', content: AGENT_INSTRUCTIONS },
+              { role: 'user', content: 'hello' },
+            ],
+            outputMessages: [
+              { role: 'assistant', content: 'hello' },
+            ],
+            metrics: {
+              input_tokens: MOCK_NOT_NULLISH,
+              output_tokens: MOCK_NOT_NULLISH,
+              total_tokens: MOCK_NOT_NULLISH,
+              cache_read_input_tokens: MOCK_NOT_NULLISH,
+              reasoning_output_tokens: MOCK_NOT_NULLISH,
+            },
+            metadata: {
+              temperature: MOCK_NOT_NULLISH,
+              stream: MOCK_NOT_NULLISH,
+              top_p: MOCK_NOT_NULLISH,
+              tool_choice: MOCK_NOT_NULLISH,
+              truncation: MOCK_NOT_NULLISH,
+              text: MOCK_NOT_NULLISH,
+            },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+        })
+
+        it('keeps streamed workflow output', async () => {
+          const stream = await agentsCore.run(streamedAgent, 'hello', { stream: true })
+          for await (const event of stream) void event
+          await stream.completed
+          assert.equal(stream.finalOutput, 'The capital of France is Paris.')
+          const { apmSpans, llmobsSpans } = await getEvents(3)
+          const workflowEvent = llmobsSpans.find(s => s.meta?.['span.kind'] === 'workflow')
+          assertLlmObsSpanEvent(workflowEvent, {
+            span: apmSpans.find(s => s.name === 'Agent workflow'),
+            inputValue: 'hello',
+            outputValue: 'The capital of France is Paris.',
+            spanKind: 'workflow',
+            name: 'Agent workflow',
+            tags: { ml_app: 'test', integration: 'openai-agents' },
+          })
+        })
+
+        it('includes tool calls and results in the next LLM input', async () => {
+          await agentsCore.run(toolAgent, 'What is 1 + 2?', { maxTurns: 2 })
+          const { llmobsSpans } = await getEvents(7)
+          const llmEvents = llmobsSpans.filter(s => s.name === 'tool_agent (LLM)')
+          assert.equal(llmEvents.length, 2)
+          assert.deepStrictEqual(llmEvents[0].meta.tool_definitions, [{
+            name: 'add',
+            description: 'Adds two numbers.',
+            schema: {
+              type: 'object',
+              properties: {
+                a: { type: 'number' },
+                b: { type: 'number' },
+              },
+              required: ['a', 'b'],
+              additionalProperties: false,
+            },
+          }])
+          const messages = llmEvents[1].meta.input.messages
+          assert.ok(messages.some(message => message.tool_calls?.[0]?.tool_id === 'call_tool' ||
+            message.toolCalls?.[0]?.toolId === 'call_tool'))
+          assert.ok(messages.some(message => message.tool_results?.[0]?.tool_id === 'call_tool' ||
+            message.toolResults?.[0]?.toolId === 'call_tool'))
         })
 
         it('emits a tool span flagged as errored when the tool throws', async () => {

@@ -128,11 +128,30 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
 
     if (cwd) metadata.cwd = cwd
     if (permissionMode) metadata.permissionMode = permissionMode
-    const systemPrompt = ctx.arguments?.[0]?.options?.systemPrompt
+    const options = ctx.arguments?.[0]?.options
+    const systemPrompt = options?.systemPrompt
     if (systemPrompt?.type === 'preset') {
       if (typeof systemPrompt.preset === 'string') metadata.systemPromptPreset = systemPrompt.preset
       if (typeof systemPrompt.append === 'string') metadata.systemPromptAppend = systemPrompt.append
     }
+    if (options?.maxTurns) metadata.max_turns = options.maxTurns
+    if (options?.maxThinkingTokens) metadata.max_thinking_tokens = options.maxThinkingTokens
+    if (options?.maxBudgetUsd) metadata.max_budget_usd = options.maxBudgetUsd
+    if (ctx.resultChunk?.stop_reason) metadata.stop_reason = ctx.resultChunk.stop_reason
+
+    const initChunk = ctx.initChunk
+    if (initChunk) {
+      const manifest = { framework: 'Claude Agent SDK' }
+      const model = initChunk.model ?? options?.model
+      if (model) manifest.model = model
+      if (Array.isArray(initChunk.tools)) manifest.tools = initChunk.tools.map(name => ({ name }))
+      if (initChunk.mcp_servers) manifest.dependencies = { mcp_servers: initChunk.mcp_servers }
+      if (options?.maxTurns) manifest.max_iterations = options.maxTurns
+      metadata._dd = { agent_manifest: manifest }
+    }
+
+    const metrics = extractUsageMetrics(ctx.resultChunk?.usage)
+    if (metrics) this._tagger.tagMetrics(span, metrics)
 
     this._tagger.tagMetadata(span, metadata)
   }

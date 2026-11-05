@@ -1,0 +1,80 @@
+{
+  "responses": [
+    {
+      "match": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "status": 200,
+      "headers": {
+        "CF-RAY": "9237b900d980f4e3-IAD",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Date": "Thu, 20 Mar 2025 19:47:41 GMT",
+        "Server": "cloudflare",
+        "Set-Cookie": "__cf_bm=fUIOfmAZKxuNu54KQUkR6jymTqUaYVRrZHRv5Y3sKbw-1742500061-1.0.1.1-U637j94saYkP.GkC6c.nMWNS1o1pa7.17BhnQjtN.6oAxece7GAfDYpDFP3sd2TLE6CpiLeQdPukIPBR58h2QNlBYAXPTv600KYVcdL51yY; path=/; expires=Thu, 20-Mar-25 20:17:41 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None",
+        "Transfer-Encoding": "chunked",
+        "X-Content-Type-Options": "nosniff",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "openai-organization": "datadog-staging",
+        "openai-processing-ms": "1323",
+        "openai-version": "2020-10-01",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-request-id": "req_8f288ce0fcfa1ea71f77affc31e0924c"
+      },
+      "body": "{\n  \"id\": \"resp_67dc70dc58d8819186d7fae66be333070833a3e13699eecf\",\n  \"object\": \"response\",\n  \"created_at\": 1742500060,\n  \"status\": \"completed\",\n  \"error\": null,\n  \"incomplete_details\": null,\n  \"instructions\": \"You are a helpful assistant that can research a topic using your research tool. Always research the topic before summarizing.\",\n  \"max_output_tokens\": null,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"output\": [\n    {\n      \"type\": \"function_call\",\n      \"id\": \"fc_67dc70dd81d08191b682b5d146b320850833a3e13699eecf\",\n      \"call_id\": \"call_Z6lolsgR1GQ3A7vExkNGSrwY\",\n      \"name\": \"research\",\n      \"arguments\": \"{\\\"query\\\":\\\"soccer news October 4 2023\\\"}\",\n      \"status\": \"completed\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\": null,\n  \"reasoning\": {\n    \"effort\": null,\n    \"generate_summary\": null\n  },\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    }\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"description\": \"Research the internet on a topic.\",\n      \"name\": \"research\",\n      \"parameters\": {\n        \"properties\": {\n          \"query\": {\n            \"description\": \"The query to search the internet for\",\n            \"title\": \"Query\",\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"query\"\n        ],\n        \"title\": \"research_args\",\n        \"type\": \"object\",\n        \"additionalProperties\": false\n      },\n      \"strict\": true\n    },\n    {\n      \"type\": \"function\",\n      \"description\": \"Handoff to the Summarizer agent to handle the request. \",\n      \"name\": \"transfer_to_summarizer\",\n      \"parameters\": {\n        \"additionalProperties\": false,\n        \"type\": \"object\",\n        \"properties\": {},\n        \"required\": []\n      },\n      \"strict\": true\n    }\n  ],\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 334,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 23,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 357\n  },\n  \"user\": null,\n  \"metadata\": {}\n}",
+      "stream": false
+    },
+    {
+      "match": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "status": 200,
+      "headers": {
+        "CF-RAY": "9237b909cdfaf4e3-IAD",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Date": "Thu, 20 Mar 2025 19:47:43 GMT",
+        "Server": "cloudflare",
+        "Transfer-Encoding": "chunked",
+        "X-Content-Type-Options": "nosniff",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "openai-organization": "datadog-staging",
+        "openai-processing-ms": "1270",
+        "openai-version": "2020-10-01",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-request-id": "req_b817769dba63836c1a42e0003cf8592f"
+      },
+      "body": "{\n  \"id\": \"resp_67dc70ddc60c8191816ff07dab8cda0b0833a3e13699eecf\",\n  \"object\": \"response\",\n  \"created_at\": 1742500061,\n  \"status\": \"completed\",\n  \"error\": null,\n  \"incomplete_details\": null,\n  \"instructions\": \"You are a helpful assistant that can research a topic using your research tool. Always research the topic before summarizing.\",\n  \"max_output_tokens\": null,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"output\": [\n    {\n      \"type\": \"message\",\n      \"id\": \"msg_67dc70de2d688191874c3d9be9e354da0833a3e13699eecf\",\n      \"status\": \"completed\",\n      \"role\": \"assistant\",\n      \"content\": [\n        {\n          \"type\": \"output_text\",\n          \"text\": \"To provide an accurate summary of yesterday's soccer events, I'll need to conduct a detailed investigation of trustworthy sources. Let me do that now.\",\n          \"annotations\": []\n        }\n      ]\n    },\n    {\n      \"type\": \"function_call\",\n      \"id\": \"fc_67dc70defb288191a2a5151a3767471a0833a3e13699eecf\",\n      \"call_id\": \"call_foCVeHcptx4J3EddQVXaQ0f8\",\n      \"name\": \"transfer_to_summarizer\",\n      \"arguments\": \"{}\",\n      \"status\": \"completed\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\": null,\n  \"reasoning\": {\n    \"effort\": null,\n    \"generate_summary\": null\n  },\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    }\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"description\": \"Research the internet on a topic.\",\n      \"name\": \"research\",\n      \"parameters\": {\n        \"properties\": {\n          \"query\": {\n            \"description\": \"The query to search the internet for\",\n            \"title\": \"Query\",\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"query\"\n        ],\n        \"title\": \"research_args\",\n        \"type\": \"object\",\n        \"additionalProperties\": false\n      },\n      \"strict\": true\n    },\n    {\n      \"type\": \"function\",\n      \"description\": \"Handoff to the Summarizer agent to handle the request. \",\n      \"name\": \"transfer_to_summarizer\",\n      \"parameters\": {\n        \"additionalProperties\": false,\n        \"type\": \"object\",\n        \"properties\": {},\n        \"required\": []\n      },\n      \"strict\": true\n    }\n  ],\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 812,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 44,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 856\n  },\n  \"user\": null,\n  \"metadata\": {}\n}",
+      "stream": false
+    },
+    {
+      "match": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "status": 200,
+      "headers": {
+        "CF-RAY": "9237b91239ddf4e3-IAD",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Date": "Thu, 20 Mar 2025 19:47:43 GMT",
+        "Server": "cloudflare",
+        "Transfer-Encoding": "chunked",
+        "X-Content-Type-Options": "nosniff",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "openai-organization": "datadog-staging",
+        "openai-processing-ms": "527",
+        "openai-version": "2020-10-01",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-request-id": "req_6fca328f016606b5ead356d7b61a256f"
+      },
+      "body": "{\n  \"id\": \"resp_67dc70df16e08191a99808583575997a0833a3e13699eecf\",\n  \"object\": \"response\",\n  \"created_at\": 1742500063,\n  \"status\": \"completed\",\n  \"error\": null,\n  \"incomplete_details\": null,\n  \"instructions\": \"You are a helpful assistant that can summarize a research results.\",\n  \"max_output_tokens\": null,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"output\": [\n    {\n      \"type\": \"message\",\n      \"id\": \"msg_67dc70df708481918affdbb26e06c4bf0833a3e13699eecf\",\n      \"status\": \"completed\",\n      \"role\": \"assistant\",\n      \"content\": [\n        {\n          \"type\": \"output_text\",\n          \"text\": \"I'm sorry, but I don't have that information.\",\n          \"annotations\": []\n        }\n      ]\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\": null,\n  \"reasoning\": {\n    \"effort\": null,\n    \"generate_summary\": null\n  },\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    }\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [],\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 173,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 11,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 184\n  },\n  \"user\": null,\n  \"metadata\": {}\n}",
+      "stream": false
+    }
+  ]
+}
