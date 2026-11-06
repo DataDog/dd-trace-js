@@ -15,7 +15,8 @@ const {
   takePoolWaitTime,
   wrapPoolQueryMethod,
 } = require('./helpers/pool-acquire')
-const { normalizeSql, runSqlCommand, wrapCallbackBundle, wrapPromiseBundle } = require('./mariadb-bundle')
+const { normalizeSql, runSqlCommand, withInjectedSql, wrapCallbackBundle, wrapPromiseBundle } =
+  require('./mariadb-bundle')
 
 const commandAddCh = channel('apm:mariadb:command:add')
 const connectionStartCh = channel('apm:mariadb:connection:start')
@@ -32,6 +33,7 @@ const poolAcquireChannels = {
   acquireFinishCh,
 }
 const wrappedPools = new WeakSet()
+const executeCommands = new WeakSet()
 
 /**
  * @typedef {object} PoolAcquireTiming
@@ -81,12 +83,14 @@ function wrapCommandStart (start, ctx) {
   })
 }
 
-function wrapCommand (Command) {
+function wrapCommand (Command, execute) {
   return class extends Command {
     constructor (...args) {
       super(...args)
 
-      if (!this.start) return
+      if (!this.start || (execute && (
+        executeCommands.has(args[3]) || executeCommands.has(args[3]?.opts ?? args[2])
+      ))) return
 
       const ctx = { sql: this.sql, conf: this.opts }
 
@@ -107,17 +111,7 @@ function createWrapQuery (options) {
       const poolWaitTime = takePoolWaitTime(this)
       if (poolWaitTime !== undefined) ctx.poolWaitTime = poolWaitTime
 
-      return startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql)
-        .then(result => {
-          ctx.result = result
-          finishCh.publish(ctx)
-          return result
-        }, error => {
-          ctx.error = error
-          errorCh.publish(ctx)
-          finishCh.publish(ctx)
-          throw error
-        })
+      return finishPromiseQuery(ctx, startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql))
     }
   }
 }
@@ -151,6 +145,137 @@ function createWrapQueryCallback (options) {
       return startCh.runStores(ctx, runSqlCommand, this, ctx, query, arguments, originalSql)
     }
   }
+}
+
+/**
+ * @param {Function} execute
+ */
+function wrapPreparedExecute (execute) {
+  const promise = execute.length === 1
+  /**
+   * @param {{ sql: unknown, opts?: Record<string, unknown> }} cmdParam
+   * @param {Function} [resolve]
+   * @param {(error: Error) => unknown} [reject]
+   */
+  return function (cmdParam, resolve, reject) {
+    if (!startCh.hasSubscribers) return execute.apply(this, arguments)
+
+    const ctx = {
+      sql: cmdParam.sql,
+      conf: cmdParam.opts ? { ...this.opts, ...cmdParam.opts } : this.opts,
+    }
+    const poolWaitTime = takePoolWaitTime(this.streamOut)
+    if (poolWaitTime !== undefined) ctx.poolWaitTime = poolWaitTime
+
+    commandAddCh.publish(ctx)
+    executeCommands.add(cmdParam)
+    if (!promise) {
+      arguments[1] = function () {
+        return finishCh.runStores(ctx, resolve, this, ...arguments)
+      }
+      /** @param {Error} error */
+      arguments[2] = function (error) {
+        ctx.error = error
+        errorCh.publish(ctx)
+        return finishCh.runStores(ctx, reject, this, ...arguments)
+      }
+    }
+
+    const result = startCh.runStores(ctx, runPreparedExecute, this, ctx, execute, arguments)
+    return promise ? finishPromiseQuery(ctx, result) : result
+  }
+}
+
+/**
+ * @param {Record<string, unknown>} ctx
+ * @param {Promise<unknown>} result
+ */
+function finishPromiseQuery (ctx, result) {
+  return result.then(result => {
+    ctx.result = result
+    finishCh.publish(ctx)
+    return result
+  }, error => {
+    ctx.error = error
+    errorCh.publish(ctx)
+    finishCh.publish(ctx)
+    throw error
+  })
+}
+
+/**
+ * @param {{ sql: unknown }} ctx
+ * @param {Function} execute
+ * @param {ArgumentsLike} args
+ */
+function runPreparedExecute (ctx, execute, args) {
+  if (typeof args[0].sql === 'string' && args[0].sql && typeof ctx.sql === 'string') args[0].sql = ctx.sql
+  return execute.apply(this, args)
+}
+
+/**
+ * @param {Function} Driver
+ * @param {boolean} callbackApi
+ */
+function wrapLegacyExecute (Driver, callbackApi) {
+  /** @param {Function} execute */
+  shimmer.wrap(Driver, '_EXECUTE_CMD', execute => {
+    const normalized = callbackApi && execute.length === 2
+    /**
+     * @param {{ sql: unknown }} ctx
+     * @param {ArgumentsLike} args
+     * @param {unknown} originalSql
+     */
+    function runExecute (ctx, args, originalSql) {
+      const command = args[1]
+      if (typeof originalSql === 'string' && originalSql && typeof ctx.sql === 'string') {
+        const original = normalized ? command.opts ?? command.sql : command
+        const injected = withInjectedSql(original, ctx.sql, originalSql, normalized)
+        const options = typeof injected === 'string' ? { sql: injected } : injected
+        executeCommands.add(options)
+        if (normalized) {
+          command.sql = ctx.sql
+          command.opts = options
+        } else {
+          args[1] = options
+        }
+      }
+      return execute.apply(this, args)
+    }
+
+    /**
+     * @param {{ opts: object, prepareExecute?: Function }} connection
+     * @param {unknown} cmdParam
+     */
+    return function (connection, cmdParam) {
+      if (!startCh.hasSubscribers || (!normalized && cmdParam === null) ||
+          (!callbackApi && connection.prepareExecute)) {
+        return execute.apply(this, arguments)
+      }
+
+      const originalSql = normalizeSql(cmdParam)
+      const ctx = { sql: originalSql, conf: connection.opts }
+      if (callbackApi) {
+        const target = normalized ? cmdParam : arguments
+        const index = normalized ? 'callback' : typeof arguments[2] === 'function' ? 2 : 3
+        const callback = target[index]
+        /** @param {Error | null} error */
+        target[index] = function (error) {
+          if (error) {
+            ctx.error = error
+            errorCh.publish(ctx)
+          }
+          return typeof callback === 'function'
+            ? finishCh.runStores(ctx, callback, this, ...arguments)
+            : finishCh.publish(ctx)
+        }
+      }
+
+      const result = startCh.runStores(ctx, runExecute, this, ctx, arguments, originalSql)
+      return callbackApi ? result : finishPromiseQuery(ctx, result)
+    }
+  })
+  return Driver
 }
 
 function wrapConnection (promiseMethod, Connection) {
@@ -425,8 +550,24 @@ function wrapPoolGetConnectionMethod (getConnection) {
 
 const name = 'mariadb'
 
-addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'], patchDefault: true }, wrapCommand)
-addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'], patchDefault: true }, wrapCommand)
+addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'], patchDefault: true }, Command => {
+  return wrapCommand(Command, false)
+})
+addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'], patchDefault: true }, Command => {
+  return wrapCommand(Command, true)
+})
+
+// Preparation must receive rewritten SQL before its cache lookup and before pipelined commands are created.
+addHook({ name, file: 'lib/connection.js', versions: ['>=3'], patchDefault: true }, Connection => {
+  shimmer.wrap(Connection.prototype, 'prepareExecute', wrapPreparedExecute)
+  return Connection
+})
+addHook({ name, file: 'lib/connection-promise.js', versions: ['>=3'], patchDefault: true }, Driver => {
+  return wrapLegacyExecute(Driver, false)
+})
+addHook({ name, file: 'lib/connection-callback.js', versions: ['>=3'], patchDefault: true }, Driver => {
+  return wrapLegacyExecute(Driver, true)
+})
 
 // mariadb 3.4.1 switched its internal getConnection from promises to callbacks. That exposes synchronous
 // recent-idle reuse without a clock read while still letting us time validation and queueing.

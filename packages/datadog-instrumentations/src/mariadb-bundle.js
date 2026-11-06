@@ -121,6 +121,11 @@ function withInjectedSql (original, injected, originalSql, mirrorOptions) {
   if (typeof original === 'string') return injected
 
   const command = { ...original, sql: injected }
+  if (!Object.hasOwn(command, 'values') && 'values' in original) {
+    Object.defineProperty(command, 'values', {
+      get () { return original.values },
+    })
+  }
   if (mirrorOptions) {
     const enumerable = Object.getOwnPropertyDescriptor(original, 'metaAsArray')?.enumerable ?? true
     Object.defineProperty(command, 'metaAsArray', {
@@ -1628,4 +1633,4 @@ function wrapCallbackBundle (mariadb) {
   ])
 }
 
-module.exports = { normalizeSql, runSqlCommand, wrapCallbackBundle, wrapPromiseBundle }
+module.exports = { normalizeSql, runSqlCommand, withInjectedSql, wrapCallbackBundle, wrapPromiseBundle }
