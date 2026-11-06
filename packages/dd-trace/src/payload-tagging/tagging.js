@@ -2,13 +2,12 @@
 
 const { PAYLOAD_TAGGING_MAX_TAGS } = require('../constants')
 const { truncateString } = require('../util')
+const { maxValueLength, truncated } = require('./constants')
 
 const redactedKeys = new Set([
   'authorization', 'x-authorization', 'password', 'token',
 ])
-const truncated = 'truncated'
 const redacted = 'redacted'
-const maxValueLength = 5000
 const maxRetainedValueLength = maxValueLength * 2
 
 /**
@@ -49,7 +48,7 @@ function tagsFromObject (object, opts) {
   const result = {}
 
   function tagRec (prefix, object, depth = 0) {
-    // Off by one: _dd.payload_tags_trimmed counts as 1 tag
+    // Off by one: _dd.payload_tags_incomplete counts as 1 tag
     if (abort) { return }
 
     if (tagCount >= PAYLOAD_TAGGING_MAX_TAGS - 1) {
