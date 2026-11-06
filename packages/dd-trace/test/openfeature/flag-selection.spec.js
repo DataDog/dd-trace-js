@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { existsSync, readFileSync } = require('node:fs')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -177,14 +178,14 @@ describe('OpenFeature flag selection', () => {
     it('sends tags before key patterns with RFC 3986 percent-encoding', () => {
       const resolved = createSourceConfig({
         keyPatterns: ['checkout.*'],
-        tags: ['team:r&d+qa #1%/?=', "!'()*", 'é~'],
+        tags: ['dept:r&d+qa #1%/?=', "!'()*", 'é~'],
       })
 
       assert.strictEqual(
         resolved.endpoint.toString(),
         `${DEFAULT_ENDPOINT}` +
         '&selected_flag_tags=%21%27%28%29%2A' +
-        '&selected_flag_tags=team%3Ar%26d%2Bqa%20%231%25%2F%3F%3D' +
+        '&selected_flag_tags=dept%3Ar%26d%2Bqa%20%231%25%2F%3F%3D' +
         '&selected_flag_tags=%C3%A9~' +
         '&selected_flag_key_patterns=checkout.%2A'
       )
@@ -213,6 +214,31 @@ describe('OpenFeature flag selection', () => {
       assert.strictEqual(
         resolved.endpoint.toString(),
         'http://127.0.0.1:8080/api/v2/feature-flagging/config/rules-based/server?selected_flag_key_patterns=search.%2A'
+      )
+    })
+
+    it('never logs the values of a selection that is sent', () => {
+      config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+        'https://flags.example.test/custom/ufc?tenant=one'
+
+      const resolved = createSourceConfig({ tags: ['SENTINEL_TAG'], keyPatterns: ['SENTINEL_PATTERN.*'] })
+
+      assert.strictEqual(resolved.flagSelectionSent, true)
+      sinon.assert.called(log.debug)
+      const calls = [log.debug, log.warn, log.error].flatMap(spy => spy.args)
+        .map(args => args.map(arg => typeof arg === 'function' ? arg() : arg))
+      assert.doesNotMatch(inspect(calls, { depth: null }), /SENTINEL/)
+    })
+
+    it('pins flagging-core to the version the vendored provider depends on', () => {
+      const { dependencies } = require('../../../../vendor/package.json')
+      const { packages } = require('../../../../vendor/package-lock.json')
+
+      const installed = packages['node_modules/@datadog/flagging-core'].version
+      assert.strictEqual(dependencies['@datadog/flagging-core'], installed)
+      assert.strictEqual(
+        packages['node_modules/@datadog/openfeature-node-server/node_modules/@datadog/flagging-core'],
+        undefined
       )
     })
 
@@ -257,13 +283,13 @@ describe('OpenFeature flag selection', () => {
 
   describe('dropped selection', () => {
     const malformed = {
-      'a string': 'team:payments',
-      'an array': ['team:payments'],
+      'a string': 'payments',
+      'an array': ['payments'],
       'a number': 42,
-      'a list that is not an array': { tags: 'team:payments' },
-      'a non-string entry': { tags: ['team:payments', 1] },
+      'a list that is not an array': { tags: 'payments' },
+      'a non-string entry': { tags: ['payments', 1] },
       'a null entry': { keyPatterns: [null] },
-      'an unpaired surrogate': { tags: ['team:\uD800payments'] },
+      'an unpaired surrogate': { tags: ['\uD800payments'] },
     }
 
     for (const [name, flagSelection] of Object.entries(malformed)) {
@@ -280,7 +306,7 @@ describe('OpenFeature flag selection', () => {
     it('reports malformed_selection when reading the option throws', () => {
       const flagSelection = {
         get tags () {
-          throw new Error('team:payments')
+          throw new Error('payments')
         },
       }
 
@@ -289,6 +315,51 @@ describe('OpenFeature flag selection', () => {
       assert.strictEqual(resolved.flagSelectionSent, false)
       assertDropped('malformed_selection')
       assert.doesNotMatch(JSON.stringify(log.error.args), /payments/)
+    })
+
+    it('reports malformed_selection when a list yields an unpaired surrogate after validation', () => {
+      const tags = ['payments']
+      Object.defineProperty(tags, Symbol.iterator, { value: function * () { yield '\uD800' } })
+
+      const resolved = createSourceConfig({ tags })
+
+      assert.strictEqual(resolved.endpoint.toString(), DEFAULT_ENDPOINT)
+      assert.strictEqual(resolved.flagSelectionSent, false)
+      assertDropped('malformed_selection')
+    })
+
+    describe('when flagging-core cannot be loaded', () => {
+      beforeEach(() => {
+        const flagSelection = proxyquire('../../src/openfeature/flag-selection', {
+          '../log': log,
+          '../telemetry/metrics': { manager: { namespace } },
+          '../../../../vendor/dist/@datadog/flagging-core': null,
+        })
+        configurationSource = proxyquire('../../src/openfeature/configuration_source', {
+          '../log': log,
+          './agentless_configuration_source': AgentlessConfigurationSource,
+          './flag-selection': flagSelection,
+        })
+      })
+
+      it('loads the full configuration through the agentless source', () => {
+        const resolved = createSourceConfig({ tags: ['mobile'] })
+
+        assert.strictEqual(resolved.endpoint.toString(), DEFAULT_ENDPOINT)
+        assert.strictEqual(resolved.flagSelectionSent, false)
+        assertDropped('malformed_selection')
+      })
+
+      it('does not throw for Remote Config delivery', () => {
+        config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+        config.remoteConfig = { DD_REMOTE_CONFIGURATION_ENABLED: true }
+        config.featureFlags.flagSelection = { tags: ['mobile'] }
+
+        assert.strictEqual(configurationSource.create(config, sinon.spy()), undefined)
+        sinon.assert.calledOnceWithExactly(log.warn, REMOTE_CONFIG_WARNING)
+        sinon.assert.notCalled(log.error)
+        sinon.assert.notCalled(count)
+      })
     })
 
     it('logs and counts the reason and limit, never the values', () => {

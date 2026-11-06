@@ -849,6 +849,29 @@ describe('AgentlessConfigurationSource', () => {
       sinon.assert.calledTwice(increment)
     })
 
+    it('sends the selected endpoint on every poll and revalidates with its ETag', async () => {
+      config.endpoint = new URL(
+        'http://127.0.0.1:8080/api/v2/feature-flagging/config/rules-based/server?selected_flag_tags=mobile'
+      )
+      responses.push(ignoredResponse('tag_load_failed'), { statusCode: 304 }, { statusCode: 304 })
+
+      source().start()
+      await flush()
+      await tick(30_000)
+      await tick(30_000)
+
+      assert.strictEqual(requests.length, 3)
+      for (const { options } of requests) assert.strictEqual(options.url, config.endpoint)
+      assert.deepStrictEqual(
+        requests.map(({ options }) => options.headers['If-None-Match']),
+        [undefined, '"selected"', '"selected"']
+      )
+      sinon.assert.calledOnce(applyConfiguration)
+      assert.deepStrictEqual(ignoredLogs(), [[IGNORED, 'tag_load_failed']])
+      const applied = log.debug.args.find(([message]) => typeof message === 'function')[0]()
+      assert.doesNotMatch(applied, /mobile|selected_flag/)
+    })
+
     it('does not read the header when no selection was sent', async () => {
       config.flagSelectionSent = false
       responses.push(ignoredResponse('too_many_values'))

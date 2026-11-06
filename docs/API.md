@@ -189,7 +189,7 @@ Load only the flags a service needs by passing a flag selection before you first
 const tracer = require('dd-trace').init({
   featureFlags: {
     flagSelection: {
-      tags: ['team:checkout'],
+      tags: ['checkout'],
       keyPatterns: ['checkout.*']
     }
   }
@@ -199,7 +199,8 @@ await OpenFeature.setProviderAndWait(tracer.openfeature)
 ```
 
 The provider loads only the flags that have any of the `tags` or whose key matches any of the `keyPatterns`.
-Tags match exactly. A key pattern matches the whole key, and `*` matches any run of characters.
+Tags and key patterns are case-sensitive. Tags match exactly. A key pattern matches the whole key: `*` matches any run
+of characters, including none, and every other character, including `?`, is literal.
 Flags outside the selection return the default value with the `FLAG_NOT_FOUND` error code.
 Without a selection, the provider loads every flag.
 
@@ -209,10 +210,15 @@ object with optional `tags` and `keyPatterns` string arrays, is not sent: the pr
 flag. If the server cannot apply the selection, it returns every flag and the provider logs an error. Like other tracer
 logs, these errors are written only when `DD_TRACE_DEBUG=true`.
 
-Flag selection has no environment variable. `node --require dd-trace/init` and Single Step Instrumentation call
-`init()` without options, so they cannot set a selection; call `init()` with the option in your application or in your
-own preload file instead. Flag selection applies to agentless delivery only: with
-`DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config`, the provider logs a warning and loads every flag.
+Flag selection has no environment variable. `node --require dd-trace/init` and `node --import dd-trace/initialize.mjs`
+call `init()` without options, and later `init()` calls are ignored, so they cannot set a selection; call `init()` with
+the option in your application or in your own preload file instead. With Single Step Instrumentation, an application
+that installs `dd-trace` and calls `init()` with the option can set a selection, because the injected tracer then skips
+its own `init()`. An application that relies only on the injected tracer cannot set one.
+
+Flag selection applies to agentless delivery only. When flags are delivered through Remote Config
+(`DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config`, or `DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true` without a
+configuration source), the provider logs a warning and loads every flag.
 
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 

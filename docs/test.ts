@@ -88,21 +88,21 @@ const evaluationTelemetryOptOutOption: TracerOptions = {
 const flagSelectionOption: TracerOptions = {
   featureFlags: {
     flagSelection: {
-      tags: ['team:checkout'],
+      tags: ['checkout'],
       keyPatterns: ['checkout.*']
     }
   }
 };
 const tagsOnlyFlagSelectionOption: TracerOptions = {
   featureFlags: {
-    flagSelection: { tags: ['team:checkout'] }
+    flagSelection: { tags: ['checkout'] }
   }
 };
 const invalidFlagSelectionOption: TracerOptions = {
   featureFlags: {
     flagSelection: {
       // @ts-expect-error Tags must be a list of strings.
-      tags: 'team:checkout'
+      tags: 'checkout'
     }
   }
 };
@@ -117,7 +117,7 @@ tracer.init({
   featureFlags: {
     enableEvaluationTelemetryOptOutParameter: true,
     flagSelection: {
-      tags: ['team:checkout'],
+      tags: ['checkout'],
       keyPatterns: ['checkout.*']
     }
   },

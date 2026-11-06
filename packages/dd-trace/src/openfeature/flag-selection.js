@@ -35,11 +35,11 @@ let flaggingCore
  * @returns {CanonicalizeResult}
  */
 function canonicalize (option) {
-  flaggingCore ??= require('../../../../vendor/dist/@datadog/flagging-core')
   try {
+    flaggingCore ??= require('../../../../vendor/dist/@datadog/flagging-core')
     return flaggingCore.canonicalizeFlagSelection(option)
   } catch {
-    // Only a throwing getter or proxy gets here, which is not an object with tags and keyPatterns arrays.
+    // A throwing getter, proxy or iterator in the option, or a missing vendored bundle: nothing can be sent.
     return { error: 'malformed_selection' }
   }
 }
@@ -98,10 +98,17 @@ function withFlagSelection (endpoint, option) {
   }
   if (!selection) return
 
-  const parameters = [
-    ...selection.tags.map(tag => `selected_flag_tags=${encodeQueryValue(tag)}`),
-    ...selection.keyPatterns.map(pattern => `selected_flag_key_patterns=${encodeQueryValue(pattern)}`),
-  ].join('&')
+  let parameters
+  try {
+    parameters = [
+      ...selection.tags.map(tag => `selected_flag_tags=${encodeQueryValue(tag)}`),
+      ...selection.keyPatterns.map(pattern => `selected_flag_key_patterns=${encodeQueryValue(pattern)}`),
+    ].join('&')
+  } catch {
+    // flagging-core validates entries by index but canonicalizes through the iterator, which can yield bad text.
+    reportDropped('malformed_selection', MALFORMED_LIMIT)
+    return
+  }
   const url = new URL(endpoint)
   const query = url.search.slice(1)
   url.search = query ? `${query}&${parameters}` : parameters

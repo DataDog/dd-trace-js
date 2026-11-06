@@ -879,11 +879,12 @@ declare namespace tracer {
        */
       flagSelection?: {
         /**
-         * Flag tags, such as `team:checkout`, matched exactly and case-sensitively.
+         * Flag tags, such as `checkout`, matched exactly and case-sensitively.
          */
         tags?: string[]
         /**
-         * Flag key patterns, such as `checkout.*`, matched against the whole key; `*` matches any characters.
+         * Flag key patterns, such as `checkout.*`, matched case-sensitively against the whole key.
+         * `*` matches any run of characters, including none; every other character, including `?`, is literal.
          */
         keyPatterns?: string[]
       }
