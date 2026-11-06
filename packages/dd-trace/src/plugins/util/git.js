@@ -216,7 +216,9 @@ function getRepositoryUrl () {
     ['config', '--get', 'remote.origin.url'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_repository' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_repository' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_repository' } }
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_repository' } },
+    true,
+    { uncached: true }
   )
 }
 
@@ -384,7 +386,7 @@ function getCounts (sourceBranch, candidateBranch) {
 }
 
 function getCommitsRevList (commitsToExclude, commitsToInclude) {
-  let result = null
+  let result
 
   const commitsToExcludeString = commitsToExclude.map(commit => `^${commit}`)
 
@@ -399,6 +401,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
         '--no-object-names',
         '--filter=blob:none',
         '--since="1 month ago"',
+        '--max-count=1000',
         ...commitsToExcludeString,
         ...commitsToInclude,
       ],
@@ -406,7 +409,19 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
       .toString()
       .split('\n')
       .filter(Boolean)
+    const objects = new Set(result)
+    const excluded = new Set(commitsToExclude)
+    const outsideWindow = commitsToInclude.filter(commit =>
+      validateGitCommitSha(commit) && !objects.has(commit) && !excluded.has(commit))
+    if (outsideWindow.length) {
+      const selectedObjects = cachedExec('git', [
+        'rev-list', '--objects', '--no-object-names', '--filter=blob:none', '--no-walk=unsorted',
+        ...outsideWindow,
+      ], { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER }).toString().split('\n').filter(Boolean)
+      result = [...new Set([...result, ...selectedObjects])]
+    }
   } catch (err) {
+    result = null
     log.error('Get commits to upload failed', err)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
@@ -485,8 +500,17 @@ function generatePackFilesForCommits (commitsToUpload) {
 
 function getRepositoryRoot () {
   return sanitizedExec(
-    ['rev-parse', '--show-toplevel']
+    ['rev-parse', '--show-toplevel'], null, null, null, true, { uncached: true }
   )
+}
+
+/**
+ * Read mutable checkout metadata without the cache shared by CI jobs.
+ * @param {string[]} flags
+ * @param {boolean} [shouldTrim]
+ */
+function readCheckout (flags, shouldTrim = true) {
+  return sanitizedExec(flags, null, null, null, shouldTrim, { uncached: true })
 }
 
 // If there is ciMetadata, it takes precedence.
@@ -513,15 +537,15 @@ function getGitMetadata (ciMetadata) {
     committerName,
     committerEmail,
     committerDate,
-  ] = sanitizedExec([
+  ] = readCheckout([
     'show', '-s', '--no-show-signature', '--format=%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI',
   ]).split('\0')
 
   const tags = {
     [GIT_COMMIT_MESSAGE]:
-      commitMessage || sanitizedExec(['show', '-s', '--no-show-signature', '--format=%B'], null, null, null, false),
-    [GIT_BRANCH]: branch || sanitizedExec(['rev-parse', '--abbrev-ref', 'HEAD']),
-    [GIT_COMMIT_SHA]: commitSHA || sanitizedExec(['rev-parse', 'HEAD']),
+      commitMessage || readCheckout(['show', '-s', '--no-show-signature', '--format=%B'], false),
+    [GIT_BRANCH]: branch || readCheckout(['rev-parse', '--abbrev-ref', 'HEAD']),
+    [GIT_COMMIT_SHA]: commitSHA || readCheckout(['rev-parse', 'HEAD']),
     [CI_WORKSPACE_PATH]: ciWorkspacePath || getRepositoryRoot(),
   }
 
@@ -529,7 +553,7 @@ function getGitMetadata (ciMetadata) {
 
   let localTag = tag
   if (!localTag && !tags[GIT_BRANCH]) {
-    const tagsAtHead = sanitizedExec(['tag', '--points-at', 'HEAD'], null, null, null, false)
+    const tagsAtHead = readCheckout(['tag', '--points-at', 'HEAD'], false)
       .trim().split(/\r?\n/).filter(Boolean)
     if (tagsAtHead.length === 1) localTag = tagsAtHead[0]
   }
@@ -581,7 +605,7 @@ function getGitMetadata (ciMetadata) {
 
   const entries = [
     GIT_REPOSITORY_URL,
-    filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec(['ls-remote', '--get-url'])),
+    filterSensitiveInfoFromRepository(repositoryUrl || readCheckout(['ls-remote', '--get-url'])),
     GIT_COMMIT_AUTHOR_DATE, authorDate,
     GIT_COMMIT_AUTHOR_NAME, ciAuthorName || authorName,
     GIT_COMMIT_AUTHOR_EMAIL, ciAuthorEmail || authorEmail,
@@ -608,7 +632,9 @@ function getGitInformationDiscrepancy () {
     ['rev-parse', 'HEAD'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_sha' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_sha' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_sha' } }
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_sha' } },
+    true,
+    { uncached: true }
   )
 
   return { gitRepositoryUrl, gitCommitSHA }

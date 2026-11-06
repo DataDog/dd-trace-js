@@ -211,6 +211,16 @@ describe('git', () => {
 })
 
 describe('getCommitsRevList', () => {
+  it('returns null if retrieving the selected old root fails after another object was found', () => {
+    const command = sinon.stub()
+    command.onFirstCall().returns('b'.repeat(40) + '\n')
+    command.onSecondCall().throws(new Error('selected commit disappeared'))
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git', {
+      './git-cache': { cachedExec: command },
+    })
+    assert.strictEqual(getCommitsRevList([], ['a'.repeat(40), 'b'.repeat(40)]), null)
+  })
+
   it('gets the commits to upload if the repository is smaller than the limit', () => {
     const logErrorSpy = sinon.spy()
 
@@ -884,6 +894,7 @@ describe('getCounts', () => {
 describe('getGitInformationDiscrepancy', () => {
   const { getGitInformationDiscrepancy } = proxyquire('../../../src/plugins/util/git',
     {
+      'node:child_process': { execFileSync: cachedExecStub },
       './git-cache': {
         cachedExec: cachedExecStub,
       },
@@ -1069,6 +1080,8 @@ describe('PR head metadata in shallow repositories', () => {
   let baseSha
   let getGitMetadata
   let getGitDiff
+  let getLatestCommits
+  let getCommitsRevList
   let cachedExecSpy
 
   /**
@@ -1139,11 +1152,72 @@ done
     })
     getGitMetadata = gitUtils.getGitMetadata
     getGitDiff = gitUtils.getGitDiff
+    getLatestCommits = gitUtils.getLatestCommits
+    getCommitsRevList = gitUtils.getCommitsRevList
   })
 
   afterEach(() => {
     nock.cleanAll()
     fs.rmSync(directory, { recursive: true, force: true })
+  })
+
+  it('includes an old selected commit and its tree without walking old ancestors', () => {
+    git(checkout, ['fetch', '--unshallow', 'origin'])
+    const checkedOutSha = git(checkout, ['rev-parse', 'HEAD'])
+    assert.deepStrictEqual(getLatestCommits(headSha), [headSha])
+    const objects = getCommitsRevList([], [headSha])
+    assert.ok(objects.includes(headSha))
+    assert.ok(objects.includes(git(remote, ['rev-parse', headSha + '^{tree}'])))
+    assert.ok(!objects.includes(baseSha))
+    assert.ok(!objects.includes(checkedOutSha))
+  })
+
+  it('reads the current checkout when successive jobs share a persistent Git cache', () => {
+    const secondCheckout = path.join(directory, 'second-checkout')
+    git(directory, ['clone', '--no-checkout', pathToFileURL(remote).href, secondCheckout])
+    git(secondCheckout, ['symbolic-ref', 'HEAD', 'refs/heads/juan-fernandez/cache-new'])
+    git(secondCheckout, ['update-ref', 'HEAD', headSha])
+    git(secondCheckout, ['config', 'remote.origin.url', 'https://example.com/current.git'])
+    const repo = path.resolve(__dirname, '../../../../..')
+    const cacheDirectory = path.join(directory, 'shared-git-cache')
+    const script = `
+      process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = 'true'
+      process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = process.argv[2]
+      const path = require('node:path')
+      const config = require(path.join(process.argv[1], 'packages/dd-trace/src/config'))()
+      if (!config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED ||
+          config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR !== process.argv[2]) {
+        throw new Error('Expected the shared experimental Git cache to be enabled')
+      }
+      const { cachedExec } = require(path.join(process.argv[1], 'packages/dd-trace/src/plugins/util/git-cache'))
+      const { getGitMetadata, getGitInformationDiscrepancy, getRepositoryRoot } =
+        require(path.join(process.argv[1], 'packages/dd-trace/src/plugins/util/git'))
+      process.stdout.write(JSON.stringify({
+        cachedHead: cachedExec('git', ['rev-parse', 'HEAD']).toString().trim(),
+        metadata: getGitMetadata({}),
+        discrepancy: getGitInformationDiscrepancy(),
+        root: getRepositoryRoot(),
+      }))
+    `
+    /** @param {string} cwd */
+    const read = cwd => JSON.parse(execFileSync(process.execPath,
+      ['-e', script, repo, cacheDirectory], { cwd, stdio: 'pipe' }))
+    const first = read(checkout)
+    const second = read(secondCheckout)
+    assert.strictEqual(second.cachedHead, first.cachedHead)
+    assert.notStrictEqual(first.metadata[GIT_COMMIT_SHA], headSha)
+    assertObjectContains(second.metadata, {
+      [GIT_COMMIT_SHA]: headSha,
+      [GIT_BRANCH]: 'juan-fernandez/cache-new',
+      [GIT_REPOSITORY_URL]: 'https://example.com/current.git',
+      [GIT_COMMIT_MESSAGE]: 'PR head DD_abc123\n',
+      [GIT_COMMIT_AUTHOR_NAME]: 'PR Author',
+      [GIT_COMMIT_COMMITTER_NAME]: 'PR Committer',
+    })
+    assert.deepStrictEqual(second.discrepancy, {
+      gitRepositoryUrl: 'https://example.com/current.git', gitCommitSHA: headSha,
+    })
+    assert.strictEqual(fs.realpathSync(second.root), fs.realpathSync(secondCheckout))
   })
 
   it('fetches head metadata without its ancestors or changing the checkout', () => {
