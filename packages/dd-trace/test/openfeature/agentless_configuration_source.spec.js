@@ -34,6 +34,7 @@ function responseBody (configuration = VALID_UFC) {
 describe('AgentlessConfigurationSource', () => {
   let AgentlessConfigurationSource
   let applyConfiguration
+  let onFetchResult
   let clock
   let config
   let log
@@ -46,6 +47,7 @@ describe('AgentlessConfigurationSource', () => {
   beforeEach(() => {
     clock = sinon.useFakeTimers()
     applyConfiguration = sinon.stub()
+    onFetchResult = sinon.spy()
     config = {
       endpoint: new URL('http://127.0.0.1:8080/api/v2/feature-flagging/config/rules-based/server'),
       pollIntervalMs: 30_000,
@@ -118,7 +120,7 @@ describe('AgentlessConfigurationSource', () => {
   })
 
   function source () {
-    const configurationSource = new AgentlessConfigurationSource(config, applyConfiguration)
+    const configurationSource = new AgentlessConfigurationSource(config, applyConfiguration, onFetchResult)
     sources.push(configurationSource)
     return configurationSource
   }
@@ -134,6 +136,64 @@ describe('AgentlessConfigurationSource', () => {
     await clock.tickAsync(milliseconds)
     await flush()
   }
+
+  it('observes only completed fetches, including recovery with unchanged rules', async () => {
+    responses.push(
+      { statusCode: 200, body: responseBody() },
+      { statusCode: 503 }, { statusCode: 503 }, { statusCode: 503 },
+      { statusCode: 304 }
+    )
+    source().start()
+    await flush()
+    assert.deepStrictEqual(onFetchResult.args, [[true]])
+    await tick(30_000)
+    await tick(5000)
+    assert.deepStrictEqual(onFetchResult.args, [[true]])
+    await tick(10_000)
+    assert.deepStrictEqual(onFetchResult.args, [[true], [false]])
+    await tick(30_000)
+    assert.deepStrictEqual(onFetchResult.args, [[true], [false], [true]])
+    sinon.assert.calledOnce(applyConfiguration)
+  })
+
+  for (const response of [
+    { statusCode: 401 }, { statusCode: 403 }, { statusCode: 404 },
+    { statusCode: 304 }, { statusCode: 200, body: 'invalid json' },
+  ]) {
+    it(`reports a failed fetch for HTTP ${response.statusCode} ${response.body ?? ''}`, async () => {
+      responses.push(response)
+      source().start()
+      await flush()
+      sinon.assert.calledOnceWithExactly(onFetchResult, false)
+    })
+  }
+
+  it('does not mislabel a configuration application error as a fetch failure', async () => {
+    applyConfiguration.throws(new Error('application failure'))
+    responses.push({ statusCode: 200, body: responseBody() })
+    source().start()
+    await flush()
+    sinon.assert.notCalled(onFetchResult)
+  })
+
+  it('does not report cancellation as a failed fetch', async () => {
+    responses.push({ pending: true })
+    const running = source()
+    running.start()
+    await flush()
+    running.stop()
+    await flush()
+    sinon.assert.notCalled(onFetchResult)
+  })
+
+  it('continues polling if a diagnostic observer throws', async () => {
+    onFetchResult = () => { throw new Error('observer failure') }
+    responses.push({ statusCode: 401 }, { statusCode: 200, body: responseBody() })
+    source().start()
+    await flush()
+    await tick(30_000)
+    sinon.assert.calledOnce(applyConfiguration)
+  })
 
   it('fetches, applies, and reuses an accepted ETag', async () => {
     responses.push(

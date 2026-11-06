@@ -18,8 +18,9 @@ const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is r
 /**
  * @param {import('../config/config-base')} config
  * @param {(configuration: UniversalFlagConfiguration) => void} applyConfiguration
+ * @param {(success: boolean) => void} [onFetchResult]
  */
-function create (config, applyConfiguration) {
+function create (config, applyConfiguration, onFetchResult) {
   const {
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: source,
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: baseUrl,
@@ -62,7 +63,7 @@ function create (config, applyConfiguration) {
       requestTimeoutMs: requestTimeoutSeconds * 1000,
       apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
       env: config.env,
-    }, applyConfiguration)
+    }, applyConfiguration, onFetchResult)
   } catch (error) {
     log.error('Unable to configure Feature Flagging configuration source', error)
   }
