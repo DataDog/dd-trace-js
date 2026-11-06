@@ -47,8 +47,8 @@ function otelHttpResourceName (method, route) {
  * @param {string} resource
  */
 function setInstrumentationHttpResource (span, resource) {
+  span.context().setTag(INSTRUMENTATION_HTTP_RESOURCE, resource)
   span.setTag('resource.name', resource)
-  span.setTag(INSTRUMENTATION_HTTP_RESOURCE, resource)
 }
 
 // Datadog HTTP meta keys replaced by OTel names — omitted when rebuilding meta.
@@ -242,7 +242,7 @@ function applyHttpOtelSemantics (formattedSpan) {
     }
     // Comparing against the recorded value keeps a manual resource shaped like "GET /custom".
     if (isInstrumentationOwnedResource(formattedSpan.resource, meta[INSTRUMENTATION_HTTP_RESOURCE])) {
-      formattedSpan.resource = otelHttpResourceName(method, meta['http.route'])
+      formattedSpan.resource = otelHttpResourceName(method, kind === 'server' ? meta['http.route'] : undefined)
     }
   }
 

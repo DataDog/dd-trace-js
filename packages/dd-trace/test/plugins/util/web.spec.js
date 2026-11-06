@@ -830,6 +830,30 @@ describe('plugins/util/web', () => {
       assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], 'GET /users/:id')
     })
 
+    for (const method of ['GET', 'PROPFIND']) {
+      it(`samples the preserved upstream route for ${method} before finish`, () => {
+        config = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+        req.method = method
+        span = web.startSpan(tracer, config, req, res, 'test.request')
+        tags = span.context().getTags()
+        span.setTag(HTTP_ROUTE, '/upstream/:id')
+
+        web.setRoute(req, '/users/:id')
+
+        const resource = `${method === 'GET' ? 'GET' : 'HTTP'} /upstream/:id`
+        assert.strictEqual(tags[HTTP_ROUTE], '/upstream/:id')
+        assert.strictEqual(tags[RESOURCE_NAME], resource)
+        assert.strictEqual(tags[INSTRUMENTATION_HTTP_RESOURCE], resource)
+
+        const prioritySampler = new PrioritySampler('test', {
+          sampleRate: 0,
+          rules: [{ sampleRate: 1, resource }],
+        })
+        prioritySampler.sample(span.context())
+        assert.strictEqual(span.context()._sampling.priority, USER_KEEP)
+      })
+    }
+
     it('updates an OTel route assembled from multiple framework segments', () => {
       config = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
       req.method = 'PROPFIND'

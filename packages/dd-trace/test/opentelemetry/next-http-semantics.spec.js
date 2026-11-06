@@ -60,6 +60,18 @@ describe('Next.js native OTel HTTP semantics', () => {
       assert.strictEqual(span.meta['error.type'], 'TypeError')
     })
   }
+
+  for (const nativeErrorStatus of [false, true]) {
+    for (const status of [499, 500, 600]) {
+      it(`preserves explicit OK with status ${status} and native error status ${nativeErrorStatus}`, () => {
+        const span = exportNextSpan('GET', status, '/api/test', undefined, api.SpanStatusCode.OK, nativeErrorStatus)
+
+        assert.strictEqual(span.error, 0)
+        assert.strictEqual(span.meta['error.type'], nativeErrorStatus && status >= 500 ? String(status) : undefined)
+        assert.strictEqual(span.meta['_dd.otel.status_error'], undefined)
+      })
+    }
+  }
 })
 
 /**
@@ -67,8 +79,10 @@ describe('Next.js native OTel HTTP semantics', () => {
  * @param {number} status
  * @param {string} [route]
  * @param {Error} [error]
+ * @param {import('@opentelemetry/api').SpanStatusCode} [statusCode]
+ * @param {boolean} [nativeErrorStatus]
  */
-function exportNextSpan (method, status, route, error) {
+function exportNextSpan (method, status, route, error, statusCode, nativeErrorStatus) {
   const exporter = sinon.stub(tracer._tracer._exporter, 'export')
   const span = provider.getTracer('next').startSpan(method, {
     kind: api.SpanKind.SERVER,
@@ -79,12 +93,17 @@ function exportNextSpan (method, status, route, error) {
     },
   })
   const name = route ? `${method} ${route}` : method
+  if (statusCode !== undefined) span.setStatus({ code: statusCode })
   span.setAttributes({
     'http.status_code': status,
     'next.route': route,
     'http.route': route,
     'next.span_name': name,
   })
+  if (nativeErrorStatus && status >= 500) {
+    span.setStatus({ code: api.SpanStatusCode.ERROR })
+    span.setAttribute('error.type', String(status))
+  }
   span.updateName(name)
   if (error) {
     span.recordException(error)
