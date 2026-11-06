@@ -9,3 +9,10 @@ runs:
         timeout_minutes: 5
         retry_wait_seconds: 30
         command: bun install --linker=hoisted --trust --network-concurrency 8
+    - name: Verify local Bun binary
+      shell: bash
+      run: |
+        if ! ./node_modules/bun/bin/bun.exe --version; then
+          node ./node_modules/bun/install.js
+        fi
+        ./node_modules/bun/bin/bun.exe --version
