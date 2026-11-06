@@ -300,6 +300,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
+<h5 id="react-router"></h5>
 <h5 id="redis"></h5>
 <h5 id="restify"></h5>
 <h5 id="rhea"></h5>
@@ -390,6 +391,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 * [postgres](./interfaces/plugins.postgres.html)
 * [prisma](./interfaces/plugins.prisma.html)
 * [protobufjs](./interfaces/plugins.protobufjs.html)
+* [react-router](./interfaces/plugins.react_router.html)
 * [redis](./interfaces/plugins.redis.html)
 * [restify](./interfaces/plugins.restify.html)
 * [rhea](./interfaces/plugins.rhea.html)
@@ -914,3 +916,115 @@ function handle () {
   })
 }
 ```
+
+## Mocha test automation exclusions
+
+Mocha supports the same `preventFailureSuppression` and `noAutoRetry` callback annotations
+from `dd-trace/ci/test-annotations` shown below for Jest. Apply them to `it`, `test`, and
+parameterized callbacks, including `only` and `skip` declarations. The annotations are
+preserved in serial and parallel workers. Native Mocha retries remain available when
+`noAutoRetry` excludes Datadog ATR, EFD, and Attempt to Fix.
+
+## Cucumber test automation exclusions
+
+Use the native Gherkin tags `@datadog:prevent_failure_suppression` and
+`@datadog:no_auto_retry` on a `Scenario` or `Scenario Outline`. Outline tags apply
+to every example. These are tracer declaration annotations, resolved before
+Datadog disabling, quarantine, ATR, EFD, and Attempt to Fix. Explicit `--retry`
+settings remain available. Parallel Test Management exclusions require Cucumber 11 or later,
+which exposes the worker `runTestCase` lifecycle; serial scenarios support Cucumber 7 or later.
+Cucumber's normal tag selection and dry runs still apply.
+The annotation and assigned Test Management span tags follow the callback API below.
+
+## Playwright test automation exclusions
+
+Playwright 1.38 and later support the `preventFailureSuppression` and `noAutoRetry`
+callback annotations from `dd-trace/ci/test-annotations`. Apply them to individual
+`test` callbacks, including generated cases, `test.only`, and `test.skip`. Callback
+fixture parameters remain available. Exclusions are resolved in the coordinator
+before disabling and retries; worker spans retain both annotation and backend
+assignment tags. Explicit project and suite retry settings remain available.
+Playwright retries serial groups together, so a group containing `noAutoRetry` also
+excludes Datadog automatic retries for its other members. Explicit native group
+and project retries remain available.
+
+## Jest test automation exclusions
+
+With the `jest-circus` runner, annotate test callbacks using `dd-trace/ci/test-annotations`:
+
+```javascript
+const { preventFailureSuppression, noAutoRetry } = require('dd-trace/ci/test-annotations')
+
+test('critical check', preventFailureSuppression(noAutoRetry(() => {
+  expect(check()).toBe(true)
+})))
+
+test.each(cases)('critical case %s', preventFailureSuppression(value => {
+  expect(check(value)).toBe(true)
+}))
+```
+
+`preventFailureSuppression(callback)` prevents Datadog quarantine and disabling from applying to that callback.
+It does not override Test Impact Analysis, developer skips, or test selection, and does not prevent retries.
+
+`noAutoRetry(callback)` prevents Datadog Auto Test Retries, Early Flake Detection retries, and Attempt to Fix retries.
+It does not turn off test discovery or flakiness reporting. Explicit `jest.retryTimes(...)` calls remain available.
+To protect a failure from both quarantine/disable and automatic retries, combine the helpers.
+
+Each helper returns an annotated callback without modifying the original. Callback arguments, return values,
+errors, `this`, and arity are preserved. Apply the helper to the callback passed to `test.each` to protect every case.
+The helpers can be imported without initializing the tracer; enforcement requires the corresponding test framework instrumentation.
+
+Test events report `test.test_management.prevent_failure_suppression` and `test.test_management.no_auto_retry`
+as `true` when the corresponding annotation is present; absent annotations omit the tag.
+These describe annotations observed on that execution, on any branch. Management-property tags retain backend
+assignments even when annotations override their runtime behavior. Default-branch synchronization and UI restrictions require backend support;
+these helpers do not update remote test properties. Files skipped by Test Impact Analysis produce no new observation.
+
+Framework support is described in the framework-specific sections. The legacy Jest Jasmine runner does not enforce these helpers.
+
+## Vitest test automation exclusions
+
+Annotate callbacks with `preventFailureSuppression` and `noAutoRetry` from
+`dd-trace/ci/test-annotations`. These declarations apply to all generated `test.each`
+cases and work with Vitest's test modifiers, worker processes and supported
+browser/no-worker modes. Annotation flags travel with test task metadata before
+Vitest replaces callbacks for fixtures or parameterization.
+
+Protection overrides Datadog quarantine/disabling; retry exclusion blocks Datadog
+ATR, EFD and Attempt to Fix. Explicit native retries on a test or suite remain
+available and are reported as framework retries. Developer skips and TIA retain
+their ordinary selection semantics. Backend-assigned property tags remain visible
+when the execution policy is overridden; observed annotation tags are true-only.
+
+## Cypress test automation exclusions
+
+With Cypress 12 and later, annotate the callback passed to `it` or `specify` using
+`preventFailureSuppression` and `noAutoRetry` from `dd-trace/ci/test-annotations`.
+Both helpers compose in the same way as the Jest examples above. Skipped declarations,
+loop-generated cases, and allowed native retries retain their annotation tags.
+
+`preventFailureSuppression` overrides Datadog quarantine and disabling while preserving
+normal test selection, explicit skips, and Test Impact Analysis. `noAutoRetry` excludes
+Datadog ATR, EFD, and Attempt to Fix. Explicit Cypress retries configured on a test,
+suite, or globally remain available and are reported as framework retries. Test isolation
+must remain enabled for Datadog automatic retry controls to apply.
+
+Management tags continue to describe backend assignments. Annotation tags describe the
+observed callback, and effective execution/final status follows the exclusions.
+
+
+## WebdriverIO test automation exclusions
+
+With the WebdriverIO Mocha or Jasmine adapter (WebdriverIO 9 and later), apply
+`preventFailureSuppression` and `noAutoRetry` from `dd-trace/ci/test-annotations`
+to callbacks passed to `it` or `xit`. The helpers compose as in the Jest example.
+They apply to every declaration generated in a loop and retain annotation tags
+on explicit skips and permitted native retries.
+
+`preventFailureSuppression` overrides Datadog quarantine and disabling without
+blocking retries. `noAutoRetry` excludes Datadog ATR, EFD, and Attempt to Fix;
+native Mocha retries and explicit WebdriverIO Jasmine retries remain available and
+are reported as framework retries.
+Both helpers preserve ordinary selection and expected-failure behavior. Management
+property tags retain backend assignments even when their execution policy is overridden.

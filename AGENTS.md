@@ -24,6 +24,10 @@ Prefer composition and explicit contracts. Avoid new public APIs unless the use 
 Do not expose internals or bend production code solely to make a test possible. Fix upstream issues upstream rather
 than maintaining a local workaround when practical.
 
+Getters and inherited properties in input options are unsupported by default. Add support only for an active user
+request, a known use case, or explicit upstream support for that use case. Incidental JavaScript property access does
+not establish support. Do not add special handling or tests for these shapes without that evidence.
+
 ## Testing
 
 Run individual specs from the repository root:

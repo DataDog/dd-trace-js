@@ -164,6 +164,8 @@ describe('TracerProxy', () => {
     NoopDogStatsDClient = sinon.stub().returns(noopDogStatsDClient)
 
     config = {
+      DD_API_KEY: 'api-key',
+      DD_APP_KEY: 'app-key',
       DD_TRACE_ENABLED: true,
       testOptimization: {},
       featureFlags: {
@@ -363,6 +365,53 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(rewriter.enable)
       })
 
+      it('initializes AI Guard with all required configuration', () => {
+        proxy.init()
+
+        sinon.assert.calledOnceWithExactly(AIGuardSdk, tracer, config)
+        sinon.assert.calledOnceWithExactly(aiguard.enable, tracer, config)
+        sinon.assert.notCalled(log.error)
+      })
+
+      for (const missing of [
+        ['DD_API_KEY'],
+        ['DD_APP_KEY'],
+        ['DD_API_KEY', 'DD_APP_KEY'],
+      ]) {
+        it(`does not initialize AI Guard without ${missing.join(' or ')}`, () => {
+          for (const name of missing) {
+            config[name] = undefined
+          }
+          config.apmTracingEnabled = true
+
+          proxy.init()
+
+          sinon.assert.calledOnceWithExactly(DatadogTracer, config, undefined)
+          sinon.assert.notCalled(AIGuardSdk)
+          sinon.assert.notCalled(aiguard.enable)
+          sinon.assert.calledOnceWithExactly(
+            log.error,
+            'AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY'
+          )
+
+          const messages = [{ role: 'user', content: 'What day is today?' }]
+          proxy.aiguard.evaluate(messages)
+          sinon.assert.calledOnceWithExactly(noopAiguardSdk.evaluate, messages)
+        })
+      }
+
+      it('does not validate required AI Guard configuration while AI Guard is disabled', () => {
+        config.DD_API_KEY = undefined
+        config.DD_APP_KEY = undefined
+        config.aiguard.DD_AI_GUARD_ENABLED = false
+
+        proxy.init()
+
+        sinon.assert.notCalled(AIGuardSdk)
+        sinon.assert.notCalled(aiguard.enable)
+        sinon.assert.notCalled(log.error)
+      })
+
       it('only loads Test Optimization startup modules through ci/init', () => {
         const repoRoot = path.resolve(__dirname, '../../..')
         const testOptimizationRoot = path.join(repoRoot, 'packages/dd-trace/src/ci-visibility') + path.sep
@@ -520,6 +569,19 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(config.setRemoteConfig, conf)
         sinon.assert.calledWith(tracer.configure, config)
         sinon.assert.calledWith(pluginManager.configure, config)
+      })
+
+      it('logs missing AI Guard configuration once across remote config updates', () => {
+        config.DD_API_KEY = undefined
+        config.apmTracingEnabled = true
+
+        proxy.init()
+
+        const handleApmTracing = handlers.get('APM_TRACING')
+        handleApmTracing(createApmTracingTransaction('aiguard-update-1', {}))
+        handleApmTracing(createApmTracingTransaction('aiguard-update-2', {}, 'modify'))
+
+        sinon.assert.calledOnce(log.error)
       })
 
       it('does not load Dynamic Instrumentation for a disabled remote config update', () => {
@@ -750,6 +812,8 @@ describe('TracerProxy', () => {
       it('should support applying remote config', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
+          './aiguard': aiguard,
+          './aiguard/sdk': AIGuardSdk,
           './appsec': appsec,
           './appsec/iast': iast,
           './remote_config': RemoteConfig,
@@ -782,6 +846,8 @@ describe('TracerProxy', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
           './config': Config,
+          './aiguard': aiguard,
+          './aiguard/sdk': AIGuardSdk,
           './appsec': appsec,
           './appsec/iast': iast,
           './remote_config': RemoteConfig,
@@ -982,11 +1048,29 @@ describe('TracerProxy', () => {
         )
       })
 
-      it('should start telemetry', () => {
+      it('should start telemetry without product metadata for ordinary tracing', () => {
         proxy.init()
 
-        sinon.assert.called(telemetry.start)
+        sinon.assert.calledOnceWithExactly(telemetry.start, config, pluginManager, undefined)
       })
+
+      for (const enabled of [true, false]) {
+        it(`provides Test Optimization log metadata only with telemetry enabled (${enabled})`, () => {
+          config.isCiVisibility = true
+          config.telemetry = { DD_INSTRUMENTATION_TELEMETRY_ENABLED: enabled }
+
+          proxy.init()
+
+          const options = telemetry.start.firstCall.args[2]
+          if (enabled) {
+            assert.deepStrictEqual(options, {
+              tags: 'test_optimization_enabled:true',
+            })
+          } else {
+            assert.strictEqual(options, undefined)
+          }
+        })
+      }
 
       it('should configure standalone', () => {
         const standalone = {
@@ -997,6 +1081,8 @@ describe('TracerProxy', () => {
         const DatadogProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
           './config': Config,
+          './aiguard': aiguard,
+          './aiguard/sdk': AIGuardSdk,
           './appsec': appsec,
           './appsec/iast': iast,
           './remote_config': RemoteConfig,
@@ -1430,6 +1516,7 @@ describe('TracerProxy', () => {
         './log': log,
         './profiler': profiler,
         './tracer_metadata': storeConfig,
+        './aiguard': aiguard,
         './serverless': {
           IS_AWS_LAMBDA_MICROVM: true,
           IS_SERVERLESS: true,
@@ -1668,6 +1755,7 @@ describe('TracerProxy', () => {
         './log': log,
         './profiler': profiler,
         './tracer_metadata': storeConfig,
+        './aiguard': aiguard,
         './serverless': {
           IS_AWS_LAMBDA_MICROVM: true,
           IS_SERVERLESS: true,

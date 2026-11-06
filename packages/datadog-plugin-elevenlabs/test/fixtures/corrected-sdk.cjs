@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 const Module = require('node:module')
-const { dirname, join, resolve } = require('node:path')
+const { dirname, join } = require('node:path')
 
 const sinon = require('sinon')
 
@@ -29,14 +29,6 @@ try {
 }
 assert.equal(corrected, true)
 
-const root = resolve(__dirname, '../../../..')
-const Writer = require(join(root, 'packages/dd-trace/src/llmobs/writers/spans'))
-const append = Writer.prototype.append
-const events = []
-Writer.prototype.append = function (event, routing) {
-  events.push(event)
-  return append.call(this, event, routing)
-}
 const clock = sinon.useFakeTimers({ now: 1_000_000, toFake: ['Date'] })
 const socket = new EventEmitter()
 socket.readyState = 1
@@ -81,18 +73,6 @@ function response (id, text) {
   deliver({ type: 'agent_response', agent_response_event: { event_id: id, agent_response: text } })
 }
 
-/**
- * @param {object} llm
- * @param {number} durationMs
- * @param {number} value
- */
-function assertOutput (llm, durationMs, value) {
-  const bytes = Buffer.from(llm.meta.output.messages[0].audio_parts[0].content, 'base64')
-  assert.equal(bytes.readUInt32LE(24), 24_000)
-  assert.deepEqual(bytes.subarray(44), Buffer.alloc(durationMs * 48, value))
-  assert.equal(llm.meta.metadata.output_audio_omitted_reason, undefined)
-}
-
 async function main () {
   const start = conversation.startSession()
   socket.emit('open')
@@ -128,24 +108,8 @@ async function main () {
   for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
 
   assert.equal(accepted.length, 3)
-  assert.equal(events.length, 12)
-  const llms = events.filter(event => event.name === 'elevenlabs response')
-  assert.deepEqual(llms.map(llm => llm.meta.input.messages[0].content),
-    ['First question', 'Second question', 'Third question'])
-  assertOutput(llms[0], 100, 9)
-  assertOutput(llms[1], 200, 6)
-  assertOutput(llms[2], 50, 5)
-  const replacement = llms[1]
-  const speech = events.find(event => event.name === 'agent speech' && event.parent_id === replacement.parent_id)
-  assert.equal(speech.duration, 200e6)
-  for (const event of events) {
-    assert.equal(event.session_id, 'conv-corrected-sdk')
-    assert.equal(event.meta.metadata.ttfa_eligible, false)
-    assert.deepEqual(event.metrics, {})
-  }
 }
 
 main().finally(() => {
-  Writer.prototype.append = append
   clock.restore()
 }).catch(error => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1 })

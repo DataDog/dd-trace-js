@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { EventEmitter } = require('node:events')
+const http = require('node:http')
 const { Readable } = require('node:stream')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -773,4 +775,84 @@ describe('Test Optimization exporter request', () => {
     assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
     assert.strictEqual(pendingRequests.length, 0)
   })
+})
+
+/**
+ * @param {import('node:http').RequestOptions} options
+ * @param {(response: import('node:http').IncomingMessage) => void} onResponse
+ * @returns {EventEmitter}
+ */
+function createUnavailableRequest (options, onResponse) {
+  const request = new EventEmitter()
+  request.setTimeout = sinon.stub()
+  request.write = sinon.stub()
+  request.end = () => setImmediate(() => {
+    const response = new EventEmitter()
+    response.statusCode = 503
+    response.headers = {}
+    response.setTimeout = sinon.stub()
+    onResponse(response)
+    response.emit('end')
+    request.emit('close')
+  })
+  return request
+}
+
+describe('Test Optimization request with the common transport', () => {
+  let clock
+  let sandbox
+  let httpRequest
+  let request
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox()
+    clock = sandbox.useFakeTimers({ now: 10_000 })
+    sandbox.stub(Math, 'random').returns(0)
+    httpRequest = sandbox.stub(http, 'request').callsFake(createUnavailableRequest)
+    const retry = proxyquire('../../../src/exporters/common/retry', {})
+    const transport = proxyquire('../../../src/exporters/common/request', { './retry': retry })
+    request = proxyquire('../../../src/ci-visibility/exporters/request', {
+      '../../exporters/common/request': transport,
+      '../../exporters/common/retry': retry,
+    })
+  })
+
+  afterEach(() => {
+    sandbox.restore()
+  })
+
+  for (const url of [
+    'http://agent:8126/path',
+    new URL('http://agent:8126/path'),
+    new URL('http://[::1]:8126/path'),
+    'unix:/tmp/agent.sock',
+    new URL('unix:/tmp/agent.sock'),
+    'unix://./pipe/apm',
+    new URL('unix://./pipe/apm'),
+  ]) {
+    it(`uses the reached-endpoint retry limit for ${typeof url} ${url}`, async () => {
+      const callback = sinon.spy()
+      request('payload', { url, method: 'POST' }, callback)
+
+      await clock.tickAsync(20_000)
+
+      sinon.assert.callCount(httpRequest, 2)
+      sinon.assert.calledOnce(callback)
+      assert.strictEqual(callback.firstCall.args[2], 503)
+    })
+  }
+
+  for (const [url, code] of [
+    ['not a URL', 'ERR_INVALID_URL'],
+    ['ftp://intake.example/path', 'ERR_INVALID_PROTOCOL'],
+  ]) {
+    it(`settles invalid target ${url} without consulting endpoint retry state`, () => {
+      const callback = sinon.spy()
+      request('payload', { url, method: 'POST' }, callback)
+
+      sinon.assert.notCalled(httpRequest)
+      sinon.assert.calledOnce(callback)
+      assert.strictEqual(callback.firstCall.args[0].code, code)
+    })
+  }
 })

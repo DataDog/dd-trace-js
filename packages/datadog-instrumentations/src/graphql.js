@@ -11,10 +11,16 @@ const { addHook, getHooks } = require('./helpers/instrument')
  * @param {string} name
  */
 function addRewriterHooks (name) {
-  const files = new Set()
+  const hooks = new Map()
   for (const hook of getHooks(name).values()) {
-    if (files.has(hook.file)) continue
-    files.add(hook.file)
+    const existing = hooks.get(hook.file)
+    if (existing) {
+      existing.versions.push(...hook.versions)
+    } else {
+      hooks.set(hook.file, hook)
+    }
+  }
+  for (const hook of hooks.values()) {
     addHook(hook, exports => exports)
   }
 }

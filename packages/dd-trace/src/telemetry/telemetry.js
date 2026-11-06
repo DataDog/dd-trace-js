@@ -203,7 +203,12 @@ function appClosing () {
   telemetryAppClosingChannel.publish()
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
-  // We flush before shutting down.
+  flush()
+}
+
+function flush () {
+  if (!config?.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED) return
+
   metricsManager.send(config, application, host)
   telemetryLogger.send(config, application, host)
 }
@@ -316,8 +321,9 @@ function extendedHeartbeat (config) {
 /**
  * @param {import('../config/config-base')} aConfig
  * @param {PluginManager} thePluginManager
+ * @param {import('./logs').TelemetryLogOptions} [logOptions]
  */
-function start (aConfig, thePluginManager) {
+function start (aConfig, thePluginManager, logOptions) {
   if (!aConfig.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED) {
     if (aConfig.appsec.DD_APPSEC_SCA_ENABLED) {
       logger.warn('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
@@ -331,7 +337,7 @@ function start (aConfig, thePluginManager) {
   integrations = getIntegrations()
 
   dependencies.start(config, application, host, getRetryData, updateRetryData)
-  telemetryLogger.start(config)
+  telemetryLogger.start(config, logOptions)
   endpoints.start(config, application, host, getRetryData, updateRetryData)
   sessionPropagation.start(config)
 
@@ -397,4 +403,5 @@ module.exports = {
   updateIntegrations,
   updateConfig,
   appClosing,
+  flush,
 }

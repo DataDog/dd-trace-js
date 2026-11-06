@@ -278,6 +278,7 @@ describe('generatePackFilesForCommits', () => {
 
   it('creates pack files in cwd if the temporary path fails', () => {
     const execFileSyncSpy = sinon.stub().onCall(0).throws().onCall(1).returns(['commitSHA'])
+    const logError = sinon.spy()
 
     const cwdPath = path.join('cwd', '1234')
 
@@ -286,11 +287,25 @@ describe('generatePackFilesForCommits', () => {
         './git-cache': {
           cachedExec: execFileSyncSpy,
         },
+        '../../log': { error: logError },
       }
     )
 
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
     assert.deepStrictEqual(packFilesToUpload, [`${cwdPath}-commitSHA.pack`])
+    sinon.assert.notCalled(logError)
+  })
+
+  it('reports an error when both packfile locations fail', () => {
+    const error = new Error('Packfile creation failed')
+    const logError = sinon.spy()
+    const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git', {
+      './git-cache': { cachedExec: sinon.stub().throws(error) },
+      '../../log': { error: logError },
+    })
+
+    assert.deepStrictEqual(generatePackFilesForCommits(['commitSHA']), [])
+    sinon.assert.calledOnceWithExactly(logError, 'Git plugin error executing fallback git pack-objects command', error)
   })
 
   it('does not work if tmpdir does not return a folder', () => {
@@ -542,6 +557,7 @@ describe('getGitRemoteName', () => {
   })
 
   it('returns first remote when upstream is not available', () => {
+    const logError = sinon.spy()
     cachedExecStub
       .onCall(0).throws()
       .onCall(1).returns('upstream\norigin')
@@ -551,12 +567,27 @@ describe('getGitRemoteName', () => {
         './git-cache': {
           cachedExec: cachedExecStub,
         },
+        '../../log': { error: logError },
       }
     )
 
     const remoteName = getGitRemoteName()
     assert.strictEqual(remoteName, 'upstream')
     sinon.assert.calledWith(cachedExecStub, 'git', ['remote'])
+    sinon.assert.notCalled(logError)
+  })
+
+  it('reports an error when the remote-list fallback also fails', () => {
+    const error = new Error('Git is unavailable')
+    const logError = sinon.spy()
+    cachedExecStub.throws(error)
+    const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
+      './git-cache': { cachedExec: cachedExecStub },
+      '../../log': { error: logError },
+    })
+
+    assert.strictEqual(getGitRemoteName(), 'origin')
+    sinon.assert.calledOnceWithExactly(logError, 'Git plugin error executing command', error)
   })
 
   it('returns origin when no remotes are available', () => {
