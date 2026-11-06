@@ -161,6 +161,32 @@ describe('Plugin', () => {
           })
         }
 
+        for (const method of ['GET', 'PROPFIND']) {
+          it(`keeps the ${method} client resource independent of http.route`, async () => {
+            tracer.use('http', {
+              server: false,
+              client: {
+                hooks: {
+                  /** @param {import('../../dd-trace/src/opentracing/span')} span */
+                  request (span) {
+                    span.setTag('http.route', '/users/:id')
+                  },
+                },
+              },
+            })
+            appListener = server((req, res) => res.end(), () => {})
+            await once(appListener, 'listening')
+            const { port } = appListener.address()
+            const traceReceived = agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.resource, method === 'GET' ? 'GET' : 'HTTP')
+              assert.strictEqual(span.meta['http.route'], '/users/:id')
+            })
+            const request = http.request(`${protocol}://localhost:${port}/user`, { method }, response => response.resume())
+            request.end()
+            await Promise.all([traceReceived, once(request, 'close')])
+          })
+        }
+
         it('sets error.type to the status code on a 4xx client response', done => {
           const app = express()
           app.get('/bad', (req, res) => {

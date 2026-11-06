@@ -254,7 +254,7 @@ function recordException (ddSpan, exception, timeInput, otelTraceSemanticsEnable
 
 /**
  * Applies OTel `setStatus({ code, message })` per spec: UNSET / missing is a no-op, OK is
- * final, ERROR is replaceable. Only ERROR writes tags; the returned code is the one the
+ * final, ERROR is replaceable. Only ERROR writes error metadata; the returned code is the one the
  * caller must store for the next call.
  *
  * @param {import('../opentracing/span')} ddSpan
@@ -266,6 +266,11 @@ function applyOtelStatus (ddSpan, currentCode, status, otelTraceSemanticsEnabled
   if (!isWritable(ddSpan)) return currentCode
 
   const code = status?.code
+  if (otelTraceSemanticsEnabled && (code === 1 || currentCode === 1)) {
+    ddSpan.context().deleteTag(ERROR_MESSAGE)
+    ddSpan.setTag(IGNORE_OTEL_ERROR, true)
+    return 1
+  }
   if (!code || currentCode === 1) {
     if (otelTraceSemanticsEnabled) {
       ddSpan.context().deleteTag(ERROR_MESSAGE)

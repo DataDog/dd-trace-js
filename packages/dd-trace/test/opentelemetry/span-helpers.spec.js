@@ -398,7 +398,7 @@ describe('OTel bridge helpers', () => {
 
         assert.strictEqual(after, 1)
         assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], undefined)
-        assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], undefined)
+        assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], true)
       })
 
       it('clears error tags when a subsequent call is blocked by OK', () => {
@@ -410,9 +410,8 @@ describe('OTel bridge helpers', () => {
         const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'should be ignored' }, true)
         assert.strictEqual(stillOk, 1)
 
-        // In compat mode, when OK blocks a later ERROR, the error marker is cleaned up.
         assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], undefined)
-        assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], undefined)
+        assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], true)
       })
     })
   })
