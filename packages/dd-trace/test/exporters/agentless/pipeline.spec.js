@@ -5,7 +5,6 @@ const http = require('node:http')
 const { URL } = require('node:url')
 const zlib = require('node:zlib')
 
-const { supportsAgentlessStats } = require('@datadog/libdatadog')
 const { decode } = require('@msgpack/msgpack')
 const { after, before, describe, it } = require('mocha')
 
@@ -146,8 +145,7 @@ describe('AgentlessWriter data pipeline', () => {
     await noIntakeTrace
   })
 
-  const nativeStatsIt = supportsAgentlessStats ? it : it.skip
-  nativeStatsIt('exports traces and native client stats from one v0.4 payload', async () => {
+  it('exports traces and native client stats from one v0.4 payload', async () => {
     request = receiveRequests(3)
     const metadata = {
       env: 'test-env',

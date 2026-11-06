@@ -45,6 +45,12 @@ class SpanProcessor {
     ) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
+      exporter.onClientStatsMode?.(mode => {
+        if (mode !== 'javascript') {
+          this._stats.stop()
+          this._stats = undefined
+        }
+      })
     }
 
     this._spanSampler = new SpanSampler(config.sampler)
