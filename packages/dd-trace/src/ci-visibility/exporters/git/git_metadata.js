@@ -261,8 +261,9 @@ function generateAndUploadPackFiles ({
  * @param {EvpProxyConfiguration} evpProxyConfiguration
  * @param {string | undefined} configRepositoryUrl repository URL from the configuration, if set
  * @param {(error?: Error | null) => void} callback
+ * @param {string=} configCommitSha
  */
-function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
+function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback, configCommitSha) {
   if (!isGitAvailable()) {
     return callback(new Error('Git is not available'))
   }
@@ -292,7 +293,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
 
     // If it has already unshallowed or the clone is not shallow, we move on
     if (hasCheckedShallow || !isShallowRepository()) {
-      const [headCommit] = latestCommits
+      const headCommit = configCommitSha || latestCommits[0]
       return generateAndUploadPackFiles({
         url,
         isEvpProxy,

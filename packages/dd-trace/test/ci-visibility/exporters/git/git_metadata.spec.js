@@ -159,6 +159,21 @@ describe('git_metadata', () => {
     })
   })
 
+  it('labels packfiles with the selected event and request commit identity', (done) => {
+    requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+    requestStub.onCall(1).callsFake(async (form, options, callback) => {
+      const chunks = []
+      for await (const chunk of form) chunks.push(chunk)
+      assert.match(Buffer.concat(chunks).toString(), /"id":"explicit-session-sha"/)
+      callback(null, '', 204)
+    })
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+      assert.strictEqual(err, null)
+      sinon.assert.calledTwice(requestStub)
+      done()
+    }, 'explicit-session-sha')
+  })
+
   it('should not request to /api/v2/git/repository/packfile if the backend has the commit info', (done) => {
     requestStub.callsArgWith(2, null,
       JSON.stringify({ data: latestCommits.map((sha) => ({ id: sha, type: 'commit' })) }),

@@ -736,15 +736,15 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
       v1: ciRepositoryUrl,
       v2: gitRepositoryUrl,
       type: 'repository_discrepancy',
-      expected: 'ci_provider',
-      discrepant: 'git_client',
+      expected: 'git_client',
+      discrepant: 'ci_provider',
     },
     {
       v1: ciCommitSHA,
       v2: gitCommitSHA,
       type: 'commit_discrepancy',
-      expected: 'ci_provider',
-      discrepant: 'git_client',
+      expected: 'git_client',
+      discrepant: 'ci_provider',
     },
   ]
 
@@ -782,30 +782,22 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
   if (!shouldSkipGitMetadataExtraction) {
     checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
 
-    const {
-      [GIT_COMMIT_SHA]: commitSHA,
-      [GIT_BRANCH]: branch,
-      [GIT_REPOSITORY_URL]: repositoryUrl,
-      [GIT_TAG]: tag,
-      [GIT_COMMIT_AUTHOR_NAME]: authorName,
-      [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
-      [GIT_COMMIT_MESSAGE]: commitMessage,
-      [CI_WORKSPACE_PATH]: ciWorkspacePath,
-      [GIT_COMMIT_HEAD_SHA]: headCommitSha,
-    } = ciMetadata
     gitMetadata = getGitMetadata({
-      commitSHA,
-      branch,
-      repositoryUrl,
-      tag,
-      authorName,
-      authorEmail,
-      commitMessage,
-      ciWorkspacePath,
-      headCommitSha,
+      ciWorkspacePath: ciMetadata[CI_WORKSPACE_PATH],
+      headCommitSha: ciMetadata[GIT_COMMIT_HEAD_SHA],
       pullRequestBaseBranchSha: userProvidedGitMetadata[GIT_PULL_REQUEST_BASE_BRANCH_SHA] ||
         ciMetadata[GIT_PULL_REQUEST_BASE_BRANCH_SHA],
     })
+  }
+
+  let providerMetadata = ciMetadata
+  if (gitMetadata[GIT_COMMIT_SHA]) {
+    providerMetadata = {}
+    for (const key of Object.keys(ciMetadata)) {
+      if (!key.startsWith('git.') || key.startsWith('git.commit.head.') || key.startsWith('git.pull_request.')) {
+        providerMetadata[key] = ciMetadata[key]
+      }
+    }
   }
 
   /** @type {TestEnvironmentMetadata} */
@@ -815,7 +807,7 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
     [TEST_FRAMEWORK]: testFramework,
     [DD_TEST_IS_USER_PROVIDED_SERVICE]: (config && config.isServiceUserProvided) ? 'true' : 'false',
     ...gitMetadata,
-    ...ciMetadata,
+    ...providerMetadata,
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata,
   }
