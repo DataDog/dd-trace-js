@@ -700,8 +700,8 @@ describe('Git metadata precedence', () => {
         Object.hasOwn = originalHasOwn
       }
       for (const key of keys) {
-        const commitFieldCleared = source.startsWith('sha-only') && key.startsWith('git.commit.') &&
-          key !== 'git.commit.sha'
+        const commitFieldCleared = source.startsWith('sha-only') &&
+          (key === 'git.tag' || (key.startsWith('git.commit.') && key !== 'git.commit.sha'))
         const expected = commitFieldCleared
           ? undefined
           : overrides[key] || (source === 'provider' ? provider[key] : git[key])

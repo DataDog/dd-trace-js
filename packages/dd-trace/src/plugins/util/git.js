@@ -155,12 +155,10 @@ function unshallowRepository (parentOnly = false, commitSha) {
     log.warn('Git version is <2.27, so git unshallow will not proceed')
     return
   }
-  const defaultRemoteName = sanitizedExec(
-    ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'],
-    null, null, null, true, { uncached: true }
-  )
+  const defaultRemoteName = getGitRemoteName()
   const revParseHead = commitSha || sanitizedExec(['rev-parse', 'HEAD'], null, null, null, true, { uncached: true })
-  const fetchOptions = { stdio: 'pipe', timeout: 5000 }
+  const fetchOptions = { stdio: 'pipe' }
+  if (commitSha) fetchOptions.timeout = 5000
   let depth = parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"'
   if (commitSha) depth = '--depth=1'
 
@@ -215,7 +213,7 @@ function unshallowRepository (parentOnly = false, commitSha) {
         null,
         { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'unshallow' } }, // we log the error in sanitizedExec
         true,
-        { uncached: true, timeout: 5000 }
+        { uncached: true }
       )
     }
   }
@@ -292,7 +290,7 @@ function getGitRemoteName () {
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
     true,
-    { expectedFailure: true } // Detached HEADs and branches without an upstream use the remote-list fallback.
+    { expectedFailure: true, uncached: true } // Detached HEADs and branches without an upstream use the fallback.
   )
 
   if (upstreamRemote) {
@@ -304,7 +302,8 @@ function getGitRemoteName () {
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
-    false
+    false,
+    { uncached: true }
   )
 
   return getSegment(remotes, '\n', 0) || 'origin'

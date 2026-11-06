@@ -814,7 +814,8 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
   const explicitSha = userProvidedGitMetadata[GIT_COMMIT_SHA]
   if (explicitSha && explicitSha !== (gitMetadata[GIT_COMMIT_SHA] || ciMetadata[GIT_COMMIT_SHA])) {
     for (const key of Object.keys(metadata)) {
-      if (key.startsWith('git.commit.') && key !== GIT_COMMIT_SHA && !key.startsWith('git.commit.head.') &&
+      if ((key === GIT_TAG || (key.startsWith('git.commit.') && key !== GIT_COMMIT_SHA &&
+          !key.startsWith('git.commit.head.'))) &&
           // eslint-disable-next-line prefer-object-has-own -- Cypress 6's plugin process runs on Node 12.
           !Object.prototype.hasOwnProperty.call(userProvidedGitMetadata, key)) {
         delete metadata[key]

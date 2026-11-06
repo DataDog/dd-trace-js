@@ -393,7 +393,20 @@ describe('unshallowRepository', () => {
     ]
 
     unshallowRepository(false)
-    sinon.assert.calledWith(cachedExecStub, 'git', options)
+    sinon.assert.calledWith(cachedExecStub, 'git', options, { stdio: 'pipe' })
+  })
+
+  it('bounds targeted recovery without shortening an ordinary unshallow fetch', () => {
+    const selected = 'a'.repeat(40)
+    cachedExecStub.onCall(0).returns('git version 2.39.0')
+    cachedExecStub.onCall(1).returns('upstream/main')
+
+    unshallowRepository(false, selected)
+
+    sinon.assert.calledWith(cachedExecStub, 'git', [
+      'fetch', '--depth=1', '--update-shallow', '--filter=blob:none', '--recurse-submodules=no',
+      'upstream', selected,
+    ], { stdio: 'pipe', timeout: 5000 })
   })
 
   it('works for the usual case with parentOnly', () => {
@@ -590,6 +603,7 @@ describe('getGitRemoteName', () => {
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
+        'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': {
           cachedExec: cachedExecStub,
         },
@@ -610,6 +624,7 @@ describe('getGitRemoteName', () => {
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
+        'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': {
           cachedExec: cachedExecStub,
         },
@@ -628,6 +643,7 @@ describe('getGitRemoteName', () => {
     const logError = sinon.spy()
     cachedExecStub.throws(error)
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: cachedExecStub },
       './git-cache': { cachedExec: cachedExecStub },
       '../../log': { error: logError },
     })
@@ -643,6 +659,7 @@ describe('getGitRemoteName', () => {
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
+        'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': {
           cachedExec: cachedExecStub,
         },
@@ -986,9 +1003,7 @@ describe('fetchHeadCommitSha', () => {
     const headSha = 'abc123'
     const remoteName = 'origin'
 
-    execFileSyncStub
-      .returns('')
-      .onCall(0).throws(new Error('Commit is missing'))
+    execFileSyncStub.withArgs('git', ['cat-file', '-e', headSha]).throws(new Error('Commit is missing'))
 
     fetchHeadCommitSha(headSha)
 
@@ -1018,8 +1033,9 @@ describe('fetchHeadCommitSha', () => {
   })
 
   it('retries the original fetch after a bounded fetch fails', () => {
-    execFileSyncStub.onCall(0).throws(new Error('Commit is missing'))
-    execFileSyncStub.onCall(1).throws(new Error('Shallow requests are unsupported'))
+    execFileSyncStub.withArgs('git', ['cat-file', '-e', 'abc123']).throws(new Error('Commit is missing'))
+    execFileSyncStub.withArgs('git', sinon.match.array.startsWith(['fetch']))
+      .onFirstCall().throws(new Error('Shallow requests are unsupported'))
 
     fetchHeadCommitSha('abc123')
 
@@ -1050,11 +1066,11 @@ describe('fetchHeadCommitSha', () => {
   }
 
   it('does not retry a failed original fetch for a local head', () => {
-    execFileSyncStub.onCall(1).throws(new Error('Remote is unavailable'))
+    execFileSyncStub.withArgs('git', sinon.match.array.startsWith(['fetch'])).throws(new Error('Remote is unavailable'))
 
     fetchHeadCommitSha('abc123')
 
-    sinon.assert.calledTwice(execFileSyncStub)
+    assert.strictEqual(execFileSyncStub.getCalls().filter(call => call.args[1][0] === 'fetch').length, 1)
     sinon.assert.calledOnce(logErrorSpy)
   })
 
@@ -1607,52 +1623,54 @@ done
   })
 
   for (const depth of [1, 2]) {
-    it(`recovers an unrelated selected commit from a depth-${depth} checkout`, () => {
-      const tree = git(remote, ['rev-parse', headSha + '^{tree}'])
-      const selected = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
-        input: `tree ${tree}
+    for (const remoteName of ['origin', 'upstream']) {
+      it(`recovers an unrelated selected commit from a depth-${depth} checkout with remote ${remoteName}`, () => {
+        const tree = git(remote, ['rev-parse', headSha + '^{tree}'])
+        const selected = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+          input: `tree ${tree}
 author Test <test@example.com> 1 +0000
 committer Test <test@example.com> 1 +0000
 
 unrelated
 `,
-      })
-      git(remote, ['update-ref', 'refs/heads/juan-fernandez/unrelated', selected])
-      const timestamp = Math.floor(Date.now() / 1000)
-      const root = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
-        input: `tree ${tree}
+        })
+        git(remote, ['update-ref', 'refs/heads/juan-fernandez/unrelated', selected])
+        const timestamp = Math.floor(Date.now() / 1000)
+        const root = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+          input: `tree ${tree}
 author Test <test@example.com> ${timestamp} +0000
 committer Test <test@example.com> ${timestamp} +0000
 
 root
 `,
-      })
-      const current = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
-        input: `tree ${tree}
+        })
+        const current = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+          input: `tree ${tree}
 parent ${root}
 author Test <test@example.com> ${timestamp} +0000
 committer Test <test@example.com> ${timestamp} +0000
 
 current
 `,
+        })
+        git(remote, ['update-ref', 'refs/heads/juan-fernandez/current', current])
+        fs.rmSync(checkout, { recursive: true, force: true })
+        git(directory, [
+          'clone', '--origin', remoteName, '--depth=' + depth, '--no-checkout', '--branch', 'juan-fernandez/current',
+          pathToFileURL(remote).href, checkout,
+        ])
+        const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+        const originalHistory = git(checkout, ['rev-list', '--count', 'HEAD'])
+        assert.deepStrictEqual(getLatestCommits(selected), [])
+
+        unshallowSelectedRepository(false, selected)
+
+        assert.deepStrictEqual(getLatestCommits(selected), [selected])
+        assert.ok(!getCommitsRevList([], [selected]).includes(originalHead))
+        assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+        assert.strictEqual(git(checkout, ['rev-list', '--count', 'HEAD']), originalHistory)
       })
-      git(remote, ['update-ref', 'refs/heads/juan-fernandez/current', current])
-      fs.rmSync(checkout, { recursive: true, force: true })
-      git(directory, [
-        'clone', '--depth=' + depth, '--no-checkout', '--branch', 'juan-fernandez/current',
-        pathToFileURL(remote).href, checkout,
-      ])
-      const originalHead = git(checkout, ['rev-parse', 'HEAD'])
-      const originalHistory = git(checkout, ['rev-list', '--count', 'HEAD'])
-      assert.deepStrictEqual(getLatestCommits(selected), [])
-
-      unshallowSelectedRepository(false, selected)
-
-      assert.deepStrictEqual(getLatestCommits(selected), [selected])
-      assert.ok(!getCommitsRevList([], [selected]).includes(originalHead))
-      assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
-      assert.strictEqual(git(checkout, ['rev-list', '--count', 'HEAD']), originalHistory)
-    })
+    }
   }
 
   it('discovers a selected commit after a cached miss and shallow fetch', () => {
