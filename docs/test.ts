@@ -85,6 +85,27 @@ const evaluationTelemetryOptOutOption: TracerOptions = {
     enableEvaluationTelemetryOptOutParameter: 'true'
   }
 };
+const flagSelectionOption: TracerOptions = {
+  featureFlags: {
+    flagSelection: {
+      tags: ['team:checkout'],
+      keyPatterns: ['checkout.*']
+    }
+  }
+};
+const tagsOnlyFlagSelectionOption: TracerOptions = {
+  featureFlags: {
+    flagSelection: { tags: ['team:checkout'] }
+  }
+};
+const invalidFlagSelectionOption: TracerOptions = {
+  featureFlags: {
+    flagSelection: {
+      // @ts-expect-error Tags must be a list of strings.
+      tags: 'team:checkout'
+    }
+  }
+};
 tracer.init({
   apmTracingEnabled: false,
   logInjection: true,
@@ -94,7 +115,11 @@ tracer.init({
   url: 'http://localhost',
   runtimeMetrics: true,
   featureFlags: {
-    enableEvaluationTelemetryOptOutParameter: true
+    enableEvaluationTelemetryOptOutParameter: true,
+    flagSelection: {
+      tags: ['team:checkout'],
+      keyPatterns: ['checkout.*']
+    }
   },
   experimental: {
     exporter: 'log'

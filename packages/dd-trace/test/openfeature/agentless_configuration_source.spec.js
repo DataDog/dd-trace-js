@@ -36,6 +36,8 @@ describe('AgentlessConfigurationSource', () => {
   let applyConfiguration
   let clock
   let config
+  let count
+  let increment
   let log
   let random
   let request
@@ -103,10 +105,17 @@ describe('AgentlessConfigurationSource', () => {
       }
     }
     request = sinon.spy(sendRequest)
+    increment = sinon.spy()
+    count = sinon.spy(() => ({ inc: increment }))
 
+    const flagSelection = proxyquire('../../src/openfeature/flag-selection', {
+      '../log': log,
+      '../telemetry/metrics': { manager: { namespace: () => ({ count }) } },
+    })
     AgentlessConfigurationSource = proxyquire('../../src/openfeature/agentless_configuration_source', {
       '../exporters/common/request': request,
       '../log': log,
+      './flag-selection': flagSelection,
     })
   })
 
@@ -732,5 +741,181 @@ describe('AgentlessConfigurationSource', () => {
     const stopped = log.debug.getCalls()
       .filter((call) => call.args[0] === 'Feature Flags: agentless configuration polling stopped')
     assert.strictEqual(stopped.length, 1)
+  })
+
+  describe('flag selection ignored by the server', () => {
+    const IGNORED = 'featureFlags.flagSelection was ignored by the server (%s). Loaded the full flag configuration.'
+    const HEADER = 'dd-flag-selection-ignored'
+
+    beforeEach(() => {
+      config.flagSelectionSent = true
+    })
+
+    /**
+     * @param {string | undefined} reason
+     */
+    function ignoredResponse (reason) {
+      return { statusCode: 200, headers: { etag: '"selected"', [HEADER]: reason }, body: responseBody() }
+    }
+
+    function ignoredLogs () {
+      return log.error.args.filter(args => args[0] === IGNORED)
+    }
+
+    it('logs and counts the reason after the configuration is applied', async () => {
+      responses.push(ignoredResponse('tag_load_failed'))
+
+      source().start()
+      await flush()
+
+      sinon.assert.calledOnceWithExactly(applyConfiguration, VALID_UFC)
+      sinon.assert.calledOnceWithExactly(log.error, IGNORED, 'tag_load_failed')
+      sinon.assert.callOrder(applyConfiguration, log.error)
+      sinon.assert.calledOnceWithExactly(count, 'flag_selection.ignored', { reason: 'tag_load_failed' })
+      sinon.assert.calledOnceWithExactly(increment)
+    })
+
+    for (const reason of [
+      'malformed_selection',
+      'too_many_values',
+      'invalid_key_pattern',
+      'invalid_tag',
+      'tag_load_failed',
+    ]) {
+      it(`keeps the known reason ${reason}`, async () => {
+        responses.push(ignoredResponse(reason))
+
+        source().start()
+        await flush()
+
+        assert.deepStrictEqual(ignoredLogs(), [[IGNORED, reason]])
+        assert.deepStrictEqual(count.args, [['flag_selection.ignored', { reason }]])
+      })
+    }
+
+    for (const [name, value] of Object.entries({
+      'trailing whitespace': 'too_many_values ',
+      'leading whitespace': ' too_many_values',
+      'a different case': 'TOO_MANY_VALUES',
+      'a new reason': 'secret-header-value',
+      'a value over 32 bytes': `tag_load_failed${'z'.repeat(18)}`,
+      'a list of reasons': 'invalid_tag, tag_load_failed',
+    })) {
+      it(`reports ${name} as unknown without logging the header`, async () => {
+        responses.push(ignoredResponse(value))
+
+        source().start()
+        await flush()
+
+        assert.deepStrictEqual(ignoredLogs(), [[IGNORED, 'unknown']])
+        assert.deepStrictEqual(count.args, [['flag_selection.ignored', { reason: 'unknown' }]])
+        assert.doesNotMatch(JSON.stringify([log.error.args, log.warn.args, log.debug.args, count.args]), /secret|zzz/)
+      })
+    }
+
+    it('treats an empty header as absent', async () => {
+      responses.push(ignoredResponse(''), ignoredResponse(undefined))
+
+      source().start()
+      await flush()
+      await tick(30_000)
+
+      sinon.assert.calledTwice(applyConfiguration)
+      sinon.assert.notCalled(log.error)
+      sinon.assert.notCalled(count)
+    })
+
+    it('logs and counts once per process per reason', async () => {
+      responses.push(
+        ignoredResponse('too_many_values'),
+        ignoredResponse('too_many_values'),
+        ignoredResponse('invalid_tag'),
+        ignoredResponse('too_many_values')
+      )
+
+      source().start()
+      await flush()
+      await tick(30_000)
+      await tick(30_000)
+      source().start()
+      await flush()
+
+      sinon.assert.callCount(applyConfiguration, 4)
+      assert.deepStrictEqual(ignoredLogs(), [[IGNORED, 'too_many_values'], [IGNORED, 'invalid_tag']])
+      assert.deepStrictEqual(count.args, [
+        ['flag_selection.ignored', { reason: 'too_many_values' }],
+        ['flag_selection.ignored', { reason: 'invalid_tag' }],
+      ])
+      sinon.assert.calledTwice(increment)
+    })
+
+    it('does not read the header when no selection was sent', async () => {
+      config.flagSelectionSent = false
+      responses.push(ignoredResponse('too_many_values'))
+
+      source().start()
+      await flush()
+
+      sinon.assert.calledOnce(applyConfiguration)
+      sinon.assert.notCalled(log.error)
+      sinon.assert.notCalled(count)
+    })
+
+    for (const statusCode of [304, 400, 401, 403, 404]) {
+      it(`does not read the header on HTTP ${statusCode}`, async () => {
+        responses.push(
+          ignoredResponse('invalid_tag'),
+          { statusCode, headers: { [HEADER]: 'too_many_values' } }
+        )
+
+        source().start()
+        await flush()
+        await tick(30_000)
+
+        assert.strictEqual(requests.length, 2)
+        assert.deepStrictEqual(ignoredLogs(), [[IGNORED, 'invalid_tag']])
+        assert.deepStrictEqual(count.args, [['flag_selection.ignored', { reason: 'invalid_tag' }]])
+      })
+    }
+
+    it('does not read the header after retries are exhausted', async () => {
+      responses.push(
+        { statusCode: 503, headers: { [HEADER]: 'too_many_values' } },
+        { statusCode: 503, headers: { [HEADER]: 'too_many_values' } },
+        { statusCode: 503, headers: { [HEADER]: 'too_many_values' } }
+      )
+
+      source().start()
+      await flush()
+      await tick(5000)
+      await tick(10_000)
+
+      assert.strictEqual(requests.length, 3)
+      assert.deepStrictEqual(ignoredLogs(), [])
+      sinon.assert.notCalled(count)
+    })
+
+    it('does not log the header when the configuration is malformed', async () => {
+      responses.push({ statusCode: 200, headers: { [HEADER]: 'too_many_values' }, body: '{' })
+
+      source().start()
+      await flush()
+
+      sinon.assert.notCalled(applyConfiguration)
+      assert.deepStrictEqual(ignoredLogs(), [])
+      sinon.assert.notCalled(count)
+    })
+
+    it('does not log the header when the configuration cannot be applied', async () => {
+      applyConfiguration.throws(new Error('listener failed'))
+      responses.push(ignoredResponse('too_many_values'))
+
+      source().start()
+      await flush()
+
+      sinon.assert.calledOnce(applyConfiguration)
+      assert.deepStrictEqual(ignoredLogs(), [])
+      sinon.assert.notCalled(count)
+    })
   })
 })

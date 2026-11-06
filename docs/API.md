@@ -181,6 +181,39 @@ Set the subject attribute before evaluation. Changes from After or Error hooks a
 Previously queued events and span data remain available. Each evaluation has its own decision, including nested and concurrent calls.
 The option does not change protected/full-data reporting consent or debug logging.
 
+<h3 id="feature-flag-selection">Flag Selection</h3>
+
+Load only the flags a service needs by passing a flag selection before you first access `tracer.openfeature`:
+
+```javascript
+const tracer = require('dd-trace').init({
+  featureFlags: {
+    flagSelection: {
+      tags: ['team:checkout'],
+      keyPatterns: ['checkout.*']
+    }
+  }
+})
+const { OpenFeature } = require('@openfeature/server-sdk')
+await OpenFeature.setProviderAndWait(tracer.openfeature)
+```
+
+The provider loads only the flags that have any of the `tags` or whose key matches any of the `keyPatterns`.
+Tags match exactly. A key pattern matches the whole key, and `*` matches any run of characters.
+Flags outside the selection return the default value with the `FLAG_NOT_FOUND` error code.
+Without a selection, the provider loads every flag.
+
+Values are trimmed, deduplicated and sorted before they are sent. Each list accepts at most 31 values, each value is
+at most 200 UTF-8 bytes, and the request URL is at most 8192 bytes. A selection over these limits, or one that is not an
+object with optional `tags` and `keyPatterns` string arrays, is not sent: the provider logs an error and loads every
+flag. If the server cannot apply the selection, it returns every flag and the provider logs an error. Like other tracer
+logs, these errors are written only when `DD_TRACE_DEBUG=true`.
+
+Flag selection has no environment variable. `node --require dd-trace/init` and Single Step Instrumentation call
+`init()` without options, so they cannot set a selection; call `init()` with the option in your application or in your
+own preload file instead. Flag selection applies to agentless delivery only: with
+`DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config`, the provider logs a warning and loads every flag.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:
