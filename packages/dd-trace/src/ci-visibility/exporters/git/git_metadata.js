@@ -16,6 +16,7 @@ const { getSegment } = require('../../../util')
 const {
   getLatestCommits,
   getRepositoryUrl,
+  getRepositoryRoot,
   generatePackFilesForCommits,
   getCommitsRevList,
   isShallowRepository,
@@ -282,7 +283,9 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
   }
 
   let latestCommits = getLatestCommits(configCommitSha)
-  if (!latestCommits.length) return callback(new Error('Selected Git commit is unavailable'))
+  if (!latestCommits.length) {
+    return callback(getRepositoryRoot() ? new Error('Selected Git commit is unavailable') : null)
+  }
   log.debug('There were %s commits since last month.', latestCommits.length)
 
   const getOnFinishGetCommitsToUpload = (hasCheckedShallow) => (err, commitsToUpload) => {

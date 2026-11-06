@@ -31,6 +31,7 @@ describe('git_metadata', () => {
 
   let getLatestCommitsStub
   let getRepositoryUrlStub
+  let getRepositoryRootStub
   let getCommitsRevListStub
   let generatePackFilesForCommitsStub
   let isShallowRepositoryStub
@@ -55,6 +56,7 @@ describe('git_metadata', () => {
     getLatestCommitsStub = sinon.stub().returns(latestCommits)
     getCommitsRevListStub = sinon.stub().returns(latestCommits)
     getRepositoryUrlStub = sinon.stub().returns('git@github.com:DataDog/dd-trace-js.git')
+    getRepositoryRootStub = sinon.stub().returns('/checkout')
     isShallowRepositoryStub = sinon.stub().returns(false)
     unshallowRepositoryStub = sinon.stub()
 
@@ -71,6 +73,7 @@ describe('git_metadata', () => {
     const gitStubs = {
       getLatestCommits: getLatestCommitsStub,
       getRepositoryUrl: getRepositoryUrlStub,
+      getRepositoryRoot: getRepositoryRootStub,
       generatePackFilesForCommits: generatePackFilesForCommitsStub,
       getCommitsRevList: getCommitsRevListStub,
       isShallowRepository: isShallowRepositoryStub,
@@ -157,6 +160,18 @@ describe('git_metadata', () => {
       assert.match(requestStub.getCall(1).args[1].path, /\/api\/v2\/git\/repository\/packfile/)
       done()
     })
+  })
+
+  it('allows provider-backed optimization when the local checkout cannot be read', (done) => {
+    getLatestCommitsStub.returns([])
+    getRepositoryRootStub.returns('')
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false },
+      'https://example.com/provider.git', (err) => {
+        assert.strictEqual(err, null)
+        sinon.assert.notCalled(requestStub)
+        sinon.assert.notCalled(generatePackFilesForCommitsStub)
+        done()
+      }, 'a'.repeat(40))
   })
 
   it('does not upload a different history when the selected commit is unavailable', (done) => {

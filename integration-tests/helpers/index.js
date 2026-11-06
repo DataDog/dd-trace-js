@@ -1059,6 +1059,8 @@ function getCiVisAgentlessConfig (port) {
     ...rest,
     DATADOG_API_KEY: undefined,
     DD_API_KEY: '1',
+    // Sandboxes fetch from local filesystem remotes; use a backend repository identity explicitly.
+    DD_GIT_REPOSITORY_URL: 'https://example.com/dd-trace-js-integration-tests.git',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init',
@@ -1080,6 +1082,7 @@ function getCiVisEvpProxyConfig (port) {
     ...rest,
     DATADOG_API_KEY: undefined,
     DD_API_KEY: undefined,
+    DD_GIT_REPOSITORY_URL: 'https://example.com/dd-trace-js-integration-tests.git',
     DD_TRACE_AGENT_PORT: String(port),
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',

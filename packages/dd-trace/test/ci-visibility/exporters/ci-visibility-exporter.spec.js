@@ -84,7 +84,9 @@ describe('CI Visibility Exporter', () => {
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
-    sinon.stub(cp, 'execFileSync').returns('false')
+    const gitCommand = sinon.stub(cp, 'execFileSync').returns('false')
+    gitCommand.withArgs('git', ['config', '--get', 'remote.origin.url']).returns('https://example.com/repository.git')
+    gitCommand.withArgs('git', sinon.match.array.startsWith(['log'])).returns('a'.repeat(40))
     const readFileSync = fs.readFileSync
     sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
       if (filename === sketchesJsPath) {
@@ -463,7 +465,7 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/search_commits')
         .reply(200, function () {
           const { meta: { repository_url: repositoryUrl } } = JSON.parse(this.req.requestBodyBuffers.toString())
-          assert.strictEqual(repositoryUrl, 'https://custom-git@datadog.com')
+          assert.strictEqual(repositoryUrl, 'https://datadog.com')
           done()
         })
         .post('/api/v2/git/repository/packfile')
@@ -633,6 +635,39 @@ describe('CI Visibility Exporter', () => {
           done()
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      })
+      it('requests skippable suites without a checkout when require_git is false', (done) => {
+        cp.execFileSync.withArgs('git', sinon.match.array.startsWith(['log'])).returns('')
+        cp.execFileSync.withArgs('git', ['rev-parse', '--show-toplevel']).returns('')
+        nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                itr_enabled: true,
+                require_git: false,
+                tests_skipping: true,
+              },
+            },
+          }))
+        const skippableScope = nock(url)
+          .post('/api/v2/ci/tests/skippable')
+          .reply(200, JSON.stringify({ data: [] }))
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+        })
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+
+        ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
+          assert.strictEqual(settingsErr, null)
+          ciVisibilityExporter.getSkippableSuites({}, (skippableErr, skippableSuites) => {
+            assert.strictEqual(skippableErr, null)
+            assert.deepStrictEqual(skippableSuites, [])
+            assert.strictEqual(skippableScope.isDone(), true)
+            done()
+          })
+        })
       })
       it('does not request skippable suites when git metadata upload fails with require_git false', (done) => {
         // Regression: the live settings path starts `sendGitMetadata` even when the
