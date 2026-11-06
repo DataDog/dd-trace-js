@@ -361,7 +361,7 @@ function getDelimitedRanges (source, open, close) {
 function getLiteralStringProperties (source, property) {
   return getPropertyPositions(source, property).flatMap(({ index, valueStart }) => {
     const literal = /^(["'])([^"'\\]+)\1/.exec(source.slice(valueStart))
-    return literal ? [{ index, value: literal[2] }] : []
+    return literal ? { index, value: literal[2] } : []
   })
 }
 

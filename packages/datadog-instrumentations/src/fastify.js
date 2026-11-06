@@ -1,6 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
+const { isEmpty } = require('../../dd-trace/src/util')
 const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
 
 const errorChannel = channel('apm:fastify:middleware:error')
@@ -186,6 +187,17 @@ function onRequest (request, reply, done) {
   return done()
 }
 
+/**
+ * Publishing an empty body would set a WAF address for nothing, so only non-empty bodies are published.
+ * Strings, arrays and binary bodies are checked by length to avoid enumerating one key per character or element.
+ *
+ * @param {unknown} body
+ */
+function hasBody (body) {
+  if (typeof body === 'string') return body.length > 0
+  return typeof body === 'object' && body !== null && !isEmpty(body)
+}
+
 function preHandler (request, reply, done) {
   if (typeof done !== 'function') return
   if (!reply || typeof reply.send !== 'function') return done()
@@ -194,11 +206,8 @@ function preHandler (request, reply, done) {
   const res = getRes(reply)
   const ctx = { req, res }
 
-  // eslint-disable-next-line no-restricted-syntax -- arbitrary body keys; publishing {} sets a WAF address
-  const hasBody = request.body && Object.keys(request.body).length > 0
-
   // For multipart/form-data, the body is not available until after preValidation hook
-  if (bodyParserReadCh.hasSubscribers && hasBody && !bodyPublished.has(req)) {
+  if (bodyParserReadCh.hasSubscribers && !bodyPublished.has(req) && hasBody(request.body)) {
     ctx.abortController = new AbortController()
     ctx.body = request.body
     bodyParserReadCh.publish(ctx)

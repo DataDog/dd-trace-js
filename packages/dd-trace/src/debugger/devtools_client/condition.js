@@ -312,9 +312,9 @@ function isInstanceOfCoreType (type, variable, fallback = `${variable} instanceo
 function getSize (variable) {
   return `((val) => {
     if (${isString('val')} || ${isArrayOrTypedArray('val')}) {
-      return ${guardAgainstPropertyAccessSideEffects('val', '"length"')}
+      return ${guardAgainstPropertyAccessSideEffects('"length"')}
     } else if (${isInstanceOfCoreType('Set', 'val')} || ${isInstanceOfCoreType('Map', 'val')}) {
-      return ${guardAgainstPropertyAccessSideEffects('val', '"size"')}
+      return ${guardAgainstPropertyAccessSideEffects('"size"')}
     } else if (${isInstanceOfCoreType('WeakSet', 'val')} || ${isInstanceOfCoreType('WeakMap', 'val')}) {
       throw new TypeError('Cannot get size of WeakSet or WeakMap')
     } else if (typeof val === 'object' && val !== null) {
@@ -338,12 +338,12 @@ function accessProperty (variable, keyOrIndex, allowMapAccess) {
     } else if (${isInstanceOfCoreType('Set', 'val')} || ${isInstanceOfCoreType('WeakSet', 'val')}) {
       throw new Error('Accessing a Set or WeakSet is not allowed')
     } else {
-      return ${guardAgainstPropertyAccessSideEffects('val', 'key')}
+      return ${guardAgainstPropertyAccessSideEffects('key')}
     }
   })(${variable}, ${keyOrIndex})`
 }
 
-function guardAgainstPropertyAccessSideEffects (variable, propertyName) {
+function guardAgainstPropertyAccessSideEffects (propertyName) {
   return `((val, key) => {
     if (
       ${isInstanceOfCoreType('Proxy', 'val', 'true')} ||
@@ -353,7 +353,7 @@ function guardAgainstPropertyAccessSideEffects (variable, propertyName) {
     } else {
       return val[key]
     }
-  })(${variable}, ${propertyName})`
+  })(val, ${propertyName})`
 }
 
 function guardAgainstCoercionSideEffects (variable) {

@@ -1,0 +1,12 @@
+_v: 1
+name: mariadb
+display_name: MariaDB
+description: Instruments MariaDB queries, including streamed, prepared, and batched execution, transaction commands, file
+  imports, and connection-pool acquisition.
+packages:
+- name: mariadb
+category:
+- db.client
+systems:
+- mariadb
+creation_date: '2022-10-06'

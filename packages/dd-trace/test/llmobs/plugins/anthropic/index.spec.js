@@ -2,6 +2,7 @@
 
 const assert = require('node:assert')
 const { inspect } = require('node:util')
+
 const { describe, before, it } = require('mocha')
 const semifies = require('semifies')
 const { withVersions } = require('../../../setup/mocha')
@@ -68,14 +69,6 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertLLMObsSpan(apmSpans, llmobsSpans)
-
-        // MLOS-591 regression: the default `LLMObsPlugin.start` registration
-        // path must emit OTel bridge tags onto the local trace so dd-go can
-        // correlate manual OTel `gen_ai.*` spans with this LLMObs span.
-        const apmMeta = apmSpans[0].meta
-        assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
-        assert.ok(apmMeta.llmobs_parent_id)
-        assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
       })
 
       it('sets model_provider to unknown for unrecognized base URLs', async () => {
@@ -430,6 +423,89 @@ describe('Plugin', () => {
       })
     })
 
+    describe('web search', () => {
+      const tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 1 }]
+
+      /**
+       * @param {object[]} apmSpans
+       * @param {object[]} llmobsSpans
+       * @param {{ content: string, webSearchCount?: number, tokens?: Record<string, number> }} options
+       */
+      function assertWebSearchSpan (apmSpans, llmobsSpans, { content, webSearchCount, tokens }) {
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'anthropic.request',
+          modelName: 'claude-haiku-4-5-20251001',
+          modelProvider: 'anthropic',
+          inputMessages: [{ role: 'user', content }],
+          outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          metadata: { max_tokens: 1024 },
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_write_input_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: MOCK_NUMBER,
+            ephemeral_5m_input_tokens: MOCK_NUMBER,
+            ephemeral_1h_input_tokens: MOCK_NUMBER,
+            ...tokens,
+            ...(webSearchCount === undefined ? {} : { web_search_count: webSearchCount }),
+          },
+          tags: { ml_app: 'test', integration: 'anthropic' },
+        })
+      }
+
+      it('tags web_search_count from usage (non-streaming)', async () => {
+        const content = 'Search the web for the latest Node.js LTS release. Answer in one sentence.'
+        await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          messages: [{ role: 'user', content }],
+          max_tokens: 1024,
+          tools,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertWebSearchSpan(apmSpans, llmobsSpans, { content, webSearchCount: 1 })
+      })
+
+      it('tags web_search_count from the final message_delta (streaming)', async () => {
+        const content = 'Search the web for the latest Node.js LTS release. Answer in one sentence, streamed.'
+        const stream = await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          messages: [{ role: 'user', content }],
+          max_tokens: 1024,
+          tools,
+          stream: true,
+        })
+
+        for await (const chunk of stream) {
+          assert.ok(chunk)
+        }
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        // input_tokens comes from the cumulative message_delta count (18882), not message_start (2234)
+        assertWebSearchSpan(apmSpans, llmobsSpans, {
+          content,
+          webSearchCount: 1,
+          tokens: { input_tokens: 18882, output_tokens: 120, total_tokens: 19002 },
+        })
+      })
+
+      it('omits web_search_count when no search runs', async () => {
+        const content = 'What is 2 + 2? Do not search the web.'
+        await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          messages: [{ role: 'user', content }],
+          max_tokens: 1024,
+          tools,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertWebSearchSpan(apmSpans, llmobsSpans, { content })
+      })
+    })
+
     describe('beta.messages.create', () => {
       before(function () {
         if (!isBetaSupported) this.skip()
@@ -488,6 +564,50 @@ describe('Plugin', () => {
         const { apmSpans, llmobsSpans } = await getEvents()
         assertLLMObsSpan(apmSpans, llmobsSpans)
       })
+    })
+  })
+})
+
+describe('Plugin with LLMObs direct traces', () => {
+  useEnv({
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>',
+  })
+
+  const { getEvents } = useLlmObs({
+    plugin: 'anthropic',
+    tracerConfigOptions: {
+      samplingRules: [{ sampleRate: 0 }],
+    },
+  })
+
+  withVersions('anthropic', '@anthropic-ai/sdk', (version) => {
+    let client
+
+    before(() => {
+      const { Anthropic } = require(`../../../../../../versions/@anthropic-ai/sdk@${version}`).get()
+      client = new Anthropic({ baseURL: 'http://127.0.0.1:9126/vcr/anthropic' })
+    })
+
+    it('submits rejected spans through direct LLMObs intake', async () => {
+      await client.messages.create({
+        model: 'claude-3-7-sonnet-20250219',
+        messages: [{ role: 'user', content: 'Hello, world!' }],
+        max_tokens: 100,
+        temperature: 0.5,
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents()
+
+      // MLOS-591 regression: the default `LLMObsPlugin.start` registration
+      // path must emit OTel bridge tags onto the local trace so dd-go can
+      // correlate manual OTel `gen_ai.*` spans with this LLMObs span.
+      assert.equal(apmSpans.length, 1)
+      assert.equal(llmobsSpans.length, 1)
+      assert.strictEqual(llmobsSpans[0].name, 'anthropic.request')
+      const apmMeta = apmSpans[0].meta
+      assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
+      assert.ok(apmMeta.llmobs_parent_id)
+      assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
     })
   })
 })

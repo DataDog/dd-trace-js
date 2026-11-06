@@ -223,8 +223,9 @@ function presenceBitmask (optionalGroups, present) {
  * @returns {string|null}
  */
 function normalizeRoute (route, params, urlPath, parse, makeMatcher) {
-  if (typeof route !== 'string' || !route) return null
-  if (typeof parse !== 'function' || typeof makeMatcher !== 'function') return null
+  if (typeof route !== 'string' || !route || typeof parse !== 'function' || typeof makeMatcher !== 'function') {
+    return null
+  }
 
   let entry = routeCache.get(route)
   if (entry === undefined) {

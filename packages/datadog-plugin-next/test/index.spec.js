@@ -8,6 +8,7 @@ const path = require('node:path')
 const http = require('node:http')
 const { execSync, spawn } = require('node:child_process')
 const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
+const { rm } = require('node:fs/promises')
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -237,7 +238,7 @@ describe('Plugin', function () {
         }
       })
 
-      after(function () {
+      after(async function () {
         this.timeout(5000)
         const files = [
           'package.json',
@@ -245,8 +246,7 @@ describe('Plugin', function () {
           '.next',
           'yarn.lock',
         ]
-        const paths = files.map(file => path.join(__dirname, file))
-        execSync(`rm -rf ${paths.join(' ')}`)
+        await Promise.all(files.map(file => rm(path.join(__dirname, file), { recursive: true, force: true })))
       })
 
       withNamingSchema(
@@ -354,8 +354,8 @@ describe('Plugin', function () {
               .catch(() => {})
           })
 
-          it('should handle invalid catch all parameters', done => {
-            agent
+          it('should handle invalid catch all parameters', async () => {
+            const tracingPromise = agent
               .assertSomeTraces(traces => {
                 const spans = traces[0]
 
@@ -367,18 +367,20 @@ describe('Plugin', function () {
                   meta: {
                     'span.kind': 'server',
                     'http.method': 'GET',
-                    // Next.js 16 surfaces a malformed request URL as a 500 instead of a 400.
-                    'http.status_code': satisfies(pkg.version, '>=16') ? '500' : '400',
                     component: 'next',
                   },
                 })
-              })
-              .then(done)
-              .catch(done)
 
-            httpRequest
-              .get(`http://127.0.0.1:${port}/api/invalid/%ff`)
-              .catch(() => {})
+                return spans[1]
+              })
+
+            const [span, response] = await Promise.all([
+              tracingPromise,
+              httpRequest.get(`http://127.0.0.1:${port}/api/invalid/%ff`, { validateStatus: null }),
+            ])
+
+            assert.ok(response.status >= 400 && response.status < 600)
+            assert.strictEqual(span.meta['http.status_code'], String(response.status))
           })
 
           it('should pass resource path to parent span', done => {

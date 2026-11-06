@@ -3,8 +3,10 @@
 const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const { coerce, major, maxSatisfying } = require('semver')
 
+const { getInstrumentation } = require('../setup/helpers/load-inst')
 const externals = require('./externals')
 const {
   brokenVersionReason,
@@ -66,12 +68,12 @@ describe('getVersionList', () => {
 
   it('adds the floor, the floor major and the top major for non-consecutive packages', () => {
     // The middle majors may be unpublished, but the floor major (1) and the top major (5) both exist and are tested.
-    assert.deepEqual(keys('mongodb', ['>=1 <6'], new Set(['mongodb'])), ['1.0.0', '1', '5'])
+    assert.deepEqual(keys('mongodb', ['>=1 <6'], new Map([['mongodb', '>=2 <5']])), ['1.0.0', '1', '5'])
   })
 
-  it('treats the built-in non-consecutive packages as floor + floor major + top major', () => {
-    // graphql jumps from 0.x to 14.x; 1.x–13.x are skipped, but the latest 0.x and the newest major are still tested.
-    assert.deepEqual(keys('graphql', ['>=0.10']), ['0.10.0', '0', latestMajorKey('graphql')])
+  it('keeps every published major of graphql', () => {
+    const publishedMajors = Array.from({ length: major(latests.graphql) - 13 }, (_, index) => String(index + 14))
+    assert.deepEqual(keys('graphql', ['>=0.10']), ['0.10.0', '0', ...publishedMajors])
   })
 
   it('throws on an unparseable range', () => {
@@ -94,6 +96,30 @@ describe('resolvePluginVersions', () => {
       versions: ['5', '6'],
     },
   ]
+
+  it('keeps stable Redis majors from the instrumentation declarations', () => {
+    const declarations = getInstrumentation('redis').filter(({ name }) => name === '@redis/client')
+    const result = resolvePluginVersions({ name: '@redis/client', declarations, env: {} })
+    const stableMajors = Array.from({ length: major(latests['@redis/client']) - 4 }, (_, index) => String(index + 5))
+
+    assert.deepEqual(versionKeys(result), ['1.1.0', '1', ...stableMajors])
+  })
+
+  for (const latest of ['7.0.1', '26.0.0']) {
+    it(`keeps published OracleDB majors with the latest pinned to ${latest}`, () => {
+      const { resolvePluginVersions } = proxyquire('./versions', {
+        './package.json': { dependencies: { ...latests, oracledb: latest } },
+      })
+      const result = resolvePluginVersions({
+        name: 'oracledb',
+        declarations: getInstrumentation('oracledb'),
+        env: {},
+      })
+
+      assert.deepEqual(versionKeys(result), ['5.0.0', '5', '6', '7', ...(latest === '26.0.0' ? ['26'] : [])])
+      assert.equal(result.unversioned, '>=5')
+    })
+  }
 
   it('expands the declared versions and uses every active range for the unversioned folder', () => {
     const result = resolvePluginVersions({
@@ -188,6 +214,20 @@ describe('resolvePluginVersions', () => {
     assert.deepEqual(versionKeys(result), ['2.115.0'])
     assert.equal(result.unversioned, '=2.115.0')
   })
+
+  for (const [nodeVersion, expected] of [['22.11.999', '4.29.1'], ['22.12.0', '5.12.5']]) {
+    it(`selects a compatible Fastify fixture for light-my-request on Node.js ${nodeVersion}`, () => {
+      const result = resolvePluginVersions({
+        name: 'fastify',
+        declarations: externals['light-my-request'].filter(({ name }) => name === 'fastify'),
+        nodeVersion,
+        honourEnvRange: false,
+        env: { PACKAGE_VERSION_RANGE: '6' },
+      })
+
+      assert.equal(maxSatisfying(['4.29.1', '5.12.5'], result.unversioned), expected)
+    })
+  }
 
   it('ignores the PACKAGE_VERSION_RANGE opt-in of a declaration outside the Node.js range', () => {
     const result = resolvePluginVersions({
@@ -284,11 +324,45 @@ describe('brokenVersionReason', () => {
   const broken = { ai: [{ range: '>=4.1.0 <5.0.0', reason: 'no cassette' }] }
 
   it('returns the reason for a version inside a broken range', () => {
-    assert.equal(brokenVersionReason('ai', '4.3.19', broken), 'no cassette')
+    assert.equal(brokenVersionReason('ai', '4.3.19', '26.2.0', broken), 'no cassette')
+  })
+
+  for (const { name, brokenVersion, workingVersion, brokenNode, workingNode } of [
+    { name: 'hapi', brokenVersion: '17.0.0', workingVersion: '16.8.4', brokenNode: '15.0.0', workingNode: '14.21.3' },
+    {
+      name: '@hapi/hapi',
+      brokenVersion: '20.3.0',
+      workingVersion: '21.0.0',
+      brokenNode: '15.0.0',
+      workingNode: '14.21.3',
+    },
+    { name: 'avsc', brokenVersion: '5.0.0', workingVersion: '5.0.1', brokenNode: '25.0.0', workingNode: '24.16.0' },
+    {
+      name: '@grpc/grpc-js',
+      brokenVersion: '1.1.4',
+      workingVersion: '1.3.0',
+      brokenNode: '25.0.0',
+      workingNode: '24.16.0',
+    },
+    { name: 'undici', brokenVersion: '7.11.0', workingVersion: '7.10.0', brokenNode: '18.20.8', workingNode: '20.0.0' },
+  ]) {
+    it(`excludes only the incompatible ${name} and Node.js combination`, () => {
+      for (const suffix of ['', '-nightly20261031012345']) {
+        assert.equal(brokenVersionReason(name, brokenVersion, `${workingNode}${suffix}`), undefined)
+        assert.equal(brokenVersionReason(name, workingVersion, `${brokenNode}${suffix}`), undefined)
+        assert.equal(typeof brokenVersionReason(name, brokenVersion, `${brokenNode}${suffix}`), 'string')
+      }
+    })
+  }
+
+  it('keeps later nightly runtimes subject to their compatibility gates', () => {
+    const nodeVersion = '26.0.0-nightly20261031012345'
+    assert.equal(typeof brokenVersionReason('avsc', '5.0.0', nodeVersion), 'string')
+    assert.equal(typeof brokenVersionReason('@grpc/grpc-js', '1.1.4', nodeVersion), 'string')
   })
 
   it('returns undefined outside every broken range and for unlisted modules', () => {
-    assert.equal(brokenVersionReason('ai', '4.0.0', broken), undefined)
-    assert.equal(brokenVersionReason('mongodb', '4.3.19', broken), undefined)
+    assert.equal(brokenVersionReason('ai', '4.0.0', '26.2.0', broken), undefined)
+    assert.equal(brokenVersionReason('mongodb', '4.3.19', '26.2.0', broken), undefined)
   })
 })

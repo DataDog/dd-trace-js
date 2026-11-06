@@ -1,0 +1,13 @@
+_v: 1
+name: redis
+display_name: Redis
+description: Instruments Redis client commands, recording command details, connection metadata, and errors.
+packages:
+- name: '@node-redis/client'
+- name: '@redis/client'
+- name: redis
+category:
+- db.client
+systems:
+- redis
+creation_date: '2018-05-10'

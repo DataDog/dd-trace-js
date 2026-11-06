@@ -1273,7 +1273,7 @@ function getProjectPreferenceScores (root, manifests) {
 /**
  * Normalizes repository and package names for conservative identity comparison.
  *
- * @param {string} value repository or package name
+ * @param {unknown} value repository or package name from manifest metadata
  * @returns {Set<string>} normalized identity tokens
  */
 function getIdentityTokens (value) {
@@ -1332,7 +1332,7 @@ function isIneligibleFrameworkCommand (frameworkId, command) {
  * @param {string} command package script command
  */
 function isCucumberRunnerCommand (command) {
-  return CUCUMBER_RUNNER_COMMAND_RE.test(String(command || ''))
+  return CUCUMBER_RUNNER_COMMAND_RE.test(command)
 }
 
 /**
@@ -1743,9 +1743,7 @@ function readTextFiles (root, physicalRoot, files, maxTotalBytes) {
 
   for (const relativePath of files) {
     const file = getSafeScannedFile(root, physicalRoot, relativePath)
-    if (!file) continue
-
-    if (file.stat.size > MAX_TEXT_FILE_SIZE) continue
+    if (!file || file.stat.size > MAX_TEXT_FILE_SIZE) continue
     if (totalBytes + file.stat.size > maxTotalBytes) {
       textFiles.truncated = true
       break
@@ -1862,15 +1860,13 @@ function isTestSetupOrCiFile (file) {
   const relativePath = file.relativePath
   const basename = path.basename(relativePath)
 
-  if (isWorkflowFile(relativePath)) return true
-  if (basename === 'package.json') return true
-  if (/^(?:jest|config-jest|vitest|vite|playwright|cypress|cucumber)\.config\./.test(basename)) return true
-  if (/^\.mocharc\./.test(basename)) return true
-  if (basename === 'cypress.json') return true
-  if (/setup|bootstrap/i.test(basename)) return true
-  if (relativePath.startsWith('cypress/support/')) return true
-
-  return false
+  return isWorkflowFile(relativePath) ||
+    basename === 'package.json' ||
+    /^(?:jest|config-jest|vitest|vite|playwright|cypress|cucumber)\.config\./.test(basename) ||
+    /^\.mocharc\./.test(basename) ||
+    basename === 'cypress.json' ||
+    /setup|bootstrap/i.test(basename) ||
+    relativePath.startsWith('cypress/support/')
 }
 
 /**
@@ -2013,9 +2009,8 @@ function coerceVersion (rawVersion) {
  * @param {string} rawVersion package manifest version/range
  */
 function isAmbiguousRange (rawVersion) {
-  const version = String(rawVersion || '').trim()
-  if (!version) return true
-  if (version.includes('||')) return true
+  const version = rawVersion.trim()
+  if (!version || version.includes('||')) return true
   return /<=?\s*\d/.test(version)
 }
 
@@ -2096,7 +2091,7 @@ function hasShaMetadata (env) {
  * @param {string|undefined} value value to inspect
  */
 function isTrueLike (value) {
-  return /^(?:1|true)$/i.test(String(value || ''))
+  return /^(?:1|true)$/i.test(String(value))
 }
 
 /**

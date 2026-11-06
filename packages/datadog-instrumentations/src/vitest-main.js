@@ -300,8 +300,7 @@ function configureEfdSuiteTracker (testFilepaths, repositoryRoot) {
  * @param {boolean} hasNewTest
  */
 function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
-  if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string') return false
-  if (isEarlyFlakeDetectionFaulty) return false
+  if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string' || isEarlyFlakeDetectionFaulty) return false
 
   if (hasNewTest) {
     suitesWithNewTests.add(testSuite)
@@ -681,6 +680,7 @@ function resetMainProcessProvidedContext (ctx) {
     _ddIsEfdSuiteAdmissionEnabled: false,
     _ddIsFlakyTestRetriesEnabled: false,
     _ddFlakyTestRetriesCount: 0,
+    _ddFlakyTestRetriesUseRetryMarker: false,
     _ddIsDynamicAtrEnabled: false,
     _ddDynamicAtrBuckets: undefined,
     _ddFlakyTestRetriesIncludesUnnamedProject: false,
@@ -824,7 +824,7 @@ async function runMainProcessSetup (
     }
   }
 
-  const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
+  const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications, frameworkVersion)
   if (flakyTestRetriesConfiguration) {
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
@@ -833,6 +833,7 @@ async function runMainProcessSetup (
       _ddDynamicAtrBuckets: dynamicAtrBuckets,
       _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
       _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
+      _ddFlakyTestRetriesUseRetryMarker: flakyTestRetriesConfiguration.usesRetryMarker,
     }, 'Could not send library configuration to workers.')
   }
 
@@ -1039,7 +1040,7 @@ function shouldUseBrowserReporter (frameworkVersion, testSpecifications) {
     testSpecifications.some(isBrowserTestSpecification)
 }
 
-function configureFlakyTestRetries (ctx, testSpecifications) {
+function configureFlakyTestRetries (ctx, testSpecifications, frameworkVersion) {
   if (!isFlakyTestRetriesEnabled || (!isDynamicAtrEnabled && flakyTestRetriesCount <= 0)) return
 
   const maximumDynamicAtrRetries = dynamicAtrBuckets
@@ -1048,13 +1049,23 @@ function configureFlakyTestRetries (ctx, testSpecifications) {
   const retryCount = isDynamicAtrEnabled
     ? Math.max(1, maximumDynamicAtrRetries)
     : flakyTestRetriesCount
+  const usesRetryMarker = isDynamicAtrEnabled || satisfies(frameworkVersion, '>=4.1.0')
   let configured = false
   let includesUnnamedProject = false
   const projectNames = []
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
     if (!config.retry || config.retry.__ddTestOptAtr) {
+      // Tag retries are resolved during declaration, after the callback's own options were captured.
+      if (config.tags) {
+        config.tags = config.tags.map(tag => tag.retry === undefined
+          ? tag
+          : {
+              ...tag,
+              meta: { ...tag.meta, __ddTestOptHasFrameworkRetry: true },
+            })
+      }
       // The serializable marker survives task inheritance and setup refreshes, unlike numeric retry counts.
-      config.retry = isDynamicAtrEnabled ? { count: retryCount, __ddTestOptAtr: true } : retryCount
+      config.retry = usesRetryMarker ? { count: retryCount, __ddTestOptAtr: true } : retryCount
       configured = true
       if (projectName) {
         projectNames.push(projectName)
@@ -1069,6 +1080,7 @@ function configureFlakyTestRetries (ctx, testSpecifications) {
   return {
     includesUnnamedProject,
     projectNames,
+    usesRetryMarker,
   }
 }
 
@@ -1201,11 +1213,7 @@ function getSortWrapper (sort, frameworkVersion) {
 
 function getFinishWrapper (exitOrClose) {
   return async function () {
-    if (finishedSessionContexts.has(this)) {
-      return exitOrClose.apply(this, arguments)
-    }
-
-    if (!testSessionFinishCh.hasSubscribers) {
+    if (finishedSessionContexts.has(this) || !testSessionFinishCh.hasSubscribers) {
       return exitOrClose.apply(this, arguments)
     }
     finishedSessionContexts.add(this)
@@ -1230,15 +1238,15 @@ function getFinishWrapper (exitOrClose) {
     const tests = getTypeTasks(this.state.getFiles())
     const hasExecutedTests = tests.some(test =>
       test.mode !== 'skip' && test.mode !== 'todo' &&
-      test.result?.state !== 'skip' && test.result?.state !== 'todo'
+      (test.result?.state === 'pass' || test.result?.state === 'fail')
     )
     const hasErrors = hasRunError || error ||
       this.state.getCountOfFailedTests() > 0 || this.state.getUnhandledErrors().length > 0
-    const testSessionEmptyReason = !hasErrors && !hasExecutedTests
-      ? (isEmptyShard
-          ? 'zero_test_shard'
-          : tests.length > 0 || skippedSuites.length > 0 ? 'all_tests_skipped' : 'zero_tests')
-      : undefined
+    const testSessionEmptyReason = hasErrors || hasExecutedTests
+      ? undefined
+      : isEmptyShard
+        ? 'zero_test_shard'
+        : tests.length > 0 || skippedSuites.length > 0 ? 'all_tests_skipped' : 'zero_tests'
     const status = hasErrors ? 'fail' : (testSessionEmptyReason ? 'skip' : 'pass')
     const flushPromise = getChannelPromise(testSessionFinishCh, {
       status,
@@ -1281,6 +1289,13 @@ function getFinishWrapper (exitOrClose) {
 function getCliOrStartVitestWrapper (frameworkVersion) {
   return function (oldCliOrStartVitest) {
     return function (...args) {
+      const entrypoint = oldCliOrStartVitest.name
+      if (testSessionStartCh.hasSubscribers && (entrypoint === 'createVitest' || entrypoint === 'startVitest')) {
+        const isCreate = entrypoint === 'createVitest'
+        const isLegacySignature = typeof args[0] === 'string'
+        const overridesIndex = isCreate ? (isLegacySignature ? 2 : 1) : (isLegacySignature ? 3 : 2)
+        args[overridesIndex] = noWorkerInit.addBrowserAnnotationPlugin(args[overridesIndex])
+      }
       if (!testSessionStartCh.hasSubscribers || isSessionStarted) {
         return oldCliOrStartVitest.apply(this, args)
       }
@@ -1758,8 +1773,7 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
 }
 
 async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker, files = result?.files) {
-  if (!testSuiteFinishCh.hasSubscribers) return
-  if (!Array.isArray(result?.files) || !Array.isArray(files)) return
+  if (!testSuiteFinishCh.hasSubscribers || !Array.isArray(result?.files) || !Array.isArray(files)) return
 
   const setupState = ctx && mainProcessSetupStates.get(ctx)
   if (
@@ -2080,6 +2094,16 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   if (createVitestExport) {
     shimmer.wrap(cliApiPackage, createVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
   }
+  // Newer CLI chunks call the bundled namespace instead of the direct function exports.
+  for (const [key, value] of Object.entries(cliApiPackage)) {
+    if (value && typeof value === 'object' && typeof value.startVitest === 'function') {
+      cliApiPackage[key] = {
+        ...value,
+        startVitest: cliApiPackage[startVitestExport.key],
+      }
+      if (createVitestExport) cliApiPackage[key].createVitest = cliApiPackage[createVitestExport.key]
+    }
+  }
   wrapMessagePortOn()
 
   wrapVitestInternals(cliApiPackage, frameworkVersion)
@@ -2239,8 +2263,6 @@ addHook({
   versions: ['>=5.0.0'],
   filePattern: 'dist/chunks/index.*',
 }, (vitestPackage, frameworkVersion) => {
-  if (!getVitestExport(vitestPackage)) return vitestPackage
-
   wrapVitestInternals(vitestPackage, frameworkVersion)
 
   const typecheckPoolWorker = getTypecheckPoolWorkerExport(vitestPackage)

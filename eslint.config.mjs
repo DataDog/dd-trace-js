@@ -78,6 +78,7 @@ const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   'packages/dd-trace/src/config/stable.js',
   'packages/dd-trace/src/debugger/index.js',
   'packages/dd-trace/src/log/index.js',
+  'packages/dd-trace/src/plugins/util/test.js', // Reads DDTest's artifact locator and its existing alias.
   'packages/dd-trace/src/telemetry/session-propagation.js',
 ]
 
@@ -783,6 +784,7 @@ export default [
       'unicorn/prefer-abort-signal-any': 'off', // Node.js 18.17
       'unicorn/prefer-dispose': 'off', // Explicit resource management (newer Node.js)
       'unicorn/prefer-group-by': 'off', // Node.js 21
+      'unicorn/prefer-iterator-zip': 'off', // Iterator.zip is unavailable in Node.js 18
       'unicorn/prefer-iterator-helpers': 'off', // Iterator helpers (Node.js 22)
       'unicorn/prefer-iterator-to-array': 'off', // Iterator helpers (Node.js 22)
       'unicorn/prefer-iterator-to-array-at-end': 'off', // Iterator helpers (Node.js 22)
@@ -790,7 +792,10 @@ export default [
       'unicorn/prefer-promise-with-resolvers': 'off', // few | Promise.withResolvers (Node.js 22)
       'unicorn/prefer-set-methods': 'off', // Set methods (Node.js 22)
       'unicorn/prefer-temporal': 'off', // Temporal is not stable on supported Node.js
+      'unicorn/prefer-url-can-parse': 'off', // Node.js 18.17
       'unicorn/prefer-uint8array-base64': 'off', // Uint8Array base64 (Node.js 22)
+
+      'unicorn/prefer-default-parameters': ['error', { checkFallbackExpressions: false }],
 
       // These rules could potentially be evaluated again at a much later point
       'unicorn/class-reference-in-static-methods': 'off', // few
@@ -827,6 +832,7 @@ export default [
       'unicorn/max-nested-calls': 'off', // Questionable benefit
       'unicorn/no-array-reduce': 'off', // Questionable benefit
       'unicorn/no-array-splice': 'off', // toSpliced copies the whole array (perf)
+      'unicorn/no-asterisk-prefix-in-documentation-comments': 'off', // Preserve standard JSDoc formatting
       'unicorn/no-break-in-nested-loop': 'off', // Conflicts with our performance-oriented loops
       'unicorn/no-global-object-property-assignment': 'off', // We use globalThis[Symbol.for('dd-trace')]
       'unicorn/no-negated-array-predicate': 'off', // Predicate inversion is harder to read and creates churn
@@ -903,6 +909,7 @@ export default [
       'eslint.config.mjs',
     ],
     rules: {
+      'unicorn/no-top-level-side-effects': 'off', // Constructing the exported lint configuration runs helpers
       'eslint-rules/eslint-config-names-sync': ['error', {
         indexDtsPaths: ['index.d.ts', 'index.d.v5.ts'],
       }],

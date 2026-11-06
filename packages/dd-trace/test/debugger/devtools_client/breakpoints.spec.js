@@ -505,6 +505,37 @@ describe('breakpoints', function () {
         })
     })
 
+    it('should report why enabling the debugger failed for every probe', async function () {
+      const enableError = new Error('Inspector method "Debugger.enable" requires an active inspector')
+      sessionMock.post.withArgs('Debugger.enable').rejects(enableError)
+      // No script is loaded until the debugger has been enabled
+      stateMock.findScriptFromPartialPath.returns(undefined)
+
+      await assert.rejects(addProbe(), enableError)
+      await assert.rejects(addProbe({ id: 'probe-2' }), enableError)
+
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.enable')
+      sinon.assert.calledTwice(sessionMock.post)
+      sinon.assert.notCalled(stateMock.findScriptFromPartialPath)
+    })
+
+    it('should add the next probe once enabling the debugger succeeds', async function () {
+      const enableError = new Error('Inspector method "Debugger.enable" requires an active inspector')
+      sessionMock.post.withArgs('Debugger.enable')
+        .onFirstCall().rejects(enableError)
+        .onSecondCall().resolves({})
+
+      await assert.rejects(addProbe(), enableError)
+      await addProbe({ id: 'probe-2' })
+
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint')
+      sinon.assert.calledThrice(sessionMock.post)
+      assert.ok(stateMock.breakpointToProbes.get(breakpointId)?.has('probe-2'))
+    })
+
     it('should handle condition compilation errors', async function () {
       const config = {
         when: {

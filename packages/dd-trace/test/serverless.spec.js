@@ -15,6 +15,7 @@ require('./setup/core')
 
 const {
   enableGCPPubSubPushSubscription,
+  getIsAzureContainerApp,
 } = require('../src/serverless')
 const { registerVercelTelemetryRetention } = require('../src/serverless/vercel')
 const { flushServerlessTelemetry } = require('../src/flush')
@@ -150,6 +151,52 @@ describe('enableGCPPubSubPushSubscription', () => {
     process.env.DD_TRACE_GCP_PUBSUB_PUSH_ENABLED = 'false'
     assert.strictEqual(enableGCPPubSubPushSubscription(), false)
   })
+})
+
+describe('getIsAzureContainerApp', () => {
+  const originalContainerAppName = process.env.CONTAINER_APP_NAME
+
+  afterEach(() => {
+    if (originalContainerAppName === undefined) delete process.env.CONTAINER_APP_NAME
+    else process.env.CONTAINER_APP_NAME = originalContainerAppName
+  })
+
+  it('is false when CONTAINER_APP_NAME is not set', () => {
+    delete process.env.CONTAINER_APP_NAME
+    assert.strictEqual(getIsAzureContainerApp(), false)
+  })
+
+  it('is true when CONTAINER_APP_NAME is set', () => {
+    process.env.CONTAINER_APP_NAME = 'my-container-app'
+    assert.strictEqual(getIsAzureContainerApp(), true)
+  })
+
+  // Detection is presence-based (mirrors the agent's os.LookupEnv check), so an
+  // empty-but-present value still counts as running in a Container App.
+  it('is true when CONTAINER_APP_NAME is present but empty', () => {
+    process.env.CONTAINER_APP_NAME = ''
+    assert.strictEqual(getIsAzureContainerApp(), true)
+  })
+})
+
+describe('IS_AWS_LAMBDA', () => {
+  const environment = process.env
+
+  afterEach(() => {
+    process.env = environment
+  })
+
+  for (const name of [undefined, '', 'my-function']) {
+    it(`detects Lambda with AWS_LAMBDA_FUNCTION_NAME=${name}`, () => {
+      process.env = { ...environment }
+      if (name === undefined) {
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      } else {
+        process.env.AWS_LAMBDA_FUNCTION_NAME = name
+      }
+      assert.strictEqual(getServerlessFresh().IS_AWS_LAMBDA, name !== undefined)
+    })
+  }
 })
 
 describe('IS_STANDARD_AWS_LAMBDA', () => {

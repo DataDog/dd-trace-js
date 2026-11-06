@@ -1,0 +1,22 @@
+_v: 1
+name: jest
+display_name: Jest
+description: Instruments Jest test execution and lifecycle hooks for Test Optimization, including session and suite
+  results, code coverage, test selection and management, retries, failed-test replay, and test log correlation and
+  submission.
+packages:
+- name: '@happy-dom/jest-environment'
+- name: '@jest/core'
+- name: '@jest/test-sequencer'
+- name: '@jest/transform'
+- name: jest-circus
+- name: jest-config
+- name: jest-environment-jsdom
+- name: jest-environment-node
+- name: jest-runtime
+- name: jest-worker
+category:
+- log.emission
+- test.execution
+systems: []
+creation_date: '2020-12-11'

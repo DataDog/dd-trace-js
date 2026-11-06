@@ -143,6 +143,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "allowed": ".+",
         "default": null,
         "aliases": [
           "DATADOG_API_KEY"
@@ -497,6 +498,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "allowed": ".+",
         "default": null,
         "sensitive": true
       }
@@ -506,6 +508,14 @@
         "implementation": "A",
         "type": "string",
         "default": null
+      }
+    ],
+    "DD_BUNDLER_INJECT_GIT_METADATA": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "description": "When using the Datadog esbuild or webpack plugin, inject DD_GIT_COMMIT_SHA and DD_GIT_REPOSITORY_URL into the bundle. Set to false for stable artifact hashes across commits."
       }
     ],
     "DD_CIVISIBILITY_AGENTLESS_ENABLED": [
@@ -937,6 +947,17 @@
         "default": "false"
       }
     ],
+    "DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "namespace": "featureFlags",
+        "configurationNames": [
+          "featureFlags.enableEvaluationTelemetryOptOutParameter"
+        ],
+        "default": "false"
+      }
+    ],
     "DD_FEATURE_FLAGS_CONFIGURATION_SOURCE": [
       {
         "implementation": "A",
@@ -982,6 +1003,15 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
+        "namespace": "featureFlags"
+      }
+    ],
+    "DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "description": "Enable Feature Flagging exposure delivery to Datadog independently of flag evaluation and evaluation telemetry.",
         "namespace": "featureFlags"
       }
     ],
@@ -2130,6 +2160,22 @@
         "namespace": "testOptimization"
       }
     ],
+    "_DD_TEST_PARALLELIZATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "description": "Internal: Identifies test processes started by ddtest run."
+      }
+    ],
+    "_DD_TEST_PARALLELIZATION_METADATA_FILE": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "description": "Internal: Absolute path to planning metadata supplied by ddtest run."
+      }
+    ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",
@@ -3185,9 +3231,9 @@
     ],
     "DD_TRACE_HTTP_CLIENT_ERROR_STATUSES": [
       {
-        "implementation": "A",
+        "implementation": "D",
         "type": "string",
-        "default": "400-499"
+        "default": null
       }
     ],
     "DD_TRACE_HTTP_ENABLED": [
@@ -3973,6 +4019,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_REACT_ROUTER_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_REDIS_CLIENT_ENABLED": [
       {
         "implementation": "A",
@@ -4179,6 +4232,13 @@
       }
     ],
     "DD_TRACE_TEDIOUS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_TYPESAFE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

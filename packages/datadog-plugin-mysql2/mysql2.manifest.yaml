@@ -1,0 +1,12 @@
+_v: 1
+name: mysql2
+display_name: mysql2
+description: Instruments mysql2 queries, prepared statement execution, and pool connection acquisition, with database monitoring
+  propagation and SQL injection detection and protection.
+packages:
+- name: mysql2
+category:
+- db.client
+systems:
+- mysql
+creation_date: '2018-05-15'

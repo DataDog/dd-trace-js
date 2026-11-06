@@ -111,7 +111,7 @@ describe('integration coverage merge', () => {
     for (let i = 0; i < results.length; i++) {
       await fs.writeFile(path.join(v8Dir, `profile-${i}.json`), JSON.stringify({ result: results[i] }))
     }
-    const summary = await convertV8DirToReport(v8Dir, outputDir)
+    const summary = await convertV8DirToReport(v8Dir, outputDir, { lcovOnly: false })
     let coverage = {}
     if (summary.files > 0) {
       coverage = JSON.parse(await fs.readFile(path.join(outputDir, 'coverage-final.json'), 'utf8'))
@@ -185,6 +185,49 @@ describe('integration coverage merge', () => {
     assert.ok(functionMapEntry)
     assert.strictEqual(coverage[REPO_FILE].f[functionMapEntry[0]], 2)
     assert.deepStrictEqual(Object.values(coverage[REPO_FILE].b).flat(), [1, 1])
+  })
+
+  it('can emit only the LCOV report used by CI uploaders', async () => {
+    await fs.rm(v8Dir, { force: true, recursive: true })
+    await fs.rm(outputDir, { force: true, recursive: true })
+    await fs.mkdir(v8Dir, { recursive: true })
+    await fs.writeFile(path.join(v8Dir, 'profile.json'), JSON.stringify({
+      result: [scriptEntry(pathToFileURL(REPO_FILE).href, sourceLength)],
+    }))
+
+    await convertV8DirToReport(v8Dir, outputDir, { lcovOnly: true })
+
+    const outputFiles = await fs.readdir(outputDir)
+    assert.deepStrictEqual(outputFiles, ['lcov.info'])
+  })
+
+  it('defaults to LCOV-only in CI and the full report locally', async () => {
+    const originalCi = process.env.CI
+    await fs.rm(v8Dir, { force: true, recursive: true })
+    await fs.rm(outputDir, { force: true, recursive: true })
+    await fs.mkdir(v8Dir, { recursive: true })
+    await fs.writeFile(path.join(v8Dir, 'profile.json'), JSON.stringify({
+      result: [scriptEntry(pathToFileURL(REPO_FILE).href, sourceLength)],
+    }))
+
+    try {
+      process.env.CI = 'true'
+      await convertV8DirToReport(v8Dir, outputDir)
+      assert.deepStrictEqual(await fs.readdir(outputDir), ['lcov.info'])
+
+      delete process.env.CI
+      await fs.rm(outputDir, { force: true, recursive: true })
+      await convertV8DirToReport(v8Dir, outputDir)
+      assert.deepStrictEqual((await fs.readdir(outputDir)).sort(), [
+        'coverage-final.json',
+        'html',
+        'lcov.info',
+        'text-summary.txt',
+      ])
+    } finally {
+      if (originalCi === undefined) delete process.env.CI
+      else process.env.CI = originalCi
+    }
   })
 
   it('ignores malformed profiles and entries', async () => {

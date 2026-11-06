@@ -2,7 +2,6 @@
 
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, getHooks } = require('./helpers/instrument')
 const LAZY_DURABLE_PROMISE_METHODS = require('./aws-durable-execution-sdk-js-context-methods')
 
 for (const method of LAZY_DURABLE_PROMISE_METHODS) {
@@ -101,9 +100,4 @@ function observeDurablePromise (dp, onSettle) {
   if (!dp || typeof dp.then !== 'function') return
   instrumentDurablePromiseProto(Object.getPrototypeOf(dp))
   dp[ON_SETTLE] = onSettle
-}
-
-for (const hook of getHooks('@aws/durable-execution-sdk-js').values()) {
-  hook.file = null
-  addHook(hook, exports => exports)
 }

@@ -1,0 +1,12 @@
+_v: 1
+name: google-genai
+display_name: Google GenAI
+description: Instruments Google GenAI content generation, including streaming, and embedding requests with APM tracing
+  and LLM Observability.
+packages:
+- name: '@google/genai'
+category:
+- gen_ai
+systems:
+- gcp.gen_ai
+creation_date: '2025-12-05'

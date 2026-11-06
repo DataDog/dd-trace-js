@@ -23,6 +23,16 @@ const isValid = (server, args) => {
     (server.type === 'unary' ? typeof args[1] === 'function' : isEmitter(args[0])))
 }
 
+// A call can end through several paths (cancellation, error, handler callback);
+// only the first one may finish the span and set its status. Later terminal
+// events must not publish errors or status updates either: the span can still
+// be buffered by an unfinished child, so they would overwrite the final tags.
+function finish (ctx) {
+  if (ctx.finished) return
+  ctx.finished = true
+  finishChannel.publish(ctx)
+}
+
 function wrapHandler (func, name) {
   return function (call, callback) {
     if (!isValid(this, arguments)) return func.apply(this, arguments)
@@ -37,7 +47,7 @@ function wrapHandler (func, name) {
       try {
         const onCancel = () => {
           ctx.code = CANCELLED
-          finishChannel.publish(ctx)
+          finish(ctx)
         }
 
         // Finish the span if the call was cancelled.
@@ -96,12 +106,14 @@ function wrapSetupHandlers (setupHandlers) {
 function createWrapEmit (call, ctx, onCancel) {
   return function wrapEmit (emit) {
     return function (event, arg1) {
+      if (ctx.finished) return emit.apply(this, arguments)
+
       switch (event) {
         case 'error':
           ctx.error = arg1
           errorChannel.publish(ctx)
           ctx.code = arg1.code
-          finishChannel.publish(ctx)
+          finish(ctx)
           call.removeListener('cancelled', onCancel)
           break
         // Streams are always cancelled before `finish` since 1.10.0 so we have
@@ -111,7 +123,7 @@ function createWrapEmit (call, ctx, onCancel) {
             updateChannel.publish(call.status)
           }
           if (!call.status || call.status.code === 0) {
-            finishChannel.publish(ctx)
+            finish(ctx)
           }
           call.removeListener('cancelled', onCancel)
           break
@@ -132,6 +144,9 @@ function wrapStream (call, ctx, onCancel) {
 
 function wrapCallback (callback = () => {}, call, ctx, onCancel) {
   return shimmer.wrapFunction(callback, callback => function (err, value, trailer, flags) {
+    if (ctx.finished) {
+      return asyncStartChannel.runStores(ctx, () => callback.apply(this, arguments))
+    }
     if (err) {
       ctx.error = err
       errorChannel.publish(ctx)
@@ -140,7 +155,7 @@ function wrapCallback (callback = () => {}, call, ctx, onCancel) {
       ctx.trailer = trailer
     }
 
-    finishChannel.publish(ctx)
+    finish(ctx)
 
     call.removeListener('cancelled', onCancel)
 
@@ -153,8 +168,10 @@ function wrapCallback (callback = () => {}, call, ctx, onCancel) {
 
 function wrapSendStatus (sendStatus, ctx) {
   return function (status) {
-    ctx.status = status
-    updateChannel.publish(ctx)
+    if (!ctx.finished) {
+      ctx.status = status
+      updateChannel.publish(ctx)
+    }
 
     return sendStatus.apply(this, arguments)
   }

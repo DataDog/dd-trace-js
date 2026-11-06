@@ -12,10 +12,10 @@ const { nowUnixNano } = require('./time')
  * @param {(error: Error | null) => void} [done]
  * @param {Error | null} [error]
  */
-function callDone (done, error) {
+function callDone (done, error = null) {
   if (!done) return
   try {
-    done(error ?? null)
+    done(error)
   } catch (callbackError) {
     log.error('Error completing OTLP metrics lifecycle callback:', callbackError)
   }
@@ -162,8 +162,7 @@ class PeriodicMetricReader {
   addBatchObservableCallback (callback, observables) {
     if (typeof callback !== 'function') return
     const instruments = new Set(observables?.filter(isObservableInstrument))
-    if (instruments.size === 0) return
-    if (this.#findBatchCallback(callback, instruments) !== -1) return
+    if (instruments.size === 0 || this.#findBatchCallback(callback, instruments) !== -1) return
     this.#batchCallbacks.push({ callback, instruments })
   }
 

@@ -92,8 +92,10 @@ function Hook (modules, options, onrequire) {
     let name, basedir, hooks
     // return known patched modules immediately
     if (cache[moduleId]) {
-      // require.cache was potentially altered externally
-      const cacheEntry = require.cache[filename]
+      // Use Node's cache: bundlers replace require.cache with their own factory cache,
+      // whose not-yet-evaluated external modules can still have empty exports.
+      // @ts-expect-error - Module._cache is not typed
+      const cacheEntry = Module._cache[filename]
       if (cacheEntry && cacheEntry.exports !== cache[moduleId].original) {
         return cacheEntry.exports
       }

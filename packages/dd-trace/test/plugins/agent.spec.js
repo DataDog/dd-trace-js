@@ -28,6 +28,49 @@ describe('test agent helper', () => {
       assert.strictEqual(agent.server.address().address, '127.0.0.1')
     })
 
+    for (const semantics of ['true', 'false']) {
+      it(`receives OTLP trace requests with OTel semantics=${semantics}`, async () => {
+        const environment = process.env
+        process.env = {
+          ...environment,
+          OTEL_TRACES_EXPORTER: 'otlp',
+          DD_TRACE_OTEL_SEMANTICS_ENABLED: semantics,
+        }
+
+        try {
+          const tracer = await agent.load([])
+          const paths = []
+          agent.server.on('request', request => {
+            if (request.method === 'POST') paths.push(request.url)
+          })
+          const traceReceived = agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces.length, 1)
+            const [root, child] = traces[0]
+            assert.strictEqual(root.resource, 'otlp-root')
+            assert.strictEqual(child.resource, 'otlp-child')
+            assert.strictEqual(root.service, 'test')
+            assert.strictEqual(root.parent_id, 0n)
+            assert.strictEqual(child.parent_id, root.span_id)
+            assert.strictEqual(child.trace_id, root.trace_id)
+            assert.strictEqual(root.meta['span.kind'], 'client')
+            assert.strictEqual(root.meta['test.tag'], 'value')
+            assert.strictEqual(root.metrics._sampling_priority_v1, 2)
+            assert.ok(root.duration >= 0)
+            assert.ok(root.start > 0)
+          })
+
+          const tags = { 'span.kind': 'client', 'test.tag': 'value', 'sampling.priority': 2 }
+          tracer.trace('otlp-root', { tags }, () => {
+            tracer.trace('otlp-child', () => {})
+          })
+          await traceReceived
+          assert.deepStrictEqual(paths, ['/v1/traces'])
+        } finally {
+          process.env = environment
+        }
+      })
+    }
+
     it('reuses the cached tracer for repeat loads without close', async () => {
       const first = await agent.load([])
       const second = await agent.load([])

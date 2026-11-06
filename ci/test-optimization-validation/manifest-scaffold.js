@@ -750,8 +750,13 @@ function hasCucumberBrowserSupport (files, retainedInputs, projectRoot) {
 function isTestFile (filename, source, framework, projectRoot, allowDirectoryConvention) {
   const basename = path.basename(filename)
   const normalized = filename.replaceAll('\\', '/')
-  if (normalized.includes('/dd-test-optimization-validation-')) return false
-  if (TYPE_ONLY_TEST_PATTERN.test(basename) || TYPE_ONLY_DIRECTORY_PATTERN.test(normalized)) return false
+  if (
+    normalized.includes('/dd-test-optimization-validation-') ||
+    TYPE_ONLY_TEST_PATTERN.test(basename) ||
+    TYPE_ONLY_DIRECTORY_PATTERN.test(normalized)
+  ) {
+    return false
+  }
   if (framework === 'cucumber') return cucumber.isTestFile(filename)
   if (framework === 'cypress') return cypress.isTestFile(basename, path.dirname(filename), projectRoot)
   if (framework === 'playwright') return playwright.isTestFile(basename, path.dirname(filename), projectRoot)
@@ -887,7 +892,7 @@ function findPreferredRepresentativeRoot (projectRoot, repositoryRoot) {
 /**
  * Normalizes repository and package names for exact identity comparison.
  *
- * @param {string} value package identity
+ * @param {unknown} value package identity from manifest metadata
  */
 function normalizeProjectIdentity (value) {
   const unscoped = String(value || '').toLowerCase().replace(/^@[^/]+\//, '')

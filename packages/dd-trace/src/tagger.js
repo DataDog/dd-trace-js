@@ -2,13 +2,13 @@
 
 // TODO: Rename and move file. This is a general purpose helper for adding tags to a carrier.
 
-function addNonEmpty (carrier, key, value) {
+function addNonEmpty (carrier, key, value, decode) {
   if (key !== '') {
-    carrier[key] = value
+    carrier[decode ? decodeURIComponent(key) : key] = decode ? decodeURIComponent(value) : value
   }
 }
 
-function add (carrier, keyValuePairs, valueSeparator = ':') {
+function add (carrier, keyValuePairs, valueSeparator = ':', decode = false) {
   if (typeof keyValuePairs === 'string') {
     let valueStart = 0
     let keyStart = 0
@@ -25,7 +25,8 @@ function add (carrier, keyValuePairs, valueSeparator = ':') {
         addNonEmpty(
           carrier,
           keyValuePairs.slice(keyStart, valueStart).trim(),
-          keyValuePairs.slice(valueStart + 1, i).trim()
+          keyValuePairs.slice(valueStart + 1, i).trim(),
+          decode
         )
         keyStart = i + 1
         valueStart = 0
@@ -37,7 +38,8 @@ function add (carrier, keyValuePairs, valueSeparator = ':') {
       addNonEmpty(
         carrier,
         keyValuePairs.slice(keyStart, valueStart).trim(),
-        keyValuePairs.slice(valueStart + 1).trim()
+        keyValuePairs.slice(valueStart + 1).trim(),
+        decode
       )
     }
   } else if (Array.isArray(keyValuePairs)) {

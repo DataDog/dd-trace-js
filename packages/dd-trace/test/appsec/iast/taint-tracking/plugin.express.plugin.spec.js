@@ -1,5 +1,6 @@
 'use strict'
 
+const { METHODS } = require('node:http')
 const { URL } = require('url')
 const { prepareTestServerForIastInExpress } = require('../utils')
 const { withVersions } = require('../../../setup/mocha')
@@ -10,6 +11,12 @@ function noop () {}
 describe('Taint tracking plugin sources express tests', () => {
   withVersions('express', 'express', '>=4.8.0', version => {
     prepareTestServerForIastInExpress('in express', version,
+      (app, listener) => {
+        if (METHODS.includes('QUERY')) {
+          const bodyParser = require('../../../../../../versions/body-parser').get()
+          app.query('/query', bodyParser.json(), listener)
+        }
+      },
       (testThatRequestHasVulnerability, _, config) => {
         describe('tainted body', () => {
           function makePostRequest (done) {
@@ -22,6 +29,29 @@ describe('Taint tracking plugin sources express tests', () => {
             const childProcess = require('child_process')
             childProcess.exec(req.body.command, noop)
           }, 'COMMAND_INJECTION', 1, noop, makePostRequest)
+        })
+
+        describe('tainted QUERY body', () => {
+          before(function () {
+            if (!METHODS.includes('QUERY')) {
+              // Older Node.js HTTP parsers do not support QUERY.
+              this.skip()
+            }
+          })
+
+          testThatRequestHasVulnerability({
+            fn: req => {
+              const childProcess = require('node:child_process')
+              childProcess.exec(req.body.command, noop)
+            },
+            vulnerability: 'COMMAND_INJECTION',
+            occurrences: 1,
+            makeRequest: done => {
+              httpRequest({
+                url: `http://localhost:${config.port}/query`, method: 'QUERY', data: { command: 'echo 1' },
+              }).catch(done)
+            },
+          })
         })
 
         describe('tainted query param', () => {
