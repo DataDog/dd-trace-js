@@ -185,28 +185,35 @@ describe('generate supported integrations', () => {
     assert.deepStrictEqual(rows, [supportedIntegration('pino-pretty', 'pino', '>=3 || 1 - 2', ['8.0.0'])])
   })
 
-  it('reports only the WebdriverIO versions installed by each runtime job', async () => {
-    const { rows } = await generateSupportedIntegrations({
-      nodeVersions: ['18.20.8', '26.2.0'],
-      plugins: new Map([['@wdio/local-runner', 'mocha']]),
-      getPackageVersions: async () => ['9.0.0', '9.33.1', latestVersions['@wdio/local-runner']],
-    })
+  for (const nodeRange of ['>=18', '>=22']) {
+    it(`reports WebdriverIO with the default Node catalog and engines ${nodeRange}`, async () => {
+      const { rows } = await generateSupportedIntegrations({
+        packageInfo: { ...require('../../../package.json'), engines: { node: nodeRange } },
+        plugins: new Map([['@wdio/local-runner', 'mocha']]),
+        getPackageVersions: async () => ['9.0.0', '9.33.1', latestVersions['@wdio/local-runner']],
+      })
 
-    assert.deepStrictEqual(rows, [{
-      dependencyName: '@wdio/local-runner',
-      integrationName: 'mocha',
-      autoInstrumented: true,
-      versions: [{
+      const versions = [{
         supportedRange: '>=9.0.0',
         tested: [latestVersions['@wdio/local-runner']],
-        testedRuntimes: { node: ['26.2.0'] },
-      }, {
-        supportedRange: '>=9.0.0',
-        tested: ['9.0.0'],
-        testedRuntimes: { node: ['18.20.8'] },
-      }],
-    }])
-  })
+        testedRuntimes: { node: ['22.23.4'] },
+      }]
+      if (nodeRange === '>=18') {
+        versions.push({
+          supportedRange: '>=9.0.0',
+          tested: ['9.0.0'],
+          testedRuntimes: { node: ['18.20.8'] },
+        })
+      }
+
+      assert.deepStrictEqual(rows, [{
+        dependencyName: '@wdio/local-runner',
+        integrationName: 'mocha',
+        autoInstrumented: true,
+        versions,
+      }])
+    })
+  }
 
   it('keeps umbrella package aliases out of the runtime hooks and plugin registry', () => {
     const hooks = require('../../datadog-instrumentations/src/helpers/hooks')
