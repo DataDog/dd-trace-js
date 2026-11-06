@@ -216,7 +216,7 @@ describe('getCommitsRevList', () => {
     command.onFirstCall().returns('b'.repeat(40) + '\n')
     command.onSecondCall().throws(new Error('selected commit disappeared'))
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git', {
-      './git-cache': { cachedExec: command },
+      'node:child_process': { execFileSync: command },
     })
     assert.strictEqual(getCommitsRevList([], ['a'.repeat(40), 'b'.repeat(40)]), null)
   })
@@ -226,8 +226,8 @@ describe('getCommitsRevList', () => {
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        './git-cache': {
-          cachedExec: (command, flags, options) =>
+        'node:child_process': {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, options),
         },
         '../../log': {
@@ -244,8 +244,8 @@ describe('getCommitsRevList', () => {
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        './git-cache': {
-          cachedExec: (command, flags, options) =>
+        'node:child_process': {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options),
         },
         '../../log': {
@@ -260,8 +260,8 @@ describe('getCommitsRevList', () => {
   it('returns null if the repository is bigger than the limit', () => {
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        './git-cache': {
-          cachedExec: (command, flags, options) =>
+        'node:child_process': {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options),
         },
       }
@@ -273,8 +273,8 @@ describe('getCommitsRevList', () => {
   it('returns null if execFileSync fails for whatever reason', () => {
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        './git-cache': {
-          cachedExec: () => { throw new Error('error!') },
+        'node:child_process': {
+          execFileSync: () => { throw new Error('error!') },
         },
       }
     )
@@ -1602,6 +1602,28 @@ done
 
     assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
     assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
+  })
+
+  it('discovers a selected commit after a cached miss and shallow fetch', () => {
+    const repo = path.resolve(__dirname, '../../../../..')
+    const script = `
+      const assert = require('node:assert/strict')
+      const path = require('node:path')
+      const { execFileSync } = require('node:child_process')
+      const [repo, sha, cacheDir] = process.argv.slice(1)
+      const config = require(path.join(repo, 'packages/dd-trace/src/config'))()
+      config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = true
+      config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = cacheDir
+      const { getLatestCommits, getCommitsRevList } = require(path.join(repo, 'packages/dd-trace/src/plugins/util/git'))
+      assert.deepStrictEqual(getLatestCommits(sha), [])
+      assert.strictEqual(getCommitsRevList([], [sha]), null)
+      execFileSync('git', ['fetch', '--depth=1', 'origin', sha], { stdio: 'pipe' })
+      assert.strictEqual(getLatestCommits(sha)[0], sha)
+      assert.ok(getCommitsRevList([], [sha]).includes(sha))
+    `
+    execFileSync(process.execPath, [
+      '-e', script, repo, headSha, path.join(directory, 'git-cache'),
+    ], { cwd: checkout, stdio: 'pipe' })
   })
 
   for (const missingObject of ['parent', 'tree']) {

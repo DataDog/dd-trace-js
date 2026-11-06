@@ -230,12 +230,13 @@ function getLatestCommits (commitSha) {
   try {
     const flags = ['log', '--format=%H', '-n 1000', '--since="1 month ago"']
     if (commitSha) flags.push(commitSha, '--')
-    const result = cachedExec('git', flags)
+    const result = execFileSync('git', flags, { stdio: 'pipe' })
       .toString()
       .split('\n')
       .filter(Boolean)
     if (commitSha && !result.includes(commitSha)) {
-      const selectedCommit = cachedExec('git', ['rev-parse', '--verify', commitSha + '^{commit}']).toString().trim()
+      const selectedCommit = execFileSync('git', ['rev-parse', '--verify', commitSha + '^{commit}'])
+        .toString().trim()
       if (selectedCommit !== commitSha) return []
       result.unshift(commitSha)
     }
@@ -393,7 +394,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_objects' })
   const startTime = Date.now()
   try {
-    result = cachedExec(
+    result = execFileSync(
       'git',
       [
         'rev-list',
@@ -414,7 +415,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
     const outsideWindow = commitsToInclude.filter(commit =>
       validateGitCommitSha(commit) && !objects.has(commit) && !excluded.has(commit))
     if (outsideWindow.length) {
-      const selectedObjects = cachedExec('git', [
+      const selectedObjects = execFileSync('git', [
         'rev-list', '--objects', '--no-object-names', '--filter=blob:none', '--no-walk=unsorted',
         ...outsideWindow,
       ], { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER }).toString().split('\n').filter(Boolean)
