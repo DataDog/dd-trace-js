@@ -10,13 +10,14 @@ const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
 
 const log = require('../../../log')
-const { validateGitRepositoryUrl } = require('../../../plugins/util/user-provided-git')
+const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../plugins/util/user-provided-git')
+const { GIT_COMMIT_SHA } = require('../../../plugins/util/tags')
 const { filterSensitiveInfoFromRepository } = require('../../../plugins/util/url')
 const { getSegment } = require('../../../util')
 const {
   getLatestCommits,
   getRepositoryUrl,
-  getRepositoryRoot,
+  getGitMetadata,
   generatePackFilesForCommits,
   getCommitsRevList,
   isShallowRepository,
@@ -284,7 +285,8 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
 
   let latestCommits = getLatestCommits(configCommitSha)
   if (!latestCommits.length) {
-    return callback(getRepositoryRoot() ? new Error('Selected Git commit is unavailable') : null)
+    const localSha = getGitMetadata({})[GIT_COMMIT_SHA]
+    return callback(validateGitCommitSha(localSha) ? new Error('Selected Git commit is unavailable') : null)
   }
   log.debug('There were %s commits since last month.', latestCommits.length)
 

@@ -636,39 +636,43 @@ describe('CI Visibility Exporter', () => {
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       })
-      it('requests skippable suites without a checkout when require_git is false', (done) => {
-        cp.execFileSync.withArgs('git', sinon.match.array.startsWith(['log'])).returns('')
-        cp.execFileSync.withArgs('git', ['rev-parse', '--show-toplevel']).returns('')
-        nock(url)
-          .post('/api/v2/libraries/tests/services/setting')
-          .reply(200, JSON.stringify({
-            data: {
-              attributes: {
-                itr_enabled: true,
-                require_git: false,
-                tests_skipping: true,
+      for (const repositoryRoot of ['', '/checkout']) {
+        const checkoutDescription = repositoryRoot ? 'unreadable checkout' : 'missing checkout'
+        it(`requests skippable suites with ${checkoutDescription} when require_git is false`, (done) => {
+          cp.execFileSync.withArgs('git', sinon.match.array.startsWith(['log'])).returns('')
+          cp.execFileSync.withArgs('git', ['rev-parse', '--show-toplevel']).returns(repositoryRoot)
+          cp.execFileSync.withArgs('git', ['rev-parse', 'HEAD']).returns('')
+          nock(url)
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  itr_enabled: true,
+                  require_git: false,
+                  tests_skipping: true,
+                },
               },
-            },
-          }))
-        const skippableScope = nock(url)
-          .post('/api/v2/ci/tests/skippable')
-          .reply(200, JSON.stringify({ data: [] }))
-        const ciVisibilityExporter = new CiVisibilityExporter({
-          url,
-          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
-        })
-        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+            }))
+          const skippableScope = nock(url)
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({ data: [] }))
+          const ciVisibilityExporter = new CiVisibilityExporter({
+            url,
+            testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+          })
+          ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
 
-        ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
-          assert.strictEqual(settingsErr, null)
-          ciVisibilityExporter.getSkippableSuites({}, (skippableErr, skippableSuites) => {
-            assert.strictEqual(skippableErr, null)
-            assert.deepStrictEqual(skippableSuites, [])
-            assert.strictEqual(skippableScope.isDone(), true)
-            done()
+          ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
+            assert.strictEqual(settingsErr, null)
+            ciVisibilityExporter.getSkippableSuites({}, (skippableErr, skippableSuites) => {
+              assert.strictEqual(skippableErr, null)
+              assert.deepStrictEqual(skippableSuites, [])
+              assert.strictEqual(skippableScope.isDone(), true)
+              done()
+            })
           })
         })
-      })
+      }
       it('does not request skippable suites when git metadata upload fails with require_git false', (done) => {
         // Regression: the live settings path starts `sendGitMetadata` even when the
         // backend returns `require_git: false`. `getSkippableSuites` awaits

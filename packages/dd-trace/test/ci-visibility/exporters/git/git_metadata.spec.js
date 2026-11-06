@@ -31,7 +31,7 @@ describe('git_metadata', () => {
 
   let getLatestCommitsStub
   let getRepositoryUrlStub
-  let getRepositoryRootStub
+  let getGitMetadataStub
   let getCommitsRevListStub
   let generatePackFilesForCommitsStub
   let isShallowRepositoryStub
@@ -56,7 +56,7 @@ describe('git_metadata', () => {
     getLatestCommitsStub = sinon.stub().returns(latestCommits)
     getCommitsRevListStub = sinon.stub().returns(latestCommits)
     getRepositoryUrlStub = sinon.stub().returns('git@github.com:DataDog/dd-trace-js.git')
-    getRepositoryRootStub = sinon.stub().returns('/checkout')
+    getGitMetadataStub = sinon.stub().returns({ 'git.commit.sha': 'b'.repeat(40) })
     isShallowRepositoryStub = sinon.stub().returns(false)
     unshallowRepositoryStub = sinon.stub()
 
@@ -73,7 +73,7 @@ describe('git_metadata', () => {
     const gitStubs = {
       getLatestCommits: getLatestCommitsStub,
       getRepositoryUrl: getRepositoryUrlStub,
-      getRepositoryRoot: getRepositoryRootStub,
+      getGitMetadata: getGitMetadataStub,
       generatePackFilesForCommits: generatePackFilesForCommitsStub,
       getCommitsRevList: getCommitsRevListStub,
       isShallowRepository: isShallowRepositoryStub,
@@ -164,7 +164,7 @@ describe('git_metadata', () => {
 
   it('allows provider-backed optimization when the local checkout cannot be read', (done) => {
     getLatestCommitsStub.returns([])
-    getRepositoryRootStub.returns('')
+    getGitMetadataStub.returns({})
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false },
       'https://example.com/provider.git', (err) => {
         assert.strictEqual(err, null)
