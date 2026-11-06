@@ -14,6 +14,8 @@ on:
       - ".github/actions/datadog-ci/bun.lock"
       - ".github/all-green/package.json"
       - ".github/all-green/bun.lock"
+      - ".github/workflow-job-names/package.json"
+      - ".github/workflow-job-names/bun.lock"
       - "packages/dd-trace/test/plugins/versions/package.json"
       - ".github/actions/node/**"
       - ".github/audit-allowlist.json"

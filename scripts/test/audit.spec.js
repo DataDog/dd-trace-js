@@ -175,7 +175,14 @@ describe('scripts/audit.js', () => {
       assert.strictEqual(matches(filename), false, filename)
     }
 
-    const expectedDirectories = ['.', '.github/actions/datadog-ci', '.github/all-green', 'docs', 'vendor']
+    const expectedDirectories = [
+      '.',
+      '.github/actions/datadog-ci',
+      '.github/all-green',
+      '.github/workflow-job-names',
+      'docs',
+      'vendor',
+    ]
     const { strategy, steps } = auditWorkflow.jobs.dependencies
     assert.strictEqual(strategy, undefined)
     assert.deepStrictEqual(steps.at(-1), { run: 'node scripts/audit.js' })

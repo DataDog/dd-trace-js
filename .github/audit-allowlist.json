@@ -31,6 +31,10 @@
     ".github/actions/datadog-ci": {
       "level": "high",
       "allow": []
+    },
+    ".github/workflow-job-names": {
+      "level": "high",
+      "allow": []
     }
   }
 }
