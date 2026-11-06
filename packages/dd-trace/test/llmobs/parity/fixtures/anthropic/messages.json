@@ -1,0 +1,31 @@
+{
+  "responses": [
+    {
+      "match": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "status": 200,
+      "headers": {
+        "CF-Cache-Status": "DYNAMIC",
+        "CF-RAY": "88ea0b65093d42c0-EWR",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Date": "Tue, 04 Jun 2024 18:39:16 GMT",
+        "Server": "cloudflare",
+        "Transfer-Encoding": "chunked",
+        "anthropic-ratelimit-requests-limit": "5",
+        "anthropic-ratelimit-requests-remaining": "4",
+        "anthropic-ratelimit-requests-reset": "2024-06-04T18:39:57Z",
+        "anthropic-ratelimit-tokens-limit": "10000",
+        "anthropic-ratelimit-tokens-remaining": "10000",
+        "anthropic-ratelimit-tokens-reset": "2024-06-04T18:39:57Z",
+        "request-id": "req_01A5sdFuYR9e3QLNLdpFz2g5",
+        "via": "1.1 google",
+        "x-cloud-trace-context": "35c62374de27fdf8dc2fe68a12494c9e"
+      },
+      "body": "{\"id\":\"msg_01GxAX7svS7SnakLHe57YHrV\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-3-opus-20240229\",\"content\":[{\"type\":\"text\",\"text\":\"When Nietzsche famously declared \\\"God is dead\\\" in his\"}],\"stop_reason\":\"max_tokens\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":22,\"output_tokens\":15}}",
+      "stream": false
+    }
+  ]
+}
