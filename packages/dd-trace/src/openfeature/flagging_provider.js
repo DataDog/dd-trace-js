@@ -92,8 +92,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     } catch (error) {
       this.#configurationSourceError = error
       log.error('Unable to configure Feature Flagging configuration source', error)
-      if (config.startupLogs) {
-        // log.error prints only with debug logging enabled, so write the diagnostic like the startup logs do.
+      // log.error prints only with debug logging enabled, so write the diagnostic like the startup logs do.
+      // Only an explicit DD_TRACE_STARTUP_LOGS=false hides it: v5 disables startup logs by default.
+      if (config.startupLogs || config.getOrigin('startupLogs') === 'default') {
         warn(`DATADOG TRACER DIAGNOSTIC - Feature Flags: ${error.message}. ${SOURCE_UNAVAILABLE_CONSEQUENCE}`)
       }
     }

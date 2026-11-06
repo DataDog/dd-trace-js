@@ -250,7 +250,7 @@ describe('OpenFeature configuration source', () => {
     sinon.assert.notCalled(log.error)
   })
 
-  for (const apiKey of [undefined, '']) {
+  for (const apiKey of [undefined, '', '   ']) {
     it(`requires a Datadog API key for the default endpoint (DD_API_KEY=${JSON.stringify(apiKey)})`, () => {
       config.DD_API_KEY = apiKey
 
@@ -258,7 +258,8 @@ describe('OpenFeature configuration source', () => {
         () => configurationSource.create(config, sinon.spy()),
         {
           message: 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint; ' +
-            'set DD_API_KEY or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL',
+            'set DD_API_KEY, set DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, or set ' +
+            'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config to load flags through the Datadog Agent',
         }
       )
       sinon.assert.notCalled(AgentlessConfigurationSource)

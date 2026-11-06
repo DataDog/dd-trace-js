@@ -581,7 +581,8 @@ describe('FlaggingProvider Initialization Timeout', () => {
 
   describe('when the configuration source cannot start', () => {
     const SOURCE_ERROR_MESSAGE = 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint; ' +
-      'set DD_API_KEY or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL'
+      'set DD_API_KEY, set DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, or set ' +
+      'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config to load flags through the Datadog Agent'
     const DIAGNOSTIC = `DATADOG TRACER DIAGNOSTIC - Feature Flags: ${SOURCE_ERROR_MESSAGE}. ` +
       'Provider initialization fails and flag evaluations return their default values.'
 
@@ -592,6 +593,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
       sourceError = new Error(SOURCE_ERROR_MESSAGE)
       writer = { warn: sinon.spy() }
       mockConfig.startupLogs = true
+      mockConfig.getOrigin = name => name === 'startupLogs' ? 'env_var' : 'default'
 
       FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
         'dc-polyfill': {
@@ -643,7 +645,17 @@ describe('FlaggingProvider Initialization Timeout', () => {
       )
     })
 
-    it('leaves the cause to debug logging when startup logs are disabled', () => {
+    it('writes the cause when startup logs are off by default', () => {
+      mockConfig.startupLogs = false
+      mockConfig.getOrigin = name => name === 'startupLogs' ? 'default' : 'env_var'
+
+      // eslint-disable-next-line no-new
+      new FlaggingProvider(mockTracer, mockConfig)
+
+      sinon.assert.calledOnceWithExactly(writer.warn, DIAGNOSTIC)
+    })
+
+    it('does not write the diagnostic when startup logs are disabled', () => {
       mockConfig.startupLogs = false
 
       // eslint-disable-next-line no-new
@@ -660,10 +672,19 @@ describe('FlaggingProvider Initialization Timeout', () => {
     it('initializes from configuration applied before initialization', async () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
       provider.setConfiguration({ flags: {} })
+      // Listen on the provider: OpenFeature attaches its listeners only after initialize returns.
+      const errorEvent = sinon.spy()
+      provider.events.addHandler(ProviderEvents.Error, errorEvent)
 
-      await provider.initialize()
+      try {
+        await OpenFeature.setProviderAndWait(provider)
 
-      sinon.assert.notCalled(log.errorWithoutTelemetry)
+        assert.strictEqual(OpenFeature.getClient().providerStatus, ProviderStatus.READY)
+        sinon.assert.notCalled(errorEvent)
+        sinon.assert.notCalled(log.errorWithoutTelemetry)
+      } finally {
+        await OpenFeature.clearProviders()
+      }
     })
 
     it('puts the OpenFeature client in an error state that returns default values', async () => {

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const path = require('node:path')
+const { setTimeout: sleep } = require('node:timers/promises')
 const { after, afterEach, before, describe, it } = require('mocha')
 
 const { FakeAgent, sandboxCwd, spawnProc, stopProc, useSandbox } = require('../helpers')
@@ -67,8 +68,7 @@ describe('OpenFeature agentless configuration without an API key', () => {
   }
 
   it('fails initialization at once and writes the cause without debug logging', async () => {
-    // Explicit because v5 disables startup logs by default.
-    await start({ DD_TRACE_STARTUP_LOGS: 'true' })
+    await start({})
 
     await assert.rejects(
       sendCommand(proc, { command: 'access', waitForReady: true }),
@@ -78,7 +78,7 @@ describe('OpenFeature agentless configuration without an API key', () => {
 
     assert.strictEqual(details.value, DEFAULT_VALUE)
     assert.strictEqual(details.reason, 'ERROR')
-    assert.ok(output.includes(DIAGNOSTIC), output)
+    await waitForOutput(DIAGNOSTIC)
   })
 
   it('does not write the diagnostic when startup logs are disabled', async () => {
@@ -88,9 +88,24 @@ describe('OpenFeature agentless configuration without an API key', () => {
       sendCommand(proc, { command: 'access', waitForReady: true }),
       { message: new RegExp(`^Error: ${MISSING_API_KEY_MESSAGE}`) }
     )
+    // Output pipes and IPC are separate channels, so read the output only once the child has closed them.
+    const closed = once(proc, 'close')
+    await stopProc(proc)
+    await closed
 
     assert.ok(!output.includes(DIAGNOSTIC), output)
   })
+
+  /**
+   * @param {string} text
+   */
+  async function waitForOutput (text) {
+    const deadline = Date.now() + COMMAND_TIMEOUT_MS
+    while (!output.includes(text)) {
+      if (Date.now() > deadline) assert.fail(`Timed out waiting for ${JSON.stringify(text)} in:\n${output}`)
+      await sleep(10)
+    }
+  }
 })
 
 /**

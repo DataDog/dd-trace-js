@@ -11,7 +11,8 @@ const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is r
   'Configuration is disabled; flag evaluations will return their default values. Set ' +
   'DD_REMOTE_CONFIGURATION_ENABLED=true or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=agentless'
 const MISSING_API_KEY_MESSAGE = 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint; ' +
-  'set DD_API_KEY or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL'
+  'set DD_API_KEY, set DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL, or set ' +
+  'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=remote_config to load flags through the Datadog Agent'
 
 /**
  * @typedef {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} UniversalFlagConfiguration
@@ -46,7 +47,7 @@ function create (config, applyConfiguration) {
 
   const hasCustomEndpoint = Boolean(baseUrl?.trim())
 
-  if (!hasCustomEndpoint && !config.DD_API_KEY) {
+  if (!hasCustomEndpoint && !config.DD_API_KEY?.trim()) {
     throw new Error(MISSING_API_KEY_MESSAGE)
   }
 
