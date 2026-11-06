@@ -41,7 +41,11 @@ class FlagEvalEVPHook {
    * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
    */
   after (hookContext, evaluationDetails) {
-    this.#dependencyTelemetrySidecar?.associateDependencyEvaluations(hookContext, evaluationDetails.flagMetadata)
+    try {
+      this.#dependencyTelemetrySidecar?.associateDependencyEvaluations(hookContext, evaluationDetails?.flagMetadata)
+    } catch {
+      recordHookError()
+    }
     this.#captureDependencies(hookContext, evaluationDetails)
   }
 
@@ -62,31 +66,35 @@ class FlagEvalEVPHook {
    *
    * @param {import('@openfeature/core').HookContext} hookContext
    * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
-   * @param {boolean} [allowContextFallback=false]
+   * @param {boolean} [allowContextFallback]
    */
   #captureDependencies (hookContext, evaluationDetails, allowContextFallback = false) {
-    const sidecar = this.#dependencyTelemetrySidecar
-    if (!sidecar) return
-    let dependencies = sidecar.takeDependencyEvaluations(
-      evaluationDetails.flagMetadata,
-      hookContext
-    )
-    if (dependencies.length === 0 && allowContextFallback && !this.#closed &&
-      this.#writer.getUnavailableReason() === undefined && this.#writer.hasCapacity()) {
-      let context
-      try {
-        context = hookContext.context
-      } catch {
-        // An unreadable context cannot recover a batch whose normal aliases were replaced.
+    try {
+      const sidecar = this.#dependencyTelemetrySidecar
+      if (!sidecar) return
+      let dependencies = sidecar.takeDependencyEvaluations(
+        evaluationDetails?.flagMetadata,
+        hookContext
+      )
+      if (dependencies.length === 0 && allowContextFallback && !this.#closed &&
+        this.#writer.getUnavailableReason() === undefined && this.#writer.hasCapacity()) {
+        let context
+        try {
+          context = hookContext.context
+        } catch {
+          // An unreadable context cannot recover a batch whose normal aliases were replaced.
+        }
+        dependencies = sidecar.takeDependencyEvaluations(undefined, undefined, context)
       }
-      dependencies = sidecar.takeDependencyEvaluations(undefined, undefined, context)
-    }
-    for (const dependency of dependencies) {
-      this.#capture(dependency.flagKey, hookContext, {
-        ...dependency.details,
-        flagKey: dependency.flagKey,
-        flagMetadata: dependency.details.flagMetadata ?? {},
-      })
+      for (const dependency of dependencies) {
+        this.#capture(dependency.flagKey, hookContext, {
+          ...dependency.details,
+          flagKey: dependency.flagKey,
+          flagMetadata: dependency.details.flagMetadata ?? {},
+        })
+      }
+    } catch {
+      recordHookError()
     }
   }
 

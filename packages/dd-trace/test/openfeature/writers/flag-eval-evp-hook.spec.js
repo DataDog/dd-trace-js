@@ -164,6 +164,21 @@ describe('FlagEvalEVPHook', () => {
     assert.deepStrictEqual(writer.enqueue.args.map(([event]) => event.flagKey), ['prerequisite', 'root'])
   })
 
+  it('contains sidecar failures without changing the root evaluation', () => {
+    enable()
+    const hookContext = { flagKey: 'root', context: { targetingKey: 'customer' } }
+    const result = details()
+    dependencyTelemetrySidecar.associateDependencyEvaluations.throws(new Error('association failed'))
+    dependencyTelemetrySidecar.takeDependencyEvaluations.throws(new Error('drain failed'))
+
+    assert.doesNotThrow(() => hook.after(hookContext, result))
+    assert.doesNotThrow(() => hook.finally(hookContext, result))
+
+    sinon.assert.calledOnce(writer.enqueue)
+    assert.strictEqual(writer.enqueue.firstCall.args[0].flagKey, 'root')
+    assert.strictEqual(writer.enqueue.firstCall.args[0].variant, 'on')
+  })
+
   it('captures a root error after dependency graph failure', () => {
     enable()
     const result = details()
