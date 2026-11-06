@@ -26,9 +26,24 @@ function generateRewriterTargets () {
 
 function generateRewriterTargetPatterns () {
   const patterns = new Map()
+  /** @type {Map<string, Set<string>|undefined>} */
+  const sourceMatches = new Map()
   for (const { module: { name, filePath, sourceMatch } } of instrumentations) {
     if (!(filePath instanceof RegExp)) continue
-    patterns.set(`${name}|${filePath}`, { name, source: filePath.source, flags: filePath.flags, sourceMatch })
+    const key = `${name}|${filePath}`
+    // Descriptors of one package can target different chunks behind the same file pattern. A chunk is a target
+    // when it contains any of their markers, and a descriptor without a marker accepts every matching chunk.
+    if (!patterns.has(key)) sourceMatches.set(key, new Set())
+    if (sourceMatch === undefined) {
+      sourceMatches.set(key, undefined)
+    } else {
+      sourceMatches.get(key)?.add(sourceMatch)
+    }
+    patterns.set(key, { name, source: filePath.source, flags: filePath.flags })
+  }
+  for (const [key, pattern] of patterns) {
+    const markers = sourceMatches.get(key)
+    if (markers) pattern.sourceMatch = markers.size === 1 ? [...markers][0] : [...markers]
   }
   return `${JSON.stringify([...patterns.values()], null, 2)}\n`
 }

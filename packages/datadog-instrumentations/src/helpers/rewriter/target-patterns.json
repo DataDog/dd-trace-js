@@ -3,13 +3,19 @@
     "name": "@modelcontextprotocol/client",
     "source": "^dist\\/[\\w-]+\\.[cm]js$",
     "flags": "",
-    "sourceMatch": "var Client = class"
+    "sourceMatch": [
+      "var Client = class",
+      "var Protocol = class"
+    ]
   },
   {
     "name": "@modelcontextprotocol/server",
     "source": "^dist\\/[\\w-]+\\.[cm]js$",
     "flags": "",
-    "sourceMatch": "var McpServer = class"
+    "sourceMatch": [
+      "var McpServer = class",
+      "var Protocol = class"
+    ]
   },
   {
     "name": "react-router",

@@ -47,6 +47,21 @@ describe('rewriter targets', () => {
     )
   })
 
+  it('keeps every source marker of descriptors that share a hashed file pattern', () => {
+    assert.deepStrictEqual(
+      getRewriteTarget('file:///app/node_modules/@modelcontextprotocol/client/dist/src-ohtppAR3.cjs'),
+      {
+        moduleName: '@modelcontextprotocol/client',
+        filePath: 'dist/src-ohtppAR3.cjs',
+        sourceMatch: ['var Client = class', 'var Protocol = class'],
+      }
+    )
+    assert.strictEqual(
+      getRewriteTarget('file:///app/node_modules/@modelcontextprotocol/client/dist/nested/src-ohtppAR3.cjs'),
+      undefined
+    )
+  })
+
   it('finds nested rewrite targets', () => {
     assert.deepStrictEqual(
       getRewriteTarget('file:///app/node_modules/outer/node_modules/@langchain/core/dist/embeddings.js'),

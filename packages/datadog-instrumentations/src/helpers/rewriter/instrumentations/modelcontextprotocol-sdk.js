@@ -56,7 +56,22 @@ function serverEntries (methodName) {
   ]
 }
 
+const protocolEntries = [
+  ...['dist/esm/shared/protocol.js', 'dist/cjs/shared/protocol.js'].map(filePath => ({
+    module: { name: '@modelcontextprotocol/sdk', versionRange: '>=1.27.1', filePath },
+    functionQuery: { methodName: '_onclose', className: 'Protocol', kind: 'Sync' },
+    channelName: 'Protocol__onclose',
+  })),
+  // Both 2.x packages bundle their own Protocol copy.
+  ...['@modelcontextprotocol/client', '@modelcontextprotocol/server'].map(name => ({
+    module: { name, versionRange: '>=2', filePath: V2_CHUNK_FILE_PATH, sourceMatch: 'var Protocol = class' },
+    functionQuery: { methodName: '_onclose', className: 'Protocol', kind: 'Sync' },
+    channelName: 'Protocol__onclose',
+  })),
+]
+
 module.exports = [
   ...CLIENT_METHODS.flatMap(clientEntries),
   ...SERVER_METHODS.flatMap(serverEntries),
+  ...protocolEntries,
 ]

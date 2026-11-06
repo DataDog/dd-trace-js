@@ -126,6 +126,14 @@ function finishPendingServerRequests (protocol) {
   }
 }
 
+// On close, SDK 1.x clears the abort controller map, but 2.x swaps in a new map, so the wrapped `delete` never
+// runs for requests still in flight. Stateless 2.x servers close right after sending each response.
+for (const name of ['@modelcontextprotocol/sdk', '@modelcontextprotocol/client', '@modelcontextprotocol/server']) {
+  channel(`tracing:orchestrion:${name}:Protocol__onclose:start`).subscribe(({ self }) => {
+    finishPendingServerRequests(self)
+  })
+}
+
 function wrapProtocol (Protocol) {
   // Inject trace context into MCP request metadata so out-of-process MCP servers
   // can parent server spans to the client operation span.
@@ -188,15 +196,6 @@ function wrapProtocol (Protocol) {
   shimmer.wrap(Protocol.prototype, 'setRequestHandler', function (original) {
     return function setRequestHandlerWithTrace () {
       wrapRequestHandlers(this)
-      return original.apply(this, arguments)
-    }
-  })
-
-  // On close, SDK 1.x clears the abort controller map, but 2.x swaps in a new map, so the wrapped `delete` never
-  // runs for requests still in flight. Stateless 2.x servers close right after sending each response.
-  shimmer.wrap(Protocol.prototype, '_onclose', function (original) {
-    return function _oncloseWithTrace () {
-      finishPendingServerRequests(this)
       return original.apply(this, arguments)
     }
   })
@@ -271,7 +270,9 @@ addHook({
 })
 
 // SDK 2.x splits into separate client and server packages, each bundling its own Protocol copy into chunk files
-// whose names change with every release. The package entry re-exports the classes, so hook it instead.
+// whose names change with every release. The package entry re-exports the classes, so hook it instead. These reuse
+// the 1.x shimmer wrappers: they share state with the request handler and abort controller maps, which each Protocol
+// instance creates at runtime and only shimmer can patch.
 addHook({ name: '@modelcontextprotocol/client', versions: ['>=2'] }, exports => {
   wrapProtocol(exports.Protocol)
   return exports
