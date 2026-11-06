@@ -248,17 +248,18 @@ jobs:
       matrix:
         # Keep the regular, failure video, and Test Optimization suites in separate lanes; together they exceed the
         # CI time budget. The oldest Test Optimization suite also runs each adapter in its own lane.
+        # WebdriverIO 10.2 needs Node >=22.23.4; keep its runtime separate from the shared latest runtime.
         include:
           - node-version: oldest
             webdriverio-version: oldest
             spec: webdriverio
-          - node-version: latest
+          - node-version: '22.23.4'
             webdriverio-version: latest
             spec: webdriverio
           - node-version: oldest
             webdriverio-version: oldest
             spec: webdriverio.failure-videos
-          - node-version: latest
+          - node-version: '22.23.4'
             webdriverio-version: latest
             spec: webdriverio.failure-videos
           - node-version: oldest
@@ -269,7 +270,7 @@ jobs:
             webdriverio-version: oldest
             spec: webdriverio.test-optimization
             adapter: jasmine
-          - node-version: latest
+          - node-version: '22.23.4'
             webdriverio-version: latest
             spec: webdriverio.test-optimization
     name: >-
@@ -652,7 +653,7 @@ jobs:
           - version: latest
             browser-provider: playwright
             container-image: ${{ fromJson(needs.playwright-image.outputs.images).latest.latest }}
-          - version: latest
+          - version: '22.23.4'
             browser-provider: webdriverio
             container-image: ${{ needs.browser-tools.outputs.image }}
             browser-binary: /usr/bin/google-chrome
