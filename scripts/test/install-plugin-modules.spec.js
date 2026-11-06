@@ -85,12 +85,32 @@ describe('scripts/install_plugin_modules.js', function () {
       .map(JSON.parse)
     assert.deepStrictEqual(packageManagerCalls, [
       ['bun', 'install', '--trust'],
+      ['bun', 'update', '--recursive', '--trust'],
       ['bun', 'install', '--trust'],
-      ['bun', 'install', '--trust'],
-      ['bun', 'install', '--trust'],
-      ['bun', 'install', '--trust'],
-      ['bun', 'install', '--trust'],
+      ['bun', 'update', '--recursive', '--trust'],
     ])
+  })
+
+  it('installs the latest GraphQL executor in each major despite older transitive dependencies', () => {
+    runInstall('graphql')
+
+    const expectedVersions = {
+      '0.0.14': '0.0.14',
+      0: '0.0.20',
+      1: '1.5.7',
+      2: '2.1.0',
+      3: '3.0.0',
+      4: '4.1.7',
+    }
+    for (const [version, expected] of Object.entries(expectedVersions)) {
+      const executor = require(path.join(versionsDir, `@graphql-tools/executor@${version}`))
+      assert.strictEqual(executor.version(), expected, version)
+      executor.get()
+    }
+
+    const lock = fs.readFileSync(path.join(versionsDir, 'bun.lock'), 'utf8')
+    runInstall('graphql')
+    assert.strictEqual(fs.readFileSync(path.join(versionsDir, 'bun.lock'), 'utf8'), lock)
   })
 
   it('reports guidance when Bun cannot install the generated workspaces', () => {
@@ -115,6 +135,23 @@ describe('scripts/install_plugin_modules.js', function () {
     assert.deepStrictEqual(
       fs.readFileSync(traceFile, 'utf8').trim().split('\n').map(JSON.parse),
       [['bun', 'install', '--trust']]
+    )
+  })
+
+  it('does not record a successful rebuild when updating workspace ceilings fails', () => {
+    const nodeAbiFile = path.join(versionsDir, '.node-abi')
+    const traceFile = path.join(wrapperDirectory, 'failed-update-trace.ndjson')
+    fs.writeFileSync(nodeAbiFile, 'stale')
+    const result = spawnInstall('q', {
+      DD_TEST_FAIL_BUN_UPDATE: 'true',
+      DD_TEST_PACKAGE_MANAGER_TRACE_FILE: traceFile,
+    })
+
+    assert.strictEqual(result.status, 1)
+    assert.strictEqual(fs.readFileSync(nodeAbiFile, 'utf8'), 'stale')
+    assert.deepStrictEqual(
+      fs.readFileSync(traceFile, 'utf8').trim().split('\n').map(JSON.parse),
+      [['bun', 'install', '--trust', '--force'], ['bun', 'update', '--recursive', '--trust']]
     )
   })
 
@@ -390,6 +427,7 @@ const args = process.argv.slice(2)
 if (process.env.DD_TEST_PACKAGE_MANAGER_TRACE_FILE) {
   appendFileSync(process.env.DD_TEST_PACKAGE_MANAGER_TRACE_FILE, JSON.stringify(['bun', ...args]) + '\n')
 }
+if (process.env.DD_TEST_FAIL_BUN_UPDATE === 'true' && args[0] === 'update') process.exit(1)
 if (process.env.DD_TEST_FAIL_BUN_INSTALL === 'true' && args[0] === 'install') process.exit(1)
 if (process.env.DD_TEST_FAIL_BUN_INSTALL_ONCE_FILE &&
     args[0] === 'install' &&

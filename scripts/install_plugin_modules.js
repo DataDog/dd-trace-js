@@ -60,15 +60,8 @@ async function run () {
   const nodeAbiFile = join(__dirname, '..', 'versions', '.node-abi')
   const recordedAbi = existsSync(nodeAbiFile) ? readFileSync(nodeAbiFile, 'utf8').trim() : undefined
   const force = recordedAbi !== undefined && recordedAbi !== process.versions.modules
-  const deferredPackageStages = await assertPrerequisites()
+  await assertPrerequisites()
   install(force)
-  for (const stage of deferredPackageStages) {
-    // eslint-disable-next-line no-await-in-loop
-    await mapWithConcurrency(stage, FS_CONCURRENCY, assertPackage)
-    // eslint-disable-next-line no-await-in-loop
-    await assertWorkspaces()
-    install(force)
-  }
   const changed = await assertPeerDependencies(join(__dirname, '..', 'versions'))
   // The peer-dependency install only does something when patching actually changed a manifest. Targeted
   // installs for plugins without external peer dependencies (the common CI matrix case) skip it entirely.
@@ -84,78 +77,9 @@ async function assertPrerequisites () {
   const packages = collectPackages(moduleNames)
 
   applyExternalConfiguration(moduleNames, packages)
-  const [initialPackages = [], ...deferredPackageStages] = buildInstallStages(packages)
-  await mapWithConcurrency(initialPackages, FS_CONCURRENCY, assertPackage)
+  await mapWithConcurrency(packages, FS_CONCURRENCY, assertPackage)
 
   await assertWorkspaces()
-  return deferredPackageStages
-}
-
-/**
- * @param {Array<{ name: string, version: string|null, range: string }>} packages
- * @returns {Array<Array<{ name: string, version: string|null, range: string }>>}
- */
-function buildInstallStages (packages) {
-  const packageStages = []
-  const rangeStages = []
-  const orderedPackages = packages.map(entry => {
-    const range = getCappedRange(entry.name, entry.range)
-    return { entry, range, maximum: getRangeMaximum(range) }
-  })
-  orderedPackages.sort((left, right) => semver.rcompare(left.maximum, right.maximum))
-
-  // Bun merges overlapping workspace ranges onto one version. Lock each ceiling before adding its intersecting
-  // floors, so the fixtures test distinct versions instead of resolving every workspace to the same release.
-  for (const { entry, range } of orderedPackages) {
-    let stageIndex = 0
-
-    for (let index = 0; index < rangeStages.length; index++) {
-      const stagedRanges = rangeStages[index].get(entry.name)
-      if (!stagedRanges) continue
-      for (const stagedRange of stagedRanges) {
-        if (semver.intersects(range, stagedRange)) {
-          stageIndex = index + 1
-          break
-        }
-      }
-    }
-
-    if (stageIndex === packageStages.length) {
-      packageStages.push([])
-      rangeStages.push(new Map())
-    }
-    packageStages[stageIndex].push(entry)
-    const stagedRanges = rangeStages[stageIndex].get(entry.name)
-    if (stagedRanges) {
-      stagedRanges.push(range)
-    } else {
-      rangeStages[stageIndex].set(entry.name, [range])
-    }
-  }
-
-  return packageStages
-}
-
-/**
- * @param {string} range
- * @returns {import('semver').SemVer}
- */
-function getRangeMaximum (range) {
-  let rangeMaximum
-  for (const comparatorSet of new semver.Range(range).set) {
-    let setMaximum
-    for (const comparator of comparatorSet) {
-      if (
-        comparator.value &&
-        (comparator.operator === '' || comparator.operator === '<' || comparator.operator === '<=') &&
-        (!setMaximum || semver.lt(comparator.semver, setMaximum))
-      ) {
-        setMaximum = comparator.semver
-      }
-    }
-    if (!rangeMaximum || semver.gt(setMaximum, rangeMaximum)) rangeMaximum = setMaximum
-  }
-  return rangeMaximum
 }
 
 /**
@@ -452,6 +376,8 @@ async function assertWorkspaces () {
 function install (force = false) {
   try {
     exec(`bun install --trust${force ? ' --force' : ''}`, { cwd: folder() })
+    // Install can reuse an older transitive version for a workspace range. Update each workspace to its own ceiling.
+    if (workspaces.size) exec('bun update --recursive --trust', { cwd: folder() })
   } catch (error) {
     // A failure is most often an unresolvable version: a declared range spans a major version that was never
     // published. Point at the fix instead of leaving a bare bun error.
