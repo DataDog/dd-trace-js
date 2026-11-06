@@ -69,6 +69,7 @@ const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   'packages/datadog-instrumentations/src/cypress-config.js',
   'packages/datadog-instrumentations/src/mocha/main.js',
   'packages/datadog-instrumentations/src/vitest.js',
+  'packages/datadog-vite/src/log.js',
   'packages/datadog-webpack/src/log.js',
   'packages/dd-trace/src/ci-visibility/exporters/ci-validation/index.js',
   'packages/dd-trace/src/ci-visibility/test-optimization-cache.js',
