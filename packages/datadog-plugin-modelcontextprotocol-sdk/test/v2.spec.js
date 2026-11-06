@@ -165,6 +165,44 @@ describe('Plugin', () => {
           })
         })
       }
+
+      it('finishes an in-flight server request span with an error when the transport closes', async () => {
+        const versionMod = require(`../../../versions/${moduleName}@${version}`)
+        const { Client } = versionMod.get('@modelcontextprotocol/client')
+        const { InMemoryTransport, McpServer } = versionMod.get('@modelcontextprotocol/server')
+
+        let markStarted
+        const started = new Promise(resolve => { markStarted = resolve })
+        let release
+        const held = new Promise(resolve => { release = resolve })
+
+        const server = new McpServer({ name: 'disconnect-server', version: '1.0.0' })
+        server.registerTool('slow-tool', { description: 'Waits until released' }, async () => {
+          markStarted()
+          await held
+          return { content: [{ type: 'text', text: 'done' }] }
+        })
+
+        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+        await server.connect(serverTransport)
+        const client = new Client({ name: 'test-client', version: '1.0.0' })
+        await client.connect(clientTransport)
+
+        const tracesPromise = assertSpans(spans => {
+          const serverSpan = findSpan(spans, 'mcp.request', 'server_tool_call')
+          assert.equal(serverSpan.error, 1)
+          assert.equal(serverSpan.meta['error.type'], 'McpError')
+          assert.equal(serverSpan.meta['error.message'], 'Connection closed')
+        })
+
+        const callPromise = client.callTool({ name: 'slow-tool', arguments: {} })
+        await started
+        await server.close()
+        release()
+
+        await Promise.all([tracesPromise, assert.rejects(callPromise)])
+        await client.close()
+      })
     })
   })
 })

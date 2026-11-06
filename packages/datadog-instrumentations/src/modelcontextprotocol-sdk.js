@@ -117,7 +117,11 @@ function finishPendingServerRequests (protocol) {
   const pending = pendingContexts.get(protocol)
   if (!pending) return
 
-  for (const requestId of pending.keys()) {
+  for (const [requestId, ctx] of pending) {
+    // The close aborts a handler that has not settled, so the client never gets its response.
+    if (!Object.hasOwn(ctx, 'result') && !ctx.error) {
+      ctx.error = { name: 'McpError', message: 'Connection closed' }
+    }
     finishServerRequest(protocol, requestId)
   }
 }
