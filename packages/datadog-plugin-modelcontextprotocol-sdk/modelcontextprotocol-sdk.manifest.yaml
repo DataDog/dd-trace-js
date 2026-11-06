@@ -5,6 +5,8 @@ description: Instruments Model Context Protocol SDK client and server tool, reso
   server tool execution, distributed trace propagation, and LLM Observability for client tool calls and tool discovery.
 packages:
 - name: '@modelcontextprotocol/sdk'
+- name: '@modelcontextprotocol/client'
+- name: '@modelcontextprotocol/server'
 category:
 - gen_ai
 - mcp.client

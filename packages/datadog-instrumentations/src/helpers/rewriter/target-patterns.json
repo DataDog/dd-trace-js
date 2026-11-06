@@ -1,5 +1,23 @@
 [
   {
+    "name": "@modelcontextprotocol/client",
+    "source": "^dist\\/[\\w-]+\\.[cm]js$",
+    "flags": "",
+    "sourceMatch": [
+      "var Client = class",
+      "var Protocol = class"
+    ]
+  },
+  {
+    "name": "@modelcontextprotocol/server",
+    "source": "^dist\\/[\\w-]+\\.[cm]js$",
+    "flags": "",
+    "sourceMatch": [
+      "var McpServer = class",
+      "var Protocol = class"
+    ]
+  },
+  {
     "name": "react-router",
     "source": "^dist\\/(?:development|production)\\/chunk-[A-Z0-9]+\\.mjs$",
     "flags": "",

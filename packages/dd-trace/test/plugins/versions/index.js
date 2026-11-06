@@ -22,6 +22,12 @@ const brokenVersions = {
   avsc: [{ range: '5.0.0', node: '>=25', reason: 'avsc 5.0.0 is not tested on Node.js >=25' }],
   '@grpc/grpc-js': [{ range: '<1.3.0', node: '>=25', reason: 'grpc-js <1.3.0 is not tested on Node.js >=25' }],
   undici: [{ range: '>=7.11.0', node: '<20', reason: 'undici >=7.11.0 is not tested on Node.js <20' }],
+  '@modelcontextprotocol/client': [
+    { range: '>=2', node: '<20', reason: '@modelcontextprotocol/client 2.x requires Node.js >=20' },
+  ],
+  '@modelcontextprotocol/server': [
+    { range: '>=2', node: '<20', reason: '@modelcontextprotocol/server 2.x requires Node.js >=20' },
+  ],
   // TODO: record VCR cassettes for the ai 4.x line; `versions/ai@4` resolves to the newest 4.x, which has no cassette,
   // so the test would hit the live API. 4.0.x (cassetted) and 5.x/6.x stay covered.
   ai: [{ range: '>=4.1.0 <5.0.0', reason: 'no VCR cassette for the ai 4.x latest (TODO: record cassettes)' }],

@@ -444,9 +444,8 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
   })
 
   describe('Protocol.setRequestHandler - transport disconnect (connection closed)', () => {
-    it('should finish in-flight server request spans when the handler completes after transport closes', async () => {
-      // The handler is wrapped at setRequestHandler time. When the transport disconnects,
-      // the in-flight handler eventually resolves and the .finally() fires serverRequestFinishCh.
+    it('should finish in-flight server request spans with an error when the transport closes', async () => {
+      // Closing the transport aborts the in-flight handler, so the client never receives the result.
       const { McpServer } = meta.versionMod.get('@modelcontextprotocol/sdk/server/mcp.js')
       const { InMemoryTransport } = meta.versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
       const { Client } = meta.mod
@@ -478,10 +477,13 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
         name: 'mcp.request',
         type: 'mcp',
         resource: 'server_tool_call',
+        error: 1,
         meta: {
           component: 'modelcontextprotocol_server',
           '_dd.integration': 'modelcontextprotocol_server',
           'span.kind': 'server',
+          'error.message': 'Connection closed',
+          'error.type': 'McpError',
         },
       })
 
@@ -490,7 +492,7 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
 
       await slowToolStarted
 
-      // Close the server, triggering _onclose() -> _requestHandlerAbortControllers.clear().
+      // Close the server while the tool is still running, so Protocol._onclose() finishes the pending span.
       await disconnectServer.close()
       resumeSlowTool()
       await callPromise
