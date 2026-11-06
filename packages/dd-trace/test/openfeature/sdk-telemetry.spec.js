@@ -14,7 +14,7 @@ const { testBooleanAndStringFlags: configuration } =
 const NOW = Date.UTC(2026, 10, 5)
 
 describe('Feature Flags SDK diagnostics', () => {
-  let clock, provider, Provider, config, request, selectRoute, stopDelivery, onFetchResult, handlers
+  let clock, provider, Provider, config, request, selectRoute, stopDelivery, onFetchResult, handlers, telemetryNow
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({ now: NOW })
@@ -43,9 +43,10 @@ describe('Feature Flags SDK diagnostics', () => {
       './base': Base,
       './util': { setEventDeliveryStrategy: selectRoute },
     })
+    telemetryNow = sinon.spy(clock.performance.now)
     const Telemetry = proxyquire('../../src/openfeature/sdk-telemetry', {
       './writers/sdk-diagnostics': Writer,
-      'node:perf_hooks': { performance: clock.performance },
+      'node:perf_hooks': { performance: { now: telemetryNow } },
     })
     Provider = proxyquire('../../src/openfeature/flagging_provider', {
       './sdk-telemetry': Telemetry,
@@ -223,18 +224,41 @@ describe('Feature Flags SDK diagnostics', () => {
     assert.strictEqual(events().length, 1)
   })
 
-  for (const { field, value } of [
-    { field: 'env', value: undefined }, { field: 'service', value: '' },
-    { field: 'env', value: ' ' }, { field: 'service', value: 'x'.repeat(201) },
-    { field: 'env', value: ' staging' }, { field: 'service', value: 'checkout\nservice' },
-  ]) {
-    it(`skips diagnostics with invalid ${field}: ${String(value).slice(0, 10)}`, async () => {
-      config[field] = value
-      await ready()
-      provider.onClose()
-      sinon.assert.notCalled(selectRoute)
-      sinon.assert.notCalled(request)
-    })
+  for (const field of ['service', 'env']) {
+    for (const value of [undefined, null, 42, '', ' ', ' leading', 'x'.repeat(201), 'contains\ncontrol']) {
+      it(`skips diagnostics work with invalid ${field}: ${String(value).slice(0, 10)}`, async () => {
+        config[field] = value
+        await ready()
+        provider.onClose()
+        assert.strictEqual(onFetchResult, undefined)
+        sinon.assert.notCalled(telemetryNow)
+        sinon.assert.notCalled(selectRoute)
+        sinon.assert.notCalled(request)
+      })
+    }
+
+    for (const outcome of ['ready', 'failed', 'closed']) {
+      it(`preserves ${outcome} initialization without ${field}`, async () => {
+        delete config[field]
+        const pending = create().initialize()
+        const error = new Error('configuration failed')
+        if (outcome === 'failed') {
+          const rejected = assert.rejects(pending, actual => actual === error)
+          provider.setError(error)
+          await rejected
+        } else {
+          if (outcome === 'closed') provider.onClose()
+          provider.setConfiguration(configuration)
+          await pending
+          assert.strictEqual(provider.getConfiguration(), configuration)
+        }
+        provider.onClose()
+        assert.strictEqual(onFetchResult, undefined)
+        sinon.assert.notCalled(telemetryNow)
+        sinon.assert.notCalled(selectRoute)
+        sinon.assert.notCalled(request)
+      })
+    }
   }
 
   it('accepts service and environment names at the schema length limit', async () => {

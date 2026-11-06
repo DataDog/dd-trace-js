@@ -50,7 +50,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       initializationTimeoutMs: config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
     })
 
-    this.#sdkTelemetry = new SDKTelemetry(config)
+    const sdkTelemetry = SDKTelemetry.create(config)
+    this.#sdkTelemetry = sdkTelemetry
 
     const enableOptOut =
       config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED === true
@@ -88,7 +89,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     }
 
     this.#configurationSource = configurationSource.create(
-      config, this.setConfiguration.bind(this), success => this.#sdkTelemetry.fetchResult(success)
+      config, this.setConfiguration.bind(this), sdkTelemetry && (success => sdkTelemetry.fetchResult(success))
     )
     this.#configurationSource?.start()
   }
@@ -100,7 +101,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   initialize (context) {
     const hasConfiguration = this.getConfiguration() !== undefined
 
-    this.#sdkTelemetry.start(hasConfiguration)
+    const sdkTelemetry = this.#sdkTelemetry
+    sdkTelemetry?.start(hasConfiguration)
     this.#waitingForConfiguration = !hasConfiguration
     const promise = super.initialize(context)
 
@@ -110,10 +112,11 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       log.debug('Feature Flags: waiting for provider initialization (timeout %dms)...', this.#initializationTimeoutMs)
     }
 
+    if (!sdkTelemetry) return promise
     return promise.then(
-      () => { this.#sdkTelemetry.finish('ready') },
+      () => { sdkTelemetry.finish('ready') },
       error => {
-        this.#sdkTelemetry.finish('failed')
+        sdkTelemetry.finish('failed')
         throw error
       }
     )
@@ -131,7 +134,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     super.setConfiguration(configuration)
     // An empty update leaves upstream initialization pending until configuration arrives or it times out.
     if (configuration == null) return
-    this.#sdkTelemetry.configurationReceived()
+    this.#sdkTelemetry?.configurationReceived()
     this.#waitingForConfiguration = false
 
     if (wasWaiting) {
@@ -176,7 +179,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * Cleans up resources including channel subscriptions.
    */
   onClose () {
-    this.#sdkTelemetry.close()
+    this.#sdkTelemetry?.close()
     this.#configurationSource?.stop()
     this.#configurationSource = undefined
     this.#spanEnrichmentHook?.destroy()

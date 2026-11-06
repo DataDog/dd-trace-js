@@ -29,6 +29,12 @@ class SDKTelemetry {
   #lastErrorAt = -Infinity
 
   /** @param {import('../config/config-base')} config */
+  static create (config) {
+    if (!validIdentity(config.service) || !validIdentity(config.env)) return
+    return new SDKTelemetry(config)
+  }
+
+  /** @param {import('../config/config-base')} config */
   constructor (config) {
     this.#config = config
   }
