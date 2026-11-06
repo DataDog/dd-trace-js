@@ -40,6 +40,8 @@ const jsonBuffer = new JSONBuffer({
   onFlush,
 })
 
+send.drain = jsonBuffer.drain.bind(jsonBuffer)
+
 /**
  * Queue a probe result for upload.
  *

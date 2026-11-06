@@ -21,6 +21,46 @@ describe('JSONBuffer', () => {
     clock.restore()
   })
 
+  describe('shutdown draining', () => {
+    it('flushes the partial batch immediately and cancels its timer', async () => {
+      const onFlush = sinon.spy((json, done) => done())
+      const buffer = new JSONBuffer({ size: 100, maxQueueBytes: 100, timeout: 10_000, onFlush })
+      buffer.write('{"last":true}')
+
+      await buffer.drain()
+
+      sinon.assert.calledOnce(onFlush)
+      assert.strictEqual(onFlush.firstCall.args[0], '[{"last":true}]')
+      clock.tick(10_000)
+      sinon.assert.calledOnce(onFlush)
+    })
+
+    it('waits for both an earlier upload and the final batch', async () => {
+      const onFlush = sinon.spy()
+      const buffer = new JSONBuffer({ size: 10, maxQueueBytes: 100, timeout: 10_000, onFlush })
+      buffer.write('{"a":1}')
+      buffer.write('{"b":2}')
+      const drained = sinon.spy()
+      const draining = buffer.drain().then(drained)
+      sinon.assert.calledTwice(onFlush)
+
+      onFlush.secondCall.args[1]()
+      await Promise.resolve()
+      sinon.assert.notCalled(drained)
+      onFlush.firstCall.args[1]()
+      await draining
+
+      sinon.assert.calledOnce(drained)
+    })
+
+    it('finishes an empty buffer without sending a payload', async () => {
+      const onFlush = sinon.spy()
+      const buffer = new JSONBuffer({ size: 100, maxQueueBytes: 100, timeout: 10_000, onFlush })
+      await buffer.drain()
+      sinon.assert.notCalled(onFlush)
+    })
+  })
+
   describe('timeout-based flushing', () => {
     it('should call onFlush with the expected payload when the timeout is reached', function () {
       let flushedJson
