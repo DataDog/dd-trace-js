@@ -284,6 +284,13 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
   }
 
   let latestCommits = getLatestCommits(configCommitSha)
+  let recoveredSelectedCommit = false
+  if (!latestCommits.length && getConfig().testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED &&
+    isShallowRepository(true)) {
+    unshallowRepository(false)
+    latestCommits = getLatestCommits(configCommitSha)
+    recoveredSelectedCommit = true
+  }
   if (!latestCommits.length) {
     const localSha = getGitMetadata({})[GIT_COMMIT_SHA]
     if (!validateGitCommitSha(localSha)) return callback(null)
@@ -338,7 +345,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     latestCommits,
     isEvpProxy,
     evpProxyPrefix,
-  }, getOnFinishGetCommitsToUpload(false))
+  }, getOnFinishGetCommitsToUpload(recoveredSelectedCommit))
 }
 
 module.exports = {

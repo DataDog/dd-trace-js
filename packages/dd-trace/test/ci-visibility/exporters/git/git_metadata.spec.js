@@ -174,6 +174,33 @@ describe('git_metadata', () => {
       }, 'a'.repeat(40))
   })
 
+  for (const recovery of ['available', 'unavailable', 'disabled']) {
+    it(`recovers a missing selected commit in a shallow checkout: ${recovery}`, (done) => {
+      const selected = 'a'.repeat(40)
+      getLatestCommitsStub.returns([])
+      if (recovery === 'available') getLatestCommitsStub.onCall(1).returns([selected])
+      isShallowRepositoryStub.returns(true)
+      fakeConfig.testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = recovery !== 'disabled'
+      getCommitsRevListStub.returns([selected])
+      requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+      requestStub.onCall(1).callsArgWith(2, null, '', 204)
+
+      gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+        if (recovery === 'available') {
+          assert.strictEqual(err, null)
+          sinon.assert.calledOnceWithExactly(generatePackFilesForCommitsStub, [selected])
+        } else {
+          assert.strictEqual(err.code, 'ERR_GIT_COMMIT_UNAVAILABLE')
+          sinon.assert.notCalled(requestStub)
+          sinon.assert.notCalled(generatePackFilesForCommitsStub)
+        }
+        assert.strictEqual(unshallowRepositoryStub.callCount, recovery === 'disabled' ? 0 : 1)
+        assert.strictEqual(getLatestCommitsStub.callCount, recovery === 'disabled' ? 1 : 2)
+        done()
+      }, selected)
+    })
+  }
+
   it('does not upload a different history when the selected commit is unavailable', (done) => {
     getLatestCommitsStub.returns([])
     const selected = 'a'.repeat(40)

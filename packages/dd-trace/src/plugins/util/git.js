@@ -154,8 +154,12 @@ function unshallowRepository (parentOnly = false) {
     log.warn('Git version is <2.27, so git unshallow will not proceed')
     return
   }
-  const defaultRemoteName = sanitizedExec(['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
-  const revParseHead = sanitizedExec(['rev-parse', 'HEAD'])
+  const defaultRemoteName = sanitizedExec(
+    ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'],
+    null, null, null, true, { uncached: true }
+  )
+  const revParseHead = sanitizedExec(['rev-parse', 'HEAD'], null, null, null, true, { uncached: true })
+  const fetchOptions = { stdio: 'pipe', timeout: 5000 }
 
   const baseGitOptions = [
     'fetch',
@@ -173,7 +177,7 @@ function unshallowRepository (parentOnly = false) {
     revParseHead,
   ]
   try {
-    cachedExec('git', flags)
+    execFileSync('git', flags, fetchOptions)
   } catch (err) {
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
@@ -183,14 +187,15 @@ function unshallowRepository (parentOnly = false) {
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
     )
     const upstreamRemote = sanitizedExec(
-      ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']
+      ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+      null, null, null, true, { uncached: true }
     )
     flags = [
       ...baseGitOptions,
       upstreamRemote,
     ]
     try {
-      cachedExec('git', flags)
+      execFileSync('git', flags, fetchOptions)
     } catch (err) {
       // If the CI is working on a detached HEAD or branch tracking hasn't been set up, the above command will fail.
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
@@ -204,7 +209,9 @@ function unshallowRepository (parentOnly = false) {
         baseGitOptions,
         null,
         null,
-        { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'unshallow' } } // we log the error in sanitizedExec
+        { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'unshallow' } }, // we log the error in sanitizedExec
+        true,
+        { uncached: true, timeout: 5000 }
       )
     }
   }
