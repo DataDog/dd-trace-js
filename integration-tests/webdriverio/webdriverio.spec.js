@@ -6,6 +6,8 @@ const { once } = require('node:events')
 const http = require('node:http')
 const { join } = require('node:path')
 
+const { satisfies } = require('semver')
+
 const {
   createParallelIt,
   getCiVisAgentlessConfig,
@@ -40,7 +42,11 @@ const {
   TEST_SUITE,
   TEST_TYPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { getWebdriverioVersions, oldest: OLDEST_WEBDRIVERIO_VERSION } = require('./versions')
+const {
+  getWebdriverioVersions,
+  oldest: OLDEST_WEBDRIVERIO_VERSION,
+  resolveWebdriverioVersion,
+} = require('./versions')
 const requestedVersion = process.env.WEBDRIVERIO_VERSION
 const versions = getWebdriverioVersions(requestedVersion)
 const mochaArgs = [...process.argv, ...(process.env.MOCHA_OPTIONS?.split(/\s+/) || [])]
@@ -318,6 +324,8 @@ for (const version of versions) {
 
     let cwd
     const concurrency = version === OLDEST_WEBDRIVERIO_VERSION && !hasMochaFilter ? 2 : 1
+    const resolvedWebdriverioVersion = resolveWebdriverioVersion(version)
+    const jasmineSuiteHookFailureExitCode = satisfies(resolvedWebdriverioVersion, '>=10.2.0') ? 1 : 0
     const it = createScenarioIt(global.it, concurrency)
 
     useSandbox([
@@ -584,7 +592,7 @@ for (const version of versions) {
         assert.match(suites[0].meta['error.message'], /expected WebdriverIO Jasmine afterAll failure/)
         assert.strictEqual(tests.length, 1)
         assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
-      }, 0, { framework: 'jasmine' })
+      }, jasmineSuiteHookFailureExitCode, { framework: 'jasmine' })
     })
 
     it('reports a Jasmine global afterAll failure on its suite', async () => {
@@ -602,7 +610,7 @@ for (const version of versions) {
         assert.match(failedSuite.meta['error.message'], /expected WebdriverIO Jasmine global afterAll failure/)
         assert.strictEqual(tests.length, 2)
         assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), ['pass', 'pass'])
-      }, 0, { framework: 'jasmine' })
+      }, jasmineSuiteHookFailureExitCode, { framework: 'jasmine' })
     })
 
     it('starts Jasmine parent spans before tests when settings are delayed', async () => {

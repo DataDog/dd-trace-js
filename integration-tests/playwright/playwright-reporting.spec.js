@@ -60,8 +60,9 @@ const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const { PLAYWRIGHT_VERSION, TEST_OPTIMIZATION_NODE_SHARD } = process.env
 
-const { getLatestPlaywrightSpecifier, oldest } = require('./versions')
+const { getLatestPlaywrightSpecifier, latest: latestPlaywrightVersion, oldest } = require('./versions')
 const latest = getLatestPlaywrightSpecifier()
+const latestResolvedVersion = latest === 'latest' ? latestPlaywrightVersion : latest
 const versions = [oldest, latest]
 const REQUEST_ERROR_TAG_TEST_DIR = './ci-visibility/playwright-tests-request-error-tag'
 const SCREENSHOT_CAPTURE_DISABLED_WARNING =
@@ -367,8 +368,18 @@ retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
       const result = await execute('--last-failed --list', false)
       assert.strictEqual(result.exitCode, 0, JSON.stringify(result.report.errors))
       const specs = result.report.suites[0].specs
-      assert.deepStrictEqual(new Set(specs.map(({ id }) => id)), new Set(history.failedTests))
       const selectedTests = specs.flatMap(({ tests }) => tests)
+      const listedSpecIds = new Set(specs.map(({ id }) => id))
+      const failedTestIds = new Set(history.failedTests)
+
+      if (satisfies(latestResolvedVersion, '>=1.65.0') && nativeRepeats > 1) {
+        for (const specId of listedSpecIds) {
+          assert.ok(failedTestIds.has(specId), `${specId} should be one of the failed test ids`)
+        }
+        assert.strictEqual(selectedTests.length, failedTestIds.size)
+      } else {
+        assert.deepStrictEqual(listedSpecIds, failedTestIds)
+      }
       assert.deepStrictEqual(
         selectedTests.map(({ results }) => results),
         Array.from({ length: nativeRepeats }, () => [])
