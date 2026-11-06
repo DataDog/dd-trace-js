@@ -16,6 +16,7 @@ const {
   SPAN_KIND,
   MODEL_NAME,
   MODEL_PROVIDER,
+  EXPERIMENT_EXPECTED_OUTPUT,
   METADATA,
   COST_TAGS,
   AGENT_MANIFEST,
@@ -213,6 +214,9 @@ class LLMObsSpanProcessor {
     const spanKind = mlObsTags[SPAN_KIND]
 
     const meta = { 'span.kind': spanKind, input: {}, output: {} }
+    if (spanKind === 'experiment' && Object.hasOwn(mlObsTags, EXPERIMENT_EXPECTED_OUTPUT)) {
+      meta.expected_output = mlObsTags[EXPERIMENT_EXPECTED_OUTPUT]
+    }
     const input = {}
     const output = {}
 
