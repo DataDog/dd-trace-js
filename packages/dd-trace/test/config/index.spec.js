@@ -1512,10 +1512,13 @@ describe('Config', () => {
   })
 
   describe('HTTP client error statuses', () => {
-    it('should default to 400-499', () => {
+    it('should leave the default to the HTTP status validator', () => {
       const config = getConfig()
 
-      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, '400-499')
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES, undefined)
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', value: null, origin: 'default' },
+      ])
     })
 
     it('should initialize from DD_TRACE_HTTP_CLIENT_ERROR_STATUSES', () => {
