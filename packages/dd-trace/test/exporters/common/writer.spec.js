@@ -179,4 +179,10 @@ describe('common Writer', () => {
     assert.strictEqual(writer.append(payload), false)
     sinon.assert.calledOnceWithExactly(encoder.encode, payload)
   })
+
+  it('resetPendingBatch discards the pending encoded batch', () => {
+    writer.resetPendingBatch()
+
+    sinon.assert.calledOnce(encoder.reset)
+  })
 })
