@@ -7,6 +7,7 @@ const { setTimeout: sleep } = require('node:timers/promises')
 const request = require('../exporters/common/request')
 const { getClientLibraryHeaders } = require('../exporters/common/client-library-headers')
 const log = require('../log')
+const { DEPENDENT_FLAG_VARIANT_KEY_V1, getEvaluatorCapabilities } = require('./evaluator-capabilities')
 
 const MAX_ATTEMPTS = 3
 const FIRST_RETRY_MIN_MS = 2000
@@ -160,6 +161,11 @@ class AgentlessConfigurationSource {
   #request (signal) {
     const headers = getClientLibraryHeaders()
     headers['Accept-Encoding'] = 'gzip'
+    let endpoint = this.#config.endpoint
+    if (getEvaluatorCapabilities().includes(DEPENDENT_FLAG_VARIANT_KEY_V1)) {
+      endpoint = new URL(endpoint)
+      endpoint.searchParams.set('cap_dependent-flags-variant-key', 'v1')
+    }
     if (this.#config.apiKey) headers['DD-API-KEY'] = this.#config.apiKey
     if (this.#etag) headers['If-None-Match'] = this.#etag
 
@@ -183,7 +189,7 @@ class AgentlessConfigurationSource {
       }
 
       request('', {
-        url: this.#config.endpoint,
+        url: endpoint,
         method: 'GET',
         headers,
         retry: false,

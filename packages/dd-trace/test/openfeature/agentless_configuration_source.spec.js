@@ -37,6 +37,7 @@ describe('AgentlessConfigurationSource', () => {
   let clock
   let config
   let log
+  let getEvaluatorCapabilities
   let random
   let request
   let requests
@@ -44,6 +45,7 @@ describe('AgentlessConfigurationSource', () => {
   let sources
 
   beforeEach(() => {
+    getEvaluatorCapabilities = sinon.stub().returns([])
     clock = sinon.useFakeTimers()
     applyConfiguration = sinon.stub()
     config = {
@@ -107,6 +109,10 @@ describe('AgentlessConfigurationSource', () => {
     AgentlessConfigurationSource = proxyquire('../../src/openfeature/agentless_configuration_source', {
       '../exporters/common/request': request,
       '../log': log,
+      './evaluator-capabilities': {
+        DEPENDENT_FLAG_VARIANT_KEY_V1: 'dependent-flag-variant-key-v1',
+        getEvaluatorCapabilities,
+      },
     })
   })
 
@@ -133,6 +139,27 @@ describe('AgentlessConfigurationSource', () => {
   async function tick (milliseconds) {
     await clock.tickAsync(milliseconds)
     await flush()
+  }
+
+  for (const capabilities of [[], ['unknown-v1'], ['dependent-flag-variant-key-v1']]) {
+    it(`gates initial and conditional capability parameters for ${JSON.stringify(capabilities)}`, async () => {
+      getEvaluatorCapabilities.returns(capabilities)
+      config.endpoint.searchParams.set('token', 'preserved')
+      responses.push(
+        { statusCode: 200, headers: { etag: '"v1"' }, body: responseBody() },
+        { statusCode: 304 }
+      )
+      source().start()
+      await flush()
+      await tick(30_000)
+      assert.strictEqual(requests.length, 2)
+      for (const request of requests) {
+        const expected = capabilities.includes('dependent-flag-variant-key-v1') ? 'v1' : null
+        assert.strictEqual(request.options.url.searchParams.get('cap_dependent-flags-variant-key'), expected)
+        assert.strictEqual(request.options.url.searchParams.get('token'), 'preserved')
+      }
+      assert.strictEqual(requests[1].options.headers['If-None-Match'], '"v1"')
+    })
   }
 
   it('fetches, applies, and reuses an accepted ETag', async () => {

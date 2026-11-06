@@ -17,9 +17,11 @@ describe('OpenFeature Remote Config', () => {
   let getOpenfeatureProxy
   let handlers
   let log
+  let getEvaluatorCapabilities
   let enable
 
   beforeEach(() => {
+    getEvaluatorCapabilities = sinon.stub().returns([])
     log = {
       debug: sinon.spy((messageOrFn) => {
         // Simulates a debug-enabled logger, which invokes the lazy callback form.
@@ -29,6 +31,10 @@ describe('OpenFeature Remote Config', () => {
 
     ;({ enable } = proxyquire('../../src/openfeature/remote_config', {
       '../log': log,
+      './evaluator-capabilities': {
+        DEPENDENT_FLAG_VARIANT_KEY_V1: 'dependent-flag-variant-key-v1',
+        getEvaluatorCapabilities,
+      },
     }))
 
     handlers = new Map()
@@ -46,6 +52,16 @@ describe('OpenFeature Remote Config', () => {
 
     getOpenfeatureProxy = sinon.stub().returns(openfeatureProxy)
   })
+
+  for (const capabilities of [[], ['unknown-v1'], ['dependent-flag-variant-key-v1']]) {
+    it(`gates dependent flag RC capability for ${JSON.stringify(capabilities)}`, () => {
+      getEvaluatorCapabilities.returns(capabilities)
+      enable(rc, getOpenfeatureProxy, true)
+      const expected = [[1n << 46n, true]]
+      if (capabilities.includes('dependent-flag-variant-key-v1')) expected.push([1n << 50n, true])
+      assert.deepStrictEqual(rc.updateCapabilities.args, expected)
+    })
+  }
 
   describe('enable', () => {
     it('should enable FFE_FLAG_CONFIGURATION_RULES capability', () => {
