@@ -19,6 +19,7 @@ module.exports = {
   fastifyMiddlewareError: dc.channel('apm:fastify:middleware:error'),
   fastifyPathParams: dc.channel('datadog:fastify:path-params:finish'),
   fastifyQueryParams: dc.channel('datadog:fastify:query-params:finish'),
+  fastifyRequestHandle: dc.channel('apm:fastify:request:handle'),
   fastifyResponseChannel: dc.channel('datadog:fastify:response:finish'),
   fsOperationStart: dc.channel('apm:fs:operation:start'),
   graphqlMiddlewareChannel: dc.tracingChannel('datadog:apollo:middleware'),

@@ -31,6 +31,16 @@ describe('WAFManager', () => {
   })
 
   describe('getWAFContext', () => {
+    it('skips a missing ruleset and retries context creation after configuration returns', () => {
+      const manager = new WAFManager({}, {})
+      const req = {}
+      DDWAF.prototype.createContext.onFirstCall().returns(null)
+      assert.strictEqual(manager.getWAFContext(req), undefined)
+      sinon.assert.notCalled(WAFContextWrapper)
+      DDWAF.prototype.createContext.onSecondCall().returns({})
+      assert.ok(manager.getWAFContext(req))
+      sinon.assert.calledOnce(WAFContextWrapper)
+    })
     it('should construct WAFContextWrapper with knownAddresses', () => {
       const wafManager = new WAFManager({}, {})
 

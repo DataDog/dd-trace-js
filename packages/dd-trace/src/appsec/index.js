@@ -10,6 +10,7 @@ const {
   multerParser,
   fastifyBodyParser,
   fastifyCookieParser,
+  fastifyRequestHandle,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   lambdaStartInvocation,
@@ -36,6 +37,7 @@ const {
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
 const apiSecurity = require('./api_security')
+const matchedRoutes = require('./api_security/normalized-route/matched-routes')
 const { setTemplates } = require('./blocking')
 const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
@@ -51,6 +53,7 @@ let isEnabled = false
 // Single source of truth for what enable() subscribes and disable() unsubscribes,
 // so the two can't drift apart.
 const channelHandlers = [
+  [fastifyRequestHandle, matchedRoutes.onRequest],
   [bodyParser, httpRequest.onRequestBodyParsed],
   [multerParser, httpRequest.onRequestBodyParsed],
   [cookieParser, httpRequest.onRequestCookieParser],

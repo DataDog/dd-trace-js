@@ -255,6 +255,132 @@ describe('WAFContextWrapper', () => {
     })
   })
 
+  describe('native-appsec 12 contexts', () => {
+    let parent, scoped, wrapper, clock
+    const persistent = { [addresses.HTTP_INCOMING_QUERY]: { key: 'value' } }
+    const ephemeral = { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { field: 'value' } }
+
+    beforeEach(() => {
+      clock = sinon.stub(process.hrtime, 'bigint').returns(0n)
+      sinon.stub(Reporter, 'reportAttack')
+      sinon.stub(Reporter, 'reportAttributes')
+      scoped = {
+        run: sinon.stub().returns({ duration: 2000, timeout: false, metrics: {} }),
+        dispose: sinon.spy(),
+      }
+      parent = {
+        run: sinon.stub().returns({ duration: 1000, timeout: false, metrics: {} }),
+        createSubcontext: sinon.stub().returns(scoped),
+      }
+      wrapper = new WAFContextWrapper(parent, 1000, '2.1.0', '1.8.0', knownAddresses)
+    })
+
+    it('passes persistent addresses directly without a subcontext', () => {
+      wrapper.run({ persistent })
+      sinon.assert.calledOnceWithExactly(parent.run, persistent, 1000)
+      sinon.assert.notCalled(parent.createSubcontext)
+    })
+
+    it('uses a new subcontext for each scoped evaluation and disposes it', () => {
+      wrapper.run({ ephemeral })
+      wrapper.run({ ephemeral })
+      sinon.assert.notCalled(parent.run)
+      sinon.assert.calledTwice(parent.createSubcontext)
+      sinon.assert.calledTwice(scoped.dispose)
+      sinon.assert.alwaysCalledWithExactly(scoped.run, ephemeral, 1000)
+    })
+
+    it('combines results and spends the remaining timeout on scoped data', () => {
+      clock.onCall(0).returns(0n)
+      clock.onCall(1).returns(250000n)
+      clock.onCall(2).returns(300000n)
+      parent.run.returns({
+        status: 'match',
+        events: [{ rule_matches: [] }],
+        attributes: { first: 1 },
+        keep: true,
+        duration: 1000,
+        metrics: { maxTruncatedString: 8000 },
+      })
+      scoped.run.returns({
+        attributes: { second: 2 },
+        duration: 2000,
+        timeout: false,
+        keep: false,
+        metrics: { maxTruncatedString: 5000 },
+      })
+
+      const result = wrapper.run({ persistent, ephemeral })
+
+      sinon.assert.calledOnceWithExactly(parent.run, persistent, 1000)
+      sinon.assert.calledOnceWithExactly(scoped.run, ephemeral, 750)
+      sinon.assert.calledOnce(scoped.dispose)
+      assert.deepStrictEqual(result.attributes, { first: 1, second: 2 })
+      assert.strictEqual(result.events.length, 1)
+      assert.strictEqual(result.duration, 3000)
+      assert.strictEqual(result.keep, true)
+      assert.strictEqual(result.metrics.maxTruncatedString, 8000)
+      const metrics = Reporter.reportMetrics.firstCall.args[0]
+      assert.strictEqual(metrics.duration, 3)
+      sinon.assert.calledOnce(Reporter.reportAttack)
+    })
+
+    for (const result of [
+      { timeout: true },
+      { errorCode: -2 },
+      { actions: { block_request: { status_code: 403 } } },
+    ]) {
+      it(`stops after a decisive parent result: ${JSON.stringify(result)}`, () => {
+        parent.run.returns(result)
+        wrapper.run({ persistent, ephemeral })
+        sinon.assert.notCalled(parent.createSubcontext)
+      })
+    }
+
+    it('does not grant a second timeout when the shared budget is exhausted', () => {
+      clock.onCall(1).returns(1000000n)
+      const result = wrapper.run({ persistent, ephemeral })
+      assert.strictEqual(result.timeout, true)
+      sinon.assert.notCalled(scoped.run)
+      sinon.assert.calledOnce(scoped.dispose)
+    })
+
+    for (const throws of [false, true]) {
+      it(`disposes the scoped context on ${throws ? 'a thrown exception' : 'a native error'}`, () => {
+        if (throws) scoped.run.throws(new Error('scoped evaluation failed'))
+        else scoped.run.returns({ errorCode: -2 })
+        wrapper.run({ ephemeral })
+        sinon.assert.calledOnce(scoped.dispose)
+        assert.strictEqual(Reporter.reportMetrics.firstCall.args[0].errorCode, throws ? -127 : -2)
+      })
+    }
+
+    it('preserves parent events when the scoped evaluation fails', () => {
+      parent.run.returns({ events: [{ rule_matches: [] }], duration: 1000 })
+      scoped.run.returns({ errorCode: -2 })
+      const result = wrapper.run({ persistent, ephemeral })
+      assert.strictEqual(result.events.length, 1)
+      sinon.assert.calledOnce(Reporter.reportAttack)
+      assert.strictEqual(Reporter.reportMetrics.firstCall.args[0].errorCode, -2)
+    })
+
+    it('preserves parent output when subcontext creation throws', () => {
+      parent.run.returns({ attributes: { tag: 'ordinary' }, duration: 1000 })
+      parent.createSubcontext.throws(new Error('creation failed'))
+      const result = wrapper.run({ persistent, ephemeral })
+      assert.deepStrictEqual(result.attributes, { tag: 'ordinary' })
+      assert.strictEqual(Reporter.reportMetrics.firstCall.args[0].errorCode, -127)
+      sinon.assert.notCalled(scoped.dispose)
+    })
+
+    it('does not treat an attributes-only match as a rule event', () => {
+      scoped.run.returns({ status: 'match', events: [], attributes: { tag: 'value' } })
+      wrapper.run({ ephemeral })
+      sinon.assert.notCalled(Reporter.reportAttack)
+      sinon.assert.calledOnceWithMatch(Reporter.reportAttributes, { tag: 'value' })
+    })
+  })
+
   describe('Disposal context check', () => {
     let log
     let ddwafContext
