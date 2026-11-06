@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
 const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
-const { ProviderEvents } = require('@openfeature/server-sdk')
+const { OpenFeature, ProviderEvents, ProviderStatus } = require('@openfeature/server-sdk')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -576,6 +576,115 @@ describe('FlaggingProvider Initialization Timeout', () => {
 
       // Should now be timed out (using config value, not env var)
       assert.strictEqual(provider.initController.isInitializing(), false)
+    })
+  })
+
+  describe('when the configuration source cannot start', () => {
+    const SOURCE_ERROR_MESSAGE = 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint; ' +
+      'set DD_API_KEY or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL'
+    const DIAGNOSTIC = `DATADOG TRACER DIAGNOSTIC - Feature Flags: ${SOURCE_ERROR_MESSAGE}. ` +
+      'Provider initialization fails and flag evaluations return their default values.'
+
+    let sourceError
+    let writer
+
+    beforeEach(() => {
+      sourceError = new Error(SOURCE_ERROR_MESSAGE)
+      writer = { warn: sinon.spy() }
+      mockConfig.startupLogs = true
+
+      FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
+        'dc-polyfill': {
+          channel: channelStub,
+        },
+        '../log': log,
+        '../log/writer': writer,
+        './configuration_source': {
+          create: sinon.stub().throws(sourceError),
+        },
+        './writers/flag-eval-evp-hook': sinon.stub().returns({ destroy: sinon.spy() }),
+        '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
+      })
+    })
+
+    it('rejects initialization with the source error without waiting for the timeout', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      await assert.rejects(provider.initialize(), sourceError)
+
+      assert.strictEqual(provider.initController.isInitializing(), false)
+      assert.strictEqual(clock.countTimers(), 0)
+      sinon.assert.calledOnceWithExactly(
+        log.errorWithoutTelemetry,
+        'Feature Flags: provider failed to initialize: %s',
+        SOURCE_ERROR_MESSAGE
+      )
+      sinon.assert.neverCalledWith(log.debug, sinon.match(/waiting for provider initialization/), sinon.match.any)
+    })
+
+    it('rejects every initialization attempt', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      await assert.rejects(provider.initialize(), sourceError)
+      await assert.rejects(provider.initialize(), sourceError)
+
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('writes the cause without debug logging when startup logs are enabled', () => {
+      // eslint-disable-next-line no-new
+      new FlaggingProvider(mockTracer, mockConfig)
+
+      sinon.assert.calledOnceWithExactly(writer.warn, DIAGNOSTIC)
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        'Unable to configure Feature Flagging configuration source',
+        sourceError
+      )
+    })
+
+    it('leaves the cause to debug logging when startup logs are disabled', () => {
+      mockConfig.startupLogs = false
+
+      // eslint-disable-next-line no-new
+      new FlaggingProvider(mockTracer, mockConfig)
+
+      sinon.assert.notCalled(writer.warn)
+      sinon.assert.calledOnceWithExactly(
+        log.error,
+        'Unable to configure Feature Flagging configuration source',
+        sourceError
+      )
+    })
+
+    it('initializes from configuration applied before initialization', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      provider.setConfiguration({ flags: {} })
+
+      await provider.initialize()
+
+      sinon.assert.notCalled(log.errorWithoutTelemetry)
+    })
+
+    it('puts the OpenFeature client in an error state that returns default values', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const errorEvent = sinon.spy()
+      OpenFeature.addHandler(ProviderEvents.Error, errorEvent)
+
+      try {
+        await assert.rejects(OpenFeature.setProviderAndWait(provider), sourceError)
+
+        const client = OpenFeature.getClient()
+        const details = await client.getBooleanDetails('missing-key-flag', true, { targetingKey: 'user' })
+
+        assert.strictEqual(client.providerStatus, ProviderStatus.ERROR)
+        assert.strictEqual(details.value, true)
+        assert.strictEqual(details.reason, 'ERROR')
+        sinon.assert.calledOnceWithMatch(errorEvent, { message: SOURCE_ERROR_MESSAGE })
+      } finally {
+        OpenFeature.removeHandler(ProviderEvents.Error, errorEvent)
+        await OpenFeature.clearProviders()
+      }
     })
   })
 })

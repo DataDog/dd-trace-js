@@ -5,6 +5,7 @@ const { channel } = require('dc-polyfill')
 const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/openfeature-node-server')
 const log = require('../log')
 const { debugChannel } = require('../log/channels')
+const { warn } = require('../log/writer')
 const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const DebugLoggingHook = require('./debug-logging-hook')
@@ -16,6 +17,7 @@ const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
 const RAW_EVALUATION_DATA_WARNING = 'Feature Flags: debug logging is enabled, so feature flag logs include raw ' +
   'evaluation data (targeting keys, evaluation context attributes, flag values, and default values) that may ' +
   'contain personal or sensitive information. Unset DD_TRACE_DEBUG when you no longer need it.'
+const SOURCE_UNAVAILABLE_CONSEQUENCE = 'Provider initialization fails and flag evaluations return their default values.'
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
@@ -33,6 +35,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
   /** @type {{ start: Function, stop: Function } | undefined} */
   #configurationSource
+
+  /** @type {Error | undefined} */
+  #configurationSourceError
 
   /** @type {number} */
   #initializationTimeoutMs
@@ -82,7 +87,16 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       this.hooks.push(telemetryHook(this.#flagEvalEVPHook))
     }
 
-    this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this))
+    try {
+      this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this))
+    } catch (error) {
+      this.#configurationSourceError = error
+      log.error('Unable to configure Feature Flagging configuration source', error)
+      if (config.startupLogs) {
+        // log.error prints only with debug logging enabled, so write the diagnostic like the startup logs do.
+        warn(`DATADOG TRACER DIAGNOSTIC - Feature Flags: ${error.message}. ${SOURCE_UNAVAILABLE_CONSEQUENCE}`)
+      }
+    }
     this.#configurationSource?.start()
   }
 
@@ -98,6 +112,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
     if (hasConfiguration) {
       this.#logInitialConfiguration()
+    } else if (this.#configurationSourceError) {
+      // No configuration can arrive, so fail now instead of waiting for the timeout.
+      this.setError(this.#configurationSourceError)
     } else {
       log.debug('Feature Flags: waiting for provider initialization (timeout %dms)...', this.#initializationTimeoutMs)
     }

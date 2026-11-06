@@ -10,12 +10,18 @@ const AGENTLESS_START_MESSAGE = 'Feature Flags: starting agentless configuration
 const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is remote_config but Remote ' +
   'Configuration is disabled; flag evaluations will return their default values. Set ' +
   'DD_REMOTE_CONFIGURATION_ENABLED=true or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=agentless'
+const MISSING_API_KEY_MESSAGE = 'DD_API_KEY is required for the default Datadog Feature Flagging endpoint; ' +
+  'set DD_API_KEY or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL'
 
 /**
  * @typedef {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} UniversalFlagConfiguration
  */
 
 /**
+ * Creates the agentless source when it is the selected configuration source.
+ *
+ * Throws when the agentless source is selected but cannot start, so the provider can fail initialization.
+ *
  * @param {import('../config/config-base')} config
  * @param {(configuration: UniversalFlagConfiguration) => void} applyConfiguration
  */
@@ -40,32 +46,28 @@ function create (config, applyConfiguration) {
 
   const hasCustomEndpoint = Boolean(baseUrl?.trim())
 
-  try {
-    if (!hasCustomEndpoint && !config.DD_API_KEY) {
-      throw new Error('DD_API_KEY is required for the default Datadog Feature Flagging endpoint')
-    }
-
-    const AgentlessConfigurationSource = require('./agentless_configuration_source')
-    const resolvedEndpoint = endpoint(config, baseUrl)
-    const effectivePollIntervalSeconds = Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS)
-    log.debug(
-      AGENTLESS_START_MESSAGE,
-      redactedUrl(resolvedEndpoint),
-      hasCustomEndpoint ? 'custom' : 'default',
-      effectivePollIntervalSeconds,
-      requestTimeoutSeconds,
-      hasCustomEndpoint ? 'not sent' : 'sent'
-    )
-    return new AgentlessConfigurationSource({
-      endpoint: resolvedEndpoint,
-      pollIntervalMs: effectivePollIntervalSeconds * 1000,
-      requestTimeoutMs: requestTimeoutSeconds * 1000,
-      apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
-      env: config.env,
-    }, applyConfiguration)
-  } catch (error) {
-    log.error('Unable to configure Feature Flagging configuration source', error)
+  if (!hasCustomEndpoint && !config.DD_API_KEY) {
+    throw new Error(MISSING_API_KEY_MESSAGE)
   }
+
+  const AgentlessConfigurationSource = require('./agentless_configuration_source')
+  const resolvedEndpoint = endpoint(config, baseUrl)
+  const effectivePollIntervalSeconds = Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS)
+  log.debug(
+    AGENTLESS_START_MESSAGE,
+    redactedUrl(resolvedEndpoint),
+    hasCustomEndpoint ? 'custom' : 'default',
+    effectivePollIntervalSeconds,
+    requestTimeoutSeconds,
+    hasCustomEndpoint ? 'not sent' : 'sent'
+  )
+  return new AgentlessConfigurationSource({
+    endpoint: resolvedEndpoint,
+    pollIntervalMs: effectivePollIntervalSeconds * 1000,
+    requestTimeoutMs: requestTimeoutSeconds * 1000,
+    apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
+    env: config.env,
+  }, applyConfiguration)
 }
 
 /**
