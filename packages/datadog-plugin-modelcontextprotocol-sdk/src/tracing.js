@@ -5,6 +5,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const {
   DISTRIBUTED_TRACE_META_KEY,
+  forPackage,
   tagErrorResult,
 } = require('./utils')
 
@@ -160,14 +161,20 @@ class McpServerToolCallPlugin extends McpPlugin {
   onEnd (span, ctx) { tagErrorResult(span, ctx.result) }
 }
 
-module.exports = [
-  McpPropagationPlugin,
+const clientPlugins = [
   McpToolCallPlugin,
   McpListToolsPlugin,
   McpListResourcesPlugin,
   McpReadResourcePlugin,
   McpListPromptsPlugin,
   McpGetPromptPlugin,
+]
+
+module.exports = [
+  McpPropagationPlugin,
+  ...clientPlugins,
+  ...clientPlugins.map(Plugin => forPackage(Plugin, '@modelcontextprotocol/client')),
   McpServerRequestPlugin,
   McpServerToolCallPlugin,
+  forPackage(McpServerToolCallPlugin, '@modelcontextprotocol/server'),
 ]

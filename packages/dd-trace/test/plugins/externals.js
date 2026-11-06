@@ -540,6 +540,20 @@ module.exports = {
       versions: ['>=1.27.1'],
     },
   ],
+  '@modelcontextprotocol/client': [
+    {
+      name: '@modelcontextprotocol/server',
+      dep: true,
+      forced: true,
+    },
+  ],
+  '@modelcontextprotocol/server': [
+    {
+      name: '@modelcontextprotocol/client',
+      dep: true,
+      forced: true,
+    },
+  ],
   moleculer: [
     {
       name: 'bluebird',

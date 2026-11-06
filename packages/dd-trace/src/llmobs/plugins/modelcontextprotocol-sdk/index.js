@@ -1,5 +1,6 @@
 'use strict'
 
+const { forPackage } = require('../../../../../datadog-plugin-modelcontextprotocol-sdk/src/utils')
 const LLMObsPlugin = require('../base')
 const { formatInput, formatOutput } = require('./utils')
 
@@ -65,4 +66,9 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
   }
 }
 
-module.exports = [McpToolCallLLMObsPlugin, McpListToolsLLMObsPlugin]
+const plugins = [McpToolCallLLMObsPlugin, McpListToolsLLMObsPlugin]
+
+module.exports = [
+  ...plugins,
+  ...plugins.map(Plugin => forPackage(Plugin, '@modelcontextprotocol/client')),
+]

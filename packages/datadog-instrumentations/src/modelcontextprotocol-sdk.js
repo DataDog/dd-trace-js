@@ -4,8 +4,10 @@ const { tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, getHooks } = require('./helpers/instrument')
 
-for (const hook of getHooks('@modelcontextprotocol/sdk').values()) {
-  addHook(hook, exports => exports)
+for (const name of ['@modelcontextprotocol/sdk', '@modelcontextprotocol/client', '@modelcontextprotocol/server']) {
+  for (const hook of getHooks(name).values()) {
+    addHook(hook, exports => exports)
+  }
 }
 
 const serverRequestCh = tracingChannel('apm:mcp:server:request')
@@ -53,7 +55,8 @@ function wrapRequestHandler (protocol, handler) {
   if (wrappedRequestHandlers.has(handler)) return handler
 
   const wrappedHandler = function requestHandlerWithTrace (request, extra) {
-    const ctx = getPendingContext(protocol, extra?.requestId)
+    // SDK 1.x passes `extra.requestId`; 2.x passes a context carrying `mcpReq.id`.
+    const ctx = getPendingContext(protocol, extra?.requestId ?? extra?.mcpReq?.id)
     if (!ctx) return handler.apply(this, arguments)
 
     let result
@@ -108,14 +111,15 @@ function wrapAbortControllers (protocol) {
       return original.apply(this, arguments)
     }
   })
-  shimmer.wrap(controllers, 'clear', function (original) {
-    return function clearAbortControllersWithTrace () {
-      for (const requestId of this.keys()) {
-        finishServerRequest(protocol, requestId)
-      }
-      return original.apply(this, arguments)
-    }
-  })
+}
+
+function finishPendingServerRequests (protocol) {
+  const pending = pendingContexts.get(protocol)
+  if (!pending) return
+
+  for (const requestId of pending.keys()) {
+    finishServerRequest(protocol, requestId)
+  }
 }
 
 function wrapProtocol (Protocol) {
@@ -180,6 +184,15 @@ function wrapProtocol (Protocol) {
   shimmer.wrap(Protocol.prototype, 'setRequestHandler', function (original) {
     return function setRequestHandlerWithTrace () {
       wrapRequestHandlers(this)
+      return original.apply(this, arguments)
+    }
+  })
+
+  // On close, SDK 1.x clears the abort controller map, but 2.x swaps in a new map, so the wrapped `delete` never
+  // runs for requests still in flight. Stateless 2.x servers close right after sending each response.
+  shimmer.wrap(Protocol.prototype, '_onclose', function (original) {
+    return function _oncloseWithTrace () {
+      finishPendingServerRequests(this)
       return original.apply(this, arguments)
     }
   })
@@ -249,6 +262,19 @@ addHook({
   versions: ['>=1.27.1'],
   file: 'dist/esm/server/mcp.js',
 }, exports => {
+  wrapMcpServer(exports.McpServer)
+  return exports
+})
+
+// SDK 2.x splits into separate client and server packages, each bundling its own Protocol copy into chunk files
+// whose names change with every release. The package entry re-exports the classes, so hook it instead.
+addHook({ name: '@modelcontextprotocol/client', versions: ['>=2'] }, exports => {
+  wrapProtocol(exports.Protocol)
+  return exports
+})
+
+addHook({ name: '@modelcontextprotocol/server', versions: ['>=2'] }, exports => {
+  wrapProtocol(exports.Protocol)
   wrapMcpServer(exports.McpServer)
   return exports
 })

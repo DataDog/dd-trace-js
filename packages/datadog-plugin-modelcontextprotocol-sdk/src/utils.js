@@ -24,7 +24,25 @@ function tagErrorResult (span, result) {
   }
 }
 
+/**
+ * Copies a plugin subscribed to an SDK 1.x Orchestrion channel onto the same channel of an SDK 2.x package.
+ * The copy keeps the 1.x component, so span tags do not depend on the SDK major version.
+ *
+ * @template {{ id: string, prefix: string }} T
+ * @param {T} Plugin
+ * @param {string} packageName
+ * @returns {T}
+ */
+function forPackage (Plugin, packageName) {
+  return class extends Plugin {
+    static id = `${Plugin.id}_${packageName.slice(packageName.lastIndexOf('/') + 1)}`
+    static component = Plugin.id
+    static prefix = Plugin.prefix.replace('@modelcontextprotocol/sdk', packageName)
+  }
+}
+
 module.exports = {
   DISTRIBUTED_TRACE_META_KEY,
+  forPackage,
   tagErrorResult,
 }
