@@ -286,7 +286,10 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
   let latestCommits = getLatestCommits(configCommitSha)
   if (!latestCommits.length) {
     const localSha = getGitMetadata({})[GIT_COMMIT_SHA]
-    return callback(validateGitCommitSha(localSha) ? new Error('Selected Git commit is unavailable') : null)
+    if (!validateGitCommitSha(localSha)) return callback(null)
+    return callback(Object.assign(new Error('Selected Git commit is unavailable'), {
+      code: 'ERR_GIT_COMMIT_UNAVAILABLE',
+    }))
   }
   log.debug('There were %s commits since last month.', latestCommits.length)
 

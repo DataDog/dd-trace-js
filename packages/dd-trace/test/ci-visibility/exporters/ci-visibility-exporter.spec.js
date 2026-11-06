@@ -673,6 +673,38 @@ describe('CI Visibility Exporter', () => {
           })
         })
       }
+      for (const requireGit of [false, true]) {
+        it(`handles an unavailable selected commit when require_git is ${requireGit}`, async () => {
+          const sha = 'c'.repeat(40)
+          const configuration = { sha, repositoryUrl: 'https://example.com/repository.git' }
+          cp.execFileSync.withArgs('git', sinon.match.array.startsWith(['log'])).returns('')
+          cp.execFileSync.withArgs('git', ['rev-parse', 'HEAD']).returns('a'.repeat(40))
+          nock(url)
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, { data: { attributes: { itr_enabled: true, require_git: requireGit, tests_skipping: true } } })
+          const skippableScope = nock(url)
+            .post('/api/v2/ci/tests/skippable', body => body.data.attributes.sha === sha)
+            .reply(200, { data: [] })
+          const exporter = new CiVisibilityExporter({
+            url,
+            testOptimization: {
+              DD_CIVISIBILITY_ITR_ENABLED: true,
+              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+            },
+          })
+          exporter._resolveCanUseCiVisProtocol(true)
+          const settingsErr = await new Promise(resolve => {
+            exporter.getLibraryConfiguration(configuration, resolve)
+          })
+          assert.strictEqual(!!settingsErr, requireGit)
+          const [skippableErr, suites] = await new Promise(resolve => {
+            exporter.getSkippableSuites(configuration, (...args) => resolve(args))
+          })
+          assert.strictEqual(!!skippableErr, requireGit)
+          assert.deepStrictEqual(suites, [])
+          assert.strictEqual(skippableScope.isDone(), !requireGit)
+        })
+      }
       it('does not request skippable suites when git metadata upload fails with require_git false', (done) => {
         // Regression: the live settings path starts `sendGitMetadata` even when the
         // backend returns `require_git: false`. `getSkippableSuites` awaits

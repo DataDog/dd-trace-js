@@ -332,7 +332,9 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     this._gitUploadPromise.then(gitUploadError => {
-      if (gitUploadError) {
+      const isKnownCommitUnavailable = gitUploadError?.code === 'ERR_GIT_COMMIT_UNAVAILABLE' &&
+        this._libraryConfig?.requireGit === false
+      if (gitUploadError && !isKnownCommitUnavailable) {
         return callback(gitUploadError, [])
       }
       getSkippableSuitesRequest(requestConfiguration, callback)

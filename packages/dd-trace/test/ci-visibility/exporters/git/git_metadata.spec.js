@@ -179,6 +179,7 @@ describe('git_metadata', () => {
     const selected = 'a'.repeat(40)
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.match(err.message, /Selected Git commit is unavailable/)
+      assert.strictEqual(err.code, 'ERR_GIT_COMMIT_UNAVAILABLE')
       sinon.assert.calledOnceWithExactly(getLatestCommitsStub, selected)
       sinon.assert.notCalled(requestStub)
       sinon.assert.notCalled(generatePackFilesForCommitsStub)
