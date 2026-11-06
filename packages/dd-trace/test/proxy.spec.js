@@ -685,6 +685,19 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(openfeature.enable)
       })
 
+      it('keeps one provider and the flag selection of the first init for the process', () => {
+        config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
+        const options = { featureFlags: { flagSelection: { tags: ['first'] } } }
+
+        proxy.init(options)
+        const provider = proxy.openfeature
+        proxy.init({ featureFlags: { flagSelection: { tags: ['second'] } } })
+
+        assert.strictEqual(proxy.openfeature, provider)
+        sinon.assert.calledOnceWithExactly(Config, options)
+        sinon.assert.calledOnceWithExactly(OpenFeatureProvider, sinon.match.any, config)
+      })
+
       it('does not enable OpenFeature when provider construction fails', () => {
         config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
         OpenFeatureProvider.throws(new Error('provider unavailable'))
