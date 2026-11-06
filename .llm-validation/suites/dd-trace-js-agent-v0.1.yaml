@@ -147,13 +147,17 @@ cases:
     files: [AGENTS.md]
     input: |
       May I make a synchronous span-processing hot path async just to simplify its implementation, including when
-      the feature is disabled? Does the same restriction apply to tests and worker threads? Answer in at most 3 bullets.
+      the feature is disabled? Would returning a promise without async syntax be acceptable instead?
+      Does the same restriction apply to tests and worker threads? Answer in at most 3 bullets.
     expected_criteria:
-      - Rejects adding promise machinery to the synchronous hot path and keeps the inactive path cheap.
+      - >
+        Rejects adding promise machinery to the synchronous hot path regardless of async syntax and keeps the
+        inactive path cheap.
       - Notes that async/await is allowed in tests.
       - Notes that async/await is allowed in worker threads.
     bad_signals:
       - Accepts making the synchronous hot path async or adding promise machinery when the feature is disabled.
+      - Accepts a promise-returning helper on the synchronous hot path because it avoids async syntax.
       - Claims async/await is forbidden in tests.
       - Claims async/await is forbidden in worker threads.
 
