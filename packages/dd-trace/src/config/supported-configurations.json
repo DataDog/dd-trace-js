@@ -4238,6 +4238,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_TRPC_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_TYPESAFE_ENABLED": [
       {
         "implementation": "A",
