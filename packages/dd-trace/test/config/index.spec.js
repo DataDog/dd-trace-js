@@ -6984,6 +6984,27 @@ rules:
         })
       }
 
+      it('keeps the selection when the legacy provider switch selects Remote Config delivery', () => {
+        process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = 'true'
+        const sourceLog = { debug: sinon.spy(), error: sinon.spy(), warn: sinon.spy() }
+        const configurationSource = proxyquire('../../src/openfeature/configuration_source', {
+          '../log': sourceLog,
+          './flag-selection': proxyquire('../../src/openfeature/flag-selection', { '../log': sourceLog }),
+        })
+
+        const config = getConfig({ featureFlags: { flagSelection: { tags: ['mobile'] } } })
+        const source = configurationSource.create(config, sinon.spy())
+
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+        assert.strictEqual(source, undefined)
+        sinon.assert.calledOnceWithExactly(
+          sourceLog.warn,
+          'featureFlags.flagSelection is not supported when flags are delivered through Remote Config. ' +
+          'Loading the full flag configuration.'
+        )
+        sinon.assert.notCalled(sourceLog.error)
+      })
+
       it('accepts the selection next to other Feature Flags options', () => {
         const flagSelection = { tags: ['mobile'] }
 

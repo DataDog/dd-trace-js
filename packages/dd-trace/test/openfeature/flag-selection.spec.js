@@ -111,10 +111,11 @@ describe('OpenFeature flag selection', () => {
     const { cases } = JSON.parse(readFileSync(VECTORS_PATH, 'utf8'))
     const sdkCases = cases.filter(vector => vector.sdk)
 
-    it('runs every SDK case and skips only the raw query cases', () => {
-      assert.strictEqual(sdkCases.length, 38)
-      assert.strictEqual(cases.filter(vector => vector.rawQuery !== undefined).length, 6)
-      assert.strictEqual(sdkCases.length + 6, cases.length)
+    it('skips only the raw query cases, which have no SDK expectation', () => {
+      assert.ok(sdkCases.length > 0, 'Expected SDK cases in the shared vectors')
+      for (const vector of cases) {
+        assert.strictEqual(vector.sdk === undefined, vector.rawQuery !== undefined, vector.name)
+      }
     })
 
     for (const vector of sdkCases) {
@@ -144,6 +145,23 @@ describe('OpenFeature flag selection', () => {
   })
 
   describe('request', () => {
+    it('loads flagging-core only once a selection is set', () => {
+      const flaggingCorePath = require.resolve('../../../../vendor/dist/@datadog/flagging-core')
+      delete require.cache[flaggingCorePath]
+
+      createSourceConfig(undefined)
+      createSourceConfig(null)
+      config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
+      configurationSource.create(config, sinon.spy())
+
+      assert.strictEqual(require.cache[flaggingCorePath], undefined)
+
+      config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'agentless'
+      createSourceConfig({ tags: ['mobile'] })
+
+      assert.ok(require.cache[flaggingCorePath], 'Expected flagging-core to load for a selection')
+    })
+
     it('leaves the request unchanged without a selection', () => {
       for (const flagSelection of [undefined, null]) {
         const resolved = createSourceConfig(flagSelection)
