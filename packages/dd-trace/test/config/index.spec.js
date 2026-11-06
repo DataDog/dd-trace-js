@@ -6951,6 +6951,73 @@ rules:
       assert.strictEqual(config.getOrigin('featureFlags.' + name), 'env_var')
     })
 
+    describe('flag selection', () => {
+      const SENTINEL = /SENTINEL_FLAG_SELECTION/
+
+      function assertNotReported () {
+        const entries = updateConfig.getCall(0).args[0]
+        assert.ok(
+          !entries.some(entry => entry.name === 'featureFlags.flagSelection'),
+          'Expected featureFlags.flagSelection to be omitted from telemetry'
+        )
+        assert.doesNotMatch(inspect(entries, { depth: null }), SENTINEL)
+        for (const method of [log.info, log.warn, log.error]) {
+          assert.doesNotMatch(inspect(method.args, { depth: null }), SENTINEL)
+        }
+      }
+
+      it('has no flag selection by default', () => {
+        assert.strictEqual(getConfig().featureFlags.flagSelection, undefined)
+      })
+
+      for (const [name, flagSelection] of Object.entries({
+        'a valid selection': { tags: ['SENTINEL_FLAG_SELECTION'], keyPatterns: ['SENTINEL_FLAG_SELECTION.*'] },
+        'a wrong-shape selection': [{ tags: ['SENTINEL_FLAG_SELECTION'] }],
+        'a string selection': 'SENTINEL_FLAG_SELECTION',
+      })) {
+        it(`passes ${name} through unchanged and keeps it out of logs and telemetry`, () => {
+          const config = getConfig({ featureFlags: { flagSelection } })
+
+          assert.strictEqual(config.featureFlags.flagSelection, flagSelection)
+          assert.strictEqual(config.getOrigin('featureFlags.flagSelection'), 'code')
+          assertNotReported()
+        })
+      }
+
+      it('keeps the selection when the legacy provider switch selects Remote Config delivery', () => {
+        process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED = 'true'
+        const sourceLog = { debug: sinon.spy(), error: sinon.spy(), warn: sinon.spy() }
+        const configurationSource = proxyquire('../../src/openfeature/configuration_source', {
+          '../log': sourceLog,
+          './flag-selection': proxyquire('../../src/openfeature/flag-selection', { '../log': sourceLog }),
+        })
+
+        const config = getConfig({ featureFlags: { flagSelection: { tags: ['mobile'] } } })
+        const source = configurationSource.create(config, sinon.spy())
+
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'remote_config')
+        assert.strictEqual(source, undefined)
+        sinon.assert.calledOnceWithExactly(
+          sourceLog.warn,
+          'featureFlags.flagSelection is not supported when flags are delivered through Remote Config. ' +
+          'Loading the full flag configuration.'
+        )
+        sinon.assert.notCalled(sourceLog.error)
+      })
+
+      it('accepts the selection next to other Feature Flags options', () => {
+        const flagSelection = { tags: ['mobile'] }
+
+        const config = getConfig({
+          featureFlags: { enableEvaluationTelemetryOptOutParameter: true, flagSelection },
+        })
+
+        assert.strictEqual(config.featureFlags.flagSelection, flagSelection)
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED, true)
+        sinon.assert.notCalled(log.warn)
+      })
+    })
+
     it('reads the configuration source environment variable', () => {
       process.env.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
 
