@@ -553,7 +553,7 @@ function getGitMetadata (ciMetadata) {
 
   let localTag = tag
   if (!localTag && !tags[GIT_BRANCH]) {
-    const tagsAtHead = readCheckout(['tag', '--points-at', 'HEAD'], false)
+    const tagsAtHead = readCheckout(['tag', '--no-column', '--points-at', 'HEAD'], false)
       .trim().split(/\r?\n/).filter(Boolean)
     if (tagsAtHead.length === 1) localTag = tagsAtHead[0]
   }

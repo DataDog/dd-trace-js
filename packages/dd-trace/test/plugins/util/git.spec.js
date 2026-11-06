@@ -114,7 +114,7 @@ describe('git', () => {
   it('omits HEAD and only infers a unique tag for a detached checkout', () => {
     cachedExecStub.returns('')
     cachedExecStub.withArgs('git', ['rev-parse', '--abbrev-ref', 'HEAD']).returns('HEAD')
-    const tagCommand = cachedExecStub.withArgs('git', ['tag', '--points-at', 'HEAD'])
+    const tagCommand = cachedExecStub.withArgs('git', ['tag', '--no-column', '--points-at', 'HEAD'])
     tagCommand.returns('v1\n')
     assert.strictEqual(getGitMetadata({})[GIT_TAG], 'v1')
     assert.strictEqual(getGitMetadata({})[GIT_BRANCH], undefined)
@@ -1159,6 +1159,16 @@ done
   afterEach(() => {
     nock.cleanAll()
     fs.rmSync(directory, { recursive: true, force: true })
+  })
+
+  it('keeps tag discovery unambiguous with forced Git column formatting', () => {
+    git(checkout, ['checkout', '--detach', 'HEAD'])
+    git(checkout, ['config', 'column.ui', 'always'])
+    git(checkout, ['config', 'column.tag', 'always'])
+    git(checkout, ['update-ref', 'refs/tags/v1', 'HEAD'])
+    assert.strictEqual(getGitMetadata({})[GIT_TAG], 'v1')
+    git(checkout, ['update-ref', 'refs/tags/stable', 'HEAD'])
+    assert.strictEqual(getGitMetadata({})[GIT_TAG], undefined)
   })
 
   it('includes an old selected commit and its tree without walking old ancestors', () => {
