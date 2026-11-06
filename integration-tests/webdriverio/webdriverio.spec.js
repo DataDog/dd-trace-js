@@ -40,11 +40,9 @@ const {
   TEST_SUITE,
   TEST_TYPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const OLDEST_WEBDRIVERIO_VERSION = '9.0.0'
+const { getWebdriverioVersions, oldest: OLDEST_WEBDRIVERIO_VERSION } = require('./versions')
 const requestedVersion = process.env.WEBDRIVERIO_VERSION
-const versions = requestedVersion
-  ? [requestedVersion === 'oldest' ? OLDEST_WEBDRIVERIO_VERSION : requestedVersion]
-  : [OLDEST_WEBDRIVERIO_VERSION, 'latest']
+const versions = getWebdriverioVersions(requestedVersion)
 const mochaArgs = [...process.argv, ...(process.env.MOCHA_OPTIONS?.split(/\s+/) || [])]
 const hasMochaFilter = mochaArgs.some(arg =>
   ['--grep', '--fgrep', '-g', '-f'].includes(arg) || /^(?:--f?grep=|-[gf].+)/.test(arg)

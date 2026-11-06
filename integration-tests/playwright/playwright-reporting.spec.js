@@ -976,6 +976,10 @@ versions.forEach((version) => {
       const programmaticRerunsContext = satisfies(version, '>=1.60.0') || version === 'latest' ? context : context.skip
 
       programmaticRerunsContext('programmatic reruns', () => {
+        // Parallel scenarios share the sandbox. Isolate output dirs so Playwright cleanup
+        // cannot delete another run's worker artifacts or .last-run.json.
+        let programmaticRerunId = 0
+
         context('automatic test retries', () => {
           it('resets dynamic ATR statuses between runs', async (receiver, run) => {
             receiver.setSettings({ flaky_test_retries_enabled: true })
@@ -983,6 +987,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
                 TEST_DIR: './ci-visibility/playwright-tests-disabled',
                 TEST_SHOULD_FAIL: 'true',
                 DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
@@ -1010,6 +1015,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
                 TEST_DIR: './ci-visibility/playwright-dynamic-atr-serial',
                 DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
                 DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
@@ -1041,6 +1047,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
                 TEST_DIR: './ci-visibility/playwright-tests-disabled',
                 TEST_SHOULD_FAIL: 'true',
                 DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
@@ -1070,6 +1077,7 @@ versions.forEach((version) => {
                 cwd,
                 env: {
                   ...getCiVisAgentlessConfig(receiver.port),
+                  PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
                   NODE_OPTIONS: '',
                   TEST_DIR: './ci-visibility/playwright-tests-disabled',
                   TEST_SHOULD_FAIL: 'true',
@@ -1124,6 +1132,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
                 NODE_OPTIONS: '',
                 TEST_DIR: './ci-visibility/playwright-tests-disabled',
                 TEST_SHOULD_FAIL: 'false',
@@ -1151,6 +1160,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: `./test-results-programmatic-rerun-${++programmaticRerunId}`,
                 NODE_OPTIONS: '',
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
                 TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
