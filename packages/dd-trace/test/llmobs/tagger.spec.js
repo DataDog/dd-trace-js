@@ -2,9 +2,10 @@
 
 const assert = require('node:assert/strict')
 
-const { beforeEach, describe, it } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+const { removeAllBaggageItems, setAllBaggageItems } = require('../../src/baggage')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
 const { writeBridgeTags, findGenAIAncestorSpanId, normalizeLlmObsTraceId } = require('../../src/llmobs/util')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -368,6 +369,101 @@ describe('tagger', () => {
 
         const tags = Tagger.tagMap.get(span)
         assert.strictEqual(tags['_ml_obs.meta.ml_app'], 'my-propagated-ml-app')
+      })
+
+      describe('with distributed context in baggage', () => {
+        afterEach(() => {
+          removeAllBaggageItems()
+        })
+
+        it('inherits the full context from baggage when no trace tags were propagated', () => {
+          // An all-digit hex ID must not be reinterpreted as decimal, as the tag carrier would.
+          setAllBaggageItems({
+            'llmobs.parent_id': '5678',
+            'llmobs.trace_id': '12345678901234567890123456789012',
+            'llmobs.ml_app': 'upstream-app',
+            'llmobs.session_id': 'upstream-session',
+            'llmobs.sample_rate': '0.25',
+            'llmobs.sampling_decision': '0',
+            'llmobs.parent_agent_span_id': '9999',
+            'llmobs.parent_agent_name': 'upstream agent, with a comma',
+          })
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          assertObjectContains(Tagger.tagMap.get(span), {
+            '_ml_obs.llmobs_parent_id': '5678',
+            '_ml_obs.trace_id': '12345678901234567890123456789012',
+            '_ml_obs.meta.ml_app': 'upstream-app',
+            '_ml_obs.session_id': 'upstream-session',
+            '_ml_obs.sample_rate': '0.25',
+            '_ml_obs.sampling_decision': '0',
+            '_ml_obs.parent_agent_span_id': '9999',
+            '_ml_obs.parent_agent_name': 'upstream agent, with a comma',
+          })
+        })
+
+        it('prefers baggage over the propagated trace tags', () => {
+          Object.assign(spanContext._trace.tags, {
+            '_dd.p.llmobs_parent_id': '1111',
+            '_dd.p.llmobs_ml_app': 'tag-app',
+            '_dd.p.llmobs_sd': '1',
+          })
+          setAllBaggageItems({
+            'llmobs.parent_id': '5678',
+            'llmobs.ml_app': 'baggage-app',
+            'llmobs.sampling_decision': '0',
+          })
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          assertObjectContains(Tagger.tagMap.get(span), {
+            '_ml_obs.llmobs_parent_id': '5678',
+            '_ml_obs.meta.ml_app': 'baggage-app',
+            '_ml_obs.sampling_decision': '0',
+          })
+        })
+
+        it('falls back to each propagated trace tag missing from baggage', () => {
+          Object.assign(spanContext._trace.tags, {
+            '_dd.p.llmobs_parent_id': '1111',
+            '_dd.p.llmobs_sid': 'tag-session',
+          })
+          setAllBaggageItems({ 'llmobs.ml_app': 'baggage-app' })
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          assertObjectContains(Tagger.tagMap.get(span), {
+            '_ml_obs.llmobs_parent_id': '1111',
+            '_ml_obs.meta.ml_app': 'baggage-app',
+            '_ml_obs.session_id': 'tag-session',
+          })
+        })
+
+        it('keeps a local LLMObs parent over the baggage context', () => {
+          const parentSpan = { context () { return { toSpanId () { return '4321' } } } }
+          Tagger.tagMap.set(parentSpan, {
+            '_ml_obs.meta.ml_app': 'local-app',
+            '_ml_obs.trace_id': 'abcdefabcdefabcdefabcdefabcdefab',
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
+          })
+          setAllBaggageItems({
+            'llmobs.parent_id': '5678',
+            'llmobs.trace_id': '12345678901234567890123456789012',
+            'llmobs.ml_app': 'upstream-app',
+            'llmobs.sampling_decision': '0',
+          })
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm', parent: parentSpan })
+
+          assertObjectContains(Tagger.tagMap.get(span), {
+            '_ml_obs.llmobs_parent_id': '4321',
+            '_ml_obs.trace_id': 'abcdefabcdefabcdefabcdefabcdefab',
+            '_ml_obs.meta.ml_app': 'local-app',
+            '_ml_obs.sampling_decision': '1',
+          })
+        })
       })
 
       describe('with no global mlApp configured', () => {

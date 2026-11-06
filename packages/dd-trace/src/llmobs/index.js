@@ -22,9 +22,23 @@ const {
   PROPAGATED_SAMPLING_DECISION_KEY,
   TRACE_ID,
   PROPAGATED_TRACE_ID_KEY,
+  BAGGAGE_AGENT_NAME_MAX_LENGTH,
+  BAGGAGE_ML_APP_KEY,
+  BAGGAGE_PARENT_AGENT_ID_KEY,
+  BAGGAGE_PARENT_AGENT_NAME_KEY,
+  BAGGAGE_PARENT_ID_KEY,
+  BAGGAGE_SAMPLE_RATE_KEY,
+  BAGGAGE_SAMPLING_DECISION_KEY,
+  BAGGAGE_SESSION_ID_KEY,
+  BAGGAGE_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { agentNameWireSafe, resolveAgentAttribution } = require('./util')
+const {
+  agentNameWireSafe,
+  getPropagatedLlmObsTraceId,
+  getPropagatedValue,
+  resolveAgentAttribution,
+} = require('./util')
 const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
@@ -69,6 +83,7 @@ let globalTracerConfig
  * @property {import('../opentracing/span_context')} spanContext
  * @property {Array<string | undefined>} [traceTagReplacements]
  * @property {number} [optionalTraceTagCount]
+ * @property {Record<string, string>} [baggageItems]
  */
 
 /**
@@ -174,36 +189,43 @@ function retireWriters (retiredSpanWriter, retiredEvalWriter) {
 
 // since LLMObs traces can extend between services and be the same trace,
 // we need to propagate the parent id, mlApp, session id, and sampling rate/decision.
+// The context is written to two carriers: the legacy `_dd.p.llmobs_*` trace tags, which ride
+// `x-datadog-tags`/`tracestate`, and `llmobs.*` W3C baggage items, which survive a hop that drops the
+// APM trace headers. The baggage items are handed to the propagator for this one request only, so the
+// in-process baggage shared by the rest of the async context is never mutated.
 /** @param {TraceTagInjection} injection */
 function handleLLMObsInjection (injection) {
-  // Respect the standard propagator's gate: when trace tag propagation is
-  // disabled, don't write `x-datadog-tags` for LLMObs either.
-  if (globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) return
-
   const parent = storage.getStore()?.span
   const mlObsSpanTags = LLMObsTagger.tagMap.get(parent)
 
   const parentContext = parent?.context()
+  const parentTraceTags = parentContext?._trace?.tags
   const parentId = parentContext?.toSpanId()
   const mlApp =
     mlObsSpanTags?.[ML_APP] ||
-    parentContext?._trace?.tags?.[PROPAGATED_ML_APP_KEY] ||
+    getPropagatedValue(parentTraceTags, PROPAGATED_ML_APP_KEY) ||
     globalTracerConfig.llmobs.DD_LLMOBS_ML_APP
 
   const sampleRate =
-    mlObsSpanTags?.[SAMPLE_RATE] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLE_RATE_KEY]
+    mlObsSpanTags?.[SAMPLE_RATE] ?? getPropagatedValue(parentTraceTags, PROPAGATED_SAMPLE_RATE_KEY)
   const samplingDecision =
-    mlObsSpanTags?.[SAMPLING_DECISION] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLING_DECISION_KEY]
+    mlObsSpanTags?.[SAMPLING_DECISION] ?? getPropagatedValue(parentTraceTags, PROPAGATED_SAMPLING_DECISION_KEY)
   const sessionId =
     mlObsSpanTags?.[SESSION_ID] ??
-    parentContext?._trace?.tags?.[SESSION_ID_TRACE_DEFAULT_KEY] ??
-    parentContext?._trace?.tags?.[PROPAGATED_SESSION_ID_KEY]
+    parentTraceTags?.[SESSION_ID_TRACE_DEFAULT_KEY] ??
+    getPropagatedValue(parentTraceTags, PROPAGATED_SESSION_ID_KEY)
   const llmobsTraceId = mlObsSpanTags?.[TRACE_ID]
   const propagatedTraceId = llmobsTraceId === undefined
-    ? parentContext?._trace?.tags?.[PROPAGATED_TRACE_ID_KEY]
+    ? parentTraceTags?.[PROPAGATED_TRACE_ID_KEY]
     : llmObsTraceIdToWire(llmobsTraceId)
 
-  if (!parentId && !mlApp && samplingDecision == null && !sessionId && !propagatedTraceId) return
+  // Without a local LLMObs span, the baggage values fall back to what was propagated from upstream, so a
+  // service that only forwards the request still carries the context in baggage, even when the upstream
+  // hop only sent the legacy tags.
+  const traceTags = parentTraceTags ?? injection.spanContext?._trace?.tags
+  const propagatedParentId = parentId ?? getPropagatedValue(traceTags, PROPAGATED_PARENT_ID_KEY)
+
+  if (!propagatedParentId && !mlApp && samplingDecision == null && !sessionId && !propagatedTraceId) return
 
   // Propagate the nearest agent so spans in the downstream process attribute correctly. When the
   // active span sits under a distributed agent, `resolveAgentAttribution` inherits the propagated
@@ -212,6 +234,31 @@ function handleLLMObsInjection (injection) {
   const { name: parentAgentName, spanId: parentAgentSpanId } = resolveAgentAttribution(
     mlObsSpanTags, parent
   )
+
+  // The agent id and name are a pair, so the name only falls back when the id did too.
+  const baggageAgentName = parentAgentSpanId
+    ? parentAgentName
+    : getPropagatedValue(traceTags, PROPAGATED_PARENT_AGENT_NAME_KEY)
+
+  // The trace ID is canonical hex in baggage.
+  injection.baggageItems = compactBaggageItems({
+    [BAGGAGE_PARENT_ID_KEY]: propagatedParentId,
+    [BAGGAGE_TRACE_ID_KEY]: llmobsTraceId ?? getPropagatedLlmObsTraceId(traceTags),
+    [BAGGAGE_ML_APP_KEY]: mlApp || getPropagatedValue(traceTags, PROPAGATED_ML_APP_KEY),
+    [BAGGAGE_SESSION_ID_KEY]: sessionId ?? getPropagatedValue(traceTags, PROPAGATED_SESSION_ID_KEY),
+    [BAGGAGE_SAMPLE_RATE_KEY]: sampleRate ?? getPropagatedValue(traceTags, PROPAGATED_SAMPLE_RATE_KEY),
+    [BAGGAGE_SAMPLING_DECISION_KEY]:
+      samplingDecision ?? getPropagatedValue(traceTags, PROPAGATED_SAMPLING_DECISION_KEY),
+    [BAGGAGE_PARENT_AGENT_ID_KEY]:
+      parentAgentSpanId ?? getPropagatedValue(traceTags, PROPAGATED_PARENT_AGENT_ID_KEY),
+    // The only arbitrary-length value. Below the cap it propagates in full, even when the tag copy is
+    // dropped for not being wire-safe.
+    [BAGGAGE_PARENT_AGENT_NAME_KEY]: baggageAgentName?.slice(0, BAGGAGE_AGENT_NAME_MAX_LENGTH),
+  })
+
+  // Respect the standard propagator's gate: when trace tag propagation is
+  // disabled, don't write `x-datadog-tags` for LLMObs either.
+  if (globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) return
 
   const traceTagReplacements = []
   if (parentId) traceTagReplacements.push(PROPAGATED_PARENT_ID_KEY, parentId)
@@ -237,6 +284,19 @@ function handleLLMObsInjection (injection) {
 
   injection.traceTagReplacements = traceTagReplacements
   injection.optionalTraceTagCount = optionalTraceTagCount
+}
+
+/**
+ * @param {Record<string, string | number | undefined>} items
+ * @returns {Record<string, string>}
+ */
+function compactBaggageItems (items) {
+  /** @type {Record<string, string>} */
+  const baggageItems = {}
+  for (const [key, value] of Object.entries(items)) {
+    if (value != null && value !== '') baggageItems[key] = String(value)
+  }
+  return baggageItems
 }
 
 /**
