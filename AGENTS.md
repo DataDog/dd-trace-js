@@ -107,6 +107,7 @@ The tracer runs in user applications and hot paths:
 - Use `packages/dd-trace/src/log/index.js` with printf-style formatting; use callback formatting for expensive data.
 - Do not add promise machinery to synchronous library paths or inactive and hot paths. Inherently asynchronous APIs,
   control-plane code, and worker threads may follow their upstream asynchronous contract; keep inactive paths cheap.
+  Tests may use promises and `async`/`await`.
 - Avoid unnecessary allocations, closures, listeners, parsing, and per-call compilation. Cache reusable work.
 - Avoid try/catch in hot paths when inputs can be validated early.
 - Use `.once()` for one terminal event on a conforming Node.js `EventEmitter`. Multiple terminal names need a shared
@@ -131,12 +132,14 @@ Update every supported public TypeScript surface for new public APIs unless the 
 For new top-level tracer options or environment variables, update these surfaces.
 Other settings update only their owning surfaces:
 
-1. Define the environment variable, type, default, and applicable `configurationNames` in
-    `packages/dd-trace/src/config/supported-configurations.json`.
+1. Define the environment variable, type, default, and applicable `tracer.init()` option names through
+    `configurationNames` in `packages/dd-trace/src/config/supported-configurations.json`.
 2. Run `npm run generate:config:types` after registry changes. Do not edit generated configuration types manually.
 3. The registry drives ordinary defaults, environment and option mappings, and configuration telemetry.
+    Registry-backed options need no manual telemetry mapping.
     Change runtime configuration code only when the existing registry machinery cannot express the required behavior.
-4. Update both supported public TypeScript surfaces and their documentation comments when applicable.
+4. Update `index.d.ts` and `index.d.v5.ts` and their documentation comments for public options unless explicitly
+    version-specific.
     API reference documentation is generated from these declarations.
     Edit `docs/API.md` only for additional guide content.
 5. Test the option in `packages/dd-trace/test/config/index.spec.js`.
