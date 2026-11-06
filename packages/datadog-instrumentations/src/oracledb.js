@@ -7,12 +7,19 @@ const {
   AsyncResource,
 } = require('./helpers/instrument')
 
+/** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
 const connectionAttributes = new WeakMap()
 const poolAttributes = new WeakMap()
+const poolConnectionAttributes = new WeakMap()
 
 const startChannel = channel('apm:oracledb:query:start')
 const errorChannel = channel('apm:oracledb:query:error')
 const finishChannel = channel('apm:oracledb:query:finish')
+const poolAcquireStartChannel = channel('apm:oracledb:pool:acquire:start')
+const poolAcquireErrorChannel = channel('apm:oracledb:pool:acquire:error')
+const poolAcquireFinishChannel = channel('apm:oracledb:pool:acquire:finish')
+const poolSessionStartChannel = channel('apm:oracledb:pool:session:start')
+const poolSessionFinishChannel = channel('apm:oracledb:pool:session:finish')
 
 function finish (ctx) {
   if (ctx.error) {
@@ -49,6 +56,146 @@ function bindPoolRequestContexts (pool) {
         return processRequest.apply(this, arguments)
       }
     })
+}
+
+/**
+ * @param {Function} getConnection
+ */
+function wrapPoolGetConnection (getConnection) {
+  /**
+   * @param {unknown[]} args
+   */
+  return function wrappedGetConnection (...args) {
+    const pool = this
+    const poolAttrs = poolAttributes.get(pool)
+    const connectionAttrs = poolConnectionAttributes.get(pool)
+    const options = /** @type {{ user?: string, username?: string } | undefined} */ (args[0])
+    const lastArg = args.at(-1)
+    const callback = typeof lastArg === 'function' ? lastArg : undefined
+    const acquireCtx = poolAcquireStartChannel.hasSubscribers
+      ? {
+          pool,
+          connectionAttrs,
+          poolAttrs,
+          user: connectionAttrs.homogeneous
+            ? connectionAttrs.user
+            : options?.user ?? options?.username ?? connectionAttrs.user,
+        }
+      : undefined
+    const sessionCtx = connectionAttrs.hasSessionCallback && poolSessionStartChannel.hasSubscribers
+      ? { poolAttrs }
+      : undefined
+
+    if (callback) {
+      args[args.length - 1] = shimmer.wrapFunction(callback, callback => function (error, connection) {
+        if (connection) {
+          connectionAttributes.set(connection, poolAttrs)
+        }
+        if (acquireCtx === undefined) {
+          return callPoolCallback(sessionCtx, callback, this, arguments)
+        }
+        if (error) {
+          acquireCtx.error = error
+          poolAcquireErrorChannel.publish(acquireCtx)
+        }
+        return poolAcquireFinishChannel.runStores(
+          acquireCtx,
+          callPoolCallback,
+          undefined,
+          sessionCtx,
+          callback,
+          this,
+          arguments
+        )
+      })
+    }
+
+    const promise = sessionCtx === undefined
+      ? callPoolGetConnection(acquireCtx, getConnection, pool, args)
+      : poolSessionStartChannel.runStores(
+        sessionCtx,
+        callPoolGetConnection,
+        undefined,
+        acquireCtx,
+        getConnection,
+        pool,
+        args
+      )
+
+    if (callback) return promise
+
+    if (acquireCtx === undefined) {
+      return promise.then(connection => {
+        connectionAttributes.set(connection, poolAttrs)
+        return connection
+      })
+    }
+
+    return promise.then(
+      connection => {
+        connectionAttributes.set(connection, poolAttrs)
+        poolAcquireFinishChannel.publish(acquireCtx)
+        return connection
+      },
+      error => {
+        acquireCtx.error = error
+        poolAcquireErrorChannel.publish(acquireCtx)
+        poolAcquireFinishChannel.publish(acquireCtx)
+        throw error
+      }
+    )
+  }
+}
+
+/**
+ * @param {object} pool
+ * @param {{
+ *   connectString?: string,
+ *   connectionString?: string,
+ *   homogeneous?: boolean,
+ *   sessionCallback?: Function,
+ *   user?: string,
+ *   username?: string
+ * }} poolAttrs
+ */
+function storePoolAttributes (pool, poolAttrs) {
+  // OracleDB 5.0 expands the pool descriptor and changes the service-name case.
+  const connectString = poolAttrs.connectString ?? poolAttrs.connectionString
+  poolAttributes.set(pool, poolAttrs)
+  poolConnectionAttributes.set(pool, {
+    connectString: connectString ?? pool.connectString,
+    hasSessionCallback: typeof pool.sessionCallback === 'function',
+    homogeneous: pool.homogeneous ?? true,
+    // OracleDB 5 accepts the `username` alias but only copies `user`/`userName` to `pool.user`.
+    user: pool.user ?? poolAttrs.user ?? poolAttrs.username,
+  })
+  if (Object.hasOwn(pool, 'getConnection')) {
+    shimmer.wrap(pool, 'getConnection', wrapPoolGetConnection)
+  }
+}
+
+/**
+ * @param {object | undefined} acquireCtx
+ * @param {Function} getConnection
+ * @param {object} pool
+ * @param {unknown[]} args
+ */
+function callPoolGetConnection (acquireCtx, getConnection, pool, args) {
+  return acquireCtx === undefined
+    ? getConnection.apply(pool, args)
+    : poolAcquireStartChannel.runStores(acquireCtx, getConnection, pool, ...args)
+}
+
+/**
+ * @param {object | undefined} sessionCtx
+ * @param {Function} callback
+ * @param {unknown} thisArg
+ * @param {ArgumentsLike} args
+ */
+function callPoolCallback (sessionCtx, callback, thisArg, args) {
+  return sessionCtx === undefined
+    ? callback.apply(thisArg, args)
+    : poolSessionFinishChannel.runStores(sessionCtx, callback, thisArg, ...args)
 }
 
 addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracledb => {
@@ -164,7 +311,7 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
       if (callback) {
         arguments[1] = shimmer.wrapFunction(callback, callback => (err, pool) => {
           if (pool) {
-            poolAttributes.set(pool, poolAttrs)
+            storePoolAttributes(pool, poolAttrs)
             bindPoolRequestContexts(pool)
           }
           callback(err, pool)
@@ -173,34 +320,17 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
         createPool.apply(this, arguments)
       } else {
         return createPool.apply(this, arguments).then((pool) => {
-          poolAttributes.set(pool, poolAttrs)
+          storePoolAttributes(pool, poolAttrs)
           bindPoolRequestContexts(pool)
           return pool
         })
       }
     }
   })
-  shimmer.wrap(oracledb.Pool.prototype, 'getConnection', getConnection => {
-    return function wrappedGetConnection (...args) {
-      let callback
-      if (typeof args.at(-1) === 'function') {
-        callback = args.at(-1)
-      }
-      if (callback) {
-        args[args.length - 1] = shimmer.wrapFunction(callback, callback => (err, connection) => {
-          if (connection) {
-            connectionAttributes.set(connection, poolAttributes.get(this))
-          }
-          callback(err, connection)
-        })
-        getConnection.apply(this, args)
-      } else {
-        return getConnection.apply(this, args).then((connection) => {
-          connectionAttributes.set(connection, poolAttributes.get(this))
-          return connection
-        })
-      }
-    }
-  })
+  // OracleDB callbackifies this method at module setup, and connection metadata must be attached
+  // before completion is published. Orchestrion cannot replace both completion paths in that order.
+  if (typeof oracledb.Pool.prototype.getConnection === 'function') {
+    shimmer.wrap(oracledb.Pool.prototype, 'getConnection', wrapPoolGetConnection)
+  }
   return oracledb
 })

@@ -26,12 +26,53 @@ const config = {
 }
 
 const dbQuery = 'select current_timestamp from dual'
+/** @typedef {{ tag?: string, matchAnyTag?: boolean }} PoolConnectionOptions */
+const expectedPoolAcquireSpan = {
+  name: expectedSchema.poolAcquire.opName,
+  service: expectedSchema.poolAcquire.serviceName,
+  resource: expectedSchema.poolAcquire.opName,
+  type: 'sql',
+  meta: {
+    'span.kind': 'client',
+    component: 'oracledb',
+    'db.user': config.user,
+    'db.instance': dbInstance,
+    'db.name': dbInstance,
+    'db.hostname': hostname,
+    'out.host': hostname,
+    'network.destination.port': port,
+  },
+}
 
 describe('Plugin', () => {
   let oracledb
   let connection
   let pool
   let tracer
+
+  /**
+   * @param {{ getConnection(options: PoolConnectionOptions): Promise<{ close(): Promise<void> }> }} pool
+   * @param {PoolConnectionOptions} [options]
+   * @param {object} [expected]
+   */
+  async function getTracedConnection (pool, options = {}, expected = expectedPoolAcquireSpan) {
+    const parent = tracer.startSpan('oracle-acquisition-test')
+    let connection
+
+    try {
+      connection = await tracer.scope().activate(parent, () => pool.getConnection(options))
+      const tracePromise = agent.assertFirstTraceSpan(expected, {
+        spanResourceMatch: /^oracle\.pool\.acquire$/,
+      })
+      parent.finish()
+      await tracePromise
+      return connection
+    } catch (error) {
+      parent.finish()
+      await connection?.close()
+      throw error
+    }
+  }
 
   describe('oracledb', () => {
     withVersions('oracledb', 'oracledb', version => {
@@ -219,7 +260,7 @@ describe('Plugin', () => {
         describe('with pool', () => {
           before(async () => {
             pool = await oracledb.createPool(config)
-            connection = await pool.getConnection()
+            connection = await getTracedConnection(pool)
           })
 
           after(async () => {
@@ -229,10 +270,26 @@ describe('Plugin', () => {
 
           poolTests()
 
+          withNamingSchema(async () => {
+            const namingConnection = await pool.getConnection()
+            await namingConnection.close()
+          }, rawExpectedSchema.poolAcquire)
+
           withPeerService(
             () => tracer,
             'oracledb',
             () => connection.execute(dbQuery),
+            dbInstance,
+            'db.instance'
+          )
+
+          withPeerService(
+            () => tracer,
+            'oracledb',
+            async () => {
+              const peerConnection = await pool.getConnection()
+              await peerConnection.close()
+            },
             dbInstance,
             'db.instance'
           )
@@ -249,7 +306,7 @@ describe('Plugin', () => {
                 )
               `,
             })
-            connection = await pool.getConnection()
+            connection = await getTracedConnection(pool)
           })
 
           after(async () => {
@@ -258,6 +315,296 @@ describe('Plugin', () => {
           })
 
           poolTests()
+        })
+
+        describe('pool acquisition lifecycle', () => {
+          let lifecyclePool
+
+          before(async () => {
+            lifecyclePool = await oracledb.createPool(config)
+          })
+
+          after(async () => {
+            await lifecyclePool.close()
+          })
+
+          it('traces an idle acquisition that is released without a query', async () => {
+            const idlePool = await oracledb.createPool({
+              ...config,
+              poolMin: 1,
+            })
+            let acquiredConnection
+
+            try {
+              acquiredConnection = await getTracedConnection(idlePool, { tag: '', matchAnyTag: false })
+              await acquiredConnection.close()
+              acquiredConnection = undefined
+            } finally {
+              if (acquiredConnection !== undefined) await acquiredConnection.close()
+              await idlePool.close()
+            }
+          })
+
+          it('keeps a queued acquisition open until a connection is available', async () => {
+            const queuePool = await oracledb.createPool({
+              ...config,
+              poolMax: 1,
+              poolMin: 0,
+              queueMax: 1,
+            })
+            let heldConnection
+            let queuedConnection
+
+            try {
+              heldConnection = await getTracedConnection(queuePool)
+
+              let traceFinished = false
+              const tracePromise = agent.assertFirstTraceSpan(span => {
+                traceFinished = true
+                assertObjectContains(span, expectedPoolAcquireSpan)
+              }, { spanResourceMatch: /^oracle\.pool\.acquire$/ })
+              const queuedPromise = queuePool.getConnection()
+
+              await new Promise(resolve => setImmediate(resolve))
+              assert.strictEqual(traceFinished, false)
+
+              await heldConnection.close()
+              heldConnection = undefined
+              queuedConnection = await queuedPromise
+              await tracePromise
+              await queuedConnection.close()
+              queuedConnection = undefined
+            } finally {
+              if (heldConnection !== undefined) await heldConnection.close()
+              if (queuedConnection !== undefined) await queuedConnection.close()
+              await queuePool.close()
+            }
+          })
+
+          for (const useCallback of [false, true]) {
+            it(`parents queued ${useCallback ? 'callback' : 'Promise'} session queries to acquisition`, async () => {
+              const callbackQuery = 'select sys_context(\'userenv\', \'session_user\') from dual'
+              const sessionPool = await oracledb.createPool({
+                ...config,
+                poolMax: 1,
+                poolMin: 0,
+                queueMax: 1,
+                sessionCallback (callbackConnection, requestedTag, callback) {
+                  if (requestedTag === 'STATE=queued') {
+                    callbackConnection.execute(callbackQuery, callback)
+                  } else {
+                    callback()
+                  }
+                },
+              })
+              let heldConnection
+              let queuedConnection
+
+              try {
+                heldConnection = await getTracedConnection(sessionPool, { tag: 'STATE=held' })
+
+                const parent = tracer.startSpan('oracle-queued-session-callback-parent')
+                let tracePromise
+
+                try {
+                  const queuedPromise = tracer.scope().activate(parent, () => {
+                    if (!useCallback) return sessionPool.getConnection({ tag: 'STATE=queued' })
+
+                    return new Promise((resolve, reject) => {
+                      const returnValue = sessionPool.getConnection({ tag: 'STATE=queued' }, (error, connection) => {
+                        if (error) return reject(error)
+                        try {
+                          assert.strictEqual(tracer.scope().active(), parent)
+                          resolve(connection)
+                        } catch (assertionError) {
+                          reject(assertionError)
+                        }
+                      })
+                      assert.strictEqual(returnValue, undefined)
+                    })
+                  })
+                  await heldConnection.close()
+                  heldConnection = undefined
+                  queuedConnection = await queuedPromise
+                  tracePromise = agent.assertSomeTraces(traces => {
+                    const spans = traces.flat()
+                    const acquire = spans.find(span => span.parent_id?.toString() === parent.context().toSpanId())
+                    const query = spans.find(span => span.resource === callbackQuery)
+
+                    assert.ok(acquire)
+                    assert.ok(query)
+                    assert.strictEqual(acquire.name, expectedSchema.poolAcquire.opName)
+                    assert.strictEqual(query.parent_id.toString(), acquire.span_id.toString())
+                  })
+                } finally {
+                  parent.finish()
+                }
+                await tracePromise
+              } finally {
+                if (heldConnection !== undefined) await heldConnection.close()
+                if (queuedConnection !== undefined) await queuedConnection.close()
+                await sessionPool.close()
+              }
+            })
+          }
+
+          it('keeps session callback queries inside acquisition spans and restores callback context', async () => {
+            const callbackQuery = 'select sys_context(\'userenv\', \'session_user\') from dual'
+            const sessionPool = await oracledb.createPool({
+              ...config,
+              poolMax: 1,
+              poolMin: 0,
+              sessionCallback (callbackConnection, requestedTag, callback) {
+                assert.strictEqual(requestedTag, '')
+                callbackConnection.execute(callbackQuery, callback)
+              },
+            })
+            const parent = tracer.startSpan('oracle-session-callback-parent')
+            let acquiredConnection
+            let tracePromise
+
+            try {
+              await tracer.scope().activate(parent, () => {
+                return new Promise((resolve, reject) => {
+                  const returnValue = sessionPool.getConnection((connectionError, callbackConnection) => {
+                    if (connectionError) return reject(connectionError)
+                    try {
+                      acquiredConnection = callbackConnection
+                      assert.strictEqual(tracer.scope().active(), parent)
+                      resolve()
+                    } catch (error) {
+                      reject(error)
+                    }
+                  })
+                  assert.strictEqual(returnValue, undefined)
+                })
+              })
+              await acquiredConnection.close()
+              acquiredConnection = undefined
+              tracePromise = agent.assertSomeTraces(traces => {
+                const spans = traces.flat()
+                const acquire = spans.find(span => span.name === expectedSchema.poolAcquire.opName)
+                const query = spans.find(span => span.resource === callbackQuery)
+
+                assert.ok(acquire)
+                assert.ok(query)
+                assert.strictEqual(acquire.parent_id.toString(), parent.context().toSpanId())
+                assert.strictEqual(query.parent_id.toString(), acquire.span_id.toString())
+              })
+            } finally {
+              if (acquiredConnection !== undefined) await acquiredConnection.close()
+              parent.finish()
+              await sessionPool.close()
+            }
+            await tracePromise
+          })
+
+          it('keeps acquisition and query spans separate and restores Promise context', async () => {
+            const parent = tracer.startSpan('oracle-pool-parent')
+            let acquiredConnection
+            let tracePromise
+
+            try {
+              await tracer.scope().activate(parent, async () => {
+                acquiredConnection = await lifecyclePool.getConnection()
+                assert.strictEqual(tracer.scope().active(), parent)
+                await acquiredConnection.execute(dbQuery)
+                assert.strictEqual(tracer.scope().active(), parent)
+              })
+              tracePromise = agent.assertSomeTraces(traces => {
+                const spans = traces.flat()
+                const acquire = spans.find(span => span.name === expectedSchema.poolAcquire.opName)
+                const query = spans.find(span => span.resource === dbQuery)
+
+                assert.ok(acquire)
+                assert.ok(query)
+                assert.strictEqual(acquire.parent_id.toString(), parent.context().toSpanId())
+                assert.strictEqual(query.parent_id.toString(), parent.context().toSpanId())
+                assert.strictEqual(query.metrics['db.pool.wait_time_ms'], undefined)
+              })
+            } finally {
+              if (acquiredConnection !== undefined) await acquiredConnection.close()
+              parent.finish()
+            }
+            await tracePromise
+          })
+
+          it('restores callback context and preserves the callback return contract', async () => {
+            const parent = tracer.startSpan('oracle-pool-callback-parent')
+            let acquiredConnection
+            let returnValue
+            let tracePromise
+
+            try {
+              await tracer.scope().activate(parent, () => {
+                return new Promise((resolve, reject) => {
+                  returnValue = lifecyclePool.getConnection((error, callbackConnection) => {
+                    try {
+                      assert.ifError(error)
+                      acquiredConnection = callbackConnection
+                      assert.strictEqual(tracer.scope().active(), parent)
+                      resolve()
+                    } catch (error) {
+                      reject(error)
+                    }
+                  })
+                  assert.strictEqual(returnValue, undefined)
+                })
+              })
+              tracePromise = agent.assertSomeTraces(traces => {
+                const acquire = traces.flat().find(span => span.name === expectedSchema.poolAcquire.opName)
+
+                assert.ok(acquire)
+                assert.strictEqual(acquire.parent_id.toString(), parent.context().toSpanId())
+              })
+            } finally {
+              if (acquiredConnection !== undefined) await acquiredConnection.close()
+              parent.finish()
+            }
+            await tracePromise
+          })
+
+          it('traces Promise and callback validation errors', async () => {
+            const parent = tracer.startSpan('oracle-pool-error-parent')
+            const errors = []
+            let tracePromise
+
+            try {
+              await tracer.scope().activate(parent, async () => {
+                await assert.rejects(lifecyclePool.getConnection(null), error => {
+                  errors.push(error)
+                  assert.match(error.message, /^NJS-005:/)
+                  return true
+                })
+
+                await new Promise((resolve, reject) => {
+                  const returnValue = lifecyclePool.getConnection(null, error => {
+                    try {
+                      errors.push(error)
+                      assert.match(error.message, /^NJS-005:/)
+                      resolve()
+                    } catch (error) {
+                      reject(error)
+                    }
+                  })
+                  assert.strictEqual(returnValue, undefined)
+                })
+              })
+              tracePromise = agent.assertSomeTraces(traces => {
+                const acquireSpans = traces.flat().filter(span => span.name === expectedSchema.poolAcquire.opName)
+
+                assert.strictEqual(acquireSpans.length, 2)
+                for (const [index, span] of acquireSpans.entries()) {
+                  assert.strictEqual(span.meta[ERROR_MESSAGE], errors[index].message)
+                  assert.strictEqual(span.meta[ERROR_TYPE], errors[index].name)
+                  assert.strictEqual(span.meta[ERROR_STACK], errors[index].stack)
+                }
+              })
+            } finally {
+              parent.finish()
+            }
+            await tracePromise
+          })
         })
 
         function poolTests () {
@@ -286,8 +633,9 @@ describe('Plugin', () => {
           })
 
           it('should instrument pool.getConnection with a callback', async () => {
-            const callbackConnection = await new Promise((resolve, reject) => {
-              pool.getConnection((error, conn) => error ? reject(error) : resolve(conn))
+            const getConnection = promisify(pool.getConnection)
+            const callbackConnection = await getTracedConnection({
+              getConnection: () => getConnection.call(pool),
             })
 
             try {
@@ -430,7 +778,7 @@ describe('Plugin', () => {
             await agent.load('oracledb', {
               service (connAttrs) {
                 assert.strictEqual(connAttrs.connectString, config.connectString)
-                return currentService ?? connAttrs.connectString
+                return currentService ?? connAttrs.poolAlias ?? connAttrs.connectString
               },
             })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
@@ -486,35 +834,26 @@ describe('Plugin', () => {
               ])
             }
           })
-        })
 
-        describe('with connectionString fallback', () => {
-          before(async () => {
-            await agent.load('oracledb', {
-              service: connAttrs => connAttrs.connectString || connAttrs.connectionString,
+          it('should use pool parameters for the acquisition service name', async () => {
+            const servicePool = await oracledb.createPool({
+              ...config,
+              poolAlias: 'service-function-pool',
             })
-            oracledb = require(`../../../versions/oracledb@${version}`).get()
-            tracer = require('../../dd-trace')
-          })
+            let acquiredConnection
 
-          after(async () => {
-            await agent.close()
-          })
-
-          it('should fallback to connectionString when connectString is not available', async () => {
-            const connection = await oracledb.getConnection({
-              user: config.user,
-              password: config.password,
-              connectionString: config.connectString, // Use valid connection string
-            })
-
-            await Promise.all([
-              agent.assertFirstTraceSpan({
-                service: config.connectString,
-              }),
-              connection.execute(dbQuery),
-            ])
-            await connection.close()
+            try {
+              acquiredConnection = await getTracedConnection(servicePool, undefined, {
+                name: expectedSchema.poolAcquire.opName,
+                service: 'service-function-pool',
+                resource: expectedSchema.poolAcquire.opName,
+              })
+              await acquiredConnection.close()
+              acquiredConnection = undefined
+            } finally {
+              if (acquiredConnection !== undefined) await acquiredConnection.close()
+              await servicePool.close()
+            }
           })
         })
 
@@ -589,6 +928,150 @@ describe('Plugin', () => {
               await pool.close()
             }
           })
+        })
+      })
+
+      describe('with pool acquisition tracing disabled', () => {
+        before(async () => {
+          tracer = await agent.load('oracledb', { poolAcquire: false })
+          oracledb = require(`../../../versions/oracledb@${version}`).get()
+          pool = await oracledb.createPool(config)
+        })
+
+        after(async () => {
+          await pool.close()
+          await agent.close()
+        })
+
+        it('keeps query tracing enabled without an acquisition span', async () => {
+          const parent = tracer.startSpan('oracle-disabled-acquire-parent')
+          let acquiredConnection
+          let callbackConnection
+          let tracePromise
+
+          try {
+            await tracer.scope().activate(parent, async () => {
+              acquiredConnection = await pool.getConnection()
+              await acquiredConnection.execute(dbQuery)
+
+              callbackConnection = await new Promise((resolve, reject) => {
+                const returnValue = pool.getConnection((error, connection) => {
+                  if (error) return reject(error)
+                  resolve(connection)
+                })
+                assert.strictEqual(returnValue, undefined)
+              })
+            })
+            tracePromise = agent.assertSomeTraces(traces => {
+              const spans = traces.flat()
+
+              assert.ok(spans.find(span => span.resource === dbQuery))
+              assert.strictEqual(spans.some(span => span.name === expectedSchema.poolAcquire.opName), false)
+            })
+          } finally {
+            if (acquiredConnection !== undefined) await acquiredConnection.close()
+            if (callbackConnection !== undefined) await callbackConnection.close()
+            parent.finish()
+          }
+          await tracePromise
+        })
+
+        it('keeps session callback queries traced without an acquisition span', async () => {
+          const callbackQuery = 'select sys_context(\'userenv\', \'session_user\') from dual'
+          const sessionPool = await oracledb.createPool({
+            ...config,
+            poolAlias: 'disabled-acquire-session',
+            poolMin: 0,
+            sessionCallback (callbackConnection, requestedTag, callback) {
+              assert.strictEqual(requestedTag, '')
+              callbackConnection.execute(callbackQuery, callback)
+            },
+          })
+          const parent = tracer.startSpan('oracle-disabled-session-parent')
+          let acquiredConnection
+          let tracePromise
+
+          try {
+            await tracer.scope().activate(parent, () => {
+              return new Promise((resolve, reject) => {
+                const returnValue = sessionPool.getConnection((connectionError, callbackConnection) => {
+                  if (connectionError) return reject(connectionError)
+                  try {
+                    acquiredConnection = callbackConnection
+                    assert.strictEqual(tracer.scope().active(), parent)
+                    resolve()
+                  } catch (error) {
+                    reject(error)
+                  }
+                })
+                assert.strictEqual(returnValue, undefined)
+              })
+            })
+            tracePromise = agent.assertSomeTraces(traces => {
+              const spans = traces.flat()
+
+              assert.ok(spans.find(span => span.resource === callbackQuery))
+              assert.strictEqual(spans.some(span => span.name === expectedSchema.poolAcquire.opName), false)
+            })
+          } finally {
+            if (acquiredConnection !== undefined) await acquiredConnection.close()
+            parent.finish()
+            await sessionPool.close()
+          }
+          await tracePromise
+        })
+
+        it('keeps queued session callback queries traced without an acquisition span', async () => {
+          const callbackQuery = 'select sys_context(\'userenv\', \'session_user\') from dual'
+          const sessionPool = await oracledb.createPool({
+            ...config,
+            poolAlias: 'disabled-queued-session',
+            poolMax: 1,
+            poolMin: 0,
+            queueMax: 1,
+            sessionCallback (callbackConnection, requestedTag, callback) {
+              if (requestedTag === 'STATE=queued') {
+                callbackConnection.execute(callbackQuery, callback)
+              } else {
+                callback()
+              }
+            },
+          })
+          const parent = tracer.startSpan('oracle-disabled-queued-session-parent')
+          let heldConnection
+          let queuedConnection
+          let tracePromise
+
+          try {
+            heldConnection = await sessionPool.getConnection({ tag: 'STATE=held' })
+            const queuedPromise = tracer.scope().activate(parent, () => {
+              return sessionPool.getConnection({ tag: 'STATE=queued' })
+            })
+            await heldConnection.close()
+            heldConnection = undefined
+            queuedConnection = await queuedPromise
+            tracePromise = agent.assertSomeTraces(traces => {
+              const spans = traces.flat()
+              const query = spans.find(span => span.resource === callbackQuery)
+
+              assert.ok(query)
+              assert.strictEqual(query.parent_id.toString(), parent.context().toSpanId())
+              assert.strictEqual(spans.some(span => span.name === expectedSchema.poolAcquire.opName), false)
+            })
+          } finally {
+            parent.finish()
+            if (heldConnection !== undefined) await heldConnection.close()
+            if (queuedConnection !== undefined) await queuedConnection.close()
+            await sessionPool.close()
+          }
+          await tracePromise
+        })
+
+        it('can enable acquisition tracing between calls', async () => {
+          tracer.use('oracledb', { poolAcquire: true })
+
+          const acquiredConnection = await getTracedConnection(pool)
+          await acquiredConnection.close()
         })
       })
 
@@ -673,13 +1156,13 @@ describe('Plugin', () => {
           }
         })
 
-        for (const useCallback of [false, true]) {
+        for (const [useCallback, poolAcquire] of [[false, true], [true, true], [false, false], [true, false]]) {
           for (const queued of [false, true]) {
             const api = useCallback ? 'callback' : 'Promise'
             const timing = queued ? 'queued' : 'immediate'
 
-            it(`suppresses ${timing} ${api} session queries`, async () => {
-              tracer.use('oracledb', { dbmPropagationMode: 'service' })
+            it(`suppresses ${timing} ${api} session queries with poolAcquire=${poolAcquire}`, async () => {
+              tracer.use('oracledb', { poolAcquire, dbmPropagationMode: 'service' })
               let sessionResult
               let sessionCalls = 0
               let injected
@@ -768,8 +1251,8 @@ describe('Plugin', () => {
         after(() => agent.close())
 
         for (const enabled of [true, false]) {
-          it(`preserves queued requests with the plugin enabled=${enabled}`, async () => {
-            tracer.use('oracledb', { enabled })
+          it(`preserves queued contexts with poolAcquire=false and enabled=${enabled}`, async () => {
+            tracer.use('oracledb', { enabled, poolAcquire: false })
             const parents = [tracer.startSpan('first'), tracer.startSpan('second')]
             const contexts = []
             let heldConnection
