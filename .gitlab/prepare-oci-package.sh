@@ -8,8 +8,10 @@ archive=$(npm pack --silent)
 test -f "$archive"
 
 mkdir -p packaging/sources
+# Unlike npm --prefix, Bun needs a manifest here to avoid selecting the parent workspace.
 printf '{}\n' > packaging/sources/package.json
 
+# Bun enforces the release-age policy. Load the repository config explicitly because --cwd changes its lookup.
 npm exec --yes --package=bun -- bun --config="$PWD/bunfig.toml" add --cwd ./packaging/sources/ "$PWD/$archive"
 rm packaging/sources/*.json packaging/sources/bun.lock
 

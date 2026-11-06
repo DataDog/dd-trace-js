@@ -57,6 +57,7 @@ for (const external of Object.keys(externals)) {
 run()
 
 async function run () {
+  // Bun reuses ABI-specific native builds after Node changes. Force their postinstalls before reusing this tree.
   const nodeAbiFile = join(__dirname, '..', 'versions', '.node-abi')
   const recordedAbi = existsSync(nodeAbiFile) ? readFileSync(nodeAbiFile, 'utf8').trim() : undefined
   const force = recordedAbi !== undefined && recordedAbi !== process.versions.modules
