@@ -166,8 +166,8 @@ considering a freshly-published npm version. The window is set in `bunfig.toml` 
 `versions/bunfig.toml` via `minimumReleaseAge = 259200` and is meant to widen the gap in which
 a freshly-published compromised release gets caught and pulled from the registry before it lands
 in our installs. The Datadog-owned packages listed in `minimumReleaseAgeExcludes` bypass
-the wait because our publishing pipeline is their trust boundary. Bun only supports exact package
-names in this list; it does not expand the `@datadog/*` pattern used by Dependabot.
+the wait because our publishing pipeline is their trust boundary. An exact `name@version` entry
+bypasses the wait only for that reviewed release.
 
 `trustedDependencies` in `package.json` is a separate, intentionally smaller boundary. It permits
 lifecycle scripts only for Bun and the native packages that need to build during install; it does not
@@ -186,13 +186,13 @@ If a real advisory drops and the patched version is still inside the three-day w
 1. Pull the package's release notes and confirm the version is the advisory's fixed one.
 2. Run `bun update <pkg>@<exact-version> --minimum-release-age=0` locally to bypass the wait
     for that one resolve, then commit the regenerated `bun.lock`.
-3. In the PR description, link the advisory and call out that the override was deliberate. The
-    override stays on the maintainer's machine, never in `bunfig.toml`, so every bypass shows up
-    in a reviewable diff.
+3. In the PR description, link the advisory and call out that the override was deliberate. Keep
+    `minimumReleaseAge` unchanged in `bunfig.toml` so the default cooldown remains in force.
 
-For a package that needs a permanently shorter window (rare — usually an internal one whose
-publish cadence is faster than three days), add its exact name to `minimumReleaseAgeExcludes` in
-`bunfig.toml` and explain why in the same commit.
+For a reviewed release that must be installed without a committed lockfile, add `name@exact-version`
+to `minimumReleaseAgeExcludes` in `bunfig.toml` and explain why in the same commit. Include required
+matching versions of its transitive packages. Use a package-name entry only when its publishing
+pipeline is the trust boundary.
 
 ## Coding Standards
 
