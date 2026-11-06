@@ -2,6 +2,23 @@ name: Audit
 
 on:
   pull_request:
+    paths:
+      - "package.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "vendor/package.json"
+      - "vendor/bun.lock"
+      - "docs/package.json"
+      - "docs/bun.lock"
+      - ".github/actions/datadog-ci/package.json"
+      - ".github/actions/datadog-ci/bun.lock"
+      - ".github/all-green/package.json"
+      - ".github/all-green/bun.lock"
+      - "packages/dd-trace/test/plugins/versions/package.json"
+      - ".github/actions/node/**"
+      - ".github/audit-allowlist.json"
+      - ".github/workflows/audit.yml"
+      - "scripts/audit.js"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
@@ -12,20 +29,8 @@ permissions:
 
 jobs:
   dependencies:
-    if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        directory:
-          - "."
-          - ".github/actions/datadog-ci"
-          - ".github/all-green"
-          - "docs"
-          - "vendor"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/node/latest
-      - run: node scripts/audit.js "$DIRECTORY"
-        env:
-          DIRECTORY: ${{ matrix.directory }}
+      - run: node scripts/audit.js
