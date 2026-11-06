@@ -287,7 +287,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
   let recoveredSelectedCommit = false
   if (!latestCommits.length && getConfig().testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED &&
     isShallowRepository(true)) {
-    unshallowRepository(false)
+    unshallowRepository(false, configCommitSha)
     latestCommits = getLatestCommits(configCommitSha)
     recoveredSelectedCommit = true
   }

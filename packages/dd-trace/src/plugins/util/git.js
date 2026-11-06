@@ -144,7 +144,8 @@ function getGitVersion () {
   }
 }
 
-function unshallowRepository (parentOnly = false) {
+function unshallowRepository (parentOnly = false, commitSha) {
+  if (commitSha && !validateGitCommitSha(commitSha)) return
   const gitVersion = getGitVersion()
   if (!gitVersion) {
     log.warn('Git version could not be extracted, so git unshallow will not proceed')
@@ -158,12 +159,14 @@ function unshallowRepository (parentOnly = false) {
     ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'],
     null, null, null, true, { uncached: true }
   )
-  const revParseHead = sanitizedExec(['rev-parse', 'HEAD'], null, null, null, true, { uncached: true })
+  const revParseHead = commitSha || sanitizedExec(['rev-parse', 'HEAD'], null, null, null, true, { uncached: true })
   const fetchOptions = { stdio: 'pipe', timeout: 5000 }
+  let depth = parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"'
+  if (commitSha) depth = '--depth=1'
 
   const baseGitOptions = [
     'fetch',
-    parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"',
+    depth,
     '--update-shallow',
     '--filter=blob:none',
     '--recurse-submodules=no',
@@ -186,6 +189,7 @@ function unshallowRepository (parentOnly = false) {
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
     )
+    if (commitSha) return
     const upstreamRemote = sanitizedExec(
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
       null, null, null, true, { uncached: true }

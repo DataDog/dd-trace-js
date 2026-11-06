@@ -1082,6 +1082,7 @@ describe('PR head metadata in shallow repositories', () => {
   let getGitDiff
   let getLatestCommits
   let getCommitsRevList
+  let unshallowSelectedRepository
   let cachedExecSpy
 
   /**
@@ -1154,6 +1155,7 @@ done
     getGitDiff = gitUtils.getGitDiff
     getLatestCommits = gitUtils.getLatestCommits
     getCommitsRevList = gitUtils.getCommitsRevList
+    unshallowSelectedRepository = gitUtils.unshallowRepository
   })
 
   afterEach(() => {
@@ -1603,6 +1605,55 @@ done
     assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
     assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
   })
+
+  for (const depth of [1, 2]) {
+    it(`recovers an unrelated selected commit from a depth-${depth} checkout`, () => {
+      const tree = git(remote, ['rev-parse', headSha + '^{tree}'])
+      const selected = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+        input: `tree ${tree}
+author Test <test@example.com> 1 +0000
+committer Test <test@example.com> 1 +0000
+
+unrelated
+`,
+      })
+      git(remote, ['update-ref', 'refs/heads/juan-fernandez/unrelated', selected])
+      const timestamp = Math.floor(Date.now() / 1000)
+      const root = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+        input: `tree ${tree}
+author Test <test@example.com> ${timestamp} +0000
+committer Test <test@example.com> ${timestamp} +0000
+
+root
+`,
+      })
+      const current = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+        input: `tree ${tree}
+parent ${root}
+author Test <test@example.com> ${timestamp} +0000
+committer Test <test@example.com> ${timestamp} +0000
+
+current
+`,
+      })
+      git(remote, ['update-ref', 'refs/heads/juan-fernandez/current', current])
+      fs.rmSync(checkout, { recursive: true, force: true })
+      git(directory, [
+        'clone', '--depth=' + depth, '--no-checkout', '--branch', 'juan-fernandez/current',
+        pathToFileURL(remote).href, checkout,
+      ])
+      const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+      const originalHistory = git(checkout, ['rev-list', '--count', 'HEAD'])
+      assert.deepStrictEqual(getLatestCommits(selected), [])
+
+      unshallowSelectedRepository(false, selected)
+
+      assert.deepStrictEqual(getLatestCommits(selected), [selected])
+      assert.ok(!getCommitsRevList([], [selected]).includes(originalHead))
+      assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+      assert.strictEqual(git(checkout, ['rev-list', '--count', 'HEAD']), originalHistory)
+    })
+  }
 
   it('discovers a selected commit after a cached miss and shallow fetch', () => {
     const repo = path.resolve(__dirname, '../../../../..')

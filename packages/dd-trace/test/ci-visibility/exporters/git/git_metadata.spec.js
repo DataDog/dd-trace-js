@@ -195,6 +195,7 @@ describe('git_metadata', () => {
           sinon.assert.notCalled(generatePackFilesForCommitsStub)
         }
         assert.strictEqual(unshallowRepositoryStub.callCount, recovery === 'disabled' ? 0 : 1)
+        if (recovery !== 'disabled') sinon.assert.calledWithExactly(unshallowRepositoryStub, false, selected)
         assert.strictEqual(getLatestCommitsStub.callCount, recovery === 'disabled' ? 1 : 2)
         done()
       }, selected)
