@@ -729,7 +729,12 @@ async function createSandbox (
   })
 
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
-  const { NODE_OPTIONS, ...restOfEnv } = withBun(process.env)
+  const { NODE_OPTIONS, ...inheritedEnv } = withBun(process.env)
+  const restOfEnv = {
+    ...inheritedEnv,
+    YARN_REGISTRY: 'https://registry.npmjs.org',
+    YARN_NPM_REGISTRY_SERVER: 'https://registry.npmjs.org',
+  }
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
