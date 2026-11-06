@@ -159,19 +159,47 @@ describe('git_metadata', () => {
     })
   })
 
+  it('does not upload a different history when the selected commit is unavailable', (done) => {
+    getLatestCommitsStub.returns([])
+    const selected = 'a'.repeat(40)
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+      assert.match(err.message, /Selected Git commit is unavailable/)
+      sinon.assert.calledOnceWithExactly(getLatestCommitsStub, selected)
+      sinon.assert.notCalled(requestStub)
+      sinon.assert.notCalled(generatePackFilesForCommitsStub)
+      done()
+    }, selected)
+  })
+
+  it('rejects a local filesystem remote instead of sending an inconsistent repository identity', (done) => {
+    getRepositoryUrlStub.returns('/local/repository')
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+      assert.ok(err)
+      sinon.assert.notCalled(requestStub)
+      done()
+    })
+  })
+
   it('labels packfiles with the selected event and request commit identity', (done) => {
+    const selected = 'a'.repeat(40)
+    getLatestCommitsStub.returns([selected, ...latestCommits])
+    getCommitsRevListStub.returns([selected, ...latestCommits])
     requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
     requestStub.onCall(1).callsFake(async (form, options, callback) => {
       const chunks = []
       for await (const chunk of form) chunks.push(chunk)
-      assert.match(Buffer.concat(chunks).toString(), /"id":"explicit-session-sha"/)
+      assert.match(Buffer.concat(chunks).toString(), new RegExp(`"id":"${selected}"`))
       callback(null, '', 204)
     })
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.strictEqual(err, null)
       sinon.assert.calledTwice(requestStub)
+      sinon.assert.calledOnceWithExactly(getLatestCommitsStub, selected)
+      const searched = JSON.parse(requestStub.getCall(0).args[0]).data.map(({ id }) => id)
+      assert.ok(searched.includes(selected))
+      assert.ok(getCommitsRevListStub.getCall(0).args[1].includes(selected))
       done()
-    }, 'explicit-session-sha')
+    }, selected)
   })
 
   it('should not request to /api/v2/git/repository/packfile if the backend has the commit info', (done) => {
@@ -431,7 +459,7 @@ describe('git_metadata', () => {
         assert.strictEqual(err, null)
         sinon.assert.notCalled(getRepositoryUrlStub)
         const { meta: { repository_url: repositoryUrl } } = JSON.parse(requestStub.getCall(0).args[0])
-        assert.strictEqual(repositoryUrl, 'https://custom-git@datadog.com')
+        assert.strictEqual(repositoryUrl, 'https://datadog.com')
         done()
       })
   })

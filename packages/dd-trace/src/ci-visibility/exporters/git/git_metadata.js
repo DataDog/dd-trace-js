@@ -10,6 +10,8 @@ const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
 
 const log = require('../../../log')
+const { validateGitRepositoryUrl } = require('../../../plugins/util/user-provided-git')
+const { filterSensitiveInfoFromRepository } = require('../../../plugins/util/url')
 const { getSegment } = require('../../../util')
 const {
   getLatestCommits,
@@ -272,13 +274,15 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     repositoryUrl = getRepositoryUrl()
   }
 
+  repositoryUrl = filterSensitiveInfoFromRepository(repositoryUrl)
   log.debug('Uploading git history for repository', repositoryUrl)
 
-  if (!repositoryUrl) {
+  if (!repositoryUrl || !validateGitRepositoryUrl(repositoryUrl)) {
     return callback(new Error('Repository URL is empty'))
   }
 
-  let latestCommits = getLatestCommits()
+  let latestCommits = getLatestCommits(configCommitSha)
+  if (!latestCommits.length) return callback(new Error('Selected Git commit is unavailable'))
   log.debug('There were %s commits since last month.', latestCommits.length)
 
   const getOnFinishGetCommitsToUpload = (hasCheckedShallow) => (err, commitsToUpload) => {
@@ -310,7 +314,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
 
     // The latest commits change after unshallowing
-    latestCommits = getLatestCommits()
+    latestCommits = getLatestCommits(configCommitSha)
     getCommitsToUpload({
       url,
       repositoryUrl,

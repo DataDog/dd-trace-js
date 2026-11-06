@@ -42,6 +42,7 @@ const {
 
 const {
   getGitMetadata,
+  getLatestCommits,
   unshallowRepository,
   getGitDiff,
   isGitAvailable: isGitAvailableWithStub,
@@ -95,15 +96,47 @@ describe('git', () => {
     })
     assert.notStrictEqual(metadata[GIT_REPOSITORY_URL], 'ciRepositoryUrl')
     sinon.assert.calledWith(cachedExecStub, 'git', ['ls-remote', '--get-url'])
-    sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
-    sinon.assert.neverCalledWith(cachedExecStub, 'git', ['show', '-s', '--format=%B'])
+    sinon.assert.calledWith(cachedExecStub, 'git',
+      ['show', '-s', '--no-show-signature', '--format=%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI'])
+    sinon.assert.neverCalledWith(cachedExecStub, 'git', ['show', '-s', '--no-show-signature', '--format=%B'])
     sinon.assert.neverCalledWith(cachedExecStub, 'git', ['rev-parse', 'HEAD'])
     sinon.assert.neverCalledWith(cachedExecStub, 'git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     sinon.assert.neverCalledWith(cachedExecStub, 'git', ['rev-parse', '--show-toplevel'])
     sinon.assert.calledWith(cachedExecStub,
       'git',
-      ['show', '-s', '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'', ciMetadata.headCommitSha]
+      [
+        'show', '-s', '--no-show-signature', '--format=%H%x00%aI%x00%an%x00%ae%x00%cI%x00%cn%x00%ce%x00%B',
+        ciMetadata.headCommitSha,
+      ]
     )
+  })
+
+  it('omits HEAD and only infers a unique tag for a detached checkout', () => {
+    cachedExecStub.returns('')
+    cachedExecStub.withArgs('git', ['rev-parse', '--abbrev-ref', 'HEAD']).returns('HEAD')
+    const tagCommand = cachedExecStub.withArgs('git', ['tag', '--points-at', 'HEAD'])
+    tagCommand.returns('v1\n')
+    assert.strictEqual(getGitMetadata({})[GIT_TAG], 'v1')
+    assert.strictEqual(getGitMetadata({})[GIT_BRANCH], undefined)
+    tagCommand.returns('v1\nstable\n')
+    assert.strictEqual(getGitMetadata({})[GIT_TAG], undefined)
+    cachedExecStub.withArgs('git', ['rev-parse', '--abbrev-ref', 'HEAD']).returns('main')
+    assert.strictEqual(getGitMetadata({})[GIT_TAG], undefined)
+  })
+
+  it('keeps selected commit discovery separate from HEAD history, including old commits', () => {
+    const selected = 'a'.repeat(40)
+    cachedExecStub.returns('')
+    cachedExecStub.withArgs('git', ['rev-parse', '--verify', selected + '^{commit}']).returns(selected)
+    assert.deepStrictEqual(getLatestCommits(selected), [selected])
+    sinon.assert.calledWith(cachedExecStub, 'git',
+      ['log', '--format=%H', '-n 1000', '--since="1 month ago"', selected, '--'])
+    cachedExecStub.withArgs('git', ['rev-parse', '--verify', selected + '^{commit}'])
+      .throws(new Error('unknown commit'))
+    assert.deepStrictEqual(getLatestCommits(selected), [])
+    cachedExecStub.resetHistory()
+    assert.deepStrictEqual(getLatestCommits('--all'), [])
+    sinon.assert.notCalled(cachedExecStub)
   })
 
   it('does not crash if git is not available', () => {
@@ -128,8 +161,8 @@ describe('git', () => {
 
     cachedExecStub
       .onCall(0).returns(
-        'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
-        'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
+        ['git author', 'git.author@email.com', '2022-02-14T16:22:03-05:00',
+          'git committer', 'git.committer@email.com', '2022-02-14T16:23:03-05:00'].join('\0')
       )
       .onCall(1).returns(commitMessage)
       .onCall(2).returns('gitBranch')
@@ -137,10 +170,9 @@ describe('git', () => {
       .onCall(4).returns('ciWorkspacePath')
       .onCall(5).returns(false)
       .onCall(6).returns(
-        'headCommitSha",' +
-        '"2022-02-14T16:22:03-05:00","git head author","git.head.author@email.com",' +
-        '"2022-02-14T16:23:03-05:00","git head committer","git.head.committer@email.com",' +
-        '"' + headCommitMessage
+        ['headCommitSha', '2022-02-14T16:22:03-05:00', 'git head author', 'git.head.author@email.com',
+          '2022-02-14T16:23:03-05:00', 'git head committer', 'git.head.committer@email.com',
+          headCommitMessage].join('\0')
       )
       .onCall(7).returns('https://github.com/datadog/safe-repository.git')
 
@@ -168,8 +200,9 @@ describe('git', () => {
       [CI_WORKSPACE_PATH]: 'ciWorkspacePath',
     })
 
-    sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--format=%B'])
-    sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
+    sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--no-show-signature', '--format=%B'])
+    sinon.assert.calledWith(cachedExecStub, 'git',
+      ['show', '-s', '--no-show-signature', '--format=%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI'])
     sinon.assert.calledWith(cachedExecStub, 'git', ['rev-parse', 'HEAD'])
     sinon.assert.calledWith(cachedExecStub, 'git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     sinon.assert.calledWith(cachedExecStub, 'git', ['rev-parse', '--show-toplevel'])
@@ -433,10 +466,12 @@ describe('user credentials', () => {
   it('scrubs https user credentials', () => {
     cachedExecStub
       .onCall(0).returns(
-        'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
-        'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
+        ['git author', 'git.author@email.com', '2022-02-14T16:22:03-05:00',
+          'git committer', 'git.committer@email.com', '2022-02-14T16:23:03-05:00'].join('\0')
       )
-      .onCall(5).returns('https://x-oauth-basic:ghp_safe_characters@github.com/datadog/safe-repository.git')
+
+    cachedExecStub.withArgs('git', ['ls-remote', '--get-url']).returns(
+      'https://x-oauth-basic:ghp_safe_characters@github.com/datadog/safe-repository.git')
 
     const metadata = getGitMetadata({})
     assert.strictEqual(metadata[GIT_REPOSITORY_URL], 'https://github.com/datadog/safe-repository.git')
@@ -445,10 +480,11 @@ describe('user credentials', () => {
   it('scrubs ssh user credentials', () => {
     cachedExecStub
       .onCall(0).returns(
-        'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
-        'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
+        ['git author', 'git.author@email.com', '2022-02-14T16:22:03-05:00',
+          'git committer', 'git.committer@email.com', '2022-02-14T16:23:03-05:00'].join('\0')
       )
-      .onCall(5).returns('ssh://username@host.xz:port/path/to/repo.git/')
+
+    cachedExecStub.withArgs('git', ['ls-remote', '--get-url']).returns('ssh://username@host.xz:port/path/to/repo.git/')
 
     const metadata = getGitMetadata({})
     assert.strictEqual(metadata[GIT_REPOSITORY_URL], 'ssh://host.xz:port/path/to/repo.git/')
@@ -1119,7 +1155,7 @@ done
     const metadata = getGitMetadata({ headCommitSha: headSha })
 
     assertObjectContains(metadata, {
-      [GIT_COMMIT_HEAD_MESSAGE]: "PR head DD_abc123'\n",
+      [GIT_COMMIT_HEAD_MESSAGE]: 'PR head DD_abc123\n',
       [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'PR Author',
       [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'pr-author@example.com',
       [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'PR Committer',
@@ -1155,7 +1191,7 @@ done
 
     const metadata = getGitMetadata({ headCommitSha: headSha })
 
-    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
     assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
   })
 
@@ -1175,7 +1211,7 @@ done
 
     const metadata = getGitMetadata({ headCommitSha: headSha })
 
-    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
     const fetches = cachedExecSpy.getCalls().filter(call => call.args[1][0] === 'fetch')
     assert.strictEqual(fetches.length, 2)
     assert.ok(fetches[0].args[1].includes('--depth=1'))
@@ -1262,7 +1298,7 @@ done
     git(checkout, ['remote', 'set-url', 'origin', path.join(directory, 'unavailable.git')])
     const diff = getGitDiff(baseSha, headSha)
 
-    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
     assert.match(diff, /-root/)
     assert.match(diff, /\+head/)
   })
@@ -1357,7 +1393,7 @@ done
         assert.strictEqual(fetchOptions.length, 1)
         assert.strictEqual(fetchOptions[0].timeout, 5000)
         const metadata = getGitMetadata({ headCommitSha: headSha })
-        assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
         assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
         assert.strictEqual(metadata[GIT_COMMIT_HEAD_COMMITTER_EMAIL], 'pr-committer@example.com')
         const fetches = cachedExecSpy.getCalls().filter(call => call.args[1][0] === 'fetch')
@@ -1451,7 +1487,7 @@ done
       assert.strictEqual(result.cachedState, String(cachedShallow))
       assert.strictEqual(result.metadataShallowState, String(!cachedShallow))
       assert.strictEqual(result.finalShallowState, String(!cachedShallow))
-      assert.strictEqual(result.metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+      assert.strictEqual(result.metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
       assert.strictEqual(result.headCount, cachedShallow ? '2' : '1')
       assert.match(result.diff, /-root/)
       assert.match(result.diff, /\+head/)
@@ -1480,7 +1516,7 @@ done
       '-e', script, repo, headSha, path.join(directory, 'git-cache'),
     ], { cwd: checkout, stdio: 'pipe' }))
 
-    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
     assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
   })
 
@@ -1497,7 +1533,7 @@ done
       const metadata = getGitMetadata({ headCommitSha: headSha })
 
       assertObjectContains(metadata, {
-        [GIT_COMMIT_HEAD_MESSAGE]: "PR head DD_abc123'\n",
+        [GIT_COMMIT_HEAD_MESSAGE]: 'PR head DD_abc123\n',
         [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'PR Author',
         [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'pr-author@example.com',
         [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'PR Committer',
@@ -1511,7 +1547,7 @@ done
       const scope = nock('http://localhost:8126')
         .post('/evp_proxy/v2/api/v2/test/libraries/test-management/tests', body =>
           body.data.attributes.sha === headSha &&
-          body.data.attributes.commit_message === "PR head DD_abc123'\n")
+          body.data.attributes.commit_message === 'PR head DD_abc123\n')
         .reply(200, { data: { attributes: { modules: {} } } })
 
       getTestManagementTests({

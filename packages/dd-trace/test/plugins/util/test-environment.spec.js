@@ -664,7 +664,7 @@ describe('getJobIDFromDiagFile Windows branch', () => {
 })
 
 describe('Git metadata precedence', () => {
-  for (const source of ['git', 'provider', 'override', 'partial']) {
+  for (const source of ['git', 'provider', 'override', 'partial', 'sha-only']) {
     it(`selects ${source} metadata consistently and preserves CI and PR data`, () => {
       const keys = [
         'git.commit.sha', 'git.repository_url', 'git.branch', 'git.tag', 'git.commit.message',
@@ -684,6 +684,7 @@ describe('Git metadata precedence', () => {
         overrides['git.commit.sha'] = 'c'.repeat(40)
         overrides['git.repository_url'] = 'https://example.com/user.git'
       }
+      if (source === 'sha-only') overrides['git.commit.sha'] = 'c'.repeat(40)
       const git = source === 'provider' ? {} : source === 'partial' ? { 'git.commit.sha': 'a'.repeat(40) } : local
       const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
         './ci': { getCIMetadata: () => provider },
@@ -692,7 +693,10 @@ describe('Git metadata precedence', () => {
       })
       const tags = getTestEnvironmentMetadata('mocha')
       for (const key of keys) {
-        const expected = overrides[key] || (source === 'provider' ? provider[key] : git[key])
+        const commitFieldCleared = source === 'sha-only' && key.startsWith('git.commit.') && key !== 'git.commit.sha'
+        const expected = commitFieldCleared
+          ? undefined
+          : overrides[key] || (source === 'provider' ? provider[key] : git[key])
         assert.strictEqual(tags[key], expected, key)
       }
       assert.strictEqual(tags['ci.job.name'], 'tests')

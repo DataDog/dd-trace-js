@@ -28,12 +28,24 @@ const {
   GIT_BRANCH,
   CI_WORKSPACE_PATH,
   GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_AUTHOR_DATE,
+  GIT_COMMIT_AUTHOR_NAME,
+  GIT_COMMIT_AUTHOR_EMAIL,
+  GIT_COMMIT_COMMITTER_DATE,
+  GIT_COMMIT_COMMITTER_NAME,
+  GIT_COMMIT_COMMITTER_EMAIL,
   GIT_TAG,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_COMMIT_HEAD_SHA,
   GIT_PULL_REQUEST_BASE_BRANCH,
   GIT_COMMIT_HEAD_MESSAGE,
 } = require('./util/tags')
+const GIT_METADATA_KEYS = [
+  GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, GIT_TAG, GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_AUTHOR_DATE, GIT_COMMIT_AUTHOR_NAME, GIT_COMMIT_AUTHOR_EMAIL,
+  GIT_COMMIT_COMMITTER_DATE, GIT_COMMIT_COMMITTER_NAME, GIT_COMMIT_COMMITTER_EMAIL,
+]
+
 const Plugin = require('./plugin')
 const { getRepositoryRoot } = require('./util/git')
 const {
@@ -640,8 +652,11 @@ module.exports = class CiPlugin extends Plugin {
         if (span.name === `${this.constructor.id}.test` || span.name === `${this.constructor.id}.test_suite`) {
           Object.assign(span.meta, getSessionItrSkippingEnabledTags(this.testSessionSpan))
         }
-        // augment with git information (since it will not be available in the worker)
-        for (const key in this.testEnvironmentMetadata) {
+        // Replace worker Git metadata, including fields omitted by the coordinator.
+        for (const key of GIT_METADATA_KEYS) {
+          delete span.meta[key]
+        }
+        for (const key of Object.keys(this.testEnvironmentMetadata)) {
           // CAREFUL: this bypasses the metadata/metrics distinction
           // Be careful not to pass numbers in `meta`
           if (key.startsWith('git.')) {

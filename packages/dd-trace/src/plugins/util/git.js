@@ -39,6 +39,7 @@ const {
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { cachedExec } = require('./git-cache')
+const { validateGitCommitSha } = require('./user-provided-git')
 
 /** @typedef {NonNullable<ReturnType<string['match']>>} RegExpMatch */
 
@@ -219,14 +220,23 @@ function getRepositoryUrl () {
   )
 }
 
-function getLatestCommits () {
+/** @param {string=} commitSha */
+function getLatestCommits (commitSha) {
+  if (commitSha && !validateGitCommitSha(commitSha)) return []
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_local_commits' })
   const startTime = Date.now()
   try {
-    const result = cachedExec('git', ['log', '--format=%H', '-n 1000', '--since="1 month ago"'])
+    const flags = ['log', '--format=%H', '-n 1000', '--since="1 month ago"']
+    if (commitSha) flags.push(commitSha, '--')
+    const result = cachedExec('git', flags)
       .toString()
       .split('\n')
       .filter(Boolean)
+    if (commitSha && !result.includes(commitSha)) {
+      const selectedCommit = cachedExec('git', ['rev-parse', '--verify', commitSha + '^{commit}']).toString().trim()
+      if (selectedCommit !== commitSha) return []
+      result.unshift(commitSha)
+    }
     distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
     return result
   } catch (err) {
@@ -503,14 +513,25 @@ function getGitMetadata (ciMetadata) {
     committerName,
     committerEmail,
     committerDate,
-  ] = sanitizedExec(['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
+  ] = sanitizedExec([
+    'show', '-s', '--no-show-signature', '--format=%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI',
+  ]).split('\0')
 
   const tags = {
     [GIT_COMMIT_MESSAGE]:
-      commitMessage || sanitizedExec(['show', '-s', '--format=%B'], null, null, null, false),
+      commitMessage || sanitizedExec(['show', '-s', '--no-show-signature', '--format=%B'], null, null, null, false),
     [GIT_BRANCH]: branch || sanitizedExec(['rev-parse', '--abbrev-ref', 'HEAD']),
     [GIT_COMMIT_SHA]: commitSHA || sanitizedExec(['rev-parse', 'HEAD']),
     [CI_WORKSPACE_PATH]: ciWorkspacePath || getRepositoryRoot(),
+  }
+
+  if (tags[GIT_BRANCH] === 'HEAD') delete tags[GIT_BRANCH]
+
+  let localTag = tag
+  if (!localTag && !tags[GIT_BRANCH]) {
+    const tagsAtHead = sanitizedExec(['tag', '--points-at', 'HEAD'], null, null, null, false)
+      .trim().split(/\r?\n/).filter(Boolean)
+    if (tagsAtHead.length === 1) localTag = tagsAtHead[0]
   }
 
   if (headCommitSha) {
@@ -519,7 +540,8 @@ function getGitMetadata (ciMetadata) {
     const headFlags = [
       'show',
       '-s',
-      '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'',
+      '--no-show-signature',
+      '--format=%H%x00%aI%x00%an%x00%ae%x00%cI%x00%cn%x00%ce%x00%B',
       headCommitSha,
     ]
     // Only explicit, bounded fetches may contact the remote during head metadata recovery.
@@ -544,7 +566,7 @@ function getGitMetadata (ciMetadata) {
       headCommitterName,
       headCommitterEmail,
       headCommitMessage,
-    ] = headInfo.split('","')
+    ] = headInfo.split('\0')
 
     if (gitHeadCommitSha) {
       tags[GIT_COMMIT_HEAD_AUTHOR_DATE] = headAuthorDate
@@ -566,7 +588,7 @@ function getGitMetadata (ciMetadata) {
     GIT_COMMIT_COMMITTER_DATE, committerDate,
     GIT_COMMIT_COMMITTER_NAME, committerName,
     GIT_COMMIT_COMMITTER_EMAIL, committerEmail,
-    GIT_TAG, tag || sanitizedExec(['describe', '--tags', '--exact-match', 'HEAD']),
+    GIT_TAG, localTag,
   ]
 
   for (let i = 0; i < entries.length; i += 2) {
