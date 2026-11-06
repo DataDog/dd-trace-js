@@ -38,6 +38,7 @@ const registry = [
   { activate: true, instrumentations: require('./instrumentations/mercurius') },
   { instrumentations: require('./instrumentations/modelcontextprotocol-sdk') },
   { instrumentations: require('./instrumentations/openai-agents') },
+  { activationName: 'openai', instrumentations: require('./instrumentations/openai-agents-realtime') },
   { instrumentations: require('./instrumentations/playwright') },
   { activate: true, instrumentations: require('./instrumentations/postgres') },
   {

@@ -1,0 +1,3752 @@
+{
+  "provenance": {
+    "captureDate": "2026-10-16",
+    "sdk": "@openai/agents-realtime@0.20.0",
+    "primaryTransport": "WebRTC",
+    "syntheticMedia": true,
+    "note": "Lifecycle projection of a live capture. Token deltas omitted; IDs, text, tool payloads, and media replaced."
+  },
+  "finishAt": 57312,
+  "events": [
+    {
+      "at": 905,
+      "direction": "client",
+      "event": {
+        "type": "session.update",
+        "session": {
+          "type": "realtime",
+          "model": "gpt-realtime",
+          "output_modalities": [
+            "audio"
+          ],
+          "audio": {
+            "input": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "noise_reduction": null,
+              "transcription": {
+                "model": "gpt-4o-mini-transcribe"
+              },
+              "turn_detection": {
+                "type": "server_vad",
+                "create_response": true,
+                "interrupt_response": true
+              }
+            },
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy",
+              "speed": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "at": 985,
+      "direction": "server",
+      "event": {
+        "type": "session.updated",
+        "event_id": "event_1",
+        "session": {
+          "type": "realtime",
+          "object": "realtime.session",
+          "id": "session_1",
+          "model": "gpt-realtime",
+          "output_modalities": [
+            "audio"
+          ],
+          "tool_choice": "auto",
+          "max_output_tokens": "inf",
+          "truncation": "auto",
+          "prompt": null,
+          "expires_at": 1792184410,
+          "audio": {
+            "input": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "transcription": {
+                "model": "gpt-4o-mini-transcribe",
+                "language": null,
+                "prompt": null
+              },
+              "noise_reduction": null,
+              "turn_detection": {
+                "type": "server_vad",
+                "threshold": 0.5,
+                "prefix_padding_ms": 300,
+                "silence_duration_ms": 200,
+                "idle_timeout_ms": null,
+                "create_response": true,
+                "interrupt_response": true
+              }
+            },
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy",
+              "speed": 1
+            }
+          },
+          "include": null
+        }
+      }
+    },
+    {
+      "at": 2082,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_started",
+        "event_id": "event_2",
+        "audio_start_ms": 596,
+        "item_id": "item_1"
+      }
+    },
+    {
+      "at": 2085,
+      "direction": "client",
+      "event": {
+        "type": "output_audio_buffer.clear"
+      }
+    },
+    {
+      "at": 3235,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_stopped",
+        "event_id": "event_3",
+        "audio_end_ms": 2080,
+        "item_id": "item_1"
+      }
+    },
+    {
+      "at": 3239,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.committed",
+        "event_id": "event_4",
+        "previous_item_id": null,
+        "item_id": "item_1"
+      }
+    },
+    {
+      "at": 3240,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_5",
+        "previous_item_id": null,
+        "item": {
+          "id": "item_1",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 3245,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_6",
+        "previous_item_id": null,
+        "item": {
+          "id": "item_1",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 3246,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_1",
+        "event_id": "event_7"
+      }
+    },
+    {
+      "at": 3246,
+      "direction": "server",
+      "event": {
+        "type": "response.created",
+        "event_id": "event_8",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_1",
+          "status": "in_progress",
+          "status_details": null,
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 3442,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_9",
+        "item": {
+          "id": "item_1",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null,
+              "audio": {
+                "$syntheticAudioBytes": 69696
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 3528,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.added",
+        "event_id": "event_10",
+        "response_id": "response_1",
+        "output_index": 0,
+        "item": {
+          "id": "item_2",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 3531,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_11",
+        "previous_item_id": "item_1",
+        "item": {
+          "id": "item_2",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 3543,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.added",
+        "event_id": "event_12",
+        "response_id": "response_1",
+        "item_id": "item_2",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 3629,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "event_id": "event_13",
+        "item_id": "item_1",
+        "content_index": 0,
+        "transcript": "synthetic transcript",
+        "usage": {
+          "type": "tokens",
+          "total_tokens": 24,
+          "input_tokens": 14,
+          "input_token_details": {
+            "text_tokens": 0,
+            "audio_tokens": 14
+          },
+          "output_tokens": 10
+        }
+      }
+    },
+    {
+      "at": 3635,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_1"
+      }
+    },
+    {
+      "at": 3675,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.started",
+        "event_id": "event_14",
+        "response_id": "response_1"
+      }
+    },
+    {
+      "at": 3768,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_15",
+        "item": {
+          "id": "item_1",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 69696
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 4436,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio.done",
+        "event_id": "event_16",
+        "response_id": "response_1",
+        "item_id": "item_2",
+        "output_index": 0,
+        "content_index": 0
+      }
+    },
+    {
+      "at": 4438,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio_transcript.done",
+        "event_id": "event_17",
+        "response_id": "response_1",
+        "item_id": "item_2",
+        "output_index": 0,
+        "content_index": 0,
+        "transcript": "synthetic transcript"
+      }
+    },
+    {
+      "at": 4440,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.done",
+        "event_id": "event_18",
+        "response_id": "response_1",
+        "item_id": "item_2",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 4441,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_19",
+        "previous_item_id": null,
+        "item": {
+          "id": "item_2",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 4442,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.done",
+        "event_id": "event_20",
+        "response_id": "response_1",
+        "output_index": 0,
+        "item": {
+          "id": "item_2",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 4443,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_2",
+        "event_id": "event_21"
+      }
+    },
+    {
+      "at": 4443,
+      "direction": "server",
+      "event": {
+        "type": "response.done",
+        "event_id": "event_22",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_1",
+          "status": "completed",
+          "status_details": null,
+          "output": [
+            {
+              "id": "item_2",
+              "type": "message",
+              "status": "completed",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_audio",
+                  "transcript": "synthetic transcript"
+                }
+              ]
+            }
+          ],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": {
+            "total_tokens": 217,
+            "input_tokens": 116,
+            "output_tokens": 101,
+            "input_token_details": {
+              "text_tokens": 102,
+              "audio_tokens": 14,
+              "image_tokens": 0,
+              "cached_tokens": 0,
+              "cached_tokens_details": {
+                "text_tokens": 0,
+                "audio_tokens": 0,
+                "image_tokens": 0
+              }
+            },
+            "output_token_details": {
+              "text_tokens": 27,
+              "audio_tokens": 74
+            }
+          },
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 4590,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_23",
+        "item": {
+          "id": "item_2",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 177600
+              },
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 7357,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.stopped",
+        "event_id": "event_24",
+        "response_id": "response_1"
+      }
+    },
+    {
+      "at": 7845,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_started",
+        "event_id": "event_25",
+        "audio_start_ms": 6356,
+        "item_id": "item_3"
+      }
+    },
+    {
+      "at": 7846,
+      "direction": "client",
+      "event": {
+        "type": "output_audio_buffer.clear"
+      }
+    },
+    {
+      "at": 11534,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_stopped",
+        "event_id": "event_26",
+        "audio_end_ms": 10368,
+        "item_id": "item_3"
+      }
+    },
+    {
+      "at": 11541,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.committed",
+        "event_id": "event_27",
+        "previous_item_id": "item_2",
+        "item_id": "item_3"
+      }
+    },
+    {
+      "at": 11542,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_28",
+        "previous_item_id": "item_2",
+        "item": {
+          "id": "item_3",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 11543,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_29",
+        "previous_item_id": "item_2",
+        "item": {
+          "id": "item_3",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 11544,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_3",
+        "event_id": "event_30"
+      }
+    },
+    {
+      "at": 11545,
+      "direction": "server",
+      "event": {
+        "type": "response.created",
+        "event_id": "event_31",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_2",
+          "status": "in_progress",
+          "status_details": null,
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 11586,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_started",
+        "event_id": "event_32",
+        "audio_start_ms": 10100,
+        "item_id": "item_4"
+      }
+    },
+    {
+      "at": 11586,
+      "direction": "client",
+      "event": {
+        "type": "output_audio_buffer.clear"
+      }
+    },
+    {
+      "at": 11589,
+      "direction": "server",
+      "event": {
+        "type": "response.done",
+        "event_id": "event_33",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_2",
+          "status": "cancelled",
+          "status_details": {
+            "type": "cancelled",
+            "reason": "turn_detected"
+          },
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": {
+            "total_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "input_token_details": {
+              "text_tokens": 0,
+              "audio_tokens": 0,
+              "image_tokens": 0,
+              "cached_tokens": 0,
+              "cached_tokens_details": {
+                "text_tokens": 0,
+                "audio_tokens": 0,
+                "image_tokens": 0
+              }
+            },
+            "output_token_details": {
+              "text_tokens": 0,
+              "audio_tokens": 0
+            }
+          },
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 11800,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_34",
+        "item": {
+          "id": "item_3",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null,
+              "audio": {
+                "$syntheticAudioBytes": 191040
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 12050,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "event_id": "event_35",
+        "item_id": "item_3",
+        "content_index": 0,
+        "transcript": "synthetic transcript",
+        "usage": {
+          "type": "tokens",
+          "total_tokens": 56,
+          "input_tokens": 39,
+          "input_token_details": {
+            "text_tokens": 0,
+            "audio_tokens": 39
+          },
+          "output_tokens": 17
+        }
+      }
+    },
+    {
+      "at": 12050,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_3"
+      }
+    },
+    {
+      "at": 12138,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_36",
+        "item": {
+          "id": "item_3",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 191040
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 12490,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_stopped",
+        "event_id": "event_37",
+        "audio_end_ms": 11328,
+        "item_id": "item_4"
+      }
+    },
+    {
+      "at": 12490,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.committed",
+        "event_id": "event_38",
+        "previous_item_id": "item_3",
+        "item_id": "item_4"
+      }
+    },
+    {
+      "at": 12492,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_39",
+        "previous_item_id": "item_3",
+        "item": {
+          "id": "item_4",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 12494,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_40",
+        "previous_item_id": "item_3",
+        "item": {
+          "id": "item_4",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 12495,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_4",
+        "event_id": "event_41"
+      }
+    },
+    {
+      "at": 12498,
+      "direction": "server",
+      "event": {
+        "type": "response.created",
+        "event_id": "event_42",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_3",
+          "status": "in_progress",
+          "status_details": null,
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 12576,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_43",
+        "item": {
+          "id": "item_4",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null,
+              "audio": {
+                "$syntheticAudioBytes": 57408
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 12754,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.added",
+        "event_id": "event_44",
+        "response_id": "response_3",
+        "output_index": 0,
+        "item": {
+          "id": "item_5",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 12756,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_45",
+        "previous_item_id": "item_4",
+        "item": {
+          "id": "item_5",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 12769,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.added",
+        "event_id": "event_46",
+        "response_id": "response_3",
+        "item_id": "item_5",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 12851,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "event_id": "event_47",
+        "item_id": "item_4",
+        "content_index": 0,
+        "transcript": "synthetic transcript",
+        "usage": {
+          "type": "tokens",
+          "total_tokens": 17,
+          "input_tokens": 11,
+          "input_token_details": {
+            "text_tokens": 0,
+            "audio_tokens": 11
+          },
+          "output_tokens": 6
+        }
+      }
+    },
+    {
+      "at": 12853,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_4"
+      }
+    },
+    {
+      "at": 12909,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.started",
+        "event_id": "event_48",
+        "response_id": "response_3"
+      }
+    },
+    {
+      "at": 12933,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_49",
+        "item": {
+          "id": "item_4",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 57408
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 13918,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio.done",
+        "event_id": "event_50",
+        "response_id": "response_3",
+        "item_id": "item_5",
+        "output_index": 0,
+        "content_index": 0
+      }
+    },
+    {
+      "at": 13919,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio_transcript.done",
+        "event_id": "event_51",
+        "response_id": "response_3",
+        "item_id": "item_5",
+        "output_index": 0,
+        "content_index": 0,
+        "transcript": "synthetic transcript"
+      }
+    },
+    {
+      "at": 13919,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.done",
+        "event_id": "event_52",
+        "response_id": "response_3",
+        "item_id": "item_5",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 13920,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_53",
+        "previous_item_id": "item_4",
+        "item": {
+          "id": "item_5",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 13920,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.done",
+        "event_id": "event_54",
+        "response_id": "response_3",
+        "output_index": 0,
+        "item": {
+          "id": "item_5",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 13921,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_5",
+        "event_id": "event_55"
+      }
+    },
+    {
+      "at": 13923,
+      "direction": "server",
+      "event": {
+        "type": "response.done",
+        "event_id": "event_56",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_3",
+          "status": "completed",
+          "status_details": null,
+          "output": [
+            {
+              "id": "item_5",
+              "type": "message",
+              "status": "completed",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_audio",
+                  "transcript": "synthetic transcript"
+                }
+              ]
+            }
+          ],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": {
+            "total_tokens": 423,
+            "input_tokens": 285,
+            "output_tokens": 138,
+            "input_token_details": {
+              "text_tokens": 147,
+              "audio_tokens": 138,
+              "image_tokens": 0,
+              "cached_tokens": 192,
+              "cached_tokens_details": {
+                "text_tokens": 128,
+                "audio_tokens": 64,
+                "image_tokens": 0
+              }
+            },
+            "output_token_details": {
+              "text_tokens": 33,
+              "audio_tokens": 105
+            }
+          },
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 14121,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_57",
+        "item": {
+          "id": "item_5",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 252000
+              },
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 18157,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.stopped",
+        "event_id": "event_58",
+        "response_id": "response_3"
+      }
+    },
+    {
+      "at": 19522,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_started",
+        "event_id": "event_59",
+        "audio_start_ms": 18036,
+        "item_id": "item_6"
+      }
+    },
+    {
+      "at": 19522,
+      "direction": "client",
+      "event": {
+        "type": "output_audio_buffer.clear"
+      }
+    },
+    {
+      "at": 21006,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_stopped",
+        "event_id": "event_60",
+        "audio_end_ms": 19744,
+        "item_id": "item_6"
+      }
+    },
+    {
+      "at": 21010,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.committed",
+        "event_id": "event_61",
+        "previous_item_id": "item_5",
+        "item_id": "item_6"
+      }
+    },
+    {
+      "at": 21010,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_62",
+        "previous_item_id": "item_5",
+        "item": {
+          "id": "item_6",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 21016,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_63",
+        "previous_item_id": "item_5",
+        "item": {
+          "id": "item_6",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 21016,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_6",
+        "event_id": "event_64"
+      }
+    },
+    {
+      "at": 21022,
+      "direction": "server",
+      "event": {
+        "type": "response.created",
+        "event_id": "event_65",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_4",
+          "status": "in_progress",
+          "status_details": null,
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 21263,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_66",
+        "item": {
+          "id": "item_6",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null,
+              "audio": {
+                "$syntheticAudioBytes": 80448
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 21266,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_started",
+        "event_id": "event_67",
+        "audio_start_ms": 19700,
+        "item_id": "item_7"
+      }
+    },
+    {
+      "at": 21267,
+      "direction": "client",
+      "event": {
+        "type": "output_audio_buffer.clear"
+      }
+    },
+    {
+      "at": 21267,
+      "direction": "server",
+      "event": {
+        "type": "response.done",
+        "event_id": "event_68",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_4",
+          "status": "cancelled",
+          "status_details": {
+            "type": "cancelled",
+            "reason": "turn_detected"
+          },
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": {
+            "total_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "input_token_details": {
+              "text_tokens": 0,
+              "audio_tokens": 0,
+              "image_tokens": 0,
+              "cached_tokens": 0,
+              "cached_tokens_details": {
+                "text_tokens": 0,
+                "audio_tokens": 0,
+                "image_tokens": 0
+              }
+            },
+            "output_token_details": {
+              "text_tokens": 0,
+              "audio_tokens": 0
+            }
+          },
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 21432,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "event_id": "event_69",
+        "item_id": "item_6",
+        "content_index": 0,
+        "transcript": "synthetic transcript",
+        "usage": {
+          "type": "tokens",
+          "total_tokens": 22,
+          "input_tokens": 16,
+          "input_token_details": {
+            "text_tokens": 0,
+            "audio_tokens": 16
+          },
+          "output_tokens": 6
+        }
+      }
+    },
+    {
+      "at": 21432,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_6"
+      }
+    },
+    {
+      "at": 21514,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_70",
+        "item": {
+          "id": "item_6",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 80448
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 23055,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_stopped",
+        "event_id": "event_71",
+        "audio_end_ms": 21888,
+        "item_id": "item_7"
+      }
+    },
+    {
+      "at": 23059,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.committed",
+        "event_id": "event_72",
+        "previous_item_id": "item_6",
+        "item_id": "item_7"
+      }
+    },
+    {
+      "at": 23060,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_73",
+        "previous_item_id": "item_6",
+        "item": {
+          "id": "item_7",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 23061,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_74",
+        "previous_item_id": "item_6",
+        "item": {
+          "id": "item_7",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 23061,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_7",
+        "event_id": "event_75"
+      }
+    },
+    {
+      "at": 23064,
+      "direction": "server",
+      "event": {
+        "type": "response.created",
+        "event_id": "event_76",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_5",
+          "status": "in_progress",
+          "status_details": null,
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 23308,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_77",
+        "item": {
+          "id": "item_7",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null,
+              "audio": {
+                "$syntheticAudioBytes": 103488
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 23311,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_started",
+        "event_id": "event_78",
+        "audio_start_ms": 21812,
+        "item_id": "item_8"
+      }
+    },
+    {
+      "at": 23312,
+      "direction": "client",
+      "event": {
+        "type": "output_audio_buffer.clear"
+      }
+    },
+    {
+      "at": 23312,
+      "direction": "server",
+      "event": {
+        "type": "response.done",
+        "event_id": "event_79",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_5",
+          "status": "cancelled",
+          "status_details": {
+            "type": "cancelled",
+            "reason": "turn_detected"
+          },
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": {
+            "total_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "input_token_details": {
+              "text_tokens": 0,
+              "audio_tokens": 0,
+              "image_tokens": 0,
+              "cached_tokens": 0,
+              "cached_tokens_details": {
+                "text_tokens": 0,
+                "audio_tokens": 0,
+                "image_tokens": 0
+              }
+            },
+            "output_token_details": {
+              "text_tokens": 0,
+              "audio_tokens": 0
+            }
+          },
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 23442,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "event_id": "event_80",
+        "item_id": "item_7",
+        "content_index": 0,
+        "transcript": "synthetic transcript",
+        "usage": {
+          "type": "tokens",
+          "total_tokens": 28,
+          "input_tokens": 21,
+          "input_token_details": {
+            "text_tokens": 0,
+            "audio_tokens": 21
+          },
+          "output_tokens": 7
+        }
+      }
+    },
+    {
+      "at": 23443,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_7"
+      }
+    },
+    {
+      "at": 23528,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_81",
+        "item": {
+          "id": "item_7",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 103488
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 26358,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_stopped",
+        "event_id": "event_82",
+        "audio_end_ms": 25184,
+        "item_id": "item_8"
+      }
+    },
+    {
+      "at": 26362,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.committed",
+        "event_id": "event_83",
+        "previous_item_id": "item_7",
+        "item_id": "item_8"
+      }
+    },
+    {
+      "at": 26362,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_84",
+        "previous_item_id": "item_7",
+        "item": {
+          "id": "item_8",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 26366,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_85",
+        "previous_item_id": "item_7",
+        "item": {
+          "id": "item_8",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 26366,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_8",
+        "event_id": "event_86"
+      }
+    },
+    {
+      "at": 26371,
+      "direction": "server",
+      "event": {
+        "type": "response.created",
+        "event_id": "event_87",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_6",
+          "status": "in_progress",
+          "status_details": null,
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 26621,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_88",
+        "item": {
+          "id": "item_8",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null,
+              "audio": {
+                "$syntheticAudioBytes": 160320
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 26670,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.added",
+        "event_id": "event_89",
+        "response_id": "response_6",
+        "output_index": 0,
+        "item": {
+          "id": "item_9",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 26670,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_90",
+        "previous_item_id": "item_8",
+        "item": {
+          "id": "item_9",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 26671,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.added",
+        "event_id": "event_91",
+        "response_id": "response_6",
+        "item_id": "item_9",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 26737,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "event_id": "event_92",
+        "item_id": "item_8",
+        "content_index": 0,
+        "transcript": "synthetic transcript",
+        "usage": {
+          "type": "tokens",
+          "total_tokens": 44,
+          "input_tokens": 33,
+          "input_token_details": {
+            "text_tokens": 0,
+            "audio_tokens": 33
+          },
+          "output_tokens": 11
+        }
+      }
+    },
+    {
+      "at": 26737,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_8"
+      }
+    },
+    {
+      "at": 26763,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.started",
+        "event_id": "event_93",
+        "response_id": "response_6"
+      }
+    },
+    {
+      "at": 26829,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_94",
+        "item": {
+          "id": "item_8",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 160320
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 27281,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio.done",
+        "event_id": "event_95",
+        "response_id": "response_6",
+        "item_id": "item_9",
+        "output_index": 0,
+        "content_index": 0
+      }
+    },
+    {
+      "at": 27282,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio_transcript.done",
+        "event_id": "event_96",
+        "response_id": "response_6",
+        "item_id": "item_9",
+        "output_index": 0,
+        "content_index": 0,
+        "transcript": "synthetic transcript"
+      }
+    },
+    {
+      "at": 27282,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.done",
+        "event_id": "event_97",
+        "response_id": "response_6",
+        "item_id": "item_9",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 27282,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_98",
+        "previous_item_id": "item_8",
+        "item": {
+          "id": "item_9",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 27283,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_9",
+        "event_id": "event_99"
+      }
+    },
+    {
+      "at": 27283,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.done",
+        "event_id": "event_100",
+        "response_id": "response_6",
+        "output_index": 0,
+        "item": {
+          "id": "item_9",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 27284,
+      "direction": "server",
+      "event": {
+        "type": "response.done",
+        "event_id": "event_101",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_6",
+          "status": "completed",
+          "status_details": null,
+          "output": [
+            {
+              "id": "item_9",
+              "type": "message",
+              "status": "completed",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_audio",
+                  "transcript": "synthetic transcript"
+                }
+              ]
+            }
+          ],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": {
+            "total_tokens": 521,
+            "input_tokens": 435,
+            "output_tokens": 86,
+            "input_token_details": {
+              "text_tokens": 196,
+              "audio_tokens": 239,
+              "image_tokens": 0,
+              "cached_tokens": 320,
+              "cached_tokens_details": {
+                "text_tokens": 192,
+                "audio_tokens": 128,
+                "image_tokens": 0
+              }
+            },
+            "output_token_details": {
+              "text_tokens": 23,
+              "audio_tokens": 63
+            }
+          },
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 27369,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_102",
+        "item": {
+          "id": "item_9",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 151200
+              },
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 29918,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.stopped",
+        "event_id": "event_103",
+        "response_id": "response_6"
+      }
+    },
+    {
+      "at": 30448,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_started",
+        "event_id": "event_104",
+        "audio_start_ms": 28948,
+        "item_id": "item_10"
+      }
+    },
+    {
+      "at": 30449,
+      "direction": "client",
+      "event": {
+        "type": "output_audio_buffer.clear"
+      }
+    },
+    {
+      "at": 31952,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_stopped",
+        "event_id": "event_105",
+        "audio_end_ms": 30784,
+        "item_id": "item_10"
+      }
+    },
+    {
+      "at": 31958,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.committed",
+        "event_id": "event_106",
+        "previous_item_id": "item_9",
+        "item_id": "item_10"
+      }
+    },
+    {
+      "at": 31959,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_107",
+        "previous_item_id": "item_9",
+        "item": {
+          "id": "item_10",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 31959,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_108",
+        "previous_item_id": "item_9",
+        "item": {
+          "id": "item_10",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 31959,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_10",
+        "event_id": "event_109"
+      }
+    },
+    {
+      "at": 31962,
+      "direction": "server",
+      "event": {
+        "type": "response.created",
+        "event_id": "event_110",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_7",
+          "status": "in_progress",
+          "status_details": null,
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 32205,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_111",
+        "item": {
+          "id": "item_10",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null,
+              "audio": {
+                "$syntheticAudioBytes": 86592
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 32322,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "event_id": "event_112",
+        "item_id": "item_10",
+        "content_index": 0,
+        "transcript": "synthetic transcript",
+        "usage": {
+          "type": "tokens",
+          "total_tokens": 26,
+          "input_tokens": 18,
+          "input_token_details": {
+            "text_tokens": 0,
+            "audio_tokens": 18
+          },
+          "output_tokens": 8
+        }
+      }
+    },
+    {
+      "at": 32322,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_10"
+      }
+    },
+    {
+      "at": 32404,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_113",
+        "item": {
+          "id": "item_10",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 86592
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 32571,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.added",
+        "event_id": "event_114",
+        "response_id": "response_7",
+        "output_index": 0,
+        "item": {
+          "id": "item_11",
+          "type": "function_call",
+          "status": "in_progress",
+          "name": "check_availability",
+          "call_id": "call_1",
+          "arguments": "{\"date\":\"2030-01-01\",\"time\":\"12:00\",\"guests\":2}"
+        }
+      }
+    },
+    {
+      "at": 32572,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_115",
+        "previous_item_id": "item_10",
+        "item": {
+          "id": "item_11",
+          "type": "function_call",
+          "status": "in_progress",
+          "name": "check_availability",
+          "call_id": "call_1",
+          "arguments": "{\"date\":\"2030-01-01\",\"time\":\"12:00\",\"guests\":2}"
+        }
+      }
+    },
+    {
+      "at": 32886,
+      "direction": "server",
+      "event": {
+        "type": "response.function_call_arguments.done",
+        "event_id": "event_116",
+        "response_id": "response_7",
+        "item_id": "item_11",
+        "output_index": 0,
+        "call_id": "call_1",
+        "name": "check_availability",
+        "arguments": "{\"date\":\"2030-01-01\",\"time\":\"12:00\",\"guests\":2}"
+      }
+    },
+    {
+      "at": 32887,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_117",
+        "previous_item_id": "item_10",
+        "item": {
+          "id": "item_11",
+          "type": "function_call",
+          "status": "completed",
+          "name": "check_availability",
+          "call_id": "call_1",
+          "arguments": "{\"date\":\"2030-01-01\",\"time\":\"12:00\",\"guests\":2}"
+        }
+      }
+    },
+    {
+      "at": 32888,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.done",
+        "event_id": "event_118",
+        "response_id": "response_7",
+        "output_index": 0,
+        "item": {
+          "id": "item_11",
+          "type": "function_call",
+          "status": "completed",
+          "name": "check_availability",
+          "call_id": "call_1",
+          "arguments": "{\"date\":\"2030-01-01\",\"time\":\"12:00\",\"guests\":2}"
+        }
+      }
+    },
+    {
+      "at": 32892,
+      "direction": "server",
+      "event": {
+        "type": "response.done",
+        "event_id": "event_119",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_7",
+          "status": "completed",
+          "status_details": null,
+          "output": [
+            {
+              "id": "item_11",
+              "type": "function_call",
+              "status": "completed",
+              "name": "check_availability",
+              "call_id": "call_1",
+              "arguments": "{\"date\":\"2030-01-01\",\"time\":\"12:00\",\"guests\":2}"
+            }
+          ],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": {
+            "total_tokens": 478,
+            "input_tokens": 432,
+            "output_tokens": 46,
+            "input_token_details": {
+              "text_tokens": 217,
+              "audio_tokens": 215,
+              "image_tokens": 0,
+              "cached_tokens": 0,
+              "cached_tokens_details": {
+                "text_tokens": 0,
+                "audio_tokens": 0,
+                "image_tokens": 0
+              }
+            },
+            "output_token_details": {
+              "text_tokens": 46,
+              "audio_tokens": 0
+            }
+          },
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 33294,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.create",
+        "item": {
+          "type": "function_call_output",
+          "output": "{\"available\":true,\"synthetic\":true}",
+          "call_id": "call_1"
+        }
+      }
+    },
+    {
+      "at": 33294,
+      "direction": "client",
+      "event": {
+        "type": "response.create",
+        "event_id": "event_120"
+      }
+    },
+    {
+      "at": 33373,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_121",
+        "previous_item_id": "item_11",
+        "item": {
+          "id": "item_12",
+          "type": "function_call_output",
+          "call_id": "call_1",
+          "output": "{\"available\":true,\"date\":\"2026-10-30\",\"time\":\"19:00\",\"guests\":4,\"synthetic\":true}"
+        }
+      }
+    },
+    {
+      "at": 33376,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_122",
+        "previous_item_id": "item_11",
+        "item": {
+          "id": "item_12",
+          "type": "function_call_output",
+          "call_id": "call_1",
+          "output": "{\"available\":true,\"date\":\"2026-10-30\",\"time\":\"19:00\",\"guests\":4,\"synthetic\":true}"
+        }
+      }
+    },
+    {
+      "at": 33381,
+      "direction": "server",
+      "event": {
+        "type": "response.created",
+        "event_id": "event_123",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_8",
+          "status": "in_progress",
+          "status_details": null,
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 33653,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.added",
+        "event_id": "event_124",
+        "response_id": "response_8",
+        "output_index": 0,
+        "item": {
+          "id": "item_13",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 33653,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_125",
+        "previous_item_id": "item_12",
+        "item": {
+          "id": "item_13",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 33670,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.added",
+        "event_id": "event_126",
+        "response_id": "response_8",
+        "item_id": "item_13",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 33757,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.started",
+        "event_id": "event_127",
+        "response_id": "response_8"
+      }
+    },
+    {
+      "at": 34721,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio.done",
+        "event_id": "event_128",
+        "response_id": "response_8",
+        "item_id": "item_13",
+        "output_index": 0,
+        "content_index": 0
+      }
+    },
+    {
+      "at": 34721,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio_transcript.done",
+        "event_id": "event_129",
+        "response_id": "response_8",
+        "item_id": "item_13",
+        "output_index": 0,
+        "content_index": 0,
+        "transcript": "synthetic transcript"
+      }
+    },
+    {
+      "at": 34722,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.done",
+        "event_id": "event_130",
+        "response_id": "response_8",
+        "item_id": "item_13",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 34722,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_131",
+        "previous_item_id": "item_12",
+        "item": {
+          "id": "item_13",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 34723,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_13",
+        "event_id": "event_132"
+      }
+    },
+    {
+      "at": 34723,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.done",
+        "event_id": "event_133",
+        "response_id": "response_8",
+        "output_index": 0,
+        "item": {
+          "id": "item_13",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 34726,
+      "direction": "server",
+      "event": {
+        "type": "response.done",
+        "event_id": "event_134",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_8",
+          "status": "completed",
+          "status_details": null,
+          "output": [
+            {
+              "id": "item_13",
+              "type": "message",
+              "status": "completed",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_audio",
+                  "transcript": "synthetic transcript"
+                }
+              ]
+            }
+          ],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": {
+            "total_tokens": 540,
+            "input_tokens": 429,
+            "output_tokens": 111,
+            "input_token_details": {
+              "text_tokens": 277,
+              "audio_tokens": 152,
+              "image_tokens": 0,
+              "cached_tokens": 0,
+              "cached_tokens_details": {
+                "text_tokens": 0,
+                "audio_tokens": 0,
+                "image_tokens": 0
+              }
+            },
+            "output_token_details": {
+              "text_tokens": 30,
+              "audio_tokens": 81
+            }
+          },
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 34973,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_135",
+        "item": {
+          "id": "item_13",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 194400
+              },
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 37817,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.stopped",
+        "event_id": "event_136",
+        "response_id": "response_8"
+      }
+    },
+    {
+      "at": 39001,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_started",
+        "event_id": "event_137",
+        "audio_start_ms": 37524,
+        "item_id": "item_14"
+      }
+    },
+    {
+      "at": 39001,
+      "direction": "client",
+      "event": {
+        "type": "output_audio_buffer.clear"
+      }
+    },
+    {
+      "at": 40335,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_stopped",
+        "event_id": "event_138",
+        "audio_end_ms": 39168,
+        "item_id": "item_14"
+      }
+    },
+    {
+      "at": 40338,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.committed",
+        "event_id": "event_139",
+        "previous_item_id": "item_13",
+        "item_id": "item_14"
+      }
+    },
+    {
+      "at": 40339,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_140",
+        "previous_item_id": "item_13",
+        "item": {
+          "id": "item_14",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 40340,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_141",
+        "previous_item_id": "item_13",
+        "item": {
+          "id": "item_14",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 40340,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_14",
+        "event_id": "event_142"
+      }
+    },
+    {
+      "at": 40347,
+      "direction": "server",
+      "event": {
+        "type": "response.created",
+        "event_id": "event_143",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_9",
+          "status": "in_progress",
+          "status_details": null,
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 40588,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_144",
+        "item": {
+          "id": "item_14",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null,
+              "audio": {
+                "$syntheticAudioBytes": 77376
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 40644,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.added",
+        "event_id": "event_145",
+        "response_id": "response_9",
+        "output_index": 0,
+        "item": {
+          "id": "item_15",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 40644,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_146",
+        "previous_item_id": "item_14",
+        "item": {
+          "id": "item_15",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 40659,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.added",
+        "event_id": "event_147",
+        "response_id": "response_9",
+        "item_id": "item_15",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 40791,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.started",
+        "event_id": "event_148",
+        "response_id": "response_9"
+      }
+    },
+    {
+      "at": 40853,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "event_id": "event_149",
+        "item_id": "item_14",
+        "content_index": 0,
+        "transcript": "synthetic transcript",
+        "usage": {
+          "type": "tokens",
+          "total_tokens": 25,
+          "input_tokens": 16,
+          "input_token_details": {
+            "text_tokens": 0,
+            "audio_tokens": 16
+          },
+          "output_tokens": 9
+        }
+      }
+    },
+    {
+      "at": 40853,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_14"
+      }
+    },
+    {
+      "at": 40939,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_150",
+        "item": {
+          "id": "item_14",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 77376
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 42381,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio.done",
+        "event_id": "event_151",
+        "response_id": "response_9",
+        "item_id": "item_15",
+        "output_index": 0,
+        "content_index": 0
+      }
+    },
+    {
+      "at": 42381,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio_transcript.done",
+        "event_id": "event_152",
+        "response_id": "response_9",
+        "item_id": "item_15",
+        "output_index": 0,
+        "content_index": 0,
+        "transcript": "synthetic transcript"
+      }
+    },
+    {
+      "at": 42381,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.done",
+        "event_id": "event_153",
+        "response_id": "response_9",
+        "item_id": "item_15",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 42381,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_154",
+        "previous_item_id": "item_14",
+        "item": {
+          "id": "item_15",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 42382,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.done",
+        "event_id": "event_155",
+        "response_id": "response_9",
+        "output_index": 0,
+        "item": {
+          "id": "item_15",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 42382,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_15",
+        "event_id": "event_156"
+      }
+    },
+    {
+      "at": 42385,
+      "direction": "server",
+      "event": {
+        "type": "response.done",
+        "event_id": "event_157",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_9",
+          "status": "completed",
+          "status_details": null,
+          "output": [
+            {
+              "id": "item_15",
+              "type": "message",
+              "status": "completed",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_audio",
+                  "transcript": "synthetic transcript"
+                }
+              ]
+            }
+          ],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": {
+            "total_tokens": 768,
+            "input_tokens": 566,
+            "output_tokens": 202,
+            "input_token_details": {
+              "text_tokens": 317,
+              "audio_tokens": 249,
+              "image_tokens": 0,
+              "cached_tokens": 448,
+              "cached_tokens_details": {
+                "text_tokens": 256,
+                "audio_tokens": 192,
+                "image_tokens": 0
+              }
+            },
+            "output_token_details": {
+              "text_tokens": 46,
+              "audio_tokens": 156
+            }
+          },
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 42695,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_158",
+        "item": {
+          "id": "item_15",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 374400
+              },
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 48576,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.stopped",
+        "event_id": "event_159",
+        "response_id": "response_9"
+      }
+    },
+    {
+      "at": 49400,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_started",
+        "event_id": "event_160",
+        "audio_start_ms": 47924,
+        "item_id": "item_16"
+      }
+    },
+    {
+      "at": 49404,
+      "direction": "client",
+      "event": {
+        "type": "output_audio_buffer.clear"
+      }
+    },
+    {
+      "at": 52117,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.speech_stopped",
+        "event_id": "event_161",
+        "audio_end_ms": 50944,
+        "item_id": "item_16"
+      }
+    },
+    {
+      "at": 52120,
+      "direction": "server",
+      "event": {
+        "type": "input_audio_buffer.committed",
+        "event_id": "event_162",
+        "previous_item_id": "item_15",
+        "item_id": "item_16"
+      }
+    },
+    {
+      "at": 52121,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_163",
+        "previous_item_id": "item_15",
+        "item": {
+          "id": "item_16",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 52122,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_164",
+        "previous_item_id": "item_15",
+        "item": {
+          "id": "item_16",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 52122,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_16",
+        "event_id": "event_165"
+      }
+    },
+    {
+      "at": 52128,
+      "direction": "server",
+      "event": {
+        "type": "response.created",
+        "event_id": "event_166",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_10",
+          "status": "in_progress",
+          "status_details": null,
+          "output": [],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 52380,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_167",
+        "item": {
+          "id": "item_16",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": null,
+              "audio": {
+                "$syntheticAudioBytes": 143424
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 52434,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.added",
+        "event_id": "event_168",
+        "response_id": "response_10",
+        "output_index": 0,
+        "item": {
+          "id": "item_17",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 52434,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.added",
+        "event_id": "event_169",
+        "previous_item_id": "item_16",
+        "item": {
+          "id": "item_17",
+          "type": "message",
+          "status": "in_progress",
+          "role": "assistant",
+          "content": []
+        }
+      }
+    },
+    {
+      "at": 52451,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.added",
+        "event_id": "event_170",
+        "response_id": "response_10",
+        "item_id": "item_17",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 52514,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.input_audio_transcription.completed",
+        "event_id": "event_171",
+        "item_id": "item_16",
+        "content_index": 0,
+        "transcript": "synthetic transcript",
+        "usage": {
+          "type": "tokens",
+          "total_tokens": 45,
+          "input_tokens": 29,
+          "input_token_details": {
+            "text_tokens": 0,
+            "audio_tokens": 29
+          },
+          "output_tokens": 16
+        }
+      }
+    },
+    {
+      "at": 52514,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_16"
+      }
+    },
+    {
+      "at": 52583,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.started",
+        "event_id": "event_172",
+        "response_id": "response_10"
+      }
+    },
+    {
+      "at": 52601,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_173",
+        "item": {
+          "id": "item_16",
+          "type": "message",
+          "status": "completed",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 143424
+              },
+              "format": "pcm16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 53102,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio.done",
+        "event_id": "event_174",
+        "response_id": "response_10",
+        "item_id": "item_17",
+        "output_index": 0,
+        "content_index": 0
+      }
+    },
+    {
+      "at": 53104,
+      "direction": "server",
+      "event": {
+        "type": "response.output_audio_transcript.done",
+        "event_id": "event_175",
+        "response_id": "response_10",
+        "item_id": "item_17",
+        "output_index": 0,
+        "content_index": 0,
+        "transcript": "synthetic transcript"
+      }
+    },
+    {
+      "at": 53104,
+      "direction": "server",
+      "event": {
+        "type": "response.content_part.done",
+        "event_id": "event_176",
+        "response_id": "response_10",
+        "item_id": "item_17",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {
+          "type": "audio",
+          "transcript": "synthetic transcript"
+        }
+      }
+    },
+    {
+      "at": 53105,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.done",
+        "event_id": "event_177",
+        "previous_item_id": "item_16",
+        "item": {
+          "id": "item_17",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 53105,
+      "direction": "client",
+      "event": {
+        "type": "conversation.item.retrieve",
+        "item_id": "item_17",
+        "event_id": "event_178"
+      }
+    },
+    {
+      "at": 53106,
+      "direction": "server",
+      "event": {
+        "type": "response.output_item.done",
+        "event_id": "event_179",
+        "response_id": "response_10",
+        "output_index": 0,
+        "item": {
+          "id": "item_17",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 53107,
+      "direction": "server",
+      "event": {
+        "type": "response.done",
+        "event_id": "event_180",
+        "response": {
+          "object": "realtime.response",
+          "id": "response_10",
+          "status": "completed",
+          "status_details": null,
+          "output": [
+            {
+              "id": "item_17",
+              "type": "message",
+              "status": "completed",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_audio",
+                  "transcript": "synthetic transcript"
+                }
+              ]
+            }
+          ],
+          "conversation_id": "conversation_1",
+          "output_modalities": [
+            "audio"
+          ],
+          "max_output_tokens": "inf",
+          "audio": {
+            "output": {
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              },
+              "voice": "alloy"
+            }
+          },
+          "usage": {
+            "total_tokens": 779,
+            "input_tokens": 716,
+            "output_tokens": 63,
+            "input_token_details": {
+              "text_tokens": 363,
+              "audio_tokens": 353,
+              "image_tokens": 0,
+              "cached_tokens": 0,
+              "cached_tokens_details": {
+                "text_tokens": 0,
+                "audio_tokens": 0,
+                "image_tokens": 0
+              }
+            },
+            "output_token_details": {
+              "text_tokens": 18,
+              "audio_tokens": 45
+            }
+          },
+          "metadata": null
+        }
+      }
+    },
+    {
+      "at": 53188,
+      "direction": "server",
+      "event": {
+        "type": "conversation.item.retrieved",
+        "event_id": "event_181",
+        "item": {
+          "id": "item_17",
+          "type": "message",
+          "status": "completed",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_audio",
+              "transcript": "synthetic transcript",
+              "audio": {
+                "$syntheticAudioBytes": 108000
+              },
+              "format": {
+                "type": "audio/pcm",
+                "rate": 24000
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "at": 54837,
+      "direction": "server",
+      "event": {
+        "type": "output_audio_buffer.stopped",
+        "event_id": "event_182",
+        "response_id": "response_10"
+      }
+    }
+  ]
+}

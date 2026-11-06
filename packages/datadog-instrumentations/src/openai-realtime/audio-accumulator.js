@@ -226,6 +226,32 @@ class AudioAccumulator {
     return this.chunks.length === 1 ? this.chunks[0] : Buffer.concat(this.chunks, this.#retainedBytes)
   }
 
+  /**
+   * Replace a retrieved clip with its latest bounded item buffers. The caller owns
+   * item ordering; shared Buffer references avoid copying the whole clip on every
+   * retrieval. An incomplete/oversize set carries a marker, never a partial clip.
+   *
+   * @param {Buffer[]} buffers
+   * @param {number} totalDecodedBytes
+   * @param {number} now
+   * @param {string} mimeType
+   * @param {number} sampleRate
+   */
+  replaceBuffers (buffers, totalDecodedBytes, now, mimeType, sampleRate) {
+    this.clear()
+    this.present = totalDecodedBytes > 0
+    this.startTime = this.present ? now : undefined
+    this.totalDecodedBytes = totalDecodedBytes
+    this.mimeType = mimeType
+    this.sampleRate = sampleRate
+    this.#retain = this.#shouldRetain()
+    const retainedBytes = buffers.reduce((sum, buffer) => sum + buffer.length, 0)
+    this.oversize = totalDecodedBytes > LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES || retainedBytes !== totalDecodedBytes
+    if (!this.#retain || this.oversize) return
+    this.chunks = buffers
+    this.#retainedBytes = retainedBytes
+  }
+
   clear () {
     this.chunks = []
     this.present = false
