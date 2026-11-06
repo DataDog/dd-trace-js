@@ -162,6 +162,31 @@ describe('DatabasePlugin DBM Hash', () => {
       assert.strictEqual(span._tags['_dd.propagated_hash'], 'AQIDBAUG',
         'Span should have hash tag after query injection')
     })
+
+    it('should react to runtime DBM propagation mode changes', () => {
+      const query = 'SELECT * FROM users'
+
+      plugin.configure({
+        enabled: true,
+        dbmPropagationMode: 'disabled',
+        'dbm.injectSqlBaseHash': true,
+      })
+      assert.strictEqual(plugin.injectDbmQuery(span, query, 'test-service'), query)
+
+      plugin.configure({
+        enabled: true,
+        dbmPropagationMode: 'service',
+        'dbm.injectSqlBaseHash': true,
+      })
+      assert.match(plugin.injectDbmQuery(span, query, 'test-service'), /^\/\*dddb=/)
+
+      plugin.configure({
+        enabled: true,
+        dbmPropagationMode: 'disabled',
+        'dbm.injectSqlBaseHash': true,
+      })
+      assert.strictEqual(plugin.injectDbmQuery(span, query, 'test-service'), query)
+    })
   })
 
   describe('dynamic_service mode', () => {
