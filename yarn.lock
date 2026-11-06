@@ -286,17 +286,17 @@
   resolved "https://registry.yarnpkg.com/@datadog/libdatadog-extras/-/libdatadog-extras-0.21.0.tgz#4b29af59121015ca9a6bafbb60047d5c92120543"
   integrity sha512-VgAlNdNtilutWsEoDy6cAtn1iRLVQuj84lppjGlrwfvMwoCJ40B4pIttrZr0R7n01a6H83zv2SNt7SiH3smJRg==
 
-"@datadog/libdatadog-wasm@0.21.0":
-  version "0.21.0"
-  resolved "https://registry.yarnpkg.com/@datadog/libdatadog-wasm/-/libdatadog-wasm-0.21.0.tgz#cf903154a91c0b1570f63424a86ad1d1aff0b489"
-  integrity sha512-2wg5naOV+X7wyCNBJ/mRxE56fK22iz4ZwehzA/dSzuBO4/daNaVM6UgudRjkgXA9Pp0zEYcxmv4e1tNApQAEng==
+"@datadog/libdatadog-wasm@0.22.0":
+  version "0.22.0"
+  resolved "https://registry.yarnpkg.com/@datadog/libdatadog-wasm/-/libdatadog-wasm-0.22.0.tgz#904b0f2b754459bb70c885c49d9b465b0492a388"
+  integrity sha512-H5LEzjgDjaK8Kack2qiovRzTC3HrsoV4vD4kdhz+rTfOT19YxdVfVwENiXe9E6UK9WQmtnBh5qQw1GXMG3oR5Q==
 
-"@datadog/libdatadog@^0.21.0":
-  version "0.21.0"
-  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.21.0.tgz#2c9669f8f6444dc1cbb22272728ee26f26248872"
-  integrity sha512-6JQVv7LGBYG6uiY2wtno5paqP/G1UFXK1tA4LZEt2Bc9AzbCMtO2yrs1VfYDzMyVaFSj0+6QLdR8Hu5DQUODmw==
+"@datadog/libdatadog@^0.22.0":
+  version "0.22.0"
+  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.22.0.tgz#e77077cb5d388f6541cdaeb1d4a2d8707b412705"
+  integrity sha512-XlgRNCDqBCRZmkplyYa3OX1zmhy2lWFrGOANhlAyy6piaojDFyIG8nVX+pixjxjdCDYJwFZ1b90SEVqt2HwS2g==
   dependencies:
-    "@datadog/libdatadog-wasm" "0.21.0"
+    "@datadog/libdatadog-wasm" "0.22.0"
 
 "@datadog/native-appsec@11.0.3":
   version "11.0.3"

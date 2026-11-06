@@ -19,9 +19,14 @@ class LLMObsExporter extends BufferingExporter {
   #bufferLimitWarned = false
   #bufferedSpanCount = 0
   #exporter
+  /** @type {((mode: import('../agentless')['clientStatsMode']) => void) | undefined} */
+  #onClientStatsMode
   /** @type {Array<Function | undefined>} */
   #pendingFlushes = []
   #prioritySampler
+
+  /** @type {import('../agentless')['clientStatsMode'] | undefined} */
+  clientStatsMode
 
   /**
    * @param {import('../../config/config-base')} config
@@ -59,6 +64,11 @@ class LLMObsExporter extends BufferingExporter {
     this.#exporter = new Exporter(this._config, this.#prioritySampler)
     if (pendingUrl !== undefined) this.#exporter.setUrl?.(pendingUrl)
     this._url = this.#exporter._url
+    this.clientStatsMode = this.#exporter.clientStatsMode ?? 'javascript'
+
+    const onClientStatsMode = this.#onClientStatsMode
+    this.#onClientStatsMode = undefined
+    onClientStatsMode?.(this.clientStatsMode)
 
     this._isInitialized = true
     this.exportUncodedTraces()
@@ -67,6 +77,15 @@ class LLMObsExporter extends BufferingExporter {
     const pendingFlushes = this.#pendingFlushes
     this.#pendingFlushes = []
     for (const done of pendingFlushes) this.#exporter.flush(done)
+  }
+
+  /** @param {(mode: import('../agentless')['clientStatsMode']) => void} callback */
+  onClientStatsMode (callback) {
+    if (this._isInitialized) {
+      callback(this.clientStatsMode)
+    } else {
+      this.#onClientStatsMode = callback
+    }
   }
 
   /** @param {object[]} trace */

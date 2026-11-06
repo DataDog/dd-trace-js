@@ -16,11 +16,10 @@ const { computeIntakeUrl, INTAKE_PATH } = require('./intake')
 const legacyStorage = storage('legacy')
 
 /**
- * @typedef {object} AgentlessConfiguration
- * @property {string} apiKey
- * @property {string|undefined} env
- * @property {string|undefined} runtimeId
- * @property {URL} url
+ * @typedef {object} Pipeline
+ * @property {import('@datadog/libdatadog').AgentlessExporter} exporter
+ * @property {number} pending
+ * @property {boolean} retired
  */
 
 /**
@@ -37,10 +36,9 @@ class AgentlessWriter extends BaseWriter {
   #exporterEnv
   #exporterRuntimeId
   #exporterUrl
-  #configurationInFlight = false
   #metadata
-  #pendingConfigurations
   #pendingStatsDrains
+  #retiringExporters = 0
   #stats
   #urlMissing = false
 
@@ -48,7 +46,7 @@ class AgentlessWriter extends BaseWriter {
    * @param {object} options - Writer options
    * @param {URL} [options.url] - The intake URL. If not provided, constructed from site.
    * @param {string} [options.site] - The Datadog site
-   * @param {{ endpoint: string, intervalMs: number }} [options.stats] - Client stats configuration
+   * @param {import('@datadog/libdatadog').AgentlessStatsOptions} [options.stats] - Client stats configuration
    * @param {object} [options.metadata] - Metadata to pass to the data pipeline
    */
   constructor ({ url, site = 'datadoghq.com', stats, metadata = {} }) {
@@ -121,13 +119,17 @@ class AgentlessWriter extends BaseWriter {
     }
     this.#apiKeyMissing = false
 
-    this.#deliveriesInFlight++
+    let pipeline
     let completed = false
     const complete = () => {
       if (completed) return
       completed = true
-      this.#deliveriesInFlight--
-      this.#flushPendingStatsDrains()
+      if (pipeline) {
+        pipeline.pending--
+        this.#deliveriesInFlight--
+        if (pipeline.retired && pipeline.pending === 0) this.#closeExporter(pipeline)
+        this.#flushPendingStatsDrains()
+      }
       done()
     }
 
@@ -135,23 +137,14 @@ class AgentlessWriter extends BaseWriter {
     // internal request out of the instrumented application's traces.
     try {
       legacyStorage.run({ noop: true }, () => {
-        const { env, runtimeID: runtimeId } = this.#metadata
-        this.#applyConfiguration({
-          apiKey: DD_API_KEY,
-          env,
-          runtimeId,
-          url: this._url,
-        }, (error, exporter) => {
-          if (error) {
-            const message = error instanceof Error ? error.message : String(error)
-            log.error('Failed to send %d trace(s) to the agentless intake: %s', count, message)
-            complete()
-          } else if (exporter) {
-            exporter.sendV04(data, complete, log)
-          } else {
-            complete()
-          }
-        })
+        pipeline = this.#applyConfiguration(DD_API_KEY)
+        if (!pipeline) {
+          complete()
+          return
+        }
+        pipeline.pending++
+        this.#deliveriesInFlight++
+        pipeline.exporter.sendV04(data, complete, log)
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -161,26 +154,21 @@ class AgentlessWriter extends BaseWriter {
   }
 
   /**
-   * @param {AgentlessConfiguration} configuration
-   * @param {(error?: unknown, exporter?: import('@datadog/libdatadog').AgentlessExporter) => void} done
+   * @param {string} apiKey - Datadog API key.
+   * @returns {Pipeline|undefined}
    */
-  #applyConfiguration (configuration, done) {
-    if (this.#configurationInFlight) {
-      this.#pendingConfigurations ??= []
-      this.#pendingConfigurations.push({ configuration, done })
-      return
-    }
-    const { apiKey, env, runtimeId, url } = configuration
+  #applyConfiguration (apiKey) {
+    const url = this._url
     if (!canSendApiKey(url.protocol, url.hostname)) {
       if (!this.#apiKeyUnsafeReceiver) {
         this.#apiKeyUnsafeReceiver = true
         log.warn('DD_API_KEY will not be sent because the configured receiver is neither HTTPS nor loopback.')
       }
-      done()
       return
     }
     this.#apiKeyUnsafeReceiver = false
 
+    const { env, runtimeID: runtimeId } = this.#metadata
     if (
       this.#exporter &&
       this.#exporterApiKey === apiKey &&
@@ -188,54 +176,48 @@ class AgentlessWriter extends BaseWriter {
       this.#exporterRuntimeId === runtimeId &&
       this.#exporterUrl === url.href
     ) {
-      done(undefined, this.#exporter)
-      return
+      return this.#exporter
     }
 
-    this.#configurationInFlight = true
-    const replace = () => {
-      this.#closeExporter()
-      let error
-      try {
-        const config = getConfig()
-        const agent = url.protocol === 'https:' ? getHttpsProxyAgent(url) : undefined
-        const endpoint = this.#endpoint(url)
-        this.#exporter = createAgentlessExporter({
-          endpoint,
-          apiKey,
-          hostname: this.#metadata.hostname,
-          env,
-          service: config.service,
-          version: config.version,
-          runtimeId,
-          containerId: this.#metadata.containerId,
-          entityId: this.#metadata.entityId,
-          tracerVersion,
-          languageVersion: process.version,
-          languageInterpreter: process.versions.bun ? 'JavaScriptCore' : 'v8',
-          stats: this.#stats,
-        }, { agent })
-        this.#exporterApiKey = apiKey
-        this.#exporterEnv = env
-        this.#exporterRuntimeId = runtimeId
-        this.#exporterUrl = url.href
-      } catch (caughtError) {
-        error = caughtError
-      }
-      this.#configurationInFlight = false
-      done(error, this.#exporter)
-      const pending = this.#pendingConfigurations?.shift()
-      if (this.#pendingConfigurations?.length === 0) this.#pendingConfigurations = undefined
-      if (pending) this.#applyConfiguration(pending.configuration, pending.done)
+    const previous = this.#exporter
+    const config = getConfig()
+    const agent = url.protocol === 'https:' ? getHttpsProxyAgent(url) : undefined
+    this.#exporter = {
+      exporter: createAgentlessExporter({
+        endpoint: this.#endpoint(url),
+        apiKey,
+        hostname: this.#metadata.hostname,
+        env,
+        service: config.service,
+        version: config.version,
+        runtimeId,
+        containerId: this.#metadata.containerId,
+        entityId: this.#metadata.entityId,
+        tracerVersion,
+        languageVersion: process.version,
+        languageInterpreter: process.versions.bun ? 'JavaScriptCore' : 'v8',
+        stats: this.#stats,
+      }, { agent }),
+      pending: 0,
+      retired: false,
     }
-    this.#flushExporter(replace)
+    this.#exporterApiKey = apiKey
+    this.#exporterEnv = env
+    this.#exporterRuntimeId = runtimeId
+    this.#exporterUrl = url.href
+    if (previous) {
+      previous.retired = true
+      this.#retiringExporters++
+      if (previous.pending === 0) this.#closeExporter(previous)
+    }
+    return this.#exporter
   }
 
   /**
    * @param {() => void} done
    */
   #drainStats (done) {
-    if (this.#deliveriesInFlight > 0) {
+    if (this.#deliveriesInFlight > 0 || this.#retiringExporters > 0) {
       this.#pendingStatsDrains ??= []
       this.#pendingStatsDrains.push(done)
       return
@@ -247,15 +229,15 @@ class AgentlessWriter extends BaseWriter {
    * @param {() => void} done
    */
   #flushExporter (done) {
-    if (typeof this.#exporter?.flush === 'function') {
-      this.#exporter.flush(done, log)
+    if (this.#exporter) {
+      legacyStorage.run({ noop: true }, () => this.#exporter.exporter.flush(done, log))
     } else {
       done()
     }
   }
 
   #flushPendingStatsDrains () {
-    if (this.#deliveriesInFlight > 0 || !this.#pendingStatsDrains) return
+    if (this.#deliveriesInFlight > 0 || this.#retiringExporters > 0 || !this.#pendingStatsDrains) return
     const pendingStatsDrains = this.#pendingStatsDrains
     this.#pendingStatsDrains = undefined
     this.#flushExporter(() => {
@@ -274,13 +256,15 @@ class AgentlessWriter extends BaseWriter {
     return endpoint.href
   }
 
-  #closeExporter () {
-    this.#exporter?.close()
-    this.#exporter = undefined
-    this.#exporterApiKey = undefined
-    this.#exporterEnv = undefined
-    this.#exporterRuntimeId = undefined
-    this.#exporterUrl = undefined
+  /**
+   * @param {Pipeline} pipeline
+   */
+  #closeExporter (pipeline) {
+    legacyStorage.run({ noop: true }, () => pipeline.exporter.flush(() => {
+      pipeline.exporter.close()
+      this.#retiringExporters--
+      this.#flushPendingStatsDrains()
+    }, log))
   }
 }
 

@@ -3,8 +3,6 @@
 const { URL } = require('node:url')
 const os = require('node:os')
 
-const { supportsAgentlessStats } = require('@datadog/libdatadog')
-
 const log = require('../../log')
 const { containerId, entityId } = require('../common/docker')
 const Writer = require('./writer')
@@ -43,7 +41,6 @@ class AgentlessExporter {
       // derived from the site; never config.url (the agent's cleartext http) or the key leaks.
       this._url = new URL(computeIntakeUrl(site))
       if (
-        supportsAgentlessStats &&
         config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
         !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED &&
         !config.OTEL_TRACES_SPAN_METRICS_ENABLED

@@ -37,7 +37,6 @@ describe('AgentlessExporter', () => {
     }
 
     Exporter = proxyquire('../../../src/exporters/agentless', {
-      '@datadog/libdatadog': { supportsAgentlessStats: true },
       './writer': Writer,
     })
 
@@ -98,21 +97,6 @@ describe('AgentlessExporter', () => {
       })
 
       assert.strictEqual(writerOptions.stats.intervalMs, 10_000)
-    })
-
-    it('should disable client stats when native stats are unsupported', () => {
-      Exporter = proxyquire('../../../src/exporters/agentless', {
-        '@datadog/libdatadog': { supportsAgentlessStats: false },
-        './writer': Writer,
-      })
-
-      exporter = new Exporter({
-        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true },
-        tags: {},
-      })
-
-      assert.strictEqual(writerOptions.stats, undefined)
-      assert.strictEqual(exporter.clientStatsMode, 'disabled')
     })
 
     for (const [name, config] of [

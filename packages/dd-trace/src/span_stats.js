@@ -264,6 +264,13 @@ class SpanStatsProcessor {
     this.#flush()
   }
 
+  stop () {
+    clearInterval(this.timer)
+    this.buckets.clear()
+    this.enabled = false
+    this.otlpExporter = undefined
+  }
+
   /**
    * Drains pending span statistics and waits for their export.
    * @param {Function} [done]

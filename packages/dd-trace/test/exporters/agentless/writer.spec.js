@@ -192,6 +192,15 @@ describe('AgentlessWriter', () => {
     sinon.assert.calledOnce(exporter.sendV04)
   })
 
+  it('completes an explicit flush before an exporter has been created', async () => {
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+    encoder.count.returns(0)
+
+    await new Promise(resolve => writer.flushAndDrainStats(resolve))
+
+    sinon.assert.notCalled(createAgentlessExporter)
+  })
+
   it('waits for in-flight trace deliveries before draining native stats', async () => {
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
     await new Promise(resolve => writer.flush(resolve))
@@ -247,18 +256,32 @@ describe('AgentlessWriter', () => {
     )
   })
 
-  it('contains synchronous data-pipeline send failures', async () => {
+  it('completes stats draining after synchronous data-pipeline send failures', () => {
+    exporter.sendV04.resetBehavior()
     exporter.sendV04.throws(new Error('send failed'))
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+    const done = sinon.spy()
 
-    await new Promise(resolve => writer.flush(resolve))
+    writer.flushAndDrainStats(done)
 
+    sinon.assert.calledOnce(done)
     sinon.assert.calledWithExactly(
       log.error,
       'Failed to send %d trace(s) to the agentless intake: %s',
       1,
       'send failed'
     )
+  })
+
+  it('completes only once when delivery completes before throwing', () => {
+    exporter.sendV04.throws(new Error('send failed'))
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+    const done = sinon.spy()
+
+    writer.flushAndDrainStats(done)
+
+    sinon.assert.calledOnce(done)
+    sinon.assert.calledOnce(log.error)
   })
 
   it('does not give the API key to a non-loopback HTTP receiver', async () => {
@@ -308,44 +331,71 @@ describe('AgentlessWriter', () => {
     sinon.assert.calledOnce(exporter.flush)
     sinon.assert.calledOnce(exporter.close)
     assert.ok(exporter.flush.calledBefore(exporter.close))
-    assert.ok(exporter.close.calledBefore(createAgentlessExporter.secondCall))
     assert.strictEqual(createAgentlessExporter.secondCall.args[0].endpoint,
       'https://other-intake.example/api/v2/spans')
   })
 
-  it('replaces an exporter without native stats lifecycle support', async () => {
-    exporter.flush = undefined
-    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+  for (const change of ['url', 'apiKey', 'env', 'runtimeID']) {
+    it(`finishes active trace deliveries before retiring an exporter after changing ${change}`, async () => {
+      exporter.sendV04.resetBehavior()
+      const metadata = { env: 'old-env', runtimeID: 'old-runtime' }
+      writer = new AgentlessWriter({ url: new URL('https://intake.example'), metadata })
+      const firstSend = new Promise(resolve => writer.flush(resolve))
+      const nextExporter = {
+        close: sinon.stub(),
+        flush: sinon.stub().callsArg(0),
+        sendV04: sinon.stub().callsArg(1),
+      }
+      createAgentlessExporter.returns(nextExporter)
+      if (change === 'url') {
+        writer.setUrl(new URL('https://other-intake.example'))
+      } else if (change === 'apiKey') {
+        apiKey = 'next-api-key'
+      } else {
+        metadata[change] = 'next-value'
+      }
+      const secondSend = new Promise(resolve => writer.flush(resolve))
 
-    await new Promise(resolve => writer.flush(resolve))
-    writer.setUrl(new URL('https://other-intake.example'))
-    await new Promise(resolve => writer.flush(resolve))
+      sinon.assert.notCalled(exporter.flush)
+      sinon.assert.notCalled(exporter.close)
+      sinon.assert.calledOnce(nextExporter.sendV04)
+      exporter.sendV04.firstCall.args[1]()
+      await Promise.all([firstSend, secondSend])
 
-    sinon.assert.calledTwice(createAgentlessExporter)
-    sinon.assert.calledOnce(exporter.close)
-  })
+      sinon.assert.calledOnce(exporter.flush)
+      sinon.assert.calledOnce(exporter.close)
+    })
+  }
 
-  it('serializes exporter replacements while a stats flush is active', async () => {
+  it('waits for retiring exporters before completing an explicit flush', async () => {
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
     await new Promise(resolve => writer.flush(resolve))
     exporter.flush.resetBehavior()
-
+    const nextExporter = {
+      close: sinon.stub(),
+      flush: sinon.stub().callsArg(0),
+      sendV04: sinon.stub().callsArg(1),
+    }
+    createAgentlessExporter.returns(nextExporter)
     writer.setUrl(new URL('https://second-intake.example'))
     const secondSend = new Promise(resolve => writer.flush(resolve))
-    writer.setUrl(new URL('https://third-intake.example'))
-    const thirdSend = new Promise(resolve => writer.flush(resolve))
+    encoder.count.returns(0)
+    const drained = sinon.spy()
+    const drain = new Promise(resolve => writer.flushAndDrainStats(() => {
+      drained()
+      resolve()
+    }))
 
+    sinon.assert.notCalled(drained)
+    sinon.assert.notCalled(exporter.close)
+    sinon.assert.notCalled(nextExporter.flush)
     sinon.assert.calledOnce(exporter.flush)
-    sinon.assert.calledOnce(createAgentlessExporter)
     exporter.flush.firstCall.args[0]()
-    sinon.assert.calledTwice(exporter.flush)
-    sinon.assert.calledTwice(createAgentlessExporter)
-    exporter.flush.secondCall.args[0]()
-    await Promise.all([secondSend, thirdSend])
+    await Promise.all([secondSend, drain])
 
-    sinon.assert.calledThrice(createAgentlessExporter)
-    assert.strictEqual(createAgentlessExporter.thirdCall.args[0].endpoint,
-      'https://third-intake.example/api/v2/spans')
+    sinon.assert.calledOnce(exporter.close)
+    sinon.assert.calledOnce(nextExporter.flush)
+    sinon.assert.calledOnce(drained)
   })
 
   it('recreates the pipeline exporter when the API key changes', async () => {
