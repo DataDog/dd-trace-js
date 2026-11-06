@@ -1,0 +1,50 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/chat/completions" },
+      "status": 200,
+      "body": {
+        "id": "chatcmpl-parity-agent-1",
+        "object": "chat.completion",
+        "created": 1700000000,
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "call_parity_add",
+                  "type": "function",
+                  "function": { "name": "add", "arguments": "{\"a\":2,\"b\":2}" }
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ],
+        "usage": { "prompt_tokens": 30, "completion_tokens": 10, "total_tokens": 40 }
+      }
+    },
+    {
+      "match": { "method": "POST", "path": "/v1/chat/completions" },
+      "status": 200,
+      "body": {
+        "id": "chatcmpl-parity-agent-2",
+        "object": "chat.completion",
+        "created": 1700000001,
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "message": { "role": "assistant", "content": "2 + 2 is 4." },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": { "prompt_tokens": 45, "completion_tokens": 7, "total_tokens": 52 }
+      }
+    }
+  ]
+}

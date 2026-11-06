@@ -11,6 +11,14 @@ const {
   useLlmObs,
 } = require('../../util')
 
+function agentManifestMetadata (name, dependencies, tools = []) {
+  return {
+    _dd: {
+      agent_manifest: { name, tools, framework: 'LangGraph', max_iterations: 25, dependencies },
+    },
+  }
+}
+
 describe('integrations', () => {
   let StateGraph
   let Annotation
@@ -64,12 +72,13 @@ describe('integrations', () => {
 
           assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
-            spanKind: 'workflow',
+            spanKind: 'agent',
             name: 'foobarzoo',
             inputValue: JSON.stringify({
               messages: [{ role: 'user', content: 'Stream test' }],
             }),
             outputValue: MOCK_STRING,
+            metadata: agentManifestMetadata('foobarzoo', ['messages']),
             tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
@@ -108,10 +117,11 @@ describe('integrations', () => {
 
           assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
-            spanKind: 'workflow',
+            spanKind: 'agent',
             name: 'foobarzoo',
             inputValue: JSON.stringify({ count: 0 }),
             outputValue: MOCK_STRING,
+            metadata: agentManifestMetadata('foobarzoo', ['count']),
             tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
@@ -149,10 +159,11 @@ describe('integrations', () => {
 
           assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
-            spanKind: 'workflow',
+            spanKind: 'agent',
             name: 'foobarzoo',
             inputValue: JSON.stringify({ text: '' }),
             outputValue: MOCK_STRING,
+            metadata: agentManifestMetadata('foobarzoo', ['text']),
             tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
@@ -199,9 +210,11 @@ describe('integrations', () => {
             JSON.stringify({ messages: [{ content: 'Ping', role: 'user' }] })
           )
 
+          // default stream mode is `updates`, so the graph output is the last node update keyed by node name
           const parsedOutput = JSON.parse(workflowSpan.meta.output.value)
-          assert.ok(Array.isArray(parsedOutput.messages), `Expected array, got ${inspect(parsedOutput.messages)}`)
-          const lastMessage = parsedOutput.messages[parsedOutput.messages.length - 1]
+          const messages = parsedOutput.chat?.messages
+          assert.ok(Array.isArray(messages), `Expected array, got ${inspect(parsedOutput)}`)
+          const lastMessage = messages[messages.length - 1]
           assert.deepStrictEqual(lastMessage, { content: 'Pong', role: 'assistant' })
         })
 
@@ -242,10 +255,11 @@ describe('integrations', () => {
 
           assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
-            spanKind: 'workflow',
+            spanKind: 'agent',
             name: 'foobarzoo',
             inputValue: JSON.stringify({ value: 0 }),
             outputValue: undefined,
+            metadata: agentManifestMetadata('foobarzoo', ['value']),
             error: {
               type: 'Error',
               message: 'Streaming error',
@@ -304,6 +318,9 @@ describe('integrations', () => {
             spanKind: 'tool',
             name: 'ask_for_approval',
             inputValue: JSON.stringify({ action: 'deploy to production' }),
+            metadata: {
+              tool_info: { name: 'ask_for_approval', description: 'Ask a human to approve an action' },
+            },
             tags: { ml_app: 'test', integration: 'langchain' },
           })
 
@@ -351,8 +368,10 @@ describe('integrations', () => {
           assert.ok(node1Span, 'should have a child span named after node1')
           assert.ok(node2Span, 'should have a child span named after node2')
 
-          assert.strictEqual(node1Span.meta['span.kind'], 'workflow')
-          assert.strictEqual(node2Span.meta['span.kind'], 'workflow')
+          assert.strictEqual(node1Span.meta['span.kind'], 'task')
+          assert.strictEqual(node2Span.meta['span.kind'], 'task')
+          assert.ok(node1Span.tags.includes('integration:langgraph'), inspect(node1Span.tags))
+          assert.ok(node2Span.tags.includes('integration:langgraph'), inspect(node2Span.tags))
 
           // node spans are children of the outer graph span
           assert.strictEqual(node1Span.parent_id, graphSpan.span_id)
@@ -386,6 +405,53 @@ describe('integrations', () => {
           assert.ok(llmobsSpans.some(s => s.name === 'simpleGraph'), 'should have outer graph span')
           assert.ok(llmobsSpans.some(s => s.name === 'myNode'), 'should have node span')
           assert.ok(!llmobsSpans.some(s => s.name === 'ChannelWrite'), 'should not have ChannelWrite spans')
+        })
+      })
+
+      describe('agent manifest', () => {
+        it('lists ToolNode tools and honors recursionLimit', async () => {
+          const { END, START } = langgraphModule.get()
+          const { ToolNode } = langgraphModule.get('@langchain/langgraph/prebuilt')
+          const { tool } = langgraphModule.get('@langchain/core/tools')
+          const { z } = langgraphModule.get('zod')
+
+          const add = tool(({ a, b }) => String(a + b), {
+            name: 'add',
+            description: 'Adds two numbers',
+            schema: z.object({ a: z.number(), b: z.number() }),
+          })
+          const StateAnnotation = Annotation.Root({
+            messages: Annotation({ reducer: (x, y) => x.concat(y), default: () => [] }),
+          })
+          const workflow = new StateGraph(StateAnnotation)
+            .addNode('tools', new ToolNode([add]))
+            .addEdge(START, 'tools')
+            .addEdge('tools', END)
+          const app = workflow.compile({ name: 'toolGraph' })
+
+          const input = {
+            messages: [new langchainMessages.AIMessage({
+              content: '',
+              tool_calls: [{ id: 'call_1', name: 'add', args: { a: 1, b: 2 } }],
+            })],
+          }
+          await app.invoke(input, { recursionLimit: 7 })
+
+          const { llmobsSpans } = await getEvents(3)
+          const graphSpan = llmobsSpans.find(s => s.name === 'toolGraph')
+          assert.ok(graphSpan, 'expected graph span')
+          assert.deepStrictEqual(graphSpan.meta.metadata, {
+            _dd: {
+              agent_manifest: {
+                name: 'toolGraph',
+                // Zod schemas are not serializable, so parameters fall back to an empty object
+                tools: [{ name: 'add', description: 'Adds two numbers', parameters: {} }],
+                framework: 'LangGraph',
+                max_iterations: 7,
+                dependencies: ['messages'],
+              },
+            },
+          })
         })
       })
     })
