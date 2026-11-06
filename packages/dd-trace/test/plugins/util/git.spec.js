@@ -1217,7 +1217,7 @@ done
     assert.deepStrictEqual(second.discrepancy, {
       gitRepositoryUrl: 'https://example.com/current.git', gitCommitSHA: headSha,
     })
-    assert.strictEqual(fs.realpathSync(second.root), fs.realpathSync(secondCheckout))
+    assert.strictEqual(second.root, git(secondCheckout, ['rev-parse', '--show-toplevel']))
   })
 
   it('fetches head metadata without its ancestors or changing the checkout', () => {
