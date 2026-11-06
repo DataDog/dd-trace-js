@@ -1,33 +1,17 @@
 'use strict'
 
-const { HTTP_ROUTE } = require('../../../../../ext/tags')
-const web = require('../../plugins/util/web')
-const { getParse, getMatch } = require('../../../../datadog-instrumentations/src/path-to-regexp')
+const { LRUCache } = require('../../../../../../vendor/dist/lru-cache')
 
-/**
- * Normalize an HTTP route to the RFC-1103 _dd.appsec.normalized_route format.
- *
- * Rules: (1) starts with /, trailing slash only if declared; (2) no empty elements; (3) static
- * segments keep [A-Za-z0-9.-~_], other chars percent-encoded (UTF-8); (4) dynamic params render as
- * {name} (chars /?#+{} encoded, + reserved), shadowed duplicate names become paramN; (5) one URL
- * segment = one element, multiple params combine as {a+b}, a catch-all is a single terminal element;
- * (6) optional param elements are resolved per request against the matched URL.
- *
- * Design: Express 5 / path-to-regexp 8 only. The route is parsed once by path-to-regexp's `parse()`
- * (token tree → segment templates, cached per route string). Per-request presence of optional
- * groups is resolved with path-to-regexp's own `match()` — we do not re-implement matching. Static-
- * only optional groups (no param to capture) are dropped (rendered absent). Express 4 ships
- * path-to-regexp 0.x, which has no `parse()` → no tag.
- */
+const { renderRoute } = require('./renderer')
+const { segmentsFromTokens } = require('./segments')
 
-// path-to-regexp's match() builds a regexp exponential in a route's optional-group count, so cap it;
-// routes with more optional groups are omitted.
+// Express 5 uses path-to-regexp 8 for parsing and optional-group matching. Static-only
+// optional groups are dropped; Express 4 has no compatible parser and produces no tag.
+// match() is exponential in the optional-group count, so omit routes above this cap.
 const MAX_OPTIONAL_GROUPS = 8
 
-// Keyed on the raw route string — bounded by declared routes (never attacker URLs), so it retains
-// for the process lifetime.
-const routeCache = new Map()
-
+// Bound retention across router lifetimes. Keys are declared routes, never request URLs.
+const routeCache = new LRUCache({ max: 4096 })
 const EMPTY_SET = new Set()
 
 /**
@@ -38,7 +22,7 @@ const EMPTY_SET = new Set()
  *
  * `group` is the id of the innermost enclosing optional `{...}` group (0 = top-level, always present).
  *
- * @typedef {{ group: number, tokens: RouteToken[] }} RouteSegment
+ * @typedef {{ group: number, tokens: Exclude<RouteToken, { type: 'slash' }>[] }} RouteSegment
  *
  * @typedef {{ type: 'text', value: string } | { type: 'param', name: string }
  *   | { type: 'wildcard', name: string } | { type: 'group', tokens: PathToRegexpToken[] }} PathToRegexpToken
@@ -84,28 +68,7 @@ function tokensToSegments (ptTokens) {
   }
   walk(ptTokens, 0)
 
-  /** @type {RouteSegment[]} */
-  const segments = []
-  let cur = null
-  for (const token of flat) {
-    if (token.type === 'slash') {
-      if (cur) segments.push(cur)
-      cur = { group: token.group, tokens: [] }
-    } else {
-      if (!cur) cur = { group: 0, tokens: [] }
-      cur.tokens.push(token)
-    }
-  }
-  if (cur) segments.push(cur)
-
-  let trailingSlash = false
-  const last = segments.at(-1)
-  if (last && last.tokens.length === 0 && last.group === 0) {
-    trailingSlash = true
-    segments.pop()
-  }
-
-  return { segments, groupParent, trailingSlash }
+  return segmentsFromTokens(flat, groupParent)
 }
 
 /**
@@ -211,129 +174,6 @@ function compileRoute (route, parse, makeMatcher) {
 }
 
 /**
- * True when group `g` (and its whole ancestor chain) is present. Group 0 is always present.
- * @param {number} g
- * @param {Map<number, number>} groupParent
- * @param {Set<number>} present
- */
-function groupActive (g, groupParent, present) {
-  while (g !== 0) {
-    if (!present.has(g)) return false
-    g = groupParent.get(g)
-  }
-  return true
-}
-
-/**
- * URL-encode chars outside the RFC-1103 static alphabet [A-Za-z0-9.-~_]. The 'u' flag iterates whole
- * codepoints so surrogate pairs encode as correct multi-byte UTF-8.
- * @param {string} str
- */
-function encodeStaticSegment (str) {
-  return str.replaceAll(/[^A-Za-z0-9.\-~_]/gu, c => {
-    const code = c.charCodeAt(0)
-    if (code < 0x80) return '%' + code.toString(16).toUpperCase().padStart(2, '0')
-    try {
-      return encodeURIComponent(c)
-    } catch {
-      return '%EF%BF%BD'
-    }
-  })
-}
-
-/**
- * URL-encode the 6 characters not allowed in a normalized param name (/?#+{}).
- * @param {string} name
- */
-function encodeParamName (name) {
-  return name.replaceAll(/[/?#+{}]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
-}
-
-/**
- * Render the normalized route for a given set of present optional groups.
- * @param {CompiledRoute} compiled
- * @param {Set<number>} present
- */
-function renderRoute (compiled, present) {
-  const { segments, groupParent } = compiled
-
-  // Pass 1: present dynamic tokens (param/wildcard) in declaration order. Activity is per token: a
-  // mandatory token can share a segment with an absent optional group (e.g. '.json' in '/x{/:id}.json').
-  const dyn = []
-  for (const seg of segments) {
-    for (const t of seg.tokens) {
-      if (t.type !== 'static' && groupActive(t.group, groupParent, present)) dyn.push(t)
-    }
-  }
-
-  // Pass 2: a token keeps its (encoded) name iff it is the last present occurrence of that name;
-  // earlier duplicates become paramN (skipping surviving names).
-  const encodedNames = new Array(dyn.length)
-  const lastIndexByName = new Map()
-  for (let idx = 0; idx < dyn.length; idx++) {
-    encodedNames[idx] = encodeParamName(dyn[idx].name)
-    lastIndexByName.set(encodedNames[idx], idx)
-  }
-  const used = new Set()
-  for (let idx = 0; idx < dyn.length; idx++) {
-    if (lastIndexByName.get(encodedNames[idx]) === idx) used.add(encodedNames[idx])
-  }
-  const resolvedNames = new Array(dyn.length)
-  let counter = 1
-  for (let idx = 0; idx < dyn.length; idx++) {
-    if (lastIndexByName.get(encodedNames[idx]) === idx) {
-      resolvedNames[idx] = encodedNames[idx]
-    } else {
-      while (used.has(`param${counter}`)) counter++
-      resolvedNames[idx] = `param${counter}`
-      used.add(`param${counter}`)
-      counter++
-    }
-  }
-
-  // Pass 3: build the output elements. Each present leading slash starts a new element; a segment
-  // whose leading slash is absent merges its still-present tokens into the current element (so the
-  // '.json' in '/x{/:id}.json' survives when :id is absent) rather than being dropped with the slash.
-  const out = []
-  let dynPtr = 0
-  let staticText = ''
-  let paramNames = []
-  let isCatchAll = false
-
-  const flush = () => {
-    if (isCatchAll) {
-      out.push(`{${paramNames.join('+')}}`) // terminal catch-all; static prefix subsumed (rule 5)
-    } else if (paramNames.length === 1) {
-      out.push(`{${paramNames[0]}}`)
-    } else if (paramNames.length > 1) {
-      out.push(`{${paramNames.join('+')}}`)
-    } else if (staticText !== '') {
-      out.push(encodeStaticSegment(staticText))
-    }
-    staticText = ''
-    paramNames = []
-    isCatchAll = false
-  }
-
-  for (const seg of segments) {
-    if (groupActive(seg.group, groupParent, present)) flush()
-    for (const t of seg.tokens) {
-      if (!groupActive(t.group, groupParent, present)) continue
-      if (t.type === 'static') {
-        staticText += t.text
-      } else {
-        if (t.type === 'wildcard') isCatchAll = true
-        paramNames.push(resolvedNames[dynPtr++])
-      }
-    }
-  }
-  flush()
-
-  const normalized = '/' + out.join('/')
-  return compiled.trailingSlash && normalized !== '/' ? normalized + '/' : normalized
-}
-
-/**
  * Which optional groups are present, from a captured/params object: an optional group is present iff
  * one of its param tokens has a defined own-property value. Marks ancestor groups present too.
  * @param {CompiledRoute} compiled
@@ -375,14 +215,14 @@ function presenceBitmask (optionalGroups, present) {
 /**
  * Normalize an Express route string. Express 5 only: `parse`/`makeMatcher` are path-to-regexp 8's
  * `parse()` and a `match()` factory; returns null when either is unavailable (Express 4).
- * @param {string} route - route string (the http.route value)
+ * @param {string|undefined} route - route string (the http.route value)
  * @param {object|null|undefined} params - req.params (fallback when the URL doesn't match)
  * @param {string|undefined} urlPath - request URL (query stripped here)
- * @param {(pattern: string) => { tokens: PathToRegexpToken[] } | undefined} parse
- * @param {(route: string) => ((url: string) => object | undefined) | undefined} makeMatcher
+ * @param {((pattern: string) => { tokens: PathToRegexpToken[] } | undefined) | undefined} parse
+ * @param {((route: string) => ((url: string) => object | undefined) | undefined) | undefined} makeMatcher
  * @returns {string|null}
  */
-function normalizeRouteExpress (route, params, urlPath, parse, makeMatcher) {
+function normalizeRoute (route, params, urlPath, parse, makeMatcher) {
   if (typeof route !== 'string' || !route) return null
   if (typeof parse !== 'function' || typeof makeMatcher !== 'function') return null
 
@@ -412,37 +252,4 @@ function normalizeRouteExpress (route, params, urlPath, parse, makeMatcher) {
   return result
 }
 
-/**
- * Normalize an HTTP route from a request. Reads the framework from the span component tag.
- * @param {object} req
- * @returns {string|null}
- */
-function normalizeRoute (req) {
-  const spanContext = web.root(req)?.context()
-  const component = spanContext?.getTag?.('component')
-
-  // eslint-disable-next-line sonarjs/no-small-switch
-  switch (component) {
-    case 'express': {
-      // Routes are read as Express 5 grammar, and 4's differs ('/a{2}' matches '/aa' there), so skip
-      // Express 4. Decided per request off the serving app — a process can load both majors, and the
-      // parser adapters are process-wide — via the legacy `app.del` alias that Express 5 removed.
-      if (typeof req.app?.del === 'function') return null
-
-      const parse = getParse()
-      const makeMatcher = getMatch()
-      if (parse === undefined || makeMatcher === undefined) return null
-      // Reuse the http.route tag set by web.setRouteOrEndpointTag just before this hook.
-      const route = spanContext.getTag(HTTP_ROUTE)
-      return normalizeRouteExpress(route, req.params, req.originalUrl || req.url, parse, makeMatcher)
-    }
-    default:
-      return null
-  }
-}
-
-module.exports = {
-  normalizeRoute,
-  // exported for unit testing (framework-agnostic core)
-  normalizeRouteExpress,
-}
+module.exports = { normalizeRoute }
