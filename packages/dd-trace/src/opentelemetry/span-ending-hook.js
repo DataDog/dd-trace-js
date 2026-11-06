@@ -8,7 +8,7 @@
 
 /**
  * @type {{
- *   hook: ((ddSpan: import('../opentracing/span'), otelSemanticsEnabled: boolean) => void) | undefined
+ *   hook: ((ddSpan: import('../opentracing/span'), otelSemanticsEnabled: boolean) => boolean | undefined) | undefined
  * }}
  */
 module.exports = { hook: undefined }

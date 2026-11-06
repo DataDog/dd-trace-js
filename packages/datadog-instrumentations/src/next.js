@@ -83,8 +83,8 @@ spanEndingHook.hook = (ddSpan, otelSemanticsEnabled) => {
     setInstrumentationHttpResource(ddSpan, otelHttpResourceName(method, route))
     const status = tags['http.status_code']
     if (status >= 500) {
-      ddSpan.setTag('error', true)
       ddSpan.setTag(HTTP_STATUS_ERROR, String(status))
+      return true
     }
   } else {
     // Next already wrote the RSC-aware `${method} ${route}` into `next.span_name`; prefer it so we

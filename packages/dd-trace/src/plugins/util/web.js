@@ -164,11 +164,13 @@ const web = {
     context.paths = [path]
     // Publish before finish because downstream requests can trigger sampling inside the handler.
     // Replace only values this context owns, so an upstream route still wins.
+    let route = currentRoute
     if (currentRoute === undefined || currentRoute === publishedRoute) {
+      route = path
       context.span.setTag(HTTP_ROUTE, path)
-      if (ownsResource(spanContext)) {
-        setInstrumentationHttpResource(context.span, otelHttpResourceName(req.method, path))
-      }
+    }
+    if (ownsResource(spanContext)) {
+      setInstrumentationHttpResource(context.span, otelHttpResourceName(req.method, route))
     }
   },
 
