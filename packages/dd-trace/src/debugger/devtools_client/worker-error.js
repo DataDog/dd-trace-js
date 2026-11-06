@@ -11,9 +11,10 @@ class WorkerError extends Error {
   /**
    * @param {string} message - The error message
    * @param {WorkerErrorReasons[keyof WorkerErrorReasons]} reason - The failure reason reported in telemetry
+   * @param {{ cause?: unknown }} [options] - Standard error options, such as the `cause`
    */
-  constructor (message, reason) {
-    super(message)
+  constructor (message, reason, options) {
+    super(message, options)
     this.reason = reason
   }
 }

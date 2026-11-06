@@ -56,8 +56,8 @@ probePort.on('message', async ({ action, probe, ackId }) => {
     await processMsg(action, probe)
     probePort.postMessage({ ackId })
   } catch (err) {
-    // Structured cloning an Error drops its custom properties, so send the reason separately.
-    probePort.postMessage({ ackId, error: err, reason: err.reason })
+    // Structured cloning an Error drops its custom properties, so send `reason` and `phase` separately.
+    probePort.postMessage({ ackId, error: err, reason: err.reason, action, phase: err.phase })
     ackError(err, probe)
   }
 })
