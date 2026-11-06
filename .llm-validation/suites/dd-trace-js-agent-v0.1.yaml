@@ -99,16 +99,25 @@ cases:
       Which core configuration files must change, when does telemetry change, and how should the option be named?
       Answer in at most 5 bullets.
     expected_criteria:
-      - Adds the default in packages/dd-trace/src/config/defaults.js.
-      - Maps the environment variable in packages/dd-trace/src/config/index.js.
-      - Updates packages/dd-trace/src/config/supported-configurations.json.
-      - Adds the telemetry mapping when applicable.
+      - >-
+        Registers the DD_ variable in packages/dd-trace/src/config/supported-configurations.json with its default,
+        type and programmatic name (configurationNames) for tracer.init().
+      - >-
+        Defaults and environment/programmatic parsing are derived from the registry by config/defaults.js and
+        config/index.js. Manual edits there are needed only for behavior the registry cannot express.
+      - >-
+        Canonical configuration telemetry is derived from the registry, not a required per-option name mapping
+        in telemetry/telemetry.js. Add telemetry tests when adding or changing a configuration source;
+        custom telemetry behavior may need implementation changes.
+      - >-
+        Runs npm run generate:config:types and commits the generated configuration types. This command generates
+        types; registry-driven defaults, parsing and telemetry are constructed at runtime.
       - Uses a unit suffix, such as maxBytes.
     bad_signals:
-      - Adds the environment variable without a default.
-      - Omits the environment-variable mapping in packages/dd-trace/src/config/index.js.
+      - Adds the environment variable without a default in its registry entry.
+      - Omits the registry mapping that exposes the option through tracer.init().
       - Omits packages/dd-trace/src/config/supported-configurations.json.
-      - Treats telemetry as mandatory even when it is not applicable.
+      - Requires manual defaults, env mapping or telemetry name mapping for every ordinary registry-backed option.
       - Uses a size option name without a unit suffix.
 
   # AGENTS.md — Production Safety and Performance: performance-motivated complexity.
@@ -170,8 +179,12 @@ cases:
       - Rejects adding promise machinery to the synchronous request path regardless of async syntax.
       - >
         Allows inherently asynchronous APIs, control-plane code, and worker threads to follow their upstream
-        asynchronous contract.
+        asynchronous contract. Cover all three categories; grouping control-plane code and worker threads together
+        is valid, provided the upstream-contract condition still applies.
       - Keeps inactive paths cheap.
+      - >-
+        Uses at most three top-level bullets. A brief introduction or nested explanation does not add a top-level
+        bullet. Assess equivalent grouping consistently; missing safety conditions are substantive errors.
     bad_signals:
       - Accepts the promise-returning helper because it avoids async syntax.
       - Treats the exceptions as permission to add promise machinery to arbitrary production paths.
