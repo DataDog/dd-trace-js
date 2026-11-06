@@ -145,7 +145,7 @@ Before adding or moving a gate in front of a publish, grep the repo for the chan
 | Cache | `datadog-plugin-redis` | `src/redis.js` | `CachePlugin` |
 | HTTP client | `datadog-plugin-fetch` | `src/fetch.js` | `HttpClientPlugin` (extends `ClientPlugin`) |
 | Web framework | `datadog-plugin-express` | `src/express.js` | `RouterPlugin` |
-| Message queue | `datadog-plugin-kafkajs` | `src/kafkajs.js` | `Producer`/`ConsumerPlugin` |
+| Message queue | `datadog-plugin-kafkajs` | `src/kafkajs.js` | `ProducerPlugin`/`ConsumerPlugin` |
 | Orchestrion | `datadog-plugin-langchain` | `rewriter/instrumentations/langchain.js` | `TracingPlugin` |
 
 For the complete list by base class, see [Reference Plugins](references/reference-plugins.md).
