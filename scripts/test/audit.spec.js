@@ -6,6 +6,7 @@ const fs = require('node:fs')
 const { tmpdir } = require('node:os')
 const path = require('node:path')
 
+const { minimatch } = require('minimatch')
 const yaml = require('yaml')
 
 const repoRoot = path.join(__dirname, '..', '..')
@@ -48,6 +49,7 @@ describe('scripts/audit.js', () => {
       report: { 'some-package': advisory('GHSA-bbbb-bbbb-bbbb', 'high') },
       allow: [],
       bunStatus: 1,
+      useConfiguredDirectories: true,
     })
 
     assert.strictEqual(result.status, 1)
@@ -157,13 +159,42 @@ describe('scripts/audit.js', () => {
     assert.match(result.stderr, /Unknown level 'medium'/)
   })
 
-  it('audits every configured directory on Dependabot pull requests', () => {
+  it('audits dependency changes on pull requests from any author', () => {
     const auditWorkflow = yaml.parse(fs.readFileSync(path.join(repoRoot, '.github/workflows/audit.yml'), 'utf8'))
-    assert.deepStrictEqual(auditWorkflow.on, { pull_request: null })
-    assert.strictEqual(auditWorkflow.jobs.dependencies.if, "github.actor == 'dependabot[bot]'")
+    assert.deepStrictEqual(Object.keys(auditWorkflow.on), ['pull_request'])
+    assert.strictEqual(auditWorkflow.jobs.dependencies.if, undefined)
+
+    const { paths } = auditWorkflow.on.pull_request
+    /** @param {string} filename */
+    const matches = filename => paths.some(pattern => minimatch(filename, pattern, { dot: true }))
+    for (const filename of [
+      'packages/dd-trace/src/tracer.js',
+      'docs/index.md',
+      '.github/workflows/apm-integrations.yml',
+    ]) {
+      assert.strictEqual(matches(filename), false, filename)
+    }
 
     const expectedDirectories = ['.', '.github/actions/datadog-ci', '.github/all-green', 'docs', 'vendor']
-    assert.deepStrictEqual(auditWorkflow.jobs.dependencies.strategy.matrix.directory.sort(), expectedDirectories)
+    const { strategy, steps } = auditWorkflow.jobs.dependencies
+    assert.strictEqual(strategy, undefined)
+    assert.deepStrictEqual(steps.at(-1), { run: 'node scripts/audit.js' })
+    for (const directory of expectedDirectories) {
+      for (const filename of ['package.json', 'bun.lock']) {
+        const file = path.posix.join(directory, filename)
+        assert.strictEqual(matches(file), true, file)
+      }
+    }
+    for (const filename of [
+      'bunfig.toml',
+      'scripts/audit.js',
+      '.github/audit-allowlist.json',
+      '.github/workflows/audit.yml',
+      '.github/actions/node/setup/action.yml',
+      'packages/dd-trace/test/plugins/versions/package.json',
+    ]) {
+      assert.strictEqual(matches(filename), true, filename)
+    }
     const allowlist = JSON.parse(
       fs.readFileSync(path.join(repoRoot, '.github/audit-allowlist.json'), 'utf8')
     )
