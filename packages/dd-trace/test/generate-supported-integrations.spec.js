@@ -187,7 +187,7 @@ describe('generate supported integrations', () => {
 
   it('reports only the WebdriverIO versions installed by each runtime job', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeVersions: ['18.20.8', '26.2.0'],
+      nodeVersions: ['18.20.8', '26.12.1'],
       plugins: new Map([['@wdio/local-runner', 'mocha']]),
       getPackageVersions: async () => ['9.0.0', '9.33.1', latestVersions['@wdio/local-runner']],
     })
@@ -199,7 +199,7 @@ describe('generate supported integrations', () => {
       versions: [{
         supportedRange: '>=9.0.0',
         tested: [latestVersions['@wdio/local-runner']],
-        testedRuntimes: { node: ['26.2.0'] },
+        testedRuntimes: { node: ['26.12.1'] },
       }, {
         supportedRange: '>=9.0.0',
         tested: ['9.0.0'],

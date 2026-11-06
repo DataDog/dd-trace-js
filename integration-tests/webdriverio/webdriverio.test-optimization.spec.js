@@ -245,7 +245,7 @@ for (const version of versions) {
     let webDriver
 
     const resolvedWebdriverioVersion = resolveWebdriverioVersion(version)
-    const jasmineAfterAllFailureExitCode = satisfies(resolvedWebdriverioVersion, '>=10.2.0') ? 1 : 0
+    const jasmineSuiteHookFailureExitCode = satisfies(resolvedWebdriverioVersion, '>=10.2.0') ? 1 : 0
 
     const dependencies = [
       `@wdio/cli@${version}`,
@@ -1629,8 +1629,8 @@ for (const version of versions) {
             })
 
             let expectedExitCode = 1
-            if (framework === 'jasmine' && hookType === 'afterAll') {
-              expectedExitCode = jasmineAfterAllFailureExitCode
+            if (framework === 'jasmine') {
+              expectedExitCode = jasmineSuiteHookFailureExitCode
             }
 
             await runScenario('suiteHookFailure', 1, payloads => {
@@ -1666,7 +1666,7 @@ for (const version of versions) {
             assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
           }, {
             WEBDRIVERIO_SUITE_HOOK: 'afterAll',
-          }, framework === 'jasmine' ? jasmineAfterAllFailureExitCode : 1)
+          }, framework === 'jasmine' ? jasmineSuiteHookFailureExitCode : 1)
         })
 
         {

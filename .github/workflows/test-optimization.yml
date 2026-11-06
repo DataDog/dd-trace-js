@@ -252,13 +252,13 @@ jobs:
           - node-version: oldest
             webdriverio-version: oldest
             spec: webdriverio
-          - node-version: latest
+          - node-version: 26.12.1
             webdriverio-version: latest
             spec: webdriverio
           - node-version: oldest
             webdriverio-version: oldest
             spec: webdriverio.failure-videos
-          - node-version: latest
+          - node-version: 26.12.1
             webdriverio-version: latest
             spec: webdriverio.failure-videos
           - node-version: oldest
@@ -269,7 +269,7 @@ jobs:
             webdriverio-version: oldest
             spec: webdriverio.test-optimization
             adapter: jasmine
-          - node-version: latest
+          - node-version: 26.12.1
             webdriverio-version: latest
             spec: webdriverio.test-optimization
     name: >-
