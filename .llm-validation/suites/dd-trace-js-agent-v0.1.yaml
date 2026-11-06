@@ -111,7 +111,6 @@ cases:
         and implementation changes only for custom telemetry behavior.
       - >-
         Recommends running npm run generate:config:types and committing the generated configuration types.
-        This command generates types; registry-driven defaults, parsing and telemetry are constructed at runtime.
       - Recommends a unit suffix, such as maxBytes.
     bad_signals:
       - Recommends adding the environment variable without specifying a default in its registry entry.
