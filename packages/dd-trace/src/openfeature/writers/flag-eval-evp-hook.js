@@ -42,6 +42,7 @@ class FlagEvalEVPHook {
    */
   after (hookContext, evaluationDetails) {
     this.#dependencyTelemetrySidecar?.associateDependencyEvaluations(hookContext, evaluationDetails.flagMetadata)
+    this.#captureDependencies(hookContext, evaluationDetails)
   }
 
   /**
@@ -52,10 +53,34 @@ class FlagEvalEVPHook {
    * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
    */
   finally (hookContext, evaluationDetails) {
-    const dependencies = this.#dependencyTelemetrySidecar?.takeDependencyEvaluations(
+    this.#captureDependencies(hookContext, evaluationDetails, true)
+    this.#capture(hookContext.flagKey, hookContext, evaluationDetails)
+  }
+
+  /**
+   * Drain once on the normal after path and again as an idempotent finally fallback.
+   *
+   * @param {import('@openfeature/core').HookContext} hookContext
+   * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
+   * @param {boolean} [allowContextFallback=false]
+   */
+  #captureDependencies (hookContext, evaluationDetails, allowContextFallback = false) {
+    const sidecar = this.#dependencyTelemetrySidecar
+    if (!sidecar) return
+    let dependencies = sidecar.takeDependencyEvaluations(
       evaluationDetails.flagMetadata,
       hookContext
-    ) ?? []
+    )
+    if (dependencies.length === 0 && allowContextFallback && !this.#closed &&
+      this.#writer.getUnavailableReason() === undefined && this.#writer.hasCapacity()) {
+      let context
+      try {
+        context = hookContext.context
+      } catch {
+        // An unreadable context cannot recover a batch whose normal aliases were replaced.
+      }
+      dependencies = sidecar.takeDependencyEvaluations(undefined, undefined, context)
+    }
     for (const dependency of dependencies) {
       this.#capture(dependency.flagKey, hookContext, {
         ...dependency.details,
@@ -63,7 +88,6 @@ class FlagEvalEVPHook {
         flagMetadata: dependency.details.flagMetadata ?? {},
       })
     }
-    this.#capture(hookContext.flagKey, hookContext, evaluationDetails)
   }
 
   /**

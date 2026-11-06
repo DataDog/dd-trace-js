@@ -118,15 +118,50 @@ describe('FlagEvalEVPHook', () => {
 
   it('captures staged prerequisite evaluations before the root', () => {
     enable()
-    dependencyTelemetrySidecar.takeDependencyEvaluations.returns([
+    dependencyTelemetrySidecar.takeDependencyEvaluations.onFirstCall().returns([
       { flagKey: 'prerequisite', details: details() },
     ])
-    hook.finally({ flagKey: 'root', context: { targetingKey: 'customer' } }, details())
+    dependencyTelemetrySidecar.takeDependencyEvaluations.onSecondCall().returns([])
+    const context = { targetingKey: 'customer' }
+    const hookContext = { flagKey: 'root', context }
+    const result = details()
+    hook.after(hookContext, result)
+
+    sinon.assert.calledOnce(writer.enqueue)
+    assert.strictEqual(writer.enqueue.firstCall.args[0].flagKey, 'prerequisite')
+
+    hook.finally(hookContext, result)
 
     sinon.assert.calledTwice(writer.enqueue)
+    sinon.assert.calledWithExactly(
+      dependencyTelemetrySidecar.takeDependencyEvaluations,
+      result.flagMetadata,
+      hookContext
+    )
     assert.strictEqual(writer.enqueue.firstCall.args[0].flagKey, 'prerequisite')
     assert.strictEqual(writer.enqueue.firstCall.args[0].targetingKey, 'customer')
     assert.strictEqual(writer.enqueue.secondCall.args[0].flagKey, 'root')
+  })
+
+  it('recovers staged prerequisites by context when after was skipped and metadata was replaced', () => {
+    enable()
+    const context = { targetingKey: 'customer' }
+    const hookContext = { flagKey: 'root', context }
+    const replacement = details()
+    dependencyTelemetrySidecar.takeDependencyEvaluations.onFirstCall().returns([])
+    dependencyTelemetrySidecar.takeDependencyEvaluations.onSecondCall().returns([
+      { flagKey: 'prerequisite', details: details() },
+    ])
+
+    hook.finally(hookContext, replacement)
+
+    sinon.assert.calledWithExactly(
+      dependencyTelemetrySidecar.takeDependencyEvaluations,
+      undefined,
+      undefined,
+      context
+    )
+    assert.deepStrictEqual(writer.enqueue.args.map(([event]) => event.flagKey), ['prerequisite', 'root'])
   })
 
   it('captures a root error after dependency graph failure', () => {

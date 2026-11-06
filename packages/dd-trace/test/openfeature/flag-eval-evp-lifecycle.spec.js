@@ -290,7 +290,7 @@ describe('FlaggingProvider EVP lifecycle', () => {
     const result = await client.getBooleanDetails('root', false, { targetingKey: 'customer' })
     assert.strictEqual(result.value, false)
     assert.strictEqual(result.reason, 'ERROR')
-    assert.strictEqual(result.errorCode, ErrorCode.FLAG_NOT_FOUND)
+    assert.strictEqual(result.errorCode, ErrorCode.GENERAL)
     provider.onClose()
 
     sinon.assert.calledOnce(request)
@@ -298,10 +298,9 @@ describe('FlaggingProvider EVP lifecycle', () => {
     assert.deepStrictEqual(rows.map(row => row.flag.key), ['prerequisite', 'missing', 'root'])
     assert.deepStrictEqual(exposures, [])
     assert.strictEqual(rows[0].error, undefined)
-    for (const row of rows.slice(1)) {
-      assert.deepStrictEqual(row.error, { message: 'FLAG_NOT_FOUND' })
-      assert.strictEqual(row.runtime_default_used, true)
-    }
+    assert.deepStrictEqual(rows[1].error, { message: 'FLAG_NOT_FOUND' })
+    assert.deepStrictEqual(rows[2].error, { message: 'GENERAL' })
+    for (const row of rows.slice(1)) assert.strictEqual(row.runtime_default_used, true)
   })
 
   it('retains dependency evaluations but rolls back exposures after an application hook fails', async () => {
@@ -334,16 +333,18 @@ describe('FlaggingProvider EVP lifecycle', () => {
     const result = await client.getBooleanDetails('root', false, { targetingKey: 'customer' })
     assert.strictEqual(result.value, false)
     assert.strictEqual(result.reason, 'ERROR')
-    assert.strictEqual(result.errorCode, ErrorCode.FLAG_NOT_FOUND)
+    assert.strictEqual(result.errorCode, ErrorCode.GENERAL)
     provider.onClose()
 
     sinon.assert.calledOnce(request)
     const rows = JSON.parse(request.firstCall.args[0]).flagEvaluations
     assert.deepStrictEqual(rows.map(row => row.flag.key), ['missing', 'parent', 'root'])
-    for (const row of rows) {
-      assert.deepStrictEqual(row.error, { message: 'FLAG_NOT_FOUND' })
-      assert.strictEqual(row.runtime_default_used, true)
-    }
+    assert.deepStrictEqual(rows.map(row => row.error), [
+      { message: 'FLAG_NOT_FOUND' },
+      { message: 'GENERAL' },
+      { message: 'GENERAL' },
+    ])
+    for (const row of rows) assert.strictEqual(row.runtime_default_used, true)
   })
 
   it('omits an invalid targeting key once without dropping the evaluation', async () => {
