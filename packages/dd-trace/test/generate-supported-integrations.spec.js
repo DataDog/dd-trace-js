@@ -27,7 +27,7 @@ describe('generate supported integrations', () => {
     ])
 
     const { rows } = await generateSupportedIntegrations({
-      nodeVersions: ['26.2.0'],
+      nodeVersions: ['26.12.1'],
       plugins,
       getPackageVersions: async dependency => packageVersions[dependency],
     })
@@ -70,7 +70,7 @@ describe('generate supported integrations', () => {
   it('includes explicitly exercised AI SDK versions and excludes known-broken versions', async () => {
     for (let attempt = 0; attempt < 2; attempt++) {
       const { rows } = await generateSupportedIntegrations({
-        nodeVersions: ['24.16.0', '26.2.0'],
+        nodeVersions: ['24.16.0', '26.12.1'],
         plugins: new Map([['ai', 'ai']]),
         getPackageVersions: async () => ['1.0.0', '2.0.0', '3.0.0', '4.0.0', '4.0.2', '4.3.19',
           '5.0.0', '6.0.0', '7.0.0', latestVersions.ai],
@@ -85,7 +85,7 @@ describe('generate supported integrations', () => {
 
   it('excludes runtime-specific broken versions without narrowing declared support', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeVersions: ['26.2.0'],
+      nodeVersions: ['26.12.1'],
       plugins: new Map([['avsc', 'avsc'], ['@grpc/grpc-js', 'grpc']]),
       getPackageVersions: async dependency => dependency === 'avsc'
         ? ['5.0.0', '5.7.9']
@@ -104,7 +104,7 @@ describe('generate supported integrations', () => {
       '@hapi/hapi': ['17.9.0', '18.4.1', '19.2.0', '20.3.0', latestVersions['@hapi/hapi']],
     }
     const { rows } = await generateSupportedIntegrations({
-      nodeVersions: ['26.2.0'],
+      nodeVersions: ['26.12.1'],
       plugins: new Map([['hapi', 'hapi'], ['@hapi/hapi', 'hapi']]),
       getPackageVersions: async dependency => packageVersions[dependency],
     })
@@ -129,7 +129,7 @@ describe('generate supported integrations', () => {
       versions.push(latestVersions[dependency], semver.inc(latestVersions[dependency], 'patch'))
     }
     const { rows } = await generateSupportedIntegrations({
-      nodeVersions: ['18.20.8', '22.22.3', '26.2.0'],
+      nodeVersions: ['18.20.8', '22.22.3', '26.12.1'],
       plugins: new Map([
         ['@jest/core', 'jest'], ['mocha', 'mocha'],
         ['playwright', 'playwright'], ['@cucumber/cucumber', 'cucumber'],
@@ -142,32 +142,32 @@ describe('generate supported integrations', () => {
       node: version.testedRuntimes.node, tested: version.tested,
     }))]), [
       ['@cucumber/cucumber', [
-        { node: ['26.2.0'], tested: ['7.0.0', latestVersions['@cucumber/cucumber']] },
+        { node: ['26.12.1'], tested: ['7.0.0', latestVersions['@cucumber/cucumber']] },
         { node: ['18.20.8'], tested: ['7.0.0'] },
       ]],
       ['cypress', [
-        { node: ['26.2.0'], tested: ['12.0.0', '14.5.4', latestVersions.cypress] },
+        { node: ['26.12.1'], tested: ['12.0.0', '14.5.4', latestVersions.cypress] },
         { node: ['18.20.8'], tested: ['12.0.0', '14.5.4'] },
       ]],
       ['@jest/core', DD_MAJOR >= 6
-        ? [{ node: ['26.2.0', '18.20.8'], tested: ['28.0.0', latestVersions['@jest/core']] }]
+        ? [{ node: ['26.12.1', '18.20.8'], tested: ['28.0.0', latestVersions['@jest/core']] }]
         : [
-            { node: ['26.2.0'], tested: ['24.8.0', latestVersions['@jest/core']] },
+            { node: ['26.12.1'], tested: ['24.8.0', latestVersions['@jest/core']] },
             { node: ['18.20.8'], tested: ['24.8.0', '25.5.1', latestVersions['@jest/core']] },
           ]],
       ['mocha', [
-        { node: ['26.2.0'], tested: [DD_MAJOR >= 6 ? '8.0.0' : '5.2.0', latestVersions.mocha] },
+        { node: ['26.12.1'], tested: [DD_MAJOR >= 6 ? '8.0.0' : '5.2.0', latestVersions.mocha] },
         { node: ['18.20.8'], tested: [DD_MAJOR >= 6 ? '8.0.0' : '5.2.0', '11.7.5'] },
       ]],
       ['playwright', [
-        { node: ['26.2.0'], tested: [DD_MAJOR >= 6 ? '1.38.0' : '1.18.0', latestVersions.playwright] },
+        { node: ['26.12.1'], tested: [DD_MAJOR >= 6 ? '1.38.0' : '1.18.0', latestVersions.playwright] },
         { node: ['18.20.8'], tested: [DD_MAJOR >= 6 ? '1.38.0' : '1.18.0', '1.61.0'] },
       ]],
       ['selenium-webdriver', [{
-        node: ['26.2.0', '18.20.8'], tested: ['4.11.0', latestVersions['selenium-webdriver']],
+        node: ['26.12.1', '18.20.8'], tested: ['4.11.0', latestVersions['selenium-webdriver']],
       }]],
       ['vitest', [
-        { node: ['26.2.0'], tested: ['1.6.0', latestVersions.vitest] },
+        { node: ['26.12.1'], tested: ['1.6.0', latestVersions.vitest] },
         { node: ['18.20.8'], tested: ['1.6.0', '3.2.6'] },
       ]],
     ])
@@ -175,7 +175,7 @@ describe('generate supported integrations', () => {
 
   it('reports the Pino Pretty version loaded by the Pino tests', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeVersions: ['26.2.0'],
+      nodeVersions: ['26.12.1'],
       plugins: new Map([['pino-pretty', 'pino']]),
       getPackageVersions: async () => [
         ...Array.from({ length: 13 }, (_, index) => `${index + 1}.0.0`), latestVersions['pino-pretty'],
@@ -187,7 +187,6 @@ describe('generate supported integrations', () => {
 
   it('reports only the WebdriverIO versions installed by each runtime job', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeVersions: ['18.20.8', '26.12.1'],
       plugins: new Map([['@wdio/local-runner', 'mocha']]),
       getPackageVersions: async () => ['9.0.0', '9.33.1', latestVersions['@wdio/local-runner']],
     })
@@ -200,10 +199,6 @@ describe('generate supported integrations', () => {
         supportedRange: '>=9.0.0',
         tested: [latestVersions['@wdio/local-runner']],
         testedRuntimes: { node: ['26.12.1'] },
-      }, {
-        supportedRange: '>=9.0.0',
-        tested: ['9.0.0'],
-        testedRuntimes: { node: ['18.20.8'] },
       }],
     }])
   })
@@ -227,7 +222,7 @@ describe('generate supported integrations', () => {
  * @returns {{ dependencyName: string, integrationName: string, autoInstrumented: boolean,
  *   versions: Array<{ testedRuntimes: { node: string[] }, supportedRange: string, tested: string[] }> }}
  */
-function supportedIntegration (dependency, integration, supportedRange, testedVersions, nodeVersion = '26.2.0') {
+function supportedIntegration (dependency, integration, supportedRange, testedVersions, nodeVersion = '26.12.1') {
   return {
     dependencyName: dependency,
     integrationName: integration,

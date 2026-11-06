@@ -24,7 +24,7 @@ const nodeAliases = {
   'node-20': 'npm:node@20.20.2',
   'node-22': 'npm:node@22.22.3',
   'node-24': 'npm:node@24.16.0',
-  'node-26': 'npm:node@26.2.0',
+  'node-26': 'npm:node@26.12.1',
   'node-28': 'npm:node@28.0.0',
 }
 
@@ -52,7 +52,7 @@ describe('generate supported integrations', () => {
       autoInstrumented: true,
       versions: [{
         testedRuntimes: {
-          node: ['26.2.0'],
+          node: ['26.12.1'],
         },
         supportedRange: '*',
         tested: [],
@@ -69,19 +69,19 @@ describe('generate supported integrations', () => {
       getPackageVersions: () => Promise.reject(new Error('Node.js built-ins do not use npm metadata')),
     })
 
-    assert.deepStrictEqual(rows[0].versions[0].testedRuntimes.node, ['26.2.0'])
+    assert.deepStrictEqual(rows[0].versions[0].testedRuntimes.node, ['26.12.1'])
   })
 
   it('uses the tested package versions active on each Node.js line', async () => {
     const { rows } = await generateSupportedIntegrations({
       nodeVersions: [
         '18.20.8',
-        '26.2.0',
+        '26.12.1',
       ],
       plugins: new Map([['express', 'express']]),
       instrumentations: new Map([
         ['18.20.8', new Map([['express', [{ versions: ['>=4 <5'] }]]])],
-        ['26.2.0', new Map([['express', [{ versions: ['>=4 <6'], node: '>=26' }]]])],
+        ['26.12.1', new Map([['express', [{ versions: ['>=4 <6'], node: '>=26' }]]])],
       ]),
       getPackageVersions: dependency => {
         assert.strictEqual(dependency, 'express')
@@ -95,7 +95,7 @@ describe('generate supported integrations', () => {
       autoInstrumented: true,
       versions: [{
         testedRuntimes: {
-          node: ['26.2.0'],
+          node: ['26.12.1'],
         },
         supportedRange: '>=4 <6',
         tested: ['4.0.0', '4.22.1', '5.2.1'],
@@ -113,7 +113,7 @@ describe('generate supported integrations', () => {
     const nodeVersions = [
       '20.20.2',
       '24.16.0',
-      '26.2.0',
+      '26.12.1',
     ]
     const plugins = new Map([
       ['@azure/event-hubs', 'azure-event-hubs'],
@@ -136,7 +136,7 @@ describe('generate supported integrations', () => {
     for (const row of rows) {
       const major = row.integrationName === 'azure-service-bus' ? 7 : 6
       assert.deepStrictEqual(row.versions, [{
-        testedRuntimes: { node: ['26.2.0'] },
+        testedRuntimes: { node: ['26.12.1'] },
         supportedRange: `>=${major}.0.0`,
         tested: [`${major}.0.0`, `${major}.0.4`],
       }])
@@ -145,10 +145,10 @@ describe('generate supported integrations', () => {
 
   it('removes ranges covered by another active declaration', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeVersions: ['26.2.0'],
+      nodeVersions: ['26.12.1'],
       plugins: new Map([['express', 'express']]),
       instrumentations: new Map([
-        ['26.2.0', new Map([['express', [
+        ['26.12.1', new Map([['express', [
           { versions: ['>=4'] },
           { versions: ['4'] },
           { versions: ['>=4.0.0 <4.3.0'] },
@@ -164,10 +164,10 @@ describe('generate supported integrations', () => {
 
   it('keeps the first of two equivalent active ranges', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeVersions: ['26.2.0'],
+      nodeVersions: ['26.12.1'],
       plugins: new Map([['express', 'express']]),
       instrumentations: new Map([
-        ['26.2.0', new Map([['express', [
+        ['26.12.1', new Map([['express', [
           { versions: ['4'] },
           { versions: ['>=4 <5'] },
         ]]])],
@@ -180,7 +180,7 @@ describe('generate supported integrations', () => {
 
   it('omits dependencies without instrumentation on a tested runtime', async () => {
     const { rows } = await generateSupportedIntegrations({
-      nodeVersions: ['26.2.0'],
+      nodeVersions: ['26.12.1'],
       plugins: new Map([['express', 'express']]),
       instrumentations: new Map(),
       getPackageVersions: () => Promise.reject(new Error('Dependencies without hooks do not use npm metadata')),
@@ -194,14 +194,14 @@ describe('generate supported integrations', () => {
     const { rows } = await generateSupportedIntegrations({
       nodeVersions: [
         '18.20.8',
-        '26.2.0',
+        '26.12.1',
       ],
       plugins: new Map([['express', 'express']]),
-      instrumentations: testInstrumentations(['18.20.8', '26.2.0'], { express: declarations }),
+      instrumentations: testInstrumentations(['18.20.8', '26.12.1'], { express: declarations }),
       getPackageVersions: () => Promise.resolve(['4.0.0', '4.22.1']),
     })
 
-    assert.deepStrictEqual(rows[0].versions[0].testedRuntimes.node, ['26.2.0'])
+    assert.deepStrictEqual(rows[0].versions[0].testedRuntimes.node, ['26.12.1'])
   })
 
   it('applies runtime-specific test exclusions to each simulated Node.js version', async () => {
@@ -249,10 +249,10 @@ describe('generate supported integrations', () => {
       nodeVersions: [
         '22.22.3',
         '24.16.0',
-        '26.2.0',
+        '26.12.1',
       ],
       plugins: new Map([['@confluentinc/kafka-javascript', 'confluentinc-kafka-javascript']]),
-      instrumentations: testInstrumentations(['22.22.3', '24.16.0', '26.2.0'], {
+      instrumentations: testInstrumentations(['22.22.3', '24.16.0', '26.12.1'], {
         '@confluentinc/kafka-javascript': declarations,
       }),
       getPackageVersions: () => Promise.resolve(['1.0.0', '1.3.2', '1.4.0', '1.11.0']),
@@ -274,7 +274,7 @@ describe('generate supported integrations', () => {
     const nodeVersions = [
       '22.22.3',
       '24.16.0',
-      '26.2.0',
+      '26.12.1',
     ]
     const { rows } = await generateSupportedIntegrations({
       nodeVersions,
@@ -295,7 +295,7 @@ describe('generate supported integrations', () => {
     const nodeVersions = [
       '22.22.3',
       '24.16.0',
-      '26.2.0',
+      '26.12.1',
     ]
     const { rows } = await generateSupportedIntegrations({
       nodeVersions,
@@ -312,7 +312,7 @@ describe('generate supported integrations', () => {
       '18.20.8',
       '20.20.2',
       '24.16.0',
-      '26.2.0',
+      '26.12.1',
     ]
     const plugins = new Map([['@prisma/client', 'prisma'], ['mariadb', 'mariadb'], ['pino', 'pino']])
     const { rows } = await generateSupportedIntegrations({
@@ -331,9 +331,9 @@ describe('generate supported integrations', () => {
     const runtimes = name => rows.find(row => row.integrationName === name).versions.flatMap(version =>
       version.testedRuntimes.node
     )
-    assert.deepStrictEqual(runtimes('prisma'), ['26.2.0', '18.20.8'])
-    assert.deepStrictEqual(runtimes('mariadb'), ['26.2.0', '18.20.8'])
-    assert.deepStrictEqual(runtimes('pino'), ['26.2.0', '20.20.2'])
+    assert.deepStrictEqual(runtimes('prisma'), ['26.12.1', '18.20.8'])
+    assert.deepStrictEqual(runtimes('mariadb'), ['26.12.1', '18.20.8'])
+    assert.deepStrictEqual(runtimes('pino'), ['26.12.1', '20.20.2'])
   })
 
   it('applies matrix exclusions, re-inclusions, step conditions, and package filters', async () => {
@@ -411,7 +411,7 @@ describe('generate supported integrations', () => {
     const envOutput = path.join(directory, 'env')
     try {
       for (const [alias, expected] of Object.entries({
-        eol: '16', oldest: '18.20.8', maintenance: '20.20.2', active: '24.16.0', latest: '26.2.0', 22: '22',
+        eol: '16', oldest: '18.20.8', maintenance: '20.20.2', active: '24.16.0', latest: '26.12.1', 22: '22',
       })) {
         const result = spawnSync('bash', ['-c', command], {
           cwd: repositoryDirectory,
@@ -451,17 +451,17 @@ describe('generate supported integrations', () => {
     const { rows } = await generateSupportedIntegrations({
       nodeVersions: [
         '18.20.8',
-        '26.2.0',
+        '26.12.1',
       ],
       plugins: new Map([['mariadb', 'mariadb']]),
-      instrumentations: testInstrumentations(['18.20.8', '26.2.0'], { mariadb: declarations }),
+      instrumentations: testInstrumentations(['18.20.8', '26.12.1'], { mariadb: declarations }),
       getPackageVersions: () => Promise.resolve([
         '2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.3', '3.5.4',
       ]),
     })
 
     assert.deepStrictEqual(rows[0].versions, [{
-      testedRuntimes: { node: ['26.2.0'] },
+      testedRuntimes: { node: ['26.12.1'] },
       supportedRange: '>=3.0.0',
       tested: ['2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2', '3.5.3', '3.5.4'],
     }, {
@@ -549,10 +549,10 @@ describe('generate supported integrations', () => {
 
     try {
       await assert.rejects(generateSupportedIntegrations({
-        nodeVersions: ['26.2.0'],
+        nodeVersions: ['26.12.1'],
         plugins: new Map([['express', 'express']]),
         instrumentations: new Map([
-          ['26.2.0', new Map([['express', [{ versions: ['1.0.0'] }]]])],
+          ['26.12.1', new Map([['express', [{ versions: ['1.0.0'] }]]])],
         ]),
       }), /Could not resolve 'express@1\.0\.0' from npm metadata/)
     } finally {
@@ -589,7 +589,7 @@ describe('generate supported integrations', () => {
     const directory = mkdtempSync(path.join(tmpdir(), 'dd-supported-versions-'))
     const outputPath = path.join(directory, 'supported_versions.json')
     const options = {
-      nodeVersions: ['26.2.0'],
+      nodeVersions: ['26.12.1'],
       plugins: new Map([['fs', 'fs']]),
       instrumentations: new Map(),
       getPackageVersions: () => Promise.reject(new Error('Node.js built-ins do not use npm metadata')),
