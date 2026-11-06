@@ -167,8 +167,10 @@ Remote Configuration supports initialization observations; its transport failure
 
 These events describe observations at a point in time. They do not establish that all processes sharing a
 service and environment are healthy, and a successful initialization does not clear other processes' errors.
-Delivery is best-effort, with a bounded queue and a final flush on provider close or Node.js `beforeExit`.
-Abrupt process termination can lose pending events.
+Delivery route discovery starts when provider initialization begins. Delivery is best-effort, with a bounded queue
+and a final flush on provider close or Node.js `beforeExit`. Closing while discovery is pending drops queued
+diagnostics, as it does for flag evaluations. Shutdown does not wait for discovery. Abrupt process termination
+can lose pending events.
 
 <h3 id="feature-flag-evaluation-telemetry-opt-out">Per-subject Evaluation Telemetry Opt-out</h3>
 

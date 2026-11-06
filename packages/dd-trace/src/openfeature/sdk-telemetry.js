@@ -39,6 +39,13 @@ class SDKTelemetry {
     this.#startedAt = Date.now()
     this.#startedMonotonic = performance.now()
     if (hasConfiguration) this.#configurationElapsed = 0
+    const { service, env } = this.#config
+    if (!validIdentity(service) || !validIdentity(env) ||
+      this.#startedAt < MIN_TIMESTAMP_MS || this.#startedAt > MAX_TIMESTAMP_MS) return
+    try {
+      // Give route discovery time to finish before an observation is needed, as evaluation delivery does.
+      this.#writer = new SDKDiagnosticsWriter(this.#config)
+    } catch { /* Diagnostics must not affect provider initialization. */ }
   }
 
   configurationReceived () {
@@ -111,8 +118,7 @@ class SDKTelemetry {
     if (!validIdentity(service) || !validIdentity(env) ||
       timestamp < MIN_TIMESTAMP_MS || timestamp > MAX_TIMESTAMP_MS) return
     try {
-      this.#writer ??= new SDKDiagnosticsWriter(this.#config)
-      this.#writer.append({
+      this.#writer?.append({
         type: 'sdk_diagnostic',
         schema_version: 1,
         payload: {

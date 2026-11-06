@@ -26,6 +26,7 @@ describe('Feature Flags SDK diagnostics', () => {
       url: new URL('http://localhost:8126'),
       featureFlags: {
         DD_FLAGGING_EVALUATION_COUNTS_ENABLED: false,
+        DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED: false,
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 30_000,
       },
     }
@@ -258,7 +259,8 @@ describe('Feature Flags SDK diagnostics', () => {
     it(`honors the initialization duration limit at ${elapsed}ms`, async () => {
       config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = elapsed + 1
       const pending = create().initialize()
-      await clock.tickAsync(elapsed)
+      // Exercise the duration boundary without running a day of periodic writer flushes.
+      clock.jump(elapsed)
       provider.setConfiguration(configuration)
       await pending
       provider.onClose()
@@ -289,6 +291,38 @@ describe('Feature Flags SDK diagnostics', () => {
     assert.strictEqual(request.firstCall.args[1].headers['DD-API-KEY'], 'test-key')
     assert.strictEqual(events().length, 1)
   })
+
+  for (const outcome of ['incomplete', 'ready', 'failed']) {
+    it(`discovers a route during initialization before a close-time ${outcome} report`, async () => {
+      const discover = sinon.stub()
+      const strategy = proxyquire('../../src/openfeature/writers/util', {
+        '../../evp_proxy/discovery': { discoverEVPProxy: discover },
+      })
+      selectRoute.callsFake(strategy.setEventDeliveryStrategy)
+      const pending = create().initialize()
+      const settled = pending.catch(() => {})
+      sinon.assert.calledOnce(discover)
+      sinon.assert.notCalled(request)
+
+      // Complete real strategy discovery asynchronously, while initialization is still pending.
+      setTimeout(() => discover.firstCall.args[2](null, { url: config.url, basePath: '/evp_proxy/v2' }), 10)
+      await clock.tickAsync(10)
+      if (outcome === 'ready') {
+        provider.setConfiguration(configuration)
+        await pending
+      } else if (outcome === 'failed') {
+        provider.setError(new Error('initialization failed'))
+        await assert.rejects(pending, /initialization failed/)
+      }
+      provider.onClose()
+      assert.strictEqual(events().length, 1)
+      assert.strictEqual(events()[0].initialization.outcome, outcome)
+      sinon.assert.calledOnce(discover)
+
+      if (outcome === 'incomplete') provider.setConfiguration(configuration)
+      await settled
+    })
+  }
 
   it('does not send through an unconfirmed route at shutdown or accept late discovery', async () => {
     selectRoute.returns(stopDelivery)
