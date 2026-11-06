@@ -1588,6 +1588,10 @@ describe('Config', () => {
         DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
       },
       env: undefined,
+      ai: {
+        DD_AI_SDK_USAGE_METRICS_CLIENT_SOURCE: undefined,
+        DD_AI_SDK_USAGE_METRICS_ENABLED: false,
+      },
       aiguard: {
         DD_AI_GUARD_BLOCK: true,
         DD_AI_GUARD_ENABLED: false,
@@ -1739,6 +1743,8 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },
       { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 10_000, origin: 'default' },
+      { name: 'DD_AI_SDK_USAGE_METRICS_CLIENT_SOURCE', value: null, origin: 'default' },
+      { name: 'DD_AI_SDK_USAGE_METRICS_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED', value: false, origin: 'default' },
       { name: 'DD_TRACE_EXPERIMENTAL_EXPORTER', value: '', origin: 'default' },
       { name: 'DD_CIVISIBILITY_FLAKY_RETRY_COUNT', value: 5, origin: 'default' },
@@ -1910,6 +1916,8 @@ describe('Config', () => {
     process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = '32'
     process.env.DD_AI_GUARD_REDACTION_ENABLED = 'false'
     process.env.DD_AI_GUARD_TIMEOUT = '2000'
+    process.env.DD_AI_SDK_USAGE_METRICS_CLIENT_SOURCE = 'support-bot'
+    process.env.DD_AI_SDK_USAGE_METRICS_ENABLED = 'true'
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
     process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
@@ -2087,6 +2095,10 @@ describe('Config', () => {
         DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 0.1,
       },
       env: 'test',
+      ai: {
+        DD_AI_SDK_USAGE_METRICS_CLIENT_SOURCE: 'support-bot',
+        DD_AI_SDK_USAGE_METRICS_ENABLED: true,
+      },
       aiguard: {
         DD_AI_GUARD_BLOCK: true,
         DD_AI_GUARD_ENABLED: true,
@@ -2231,11 +2243,15 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },
       { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 10_000, origin: 'default' },
+      { name: 'DD_AI_SDK_USAGE_METRICS_CLIENT_SOURCE', value: null, origin: 'default' },
+      { name: 'DD_AI_SDK_USAGE_METRICS_ENABLED', value: false, origin: 'default' },
       { name: 'DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_ENDPOINT', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'env_var' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 2000, origin: 'env_var' },
+      { name: 'DD_AI_SDK_USAGE_METRICS_CLIENT_SOURCE', value: 'support-bot', origin: 'env_var' },
+      { name: 'DD_AI_SDK_USAGE_METRICS_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 1024 * 1024, origin: 'env_var' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 32, origin: 'env_var' },
       { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: false, origin: 'env_var' },

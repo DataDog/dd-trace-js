@@ -6,6 +6,10 @@ export interface GeneratedConfig {
   _DD_TEST_PARALLELIZATION_ENABLED: boolean | undefined;
   _DD_TEST_PARALLELIZATION_METADATA_FILE: string | undefined;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
+  ai: {
+    DD_AI_SDK_USAGE_METRICS_CLIENT_SOURCE: string | undefined;
+    DD_AI_SDK_USAGE_METRICS_ENABLED: boolean;
+  };
   aiguard: {
     DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
     DD_AI_GUARD_BLOCK: boolean;
@@ -630,6 +634,8 @@ export interface GeneratedEnvVarConfig {
   DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
   DD_AI_GUARD_REDACTION_ENABLED: boolean;
   DD_AI_GUARD_TIMEOUT: number;
+  DD_AI_SDK_USAGE_METRICS_CLIENT_SOURCE: string | undefined;
+  DD_AI_SDK_USAGE_METRICS_ENABLED: boolean;
   DD_API_KEY: string | undefined;
   DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
   DD_API_SECURITY_ENABLED: boolean;
