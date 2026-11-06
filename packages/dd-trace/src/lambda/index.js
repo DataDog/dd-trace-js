@@ -15,8 +15,9 @@ const {
   extractModuleRootAndHandler,
   getLambdaFilePaths,
 } = require('./handler-paths')
+const { listDisablesLambda } = require('./integration-names')
 
-if (!getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',').includes('lambda')) {
+if (!listDisablesLambda(getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS'))) {
   const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
   const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 
