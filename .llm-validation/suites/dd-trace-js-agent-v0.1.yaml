@@ -110,8 +110,8 @@ cases:
         in telemetry/telemetry.js. Add telemetry tests when adding or changing a configuration source;
         custom telemetry behavior may need implementation changes.
       - >-
-        Runs npm run generate:config:types and commits the generated configuration types. This command generates
-        types; registry-driven defaults, parsing and telemetry are constructed at runtime.
+        Recommends running npm run generate:config:types and committing the generated configuration types.
+        This command generates types; registry-driven defaults, parsing and telemetry are constructed at runtime.
       - Uses a unit suffix, such as maxBytes.
     bad_signals:
       - Adds the environment variable without a default in its registry entry.
