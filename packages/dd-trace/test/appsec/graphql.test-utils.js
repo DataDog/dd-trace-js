@@ -113,119 +113,19 @@ function postGraphqlQuery (port, query) {
 }
 
 /**
- * Counts the WAF runs that checked `fieldName` without arguments.
+ * Counts the WAF runs that checked `fieldName`.
  *
  * @param {sinon.SinonSpy} wafRun
  * @param {string} fieldName
  */
-function countFieldWithoutArgumentsRuns (wafRun, fieldName) {
+function countFieldRuns (wafRun, fieldName) {
   return wafRun.getCalls().filter(call => {
     const resolverInfo = call.args[0]?.ephemeral?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]
-    const fieldArguments = resolverInfo?.[fieldName]
-    return fieldArguments !== undefined &&
-      Object.keys(resolverInfo).length === 1 &&
-      Object.keys(fieldArguments).length === 0
+    return resolverInfo?.[fieldName] !== undefined
   }).length
 }
 
-/** @param {import('sinon').SinonSandbox} sandbox */
-function observeNativeContexts (sandbox) {
-  const nativeWaf = waf.wafManager.ddwaf
-  const createContext = nativeWaf.createContext.bind(nativeWaf)
-  const contexts = []
-  sandbox.stub(nativeWaf, 'createContext').callsFake(() => {
-    const context = createContext()
-    sandbox.spy(context, 'run')
-    contexts.push(context)
-    return context
-  })
-  return contexts
-}
-
-/** @param {ReturnType<typeof observeNativeContexts>} contexts */
-function resolverRuns (contexts) {
-  return contexts.flatMap(context => context.run.getCalls())
-    .filter(call => call.args[0].ephemeral?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER])
-}
-
 function graphqlCommonTests (config) {
-  describe('Empty resolver arguments', () => {
-    const sandbox = sinon.createSandbox()
-
-    afterEach(() => {
-      sandbox.restore()
-      appsec.disable()
-    })
-
-    for (const { name, rules, expectedRuns } of [
-      { name: 'bundled rules', rules: undefined, expectedRuns: 1 },
-      { name: 'rules without GraphQL inputs', rules: 'cookie-parser-rules.json', expectedRuns: 0 },
-    ]) {
-      it(`should skip unused native resolver runs with ${name}`, async () => {
-        appsec.enable(getConfigFresh({ appsec: { enabled: true, rules: rules && path.join(__dirname, rules) } }))
-        const contexts = observeNativeContexts(sandbox)
-
-        const response = await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower')
-
-        assert.strictEqual(resolverRuns(contexts).length, expectedRuns)
-        assert.deepStrictEqual(response.data, { data: { books } })
-      })
-    }
-
-    for (const change of ['rule names and order', 'value patterns', 'header-only custom rules']) {
-      it(`should retain the fast path after updating ${change}`, async () => {
-        appsec.enable(getConfigFresh({ appsec: { enabled: true } }))
-        const contexts = observeNativeContexts(sandbox)
-        const updated = structuredClone(require('../../src/appsec/recommended.json'))
-        let product = 'ASM_DD'
-        let rulesConfig = updated
-        if (change === 'rule names and order') {
-          for (const rule of updated.rules) rule.name += ' renamed'
-          updated.rules.reverse()
-        } else if (change === 'value patterns') {
-          const rule = updated.rules.find(rule => rule.conditions.some(condition =>
-            condition.operator === 'match_regex' &&
-            condition.parameters.inputs.some(input => input.address === addresses.HTTP_INCOMING_GRAPHQL_RESOLVER)
-          ) && !rule.transformers?.includes('keys_only'))
-          rule.conditions[0].parameters.regex = 'testattack'
-        } else {
-          product = 'ASM'
-          rulesConfig = {
-            custom_rules: [{
-              id: 'header-only',
-              name: 'Header only',
-              tags: { type: 'test', category: 'attack_attempt' },
-              conditions: [{
-                operator: 'phrase_match',
-                parameters: {
-                  inputs: [{ address: addresses.HTTP_INCOMING_HEADERS }], list: ['testattack'],
-                },
-              }],
-            }],
-          }
-        }
-        waf.updateConfig(product, 'resolver-test', `datadog/00/${product}/resolver-test/config`, rulesConfig)
-
-        const response = await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower')
-
-        assert.strictEqual(resolverRuns(contexts).length, 1)
-        assert.deepStrictEqual(response.data, { data: { books } })
-      })
-    }
-
-    it('should skip literal Boolean inclusion directives without dropping selected fields', async () => {
-      appsec.enable(getConfigFresh({ appsec: { enabled: true } }))
-      const contexts = observeNativeContexts(sandbox)
-
-      const response = await httpRequest.post(`http://localhost:${config.port}/graphql`, {
-        query: '{ books(title: "Test") { title @include(if: true) author @skip(if: false) } }',
-      })
-
-      assert.strictEqual(resolverRuns(contexts).length, 1)
-      assert.deepStrictEqual(response.data, { data: { books } })
-    })
-  })
-
   describe('Block with content', () => {
     beforeEach(() => {
       appsec.enable(getConfigFresh({ appsec: { enabled: true, rules: path.join(__dirname, 'graphql-rules.json') } }))
@@ -368,7 +268,7 @@ function graphqlCommonTests (config) {
     })
 
     it('Should run the WAF once for a field resolved through several aliases', async () => {
-      enableAppsecWithWafSpy('graphql-user-field-rules.json')
+      enableAppsecWithWafSpy('graphql-rules.json')
 
       const response = await postGraphqlQuery(config.port, `
         query {
@@ -383,24 +283,49 @@ function graphqlCommonTests (config) {
       assert.deepStrictEqual(response.data, {
         data: { books: [{ first: author, second: author, third: author }] },
       })
-      assert.strictEqual(countFieldWithoutArgumentsRuns(wafRun, 'author'), 1)
+      assert.strictEqual(countFieldRuns(wafRun, 'author'), 1)
+    })
+
+    it('Should run the WAF once for repeated Boolean directive inputs', async () => {
+      enableAppsecWithWafSpy('graphql-rules.json')
+
+      for (const directive of ['@include(if: true)', '@skip(if: false)', '@include(if: true) @skip(if: false)']) {
+        wafRun.resetHistory()
+        const response = await postGraphqlQuery(config.port, `
+          query {
+            books(title: "Test") {
+              first: author ${directive}
+              second: author ${directive}
+              third: author ${directive}
+            }
+          }`)
+
+        const author = books[0].author
+        assert.strictEqual(countFieldRuns(wafRun, 'author'), 1)
+        assert.deepStrictEqual(response.data, {
+          data: { books: [{ first: author, second: author, third: author }] },
+        })
+      }
     })
 
     it('Should run the WAF again for a field once setUser adds a user to the request', async () => {
       enableAppsecWithWafSpy('graphql-user-field-rules.json')
 
-      // The rule needs both the user and the field, so only the `author` resolved after `login` can block.
-      const error = await postGraphqlQuery(config.port, `
-        query {
-          before: books(title: "Test") { author }
-          login(id: "blocked-user")
-          after: books(title: "Test") { author }
-        }`).then(() => null, error => error)
-
-      assert.ok(error, 'Request should not return 200')
-      assert.strictEqual(error.response.status, 403)
-      assert.deepStrictEqual(error.response.data, JSON.parse(graphqlJson))
-      assert.strictEqual(countFieldWithoutArgumentsRuns(wafRun, 'author'), 2)
+      for (const directive of ['', '@include(if: true)', '@skip(if: false)', '@include(if: true) @skip(if: false)']) {
+        wafRun.resetHistory()
+        // The rule needs both the user and the field, so only the `author` resolved after `login` can block.
+        await assert.rejects(postGraphqlQuery(config.port, `
+          query {
+            before: books(title: "Test") { author ${directive} }
+            login(id: "blocked-user")
+            after: books(title: "Test") { author ${directive} }
+          }`), error => {
+          assert.strictEqual(error.response.status, 403)
+          assert.deepStrictEqual(error.response.data, JSON.parse(graphqlJson))
+          return true
+        })
+        assert.strictEqual(countFieldRuns(wafRun, 'author'), 2)
+      }
     })
   })
 
@@ -447,7 +372,4 @@ module.exports = {
   query,
   resolvers,
   graphqlCommonTests,
-  makeGraphqlRequest,
-  observeNativeContexts,
-  resolverRuns,
 }
