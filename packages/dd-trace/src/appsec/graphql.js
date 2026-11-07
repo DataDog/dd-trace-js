@@ -1,5 +1,7 @@
 'use strict'
 
+const { isProxy } = require('node:util/types')
+
 const log = require('../log')
 const web = require('../plugins/util/web')
 const { isEmpty } = require('../util')
@@ -25,10 +27,9 @@ const { updateBlockFailureMetric } = require('./telemetry')
 const graphqlRequestData = new WeakMap()
 
 /**
- * Per request, the blocking action of every field already checked without arguments, `undefined` when the WAF
- * requested none. A `{ fieldName: {} }` payload exposes nothing but the field name, so the WAF returns the same
- * action for every occurrence of that field, as long as the request's WAF context keeps the same persistent
- * inputs. List queries resolve the same fields once per item.
+ * Per request, the blocking action of every field checked with empty arguments or Boolean inclusion directives,
+ * `undefined` when the WAF requested none. Identical payloads return the same action while the request's WAF
+ * context keeps the same persistent inputs. List queries resolve the same fields once per item.
  *
  * @type {WeakMap<object, Map<string, object | undefined>>}
  */
@@ -45,24 +46,20 @@ function disable () {
 }
 
 /**
- * @param {{ createResolverInfo?: (data: object, skipEmpty: boolean) => object | null }} data
+ * @param {{ createResolverInfo?: (data: object) => object | null }} data
  */
 function onGraphqlStartResolver (data) {
   const req = getActiveRequest()
 
   if (!req) return
 
-  const wafContext = waf.wafManager.getWAFContext(req)
-  if (!wafContext.knownAddresses.has(addresses.HTTP_INCOMING_GRAPHQL_RESOLVER)) return
-
-  const skipEmpty = wafContext.skipEmptyGraphqlResolvers
-  const resolverInfo = data.createResolverInfo?.(data, skipEmpty)
+  const resolverInfo = data.createResolverInfo?.(data)
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
-  const fieldName = getFieldNameWithoutArguments(resolverInfo)
-  const knownActions = fieldName === undefined ? undefined : fieldsWithoutArgumentsActions.get(req)
-  if (knownActions?.has(fieldName)) {
-    applyBlockingAction(req, data, knownActions.get(fieldName))
+  const cacheKey = getFieldCacheKey(resolverInfo)
+  const knownActions = cacheKey === undefined ? undefined : fieldsWithoutArgumentsActions.get(req)
+  if (knownActions?.has(cacheKey)) {
+    applyBlockingAction(req, data, knownActions.get(cacheKey))
     return
   }
 
@@ -71,11 +68,11 @@ function onGraphqlStartResolver (data) {
 
   // A run that timed out, failed, or found no rule to evaluate is not an answer about the field, so let the next
   // occurrence run again instead of reading it back as "allowed".
-  if (fieldName !== undefined && result !== undefined && !result.timeout) {
+  if (cacheKey !== undefined && result !== undefined && !result.timeout) {
     if (knownActions === undefined) {
-      fieldsWithoutArgumentsActions.set(req, new Map([[fieldName, blockingAction]]))
+      fieldsWithoutArgumentsActions.set(req, new Map([[cacheKey, blockingAction]]))
     } else {
-      knownActions.set(fieldName, blockingAction)
+      knownActions.set(cacheKey, blockingAction)
     }
   }
 
@@ -99,21 +96,31 @@ function onWafRunFinished ({ payload }) {
 }
 
 /**
- * @param {object} resolverInfo
- * @returns {string | undefined} the field name when the payload is `{ fieldName: {} }`
+ * @param {Record<string, Record<string, unknown>>} resolverInfo
  */
-function getFieldNameWithoutArguments (resolverInfo) {
+function getFieldCacheKey (resolverInfo) {
   let fieldName
-  for (const key in resolverInfo) {
+  for (const key of Object.keys(resolverInfo)) {
     if (fieldName !== undefined) return
     fieldName = key
   }
   if (fieldName === undefined) return
 
   const fieldArguments = resolverInfo[fieldName]
-  if (!fieldArguments || typeof fieldArguments !== 'object' || !isEmpty(fieldArguments)) return
+  if (isEmpty(fieldArguments)) return fieldName
 
-  return fieldName
+  let cacheKey = fieldName
+  for (const name of Object.keys(fieldArguments)) {
+    const directive = fieldArguments[name]
+    if ((name !== 'include' && name !== 'skip') ||
+        !directive || typeof directive !== 'object' || isProxy(directive)) return
+    const argumentNames = Object.keys(directive)
+    if (argumentNames.length !== 1 || argumentNames[0] !== 'if') return
+    const value = Object.getOwnPropertyDescriptor(directive, 'if')?.value
+    if (typeof value !== 'boolean') return
+    cacheKey += `:${name}:${value}`
+  }
+  return cacheKey
 }
 
 /**
