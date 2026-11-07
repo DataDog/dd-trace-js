@@ -258,7 +258,8 @@ function getLatestCommits (commitSha) {
       .split('\n')
       .filter(Boolean)
     if (commitSha && !result.includes(commitSha)) {
-      const selectedCommit = execFileSync('git', ['rev-parse', '--verify', commitSha + '^{commit}'], { stdio: 'pipe', env })
+      const selectedCommit = execFileSync('git',
+        ['rev-parse', '--verify', commitSha + '^{commit}'], { stdio: 'pipe', env })
         .toString().trim()
       if (selectedCommit !== commitSha) return []
       result.unshift(commitSha)
