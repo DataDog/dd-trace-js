@@ -293,41 +293,10 @@ describe('AgentlessWriter', () => {
     await new Promise(resolve => writer.flush(resolve))
 
     sinon.assert.calledTwice(createAgentlessExporter)
-    sinon.assert.calledOnce(exporter.flush)
     sinon.assert.calledOnce(exporter.close)
-    assert.ok(exporter.flush.calledBefore(exporter.close))
     assert.strictEqual(createAgentlessExporter.secondCall.args[0].endpoint,
       'https://other-intake.example/api/v2/spans')
   })
-
-  for (const change of ['url', 'apiKey', 'env', 'runtimeID']) {
-    it(`flushes native stats before closing an exporter after changing ${change}`, async () => {
-      exporter.flush.resetBehavior()
-      const metadata = { env: 'old-env', runtimeID: 'old-runtime' }
-      writer = new AgentlessWriter({ url: new URL('https://intake.example'), metadata })
-      await new Promise(resolve => writer.flush(resolve))
-      const nextExporter = {
-        close: sinon.stub(),
-        flush: sinon.stub().callsArg(0),
-        sendV04: sinon.stub().callsArg(1),
-      }
-      createAgentlessExporter.returns(nextExporter)
-      if (change === 'url') {
-        writer.setUrl(new URL('https://other-intake.example'))
-      } else if (change === 'apiKey') {
-        apiKey = 'next-api-key'
-      } else {
-        metadata[change] = 'next-value'
-      }
-      await new Promise(resolve => writer.flush(resolve))
-
-      sinon.assert.notCalled(exporter.close)
-      sinon.assert.calledOnce(nextExporter.sendV04)
-      sinon.assert.calledOnce(exporter.flush)
-      exporter.flush.firstCall.args[0]()
-      sinon.assert.calledOnce(exporter.close)
-    })
-  }
 
   it('recreates the pipeline exporter when the API key changes', async () => {
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
@@ -337,7 +306,6 @@ describe('AgentlessWriter', () => {
     await new Promise(resolve => writer.flush(resolve))
 
     sinon.assert.calledTwice(createAgentlessExporter)
-    sinon.assert.calledOnce(exporter.flush)
     sinon.assert.calledOnce(exporter.close)
     assert.strictEqual(createAgentlessExporter.secondCall.args[0].apiKey, 'other-api-key')
   })
@@ -361,7 +329,6 @@ describe('AgentlessWriter', () => {
       await new Promise(resolve => writer.flush(resolve))
 
       sinon.assert.calledTwice(createAgentlessExporter)
-      sinon.assert.calledOnce(exporter.flush)
       sinon.assert.calledOnce(exporter.close)
       assert.strictEqual(createAgentlessExporter.secondCall.args[0][optionName], 'new-value')
     })

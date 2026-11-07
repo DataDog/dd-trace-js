@@ -146,7 +146,7 @@ describe('AgentlessWriter data pipeline', () => {
   })
 
   it('exports traces and native client stats from one v0.4 payload', async () => {
-    request = receiveRequests(3)
+    request = receiveRequests(2)
     const metadata = {
       env: 'test-env',
       hostname: 'test-host',
@@ -177,9 +177,6 @@ describe('AgentlessWriter data pipeline', () => {
       trace_id: id('1'),
     }])
 
-    await new Promise(resolve => writer.flush(resolve))
-    metadata.env = 'next-env'
-    writer.append([])
     await new Promise(resolve => writer.flushAndDrainStats(resolve))
     const received = await request
     const traceRequest = received.find(({ path }) => path === '/api/v2/spans')

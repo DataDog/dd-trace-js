@@ -190,14 +190,11 @@ class AgentlessWriter extends BaseWriter {
   }
 
   #closeExporter () {
-    const exporter = this.#exporter
+    this.#exporter?.close()
     this.#exporter = undefined
     this.#exporterApiKey = undefined
     this.#exporterEnv = undefined
     this.#exporterRuntimeId = undefined
-    if (exporter) {
-      legacyStorage.run({ noop: true }, () => exporter.flush(() => exporter.close(), log))
-    }
   }
 }
 
