@@ -72,7 +72,22 @@ module.exports = {
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
       excludedPackageTest: packageName => !include.has(packageName),
-      renderLicenses: modules => modules[0].licenseText,
+      handleMissingLicenseText: (packageName, licenseType) => licenseType,
+      // Every entry bundles code from more than one package, and the module order rspack reports follows the
+      // installer's `node_modules` layout, so picking `modules[0]` shipped whichever license happened to come first
+      // and omitted the rest. Changing package manager reorders it and a different wrong text ships. Emit every
+      // bundled package's license, name-sorted so the output is byte-stable, and fail the build rather than ship a
+      // bundle whose license text could not be resolved.
+      renderLicenses: modules => modules
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map(licenseModule => {
+          if (!licenseModule.licenseText) {
+            throw new Error(`No license text resolved for bundled package '${licenseModule.name}'`)
+          }
+          return `${licenseModule.name}\n\n${licenseModule.licenseText.trim()}\n`
+        })
+        .join(`\n${'-'.repeat(78)}\n\n`),
       stats: {
         warnings: false,
       },

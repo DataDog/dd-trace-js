@@ -1,7 +1,7 @@
 import { setTimeout } from 'timers/promises'
-import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
+import { Octokit } from 'octokit'
 import {
   canPropagateCancellation,
   getAllGreenOutcome,
