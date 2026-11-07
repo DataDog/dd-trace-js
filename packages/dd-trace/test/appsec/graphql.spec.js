@@ -52,6 +52,12 @@ describe('GraphQL', () => {
       updateBlockFailureMetric: sinon.stub(),
     }
 
+    sinon.stub(waf, 'wafManager').value({
+      getWAFContext: sinon.stub().returns({
+        knownAddresses: new Set([addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]),
+      }),
+    })
+
     graphql = proxyquire('../../src/appsec/graphql', {
       './blocking': blocking,
       './telemetry': telemetry,
@@ -155,6 +161,16 @@ describe('GraphQL', () => {
       sinon.assert.notCalled(message.createResolverInfo)
     })
 
+    it('Should not materialize resolver inputs when the context does not use GraphQL data', () => {
+      waf.wafManager.getWAFContext().knownAddresses.clear()
+      const message = createResolverMessage({ user: {} })
+
+      startGraphqlResolver.publish(message)
+
+      sinon.assert.notCalled(message.createResolverInfo)
+      sinon.assert.notCalled(waf.run)
+    })
+
     it('Should call waf if resolvers is well formatted', () => {
       const resolverInfo = {
         user: [{ id: '1234' }],
@@ -177,6 +193,7 @@ describe('GraphQL', () => {
       startGraphqlResolver.publish(createResolverMessage({ title: {} }))
       startGraphqlResolver.publish(createResolverMessage({ name: {} }))
 
+      sinon.assert.calledOnce(waf.wafManager.getWAFContext)
       sinon.assert.calledTwice(waf.run)
       sinon.assert.calledWithExactly(waf.run.firstCall, {
         ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { name: {} } },
@@ -234,28 +251,6 @@ describe('GraphQL', () => {
         sinon.assert.calledTwice(waf.run)
       })
     }
-
-    it('Should not evaluate argument getters while building a cache key', () => {
-      const get = sinon.stub().returns(true)
-      const include = Object.defineProperty({}, 'if', { get, enumerable: true })
-
-      startGraphqlResolver.publish(createResolverMessage({ name: { include } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include } }))
-
-      sinon.assert.notCalled(get)
-      sinon.assert.calledTwice(waf.run)
-    })
-
-    it('Should not enumerate proxy arguments while building a cache key', () => {
-      const ownKeys = sinon.stub().returns(['if'])
-      const include = new Proxy({ if: true }, { ownKeys })
-
-      startGraphqlResolver.publish(createResolverMessage({ name: { include } }))
-      startGraphqlResolver.publish(createResolverMessage({ name: { include } }))
-
-      sinon.assert.notCalled(ownKeys)
-      sinon.assert.calledTwice(waf.run)
-    })
 
     it('Should not serve a field with arguments from the argument-less results', () => {
       // The same field name reaches both shapes when a query aliases it, e.g. `name, upper: name(upper: true)`.

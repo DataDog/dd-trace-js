@@ -1,7 +1,5 @@
 'use strict'
 
-const { isProxy } = require('node:util/types')
-
 const log = require('../log')
 const web = require('../plugins/util/web')
 const { isEmpty } = require('../util')
@@ -53,12 +51,15 @@ function onGraphqlStartResolver (data) {
 
   if (!req) return
 
+  const knownActions = fieldsWithoutArgumentsActions.get(req)
+  if (knownActions === undefined &&
+      !waf.wafManager.getWAFContext(req).knownAddresses.has(addresses.HTTP_INCOMING_GRAPHQL_RESOLVER)) return
+
   const resolverInfo = data.createResolverInfo?.(data)
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
   const cacheKey = getFieldCacheKey(resolverInfo)
-  const knownActions = cacheKey === undefined ? undefined : fieldsWithoutArgumentsActions.get(req)
-  if (knownActions?.has(cacheKey)) {
+  if (cacheKey !== undefined && knownActions?.has(cacheKey)) {
     applyBlockingAction(req, data, knownActions.get(cacheKey))
     return
   }
@@ -113,10 +114,10 @@ function getFieldCacheKey (resolverInfo) {
   for (const name of Object.keys(fieldArguments)) {
     const directive = fieldArguments[name]
     if ((name !== 'include' && name !== 'skip') ||
-        !directive || typeof directive !== 'object' || isProxy(directive)) return
+        !directive || typeof directive !== 'object') return
     const argumentNames = Object.keys(directive)
     if (argumentNames.length !== 1 || argumentNames[0] !== 'if') return
-    const value = Object.getOwnPropertyDescriptor(directive, 'if')?.value
+    const value = directive.if
     if (typeof value !== 'boolean') return
     cacheKey += `:${name}:${value}`
   }
