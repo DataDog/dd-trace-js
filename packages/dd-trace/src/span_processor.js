@@ -47,7 +47,7 @@ class SpanProcessor {
     if (
       config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
       !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED &&
-      (exporter.clientStatsMode ?? 'javascript') === 'javascript'
+      (!exporter.isAgentless || config.OTEL_TRACES_SPAN_METRICS_ENABLED)
     ) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
@@ -57,8 +57,8 @@ class SpanProcessor {
           resourceAttributes: otlpStatsExporter.getStartupResourceAttributes(),
         }
       }
-      exporter.onClientStatsMode?.(mode => {
-        if (mode !== 'javascript') {
+      exporter.onTransportSelected?.(agentless => {
+        if (agentless && !config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
           this._stats.stop()
           this._stats = undefined
         }

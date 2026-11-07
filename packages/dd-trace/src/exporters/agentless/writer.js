@@ -16,13 +16,6 @@ const { computeIntakeUrl, INTAKE_PATH } = require('./intake')
 const legacyStorage = storage('legacy')
 
 /**
- * @typedef {object} Pipeline
- * @property {import('@datadog/libdatadog').AgentlessExporter} exporter
- * @property {number} pending
- * @property {boolean} retired
- */
-
-/**
  * Writer for agentless APM trace intake.
  * Encodes traces as v0.4 MessagePack and delegates transformation and delivery
  * to the APM data pipeline.
@@ -30,15 +23,11 @@ const legacyStorage = storage('legacy')
 class AgentlessWriter extends BaseWriter {
   #apiKeyMissing = false
   #apiKeyUnsafeReceiver = false
-  #deliveriesInFlight = 0
   #exporter
   #exporterApiKey
   #exporterEnv
   #exporterRuntimeId
-  #exporterUrl
   #metadata
-  #pendingStatsDrains
-  #retiringExporters = 0
   #stats
   #urlMissing = false
 
@@ -79,6 +68,7 @@ class AgentlessWriter extends BaseWriter {
    */
   setUrl (url) {
     super.setUrl(url)
+    this.#closeExporter()
     if (url) {
       this.#urlMissing = false
     }
@@ -88,7 +78,13 @@ class AgentlessWriter extends BaseWriter {
    * @param {() => void} [done]
    */
   flushAndDrainStats (done = () => {}) {
-    super.flush(() => this.#drainStats(done))
+    super.flush(() => {
+      if (this.#exporter) {
+        legacyStorage.run({ noop: true }, () => this.#exporter.flush(done, log))
+      } else {
+        done()
+      }
+    })
   }
 
   /**
@@ -119,47 +115,38 @@ class AgentlessWriter extends BaseWriter {
     }
     this.#apiKeyMissing = false
 
-    let pipeline
-    let completed = false
-    const complete = () => {
-      if (completed) return
-      completed = true
-      if (pipeline) {
-        pipeline.pending--
-        this.#deliveriesInFlight--
-        if (pipeline.retired && pipeline.pending === 0) this.#closeExporter(pipeline)
-        this.#flushPendingStatsDrains()
-      }
-      done()
-    }
-
     // The WASM transport performs its HTTP request in JavaScript. Keep that
     // internal request out of the instrumented application's traces.
     try {
       legacyStorage.run({ noop: true }, () => {
-        pipeline = this.#applyConfiguration(DD_API_KEY)
-        if (!pipeline) {
-          complete()
-          return
+        const exporter = this.#applyConfiguration(DD_API_KEY)
+        if (exporter) {
+          exporter.sendV04(data, done, log)
+        } else {
+          done()
         }
-        pipeline.pending++
-        this.#deliveriesInFlight++
-        pipeline.exporter.sendV04(data, complete, log)
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       log.error('Failed to send %d trace(s) to the agentless intake: %s', count, message)
-      complete()
+      done()
     }
+  }
+
+  #endpoint () {
+    const endpoint = new URL(this._url)
+    endpoint.pathname = INTAKE_PATH
+    endpoint.search = ''
+    endpoint.hash = ''
+    return endpoint.href
   }
 
   /**
    * @param {string} apiKey - Datadog API key.
-   * @returns {Pipeline|undefined}
+   * @returns {import('@datadog/libdatadog').AgentlessExporter|undefined}
    */
   #applyConfiguration (apiKey) {
-    const url = this._url
-    if (!canSendApiKey(url.protocol, url.hostname)) {
+    if (!canSendApiKey(this._url.protocol, this._url.hostname)) {
       if (!this.#apiKeyUnsafeReceiver) {
         this.#apiKeyUnsafeReceiver = true
         log.warn('DD_API_KEY will not be sent because the configured receiver is neither HTTPS nor loopback.')
@@ -168,103 +155,49 @@ class AgentlessWriter extends BaseWriter {
     }
     this.#apiKeyUnsafeReceiver = false
 
-    const { env, runtimeID: runtimeId } = this.#metadata
+    const { env, runtimeID } = this.#metadata
     if (
       this.#exporter &&
       this.#exporterApiKey === apiKey &&
       this.#exporterEnv === env &&
-      this.#exporterRuntimeId === runtimeId &&
-      this.#exporterUrl === url.href
+      this.#exporterRuntimeId === runtimeID
     ) {
       return this.#exporter
     }
 
-    const previous = this.#exporter
+    this.#closeExporter()
     const config = getConfig()
-    const agent = url.protocol === 'https:' ? getHttpsProxyAgent(url) : undefined
-    this.#exporter = {
-      exporter: createAgentlessExporter({
-        endpoint: this.#endpoint(url),
-        apiKey,
-        hostname: this.#metadata.hostname,
-        env,
-        service: config.service,
-        version: config.version,
-        runtimeId,
-        containerId: this.#metadata.containerId,
-        entityId: this.#metadata.entityId,
-        tracerVersion,
-        languageVersion: process.version,
-        languageInterpreter: process.versions.bun ? 'JavaScriptCore' : 'v8',
-        stats: this.#stats,
-      }, { agent }),
-      pending: 0,
-      retired: false,
-    }
+    const agent = this._url.protocol === 'https:' ? getHttpsProxyAgent(this._url) : undefined
+    this.#exporter = createAgentlessExporter({
+      endpoint: this.#endpoint(),
+      apiKey,
+      hostname: this.#metadata.hostname,
+      env,
+      service: config.service,
+      version: config.version,
+      runtimeId: runtimeID,
+      containerId: this.#metadata.containerId,
+      entityId: this.#metadata.entityId,
+      tracerVersion,
+      languageVersion: process.version,
+      languageInterpreter: process.versions.bun ? 'JavaScriptCore' : 'v8',
+      stats: this.#stats,
+    }, { agent })
     this.#exporterApiKey = apiKey
     this.#exporterEnv = env
-    this.#exporterRuntimeId = runtimeId
-    this.#exporterUrl = url.href
-    if (previous) {
-      previous.retired = true
-      this.#retiringExporters++
-      if (previous.pending === 0) this.#closeExporter(previous)
-    }
+    this.#exporterRuntimeId = runtimeID
     return this.#exporter
   }
 
-  /**
-   * @param {() => void} done
-   */
-  #drainStats (done) {
-    if (this.#deliveriesInFlight > 0 || this.#retiringExporters > 0) {
-      this.#pendingStatsDrains ??= []
-      this.#pendingStatsDrains.push(done)
-      return
+  #closeExporter () {
+    const exporter = this.#exporter
+    this.#exporter = undefined
+    this.#exporterApiKey = undefined
+    this.#exporterEnv = undefined
+    this.#exporterRuntimeId = undefined
+    if (exporter) {
+      legacyStorage.run({ noop: true }, () => exporter.flush(() => exporter.close(), log))
     }
-    this.#flushExporter(done)
-  }
-
-  /**
-   * @param {() => void} done
-   */
-  #flushExporter (done) {
-    if (this.#exporter) {
-      legacyStorage.run({ noop: true }, () => this.#exporter.exporter.flush(done, log))
-    } else {
-      done()
-    }
-  }
-
-  #flushPendingStatsDrains () {
-    if (this.#deliveriesInFlight > 0 || this.#retiringExporters > 0 || !this.#pendingStatsDrains) return
-    const pendingStatsDrains = this.#pendingStatsDrains
-    this.#pendingStatsDrains = undefined
-    this.#flushExporter(() => {
-      for (const done of pendingStatsDrains) done()
-    })
-  }
-
-  /**
-   * @param {URL} url
-   */
-  #endpoint (url) {
-    const endpoint = new URL(url)
-    endpoint.pathname = INTAKE_PATH
-    endpoint.search = ''
-    endpoint.hash = ''
-    return endpoint.href
-  }
-
-  /**
-   * @param {Pipeline} pipeline
-   */
-  #closeExporter (pipeline) {
-    legacyStorage.run({ noop: true }, () => pipeline.exporter.flush(() => {
-      pipeline.exporter.close()
-      this.#retiringExporters--
-      this.#flushPendingStatsDrains()
-    }, log))
   }
 }
 

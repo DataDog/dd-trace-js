@@ -135,14 +135,14 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
   })
 
-  for (const mode of ['native', 'disabled', 'javascript']) {
-    it(`should honor the exporter's ${mode} client stats mode`, () => {
+  for (const agentless of [false, true]) {
+    it(`should configure JavaScript stats with agentless ${agentless}`, () => {
       config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
-      exporter.clientStatsMode = mode
+      exporter.isAgentless = agentless
 
       processor = new SpanProcessor(exporter, prioritySampler, config)
 
-      if (mode === 'javascript') {
+      if (!agentless) {
         sinon.assert.calledOnceWithExactly(SpanStatsProcessor, config, undefined)
       } else {
         sinon.assert.notCalled(SpanStatsProcessor)
