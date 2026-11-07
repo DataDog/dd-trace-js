@@ -87,7 +87,7 @@ describe('AgentlessExporter', () => {
         endpoint: 'https://trace.agent.us3.datadoghq.com/api/v0.2/stats',
         intervalMs: 15_000,
       })
-      assert.strictEqual(exporter.clientStatsMode, 'native')
+      assert.strictEqual(exporter.isAgentless, true)
     })
 
     it('should use the default native stats interval', () => {
@@ -110,7 +110,6 @@ describe('AgentlessExporter', () => {
         exporter = new Exporter({ site: 'datadoghq.com', tags: {}, ...config })
 
         assert.strictEqual(writerOptions.stats, undefined)
-        assert.strictEqual(exporter.clientStatsMode, 'disabled')
       })
     }
 
@@ -123,7 +122,6 @@ describe('AgentlessExporter', () => {
       })
 
       assert.strictEqual(writerOptions.stats, undefined)
-      assert.strictEqual(exporter.clientStatsMode, 'javascript')
     })
 
     it('should register beforeExit handler', () => {

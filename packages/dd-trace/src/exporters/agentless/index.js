@@ -17,8 +17,7 @@ class AgentlessExporter {
   #timer
   #config
 
-  /** @type {'disabled'|'javascript'|'native'} */
-  clientStatsMode = 'disabled'
+  isAgentless = true
 
   /**
    * @param {object} config - Configuration object
@@ -31,10 +30,6 @@ class AgentlessExporter {
     this.#config = config
     const site = config.site ?? 'datadoghq.com'
     let stats
-
-    if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
-      this.clientStatsMode = 'javascript'
-    }
 
     try {
       // Agentless traffic carries the Datadog API key, so the intake is always an https endpoint
@@ -49,7 +44,6 @@ class AgentlessExporter {
           endpoint: computeStatsIntakeUrl(site),
           intervalMs: (config.stats.interval ?? 10) * 1000,
         }
-        this.clientStatsMode = 'native'
       }
     } catch (err) {
       log.error('Invalid site for agentless exporter. site=%s. Error: %s', site, err.message)
