@@ -6,6 +6,10 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+require('../../setup/core')
+
+const { getConfigFresh } = require('../../helpers/config')
+
 describe('LLMObsExporter', () => {
   let AgentExporter
   let AgentlessExporter
@@ -55,6 +59,99 @@ describe('LLMObsExporter', () => {
       url: new URL('http://agent:8126'),
     }
   }
+
+  describe('client stats ownership', () => {
+    for (const selection of ['agentless', 'agent', 'discovery-agentless', 'discovery-agent']) {
+      for (const otlp of [false, true]) {
+        it(`uses one stats processor for ${selection} with OTLP metrics ${otlp}`, () => {
+          const clock = sinon.useFakeTimers()
+          const handlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+          const originalHandlers = new Set(handlers)
+          try {
+            const config = getConfigFresh({ service: 'stats-test', flushInterval: 0 })
+            config.llmobs.DD_LLMOBS_ENABLED = true
+            config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = undefined
+            config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = selection.startsWith('discovery') ? undefined : selection
+            config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+            config.OTEL_TRACES_SPAN_METRICS_ENABLED = otlp
+            config.DD_API_KEY = 'test-api-key'
+            const jsStats = { export: sinon.stub().callsFake((payload, done) => done?.()) }
+            const otlpStats = {
+              export: sinon.stub().callsFake((payload, bucketSize, done) => done?.()),
+              flush: sinon.stub().callsFake(done => done?.()),
+            }
+            const native = {
+              sendV04: sinon.stub().callsFake((payload, done) => done()),
+              flush: sinon.stub().callsFake(done => done?.()),
+              close: sinon.stub(),
+            }
+            const createAgentlessExporter = sinon.stub().returns(native)
+            const Writer = proxyquire('../../../src/exporters/agentless/writer', {
+              '@datadog/libdatadog': { createAgentlessExporter },
+              '../../config': () => config,
+            })
+            const NativeExporter = proxyquire('../../../src/exporters/agentless', { './writer': Writer })
+            const agentWriter = {
+              append: sinon.stub().returns(true),
+              flush: sinon.stub().callsFake(done => done?.()),
+            }
+            const LocalExporter = proxyquire('../../../src/exporters/agent', {
+              './writer': sinon.stub().returns(agentWriter),
+            })
+            const Stats = proxyquire('../../../src/span_stats', {
+              './exporters/span-stats': { SpanStatsExporter: sinon.stub().returns(jsStats) },
+            })
+            const Processor = proxyquire('../../../src/span_processor', { './span_stats': Stats })
+            const WrappedExporter = proxyquire('../../../src/exporters/llmobs', {
+              '../../agent/info': { fetchAgentInfo },
+              '../../config/helper': { getValueFromEnvSources },
+              '../agent': LocalExporter,
+              '../agentless': NativeExporter,
+            })
+            const selectExporter = sinon.stub().returns(WrappedExporter)
+            const Tracer = proxyquire('../../../src/opentracing/tracer', {
+              '../exporter': selectExporter,
+              '../span_processor': Processor,
+              '../opentelemetry/metrics': { createOtlpSpanStatsExporter: () => otlpStats },
+            })
+            const tracer = new Tracer(config)
+            tracer.startSpan('before-selection').finish()
+            if (selection.startsWith('discovery')) {
+              fetchAgentInfo.yield(selection === 'discovery-agentless' ? new Error('Agent unavailable') : null)
+            }
+            tracer.startSpan('after-selection').finish()
+            tracer._exporter.flush()
+            clock.tick(10_000)
+
+            const agentless = selection.endsWith('agentless')
+            if (agentless || otlp) {
+              sinon.assert.notCalled(jsStats.export)
+            } else {
+              sinon.assert.calledOnce(jsStats.export)
+              assert.strictEqual(jsStats.export.firstCall.args[0].Stats[0].Stats.length, 2)
+            }
+            if (otlp) {
+              sinon.assert.calledOnce(otlpStats.export)
+              assert.strictEqual(otlpStats.export.firstCall.args[0][0].bucket.size, 2)
+            } else {
+              sinon.assert.notCalled(otlpStats.export)
+            }
+            if (agentless) {
+              sinon.assert.calledOnce(createAgentlessExporter)
+              assert.strictEqual(Boolean(createAgentlessExporter.firstCall.args[0].stats), !otlp)
+              sinon.assert.calledTwice(native.sendV04)
+            }
+            sinon.assert.calledOnceWithExactly(selectExporter, 'llmobs')
+          } finally {
+            for (const handler of handlers) {
+              if (!originalHandlers.has(handler)) handlers.delete(handler)
+            }
+            clock.restore()
+          }
+        })
+      }
+    }
+  })
 
   it('buffers traces and drains them to the Agent exporter when discovery succeeds', () => {
     const config = getConfig()

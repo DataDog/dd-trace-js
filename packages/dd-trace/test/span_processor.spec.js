@@ -120,6 +120,21 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
   })
 
+  for (const agentless of [false, true]) {
+    it(`should configure JavaScript stats with agentless ${agentless}`, () => {
+      config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+      exporter.isAgentless = agentless
+
+      processor = new SpanProcessor(exporter, prioritySampler, config)
+
+      if (!agentless) {
+        sinon.assert.calledOnceWithExactly(SpanStatsProcessor, config, undefined)
+      } else {
+        sinon.assert.notCalled(SpanStatsProcessor)
+      }
+    })
+  }
+
   it('should generate sampling priority when sampling manually', () => {
     processor.sample(finishedSpan)
 

@@ -28,17 +28,20 @@ class AgentlessWriter extends BaseWriter {
   #exporterEnv
   #exporterRuntimeId
   #metadata
+  #stats
   #urlMissing = false
 
   /**
    * @param {object} options - Writer options
    * @param {URL} [options.url] - The intake URL. If not provided, constructed from site.
    * @param {string} [options.site] - The Datadog site
+   * @param {import('@datadog/libdatadog').AgentlessStatsOptions} [options.stats] - Client stats configuration
    * @param {object} [options.metadata] - Metadata to pass to the data pipeline
    */
-  constructor ({ url, site = 'datadoghq.com', metadata = {} }) {
+  constructor ({ url, site = 'datadoghq.com', stats, metadata = {} }) {
     super({ url })
     this.#metadata = metadata
+    this.#stats = stats
     this._encoder = new AgentEncoder(this)
 
     if (!url) {
@@ -69,6 +72,19 @@ class AgentlessWriter extends BaseWriter {
     if (url) {
       this.#urlMissing = false
     }
+  }
+
+  /**
+   * @param {() => void} [done]
+   */
+  flushAndDrainStats (done = () => {}) {
+    super.flush(() => {
+      if (this.#exporter) {
+        legacyStorage.run({ noop: true }, () => this.#exporter.flush(done, log))
+      } else {
+        done()
+      }
+    })
   }
 
   /**
@@ -161,9 +177,11 @@ class AgentlessWriter extends BaseWriter {
       version: config.version,
       runtimeId: runtimeID,
       containerId: this.#metadata.containerId,
+      entityId: this.#metadata.entityId,
       tracerVersion,
       languageVersion: process.version,
       languageInterpreter: process.versions.bun ? 'JavaScriptCore' : 'v8',
+      stats: this.#stats,
     }, { agent })
     this.#exporterApiKey = apiKey
     this.#exporterEnv = env
