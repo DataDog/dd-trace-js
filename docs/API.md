@@ -420,7 +420,7 @@ This method allows you to trace a specific operation at the moment it is execute
 
 <h4 id="sync">Synchronous</h4>
 
-To trace synchronously, simply call `tracer.trace()` without passing a function to the callback.
+For synchronous operations, use a callback with at most one declared parameter. The span finishes when the callback returns.
 
 ```javascript
 function handle (err) {
@@ -434,7 +434,7 @@ If an error is thrown in the callback, it will be automatically added to the spa
 
 <h4 id="callback">Callback</h4>
 
-The most basic approach to trace asynchronous operations is to pass a function to the callback provided to the method.
+Declare a second parameter to receive the completion callback. Call it when the operation ends, including error paths.
 
 ```javascript
 function handle (err) {
@@ -446,6 +446,8 @@ function handle (err) {
 ```
 
 Errors passed to the callback will automatically be added to the span.
+
+This mode takes precedence over a returned promise or thenable. The return value passes through unchanged, and the span waits for the completion callback. A default or rest parameter does not contribute to JavaScript's `Function.length`, which selects this mode.
 
 <h4 id="promise">Promise</h4>
 
@@ -462,6 +464,22 @@ function handle () {
 ```
 
 Any error from rejected promises will automatically be added to the span.
+
+In this mode, `tracer.trace()` returns the result of calling the returned value's `.then()` method. A custom thenable can therefore lose methods or change type, as with `neverthrow.ResultAsync`.
+
+To preserve a custom thenable, use explicit completion and return the original value:
+
+```javascript
+function handleWithTrace (...args) {
+  return tracer.trace('web.request', (span, done) => {
+    const result = handle.apply(this, args)
+    result.then(() => done(), error => done(error))
+    return result
+  })
+}
+```
+
+This adapter handles rejections to record the span error. Callers still receive the original thenable, but an ignored rejection can now count as handled.
 
 <h4 id="async-await">Async/await</h4>
 
@@ -508,7 +526,7 @@ function handle () {
 const handleWithTrace = tracer.wrap('web.request', handle)
 ```
 
-Similar to `tracer.trace()`, it handles synchronous calls, callbacks, promises and async/await. The only difference being that if the last argument of the wrapped function is a callback, the span will only be finished when that callback is called.
+Similar to `tracer.trace()`, it handles synchronous calls, callbacks, promises and async/await. If the final argument at a call site is a function, `tracer.wrap()` replaces it with a completion callback. The span finishes when that callback runs, even if the wrapped function also returns a promise. The first callback argument supplies the span error.
 
 For example:
 
@@ -520,6 +538,26 @@ function handle (a, b, c, callback) {
 
 const handleWithTrace = tracer.wrap('web.request', handle)
 ```
+
+When a final function argument is data, such as a class constructor, use `tracer.trace()` inside an adapter. This preserves the receiver and arguments of a synchronous or promise-returning function:
+
+```javascript
+function handleWithTrace (...args) {
+  return tracer.trace('web.request', () => handle.apply(this, args))
+}
+```
+
+Middleware that ends a response without calling `next()` needs an explicit span completion point. For a synchronous terminal error handler, trace the work inside the handler:
+
+```javascript
+function errorHandler (error, request, response, next) {
+  return tracer.trace('error.middleware', () => {
+    response.status(500).send(error.message)
+  })
+}
+```
+
+This span ends when the traced callback returns. It does not wait for the response to finish sending. For asynchronous or streaming work, use the completion callback from `tracer.trace()` and call it from the application's completion path. `tracer.wrap()` does not infer completion from HTTP response events.
 
 <h3 id="scope-manager">tracer.scope()</h3>
 
