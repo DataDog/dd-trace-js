@@ -355,7 +355,7 @@ function graphqlCommonTests (config) {
     })
 
     it('Should run the WAF once for a field resolved through several aliases', async () => {
-      enableAppsecWithWafSpy('graphql-rules.json')
+      enableAppsecWithWafSpy('graphql-user-field-rules.json')
 
       const response = await postGraphqlQuery(config.port, `
         query {

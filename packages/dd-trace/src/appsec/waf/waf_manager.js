@@ -113,10 +113,14 @@ class WAFManager {
 
   updateConfig (path, rules) {
     const skipEmptyResolvers = canSkipEmptyGraphqlResolvers(rules)
-    if (!skipEmptyResolvers) this.#inspectEmptyGraphqlResolvers.add(path)
-
     const updateResult = this.ddwaf.createOrUpdateConfig(rules, path)
-    if (updateResult && skipEmptyResolvers) this.#inspectEmptyGraphqlResolvers.delete(path)
+    if (updateResult) {
+      if (skipEmptyResolvers) {
+        this.#inspectEmptyGraphqlResolvers.delete(path)
+      } else {
+        this.#inspectEmptyGraphqlResolvers.add(path)
+      }
+    }
     this.#updateGraphqlPolicy()
     this.setRulesVersion()
     return updateResult

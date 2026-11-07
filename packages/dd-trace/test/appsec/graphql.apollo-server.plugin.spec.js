@@ -110,6 +110,20 @@ withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
       assert.deepStrictEqual(response.data, { data: { books } })
     })
 
+    it('should retain the fast path after a rejected rule update and later publication', async () => {
+      appsec.enable(getConfigFresh({ appsec: { enabled: true } }))
+      assert.throws(() => {
+        waf.updateConfig('ASM', 'invalid', 'datadog/00/ASM/invalid/config', { custom_rules: [{}] })
+      }, { name: 'WafUpdateError', message: 'WafUpdateError' })
+      waf.updateConfig('ASM', 'safe', 'datadog/00/ASM/safe/config', { rules_override: [] })
+      const contexts = observeNativeContexts(sandbox)
+
+      const response = await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower')
+
+      assert.strictEqual(resolverRuns(contexts).length, 1)
+      assert.deepStrictEqual(response.data, { data: { books } })
+    })
+
     it('should preserve an active request snapshot when rules change during resolution', async () => {
       appsec.enable(getConfigFresh({ appsec: { enabled: true } }))
       setTestBlockingTemplates()

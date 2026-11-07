@@ -143,15 +143,23 @@ describe('WAFManager', () => {
       })
     }
 
-    it('should keep the installed fast path after a rejected unsafe update', () => {
-      const wafManager = new WAFManager(rules, {})
-      DDWAF.prototype.createOrUpdateConfig.returns(false)
+    for (const configPath of ['custom', 'default']) {
+      it(`should retain the fast path after a rejected ${configPath} update and later publication`, () => {
+        const wafManager = new WAFManager(rules, {})
+        DDWAF.prototype.createOrUpdateConfig.onFirstCall().returns(false)
 
-      wafManager.updateConfig('custom', fieldRules)
-      wafManager.getWAFContext({})
+        const path = configPath === 'default' ? WAFManager.defaultWafConfigPath : configPath
+        wafManager.updateConfig(path, fieldRules)
+        wafManager.getWAFContext({})
 
-      assert.strictEqual(WAFContextWrapper.firstCall.args[5], true)
-    })
+        assert.strictEqual(WAFContextWrapper.firstCall.args[5], true)
+
+        wafManager.updateConfig('safe', { rules_override: [] })
+        wafManager.getWAFContext({})
+
+        assert.strictEqual(WAFContextWrapper.secondCall.args[5], true)
+      })
+    }
   })
 
   describe('GraphQL configuration safety', () => {
