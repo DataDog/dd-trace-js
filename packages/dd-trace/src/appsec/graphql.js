@@ -2,7 +2,6 @@
 
 const log = require('../log')
 const web = require('../plugins/util/web')
-const { isEmpty } = require('../util')
 const { getActiveRequest } = require('./store')
 const {
   addSpecificEndpoint,
@@ -97,21 +96,18 @@ function onWafRunFinished ({ payload }) {
 }
 
 /**
+ * Resolver materializers return exactly one field.
+ *
  * @param {Record<string, Record<string, unknown>>} resolverInfo
  */
 function getFieldCacheKey (resolverInfo) {
-  let fieldName
-  for (const key of Object.keys(resolverInfo)) {
-    if (fieldName !== undefined) return
-    fieldName = key
-  }
-  if (fieldName === undefined) return
-
+  const fieldName = Object.keys(resolverInfo)[0]
   const fieldArguments = resolverInfo[fieldName]
-  if (isEmpty(fieldArguments)) return fieldName
+  const names = Object.keys(fieldArguments)
+  if (names.length === 0) return fieldName
 
   let cacheKey = fieldName
-  for (const name of Object.keys(fieldArguments)) {
+  for (const name of names) {
     const directive = fieldArguments[name]
     if ((name !== 'include' && name !== 'skip') ||
         !directive || typeof directive !== 'object') return
