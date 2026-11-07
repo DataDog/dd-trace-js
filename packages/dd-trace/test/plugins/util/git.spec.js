@@ -662,11 +662,12 @@ describe('getGitRemoteName', () => {
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
   })
 
-  it('returns first remote when upstream is not available', () => {
+  it('prefers origin when upstream and a configured clone remote are not available', () => {
     const logError = sinon.spy()
     cachedExecStub
       .onCall(0).throws()
       .onCall(1).returns('upstream\norigin')
+      .onCall(2).throws()
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
@@ -679,10 +680,31 @@ describe('getGitRemoteName', () => {
     )
 
     const remoteName = getGitRemoteName()
-    assert.strictEqual(remoteName, 'upstream')
+    assert.strictEqual(remoteName, 'origin')
     sinon.assert.calledWith(cachedExecStub, 'git', ['remote'])
     sinon.assert.notCalled(logError)
   })
+
+  for (const { configured, remotes, expected } of [
+    { configured: 'upstream', remotes: 'backup\norigin\nupstream\n', expected: 'upstream' },
+    { configured: 'missing', remotes: 'backup\norigin\n', expected: 'origin' },
+    { configured: 'missing', remotes: 'backup\nupstream\n', expected: 'backup' },
+    { configured: 'upstream', remotes: 'backup\r\nupstream\r\n', expected: 'upstream' },
+    { configured: '', remotes: 'backup\nupstream\n', expected: 'backup' },
+  ]) {
+    it(`selects ${expected} from ${JSON.stringify(remotes)} with configured remote ${configured}`, () => {
+      cachedExecStub.onCall(0).throws()
+      cachedExecStub.onCall(1).returns(remotes)
+      cachedExecStub.onCall(2).returns(configured)
+      const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
+        'node:child_process': { execFileSync: cachedExecStub },
+        './git-cache': { cachedExec: cachedExecStub },
+      })
+
+      assert.strictEqual(getGitRemoteName(), expected)
+      sinon.assert.calledWith(cachedExecStub, 'git', ['config', '--get', 'clone.defaultRemoteName'])
+    })
+  }
 
   it('reports an error when the remote-list fallback also fails', () => {
     const error = new Error('Git is unavailable')
@@ -1226,6 +1248,34 @@ done
     nock.cleanAll()
     fs.rmSync(directory, { recursive: true, force: true })
   })
+
+  for (const remoteName of ['origin', 'upstream']) {
+    for (const detached of [false, true]) {
+      for (const recovery of ['unshallow', 'fetch']) {
+        it(`uses ${remoteName} for ${recovery} with an unrelated backup remote (detached=${detached})`, () => {
+          const backup = path.join(directory, 'backup.git')
+          git(directory, ['init', '--bare', backup])
+          git(checkout, ['remote', 'add', 'backup', backup])
+          if (remoteName !== 'origin') {
+            git(checkout, ['remote', 'rename', 'origin', remoteName])
+            git(checkout, ['config', 'clone.defaultRemoteName', remoteName])
+          }
+          if (!detached) git(checkout, ['checkout', '-b', 'test/no-upstream'])
+          const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+          cachedExecSpy.resetHistory()
+
+          if (recovery === 'unshallow') unshallowSelectedRepository(false, headSha)
+          else fetchSelectedCommit(headSha)
+
+          assert.strictEqual(git(checkout, ['rev-parse', `${headSha}^{commit}`]), headSha)
+          assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+          const fetches = cachedExecSpy.getCalls().filter(call => call.args[1][0] === 'fetch')
+          assert.ok(fetches.length > 0)
+          assert.ok(fetches.every(call => call.args[1].includes(remoteName)))
+        })
+      }
+    }
+  }
 
   it('keeps tag discovery unambiguous with forced Git column formatting', () => {
     git(checkout, ['checkout', '--detach', 'HEAD'])

@@ -321,7 +321,20 @@ function getGitRemoteName () {
     { uncached: true }
   )
 
-  return getSegment(remotes, '\n', 0) || 'origin'
+  if (!remotes) return 'origin'
+
+  const remoteNames = remotes.trim().split(/\r?\n/)
+  const configuredRemote = sanitizedExec(
+    ['config', '--get', 'clone.defaultRemoteName'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    true,
+    { expectedFailure: true, uncached: true }
+  )
+
+  if (configuredRemote && remoteNames.includes(configuredRemote)) return configuredRemote
+  return remoteNames.includes('origin') ? 'origin' : remoteNames[0] || 'origin'
 }
 
 function getSourceBranch () {
