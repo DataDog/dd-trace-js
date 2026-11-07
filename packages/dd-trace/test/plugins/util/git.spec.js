@@ -436,7 +436,8 @@ describe('unshallowRepository', () => {
           clock.tick(expired ? 5000 : 100)
           throw Object.assign(new Error('outside history window'), { status: 128 })
         })
-        cachedExecStub.onCall(4).returns('')
+        cachedExecStub.onCall(4).throws(new Error('selected commit is missing'))
+        cachedExecStub.onCall(5).returns('')
 
         unshallowRepository(false, selected)
 
@@ -1234,6 +1235,31 @@ done
     assert.strictEqual(getGitMetadata({})[GIT_TAG], 'v1')
     git(checkout, ['update-ref', 'refs/tags/stable', 'HEAD'])
     assert.strictEqual(getGitMetadata({})[GIT_TAG], undefined)
+  })
+
+  it('preserves available ancestors when targeted recent-history recovery fails', () => {
+    const tree = git(remote, ['rev-parse', baseSha + '^{tree}'])
+    const commit = (parent, date, message) => git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+      input: `tree ${tree}\nparent ${parent}\nauthor Test <test@example.com> ${date} +0000\n` +
+        `committer Test <test@example.com> ${date} +0000\n\n${message}\n`,
+    })
+    const parent = commit(baseSha, 1700000001, 'available ancestor')
+    const selected = commit(parent, 1700000002, 'old selection')
+    const now = Math.floor(Date.now() / 1000)
+    const middle = commit(selected, now - 1, 'middle')
+    const head = commit(middle, now, 'checkout')
+    git(remote, ['update-ref', 'refs/heads/test/preserve-history', head])
+    fs.rmSync(checkout, { recursive: true, force: true })
+    git(directory, ['clone', '--depth=4', '--no-checkout', '--branch', 'test/preserve-history',
+      pathToFileURL(remote).href, checkout])
+    assert.strictEqual(git(checkout, ['rev-list', '--count', 'HEAD']), '4')
+    assert.strictEqual(git(checkout, ['merge-base', selected, parent]), parent)
+
+    unshallowSelectedRepository(false, selected)
+
+    assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), head)
+    assert.strictEqual(git(checkout, ['rev-list', '--count', 'HEAD']), '4')
+    assert.strictEqual(git(checkout, ['merge-base', selected, parent]), parent)
   })
 
   it('includes an old selected commit and its tree without walking old ancestors', () => {

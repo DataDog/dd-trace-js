@@ -190,7 +190,7 @@ function unshallowRepository (parentOnly = false, commitSha) {
     )
     if (targetedRecovery) {
       const timeout = 5000 - (Date.now() - start)
-      if (timeout > 0) {
+      if (timeout > 0 && !hasLocalGitObject(revParseHead)) {
         sanitizedExec(
           ['fetch', '--depth=1', ...baseGitOptions.slice(2), revParseHead],
           null, null,
