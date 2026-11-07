@@ -156,9 +156,11 @@ function unshallowRepository (parentOnly = false, commitSha) {
     return
   }
   const defaultRemoteName = getGitRemoteName()
-  const revParseHead = commitSha || sanitizedExec(['rev-parse', 'HEAD'], null, null, null, true, { uncached: true })
+  const checkoutHead = sanitizedExec(['rev-parse', 'HEAD'], null, null, null, true, { uncached: true })
+  const revParseHead = commitSha || checkoutHead
+  const targetedRecovery = commitSha && commitSha.toLowerCase() !== checkoutHead.toLowerCase()
   const fetchOptions = { stdio: 'pipe' }
-  if (commitSha) fetchOptions.timeout = 5000
+  if (targetedRecovery) fetchOptions.timeout = 5000
   const depth = parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"'
 
   const baseGitOptions = [
@@ -186,7 +188,7 @@ function unshallowRepository (parentOnly = false, commitSha) {
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
     )
-    if (commitSha) {
+    if (targetedRecovery) {
       const timeout = 5000 - (Date.now() - start)
       if (timeout > 0) {
         sanitizedExec(
@@ -250,12 +252,13 @@ function getLatestCommits (commitSha) {
   try {
     const flags = ['log', '--format=%H', '-n 1000', '--since="1 month ago"']
     if (commitSha) flags.push(commitSha, '--')
-    const result = execFileSync('git', flags, { stdio: 'pipe' })
+    const env = { ...getEnvironmentVariables(), GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' }
+    const result = execFileSync('git', flags, { stdio: 'pipe', env })
       .toString()
       .split('\n')
       .filter(Boolean)
     if (commitSha && !result.includes(commitSha)) {
-      const selectedCommit = execFileSync('git', ['rev-parse', '--verify', commitSha + '^{commit}'])
+      const selectedCommit = execFileSync('git', ['rev-parse', '--verify', commitSha + '^{commit}'], { stdio: 'pipe', env })
         .toString().trim()
       if (selectedCommit !== commitSha) return []
       result.unshift(commitSha)

@@ -327,7 +327,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
     if (getConfig().testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED) {
-      unshallowRepository(false)
+      unshallowRepository(false, configCommitSha)
     }
 
     // The latest commits change after unshallowing

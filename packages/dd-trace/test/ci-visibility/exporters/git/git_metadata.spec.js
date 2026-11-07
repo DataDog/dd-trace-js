@@ -137,6 +137,33 @@ describe('git_metadata', () => {
     })
   })
 
+  for (const recovery of ['available', 'unavailable', 'disabled']) {
+    it(`deepens an already-present selected boundary commit: ${recovery}`, (done) => {
+      const selected = 'a'.repeat(40)
+      const parent = 'c'.repeat(40)
+      const expected = recovery === 'available' ? [selected, parent] : [selected]
+      getLatestCommitsStub.returns([selected])
+      getCommitsRevListStub.callsFake((known, commits) => commits)
+      isShallowRepositoryStub.returns(true)
+      fakeConfig.testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = recovery !== 'disabled'
+      unshallowRepositoryStub.callsFake((parentOnly, sha) => {
+        if (recovery === 'available' && sha === selected) getLatestCommitsStub.returns(expected)
+      })
+      requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+      requestStub.onCall(1).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+      requestStub.onCall(2).callsArgWith(2, null, '', 204)
+
+      gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+        assert.strictEqual(err, null)
+        assert.deepStrictEqual(JSON.parse(requestStub.getCall(1).args[0]).data.map(({ id }) => id), expected)
+        sinon.assert.calledOnceWithExactly(generatePackFilesForCommitsStub, expected)
+        if (recovery === 'disabled') sinon.assert.notCalled(unshallowRepositoryStub)
+        else sinon.assert.calledOnceWithExactly(unshallowRepositoryStub, false, selected)
+        done()
+      }, selected)
+    })
+  }
+
   it('should not unshallow if the parameter to enable unshallow is false', (done) => {
     fakeConfig.testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = false
     requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)

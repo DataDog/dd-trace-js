@@ -400,6 +400,7 @@ describe('unshallowRepository', () => {
     const selected = 'a'.repeat(40)
     cachedExecStub.onCall(0).returns('git version 2.39.0')
     cachedExecStub.onCall(1).returns('upstream/main')
+    cachedExecStub.onCall(2).returns('b'.repeat(40))
 
     unshallowRepository(false, selected)
 
@@ -409,6 +410,20 @@ describe('unshallowRepository', () => {
     ], { stdio: 'pipe', timeout: 5000 })
   })
 
+  it('keeps ordinary unshallow timing when the selected SHA is HEAD', () => {
+    const selected = 'a'.repeat(40)
+    cachedExecStub.onCall(0).returns('git version 2.39.0')
+    cachedExecStub.onCall(1).returns('origin')
+    cachedExecStub.onCall(2).returns(selected)
+
+    unshallowRepository(false, selected)
+
+    sinon.assert.calledWith(cachedExecStub, 'git', [
+      'fetch', '--shallow-since="1 month ago"', '--update-shallow', '--filter=blob:none', '--recurse-submodules=no',
+      'origin', selected,
+    ], { stdio: 'pipe' })
+  })
+
   for (const expired of [false, true]) {
     it(`only falls back to depth one within the targeted recovery deadline (expired=${expired})`, () => {
       const clock = sinon.useFakeTimers()
@@ -416,16 +431,17 @@ describe('unshallowRepository', () => {
         const selected = 'a'.repeat(40)
         cachedExecStub.onCall(0).returns('git version 2.39.0')
         cachedExecStub.onCall(1).returns('origin')
-        cachedExecStub.onCall(2).callsFake(() => {
+        cachedExecStub.onCall(2).returns('b'.repeat(40))
+        cachedExecStub.onCall(3).callsFake(() => {
           clock.tick(expired ? 5000 : 100)
           throw Object.assign(new Error('outside history window'), { status: 128 })
         })
-        cachedExecStub.onCall(3).returns('')
+        cachedExecStub.onCall(4).returns('')
 
         unshallowRepository(false, selected)
 
         if (expired) {
-          sinon.assert.callCount(cachedExecStub, 3)
+          sinon.assert.callCount(cachedExecStub, 4)
         } else {
           sinon.assert.calledWith(cachedExecStub, 'git', [
             'fetch', '--depth=1', '--update-shallow', '--filter=blob:none', '--recurse-submodules=no',
@@ -1746,6 +1762,30 @@ current
       '-e', script, repo, headSha, path.join(directory, 'git-cache'),
     ], { cwd: checkout, stdio: 'pipe' })
   })
+
+  for (const legacyGit of [false, true]) {
+    const suffix = legacyGit ? ' without GIT_NO_LAZY_FETCH support' : ''
+    it(`keeps selected history discovery local in a promisor clone${suffix}`, () => {
+      git(checkout, ['config', 'remote.origin.promisor', 'true'])
+      git(checkout, ['config', 'remote.origin.partialclonefilter', 'blob:none'])
+      const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+      const execute = (command, flags, options) => cachedExecSpy(command, flags, legacyGit
+        ? { ...options, env: { ...process.env, ...options?.env, GIT_NO_LAZY_FETCH: '0' } }
+        : options)
+      const gitUtils = proxyquire('../../../src/plugins/util/git', {
+        './git-cache': { cachedExec: execute },
+        'node:child_process': { execFileSync: execute },
+      })
+
+      assert.deepStrictEqual(gitUtils.getLatestCommits(headSha), [])
+      const objects = git(checkout, ['cat-file', '--batch-all-objects', '--batch-check=%(objecttype)'])
+      assert.strictEqual(objects.split('\n').filter(type => type === 'commit').length, 1)
+      assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+
+      gitUtils.fetchHeadCommitSha(headSha, true)
+      assert.deepStrictEqual(gitUtils.getLatestCommits(headSha), [headSha])
+    })
+  }
 
   for (const missingObject of ['parent', 'tree']) {
     it(`recovers head metadata and its Test Management marker with a missing ${missingObject}`, (done) => {
