@@ -404,10 +404,39 @@ describe('unshallowRepository', () => {
     unshallowRepository(false, selected)
 
     sinon.assert.calledWith(cachedExecStub, 'git', [
-      'fetch', '--depth=1', '--update-shallow', '--filter=blob:none', '--recurse-submodules=no',
+      'fetch', '--shallow-since="1 month ago"', '--update-shallow', '--filter=blob:none', '--recurse-submodules=no',
       'upstream', selected,
     ], { stdio: 'pipe', timeout: 5000 })
   })
+
+  for (const expired of [false, true]) {
+    it(`only falls back to depth one within the targeted recovery deadline (expired=${expired})`, () => {
+      const clock = sinon.useFakeTimers()
+      try {
+        const selected = 'a'.repeat(40)
+        cachedExecStub.onCall(0).returns('git version 2.39.0')
+        cachedExecStub.onCall(1).returns('origin')
+        cachedExecStub.onCall(2).callsFake(() => {
+          clock.tick(expired ? 5000 : 100)
+          throw Object.assign(new Error('outside history window'), { status: 128 })
+        })
+        cachedExecStub.onCall(3).returns('')
+
+        unshallowRepository(false, selected)
+
+        if (expired) {
+          sinon.assert.callCount(cachedExecStub, 3)
+        } else {
+          sinon.assert.calledWith(cachedExecStub, 'git', [
+            'fetch', '--depth=1', '--update-shallow', '--filter=blob:none', '--recurse-submodules=no',
+            'origin', selected,
+          ], { stdio: 'pipe', timeout: 4900 })
+        }
+      } finally {
+        clock.restore()
+      }
+    })
+  }
 
   it('works for the usual case with parentOnly', () => {
     cachedExecStub
@@ -1624,21 +1653,35 @@ done
     assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
   })
 
-  for (const depth of [1, 2, null]) {
+  for (const { depth, recent } of [
+    { depth: 1, recent: false }, { depth: 2, recent: false }, { depth: null, recent: false },
+    { depth: 1, recent: true }, { depth: 2, recent: true }, { depth: null, recent: true },
+  ]) {
     const clone = depth === null ? 'non-shallow single-branch' : 'depth-' + depth
     for (const remoteName of ['origin', 'upstream']) {
-      it(`recovers an unrelated selected commit from a ${clone} checkout with remote ${remoteName}`, () => {
+      const age = recent ? 'recent' : 'old'
+      it(`recovers an unrelated ${age} selected commit from a ${clone} checkout with remote ${remoteName}`, () => {
         const tree = git(remote, ['rev-parse', headSha + '^{tree}'])
+        const timestamp = Math.floor(Date.now() / 1000)
+        const parent = recent && git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+          input: [
+            `tree ${tree}`,
+            `author Test <test@example.com> ${timestamp - 60} +0000`,
+            `committer Test <test@example.com> ${timestamp - 60} +0000`,
+            '', 'parent', '',
+          ].join('\n'),
+        })
+        const selectedTime = recent ? timestamp - 30 : 1
         const selected = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
-          input: `tree ${tree}
-author Test <test@example.com> 1 +0000
-committer Test <test@example.com> 1 +0000
-
-unrelated
-`,
+          input: [
+            `tree ${tree}`,
+            ...(parent ? [`parent ${parent}`] : []),
+            `author Test <test@example.com> ${selectedTime} +0000`,
+            `committer Test <test@example.com> ${selectedTime} +0000`,
+            '', 'unrelated', '',
+          ].join('\n'),
         })
         git(remote, ['update-ref', 'refs/heads/juan-fernandez/unrelated', selected])
-        const timestamp = Math.floor(Date.now() / 1000)
         const root = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
           input: `tree ${tree}
 author Test <test@example.com> ${timestamp} +0000
@@ -1670,8 +1713,11 @@ current
         if (depth === null) fetchSelectedCommit(selected, false)
         else unshallowSelectedRepository(false, selected)
 
-        assert.deepStrictEqual(getLatestCommits(selected), [selected])
-        assert.ok(!getCommitsRevList([], [selected]).includes(originalHead))
+        const expected = parent ? [selected, parent] : [selected]
+        assert.deepStrictEqual(getLatestCommits(selected), expected)
+        const objects = getCommitsRevList([], expected)
+        assert.ok(!objects.includes(originalHead))
+        if (parent) assert.ok(objects.includes(parent))
         assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
         assert.strictEqual(git(checkout, ['rev-list', '--count', 'HEAD']), originalHistory)
         assert.strictEqual(git(checkout, ['rev-parse', '--is-shallow-repository']), String(depth !== null))

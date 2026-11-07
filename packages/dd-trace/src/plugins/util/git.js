@@ -159,8 +159,7 @@ function unshallowRepository (parentOnly = false, commitSha) {
   const revParseHead = commitSha || sanitizedExec(['rev-parse', 'HEAD'], null, null, null, true, { uncached: true })
   const fetchOptions = { stdio: 'pipe' }
   if (commitSha) fetchOptions.timeout = 5000
-  let depth = parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"'
-  if (commitSha) depth = '--depth=1'
+  const depth = parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"'
 
   const baseGitOptions = [
     'fetch',
@@ -187,7 +186,19 @@ function unshallowRepository (parentOnly = false, commitSha) {
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
     )
-    if (commitSha) return
+    if (commitSha) {
+      const timeout = 5000 - (Date.now() - start)
+      if (timeout > 0) {
+        sanitizedExec(
+          ['fetch', '--depth=1', ...baseGitOptions.slice(2), revParseHead],
+          null, null,
+          { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'unshallow' } },
+          true,
+          { uncached: true, timeout, expectedFailure: true }
+        )
+      }
+      return
+    }
     const upstreamRemote = sanitizedExec(
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
       null, null, null, true, { uncached: true }
