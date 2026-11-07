@@ -332,7 +332,9 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     this._gitUploadPromise.then(gitUploadError => {
-      if (gitUploadError) {
+      const isKnownCommitUnavailable = gitUploadError?.code === 'ERR_GIT_COMMIT_UNAVAILABLE' &&
+        this._libraryConfig?.requireGit === false
+      if (gitUploadError && !isKnownCommitUnavailable) {
         return callback(gitUploadError, [])
       }
       getSkippableSuitesRequest(requestConfiguration, callback)
@@ -471,7 +473,7 @@ class CiVisibilityExporter extends BufferingExporter {
         isCoverageReportUploadEnabled: configuration.isCoverageReportUploadEnabled,
       })
     if (!canUseCachedSkippableSuites && (this._libraryConfig.requireGit || isFilesystemCache)) {
-      this.sendGitMetadata(repositoryUrl)
+      this.sendGitMetadata(repositoryUrl, configuration.sha)
     } else {
       this._resolveGit()
     }
@@ -489,7 +491,7 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {Function} done - Completion callback.
    */
   _fetchLibraryConfigurationFromBackend (configuration, repositoryUrl, cacheKey, done) {
-    this.sendGitMetadata(repositoryUrl)
+    this.sendGitMetadata(repositoryUrl, configuration.sha)
     getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
       // Mirror the original live path: keep the phase-1 config on `_libraryConfig` even
       // before the git upload resolves, so `shouldRequestSkippableSuites()` and the
@@ -604,7 +606,7 @@ class CiVisibilityExporter extends BufferingExporter {
     }
   }
 
-  sendGitMetadata (repositoryUrl) {
+  sendGitMetadata (repositoryUrl, sha) {
     if (!this._config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED) {
       this._resolveGit()
       return
@@ -631,7 +633,8 @@ class CiVisibilityExporter extends BufferingExporter {
             log.debug('Successfully uploaded git metadata')
           }
           this._resolveGit(err)
-        }
+        },
+        sha
       )
     })
   }

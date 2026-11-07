@@ -662,3 +662,53 @@ describe('getJobIDFromDiagFile Windows branch', () => {
     assert.strictEqual(getJobIDFromDiagFileWin(), null)
   })
 })
+
+describe('Git metadata precedence', () => {
+  for (const source of ['git', 'provider', 'override', 'partial', 'sha-only', 'sha-only-legacy']) {
+    it(`selects ${source} metadata consistently and preserves CI and PR data`, () => {
+      const keys = [
+        'git.commit.sha', 'git.repository_url', 'git.branch', 'git.tag', 'git.commit.message',
+        'git.commit.author.name', 'git.commit.author.email', 'git.commit.author.date',
+        'git.commit.committer.name', 'git.commit.committer.email', 'git.commit.committer.date',
+      ]
+      const local = Object.fromEntries(keys.map(key => [key, 'local-' + key]))
+      local['git.commit.sha'] = 'a'.repeat(40)
+      local['git.repository_url'] = 'https://example.com/local.git'
+      const provider = Object.fromEntries(keys.map(key => [key, 'provider-' + key]))
+      provider['git.commit.sha'] = 'b'.repeat(40)
+      provider['git.repository_url'] = 'https://example.com/provider.git'
+      provider['ci.job.name'] = 'tests'
+      provider['git.commit.head.sha'] = 'pr-head'
+      const overrides = source === 'override' ? Object.fromEntries(keys.map(key => [key, 'user-' + key])) : {}
+      if (source === 'override') {
+        overrides['git.commit.sha'] = 'c'.repeat(40)
+        overrides['git.repository_url'] = 'https://example.com/user.git'
+      }
+      if (source.startsWith('sha-only')) overrides['git.commit.sha'] = 'c'.repeat(40)
+      const git = source === 'provider' ? {} : source === 'partial' ? { 'git.commit.sha': 'a'.repeat(40) } : local
+      const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
+        './ci': { getCIMetadata: () => provider },
+        './git': { getGitMetadata: () => git, getGitInformationDiscrepancy: () => ({}) },
+        './user-provided-git': { getUserProviderGitMetadata: () => overrides },
+      })
+      const originalHasOwn = Object.hasOwn
+      let tags
+      try {
+        if (source === 'sha-only-legacy') Object.hasOwn = undefined
+        tags = getTestEnvironmentMetadata('mocha')
+      } finally {
+        Object.hasOwn = originalHasOwn
+      }
+      for (const key of keys) {
+        const commitFieldCleared = source.startsWith('sha-only') &&
+          (key === 'git.tag' || (key.startsWith('git.commit.') && key !== 'git.commit.sha'))
+        const expected = commitFieldCleared
+          ? undefined
+          : overrides[key] || (source === 'provider' ? provider[key] : git[key])
+        assert.strictEqual(tags[key], expected, key)
+      }
+      assert.strictEqual(tags['ci.job.name'], 'tests')
+      assert.strictEqual(tags['git.commit.head.sha'], 'pr-head')
+    })
+  }
+})

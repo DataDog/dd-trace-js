@@ -10,14 +10,19 @@ const FormData = require('../../../exporters/common/form-data')
 const request = require('../../../exporters/common/request')
 
 const log = require('../../../log')
+const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../plugins/util/user-provided-git')
+const { GIT_COMMIT_SHA } = require('../../../plugins/util/tags')
+const { filterSensitiveInfoFromRepository } = require('../../../plugins/util/url')
 const { getSegment } = require('../../../util')
 const {
   getLatestCommits,
   getRepositoryUrl,
+  getGitMetadata,
   generatePackFilesForCommits,
   getCommitsRevList,
   isShallowRepository,
   unshallowRepository,
+  fetchHeadCommitSha,
   isGitAvailable,
 } = require('../../../plugins/util/git')
 
@@ -261,8 +266,9 @@ function generateAndUploadPackFiles ({
  * @param {EvpProxyConfiguration} evpProxyConfiguration
  * @param {string | undefined} configRepositoryUrl repository URL from the configuration, if set
  * @param {(error?: Error | null) => void} callback
+ * @param {string=} configCommitSha
  */
-function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
+function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback, configCommitSha) {
   if (!isGitAvailable()) {
     return callback(new Error('Git is not available'))
   }
@@ -271,13 +277,29 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     repositoryUrl = getRepositoryUrl()
   }
 
+  repositoryUrl = filterSensitiveInfoFromRepository(repositoryUrl)
   log.debug('Uploading git history for repository', repositoryUrl)
 
-  if (!repositoryUrl) {
+  if (!repositoryUrl || !validateGitRepositoryUrl(repositoryUrl)) {
     return callback(new Error('Repository URL is empty'))
   }
 
-  let latestCommits = getLatestCommits()
+  let latestCommits = getLatestCommits(configCommitSha)
+  let recoveredSelectedCommit = false
+  if (!latestCommits.length && getConfig().testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED &&
+    validateGitCommitSha(configCommitSha)) {
+    if (isShallowRepository(true)) unshallowRepository(false, configCommitSha)
+    else fetchHeadCommitSha(configCommitSha, false)
+    latestCommits = getLatestCommits(configCommitSha)
+    recoveredSelectedCommit = true
+  }
+  if (!latestCommits.length) {
+    const localSha = getGitMetadata({})[GIT_COMMIT_SHA]
+    if (!validateGitCommitSha(localSha)) return callback(null)
+    return callback(Object.assign(new Error('Selected Git commit is unavailable'), {
+      code: 'ERR_GIT_COMMIT_UNAVAILABLE',
+    }))
+  }
   log.debug('There were %s commits since last month.', latestCommits.length)
 
   const getOnFinishGetCommitsToUpload = (hasCheckedShallow) => (err, commitsToUpload) => {
@@ -292,7 +314,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
 
     // If it has already unshallowed or the clone is not shallow, we move on
     if (hasCheckedShallow || !isShallowRepository()) {
-      const [headCommit] = latestCommits
+      const headCommit = configCommitSha || latestCommits[0]
       return generateAndUploadPackFiles({
         url,
         isEvpProxy,
@@ -305,11 +327,11 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
     if (getConfig().testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED) {
-      unshallowRepository(false)
+      unshallowRepository(false, configCommitSha)
     }
 
     // The latest commits change after unshallowing
-    latestCommits = getLatestCommits()
+    latestCommits = getLatestCommits(configCommitSha)
     getCommitsToUpload({
       url,
       repositoryUrl,
@@ -325,7 +347,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     latestCommits,
     isEvpProxy,
     evpProxyPrefix,
-  }, getOnFinishGetCommitsToUpload(false))
+  }, getOnFinishGetCommitsToUpload(recoveredSelectedCommit))
 }
 
 module.exports = {

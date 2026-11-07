@@ -39,6 +39,7 @@ const {
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { cachedExec } = require('./git-cache')
+const { validateGitCommitSha } = require('./user-provided-git')
 
 /** @typedef {NonNullable<ReturnType<string['match']>>} RegExpMatch */
 
@@ -143,7 +144,8 @@ function getGitVersion () {
   }
 }
 
-function unshallowRepository (parentOnly = false) {
+function unshallowRepository (parentOnly = false, commitSha) {
+  if (commitSha && !validateGitCommitSha(commitSha)) return
   const gitVersion = getGitVersion()
   if (!gitVersion) {
     log.warn('Git version could not be extracted, so git unshallow will not proceed')
@@ -153,12 +155,17 @@ function unshallowRepository (parentOnly = false) {
     log.warn('Git version is <2.27, so git unshallow will not proceed')
     return
   }
-  const defaultRemoteName = sanitizedExec(['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
-  const revParseHead = sanitizedExec(['rev-parse', 'HEAD'])
+  const defaultRemoteName = getGitRemoteName()
+  const checkoutHead = sanitizedExec(['rev-parse', 'HEAD'], null, null, null, true, { uncached: true })
+  const revParseHead = commitSha || checkoutHead
+  const targetedRecovery = commitSha && commitSha.toLowerCase() !== checkoutHead.toLowerCase()
+  const fetchOptions = { stdio: 'pipe' }
+  if (targetedRecovery) fetchOptions.timeout = 5000
+  const depth = parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"'
 
   const baseGitOptions = [
     'fetch',
-    parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"',
+    depth,
     '--update-shallow',
     '--filter=blob:none',
     '--recurse-submodules=no',
@@ -172,7 +179,7 @@ function unshallowRepository (parentOnly = false) {
     revParseHead,
   ]
   try {
-    cachedExec('git', flags)
+    execFileSync('git', flags, fetchOptions)
   } catch (err) {
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
@@ -181,15 +188,29 @@ function unshallowRepository (parentOnly = false) {
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
     )
+    if (targetedRecovery) {
+      const timeout = 5000 - (Date.now() - start)
+      if (timeout > 0 && !hasLocalGitObject(revParseHead)) {
+        sanitizedExec(
+          ['fetch', '--depth=1', ...baseGitOptions.slice(2), revParseHead],
+          null, null,
+          { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'unshallow' } },
+          true,
+          { uncached: true, timeout, expectedFailure: true }
+        )
+      }
+      return
+    }
     const upstreamRemote = sanitizedExec(
-      ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']
+      ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+      null, null, null, true, { uncached: true }
     )
     flags = [
       ...baseGitOptions,
       upstreamRemote,
     ]
     try {
-      cachedExec('git', flags)
+      execFileSync('git', flags, fetchOptions)
     } catch (err) {
       // If the CI is working on a detached HEAD or branch tracking hasn't been set up, the above command will fail.
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
@@ -203,7 +224,9 @@ function unshallowRepository (parentOnly = false) {
         baseGitOptions,
         null,
         null,
-        { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'unshallow' } } // we log the error in sanitizedExec
+        { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'unshallow' } }, // we log the error in sanitizedExec
+        true,
+        { uncached: true }
       )
     }
   }
@@ -215,18 +238,32 @@ function getRepositoryUrl () {
     ['config', '--get', 'remote.origin.url'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_repository' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_repository' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_repository' } }
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_repository' } },
+    true,
+    { uncached: true }
   )
 }
 
-function getLatestCommits () {
+/** @param {string=} commitSha */
+function getLatestCommits (commitSha) {
+  if (commitSha && !validateGitCommitSha(commitSha)) return []
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_local_commits' })
   const startTime = Date.now()
   try {
-    const result = cachedExec('git', ['log', '--format=%H', '-n 1000', '--since="1 month ago"'])
+    const flags = ['log', '--format=%H', '-n 1000', '--since="1 month ago"']
+    if (commitSha) flags.push(commitSha, '--')
+    const env = { ...getEnvironmentVariables(), GIT_NO_LAZY_FETCH: '1', GIT_ALLOW_PROTOCOL: '' }
+    const result = execFileSync('git', flags, { stdio: 'pipe', env })
       .toString()
       .split('\n')
       .filter(Boolean)
+    if (commitSha && !result.includes(commitSha)) {
+      const selectedCommit = execFileSync('git',
+        ['rev-parse', '--verify', commitSha + '^{commit}'], { stdio: 'pipe', env })
+        .toString().trim()
+      if (selectedCommit !== commitSha) return []
+      result.unshift(commitSha)
+    }
     distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
     return result
   } catch (err) {
@@ -268,7 +305,7 @@ function getGitRemoteName () {
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
     true,
-    { expectedFailure: true } // Detached HEADs and branches without an upstream use the remote-list fallback.
+    { expectedFailure: true, uncached: true } // Detached HEADs and branches without an upstream use the fallback.
   )
 
   if (upstreamRemote) {
@@ -280,10 +317,24 @@ function getGitRemoteName () {
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
-    false
+    false,
+    { uncached: true }
   )
 
-  return getSegment(remotes, '\n', 0) || 'origin'
+  if (!remotes) return 'origin'
+
+  const remoteNames = remotes.trim().split(/\r?\n/)
+  const configuredRemote = sanitizedExec(
+    ['config', '--get', 'clone.defaultRemoteName'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_remote_name' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_remote_name' } },
+    true,
+    { expectedFailure: true, uncached: true }
+  )
+
+  if (configuredRemote && remoteNames.includes(configuredRemote)) return configuredRemote
+  return remoteNames.includes('origin') ? 'origin' : remoteNames[0] || 'origin'
 }
 
 function getSourceBranch () {
@@ -374,14 +425,14 @@ function getCounts (sourceBranch, candidateBranch) {
 }
 
 function getCommitsRevList (commitsToExclude, commitsToInclude) {
-  let result = null
+  let result
 
   const commitsToExcludeString = commitsToExclude.map(commit => `^${commit}`)
 
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_objects' })
   const startTime = Date.now()
   try {
-    result = cachedExec(
+    result = execFileSync(
       'git',
       [
         'rev-list',
@@ -389,6 +440,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
         '--no-object-names',
         '--filter=blob:none',
         '--since="1 month ago"',
+        '--max-count=1000',
         ...commitsToExcludeString,
         ...commitsToInclude,
       ],
@@ -396,7 +448,19 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
       .toString()
       .split('\n')
       .filter(Boolean)
+    const objects = new Set(result)
+    const excluded = new Set(commitsToExclude)
+    const outsideWindow = commitsToInclude.filter(commit =>
+      validateGitCommitSha(commit) && !objects.has(commit) && !excluded.has(commit))
+    if (outsideWindow.length) {
+      const selectedObjects = execFileSync('git', [
+        'rev-list', '--objects', '--no-object-names', '--filter=blob:none', '--no-walk=unsorted',
+        ...outsideWindow,
+      ], { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER }).toString().split('\n').filter(Boolean)
+      result = [...new Set([...result, ...selectedObjects])]
+    }
   } catch (err) {
+    result = null
     log.error('Get commits to upload failed', err)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
@@ -475,8 +539,17 @@ function generatePackFilesForCommits (commitsToUpload) {
 
 function getRepositoryRoot () {
   return sanitizedExec(
-    ['rev-parse', '--show-toplevel']
+    ['rev-parse', '--show-toplevel'], null, null, null, true, { uncached: true }
   )
+}
+
+/**
+ * Read mutable checkout metadata without the cache shared by CI jobs.
+ * @param {string[]} flags
+ * @param {boolean} [shouldTrim]
+ */
+function readCheckout (flags, shouldTrim = true) {
+  return sanitizedExec(flags, null, null, null, shouldTrim, { uncached: true })
 }
 
 // If there is ciMetadata, it takes precedence.
@@ -503,14 +576,25 @@ function getGitMetadata (ciMetadata) {
     committerName,
     committerEmail,
     committerDate,
-  ] = sanitizedExec(['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
+  ] = readCheckout([
+    'show', '-s', '--no-show-signature', '--format=%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI',
+  ]).split('\0')
 
   const tags = {
     [GIT_COMMIT_MESSAGE]:
-      commitMessage || sanitizedExec(['show', '-s', '--format=%B'], null, null, null, false),
-    [GIT_BRANCH]: branch || sanitizedExec(['rev-parse', '--abbrev-ref', 'HEAD']),
-    [GIT_COMMIT_SHA]: commitSHA || sanitizedExec(['rev-parse', 'HEAD']),
+      commitMessage || readCheckout(['show', '-s', '--no-show-signature', '--format=%B'], false),
+    [GIT_BRANCH]: branch || readCheckout(['rev-parse', '--abbrev-ref', 'HEAD']),
+    [GIT_COMMIT_SHA]: commitSHA || readCheckout(['rev-parse', 'HEAD']),
     [CI_WORKSPACE_PATH]: ciWorkspacePath || getRepositoryRoot(),
+  }
+
+  if (tags[GIT_BRANCH] === 'HEAD') delete tags[GIT_BRANCH]
+
+  let localTag = tag
+  if (!localTag && !tags[GIT_BRANCH]) {
+    const tagsAtHead = readCheckout(['tag', '--no-column', '--points-at', 'HEAD'], false)
+      .trim().split(/\r?\n/).filter(Boolean)
+    if (tagsAtHead.length === 1) localTag = tagsAtHead[0]
   }
 
   if (headCommitSha) {
@@ -519,7 +603,8 @@ function getGitMetadata (ciMetadata) {
     const headFlags = [
       'show',
       '-s',
-      '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'',
+      '--no-show-signature',
+      '--format=%H%x00%aI%x00%an%x00%ae%x00%cI%x00%cn%x00%ce%x00%B',
       headCommitSha,
     ]
     // Only explicit, bounded fetches may contact the remote during head metadata recovery.
@@ -544,7 +629,7 @@ function getGitMetadata (ciMetadata) {
       headCommitterName,
       headCommitterEmail,
       headCommitMessage,
-    ] = headInfo.split('","')
+    ] = headInfo.split('\0')
 
     if (gitHeadCommitSha) {
       tags[GIT_COMMIT_HEAD_AUTHOR_DATE] = headAuthorDate
@@ -559,14 +644,14 @@ function getGitMetadata (ciMetadata) {
 
   const entries = [
     GIT_REPOSITORY_URL,
-    filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec(['ls-remote', '--get-url'])),
+    filterSensitiveInfoFromRepository(repositoryUrl || readCheckout(['ls-remote', '--get-url'])),
     GIT_COMMIT_AUTHOR_DATE, authorDate,
     GIT_COMMIT_AUTHOR_NAME, ciAuthorName || authorName,
     GIT_COMMIT_AUTHOR_EMAIL, ciAuthorEmail || authorEmail,
     GIT_COMMIT_COMMITTER_DATE, committerDate,
     GIT_COMMIT_COMMITTER_NAME, committerName,
     GIT_COMMIT_COMMITTER_EMAIL, committerEmail,
-    GIT_TAG, tag,
+    GIT_TAG, localTag,
   ]
 
   for (let i = 0; i < entries.length; i += 2) {
@@ -586,7 +671,9 @@ function getGitInformationDiscrepancy () {
     ['rev-parse', 'HEAD'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_commit_sha' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_commit_sha' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_sha' } }
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_commit_sha' } },
+    true,
+    { uncached: true }
   )
 
   return { gitRepositoryUrl, gitCommitSHA }

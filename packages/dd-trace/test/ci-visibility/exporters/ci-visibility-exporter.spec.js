@@ -84,7 +84,9 @@ describe('CI Visibility Exporter', () => {
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
-    sinon.stub(cp, 'execFileSync').returns('false')
+    const gitCommand = sinon.stub(cp, 'execFileSync').returns('false')
+    gitCommand.withArgs('git', ['config', '--get', 'remote.origin.url']).returns('https://example.com/repository.git')
+    gitCommand.withArgs('git', sinon.match.array.startsWith(['log'])).returns('a'.repeat(40))
     const readFileSync = fs.readFileSync
     sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
       if (filename === sketchesJsPath) {
@@ -463,7 +465,7 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/search_commits')
         .reply(200, function () {
           const { meta: { repository_url: repositoryUrl } } = JSON.parse(this.req.requestBodyBuffers.toString())
-          assert.strictEqual(repositoryUrl, 'https://custom-git@datadog.com')
+          assert.strictEqual(repositoryUrl, 'https://datadog.com')
           done()
         })
         .post('/api/v2/git/repository/packfile')
@@ -634,6 +636,75 @@ describe('CI Visibility Exporter', () => {
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       })
+      for (const repositoryRoot of ['', '/checkout']) {
+        const checkoutDescription = repositoryRoot ? 'unreadable checkout' : 'missing checkout'
+        it(`requests skippable suites with ${checkoutDescription} when require_git is false`, (done) => {
+          cp.execFileSync.withArgs('git', sinon.match.array.startsWith(['log'])).returns('')
+          cp.execFileSync.withArgs('git', ['rev-parse', '--show-toplevel']).returns(repositoryRoot)
+          cp.execFileSync.withArgs('git', ['rev-parse', 'HEAD']).returns('')
+          nock(url)
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  itr_enabled: true,
+                  require_git: false,
+                  tests_skipping: true,
+                },
+              },
+            }))
+          const skippableScope = nock(url)
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({ data: [] }))
+          const ciVisibilityExporter = new CiVisibilityExporter({
+            url,
+            testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+          })
+          ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+
+          ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
+            assert.strictEqual(settingsErr, null)
+            ciVisibilityExporter.getSkippableSuites({}, (skippableErr, skippableSuites) => {
+              assert.strictEqual(skippableErr, null)
+              assert.deepStrictEqual(skippableSuites, [])
+              assert.strictEqual(skippableScope.isDone(), true)
+              done()
+            })
+          })
+        })
+      }
+      for (const requireGit of [false, true]) {
+        it(`handles an unavailable selected commit when require_git is ${requireGit}`, async () => {
+          const sha = 'c'.repeat(40)
+          const configuration = { sha, repositoryUrl: 'https://example.com/repository.git' }
+          cp.execFileSync.withArgs('git', sinon.match.array.startsWith(['log'])).returns('')
+          cp.execFileSync.withArgs('git', ['rev-parse', 'HEAD']).returns('a'.repeat(40))
+          nock(url)
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, { data: { attributes: { itr_enabled: true, require_git: requireGit, tests_skipping: true } } })
+          const skippableScope = nock(url)
+            .post('/api/v2/ci/tests/skippable', body => body.data.attributes.sha === sha)
+            .reply(200, { data: [] })
+          const exporter = new CiVisibilityExporter({
+            url,
+            testOptimization: {
+              DD_CIVISIBILITY_ITR_ENABLED: true,
+              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+            },
+          })
+          exporter._resolveCanUseCiVisProtocol(true)
+          const settingsErr = await new Promise(resolve => {
+            exporter.getLibraryConfiguration(configuration, resolve)
+          })
+          assert.strictEqual(!!settingsErr, requireGit)
+          const [skippableErr, suites] = await new Promise(resolve => {
+            exporter.getSkippableSuites(configuration, (...args) => resolve(args))
+          })
+          assert.strictEqual(!!skippableErr, requireGit)
+          assert.deepStrictEqual(suites, [])
+          assert.strictEqual(skippableScope.isDone(), !requireGit)
+        })
+      }
       it('does not request skippable suites when git metadata upload fails with require_git false', (done) => {
         // Regression: the live settings path starts `sendGitMetadata` even when the
         // backend returns `require_git: false`. `getSkippableSuites` awaits

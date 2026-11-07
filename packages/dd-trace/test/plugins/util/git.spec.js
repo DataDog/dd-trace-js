@@ -42,6 +42,7 @@ const {
 
 const {
   getGitMetadata,
+  getLatestCommits,
   unshallowRepository,
   getGitDiff,
   isGitAvailable: isGitAvailableWithStub,
@@ -95,15 +96,47 @@ describe('git', () => {
     })
     assert.notStrictEqual(metadata[GIT_REPOSITORY_URL], 'ciRepositoryUrl')
     sinon.assert.calledWith(cachedExecStub, 'git', ['ls-remote', '--get-url'])
-    sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
-    sinon.assert.neverCalledWith(cachedExecStub, 'git', ['show', '-s', '--format=%B'])
+    sinon.assert.calledWith(cachedExecStub, 'git',
+      ['show', '-s', '--no-show-signature', '--format=%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI'])
+    sinon.assert.neverCalledWith(cachedExecStub, 'git', ['show', '-s', '--no-show-signature', '--format=%B'])
     sinon.assert.neverCalledWith(cachedExecStub, 'git', ['rev-parse', 'HEAD'])
     sinon.assert.neverCalledWith(cachedExecStub, 'git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     sinon.assert.neverCalledWith(cachedExecStub, 'git', ['rev-parse', '--show-toplevel'])
     sinon.assert.calledWith(cachedExecStub,
       'git',
-      ['show', '-s', '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'', ciMetadata.headCommitSha]
+      [
+        'show', '-s', '--no-show-signature', '--format=%H%x00%aI%x00%an%x00%ae%x00%cI%x00%cn%x00%ce%x00%B',
+        ciMetadata.headCommitSha,
+      ]
     )
+  })
+
+  it('omits HEAD and only infers a unique tag for a detached checkout', () => {
+    cachedExecStub.returns('')
+    cachedExecStub.withArgs('git', ['rev-parse', '--abbrev-ref', 'HEAD']).returns('HEAD')
+    const tagCommand = cachedExecStub.withArgs('git', ['tag', '--no-column', '--points-at', 'HEAD'])
+    tagCommand.returns('v1\n')
+    assert.strictEqual(getGitMetadata({})[GIT_TAG], 'v1')
+    assert.strictEqual(getGitMetadata({})[GIT_BRANCH], undefined)
+    tagCommand.returns('v1\nstable\n')
+    assert.strictEqual(getGitMetadata({})[GIT_TAG], undefined)
+    cachedExecStub.withArgs('git', ['rev-parse', '--abbrev-ref', 'HEAD']).returns('main')
+    assert.strictEqual(getGitMetadata({})[GIT_TAG], undefined)
+  })
+
+  it('keeps selected commit discovery separate from HEAD history, including old commits', () => {
+    const selected = 'a'.repeat(40)
+    cachedExecStub.returns('')
+    cachedExecStub.withArgs('git', ['rev-parse', '--verify', selected + '^{commit}']).returns(selected)
+    assert.deepStrictEqual(getLatestCommits(selected), [selected])
+    sinon.assert.calledWith(cachedExecStub, 'git',
+      ['log', '--format=%H', '-n 1000', '--since="1 month ago"', selected, '--'])
+    cachedExecStub.withArgs('git', ['rev-parse', '--verify', selected + '^{commit}'])
+      .throws(new Error('unknown commit'))
+    assert.deepStrictEqual(getLatestCommits(selected), [])
+    cachedExecStub.resetHistory()
+    assert.deepStrictEqual(getLatestCommits('--all'), [])
+    sinon.assert.notCalled(cachedExecStub)
   })
 
   it('does not crash if git is not available', () => {
@@ -128,8 +161,8 @@ describe('git', () => {
 
     cachedExecStub
       .onCall(0).returns(
-        'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
-        'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
+        ['git author', 'git.author@email.com', '2022-02-14T16:22:03-05:00',
+          'git committer', 'git.committer@email.com', '2022-02-14T16:23:03-05:00'].join('\0')
       )
       .onCall(1).returns(commitMessage)
       .onCall(2).returns('gitBranch')
@@ -137,10 +170,9 @@ describe('git', () => {
       .onCall(4).returns('ciWorkspacePath')
       .onCall(5).returns(false)
       .onCall(6).returns(
-        'headCommitSha",' +
-        '"2022-02-14T16:22:03-05:00","git head author","git.head.author@email.com",' +
-        '"2022-02-14T16:23:03-05:00","git head committer","git.head.committer@email.com",' +
-        '"' + headCommitMessage
+        ['headCommitSha', '2022-02-14T16:22:03-05:00', 'git head author', 'git.head.author@email.com',
+          '2022-02-14T16:23:03-05:00', 'git head committer', 'git.head.committer@email.com',
+          headCommitMessage].join('\0')
       )
       .onCall(7).returns('https://github.com/datadog/safe-repository.git')
 
@@ -168,8 +200,9 @@ describe('git', () => {
       [CI_WORKSPACE_PATH]: 'ciWorkspacePath',
     })
 
-    sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--format=%B'])
-    sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
+    sinon.assert.calledWith(cachedExecStub, 'git', ['show', '-s', '--no-show-signature', '--format=%B'])
+    sinon.assert.calledWith(cachedExecStub, 'git',
+      ['show', '-s', '--no-show-signature', '--format=%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI'])
     sinon.assert.calledWith(cachedExecStub, 'git', ['rev-parse', 'HEAD'])
     sinon.assert.calledWith(cachedExecStub, 'git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     sinon.assert.calledWith(cachedExecStub, 'git', ['rev-parse', '--show-toplevel'])
@@ -178,13 +211,23 @@ describe('git', () => {
 })
 
 describe('getCommitsRevList', () => {
+  it('returns null if retrieving the selected old root fails after another object was found', () => {
+    const command = sinon.stub()
+    command.onFirstCall().returns('b'.repeat(40) + '\n')
+    command.onSecondCall().throws(new Error('selected commit disappeared'))
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: command },
+    })
+    assert.strictEqual(getCommitsRevList([], ['a'.repeat(40), 'b'.repeat(40)]), null)
+  })
+
   it('gets the commits to upload if the repository is smaller than the limit', () => {
     const logErrorSpy = sinon.spy()
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        './git-cache': {
-          cachedExec: (command, flags, options) =>
+        'node:child_process': {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, options),
         },
         '../../log': {
@@ -201,8 +244,8 @@ describe('getCommitsRevList', () => {
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        './git-cache': {
-          cachedExec: (command, flags, options) =>
+        'node:child_process': {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options),
         },
         '../../log': {
@@ -217,8 +260,8 @@ describe('getCommitsRevList', () => {
   it('returns null if the repository is bigger than the limit', () => {
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        './git-cache': {
-          cachedExec: (command, flags, options) =>
+        'node:child_process': {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options),
         },
       }
@@ -230,8 +273,8 @@ describe('getCommitsRevList', () => {
   it('returns null if execFileSync fails for whatever reason', () => {
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        './git-cache': {
-          cachedExec: () => { throw new Error('error!') },
+        'node:child_process': {
+          execFileSync: () => { throw new Error('error!') },
         },
       }
     )
@@ -350,8 +393,67 @@ describe('unshallowRepository', () => {
     ]
 
     unshallowRepository(false)
-    sinon.assert.calledWith(cachedExecStub, 'git', options)
+    sinon.assert.calledWith(cachedExecStub, 'git', options, { stdio: 'pipe' })
   })
+
+  it('bounds targeted recovery without shortening an ordinary unshallow fetch', () => {
+    const selected = 'a'.repeat(40)
+    cachedExecStub.onCall(0).returns('git version 2.39.0')
+    cachedExecStub.onCall(1).returns('upstream/main')
+    cachedExecStub.onCall(2).returns('b'.repeat(40))
+
+    unshallowRepository(false, selected)
+
+    sinon.assert.calledWith(cachedExecStub, 'git', [
+      'fetch', '--shallow-since="1 month ago"', '--update-shallow', '--filter=blob:none', '--recurse-submodules=no',
+      'upstream', selected,
+    ], { stdio: 'pipe', timeout: 5000 })
+  })
+
+  it('keeps ordinary unshallow timing when the selected SHA is HEAD', () => {
+    const selected = 'a'.repeat(40)
+    cachedExecStub.onCall(0).returns('git version 2.39.0')
+    cachedExecStub.onCall(1).returns('origin')
+    cachedExecStub.onCall(2).returns(selected)
+
+    unshallowRepository(false, selected)
+
+    sinon.assert.calledWith(cachedExecStub, 'git', [
+      'fetch', '--shallow-since="1 month ago"', '--update-shallow', '--filter=blob:none', '--recurse-submodules=no',
+      'origin', selected,
+    ], { stdio: 'pipe' })
+  })
+
+  for (const expired of [false, true]) {
+    it(`only falls back to depth one within the targeted recovery deadline (expired=${expired})`, () => {
+      const clock = sinon.useFakeTimers()
+      try {
+        const selected = 'a'.repeat(40)
+        cachedExecStub.onCall(0).returns('git version 2.39.0')
+        cachedExecStub.onCall(1).returns('origin')
+        cachedExecStub.onCall(2).returns('b'.repeat(40))
+        cachedExecStub.onCall(3).callsFake(() => {
+          clock.tick(expired ? 5000 : 100)
+          throw Object.assign(new Error('outside history window'), { status: 128 })
+        })
+        cachedExecStub.onCall(4).throws(new Error('selected commit is missing'))
+        cachedExecStub.onCall(5).returns('')
+
+        unshallowRepository(false, selected)
+
+        if (expired) {
+          sinon.assert.callCount(cachedExecStub, 4)
+        } else {
+          sinon.assert.calledWith(cachedExecStub, 'git', [
+            'fetch', '--depth=1', '--update-shallow', '--filter=blob:none', '--recurse-submodules=no',
+            'origin', selected,
+          ], { stdio: 'pipe', timeout: 4900 })
+        }
+      } finally {
+        clock.restore()
+      }
+    })
+  }
 
   it('works for the usual case with parentOnly', () => {
     cachedExecStub
@@ -433,10 +535,12 @@ describe('user credentials', () => {
   it('scrubs https user credentials', () => {
     cachedExecStub
       .onCall(0).returns(
-        'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
-        'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
+        ['git author', 'git.author@email.com', '2022-02-14T16:22:03-05:00',
+          'git committer', 'git.committer@email.com', '2022-02-14T16:23:03-05:00'].join('\0')
       )
-      .onCall(5).returns('https://x-oauth-basic:ghp_safe_characters@github.com/datadog/safe-repository.git')
+
+    cachedExecStub.withArgs('git', ['ls-remote', '--get-url']).returns(
+      'https://x-oauth-basic:ghp_safe_characters@github.com/datadog/safe-repository.git')
 
     const metadata = getGitMetadata({})
     assert.strictEqual(metadata[GIT_REPOSITORY_URL], 'https://github.com/datadog/safe-repository.git')
@@ -445,10 +549,11 @@ describe('user credentials', () => {
   it('scrubs ssh user credentials', () => {
     cachedExecStub
       .onCall(0).returns(
-        'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
-        'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
+        ['git author', 'git.author@email.com', '2022-02-14T16:22:03-05:00',
+          'git committer', 'git.committer@email.com', '2022-02-14T16:23:03-05:00'].join('\0')
       )
-      .onCall(5).returns('ssh://username@host.xz:port/path/to/repo.git/')
+
+    cachedExecStub.withArgs('git', ['ls-remote', '--get-url']).returns('ssh://username@host.xz:port/path/to/repo.git/')
 
     const metadata = getGitMetadata({})
     assert.strictEqual(metadata[GIT_REPOSITORY_URL], 'ssh://host.xz:port/path/to/repo.git/')
@@ -544,6 +649,7 @@ describe('getGitRemoteName', () => {
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
+        'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': {
           cachedExec: cachedExecStub,
         },
@@ -556,14 +662,16 @@ describe('getGitRemoteName', () => {
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
   })
 
-  it('returns first remote when upstream is not available', () => {
+  it('prefers origin when upstream and a configured clone remote are not available', () => {
     const logError = sinon.spy()
     cachedExecStub
       .onCall(0).throws()
       .onCall(1).returns('upstream\norigin')
+      .onCall(2).throws()
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
+        'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': {
           cachedExec: cachedExecStub,
         },
@@ -572,16 +680,38 @@ describe('getGitRemoteName', () => {
     )
 
     const remoteName = getGitRemoteName()
-    assert.strictEqual(remoteName, 'upstream')
+    assert.strictEqual(remoteName, 'origin')
     sinon.assert.calledWith(cachedExecStub, 'git', ['remote'])
     sinon.assert.notCalled(logError)
   })
+
+  for (const { configured, remotes, expected } of [
+    { configured: 'upstream', remotes: 'backup\norigin\nupstream\n', expected: 'upstream' },
+    { configured: 'missing', remotes: 'backup\norigin\n', expected: 'origin' },
+    { configured: 'missing', remotes: 'backup\nupstream\n', expected: 'backup' },
+    { configured: 'upstream', remotes: 'backup\r\nupstream\r\n', expected: 'upstream' },
+    { configured: '', remotes: 'backup\nupstream\n', expected: 'backup' },
+  ]) {
+    it(`selects ${expected} from ${JSON.stringify(remotes)} with configured remote ${configured}`, () => {
+      cachedExecStub.onCall(0).throws()
+      cachedExecStub.onCall(1).returns(remotes)
+      cachedExecStub.onCall(2).returns(configured)
+      const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
+        'node:child_process': { execFileSync: cachedExecStub },
+        './git-cache': { cachedExec: cachedExecStub },
+      })
+
+      assert.strictEqual(getGitRemoteName(), expected)
+      sinon.assert.calledWith(cachedExecStub, 'git', ['config', '--get', 'clone.defaultRemoteName'])
+    })
+  }
 
   it('reports an error when the remote-list fallback also fails', () => {
     const error = new Error('Git is unavailable')
     const logError = sinon.spy()
     cachedExecStub.throws(error)
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git', {
+      'node:child_process': { execFileSync: cachedExecStub },
       './git-cache': { cachedExec: cachedExecStub },
       '../../log': { error: logError },
     })
@@ -597,6 +727,7 @@ describe('getGitRemoteName', () => {
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
+        'node:child_process': { execFileSync: cachedExecStub },
         './git-cache': {
           cachedExec: cachedExecStub,
         },
@@ -848,6 +979,7 @@ describe('getCounts', () => {
 describe('getGitInformationDiscrepancy', () => {
   const { getGitInformationDiscrepancy } = proxyquire('../../../src/plugins/util/git',
     {
+      'node:child_process': { execFileSync: cachedExecStub },
       './git-cache': {
         cachedExec: cachedExecStub,
       },
@@ -939,9 +1071,7 @@ describe('fetchHeadCommitSha', () => {
     const headSha = 'abc123'
     const remoteName = 'origin'
 
-    execFileSyncStub
-      .returns('')
-      .onCall(0).throws(new Error('Commit is missing'))
+    execFileSyncStub.withArgs('git', ['cat-file', '-e', headSha]).throws(new Error('Commit is missing'))
 
     fetchHeadCommitSha(headSha)
 
@@ -971,8 +1101,9 @@ describe('fetchHeadCommitSha', () => {
   })
 
   it('retries the original fetch after a bounded fetch fails', () => {
-    execFileSyncStub.onCall(0).throws(new Error('Commit is missing'))
-    execFileSyncStub.onCall(1).throws(new Error('Shallow requests are unsupported'))
+    execFileSyncStub.withArgs('git', ['cat-file', '-e', 'abc123']).throws(new Error('Commit is missing'))
+    execFileSyncStub.withArgs('git', sinon.match.array.startsWith(['fetch']))
+      .onFirstCall().throws(new Error('Shallow requests are unsupported'))
 
     fetchHeadCommitSha('abc123')
 
@@ -1003,11 +1134,11 @@ describe('fetchHeadCommitSha', () => {
   }
 
   it('does not retry a failed original fetch for a local head', () => {
-    execFileSyncStub.onCall(1).throws(new Error('Remote is unavailable'))
+    execFileSyncStub.withArgs('git', sinon.match.array.startsWith(['fetch'])).throws(new Error('Remote is unavailable'))
 
     fetchHeadCommitSha('abc123')
 
-    sinon.assert.calledTwice(execFileSyncStub)
+    assert.strictEqual(execFileSyncStub.getCalls().filter(call => call.args[1][0] === 'fetch').length, 1)
     sinon.assert.calledOnce(logErrorSpy)
   })
 
@@ -1033,6 +1164,10 @@ describe('PR head metadata in shallow repositories', () => {
   let baseSha
   let getGitMetadata
   let getGitDiff
+  let getLatestCommits
+  let getCommitsRevList
+  let unshallowSelectedRepository
+  let fetchSelectedCommit
   let cachedExecSpy
 
   /**
@@ -1103,11 +1238,137 @@ done
     })
     getGitMetadata = gitUtils.getGitMetadata
     getGitDiff = gitUtils.getGitDiff
+    getLatestCommits = gitUtils.getLatestCommits
+    getCommitsRevList = gitUtils.getCommitsRevList
+    unshallowSelectedRepository = gitUtils.unshallowRepository
+    fetchSelectedCommit = gitUtils.fetchHeadCommitSha
   })
 
   afterEach(() => {
     nock.cleanAll()
     fs.rmSync(directory, { recursive: true, force: true })
+  })
+
+  for (const remoteName of ['origin', 'upstream']) {
+    for (const detached of [false, true]) {
+      for (const recovery of ['unshallow', 'fetch']) {
+        it(`uses ${remoteName} for ${recovery} with an unrelated backup remote (detached=${detached})`, () => {
+          const backup = path.join(directory, 'backup.git')
+          git(directory, ['init', '--bare', backup])
+          git(checkout, ['remote', 'add', 'backup', backup])
+          if (remoteName !== 'origin') {
+            git(checkout, ['remote', 'rename', 'origin', remoteName])
+            git(checkout, ['config', 'clone.defaultRemoteName', remoteName])
+          }
+          if (!detached) git(checkout, ['checkout', '-b', 'test/no-upstream'])
+          const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+          cachedExecSpy.resetHistory()
+
+          if (recovery === 'unshallow') unshallowSelectedRepository(false, headSha)
+          else fetchSelectedCommit(headSha)
+
+          assert.strictEqual(git(checkout, ['rev-parse', `${headSha}^{commit}`]), headSha)
+          assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+          const fetches = cachedExecSpy.getCalls().filter(call => call.args[1][0] === 'fetch')
+          assert.ok(fetches.length > 0)
+          assert.ok(fetches.every(call => call.args[1].includes(remoteName)))
+        })
+      }
+    }
+  }
+
+  it('keeps tag discovery unambiguous with forced Git column formatting', () => {
+    git(checkout, ['checkout', '--detach', 'HEAD'])
+    git(checkout, ['config', 'column.ui', 'always'])
+    git(checkout, ['config', 'column.tag', 'always'])
+    git(checkout, ['update-ref', 'refs/tags/v1', 'HEAD'])
+    assert.strictEqual(getGitMetadata({})[GIT_TAG], 'v1')
+    git(checkout, ['update-ref', 'refs/tags/stable', 'HEAD'])
+    assert.strictEqual(getGitMetadata({})[GIT_TAG], undefined)
+  })
+
+  it('preserves available ancestors when targeted recent-history recovery fails', () => {
+    const tree = git(remote, ['rev-parse', baseSha + '^{tree}'])
+    const commit = (parent, date, message) => git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+      input: `tree ${tree}\nparent ${parent}\nauthor Test <test@example.com> ${date} +0000\n` +
+        `committer Test <test@example.com> ${date} +0000\n\n${message}\n`,
+    })
+    const parent = commit(baseSha, 1700000001, 'available ancestor')
+    const selected = commit(parent, 1700000002, 'old selection')
+    const now = Math.floor(Date.now() / 1000)
+    const middle = commit(selected, now - 1, 'middle')
+    const head = commit(middle, now, 'checkout')
+    git(remote, ['update-ref', 'refs/heads/test/preserve-history', head])
+    fs.rmSync(checkout, { recursive: true, force: true })
+    git(directory, ['clone', '--depth=4', '--no-checkout', '--branch', 'test/preserve-history',
+      pathToFileURL(remote).href, checkout])
+    assert.strictEqual(git(checkout, ['rev-list', '--count', 'HEAD']), '4')
+    assert.strictEqual(git(checkout, ['merge-base', selected, parent]), parent)
+
+    unshallowSelectedRepository(false, selected)
+
+    assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), head)
+    assert.strictEqual(git(checkout, ['rev-list', '--count', 'HEAD']), '4')
+    assert.strictEqual(git(checkout, ['merge-base', selected, parent]), parent)
+  })
+
+  it('includes an old selected commit and its tree without walking old ancestors', () => {
+    git(checkout, ['fetch', '--unshallow', 'origin'])
+    const checkedOutSha = git(checkout, ['rev-parse', 'HEAD'])
+    assert.deepStrictEqual(getLatestCommits(headSha), [headSha])
+    const objects = getCommitsRevList([], [headSha])
+    assert.ok(objects.includes(headSha))
+    assert.ok(objects.includes(git(remote, ['rev-parse', headSha + '^{tree}'])))
+    assert.ok(!objects.includes(baseSha))
+    assert.ok(!objects.includes(checkedOutSha))
+  })
+
+  it('reads the current checkout when successive jobs share a persistent Git cache', () => {
+    const secondCheckout = path.join(directory, 'second-checkout')
+    git(directory, ['clone', '--no-checkout', pathToFileURL(remote).href, secondCheckout])
+    git(secondCheckout, ['symbolic-ref', 'HEAD', 'refs/heads/juan-fernandez/cache-new'])
+    git(secondCheckout, ['update-ref', 'HEAD', headSha])
+    git(secondCheckout, ['config', 'remote.origin.url', 'https://example.com/current.git'])
+    const repo = path.resolve(__dirname, '../../../../..')
+    const cacheDirectory = path.join(directory, 'shared-git-cache')
+    const script = `
+      process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = 'true'
+      process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = process.argv[2]
+      const path = require('node:path')
+      const config = require(path.join(process.argv[1], 'packages/dd-trace/src/config'))()
+      if (!config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED ||
+          config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR !== process.argv[2]) {
+        throw new Error('Expected the shared experimental Git cache to be enabled')
+      }
+      const { cachedExec } = require(path.join(process.argv[1], 'packages/dd-trace/src/plugins/util/git-cache'))
+      const { getGitMetadata, getGitInformationDiscrepancy, getRepositoryRoot } =
+        require(path.join(process.argv[1], 'packages/dd-trace/src/plugins/util/git'))
+      process.stdout.write(JSON.stringify({
+        cachedHead: cachedExec('git', ['rev-parse', 'HEAD']).toString().trim(),
+        metadata: getGitMetadata({}),
+        discrepancy: getGitInformationDiscrepancy(),
+        root: getRepositoryRoot(),
+      }))
+    `
+    /** @param {string} cwd */
+    const read = cwd => JSON.parse(execFileSync(process.execPath,
+      ['-e', script, repo, cacheDirectory], { cwd, stdio: 'pipe' }))
+    const first = read(checkout)
+    const second = read(secondCheckout)
+    assert.strictEqual(second.cachedHead, first.cachedHead)
+    assert.notStrictEqual(first.metadata[GIT_COMMIT_SHA], headSha)
+    assertObjectContains(second.metadata, {
+      [GIT_COMMIT_SHA]: headSha,
+      [GIT_BRANCH]: 'juan-fernandez/cache-new',
+      [GIT_REPOSITORY_URL]: 'https://example.com/current.git',
+      [GIT_COMMIT_MESSAGE]: 'PR head DD_abc123\n',
+      [GIT_COMMIT_AUTHOR_NAME]: 'PR Author',
+      [GIT_COMMIT_COMMITTER_NAME]: 'PR Committer',
+    })
+    assert.deepStrictEqual(second.discrepancy, {
+      gitRepositoryUrl: 'https://example.com/current.git', gitCommitSHA: headSha,
+    })
+    assert.strictEqual(second.root, git(secondCheckout, ['rev-parse', '--show-toplevel']))
   })
 
   it('fetches head metadata without its ancestors or changing the checkout', () => {
@@ -1119,7 +1380,7 @@ done
     const metadata = getGitMetadata({ headCommitSha: headSha })
 
     assertObjectContains(metadata, {
-      [GIT_COMMIT_HEAD_MESSAGE]: "PR head DD_abc123'\n",
+      [GIT_COMMIT_HEAD_MESSAGE]: 'PR head DD_abc123\n',
       [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'PR Author',
       [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'pr-author@example.com',
       [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'PR Committer',
@@ -1155,7 +1416,7 @@ done
 
     const metadata = getGitMetadata({ headCommitSha: headSha })
 
-    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
     assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
   })
 
@@ -1175,7 +1436,7 @@ done
 
     const metadata = getGitMetadata({ headCommitSha: headSha })
 
-    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
     const fetches = cachedExecSpy.getCalls().filter(call => call.args[1][0] === 'fetch')
     assert.strictEqual(fetches.length, 2)
     assert.ok(fetches[0].args[1].includes('--depth=1'))
@@ -1262,7 +1523,7 @@ done
     git(checkout, ['remote', 'set-url', 'origin', path.join(directory, 'unavailable.git')])
     const diff = getGitDiff(baseSha, headSha)
 
-    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
     assert.match(diff, /-root/)
     assert.match(diff, /\+head/)
   })
@@ -1357,7 +1618,7 @@ done
         assert.strictEqual(fetchOptions.length, 1)
         assert.strictEqual(fetchOptions[0].timeout, 5000)
         const metadata = getGitMetadata({ headCommitSha: headSha })
-        assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+        assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
         assert.strictEqual(metadata[GIT_COMMIT_HEAD_AUTHOR_NAME], 'PR Author')
         assert.strictEqual(metadata[GIT_COMMIT_HEAD_COMMITTER_EMAIL], 'pr-committer@example.com')
         const fetches = cachedExecSpy.getCalls().filter(call => call.args[1][0] === 'fetch')
@@ -1451,7 +1712,7 @@ done
       assert.strictEqual(result.cachedState, String(cachedShallow))
       assert.strictEqual(result.metadataShallowState, String(!cachedShallow))
       assert.strictEqual(result.finalShallowState, String(!cachedShallow))
-      assert.strictEqual(result.metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+      assert.strictEqual(result.metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
       assert.strictEqual(result.headCount, cachedShallow ? '2' : '1')
       assert.match(result.diff, /-root/)
       assert.match(result.diff, /\+head/)
@@ -1480,9 +1741,127 @@ done
       '-e', script, repo, headSha, path.join(directory, 'git-cache'),
     ], { cwd: checkout, stdio: 'pipe' }))
 
-    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], "PR head DD_abc123'\n")
+    assert.strictEqual(metadata[GIT_COMMIT_HEAD_MESSAGE], 'PR head DD_abc123\n')
     assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
   })
+
+  for (const { depth, recent } of [
+    { depth: 1, recent: false }, { depth: 2, recent: false }, { depth: null, recent: false },
+    { depth: 1, recent: true }, { depth: 2, recent: true }, { depth: null, recent: true },
+  ]) {
+    const clone = depth === null ? 'non-shallow single-branch' : 'depth-' + depth
+    for (const remoteName of ['origin', 'upstream']) {
+      const age = recent ? 'recent' : 'old'
+      it(`recovers an unrelated ${age} selected commit from a ${clone} checkout with remote ${remoteName}`, () => {
+        const tree = git(remote, ['rev-parse', headSha + '^{tree}'])
+        const timestamp = Math.floor(Date.now() / 1000)
+        const parent = recent && git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+          input: [
+            `tree ${tree}`,
+            `author Test <test@example.com> ${timestamp - 60} +0000`,
+            `committer Test <test@example.com> ${timestamp - 60} +0000`,
+            '', 'parent', '',
+          ].join('\n'),
+        })
+        const selectedTime = recent ? timestamp - 30 : 1
+        const selected = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+          input: [
+            `tree ${tree}`,
+            ...(parent ? [`parent ${parent}`] : []),
+            `author Test <test@example.com> ${selectedTime} +0000`,
+            `committer Test <test@example.com> ${selectedTime} +0000`,
+            '', 'unrelated', '',
+          ].join('\n'),
+        })
+        git(remote, ['update-ref', 'refs/heads/juan-fernandez/unrelated', selected])
+        const root = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+          input: `tree ${tree}
+author Test <test@example.com> ${timestamp} +0000
+committer Test <test@example.com> ${timestamp} +0000
+
+root
+`,
+        })
+        const current = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
+          input: `tree ${tree}
+parent ${root}
+author Test <test@example.com> ${timestamp} +0000
+committer Test <test@example.com> ${timestamp} +0000
+
+current
+`,
+        })
+        git(remote, ['update-ref', 'refs/heads/juan-fernandez/current', current])
+        fs.rmSync(checkout, { recursive: true, force: true })
+        git(directory, [
+          'clone', '--origin', remoteName, '--single-branch', ...(depth === null ? [] : ['--depth=' + depth]),
+          '--no-checkout', '--branch', 'juan-fernandez/current',
+          pathToFileURL(remote).href, checkout,
+        ])
+        const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+        const originalHistory = git(checkout, ['rev-list', '--count', 'HEAD'])
+        assert.deepStrictEqual(getLatestCommits(selected), [])
+
+        if (depth === null) fetchSelectedCommit(selected, false)
+        else unshallowSelectedRepository(false, selected)
+
+        const expected = parent ? [selected, parent] : [selected]
+        assert.deepStrictEqual(getLatestCommits(selected), expected)
+        const objects = getCommitsRevList([], expected)
+        assert.ok(!objects.includes(originalHead))
+        if (parent) assert.ok(objects.includes(parent))
+        assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+        assert.strictEqual(git(checkout, ['rev-list', '--count', 'HEAD']), originalHistory)
+        assert.strictEqual(git(checkout, ['rev-parse', '--is-shallow-repository']), String(depth !== null))
+      })
+    }
+  }
+
+  it('discovers a selected commit after a cached miss and shallow fetch', () => {
+    const repo = path.resolve(__dirname, '../../../../..')
+    const script = `
+      const assert = require('node:assert/strict')
+      const path = require('node:path')
+      const { execFileSync } = require('node:child_process')
+      const [repo, sha, cacheDir] = process.argv.slice(1)
+      const config = require(path.join(repo, 'packages/dd-trace/src/config'))()
+      config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = true
+      config.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = cacheDir
+      const { getLatestCommits, getCommitsRevList } = require(path.join(repo, 'packages/dd-trace/src/plugins/util/git'))
+      assert.deepStrictEqual(getLatestCommits(sha), [])
+      assert.strictEqual(getCommitsRevList([], [sha]), null)
+      execFileSync('git', ['fetch', '--depth=1', 'origin', sha], { stdio: 'pipe' })
+      assert.strictEqual(getLatestCommits(sha)[0], sha)
+      assert.ok(getCommitsRevList([], [sha]).includes(sha))
+    `
+    execFileSync(process.execPath, [
+      '-e', script, repo, headSha, path.join(directory, 'git-cache'),
+    ], { cwd: checkout, stdio: 'pipe' })
+  })
+
+  for (const legacyGit of [false, true]) {
+    const suffix = legacyGit ? ' without GIT_NO_LAZY_FETCH support' : ''
+    it(`keeps selected history discovery local in a promisor clone${suffix}`, () => {
+      git(checkout, ['config', 'remote.origin.promisor', 'true'])
+      git(checkout, ['config', 'remote.origin.partialclonefilter', 'blob:none'])
+      const originalHead = git(checkout, ['rev-parse', 'HEAD'])
+      const execute = (command, flags, options) => cachedExecSpy(command, flags, legacyGit
+        ? { ...options, env: { ...process.env, ...options?.env, GIT_NO_LAZY_FETCH: '0' } }
+        : options)
+      const gitUtils = proxyquire('../../../src/plugins/util/git', {
+        './git-cache': { cachedExec: execute },
+        'node:child_process': { execFileSync: execute },
+      })
+
+      assert.deepStrictEqual(gitUtils.getLatestCommits(headSha), [])
+      const objects = git(checkout, ['cat-file', '--batch-all-objects', '--batch-check=%(objecttype)'])
+      assert.strictEqual(objects.split('\n').filter(type => type === 'commit').length, 1)
+      assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
+
+      gitUtils.fetchHeadCommitSha(headSha, true)
+      assert.deepStrictEqual(gitUtils.getLatestCommits(headSha), [headSha])
+    })
+  }
 
   for (const missingObject of ['parent', 'tree']) {
     it(`recovers head metadata and its Test Management marker with a missing ${missingObject}`, (done) => {
@@ -1497,7 +1876,7 @@ done
       const metadata = getGitMetadata({ headCommitSha: headSha })
 
       assertObjectContains(metadata, {
-        [GIT_COMMIT_HEAD_MESSAGE]: "PR head DD_abc123'\n",
+        [GIT_COMMIT_HEAD_MESSAGE]: 'PR head DD_abc123\n',
         [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'PR Author',
         [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'pr-author@example.com',
         [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'PR Committer',
@@ -1511,7 +1890,7 @@ done
       const scope = nock('http://localhost:8126')
         .post('/evp_proxy/v2/api/v2/test/libraries/test-management/tests', body =>
           body.data.attributes.sha === headSha &&
-          body.data.attributes.commit_message === "PR head DD_abc123'\n")
+          body.data.attributes.commit_message === 'PR head DD_abc123\n')
         .reply(200, { data: { attributes: { modules: {} } } })
 
       getTestManagementTests({

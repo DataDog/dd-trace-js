@@ -261,7 +261,7 @@ function getLibraryConfiguration ({
         env,
         repository_url: repositoryUrl,
         sha,
-        branch: branch || tag,
+        branch: branch || tag || 'auto:git-detached-head',
       },
     },
   })

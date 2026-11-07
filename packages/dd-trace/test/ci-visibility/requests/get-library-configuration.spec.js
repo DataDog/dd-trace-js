@@ -55,7 +55,8 @@ describe('get-library-configuration', () => {
 
   it('fetches library configuration with an API key', (done) => {
     nock('https://api.datadoghq.com')
-      .post('/api/v2/libraries/tests/services/setting')
+      .post('/api/v2/libraries/tests/services/setting', body =>
+        body.data.attributes.branch === 'auto:git-detached-head')
       .reply(200, { data: { attributes: COMPLETE_SETTINGS_ATTRIBUTES } })
 
     getLibraryConfiguration({

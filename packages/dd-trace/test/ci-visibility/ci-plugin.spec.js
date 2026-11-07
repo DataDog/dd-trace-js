@@ -361,6 +361,33 @@ describe('CiPlugin', () => {
     sinon.assert.calledWith(distributionMetric, 'code_coverage.files', {}, 3)
   })
 
+  it('replaces stale worker Git fields while preserving PR relationships and other tags', () => {
+    const plugin = createPlugin('jest_worker')
+    delete plugin.testEnvironmentMetadata[GIT_TAG]
+    const span = {
+      name: 'vitest.test',
+      span_id: '1',
+      trace_id: '2',
+      parent_id: '3',
+      meta: {
+        [GIT_COMMIT_SHA]: 'provider-sha',
+        [GIT_TAG]: 'provider-tag',
+        'git.commit.author.name': 'provider-author',
+        [GIT_COMMIT_HEAD_SHA]: 'pr-head',
+        'git.pull_request.base_branch': 'main',
+        'test.custom': 'retained',
+        'git.custom': 'retained',
+      },
+    }
+    plugin._prepareWorkerTrace([span])
+    assert.strictEqual(span.meta[GIT_COMMIT_SHA], plugin.testEnvironmentMetadata[GIT_COMMIT_SHA])
+    assert.strictEqual(span.meta[GIT_TAG], undefined)
+    assert.strictEqual(span.meta['git.commit.author.name'], undefined)
+    assert.strictEqual(span.meta['git.pull_request.base_branch'], 'main')
+    assert.strictEqual(span.meta['test.custom'], 'retained')
+    assert.strictEqual(span.meta['git.custom'], 'retained')
+  })
+
   it('exports worker traces normally', () => {
     const plugin = createPlugin('vitest_worker')
     const exportTrace = sinon.spy()

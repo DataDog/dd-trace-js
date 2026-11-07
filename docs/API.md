@@ -997,3 +997,5 @@ native Mocha retries and explicit WebdriverIO Jasmine retries remain available a
 are reported as framework retries.
 Both helpers preserve ordinary selection and expected-failure behavior. Management
 property tags retain backend assignments even when their execution policy is overridden.
+
+Test Optimization Git metadata uses explicit `DD_GIT_*` overrides first, then the readable local Git checkout. CI-provider Git metadata is used only when the checkout cannot be read. This applies to commit SHA, repository URL, branch/tag, author, committer, and message. CI job and pull-request relationship metadata remain provider-derived.
