@@ -1099,6 +1099,7 @@ describe('PR head metadata in shallow repositories', () => {
   let getLatestCommits
   let getCommitsRevList
   let unshallowSelectedRepository
+  let fetchSelectedCommit
   let cachedExecSpy
 
   /**
@@ -1172,6 +1173,7 @@ done
     getLatestCommits = gitUtils.getLatestCommits
     getCommitsRevList = gitUtils.getCommitsRevList
     unshallowSelectedRepository = gitUtils.unshallowRepository
+    fetchSelectedCommit = gitUtils.fetchHeadCommitSha
   })
 
   afterEach(() => {
@@ -1622,9 +1624,10 @@ done
     assert.strictEqual(git(checkout, ['rev-list', '--count', headSha]), '2')
   })
 
-  for (const depth of [1, 2]) {
+  for (const depth of [1, 2, null]) {
+    const clone = depth === null ? 'non-shallow single-branch' : 'depth-' + depth
     for (const remoteName of ['origin', 'upstream']) {
-      it(`recovers an unrelated selected commit from a depth-${depth} checkout with remote ${remoteName}`, () => {
+      it(`recovers an unrelated selected commit from a ${clone} checkout with remote ${remoteName}`, () => {
         const tree = git(remote, ['rev-parse', headSha + '^{tree}'])
         const selected = git(remote, ['hash-object', '-w', '-t', 'commit', '--stdin'], {
           input: `tree ${tree}
@@ -1656,19 +1659,22 @@ current
         git(remote, ['update-ref', 'refs/heads/juan-fernandez/current', current])
         fs.rmSync(checkout, { recursive: true, force: true })
         git(directory, [
-          'clone', '--origin', remoteName, '--depth=' + depth, '--no-checkout', '--branch', 'juan-fernandez/current',
+          'clone', '--origin', remoteName, '--single-branch', ...(depth === null ? [] : ['--depth=' + depth]),
+          '--no-checkout', '--branch', 'juan-fernandez/current',
           pathToFileURL(remote).href, checkout,
         ])
         const originalHead = git(checkout, ['rev-parse', 'HEAD'])
         const originalHistory = git(checkout, ['rev-list', '--count', 'HEAD'])
         assert.deepStrictEqual(getLatestCommits(selected), [])
 
-        unshallowSelectedRepository(false, selected)
+        if (depth === null) fetchSelectedCommit(selected, false)
+        else unshallowSelectedRepository(false, selected)
 
         assert.deepStrictEqual(getLatestCommits(selected), [selected])
         assert.ok(!getCommitsRevList([], [selected]).includes(originalHead))
         assert.strictEqual(git(checkout, ['rev-parse', 'HEAD']), originalHead)
         assert.strictEqual(git(checkout, ['rev-list', '--count', 'HEAD']), originalHistory)
+        assert.strictEqual(git(checkout, ['rev-parse', '--is-shallow-repository']), String(depth !== null))
       })
     }
   }

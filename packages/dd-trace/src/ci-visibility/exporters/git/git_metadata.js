@@ -22,6 +22,7 @@ const {
   getCommitsRevList,
   isShallowRepository,
   unshallowRepository,
+  fetchHeadCommitSha,
   isGitAvailable,
 } = require('../../../plugins/util/git')
 
@@ -286,8 +287,9 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
   let latestCommits = getLatestCommits(configCommitSha)
   let recoveredSelectedCommit = false
   if (!latestCommits.length && getConfig().testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED &&
-    isShallowRepository(true)) {
-    unshallowRepository(false, configCommitSha)
+    validateGitCommitSha(configCommitSha)) {
+    if (isShallowRepository(true)) unshallowRepository(false, configCommitSha)
+    else fetchHeadCommitSha(configCommitSha, false)
     latestCommits = getLatestCommits(configCommitSha)
     recoveredSelectedCommit = true
   }

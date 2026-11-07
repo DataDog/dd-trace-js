@@ -36,6 +36,7 @@ describe('git_metadata', () => {
   let generatePackFilesForCommitsStub
   let isShallowRepositoryStub
   let unshallowRepositoryStub
+  let fetchHeadCommitShaStub
   let fakeConfig
 
   before(() => {
@@ -59,6 +60,7 @@ describe('git_metadata', () => {
     getGitMetadataStub = sinon.stub().returns({ 'git.commit.sha': 'b'.repeat(40) })
     isShallowRepositoryStub = sinon.stub().returns(false)
     unshallowRepositoryStub = sinon.stub()
+    fetchHeadCommitShaStub = sinon.stub()
 
     generatePackFilesForCommitsStub = sinon.stub().returns([temporaryPackFile])
 
@@ -78,6 +80,7 @@ describe('git_metadata', () => {
       getCommitsRevList: getCommitsRevListStub,
       isShallowRepository: isShallowRepositoryStub,
       unshallowRepository: unshallowRepositoryStub,
+      fetchHeadCommitSha: fetchHeadCommitShaStub,
     }
 
     gitMetadata = proxyquire('../../../../src/ci-visibility/exporters/git/git_metadata', {
@@ -174,32 +177,39 @@ describe('git_metadata', () => {
       }, 'a'.repeat(40))
   })
 
-  for (const recovery of ['available', 'unavailable', 'disabled']) {
-    it(`recovers a missing selected commit in a shallow checkout: ${recovery}`, (done) => {
-      const selected = 'a'.repeat(40)
-      getLatestCommitsStub.returns([])
-      if (recovery === 'available') getLatestCommitsStub.onCall(1).returns([selected])
-      isShallowRepositoryStub.returns(true)
-      fakeConfig.testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = recovery !== 'disabled'
-      getCommitsRevListStub.returns([selected])
-      requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
-      requestStub.onCall(1).callsArgWith(2, null, '', 204)
+  for (const shallow of [true, false]) {
+    const checkout = shallow ? 'shallow' : 'non-shallow'
+    for (const recovery of ['available', 'unavailable', 'disabled']) {
+      it(`recovers a missing selected commit in a ${checkout} checkout: ${recovery}`, (done) => {
+        const selected = 'a'.repeat(40)
+        getLatestCommitsStub.returns([])
+        if (recovery === 'available') getLatestCommitsStub.onCall(1).returns([selected])
+        isShallowRepositoryStub.returns(shallow)
+        fakeConfig.testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = recovery !== 'disabled'
+        getCommitsRevListStub.returns([selected])
+        requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+        requestStub.onCall(1).callsArgWith(2, null, '', 204)
 
-      gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-        if (recovery === 'available') {
-          assert.strictEqual(err, null)
-          sinon.assert.calledOnceWithExactly(generatePackFilesForCommitsStub, [selected])
-        } else {
-          assert.strictEqual(err.code, 'ERR_GIT_COMMIT_UNAVAILABLE')
-          sinon.assert.notCalled(requestStub)
-          sinon.assert.notCalled(generatePackFilesForCommitsStub)
-        }
-        assert.strictEqual(unshallowRepositoryStub.callCount, recovery === 'disabled' ? 0 : 1)
-        if (recovery !== 'disabled') sinon.assert.calledWithExactly(unshallowRepositoryStub, false, selected)
-        assert.strictEqual(getLatestCommitsStub.callCount, recovery === 'disabled' ? 1 : 2)
-        done()
-      }, selected)
-    })
+        gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+          if (recovery === 'available') {
+            assert.strictEqual(err, null)
+            sinon.assert.calledOnceWithExactly(generatePackFilesForCommitsStub, [selected])
+          } else {
+            assert.strictEqual(err.code, 'ERR_GIT_COMMIT_UNAVAILABLE')
+            sinon.assert.notCalled(requestStub)
+            sinon.assert.notCalled(generatePackFilesForCommitsStub)
+          }
+          assert.strictEqual(unshallowRepositoryStub.callCount, recovery !== 'disabled' && shallow ? 1 : 0)
+          assert.strictEqual(fetchHeadCommitShaStub.callCount, recovery !== 'disabled' && !shallow ? 1 : 0)
+          if (recovery !== 'disabled') {
+            if (shallow) sinon.assert.calledWithExactly(unshallowRepositoryStub, false, selected)
+            else sinon.assert.calledWithExactly(fetchHeadCommitShaStub, selected, false)
+          }
+          assert.strictEqual(getLatestCommitsStub.callCount, recovery === 'disabled' ? 1 : 2)
+          done()
+        }, selected)
+      })
+    }
   }
 
   it('does not upload a different history when the selected commit is unavailable', (done) => {
@@ -208,7 +218,8 @@ describe('git_metadata', () => {
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.match(err.message, /Selected Git commit is unavailable/)
       assert.strictEqual(err.code, 'ERR_GIT_COMMIT_UNAVAILABLE')
-      sinon.assert.calledOnceWithExactly(getLatestCommitsStub, selected)
+      sinon.assert.calledTwice(getLatestCommitsStub)
+      sinon.assert.calledOnceWithExactly(fetchHeadCommitShaStub, selected, false)
       sinon.assert.notCalled(requestStub)
       sinon.assert.notCalled(generatePackFilesForCommitsStub)
       done()
