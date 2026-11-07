@@ -16,7 +16,7 @@
     "vendor/package.json",
     "vendor/package-lock.json"
   ],
-  "timezone": "UTC",
+  "timezone": "America/New_York",
   "dependencyDashboard": true,
   "automergeType": "pr",
   "automergeStrategy": "squash",
@@ -32,7 +32,7 @@
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
-      "* 0-4 * * 0"
+      "* 3-7 * * 0"
     ]
   },
   "packageRules": [
