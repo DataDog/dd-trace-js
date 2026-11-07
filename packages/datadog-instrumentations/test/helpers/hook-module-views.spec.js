@@ -113,3 +113,25 @@ async function loadViews (nodeOptions, requests) {
     })
   }
 })
+
+;(runtimeSupported ? describe : describe.skip)('package instrumentation across CommonJS and ESM views', () => {
+  for (const [mode, nodeOptions] of Object.entries(bootstrapModes)) {
+    describe(`with ${mode}`, () => {
+      for (const name of ['tedious', 'cookie']) {
+        for (const requests of [[`cjs:${name}`, `esm:${name}`], [`esm:${name}`, `cjs:${name}`], [`esm:${name}`]]) {
+          it(`wraps ${name} once with ${requests.join(' then ')}`, async () => {
+            const report = await loadViews(nodeOptions, requests)
+            for (const entry of report) {
+              assert.strictEqual(entry.publishes, 1)
+              // CommonJS function exports may have separate named/default wrappers even without double wrapping.
+              if (name === 'tedious') {
+                assert.strictEqual(entry.matchesFirstView, true)
+                if (entry.request.startsWith('esm:')) assert.strictEqual(entry.matchesOwnDefaultExport, true)
+              }
+            }
+          })
+        }
+      }
+    })
+  }
+})
