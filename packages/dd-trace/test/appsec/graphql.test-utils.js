@@ -93,18 +93,15 @@ function postGraphqlQuery (port, query) {
 }
 
 /**
- * Counts the WAF runs that checked `fieldName` without arguments.
+ * Counts the WAF runs that checked `fieldName`.
  *
  * @param {sinon.SinonSpy} wafRun
  * @param {string} fieldName
  */
-function countFieldWithoutArgumentsRuns (wafRun, fieldName) {
+function countFieldRuns (wafRun, fieldName) {
   return wafRun.getCalls().filter(call => {
     const resolverInfo = call.args[0]?.ephemeral?.[addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]
-    const fieldArguments = resolverInfo?.[fieldName]
-    return fieldArguments !== undefined &&
-      Object.keys(resolverInfo).length === 1 &&
-      Object.keys(fieldArguments).length === 0
+    return resolverInfo?.[fieldName] !== undefined
   }).length
 }
 
@@ -273,24 +270,49 @@ function graphqlCommonTests (config) {
       assert.deepStrictEqual(response.data, {
         data: { books: [{ first: author, second: author, third: author }] },
       })
-      assert.strictEqual(countFieldWithoutArgumentsRuns(wafRun, 'author'), 1)
+      assert.strictEqual(countFieldRuns(wafRun, 'author'), 1)
+    })
+
+    it('Should run the WAF once for repeated Boolean directive inputs', async () => {
+      enableAppsecWithWafSpy('graphql-rules.json')
+
+      for (const directive of ['@include(if: true)', '@skip(if: false)', '@include(if: true) @skip(if: false)']) {
+        wafRun.resetHistory()
+        const response = await postGraphqlQuery(config.port, `
+          query {
+            books(title: "Test") {
+              first: author ${directive}
+              second: author ${directive}
+              third: author ${directive}
+            }
+          }`)
+
+        const author = books[0].author
+        assert.strictEqual(countFieldRuns(wafRun, 'author'), 1)
+        assert.deepStrictEqual(response.data, {
+          data: { books: [{ first: author, second: author, third: author }] },
+        })
+      }
     })
 
     it('Should run the WAF again for a field once setUser adds a user to the request', async () => {
       enableAppsecWithWafSpy('graphql-user-field-rules.json')
 
-      // The rule needs both the user and the field, so only the `author` resolved after `login` can block.
-      const error = await postGraphqlQuery(config.port, `
-        query {
-          before: books(title: "Test") { author }
-          login(id: "blocked-user")
-          after: books(title: "Test") { author }
-        }`).then(() => null, error => error)
-
-      assert.ok(error, 'Request should not return 200')
-      assert.strictEqual(error.response.status, 403)
-      assert.deepStrictEqual(error.response.data, JSON.parse(graphqlJson))
-      assert.strictEqual(countFieldWithoutArgumentsRuns(wafRun, 'author'), 2)
+      for (const directive of ['', '@include(if: true)', '@skip(if: false)', '@include(if: true) @skip(if: false)']) {
+        wafRun.resetHistory()
+        // The rule needs both the user and the field, so only the `author` resolved after `login` can block.
+        await assert.rejects(postGraphqlQuery(config.port, `
+          query {
+            before: books(title: "Test") { author ${directive} }
+            login(id: "blocked-user")
+            after: books(title: "Test") { author ${directive} }
+          }`), error => {
+          assert.strictEqual(error.response.status, 403)
+          assert.deepStrictEqual(error.response.data, JSON.parse(graphqlJson))
+          return true
+        })
+        assert.strictEqual(countFieldRuns(wafRun, 'author'), 2)
+      }
     })
   })
 
