@@ -238,7 +238,7 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
 
       const abortController = new AbortController()
       queryParsedChannel.publish({ req, res, query, abortController })
-      if (abortController.signal.aborted) return Promise.resolve(undefined)
+      if (abortController.signal.aborted) return /** @type {Promise<undefined>} */ (Promise.resolve())
     }
   }
 
