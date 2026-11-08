@@ -55,11 +55,8 @@ class WAFManager {
     let wafContext = contexts.get(req)
 
     if (!wafContext) {
-      const context = this.ddwaf.createContext()
-      if (context === null) return
-
       wafContext = new WAFContextWrapper(
-        context,
+        this.ddwaf.createContext(),
         this.wafTimeout,
         this.ddwafVersion,
         this.rulesVersion,

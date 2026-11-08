@@ -5,7 +5,6 @@ const Reporter = require('../reporter')
 const addresses = require('../addresses')
 const { getBlockingAction } = require('../blocking')
 const { wafRunFinished } = require('../channels')
-const { isEmpty } = require('../../util')
 
 // TODO: remove once ephemeral addresses are implemented
 const preventDuplicateAddresses = new Set([
@@ -15,7 +14,6 @@ const preventDuplicateAddresses = new Set([
 class WAFContextWrapper {
   constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion, knownAddresses) {
     this.ddwafContext = ddwafContext
-    this.useSubcontexts = typeof ddwafContext.createSubcontext === 'function'
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
@@ -117,7 +115,7 @@ class WAFContextWrapper {
     try {
       const start = process.hrtime.bigint()
 
-      const result = this.evaluate(payload, start)
+      const result = this.ddwafContext.run(payload, this.wafTimeout)
 
       const end = process.hrtime.bigint()
 
@@ -127,11 +125,7 @@ class WAFContextWrapper {
         const error = new Error('WAF code error')
         error.errorCode = result.errorCode
 
-        // A later scoped evaluation can fail after the parent produced useful
-        // output. Preserve that output while reporting the native error.
-        if (!result.events?.length && isEmpty(result.actions) && isEmpty(result.attributes)) throw error
-        log.error('[ASM] Error while running the AppSec WAF', error)
-        metrics.errorCode = result.errorCode
+        throw error
       }
 
       if (result.metrics) {
@@ -156,7 +150,7 @@ class WAFContextWrapper {
         this.setUserIdCache(userId, result)
       }
 
-      metrics.duration = (result.duration || 0) / 1e3
+      metrics.duration = result.duration / 1e3
       metrics.blockTriggered = blockTriggered
       metrics.ruleTriggered = ruleTriggered
       metrics.wafTimeout = result.timeout
@@ -178,43 +172,6 @@ class WAFContextWrapper {
       }
 
       Reporter.reportMetrics(metrics, raspRule, req, rootSpan)
-    }
-  }
-
-  /**
-   * @param {{ persistent?: object, ephemeral?: object }} payload - Filtered address maps.
-   * @param {bigint} start - Start of the combined evaluation in monotonic nanoseconds.
-   */
-  evaluate (payload, start) {
-    if (!this.useSubcontexts) return this.ddwafContext.run(payload, this.wafTimeout)
-
-    let result
-    if (payload.persistent) {
-      result = this.ddwafContext.run(payload.persistent, this.wafTimeout)
-      if (!payload.ephemeral || result.errorCode < 0 || result.timeout || getBlockingAction(result.actions)) {
-        return result
-      }
-    }
-
-    let subcontext
-    try {
-      subcontext = this.ddwafContext.createSubcontext()
-      const remaining = result
-        ? Math.floor(this.wafTimeout - Number(process.hrtime.bigint() - start) / 1e3)
-        : this.wafTimeout
-      if (remaining <= 0) {
-        result.timeout = true
-        return result
-      }
-      const scopedResult = subcontext.run(payload.ephemeral, remaining)
-      return result ? combineResults(result, scopedResult) : scopedResult
-    } catch (error) {
-      if (!result) throw error
-      log.error('[ASM] Error while running the scoped AppSec WAF', error)
-      result.errorCode = error.errorCode ?? -127
-      return result
-    } finally {
-      subcontext?.dispose()
     }
   }
 
@@ -240,32 +197,6 @@ class WAFContextWrapper {
 
   dispose () {
     this.ddwafContext.dispose()
-  }
-}
-
-/**
- * @param {object} persistent - Result of the parent evaluation.
- * @param {object} scoped - Result of the scoped evaluation, applied second.
- */
-function combineResults (persistent, scoped) {
-  const metrics = { ...persistent.metrics }
-  if (scoped.metrics) {
-    for (const key of ['maxTruncatedString', 'maxTruncatedContainerSize', 'maxTruncatedContainerDepth']) {
-      if (scoped.metrics[key]) metrics[key] = Math.max(metrics[key] || 0, scoped.metrics[key])
-    }
-  }
-
-  return {
-    ...persistent,
-    ...scoped,
-    duration: (persistent.duration || 0) + (scoped.duration || 0),
-    timeout: !!(persistent.timeout || scoped.timeout),
-    keep: !!(persistent.keep || scoped.keep),
-    evaluated: (persistent.evaluated || 0) + (scoped.evaluated || 0),
-    events: [...(persistent.events || []), ...(scoped.events || [])],
-    actions: { ...persistent.actions, ...scoped.actions },
-    attributes: { ...persistent.attributes, ...scoped.attributes },
-    metrics,
   }
 }
 
