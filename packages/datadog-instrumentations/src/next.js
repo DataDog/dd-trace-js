@@ -191,7 +191,7 @@ function getRequestMeta (req, key) {
  * @param {(ctx: NextRequestContext) => Promise<T>} handler
  * @param {unknown} [error]
  * @param {boolean} [finishOnResponse]
- * @returns {Promise<T>}
+ * @returns {Promise<T | undefined>}
  */
 function instrument (req, res, handler, error, finishOnResponse = false) {
   req = req.originalRequest || req
@@ -231,7 +231,9 @@ function instrument (req, res, handler, error, finishOnResponse = false) {
         }
       }
 
-      queryParsedChannel.publish({ query })
+      const abortController = new AbortController()
+      queryParsedChannel.publish({ req, res, query, abortController })
+      if (abortController.signal.aborted) return Promise.resolve(undefined)
     }
   }
 

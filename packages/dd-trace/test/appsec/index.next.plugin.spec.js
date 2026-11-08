@@ -1,12 +1,17 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { satisfies } = require('semver')
 
-const agent = require('../plugins/agent')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../../version')
+const { json } = require('../../src/appsec/blocking/templates')
+const agent = require('../plugins/agent')
 const { withVersions } = require('../setup/mocha')
 const httpRequest = require('../setup/helpers/http-client')
 const { initApp, startServer } = require('./next.utils')
+const { getWebSpan } = require('./utils')
 
 describe('test suite', () => {
   withVersions('next', 'next', '>=11.1', version => {
@@ -142,6 +147,31 @@ describe('test suite', () => {
             .catch(e => { done(e) })
 
           agent.subscribe(findBodyThreat)
+        })
+
+        describe('with a blocking rule', () => {
+          async function assertBlocked (request) {
+            const [response] = await Promise.all([
+              request,
+              agent.assertSomeTraces(traces => {
+                assertObjectContains(getWebSpan(traces).meta, {
+                  'appsec.blocked': 'true',
+                  'http.status_code': '403',
+                })
+              }),
+            ])
+
+            assert.strictEqual(response.status, 403)
+            assert.deepStrictEqual(response.data.errors, JSON.parse(json).errors)
+          }
+
+          it('should block an attack in request query', () => {
+            return assertBlocked(
+              httpRequest.get(`http://127.0.0.1:${serverData.port}/api/test?param=blockattack`, {
+                validateStatus: false,
+              })
+            )
+          })
         })
       })
     })

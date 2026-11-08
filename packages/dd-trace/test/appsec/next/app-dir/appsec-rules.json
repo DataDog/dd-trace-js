@@ -30,6 +30,34 @@
         }
       ],
       "transformers": ["lowercase"]
+    },
+    {
+      "id": "test-rule-id-2",
+      "name": "test-rule-name-2",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "list": [
+              "blockattack"
+            ]
+          },
+          "operator": "phrase_match"
+        }
+      ],
+      "transformers": ["lowercase"],
+      "on_match": ["block"]
     }
   ]
 }
