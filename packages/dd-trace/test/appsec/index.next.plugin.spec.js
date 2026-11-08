@@ -150,14 +150,21 @@ describe('test suite', () => {
         })
 
         describe('with a blocking rule', () => {
-          async function assertBlocked (request) {
+          const appDirTest = appName === 'app-dir' ? it : it.skip
+          const onRequestErrorTest = appName === 'app-dir' && satisfies(realVersion, '>=15.4.1') ? it : it.skip
+
+          async function assertBlocked (request, spanMeta) {
             const [response] = await Promise.all([
               request,
               agent.assertSomeTraces(traces => {
                 assertObjectContains(getWebSpan(traces).meta, {
                   'appsec.blocked': 'true',
-                  'http.status_code': '403',
+                  ...spanMeta,
                 })
+
+                for (const span of traces.flat()) {
+                  assert.strictEqual(span.meta['error.type'], undefined, `${span.name} span has an error`)
+                }
               }),
             ])
 
@@ -169,8 +176,50 @@ describe('test suite', () => {
             return assertBlocked(
               httpRequest.get(`http://127.0.0.1:${serverData.port}/api/test?param=blockattack`, {
                 validateStatus: false,
-              })
+              }),
+              { 'http.status_code': '403' }
             )
+          })
+
+          appDirTest('should block an attack in request body', () => {
+            return assertBlocked(
+              httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test`, {
+                key: 'blockattack',
+              }, { validateStatus: false })
+            )
+          })
+
+          appDirTest('should block an attack in form data body', () => {
+            return assertBlocked(
+              httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test-formdata`, new URLSearchParams({
+                key: 'blockattack',
+              }), { validateStatus: false })
+            )
+          })
+
+          appDirTest('should block an attack in request body with .text() function', () => {
+            return assertBlocked(
+              httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test-text`, {
+                key: 'blockattack',
+              }, { validateStatus: false })
+            )
+          })
+
+          onRequestErrorTest('should not report a blocked request body to Next.js error handling', async () => {
+            await assertBlocked(
+              httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test`, {
+                key: 'blockattack',
+              }, { validateStatus: false })
+            )
+
+            assert.doesNotMatch(serverData.stderr, /BlockedRequestError/)
+          })
+
+          appDirTest('should not block an attack in a request created by the route handler', async () => {
+            const response = await httpRequest.post(`http://127.0.0.1:${serverData.port}/api/internal-request`)
+
+            assert.strictEqual(response.status, 200)
+            assert.deepStrictEqual(response.data.data, { key: 'blockattack' })
           })
         })
       })

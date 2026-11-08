@@ -60,6 +60,11 @@ const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
 const META_IS_MIDDLEWARE = 'middlewareInvoke'
 const encounteredMiddleware = new WeakSet()
 
+class BlockedRequestError extends Error {
+  name = 'BlockedRequestError'
+  message = 'Request blocked by Datadog App and API Protection'
+}
+
 // `next.span_type` value Next.js sets on its own OTel root request span; the whole detection surface.
 const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
 
@@ -283,7 +288,7 @@ function publishFinish (ctx, error) {
 function finish (ctx, result, error) {
   if (ctx.finishOnResponse) {
     ctx.handlerFinished = true
-    if (error && !isNoFallbackError(error)) ctx.error = error
+    if (error && !isIgnoredError(error)) ctx.error = error
     if (!ctx.responseFinished) return
   }
 
@@ -295,13 +300,18 @@ function isNoFallbackError (error) {
   return isNativeError(error) && noFallbackErrorPrototypes.has(Object.getPrototypeOf(error))
 }
 
+/** @param {unknown} error */
+function isIgnoredError (error) {
+  return error instanceof BlockedRequestError || isNoFallbackError(error)
+}
+
 /**
  * @param {NextNodeRequest} req
  * @param {NextRequestContext | undefined} ctx
  * @param {unknown} error
  */
 function publishError (req, ctx, error) {
-  if (!error || isNoFallbackError(error)) return
+  if (!error || isIgnoredError(error)) return
 
   if (ctx) {
     ctx.error = error
@@ -355,6 +365,8 @@ addHook({
 
 function wrapOnRequestError (onRequestError) {
   return function (req, error) {
+    // A blocked request is not an application error: skip Next.js logging and the user onRequestError hook.
+    if (error instanceof BlockedRequestError) return Promise.resolve()
     if (error) publishError(req, undefined, error)
     return onRequestError.apply(this, arguments)
   }
@@ -627,6 +639,22 @@ addHook({
   return nextServer
 })
 
+/**
+ * @param {Request} request
+ * @param {unknown} body
+ */
+function publishBodyParsed (request, body) {
+  if (!bodyParsedChannel.hasSubscribers) return
+
+  // The wrapped prototype is the global Request one: only the incoming NextRequest can block the user request.
+  const abortController = 'nextUrl' in request ? new AbortController() : undefined
+  bodyParsedChannel.publish({ body, abortController })
+
+  if (abortController?.signal.aborted) {
+    throw new BlockedRequestError()
+  }
+}
+
 addHook({
   name: 'next',
   versions: ['>=13'],
@@ -638,7 +666,7 @@ addHook({
     return async function wrappedJson () {
       const body = await originalMethod.apply(this, arguments)
 
-      bodyParsedChannel.publish({ body })
+      publishBodyParsed(this, body)
 
       return body
     }
@@ -652,7 +680,7 @@ addHook({
       if (typeof body.entries === 'function') {
         normalizedBody = Object.fromEntries(body.entries())
       }
-      bodyParsedChannel.publish({ body: normalizedBody })
+      publishBodyParsed(this, normalizedBody)
 
       return body
     }
