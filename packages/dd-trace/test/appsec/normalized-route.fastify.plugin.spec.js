@@ -197,9 +197,11 @@ withVersions('fastify', 'fastify', '>=4 <6', version => {
       await check('/gone/42', '/gone/:id', '/gone/{id}', 404)
     })
 
-    it('normalizes the fallback 404 route when it is present on the span', () => {
-      return check('/missing', '/*', '/{param1}', 404)
-    })
+    for (const url of ['/missing', '/.env', '/admin']) {
+      it(`omits the normalized route for an unmatched request to ${url}`, () => {
+        return check(url, '/*', undefined, 404)
+      })
+    }
 
     it('does not invent a route for a malformed URL rejected by the router', () => {
       return check('/users/%ZZ', undefined, undefined, 400)

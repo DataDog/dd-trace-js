@@ -50,10 +50,8 @@ const payments = require('./handlers/payments')
 
 let isEnabled = false
 
-// Single source of truth for what enable() subscribes and disable() unsubscribes,
-// so the two can't drift apart.
+// Shared lifecycle for unconditional AppSec subscriptions.
 const channelHandlers = [
-  [fastifyRequestHandle, matchedRoutes.onRequest],
   [bodyParser, httpRequest.onRequestBodyParsed],
   [multerParser, httpRequest.onRequestBodyParsed],
   [cookieParser, httpRequest.onRequestCookieParser],
@@ -108,6 +106,10 @@ function enable (_config) {
 
     httpRequest.setConfig(_config)
 
+    if (_config.appsec.DD_API_SECURITY_ENABLED) {
+      fastifyRequestHandle.subscribe(matchedRoutes.onRequest)
+    }
+
     for (const [channel, handler] of channelHandlers) {
       channel.subscribe(handler)
     }
@@ -140,6 +142,8 @@ function disable () {
   httpRequest.setConfig(undefined)
 
   // Channel#unsubscribe() is undefined for non active channels
+  if (fastifyRequestHandle.hasSubscribers) fastifyRequestHandle.unsubscribe(matchedRoutes.onRequest)
+
   for (const [channel, handler] of channelHandlers) {
     if (channel.hasSubscribers) channel.unsubscribe(handler)
   }

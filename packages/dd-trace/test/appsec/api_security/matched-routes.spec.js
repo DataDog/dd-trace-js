@@ -43,7 +43,15 @@ describe('Fastify route capture', () => {
     })
   }
 
+  it('does not capture an internal fallback without a public declaration', () => {
+    const req = {}
+    web.patch(req)
+    web.setRoute(req, '/*')
+    onRequest({ req, routeOptions: {} })
+    assert.equal(getMatchedRoute(web.getContext(req).paths), undefined)
+  })
+
   it('ignores a request without a web context', () => {
-    onRequest({ req: {} })
+    onRequest({ req: {}, routeOptions: { url: '/items/:id' } })
   })
 })
