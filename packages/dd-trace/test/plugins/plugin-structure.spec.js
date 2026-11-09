@@ -222,7 +222,8 @@ describe('Plugin Structure Validation', () => {
       assert.equal(isRewriteActivationEnabled(name), true)
     }
     assert.equal(isRewriteActivationEnabled('graphql'), false)
-    assert.equal(typeof hooks.graphql, 'function')
+    assert.equal(hooks.graphql.esmFirst, true)
+    assert.equal(typeof hooks.graphql.fn, 'function')
   })
 
   it('should map @graphql-tools/executor instrumentation to the graphql plugin', () => {

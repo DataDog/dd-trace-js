@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const Module = require('node:module')
 
 const semver = require('semver')
 
@@ -18,6 +19,9 @@ const supportedRuntime = isTrue(process.env.DD_INJECT_FORCE) ||
   semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)
 // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Feature detection skips unsupported runtimes.
 const describeEsmFirst = supportedRuntime && process.features.require_module ? describe : describe.skip
+// Earlier loaders can instrument import(), but cannot observe GraphQL's ESM internals loaded through require().
+// eslint-disable-next-line n/no-unsupported-features/node-builtins -- Feature detection for require(esm) hooks.
+const hasRequireEsmHooks = typeof Module.registerHooks === 'function'
 
 describeEsmFirst('GraphQL ESM-first exports', () => {
   for (const version of ['16.14.2', '17.0.2']) {
@@ -38,7 +42,10 @@ describeEsmFirst('GraphQL ESM-first exports', () => {
 
       for (const mode of ['import', 'require']) {
         for (const outcome of ['success', 'error', 'disabled']) {
-          it(`traces ${mode} with ${outcome}`, async () => {
+          const needsRequireEsmHooks = mode === 'require' && semver.gte(version, '17.0.0') && outcome !== 'disabled'
+          const test = needsRequireEsmHooks && !hasRequireEsmHooks ? it.skip : it
+
+          test(`traces ${mode} with ${outcome}`, async () => {
             const received = agent.assertMessageReceived(({ payload }) => {
               const spans = payload.flat()
               const graphqlSpans = spans.filter(span => span.name.startsWith('graphql.'))
