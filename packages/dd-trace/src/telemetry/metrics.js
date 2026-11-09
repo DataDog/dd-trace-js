@@ -42,7 +42,7 @@ function createSketch () {
   if (LogCollapsingLowestDenseDDSketch === undefined) {
     ({ LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js'))
   }
-  return new LogCollapsingLowestDenseDDSketch()
+  return new LogCollapsingLowestDenseDDSketch({ relativeAccuracy: 1 / 129 })
 }
 
 class Metric {
