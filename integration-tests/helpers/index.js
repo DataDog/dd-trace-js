@@ -629,17 +629,21 @@ async function packTarball (tarballPath, env) {
 }
 
 /**
- * Copy each integration-tests path into the sandbox folder concurrently.
+ * Fixture sources can overlap, so copy them in order.
  *
  * @param {string[]} integrationTestsPaths - Source paths to copy from.
  * @param {string} folder - Destination sandbox folder.
- * @returns {Promise<void>}
  */
 async function copyIntegrationTests (integrationTestsPaths, folder) {
-  await Promise.all(integrationTestsPaths.map(p => process.platform === 'win32'
-    ? execHelperAsync(`Copy-Item -Recurse -Path "${p}" -Destination "${folder}"`, { shell: 'powershell.exe' })
-    : execHelperAsync(`cp -R ${p} ${folder}`)
-  ))
+  for (const source of integrationTestsPaths) {
+    if (process.platform === 'win32') {
+      await execHelperAsync(`Copy-Item -Recurse -Path "${source}" -Destination "${folder}"`, {
+        shell: 'powershell.exe',
+      })
+    } else {
+      await execHelperAsync(`cp -R ${source} ${folder}`)
+    }
+  }
 }
 
 /**

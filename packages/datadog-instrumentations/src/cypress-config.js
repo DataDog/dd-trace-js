@@ -15,6 +15,7 @@ const {
 const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol.for('dd-trace.cypress.config.wrapped')
+const DD_SUPPORT_OWNER = Symbol.for('dd-trace.cypress.support-owner')
 const DD_CYPRESS_AFTER_SPEC_HANDLER = Symbol.for('dd-trace.cypress.after-spec.handler')
 const DD_CYPRESS_AFTER_RUN_HANDLER = Symbol.for('dd-trace.cypress.after-run.handler')
 const DD_CYPRESS_TASK_HANDLER = Symbol.for('dd-trace.cypress.task.handler')
@@ -25,6 +26,7 @@ const CONFIG_INSTRUMENTATION_NOT_INSTALLED =
   'Cypress configurations that cannot be intercepted through cypress.defineConfig were not auto-instrumented.'
 const generatedFilesForExitCleanup = new Set()
 let exitCleanupRegistered = false
+let stopManualSupportSetup
 
 const setupNodeEventsCh = channel('ci:cypress:setup-node-events')
 
@@ -39,6 +41,7 @@ if (loadCh.hasSubscribers) {
 
 const noopTask = {
   'dd:testSuiteStart': () => null,
+  'dd:testDeclarations': () => null,
   'dd:beforeEach': () => ({}),
   'dd:afterEach': () => null,
   'dd:addTags': () => null,
@@ -250,13 +253,20 @@ function mergeReturnedConfig (config, updatedConfig) {
   }
 
   const mergedConfig = { ...config }
+  // Retain the values already read for the reply, rather than invoking user getters again at IPC.
+  const returnedConfig = Object.fromEntries(Object.entries(updatedConfig))
 
-  for (const [key, value] of Object.entries(updatedConfig)) {
-    mergedConfig[key] = isPlainObject(value) && isPlainObject(mergedConfig[key])
-      ? mergeReturnedConfig(mergedConfig[key], value)
-      : value
+  for (const [key, value] of Object.entries(returnedConfig)) {
+    if (isPlainObject(value) && isPlainObject(mergedConfig[key]) && value !== mergedConfig[key]) {
+      mergedConfig[key] = mergeReturnedConfig(mergedConfig[key], value)
+      // Keep only the returned overrides, using values already read by the recursive merge.
+      returnedConfig[key] = mergedConfig[key][Symbol.for('dd-trace.cypress.returned-config')]
+    } else {
+      mergedConfig[key] = value
+    }
   }
 
+  Object.defineProperty(mergedConfig, Symbol.for('dd-trace.cypress.returned-config'), { value: returnedConfig })
   return mergedConfig
 }
 
@@ -289,9 +299,13 @@ function getRelativeImportPath (fromDirectory, importedFile) {
  * @param {string} directory writable directory inside the Cypress project
  * @param {string|false|undefined} originalSupportFile user's support file
  * @param {string} browserHooksSource Datadog browser-side support hooks
+ * @param {boolean} deferLifecycle whether manual support owns lifecycle registration
+ * @param {string} lifecycleOwnerSource browser lifecycle ownership detection
  * @returns {string[]} generated files
  */
-function createSupportWrapper (directory, originalSupportFile, browserHooksSource) {
+function createSupportWrapper (
+  directory, originalSupportFile, browserHooksSource, deferLifecycle, lifecycleOwnerSource
+) {
   const suffix = `${process.pid}-${randomUUID()}`
   const browserHooksFile = path.join(directory, `dd-cypress-support-hooks-${suffix}.mjs`)
   const wrapperFile = path.join(directory, `dd-cypress-support-${suffix}.mjs`)
@@ -305,9 +319,47 @@ function createSupportWrapper (directory, originalSupportFile, browserHooksSourc
 
   const generatedFiles = []
   try {
-    writeExclusiveFile(browserHooksFile, browserHooksSource)
+    const guardedSource = `const ddSupportRoot = Cypress.mocha.getRootSuite()
+const ddSupportKey = Symbol.for('dd-trace.cypress.support-installed')
+const ddHasLifecycle = (() => {
+const module = { exports: {} }
+${lifecycleOwnerSource}
+return module.exports
+})()
+ddSupportRoot[Symbol.for('dd-trace.cypress.has-lifecycle')] = ddHasLifecycle
+if (!ddSupportRoot[ddSupportKey] && !ddHasLifecycle(ddSupportRoot)) {
+const positions = {}
+for (const key of ['_beforeAll', '_beforeEach', '_afterAll', '_afterEach']) {
+  positions[key] = Array.isArray(ddSupportRoot[key]) ? ddSupportRoot[key].length : 0
+}
+ddSupportRoot[Symbol.for('dd-trace.cypress.lifecycle-positions')] = positions
+ddSupportRoot[Symbol.for('dd-trace.cypress.defer-lifecycle')] = ${deferLifecycle}
+${browserHooksSource}
+ddSupportRoot[ddSupportKey] = true
+}
+`
+    writeExclusiveFile(browserHooksFile, guardedSource)
     generatedFiles.push(browserHooksFile)
-    writeExclusiveFile(wrapperFile, `${wrapperImports.join('\n')}\n`)
+    const finalize = `const root = Cypress.mocha.getRootSuite()
+const install = root[Symbol.for('dd-trace.cypress.install-lifecycle')]
+const hasLifecycle = root[Symbol.for('dd-trace.cypress.has-lifecycle')]
+if (typeof install === 'function' && (!hasLifecycle || !hasLifecycle(root))) {
+  const phases = ['_beforeAll', '_beforeEach', '_afterAll', '_afterEach']
+  const lengths = {}
+  for (const key of phases) lengths[key] = Array.isArray(root[key]) ? root[key].length : 0
+  install()
+  // A Node-only manual plugin needs automatic browser hooks before user hooks.
+  // Move only the hooks just installed; an actual manual owner never enters here.
+  const positions = root[Symbol.for('dd-trace.cypress.lifecycle-positions')]
+  for (const key of phases) {
+    if (positions && Array.isArray(root[key])) {
+      const added = root[key].splice(lengths[key])
+      root[key].splice(positions[key], 0, ...added)
+    }
+  }
+}
+`
+    writeExclusiveFile(wrapperFile, `${wrapperImports.join('\n')}\n${finalize}`)
     generatedFiles.push(wrapperFile)
   } catch (error) {
     for (const generatedFile of generatedFiles) removeGeneratedFile(generatedFile)
@@ -323,21 +375,26 @@ function createSupportWrapper (directory, originalSupportFile, browserHooksSourc
  * generated paths for cleanup, or undefined if injection was skipped.
  *
  * @param {object} config Cypress resolved config object
+ * @param {boolean} [manualLifecycle] whether the manual entry point owns lifecycle registration
  * @returns {string[]|undefined} generated file paths, or undefined if skipped
  */
-function injectSupportFile (config) {
+function injectSupportFile (config, manualLifecycle = false) {
   const originalSupportFile = config.supportFile
+
+  const supportOwner = config[DD_SUPPORT_OWNER]
+  if (generatedFilesForExitCleanup.has(originalSupportFile) &&
+      (!manualLifecycle || (supportOwner?.path === originalSupportFile && supportOwner.deferLifecycle))) return
+  let deferLifecycle = manualLifecycle ||
+    (supportOwner && supportOwner.path === originalSupportFile && supportOwner.deferLifecycle)
 
   if (originalSupportFile) {
     try {
       const content = fs.readFileSync(originalSupportFile, 'utf8')
-      // Naive check: skip lines starting with // or * to avoid matching commented-out imports.
-      const hasActiveDdTraceImport = content.split('\n').some(line => {
+      deferLifecycle ||= content.split('\n').some(line => {
         const trimmed = line.trim()
         return trimmed.includes('dd-trace/ci/cypress/support') &&
           !trimmed.startsWith('//') && !trimmed.startsWith('*')
       })
-      if (hasActiveDdTraceImport) return
     } catch (error) {
       logBrowserInstrumentationError(
         'Datadog could not read the Cypress support file %s: %s. %s',
@@ -351,9 +408,11 @@ function injectSupportFile (config) {
 
   let browserHooksSource
   let browserHooksPath
+  let lifecycleOwnerSource
   try {
     browserHooksPath = require.resolve('../../datadog-plugin-cypress/src/support')
     browserHooksSource = fs.readFileSync(browserHooksPath, 'utf8')
+    lifecycleOwnerSource = fs.readFileSync(require.resolve('../../datadog-plugin-cypress/src/lifecycle-owner'), 'utf8')
   } catch (error) {
     logBrowserInstrumentationError(
       'Datadog could not read its Cypress browser support hooks: %s. %s',
@@ -372,8 +431,12 @@ function injectSupportFile (config) {
   for (const directory of new Set(candidateDirectories)) {
     if (projectRoot && !isPathInside(projectRoot, directory)) continue
     try {
-      const generatedFiles = createSupportWrapper(directory, originalSupportFile, browserHooksSource)
+      const generatedFiles = createSupportWrapper(
+        directory, originalSupportFile, browserHooksSource, !!deferLifecycle, lifecycleOwnerSource
+      )
       config.supportFile = generatedFiles[1]
+      // Shared across SDK copies, but scoped to this exact generated support path.
+      config[DD_SUPPORT_OWNER] = { path: config.supportFile, deferLifecycle: !!deferLifecycle }
       return generatedFiles
     } catch (error) {
       failures.push({ directory, error })
@@ -394,6 +457,90 @@ function injectSupportFile (config) {
       BROWSER_INSTRUMENTATION_NOT_INSTALLED
     )
   }
+}
+
+/**
+ * Installs browser hooks before user support, including manual SDK imports.
+ *
+ * @param {object} config Cypress resolved config object
+ * @param {boolean} [manualLifecycle] whether the manual entry point owns lifecycle registration
+ * @returns {string[]|undefined} generated files owned until cleanup or process exit
+ */
+function installSupportFile (config, manualLifecycle = false) {
+  const files = injectSupportFile(config, manualLifecycle)
+  if (files) registerGeneratedFilesForExitCleanup(files)
+  return files
+}
+
+/**
+ * Keeps early browser instrumentation in the actual manual setup return value.
+ *
+ * @param {object} config Cypress resolved config object
+ * @returns {(() => void)|undefined} cleanup for the one-shot setup observer
+ */
+function installManualSupportFile (config) {
+  stopManualSupportSetup?.()
+  installSupportFile(config, true)
+  const originalSend = process.send
+  if (typeof originalSend !== 'function') return
+
+  let active = true
+  const stop = () => {
+    active = false
+    if (process.send === send) process.send = originalSend
+    if (stopManualSupportSetup === stop) stopManualSupportSetup = undefined
+  }
+  const send = function (message) {
+    let forwarded = message
+    if (active && (message?.event === 'setupTestingType:reply' || message?.event === 'setupTestingType:error')) {
+      try {
+        const reply = message.event === 'setupTestingType:reply' && message.args?.[0]
+        const supplied = reply?.setupConfig
+        if (reply && (supplied == null || (supplied && typeof supplied === 'object' && !Array.isArray(supplied)))) {
+          // Snapshot own enumerable values once, as native IPC serialization would.
+          const returnedConfig = Object.fromEntries(Object.entries(supplied ?? {}))
+          const supportOwner = supplied && Object.getOwnPropertyDescriptor(supplied, DD_SUPPORT_OWNER)
+          if (supportOwner && 'value' in supportOwner) {
+            Object.defineProperty(returnedConfig, DD_SUPPORT_OWNER, supportOwner)
+          }
+          const projectRoot = returnedConfig.projectRoot ?? config.projectRoot
+          const supportFile = returnedConfig.supportFile === undefined ? config.supportFile : returnedConfig.supportFile
+          // Leave invalid user configuration for Cypress's native validator.
+          if (typeof projectRoot === 'string' &&
+              (supportFile === undefined || supportFile === false || typeof supportFile === 'string')) {
+            const supportConfig = {
+              projectRoot,
+              supportFile: typeof supportFile === 'string' ? path.resolve(projectRoot, supportFile) : supportFile,
+              [DD_SUPPORT_OWNER]: returnedConfig[DD_SUPPORT_OWNER] ?? config[DD_SUPPORT_OWNER],
+            }
+            installSupportFile(supportConfig, true)
+            if (generatedFilesForExitCleanup.has(supportConfig.supportFile)) {
+              const args = [...message.args]
+              args[0] = {
+                ...reply,
+                setupConfig: {
+                  ...returnedConfig,
+                  supportFile: supportConfig.supportFile,
+                  [DD_SUPPORT_OWNER]: supportConfig[DD_SUPPORT_OWNER],
+                },
+              }
+              forwarded = { ...message, args }
+            }
+          }
+        }
+      } catch (error) {
+        log.warn('Datadog could not retain the Cypress support wrapper in the setup reply: %s.', error)
+      } finally {
+        stop()
+      }
+    }
+    const args = [...arguments]
+    args[0] = forwarded
+    return originalSend.apply(this, args)
+  }
+  stopManualSupportSetup = stop
+  process.send = send
+  return stop
 }
 
 /**
@@ -515,8 +662,7 @@ function registerDdTraceHooks (
   userAfterScreenshotHandlers,
   manualPlugin
 ) {
-  const generatedSupportFiles = injectSupportFile(config)
-  if (generatedSupportFiles) registerGeneratedFilesForExitCleanup(generatedSupportFiles)
+  const generatedSupportFiles = installSupportFile(config, manualPlugin.detected)
 
   const cleanupWrapper = () => {
     // Open mode reuses this support file across runs, including failed setup attempts.
@@ -930,6 +1076,8 @@ function wrapCliConfigFileOptions (options) {
 }
 
 module.exports = {
+  installManualSupportFile,
+  installSupportFile,
   wrapCliConfigFileOptions,
   wrapConfig,
 }

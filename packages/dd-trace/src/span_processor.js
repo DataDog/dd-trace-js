@@ -4,6 +4,7 @@ const { channel } = require('dc-polyfill')
 
 const { AUTO_KEEP, AUTO_REJECT } = require('../../../ext/priority')
 const log = require('./log')
+const { usesOtlpTraceExporter } = require('./exporter')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
@@ -30,17 +31,29 @@ function serializeOtlpTraceState (context) {
 class SpanProcessor {
   #exportOtlpTraces
 
-  constructor (exporter, prioritySampler, config, otlpStatsExporter, exportOtlpTraces) {
+  /**
+   * @readonly
+   * @type {import('./opentelemetry/startup-config').InitializedExporter | undefined}
+   */
+  #spanMetricsStartupConfig
+
+  constructor (exporter, prioritySampler, config, otlpStatsExporter) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
-    this.#exportOtlpTraces = exportOtlpTraces
+    this.#exportOtlpTraces = usesOtlpTraceExporter(config)
 
     if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
         !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
+      if (otlpStatsExporter) {
+        this.#spanMetricsStartupConfig = {
+          protocol: otlpStatsExporter.protocol,
+          resourceAttributes: otlpStatsExporter.getStartupResourceAttributes(),
+        }
+      }
     }
 
     this._spanSampler = new SpanSampler(config.sampler)
@@ -49,7 +62,14 @@ class SpanProcessor {
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
-    this._nativeExport = config.OTEL_TRACES_EXPORTER !== 'otlp'
+  }
+
+  /**
+   * Returns the OTLP span-metrics configuration accepted during initialization, if active.
+   * @returns {import('./opentelemetry/startup-config').InitializedExporter | undefined}
+   */
+  getSpanMetricsStartupConfig () {
+    return this.#spanMetricsStartupConfig
   }
 
   sample (span) {
@@ -115,7 +135,7 @@ class SpanProcessor {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
           }
           // Stamped after formatting so a span tag with the same key can't override it.
-          if (isFirstSpanInChunk && this._nativeExport) {
+          if (isFirstSpanInChunk && !this.#exportOtlpTraces) {
             formattedSpan.meta[SDK_OTLP_EXPORT_KEY] = 'false'
           }
           isFirstSpanInChunk = false

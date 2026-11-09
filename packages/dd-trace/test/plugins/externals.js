@@ -739,6 +739,16 @@ module.exports = {
       versions: ['2'],
     },
   ],
+  'react-router': [
+    {
+      name: 'axios',
+      versions: ['>=1.0.0'],
+    },
+    {
+      name: 'react',
+      dep: true,
+    },
+  ],
   redis: [
     {
       name: 'redis',

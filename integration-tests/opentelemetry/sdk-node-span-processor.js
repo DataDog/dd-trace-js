@@ -5,6 +5,7 @@ process.env.DD_TRACE_OTEL_ENABLED = '1'
 require('dd-trace').init()
 
 const opentelemetry = require('@opentelemetry/sdk-node')
+const { trace } = require('@opentelemetry/api')
 
 // @opentelemetry/sdk-node 0.220+ hands span processors to the provider
 // constructor rather than calling addSpanProcessor, so a user processor only
@@ -27,7 +28,7 @@ const sdk = new opentelemetry.NodeSDK({
 
 sdk.start()
 
-const otelTracer = opentelemetry.api.trace.getTracer('my-service-tracer')
+const otelTracer = trace.getTracer('my-service-tracer')
 
 otelTracer.startActiveSpan('otel-sub', otelSpan => {
   setImmediate(() => {

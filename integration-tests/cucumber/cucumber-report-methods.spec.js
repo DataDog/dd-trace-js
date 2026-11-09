@@ -58,7 +58,7 @@ const {
   TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { NODE_MAJOR } = require('../../version')
+const { isLatestCucumberSupported } = require('./versions')
 
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
@@ -68,7 +68,6 @@ function assertItrSkippingEnabledTags (events, expected) {
 }
 
 const version = process.env.CUCUMBER_VERSION || 'latest'
-const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 
 const onlyLatestIt = version === 'latest' ? it : it.skip
 
@@ -80,7 +79,7 @@ const featuresPath = 'ci-visibility/features/'
 const fileExtension = 'js'
 
 describe(`cucumber@${version} commonJS`, () => {
-  if (!isLatestCucumberSupported && version === 'latest') return
+  if (!isLatestCucumberSupported() && version === 'latest') return
 
   let cwd, receiver, childProcess, testOutput
 

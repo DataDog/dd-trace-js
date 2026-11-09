@@ -37,7 +37,8 @@ module.exports = function getExporter (name) {
 }
 
 function usesLambdaLogExporter () {
-  return getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined &&
+  const { IS_AWS_LAMBDA } = require('./serverless')
+  return IS_AWS_LAMBDA &&
     !fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) &&
     !fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
 }
@@ -47,3 +48,18 @@ function hasCiValidationEnvironment () {
     getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE') &&
     getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR')
 }
+
+/**
+ * Whether the tracer effectively uses OTLP for APM spans.
+ * Test Optimization and Electron do not support OTLP even when `OTEL_TRACES_EXPORTER` is `otlp`.
+ *
+ * @param {import('./config')} config
+ */
+function usesOtlpTraceExporter (config) {
+  return config.OTEL_TRACES_EXPORTER === 'otlp' &&
+    !config.isCiVisibility &&
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== exporters.ELECTRON &&
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== exporters.AGENTLESS
+}
+
+module.exports.usesOtlpTraceExporter = usesOtlpTraceExporter
