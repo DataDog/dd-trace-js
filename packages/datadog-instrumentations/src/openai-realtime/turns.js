@@ -162,7 +162,7 @@ class ResponseTurn {
     this.audio = new AudioAccumulator(retainAudio)
   }
 
-  /** @type {{ startTime?: number, finishTime?: number } | undefined} */
+  /** @type {{ startTime?: number, finishTime?: number, derived?: boolean } | undefined} */
   serverSpeech = undefined
 
   transcript = new ItemText()

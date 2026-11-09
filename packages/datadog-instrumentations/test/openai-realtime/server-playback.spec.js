@@ -28,7 +28,7 @@ function harness ({ retain = true } = {}) {
     content: [{ type: 'output_audio', transcript: 'synthetic output' }],
   })
   const start = (id = 'r1', ids = ['a1'], playback = true, response = {}) => {
-    send({ type: 'response.created', response: { ...response, id, conversation_id: 'conversation' } })
+    send({ type: 'response.created', response: { conversation_id: 'conversation', ...response, id } })
     for (const itemId of ids) {
       send({ type: 'response.output_item.added', response_id: id, item: item(itemId, 'in_progress') })
     }
@@ -136,6 +136,292 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
     assert.strictEqual(h.emitted.length, 2)
     assert.ok(h.emitted.every(turn => turn.agentSpeech === undefined))
     assert.ok(h.emitted.every(turn => turn.output.transcript === 'synthetic output'))
+  })
+
+  for (const retain of [true, false]) {
+    for (const interrupted of [true, false]) {
+      it('preserves consecutive response playback (retain=' + retain + ', interrupted=' + interrupted + ')', () => {
+        const h = harness({ retain })
+        h.start('r1', ['a1'])
+        if (retain) h.retrieve('a1', 146400)
+        h.clock.tick(3050)
+        h.start('r2', ['a2'])
+        if (retain) h.retrieve('a2', 220800)
+
+        assert.strictEqual(h.emitted.length, 1)
+        assert.deepStrictEqual(h.emitted[0].agentSpeech, {
+          startTime: 1000000, finishTime: 1003050, transcript: 'synthetic output',
+        })
+        assert.strictEqual(h.emitted[0].output.audio.length, retain ? 146400 : 0)
+
+        h.clock.tick(interrupted ? 2300 : 4600)
+        h.send({ type: 'output_audio_buffer.' + (interrupted ? 'cleared' : 'stopped'), response_id: 'r2' })
+        if (interrupted) {
+          h.send({ type: 'conversation.item.truncated', item_id: 'a2', content_index: 0, audio_end_ms: 2300 })
+          h.clock.tick(0)
+          if (retain) h.retrieve('a2', 220800)
+        }
+        assert.strictEqual(h.emitted.length, 2)
+        assert.deepStrictEqual(h.emitted[1].agentSpeech, {
+          startTime: 1003050, finishTime: interrupted ? 1005350 : 1007650, transcript: 'synthetic output',
+        })
+        assert.strictEqual(h.emitted[1].output.audio.length, retain ? (interrupted ? 110400 : 220800) : 0)
+      })
+    }
+  }
+
+  it('keeps consecutive response playback boundaries while the earlier retrieval is pending', () => {
+    const h = harness()
+    h.start('r1', ['a1'])
+    h.clock.tick(3050)
+    h.start('r2', ['a2'])
+    h.retrieve('a2', 220800)
+    assert.strictEqual(h.emitted.length, 0)
+    h.retrieve('a1', 146400)
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].agentSpeech.finishTime, 1003050)
+    h.clock.tick(4600)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r2' })
+    assert.strictEqual(h.emitted.length, 2)
+    assert.strictEqual(h.emitted[1].agentSpeech.startTime, 1003050)
+  })
+
+  it('ignores a repeated start within consecutive response playback', () => {
+    const h = harness({ retain: false })
+    h.start('r1', ['a1'])
+    h.clock.tick(1000)
+    h.send({ type: 'output_audio_buffer.started', response_id: 'r1' })
+    assert.strictEqual(h.emitted.length, 0)
+    h.clock.tick(2050)
+    h.start('r2', ['a2'])
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].agentSpeech.startTime, 1000000)
+    assert.strictEqual(h.emitted[0].agentSpeech.finishTime, 1003050)
+    h.clock.tick(4600)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r2' })
+    assert.strictEqual(h.emitted.length, 2)
+  })
+
+  for (const lateRetrieval of [false, true]) {
+    it('derives a shared playback window with a missing start (late retrieval=' + lateRetrieval + ')', () => {
+      const h = harness()
+      h.start('r1', ['a1'])
+      h.retrieve('a1', 67200)
+      h.clock.tick(1400)
+      h.start('r2', ['a2'])
+      h.start('r3', ['a3'], false)
+      if (!lateRetrieval) {
+        h.retrieve('a2', 100800)
+        h.retrieve('a3', 196800)
+      }
+      h.clock.tick(6200)
+      h.send({ type: 'output_audio_buffer.stopped', response_id: 'r3' })
+      if (lateRetrieval) {
+        assert.strictEqual(h.emitted.length, 1)
+        h.retrieve('a3', 196800)
+        assert.strictEqual(h.emitted.length, 1)
+        h.retrieve('a2', 100800)
+      }
+      assert.strictEqual(h.emitted.length, 3)
+      assert.deepStrictEqual(h.emitted.map(turn => turn.agentSpeech), [
+        { startTime: 1000000, finishTime: 1001400, transcript: 'synthetic output' },
+        { startTime: 1001400, finishTime: 1003500, transcript: 'synthetic output' },
+        { startTime: 1003500, finishTime: 1007600, transcript: 'synthetic output' },
+      ])
+      assert.deepStrictEqual(h.emitted.map(turn => turn.output.audio.length), [67200, 100800, 196800])
+      assert.strictEqual(h.emitted[0].metadata.agent_speech_timing, undefined)
+      assert.ok(h.emitted.slice(1).every(turn => turn.metadata.agent_speech_timing === 'audio_duration'))
+    })
+  }
+
+  it('derives a shared playback window after the final generation completes', () => {
+    const h = harness()
+    h.start('r1', ['a1'])
+    h.retrieve('a1')
+    h.send({ type: 'response.created', response: { id: 'r2' } })
+    h.send({ type: 'response.output_item.added', response_id: 'r2', item: h.item('a2', 'in_progress') })
+    h.clock.tick(2000)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r2' })
+    h.retrieve('a2')
+    assert.strictEqual(h.emitted.length, 0)
+    h.send({ type: 'response.done', response: { id: 'r2', status: 'completed', output: [h.item('a2')] } })
+    h.clock.tick(0)
+    h.retrieve('a2')
+    assert.strictEqual(h.emitted.length, 2)
+    assert.strictEqual(h.emitted[0].agentSpeech.finishTime, 1001000)
+    assert.strictEqual(h.emitted[1].agentSpeech.startTime, 1001000)
+  })
+
+  it('releases shared playback members independently while an input transcript is pending', () => {
+    const h = harness()
+    h.send({ type: 'session.updated', session: { input_audio_transcription: { model: 'whisper-1' } } })
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+    h.start('r1', ['a1'])
+    h.start('r2', ['a2'], false)
+    h.retrieve('a1')
+    h.retrieve('a2')
+    h.clock.tick(2000)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r2' })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].agentSpeech.startTime, 1001000)
+    h.send({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u1', transcript: 'late input' })
+    assert.strictEqual(h.emitted.length, 2)
+    assert.strictEqual(h.emitted[1].input.transcript, 'late input')
+    assert.strictEqual(h.emitted[1].agentSpeech.startTime, 1000000)
+    h.clock.tick(5000)
+    assert.strictEqual(h.emitted.length, 2)
+  })
+
+  it('preserves a gap between the anchored clip and a derived trailing clip', () => {
+    const h = harness()
+    h.start('r1', ['a1'])
+    h.retrieve('a1')
+    h.start('r2', ['a2'], false)
+    h.retrieve('a2')
+    h.clock.tick(3000)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r2' })
+    assert.strictEqual(h.emitted.length, 2)
+    assert.strictEqual(h.emitted[0].agentSpeech.finishTime, 1001000)
+    assert.strictEqual(h.emitted[1].agentSpeech.startTime, 1002000)
+  })
+
+  it('derives multiple trailing clips within a shared playback window', () => {
+    const h = harness()
+    h.start('r1', ['a1'])
+    h.start('r2', ['a2'], false)
+    h.start('r3', ['a3'], false)
+    for (const id of ['a1', 'a2', 'a3']) h.retrieve(id)
+    h.clock.tick(3000)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r3' })
+    assert.strictEqual(h.emitted.length, 3)
+    assert.deepStrictEqual(h.emitted.map(turn => turn.agentSpeech.startTime), [1000000, 1001000, 1002000])
+  })
+
+  for (const elapsedMs of [1999, 1998]) {
+    it('bounds shared playback clock rounding at ' + elapsedMs + 'ms', () => {
+      const h = harness()
+      h.start('r1', ['a1'])
+      h.start('r2', ['a2'], false)
+      h.retrieve('a1')
+      h.retrieve('a2')
+      h.clock.tick(elapsedMs)
+      h.send({ type: 'output_audio_buffer.stopped', response_id: 'r2' })
+      assert.strictEqual(h.emitted.length, 2)
+      assert.ok(h.emitted.every(turn => Boolean(turn.agentSpeech) === (elapsedMs === 1999)))
+    })
+  }
+
+  for (const invalid of ['missing', 'unknown-codec', 'incomplete', 'oversize']) {
+    it('omits derived shared playback timing for ' + invalid + ' audio', () => {
+      const h = harness()
+      h.start('r1', ['a1'])
+      h.start('r2', invalid === 'incomplete' ? ['a2', 'a3'] : ['a2'], false)
+      h.retrieve('a1')
+      if (invalid === 'missing' || invalid === 'incomplete') {
+        if (invalid === 'incomplete') h.retrieve('a2')
+        const itemId = invalid === 'incomplete' ? 'a3' : 'a2'
+        const request = h.requests.find(request => request.itemId === itemId)
+        h.send({ type: 'error', error: { event_id: request.eventId, code: 'item_unavailable' } })
+      } else if (invalid === 'unknown-codec') {
+        h.send({
+          type: 'conversation.item.retrieved',
+          item: { ...h.item('a2'), content: [{ type: 'output_audio', format: 'unknown', audio: 'AQI=' }] },
+        })
+      } else h.retrieve('a2', LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES + 1)
+      h.clock.tick(2000)
+      h.send({ type: 'output_audio_buffer.stopped', response_id: 'r2' })
+      assert.strictEqual(h.emitted.length, 2)
+      assert.ok(h.emitted.every(turn => turn.agentSpeech === undefined))
+      assert.ok(h.emitted.every(turn => turn.metadata.agent_speech_timing === undefined))
+    })
+  }
+
+  it('flushes a shared playback window without deriving timing when retrieval never returns', () => {
+    const h = harness()
+    h.start('r1', ['a1'])
+    h.start('r2', ['a2'], false)
+    h.retrieve('a1')
+    h.clock.tick(2000)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r2' })
+    h.clock.tick(5000)
+    assert.strictEqual(h.emitted.length, 2)
+    assert.ok(h.emitted.every(turn => turn.agentSpeech === undefined))
+    h.retrieve('a2')
+    assert.strictEqual(h.emitted.length, 2)
+  })
+
+  it('does not treat an out-of-band response as queued behind active playback', () => {
+    const h = harness()
+    h.start('playing', ['a1'])
+    h.retrieve('a1', 480000)
+    h.clock.tick(100)
+    h.start('out-of-band', ['a2'], false, { conversation_id: null })
+    h.retrieve('a2')
+    h.clock.tick(4999)
+    assert.strictEqual(h.emitted.length, 0)
+    h.clock.tick(1)
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].output.audio.length, 0)
+    assert.strictEqual(h.emitted[0].agentSpeech, undefined)
+    h.clock.tick(4900)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'playing' })
+    assert.strictEqual(h.emitted.length, 2)
+    assert.strictEqual(h.emitted[1].output.audio.length, 480000)
+  })
+
+  for (const terminal of ['stopped', 'cleared']) {
+    it('bounds unstarted queued audio after active playback is ' + terminal, () => {
+      const h = harness()
+      h.start('playing', ['a1'])
+      h.retrieve('a1')
+      h.clock.tick(100)
+      h.start('queued', ['a2'], false)
+      h.retrieve('a2')
+      h.clock.tick(900)
+      h.send({ type: 'output_audio_buffer.' + terminal, response_id: 'playing' })
+      if (terminal === 'cleared') {
+        h.send({ type: 'conversation.item.truncated', item_id: 'a1', content_index: 0, audio_end_ms: 1000 })
+        h.clock.tick(0)
+        h.retrieve('a1')
+      }
+      assert.strictEqual(h.emitted.length, 1)
+      h.clock.tick(4000)
+      h.retrieve('a2')
+      h.clock.tick(999)
+      assert.strictEqual(h.emitted.length, 1)
+      h.clock.tick(1)
+      assert.strictEqual(h.emitted.length, 2)
+      assert.strictEqual(h.emitted[1].output.audio.length, 0)
+      assert.strictEqual(h.emitted[1].agentSpeech, undefined)
+    })
+  }
+
+  it('starts a fresh bounded playback wait when queued audio actually starts', () => {
+    const h = harness({ retain: false })
+    h.start('playing', ['a1'])
+    h.clock.tick(100)
+    h.start('queued', ['a2'], false)
+    h.clock.tick(119899)
+    h.send({ type: 'output_audio_buffer.started', response_id: 'queued' })
+    assert.strictEqual(h.emitted.length, 1)
+    h.clock.tick(6000)
+    assert.strictEqual(h.emitted.length, 1)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'queued' })
+    assert.strictEqual(h.emitted.length, 2)
+    assert.ok(h.emitted[1].agentSpeech)
+  })
+
+  it('flushes active and unstarted queued audio on disconnect', () => {
+    const h = harness()
+    h.start('playing', ['a1'])
+    h.start('queued', ['a2'], false)
+    h.retrieve('a1')
+    h.retrieve('a2')
+    h.session.finishSession(h.clock.now)
+    assert.strictEqual(h.emitted.length, 2)
+    assert.ok(h.emitted.every(turn => turn.output.audio.length === 0 && turn.agentSpeech === undefined))
+    h.clock.tick(120000)
+    assert.strictEqual(h.emitted.length, 2)
   })
 
   it('drops generated-but-unplayed audio on disconnect', () => {

@@ -2,6 +2,7 @@
 
 const dc = require('dc-polyfill')
 
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, getHooks } = require('./helpers/instrument')
@@ -69,16 +70,19 @@ function connect (ctx) {
       : options.callId
         ? connectionOptions('wss://api.openai.com/v1/realtime?call_id=' + options.callId)
         : defaultUrls.get(transport) || connectionOptions('wss://api.openai.com/v1/realtime')
+    const retrieveAudio = getValueFromEnvSources('DD_OPENAI_REALTIME_AUDIO_RETRIEVAL_ENABLED') !== false
     const connection = createSession({
       model: options.model ?? transport.currentModel,
       basePath: effective.basePath,
       sessionId: effective.callId,
       serverPlayback: effective.callId !== undefined,
-      requestItem: (itemId, eventId) => {
-        if (transport.status === 'connected') {
-          transport.sendEvent({ type: 'conversation.item.retrieve', item_id: itemId, event_id: eventId })
-        }
-      },
+      requestItem: retrieveAudio
+        ? (itemId, eventId) => {
+            if (transport.status === 'connected') {
+              transport.sendEvent({ type: 'conversation.item.retrieve', item_id: itemId, event_id: eventId })
+            }
+          }
+        : undefined,
     })
     const record = {
       session: connection.session,

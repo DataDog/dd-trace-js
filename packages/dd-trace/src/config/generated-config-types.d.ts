@@ -479,6 +479,7 @@ export interface GeneratedConfig {
   middlewareTracingEnabled: boolean;
   openai: {
     DD_OPENAI_LOGS_ENABLED: boolean;
+    DD_OPENAI_REALTIME_AUDIO_RETRIEVAL_ENABLED: boolean;
     DD_OPENAI_REALTIME_ENABLED: boolean;
     DD_OPENAI_SPAN_CHAR_LIMIT: number;
   };
@@ -793,6 +794,7 @@ export interface GeneratedEnvVarConfig {
   DD_METRICS_OTEL_ENABLED: boolean;
   DD_MINI_AGENT_PATH: string | undefined;
   DD_OPENAI_LOGS_ENABLED: boolean;
+  DD_OPENAI_REALTIME_AUDIO_RETRIEVAL_ENABLED: boolean;
   DD_OPENAI_REALTIME_ENABLED: boolean;
   DD_OPENAI_SPAN_CHAR_LIMIT: number;
   DD_PIPELINE_EXECUTION_ID: string | undefined;

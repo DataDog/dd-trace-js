@@ -11,7 +11,7 @@ for (const extension of ['js', 'mjs']) {
     entries.push({
       module: {
         name: '@openai/agents-realtime',
-        versionRange: '>=0.20.0 <0.21.0',
+        versionRange: '>=0.20.0 <0.22.0',
         filePath: 'dist/openaiRealtimeWebsocket.' + extension,
       },
       functionQuery: { className: 'OpenAIRealtimeWebSocket', ...functionQuery },

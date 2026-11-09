@@ -198,6 +198,7 @@ describe('integrations', () => {
             transcript = 'Sure, here you go.',
             inputTranscript = 'What is the weather?',
             status = 'completed',
+            usage = { input_tokens: 11, output_tokens: 22 },
           } = {}) {
             mic.stream(leadInMs)
             mic.speechStarted()
@@ -222,13 +223,262 @@ describe('integrations', () => {
                 id,
                 status,
                 model: 'gpt-realtime-2025-08-28',
-                usage: { input_tokens: 11, output_tokens: 22 },
+                usage,
               },
             })
             socket.deliver({
               type: 'conversation.item.input_audio_transcription.completed',
               item_id: item,
               transcript: inputTranscript,
+            })
+          }
+
+          for (const { name, details, expected } of [
+            {
+              name: 'text, audio, image and cached token details',
+              details: {
+                input_token_details: {
+                  text_tokens: 200,
+                  audio_tokens: 4800,
+                  image_tokens: 0,
+                  cached_tokens: 4000,
+                  cached_tokens_details: { text_tokens: 100, audio_tokens: 3900, image_tokens: 0 },
+                },
+                output_token_details: { text_tokens: 100, audio_tokens: 1200 },
+              },
+              expected: {
+                input_text_tokens: 200,
+                input_audio_tokens: 4800,
+                input_image_tokens: 0,
+                output_text_tokens: 100,
+                output_audio_tokens: 1200,
+                cache_read_input_tokens: 4000,
+                cache_text_read_tokens: 100,
+                cache_audio_read_tokens: 3900,
+                cache_image_read_tokens: 0,
+              },
+            },
+            {
+              name: 'positive image and cached image counts',
+              details: {
+                input_token_details: {
+                  text_tokens: 200,
+                  audio_tokens: 4700,
+                  image_tokens: 100,
+                  cached_tokens: 4000,
+                  cached_tokens_details: { text_tokens: 100, audio_tokens: 3850, image_tokens: 50 },
+                },
+              },
+              expected: {
+                input_text_tokens: 200,
+                input_audio_tokens: 4700,
+                input_image_tokens: 100,
+                cache_read_input_tokens: 4000,
+                cache_text_read_tokens: 100,
+                cache_audio_read_tokens: 3850,
+                cache_image_read_tokens: 50,
+              },
+            },
+            { name: 'absent details', details: {}, expected: {} },
+            {
+              name: 'null details',
+              details: { input_token_details: null, output_token_details: null },
+              expected: {},
+            },
+            {
+              name: 'cached usage without a modality breakdown',
+              details: { input_token_details: { audio_tokens: 4800, cached_tokens: 4000 } },
+              expected: { input_audio_tokens: 4800, cache_read_input_tokens: 4000 },
+            },
+            {
+              name: 'partial text and image details',
+              details: {
+                input_token_details: { image_tokens: 100, cached_tokens_details: { text_tokens: 80 } },
+                output_token_details: { text_tokens: 100 },
+              },
+              expected: { input_image_tokens: 100, cache_text_read_tokens: 80, output_text_tokens: 100 },
+            },
+            {
+              name: 'explicit zero modality and cache counts',
+              details: {
+                input_token_details: {
+                  text_tokens: 0,
+                  image_tokens: 0,
+                  audio_tokens: 0,
+                  cached_tokens: 0,
+                  cached_tokens_details: { text_tokens: 0, image_tokens: 0, audio_tokens: 0 },
+                },
+                output_token_details: { text_tokens: 0, audio_tokens: 0 },
+              },
+              expected: {
+                input_text_tokens: 0,
+                input_image_tokens: 0,
+                input_audio_tokens: 0,
+                output_text_tokens: 0,
+                output_audio_tokens: 0,
+                cache_read_input_tokens: 0,
+                cache_text_read_tokens: 0,
+                cache_image_read_tokens: 0,
+                cache_audio_read_tokens: 0,
+              },
+            },
+            {
+              name: 'invalid optional counts',
+              details: {
+                input_token_details: {
+                  text_tokens: true,
+                  image_tokens: 1.5,
+                  audio_tokens: -1,
+                  cached_tokens: true,
+                  cached_tokens_details: { text_tokens: '3', image_tokens: -2, audio_tokens: '3' },
+                },
+                output_token_details: { text_tokens: Number.MAX_SAFE_INTEGER + 1, audio_tokens: 1.5 },
+              },
+              expected: {},
+            },
+          ]) {
+            it(`preserves token totals with ${name}`, async () => {
+              sessionCreated()
+              spokenTurn({ usage: { input_tokens: 5000, output_tokens: 1300, ...details } })
+              const { llmobsSpans } = await getEvents(4)
+              assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, {
+                input_tokens: 5000, output_tokens: 1300, total_tokens: 6300, ...expected,
+              })
+            })
+          }
+
+          for (const value of [null, -1, true, '3', 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+            it(`omits invalid named counts (${JSON.stringify(value)}) independently of valid audio`, async () => {
+              sessionCreated()
+              spokenTurn({
+                usage: {
+                  input_tokens: 5000,
+                  output_tokens: 1300,
+                  input_token_details: {
+                    audio_tokens: 4800,
+                    text_tokens: value,
+                    image_tokens: value,
+                    cached_tokens_details: { text_tokens: value, image_tokens: value },
+                  },
+                  output_token_details: { audio_tokens: 1200, text_tokens: value },
+                },
+              })
+              const { llmobsSpans } = await getEvents(4)
+              assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, {
+                input_tokens: 5000,
+                output_tokens: 1300,
+                total_tokens: 6300,
+                input_audio_tokens: 4800,
+                output_audio_tokens: 1200,
+              })
+            })
+          }
+
+          it('preserves named counts when aggregate usage is absent', async () => {
+            sessionCreated()
+            spokenTurn({
+              usage: {
+                input_token_details: { text_tokens: 200, image_tokens: 100 },
+                output_token_details: { text_tokens: 100 },
+              },
+            })
+            const { llmobsSpans } = await getEvents(4)
+            assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, {
+              input_text_tokens: 200, input_image_tokens: 100, output_text_tokens: 100,
+            })
+          })
+
+          it('preserves the largest safe integer named count', async () => {
+            sessionCreated()
+            spokenTurn({
+              usage: {
+                input_token_details: {
+                  text_tokens: Number.MAX_SAFE_INTEGER,
+                  image_tokens: Number.MAX_SAFE_INTEGER,
+                  cached_tokens_details: {
+                    text_tokens: Number.MAX_SAFE_INTEGER, image_tokens: Number.MAX_SAFE_INTEGER,
+                  },
+                },
+                output_token_details: { text_tokens: Number.MAX_SAFE_INTEGER },
+              },
+            })
+            const { llmobsSpans } = await getEvents(4)
+            assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, {
+              input_text_tokens: Number.MAX_SAFE_INTEGER,
+              input_image_tokens: Number.MAX_SAFE_INTEGER,
+              cache_text_read_tokens: Number.MAX_SAFE_INTEGER,
+              cache_image_read_tokens: Number.MAX_SAFE_INTEGER,
+              output_text_tokens: Number.MAX_SAFE_INTEGER,
+            })
+          })
+
+          for (const field of ['input_tokens', 'output_tokens', 'total_tokens']) {
+            for (const value of [-1, true, '3', 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+              it('omits invalid aggregate ' + field + ' (' + JSON.stringify(value) + ')', async () => {
+                sessionCreated()
+                const usage = {
+                  input_tokens: 5,
+                  output_tokens: 7,
+                  total_tokens: 12,
+                  input_token_details: { audio_tokens: 2 },
+                  [field]: value,
+                }
+                spokenTurn({ usage })
+                const { llmobsSpans } = await getEvents(4)
+                const expected = { input_tokens: 5, output_tokens: 7, total_tokens: 12, input_audio_tokens: 2 }
+                delete expected[field]
+                assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, expected)
+              })
+            }
+          }
+
+          for (const { name, usage, expected } of [
+            {
+              name: 'explicit inclusive zero counts',
+              usage: {
+                input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+                input_token_details: { audio_tokens: 0, cached_tokens: 0 },
+              },
+              expected: {
+                input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+                input_audio_tokens: 0,
+                cache_read_input_tokens: 0,
+              },
+            },
+            {
+              name: 'explicit total independent of its breakdown',
+              usage: { input_tokens: 5000, output_tokens: 1300, total_tokens: 7000 },
+              expected: { input_tokens: 5000, output_tokens: 1300, total_tokens: 7000 },
+            },
+            { name: 'output-only usage', usage: { output_tokens: 7 }, expected: { output_tokens: 7 } },
+            {
+              name: 'absent total at the last safe sum',
+              usage: { input_tokens: Number.MAX_SAFE_INTEGER, output_tokens: 0 },
+              expected: {
+                input_tokens: Number.MAX_SAFE_INTEGER,
+                output_tokens: 0,
+                total_tokens: Number.MAX_SAFE_INTEGER,
+              },
+            },
+            {
+              name: 'absent total at the first unsafe sum',
+              usage: { input_tokens: Number.MAX_SAFE_INTEGER, output_tokens: 1 },
+              expected: { input_tokens: Number.MAX_SAFE_INTEGER, output_tokens: 1 },
+            },
+            { name: 'missing usage', usage: null, expected: {} },
+            { name: 'non-token billing fields', usage: { seconds: 60, characters: 1000, credits: 2 }, expected: {} },
+          ]) {
+            it('reports only supplied valid token counts with ' + name, async () => {
+              sessionCreated()
+              spokenTurn({ usage })
+              const { llmobsSpans } = await getEvents(4)
+              assert.deepStrictEqual(byName(llmobsSpans, LLM).metrics, expected)
+              assert.ok(llmobsSpans.filter(span => span.name !== LLM)
+                .every(span => Object.keys(span.metrics).length === 0))
             })
           }
 

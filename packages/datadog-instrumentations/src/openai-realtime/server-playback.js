@@ -5,9 +5,30 @@ const { randomUUID } = require('node:crypto')
 const {
   bytesPerSecond,
   realtimeAudioFormatToMime,
+  segmentDurationMs,
 } = require('../../../dd-trace/src/llmobs/audio-codec')
 const { LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES } = require('../../../dd-trace/src/llmobs/constants/audio')
 const log = require('../../../dd-trace/src/log')
+
+/**
+ * @typedef {{
+ *   id: string,
+ *   turn: import('./turns').ResponseTurn,
+ *   held: boolean,
+ *   hasAudio: boolean,
+ *   audioIncomplete: boolean,
+ *   stopped: boolean,
+ *   outOfBand: boolean,
+ *   playbackWindow?: PlaybackWindow,
+ *   output: Map<string, { wanted: boolean, inFlight: boolean }>,
+ * }} PlaybackEntry
+ * @typedef {{
+ *   entries: PlaybackEntry[],
+ *   startTime: number,
+ *   finishTime: number,
+ *   resolved: boolean,
+ * }} PlaybackWindow
+ */
 
 const AUDIO_WAIT_MS = 5000
 const PLAYBACK_WAIT_MS = 120_000
@@ -105,12 +126,14 @@ class ServerPlayback {
       transcriptPending: false,
       hasAudio: false,
       audioIncomplete: false,
+      outOfBand: response?.conversation_id === null,
       stopped: false,
       cleared: false,
       truncated: false,
       timer: undefined,
       deadline: undefined,
       phase: undefined,
+      playbackWindow: /** @type {PlaybackWindow | undefined} */ (undefined),
     }
     this.#turns.set(id, entry)
     const input = this.#items.get(turn.input.itemId)
@@ -146,6 +169,7 @@ class ServerPlayback {
       this.#remove(entry)
       return false
     }
+    if (entry.playbackWindow) this.#checkWindow(entry.playbackWindow, now, entry)
     if (this.#ready(entry)) {
       this.#remove(entry)
       return false
@@ -222,9 +246,10 @@ class ServerPlayback {
         entry.turn.serverSpeech.startTime ??= now
         if (this.#active && this.#active !== entry) {
           const previous = this.#active
-          previous.ambiguous = entry.ambiguous = true
+          // A response-specific start supplies the handoff boundary even when the
+          // shared output buffer never drains between a tool preamble and its answer.
           previous.stopped = true
-          previous.turn.serverSpeech = {}
+          previous.turn.serverSpeech.finishTime = now
           this.#check(previous, now)
         }
         this.#active = entry
@@ -232,9 +257,22 @@ class ServerPlayback {
       }
     } else if (type === 'output_audio_buffer.stopped' || type === 'output_audio_buffer.cleared') {
       const entry = this.#turns.get(String(event.response_id))
+      if (type === 'output_audio_buffer.stopped' && this.#active && this.#active !== entry && entry) {
+        const window = this.#createWindow(this.#active, entry, now)
+        if (window) {
+          for (const member of window.entries) {
+            member.stopped = true
+            member.playbackWindow = window
+            member.turn.serverSpeech = {}
+          }
+          this.#active = undefined
+          this.#checkWindow(window, now)
+          this.#releaseQueuedWaits()
+          return
+        }
+      }
       if (this.#active && this.#active !== entry) {
-        // A continuous playback interval across responses has no per-response split.
-        // AIDEV-NOTE: omit ambiguous speech spans instead of inventing a boundary.
+        // A cleared or untracked window lacks enough evidence to place its clips.
         const active = this.#active
         active.ambiguous = true
         active.stopped = true
@@ -250,6 +288,7 @@ class ServerPlayback {
         this.#check(entry, now)
       }
       this.#active = undefined
+      this.#releaseQueuedWaits()
     } else if (type === 'error') {
       const item = this.#requests.get(String(event.error?.event_id))
       if (item) {
@@ -494,8 +533,84 @@ class ServerPlayback {
     item.side.audio.present ||= item.role === 'assistant' ? item.entry.hasAudio : item.hasAudio
   }
 
+  /**
+   * @param {PlaybackEntry} first
+   * @param {PlaybackEntry} last
+   * @param {number} now
+   */
+  #createWindow (first, last, now) {
+    const startTime = first.turn.serverSpeech?.startTime
+    if (startTime === undefined || now < startTime) return
+    const entries = []
+    let collecting = false
+    for (const entry of this.#turns.values()) {
+      if (entry === first) collecting = true
+      if (!collecting) continue
+      if (entry.stopped || entry.playbackWindow) return
+      entries.push(entry)
+      if (entry === last) return { entries, startTime, finishTime: now, resolved: false }
+    }
+  }
+
+  /** @param {PlaybackWindow} window */
+  #deriveWindow (window) {
+    if (window.resolved) return
+    for (const entry of window.entries) {
+      if (!entry.held) return
+      for (const item of entry.output.values()) {
+        if (item.wanted || item.inFlight) return
+      }
+    }
+    window.resolved = true
+    const durations = []
+    let total = 0
+    for (const entry of window.entries) {
+      if (!entry.hasAudio) { durations.push(0); continue }
+      const audio = entry.turn.audio
+      const duration = segmentDurationMs(audio.totalDecodedBytes, audio.mimeType, audio.sampleRate)
+      if (entry.audioIncomplete || audio.oversize || audio.chunks.length === 0 ||
+          duration === undefined || duration <= 0) return
+      durations.push(duration)
+      total += duration
+    }
+    // Arrival timestamps are rounded to milliseconds. Larger inconsistencies are
+    // not a consistent playback window and must leave its response boundaries unknown.
+    if (total > window.finishTime - window.startTime + 1) return
+    let end = window.finishTime
+    for (let index = window.entries.length - 1; index >= 0; index--) {
+      const duration = durations[index]
+      if (!duration) continue
+      const start = index === 0 ? window.startTime : Math.max(window.startTime, end - duration)
+      const finish = index === 0 ? Math.max(start, Math.min(end, start + duration)) : end
+      window.entries[index].turn.serverSpeech = { startTime: start, finishTime: finish, derived: true }
+      end = start
+    }
+  }
+
+  /**
+   * @param {PlaybackWindow} window
+   * @param {number} now
+   * @param {PlaybackEntry} [skip] - The owner of hold() must finalize its own turn.
+   */
+  #checkWindow (window, now, skip) {
+    this.#deriveWindow(window)
+    let index = 0
+    while (index < window.entries.length) {
+      const entry = window.entries[index]
+      if (entry === skip || !entry.held || !this.#turns.has(entry.id)) { index++; continue }
+      if (this.#ready(entry)) {
+        // Removal releases this member's buffers and shifts the next member into its slot.
+        this.#finish(entry, now)
+      } else {
+        this.#arm(entry)
+        index++
+      }
+    }
+  }
+
   /** @param {object} entry */
   #ready (entry) {
+    if (entry.playbackWindow && !entry.playbackWindow.resolved) return false
     if (entry.transcriptPending || (entry.hasAudio && !entry.stopped) ||
         (entry.cleared && !entry.truncated)) return false
     if (!this.#shouldRetainAudio()) return true
@@ -511,6 +626,10 @@ class ServerPlayback {
    * @param {number} now
    */
   #check (entry, now) {
+    if (entry?.playbackWindow) {
+      this.#checkWindow(entry.playbackWindow, now)
+      return
+    }
     if (!entry?.held) return
     if (this.#ready(entry)) this.#finish(entry, now)
     else this.#arm(entry)
@@ -519,13 +638,29 @@ class ServerPlayback {
   /** @param {object} entry */
   #arm (entry) {
     clearTimeout(entry.timer)
-    const phase = entry.turn.serverSpeech.startTime === undefined || entry.stopped ? 'audio' : 'playback'
+    // A completed response without its own start can be queued behind the active
+    // response. Its playback evidence cannot arrive until that shared buffer drains.
+    const queued = !entry.outOfBand && entry.hasAudio && this.#active &&
+      this.#active !== entry && !this.#active.stopped
+    const phase = entry.stopped
+      ? 'audio'
+      : entry.turn.serverSpeech.startTime === undefined ? queued ? 'queued' : 'audio' : 'playback'
     if (entry.phase !== phase) {
       entry.phase = phase
-      entry.deadline = Date.now() + (phase === 'playback' ? PLAYBACK_WAIT_MS : AUDIO_WAIT_MS)
+      entry.deadline = Date.now() + (phase === 'audio' ? AUDIO_WAIT_MS : PLAYBACK_WAIT_MS)
     }
     entry.timer = setTimeout(() => this.#finish(entry, Date.now(), true), Math.max(0, entry.deadline - Date.now()))
     entry.timer.unref?.()
+  }
+
+  // An unstarted response loses its queue dependency when active playback ends.
+  #releaseQueuedWaits () {
+    if (this.#closed) return
+    for (const entry of this.#turns.values()) {
+      if (entry.held && entry.phase === 'queued' && entry.turn.serverSpeech.startTime === undefined) {
+        this.#arm(entry)
+      }
+    }
   }
 
   /** @param {number} now */
@@ -562,9 +697,22 @@ class ServerPlayback {
 
   /** @param {object} entry */
   #remove (entry) {
+    const window = entry.playbackWindow
+    if (window && !window.resolved) {
+      window.resolved = true
+      for (const member of window.entries) member.turn.serverSpeech = {}
+    }
+    if (window) {
+      const index = window.entries.indexOf(entry)
+      if (index !== -1) window.entries.splice(index, 1)
+      entry.playbackWindow = undefined
+    }
     clearTimeout(entry.timer)
     this.#turns.delete(entry.id)
-    if (this.#active === entry) this.#active = undefined
+    if (this.#active === entry) {
+      this.#active = undefined
+      this.#releaseQueuedWaits()
+    }
     for (const [id, item] of this.#items) {
       if (item.entry === entry) this.#items.delete(id)
     }

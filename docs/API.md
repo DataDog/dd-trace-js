@@ -292,7 +292,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="nyc"></h5>
 <h5 id="openai"></h5>
 
-OpenAI Realtime tracing also recognizes `@openai/agents-realtime` 0.20.x
+OpenAI Realtime tracing also recognizes `@openai/agents-realtime` 0.20.x–0.21.x
 (WebSocket and SIP/`call_id` sideband connections), including URLs supplied to
 the transport constructor or connect options. It uses the `openai` plugin
 configuration and `DD_OPENAI_REALTIME_ENABLED` switch. Each response retains the
@@ -300,8 +300,18 @@ configuration and `DD_OPENAI_REALTIME_ENABLED` switch. Each response retains the
 `agent speech` span contract. Server playback events determine speech windows;
 `response.done` ends generation, not playback.
 
+Realtime LLM spans preserve provider-reported input/output/total token counts and
+available text, audio, image, and cached-token breakdowns. Counts must be
+nonnegative safe integers; explicit zeros are preserved and absent or invalid
+counts are omitted. Modality and cache counts remain subsets of inclusive totals.
+Datadog calculates model costs and aggregate cost/token metrics server-side.
+
 When LLM Observability consumes audio, sideband instrumentation can request stored
-conversation items. Errors for tracer-owned retrieval requests stay internal; SDK
+conversation items. `DD_OPENAI_REALTIME_AUDIO_RETRIEVAL_ENABLED` defaults to
+`true`. Set it to `false` before connecting to disable only tracer-issued
+retrievals, while preserving Realtime timing, transcripts, tools, usage, and
+passive capture of audio already received. SDK and application retrieval requests
+are unaffected. Errors for tracer-owned retrieval requests stay internal; SDK
 and application request errors retain their normal behavior. Retrieval is bounded
 and falls back to transcripts when unavailable, incomplete, or too large.
 Interrupted items honor the server truncation boundary. Successful retrievals use
@@ -312,11 +322,17 @@ If a formatless retrieval could use a different codec from the captured item,
 the recording is omitted and any available transcript is retained.
 Input clips use paired VAD offsets to include prefix padding at the correct start,
 with wall-clock precision limited by sideband event delivery.
-Unknown per-response boundaries in continuous playback are omitted rather than
-estimated. ESM applications must register the tracer loader before importing the
-SDK. This path is tested with SDK 0.20.0 using local protocol replays and live
-WebRTC/SIP sideband calls. Continuous multi-response playback remains a live
-validation gap.
+Response-specific playback starts preserve boundaries across a shared output
+buffer. When a normally drained buffer spans responses without every start event,
+complete retrieved audio durations can reconstruct the missing boundaries; those
+responses include metadata `agent_speech_timing: audio_duration`. Trailing clips
+are placed backward from the drain event, so gaps within an unanchored sequence
+cannot be resolved individually. Missing, incomplete, unsupported, or inconsistent
+recordings retain the timing fallback. Interrupted windows without per-response
+boundaries are not reconstructed. ESM applications must register the tracer loader
+before importing the SDK. This path is tested with SDK 0.20.0 and 0.21.0 using
+CJS/ESM protocol replays, plus live WebRTC/SIP sideband calls on SDK 0.20.0.
+Playback with missing per-response start events remains a live validation gap.
 
 <h5 id="openai-agents"></h5>
 <h5 id="opensearch"></h5>

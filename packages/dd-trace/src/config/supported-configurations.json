@@ -1614,6 +1614,14 @@
         ]
       }
     ],
+    "DD_OPENAI_REALTIME_AUDIO_RETRIEVAL_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "openai"
+      }
+    ],
     "DD_OPENAI_REALTIME_ENABLED": [
       {
         "implementation": "A",

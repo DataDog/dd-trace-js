@@ -952,11 +952,14 @@ class RealtimeSession {
     // turn finalized without `response.done` would otherwise finish before its own llm span.
     const rootFinishTime = Math.max(rootStartTime, llmFinishTime, agentEnd ?? 0, userEnd ?? 0)
 
+    const metadata = { ...this.#sessionConfig }
+    if (turn.serverSpeech?.derived) metadata.agent_speech_timing = 'audio_duration'
+
     return {
       sessionId: this.#sessionId,
       model: turn.model,
       basePath: this.#basePath,
-      metadata: { ...this.#sessionConfig },
+      metadata,
       usage: turn.usage,
       failed: turn.status === 'failed',
       error: turn.error,
