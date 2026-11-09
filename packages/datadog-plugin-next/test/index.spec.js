@@ -15,7 +15,7 @@ const proxyquire = require('proxyquire')
 const { satisfies } = require('semver')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
-const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { assertObjectContains, stopProc } = require('../../../integration-tests/helpers')
 
 const { storage } = require('../../datadog-core')
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
@@ -166,7 +166,7 @@ describe('Plugin', function () {
         after(async function () {
           this.timeout(30 * 1000)
 
-          server.kill()
+          await stopProc(server)
 
           await httpRequest.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
           await agent.close()
