@@ -293,6 +293,64 @@ describe('integrations', () => {
             const llm = byName(llmobsSpans, 'elevenlabs response')
             wav(llm.meta.output.messages[0].audio_parts[0], 24000, pcm(30, 24000, 9))
             assert.equal(llm.meta.metadata.interrupted, mode === 'interruption')
+            assert.equal(byName(llmobsSpans, 'agent speech').duration, (30 + gap) * 1e6)
+            assert.equal(byName(llmobsSpans, 'elevenlabs audio turn').duration, (30 + gap) * 1e6)
+          })
+        }
+      }
+
+      for (const gap of [0, 100]) {
+        it(`preserves delivery gaps in completed agent speech, gap=${gap}`, async () => {
+          await start()
+          const began = Date.now()
+          response(); output(1, 20)
+          clock.tick(20 + gap)
+          output(1, 20)
+          close()
+          const { llmobsSpans } = await getEvents(3)
+          const speech = byName(llmobsSpans, 'agent speech')
+          const root = byName(llmobsSpans, 'elevenlabs audio turn')
+          assert.equal(speech.start_ns, began * 1e6)
+          assert.equal(speech.duration, (40 + gap) * 1e6)
+          assert.equal(root.duration, speech.duration)
+          wav(byName(llmobsSpans, 'elevenlabs response').meta.output.messages[0].audio_parts[0],
+            24000, pcm(40, 24000, 9))
+        })
+      }
+
+      for (const textFirst of [false, true]) {
+        for (const recover of [false, true]) {
+          it(`omits failed output delivery, textFirst=${textFirst}, recover=${recover}`, async () => {
+            await start()
+            if (textFirst) response()
+            const error = new TypeError('output rejected')
+            audio.output = () => { throw error }
+            const logged = sinon.stub(console, 'error')
+            try {
+              output(1, 200)
+              assert.equal(logged.firstCall.args[1], error)
+              if (!textFirst) response()
+              clock.tick(300)
+              if (recover) {
+                audio.output = outputSpy
+                output(1, 20)
+                close()
+              } else {
+                conversation.on('error', () => {})
+                socket.emit('error', new Error('transport failed after rejected audio'))
+              }
+              const { llmobsSpans } = await getEvents(recover ? 3 : 2)
+              const llm = byName(llmobsSpans, 'elevenlabs response')
+              assert.equal(llm.status, recover ? 'ok' : 'error')
+              assert.equal(outputSpy.callCount, recover ? 1 : 0)
+              if (recover) {
+                wav(llm.meta.output.messages[0].audio_parts[0], 24000, pcm(20, 24000, 9))
+                assert.equal(byName(llmobsSpans, 'agent speech').duration, 20e6)
+              } else {
+                assert.equal(llm.meta.output.messages[0].audio_parts, undefined)
+                assert.equal(llmobsSpans.some(span => span.name === 'agent speech'), false)
+              }
+            } finally { logged.restore() }
           })
         }
       }
@@ -475,6 +533,94 @@ describe('integrations', () => {
           if (reject) assert.equal(tool.meta['error.message'], 'lazy failure 1')
           else assert.equal(tool.meta.output.value, 'lazy result 1')
         })
+      }
+
+      for (const kind of ['object', 'function']) {
+        for (const outcome of ['resolve', 'reject', 'non-callable', 'throw']) {
+          it(`assimilates a ${kind} tool result once when then will ${outcome}`, async () => {
+            await start()
+            let reads = 0
+            const result = kind === 'function' ? function () {} : { value: 'plain result' }
+            Object.defineProperty(result, 'then', {
+              get () {
+                reads++
+                if (reads > 1) throw new Error('then read twice')
+                if (outcome === 'throw') throw new TypeError('then getter failed')
+                if (outcome === 'non-callable') return 42
+                return function (resolve, reject) {
+                  assert.equal(this, result)
+                  clock.tick(7)
+                  if (outcome === 'reject') reject(new TypeError('then rejected'))
+                  else resolve('then resolved')
+                }
+              },
+            })
+            tools.register('accessor-result', () => result)
+            event('client_tool_call', 'client_tool_call', 1,
+              { tool_name: 'accessor-result', tool_call_id: 'accessor-call', parameters: {} })
+            for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+            response(); close()
+            const { llmobsSpans } = await getEvents(3)
+            const tool = byName(llmobsSpans, 'accessor-result')
+            assert.equal(reads, 1)
+            const failed = outcome === 'throw' || outcome === 'reject'
+            assert.equal(socket.sent.at(-1).is_error, failed)
+            assert.equal(tool.status, failed ? 'error' : 'ok')
+            if (failed) {
+              const message = outcome === 'throw' ? 'then getter failed' : 'then rejected'
+              assert.equal(socket.sent.at(-1).result, message)
+              assert.equal(tool.meta['error.message'], message)
+            } else if (outcome === 'resolve') {
+              assert.equal(socket.sent.at(-1).result, 'then resolved')
+              assert.equal(tool.meta.output.value, 'then resolved')
+              assert.equal(tool.duration, 7e6)
+            } else {
+              assert.deepEqual(socket.sent.at(-1).result, kind === 'object' ? { value: 'plain result' } : undefined)
+            }
+          })
+        }
+      }
+
+      for (const async of [false, true]) {
+        for (const outcome of ['value', 'nested', 'throw']) {
+          it(`captures serialized tool output, async=${async}, outcome=${outcome}`, async () => {
+            await start()
+            let serializations = 0
+            const value = {
+              toJSON () {
+                serializations++
+                clock.tick(11)
+                if (outcome === 'throw') throw new TypeError('serialization failed')
+                if (serializations > 1) throw new Error('serialized twice')
+                return { count: serializations }
+              },
+            }
+            const result = outcome === 'nested' ? { nested: value } : value
+            tools.register('serialized-result', () => {
+              clock.tick(7)
+              return async ? Promise.resolve(result) : result
+            })
+            event('client_tool_call', 'client_tool_call', 1,
+              { tool_name: 'serialized-result', tool_call_id: 'serialized-call', parameters: {} })
+            for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve))
+            response(); close()
+            const { llmobsSpans } = await getEvents(3)
+            assert.equal(serializations, 1)
+            const sent = socket.sent.at(-1)
+            assert.equal(sent.is_error, outcome === 'throw')
+            const expected = outcome === 'throw'
+              ? 'serialization failed'
+              : outcome === 'nested' ? { nested: { count: 1 } } : { count: 1 }
+            assert.deepEqual(sent.result, expected)
+            const text = typeof expected === 'string' ? expected : JSON.stringify(expected)
+            const tool = byName(llmobsSpans, 'serialized-result')
+            assert.equal(tool.meta.output.value, text)
+            assert.equal(tool.duration, 7e6)
+            assert.equal(tool.status, outcome === 'throw' ? 'error' : 'ok')
+            const llm = byName(llmobsSpans, 'elevenlabs response')
+            assert.equal(llm.meta.input.messages[0].tool_results[0].result, text)
+          })
+        }
       }
 
       for (const size of [100_000 - 11, 100_000 - 10, 2 * 1024 * 1024]) {
@@ -777,8 +923,9 @@ describe('integrations', () => {
             response(2, 'Second answer')
             output(2, 20)
             close()
-            const { llmobsSpans } = await getEvents(6)
+            const { llmobsSpans } = await getEvents(target === 'output' ? 5 : 6)
             const llms = llmobsSpans.filter(span => span.name === 'elevenlabs response')
+            if (target === 'output') assert.equal(llms[0].meta.output.messages[0].audio_parts, undefined)
             assert.deepEqual(llms.map(llm => llm.meta.output.messages[0].content), ['First answer', 'Second answer'])
             assert.ok(llmobsSpans.every(span => span.status === 'ok'))
           } finally { holder[target] = previous; logged.restore() }

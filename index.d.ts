@@ -2085,9 +2085,6 @@ declare namespace tracer {
   }
 
   export namespace plugins {
-    /** Node.js ElevenLabs Agents WebSocket conversations. */
-    interface elevenlabs extends Instrumentation, LLMObsIntegration {}
-
     /** @hidden */
     interface Integration {
       /**
@@ -2628,6 +2625,12 @@ declare namespace tracer {
        */
       net?: boolean;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * [@elevenlabs/elevenlabs-js](https://www.npmjs.com/package/@elevenlabs/elevenlabs-js) module.
+     */
+    interface elevenlabs extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the

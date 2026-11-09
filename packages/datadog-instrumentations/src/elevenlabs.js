@@ -8,7 +8,6 @@ const shimmer = require('../../datadog-shimmer')
 const Session = require('./elevenlabs/session')
 
 const spanCh = dc.tracingChannel('apm:elevenlabs:span')
-const toolAsyncCh = dc.tracingChannel('apm:elevenlabs:tool-async')
 const finishCh = dc.channel('apm:elevenlabs:finish')
 const captureCh = dc.channel('dd-trace:elevenlabs:capture-context')
 const audioCh = dc.channel('dd-trace:elevenlabs:audio')
@@ -77,7 +76,7 @@ function finish (session, turn) {
       ['agent speech', turn.output, session.outputRate, text],
     ]
     for (const [name, audio, rate, transcript] of phases) {
-      const end = audio.end(rate)
+      const end = name === 'agent speech' ? turn.playbackEnd : audio.end(rate)
       if (audio.start === undefined || end === undefined || !(end > audio.start)) continue
       const activity = name === 'user speech' && !audio.overflow
         ? audio.activity.metadata(audio.duration(rate), audio.lastAudio)
@@ -89,7 +88,7 @@ function finish (session, turn) {
     turn.llm.finishTime = Math.max(turn.llm.startTime, turn.responseTime)
     finishCh.publish(turn.llm)
     turn.root.finishTime = Math.max(turn.start, turn.responseTime, turn.toolEnd,
-      turn.input.end(session.inputRate) || 0, turn.output.end(session.outputRate) || 0)
+      turn.input.end(session.inputRate) || 0, turn.playbackEnd || 0)
     finishCh.publish(turn.root)
   })
 }
@@ -133,11 +132,12 @@ function attachAudio (audio) {
   // output entrypoint follows both the released and corrected SDK without duplicating its filter.
   shimmer.wrap(audio, 'output', output => function () {
     const reception = handling?.reception
+    const result = output.apply(this, arguments)
     if (reception && !reception.accepted) {
       reception.accepted = true
       observe(() => reception.session.receive(reception.event, reception.receivedAt))
     }
-    return output.apply(this, arguments)
+    return result
   })
   audioInterfaces.set(audio, audio.output)
 }
@@ -218,7 +218,36 @@ channel('executeToolAsync').start.subscribe(ctx => {
     const { session, turn } = handling
     // Preserve this dispatch's bounded input even if another message reuses its call ID.
     const call = turn.calls.get(ctx.arguments[1].tool_call_id)
-    if (call) tools.set(ctx.arguments[1], { session, turn, call })
+    if (!call) return
+    const owner = {
+      session,
+      turn,
+      call,
+      /** @type {object | undefined} */
+      tool: undefined,
+    }
+    tools.set(ctx.arguments[1], owner)
+    // The SDK callback serializes and sends the result. Read our parsed wire copy afterward,
+    // so telemetry never invokes a handler result's toJSON or property getters itself.
+    ctx.arguments[2] = shimmer.wrapCallback(ctx.arguments[2], callback => function (response) {
+      const tool = owner.tool
+      if (tool && !tool.finished) {
+        tool.finishTime ??= Date.now()
+        turn.toolEnd = Math.max(turn.toolEnd, tool.finishTime)
+      }
+      const previous = turn.results.get(call.toolId)
+      const result = callback.apply(this, arguments)
+      observe(() => {
+        owner.tool = undefined
+        if (!tool || tool.finished) return
+        const recorded = turn.results.get(tool.id)
+        tool.output = recorded === previous ? undefined : recorded?.result
+        if (response.is_error && !tool.error) tool.error = new Error(tool.output || 'Client tool failed')
+        turn.tools.delete(tool)
+        finishCh.publish(tool)
+      })
+      return result
+    })
   }
 })
 channel('register').start.subscribe(ctx => {
@@ -243,39 +272,15 @@ channel('register').start.subscribe(ctx => {
       id,
       parameters: call.arguments,
       startTime: Date.now(),
-      promise: true,
+      deferred: true,
     }
+    owner.tool = tool
     turn.tools.add(tool)
-    return run(turn.scope, () => {
-      const result = spanCh.traceSync(() => {
-        const value = original.apply(this, arguments)
-        // Node's native tracePromise does not emit asyncEnd for primitives on newer runtimes.
-        // Classify inside traceSync so a throwing then getter follows the SDK's error path too.
-        tool.promise = value != null && typeof value.then === 'function'
-        return value
-      }, tool)
-      // The SDK assimilates handler results. Share one native promise so lazy thenables run once.
-      return tool.promise ? toolAsyncCh.tracePromise(() => Promise.resolve(result), tool) : result
-    })
+    // Preserve the original result. The SDK alone assimilates thenables; its completion callback
+    // records the execution end before serialization and finishes the span from the wire result.
+    return run(turn.scope, () => spanCh.traceSync(() => original.apply(this, arguments), tool))
   })
 })
-spanCh.error.subscribe(ctx => {
-  if (ctx.kind === 'tool') ctx.promise = false
-})
-/** @param {object} ctx */
-function settleTool (ctx) {
-  if (ctx.kind !== 'tool' || ctx.finished) return
-  ctx.output = ctx.session.toolResult(ctx.turn, ctx.id, ctx.error ? String(ctx.error) : ctx.result)
-  ctx.finishTime = Date.now()
-  ctx.turn.toolEnd = Math.max(ctx.turn.toolEnd, ctx.finishTime)
-  ctx.turn.tools.delete(ctx)
-}
-
-// Registered before product subscribers, so annotations observe the bounded result and duration.
-spanCh.end.subscribe(ctx => { if (!ctx.promise) observe(() => settleTool(ctx)) })
-spanCh.asyncEnd.subscribe(ctx => observe(() => settleTool(ctx)))
-toolAsyncCh.error.subscribe(ctx => { if (!ctx.finished) spanCh.error.publish(ctx) })
-toolAsyncCh.asyncEnd.subscribe(ctx => { if (!ctx.finished) spanCh.asyncEnd.publish(ctx) })
 
 addBeforeExitFinalizer(() => {
   for (const reference of live) observe(() => reference.deref()?.finalize(true))

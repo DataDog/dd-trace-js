@@ -41,10 +41,7 @@ class ElevenLabsTracingPlugin extends TracingPlugin {
   }
 
   /** @param {object} ctx */
-  end (ctx) { if (!ctx.deferred && !ctx.promise) this.finish(ctx) }
-
-  /** @param {object} ctx */
-  asyncEnd (ctx) { this.finish(ctx) }
+  end (ctx) { if (!ctx.deferred) this.finish(ctx) }
 
   /** @param {object} ctx */
   finish (ctx) {
