@@ -5,8 +5,9 @@ const os = require('node:os')
 
 const log = require('../../log')
 const { containerId, entityId } = require('../common/docker')
+const { createSiteUrl } = require('../common/url')
 const Writer = require('./writer')
-const { computeIntakeUrl, computeStatsIntakeUrl } = require('./intake')
+const { computeIntakeUrl } = require('./intake')
 
 /**
  * Agentless exporter for APM trace intake.
@@ -41,7 +42,7 @@ class AgentlessExporter {
         !config.OTEL_TRACES_SPAN_METRICS_ENABLED
       ) {
         stats = {
-          endpoint: computeStatsIntakeUrl(site),
+          endpoint: new URL('/api/v0.2/stats', createSiteUrl(site, 'trace.agent')).href,
           intervalMs: (config.stats.interval ?? 10) * 1000,
         }
       }

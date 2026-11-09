@@ -78,7 +78,7 @@ describe('AgentlessExporter', () => {
 
     it('should configure native client stats when local stats are enabled', () => {
       exporter = new Exporter({
-        site: 'us3.datadoghq.com',
+        site: 'US3.DataDogHQ.com',
         stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true, interval: 15 },
         tags: {},
       })
@@ -97,6 +97,25 @@ describe('AgentlessExporter', () => {
       })
 
       assert.strictEqual(writerOptions.stats.intervalMs, 10_000)
+      assert.strictEqual(writerOptions.stats.endpoint, 'https://trace.agent.datadoghq.com/api/v0.2/stats')
+    })
+
+    it('should reject URL components in the stats site', () => {
+      const log = { error: sinon.spy() }
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': Writer,
+        '../../log': log,
+      })
+
+      exporter = new Exporter({
+        site: 'datadoghq.com@evil.example',
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true },
+        tags: {},
+      })
+
+      assert.strictEqual(writerOptions.stats, undefined)
+      assert.strictEqual(writerOptions.url, null)
+      sinon.assert.calledOnce(log.error)
     })
 
     for (const [name, config] of [
