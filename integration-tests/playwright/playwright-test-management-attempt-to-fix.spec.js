@@ -752,7 +752,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
           },
-          { hardTimeout: PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT }
+          { hardTimeout: 120000 }
         )
 
       proc.stdout?.on('data', (chunk) => {
