@@ -768,6 +768,9 @@ const tracerProvider = new tracer.TracerProvider()
 tracerProvider.register()
 ```
 
+When bundling the application, leave `dd-trace` and `@opentelemetry/api` external.
+This lets the tracer select the application's API package before provider registration.
+
 The following attributes are available to override Datadog-specific options:
 
 * `service.name`: The service name to be used for this span. The service name from the tracer will be used if this is not provided.

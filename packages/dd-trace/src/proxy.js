@@ -262,13 +262,21 @@ class Tracer extends NoopProxy {
       let logs
       let metrics
       if (config.DD_LOGS_OTEL_ENABLED) {
-        const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
-        logs = initializeOpenTelemetryLogs(config)
+        try {
+          const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
+          logs = initializeOpenTelemetryLogs(config)
+        } catch (error) {
+          log.error('Error initializing OpenTelemetry logs', error)
+        }
       }
 
       if (config.DD_METRICS_OTEL_ENABLED) {
-        const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
-        metrics = initializeOpenTelemetryMetrics(config)
+        try {
+          const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
+          metrics = initializeOpenTelemetryMetrics(config)
+        } catch (error) {
+          log.error('Error initializing OpenTelemetry metrics', error)
+        }
       }
 
       if (config.runtimeMetrics.enabled) {

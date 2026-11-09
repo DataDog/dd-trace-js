@@ -382,7 +382,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
 ${fileCode}
         })(module.exports, module);
         {
-          const dc = require('dc-polyfill');
+          const dc = require(${DC_MODULE_LITERAL});
           const ch = dc.channel('${CHANNEL}');
           const mod = module.exports
           const payload = {

@@ -1,6 +1,6 @@
 'use strict'
 
-const { context } = require('@opentelemetry/api')
+const { context } = require('../api')
 const {
   millisToHrTime,
   sanitizeAttributes,

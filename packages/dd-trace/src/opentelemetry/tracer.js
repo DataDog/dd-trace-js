@@ -1,6 +1,5 @@
 'use strict'
 
-const api = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const { AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
@@ -10,6 +9,7 @@ const id = require('../id')
 const log = require('../log')
 const { normalizeOtelTraceState } = require('../otel-sampling')
 const TraceState = require('../opentracing/propagation/tracestate')
+const api = require('./api')
 const SpanContext = require('./span_context')
 const Span = require('./span')
 const Sampler = require('./sampler')

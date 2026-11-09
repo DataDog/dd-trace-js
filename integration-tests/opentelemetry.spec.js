@@ -2,9 +2,13 @@
 
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } = require('node:fs/promises')
 
-const { fork } = require('node:child_process')
-const { join } = require('node:path')
+const { execFile, fork } = require('node:child_process')
+const { createRequire } = require('node:module')
+const { tmpdir } = require('node:os')
+const { basename, dirname, join } = require('node:path')
+const { promisify } = require('node:util')
 
 const semver = require('semver')
 
@@ -12,7 +16,82 @@ const httpRequest = require('../packages/dd-trace/test/setup/helpers/http-client
 const latestVersions = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
 
-const OTEL_API_VERSIONS = ['1.4.1', '1.8.0', latestVersions['@opentelemetry/api']]
+const OTEL_API_VERSIONS = ['1.4.1', '1.8.0', '1.9.0', '1.9.1', latestVersions['@opentelemetry/api']]
+const execFileAsync = promisify(execFile)
+
+/**
+ * @param {string} directory
+ * @param {string} version
+ */
+async function installApi (directory, version) {
+  await mkdir(directory, { recursive: true })
+  await writeFile(join(directory, 'package.json'), JSON.stringify({
+    private: true,
+    dependencies: { '@opentelemetry/api': version },
+  }))
+  await execFileAsync('yarn', ['install', '--ignore-scripts', '--non-interactive', '--no-lockfile'], {
+    cwd: directory,
+    env: { ...process.env, NODE_OPTIONS: '' },
+  })
+}
+
+/** @param {string} cwd */
+async function installTracerApi (cwd) {
+  const directory = join(cwd, 'tracer-api')
+  await installApi(directory, '1.4.1')
+  const destination = join(cwd, 'node_modules/dd-trace/node_modules/@opentelemetry/api')
+  await rm(destination, { recursive: true, force: true })
+  await cp(join(directory, 'node_modules/@opentelemetry/api'), destination, { recursive: true })
+  assert.strictEqual(require(join(destination, 'package.json')).version, '1.4.1')
+}
+
+/**
+ * @param {string} cwd
+ * @param {string} entry
+ * @param {string} output
+ * @param {'esbuild' | 'webpack'} bundler
+ * @param {'commonjs' | 'esm'} format
+ * @param {boolean} [externalApi]
+ */
+async function bundleApplication (cwd, entry, output, bundler, format, externalApi = true) {
+  const external = ['dd-trace']
+  if (externalApi) external.push('@opentelemetry/api')
+  if (bundler === 'esbuild') {
+    const esbuild = require(join(cwd, 'node_modules/esbuild'))
+    const plugin = require(join(cwd, 'node_modules/dd-trace/esbuild'))
+    await esbuild.build({
+      absWorkingDir: cwd,
+      entryPoints: [entry],
+      bundle: true,
+      platform: 'node',
+      format: format === 'commonjs' ? 'cjs' : 'esm',
+      outfile: output,
+      external,
+      plugins: [plugin],
+    })
+  } else {
+    const webpack = require(join(cwd, 'node_modules/webpack'))
+    const Plugin = require(join(cwd, 'node_modules/dd-trace/webpack'))
+    const compiler = webpack({
+      context: cwd,
+      mode: 'development',
+      target: 'node',
+      devtool: false,
+      entry,
+      output: { path: dirname(output), filename: basename(output) },
+      externals: Object.fromEntries(external.map(name => [name, `commonjs ${name}`])),
+      plugins: [new Plugin()],
+    })
+    try {
+      const run = promisify(compiler.run.bind(compiler))
+      const stats = await run()
+      assert.ok(!stats.hasErrors(), stats.toString({ all: false, errors: true }))
+    } finally {
+      const close = promisify(compiler.close.bind(compiler))
+      await close()
+    }
+  }
+}
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
@@ -85,41 +164,199 @@ describe('OpenTelemetry API version compatibility', function () {
       const timeout = 5000
 
       useSandbox(
-        [`@opentelemetry/api@${apiVersion}`],
+        [`@opentelemetry/api@${apiVersion}`, '@opentelemetry/sdk-trace-node@2.0.1', 'tsx@4.20.6'],
         false,
-        ['./integration-tests/opentelemetry/basic.js']
+        ['./integration-tests/opentelemetry/basic.js', './integration-tests/opentelemetry/api.{mjs,ts}']
       )
 
-      before(async () => {
+      before(async function () {
+        this.timeout(300_000)
         cwd = sandboxCwd()
+        await installTracerApi(cwd)
         agent = await new FakeAgent().start()
       })
 
-      after(async () => {
+      afterEach(async () => {
         await stopProc(proc)
+      })
+
+      after(async () => {
         await agent?.stop()
       })
 
-      it('preserves user API span and propagation behavior', async () => {
-        const installedApiVersion = require(join(cwd, 'node_modules/@opentelemetry/api/package.json')).version
-        assert.strictEqual(installedApiVersion, apiVersion)
+      it('preserves the native ESM recording, context and propagation baseline', async () => {
+        proc = fork(join(cwd, 'api.mjs'), ['provider-first'], { cwd, env: { NATIVE_OTEL: '1' } })
+        const [code] = await once(proc, 'exit')
+        assert.strictEqual(code, 0)
+      })
 
-        proc = fork(join(cwd, 'basic.js'), {
-          cwd,
-          env: {
-            DD_TRACE_AGENT_PORT: agent.port,
-          },
-        })
+      for (const format of ['commonjs', 'esm', 'tsx']) {
+        for (const order of ['provider-first', 'api-first', 'cached-api-first', 'diag-first']) {
+          it(`preserves user API span and propagation behavior (${format}, ${order})`, async () => {
+            const installedApiVersion = require(join(cwd, 'node_modules/@opentelemetry/api/package.json')).version
+            assert.strictEqual(installedApiVersion, apiVersion)
 
-        await check(agent, proc, timeout, ({ payload }) => {
-          const trace = payload.find(trace => trace.length === 1 && trace[0].name === 'otel-sub')
-          assert.ok(trace)
-          assert.strictEqual(trace[0].meta['test.attribute'], 'value')
-          assert.strictEqual(trace[0].duration, 50_000_000)
+            const fixture = format === 'commonjs' ? 'basic.js' : `api.${format === 'esm' ? 'mjs' : 'ts'}`
+            const execArgv = format === 'commonjs' ? [] : ['--import', 'dd-trace/register.js']
+            if (format === 'tsx') execArgv.push('--import', 'tsx')
+            proc = fork(join(cwd, fixture), [order], {
+              cwd,
+              execArgv,
+              env: {
+                DD_TRACE_AGENT_PORT: agent.port,
+                DD_TRACE_STARTUP_LOGS: 'false',
+              },
+            })
+
+            await check(agent, proc, timeout, ({ payload }) => {
+              const trace = payload.find(trace => trace.length === 1 && trace[0].name === 'otel-sub')
+              assert.ok(trace)
+              assert.strictEqual(trace[0].meta['test.attribute'], 'value')
+              assert.strictEqual(trace[0].duration, 50_000_000)
+            })
+          })
+        }
+      }
+    })
+  }
+})
+
+describe('OpenTelemetry bundled API', function () {
+  this.timeout(60_000)
+  let cwd
+  let deployed
+  let agent
+  let proc
+
+  useSandbox([
+    `@opentelemetry/api@${latestVersions['@opentelemetry/api']}`,
+    '@opentelemetry/sdk-trace-node@2.0.1',
+    'esbuild@0.28.2',
+    'webpack@5.112.2',
+  ], false, ['./integration-tests/opentelemetry/basic.js', './integration-tests/opentelemetry/api.mjs'])
+
+  before(async function () {
+    this.timeout(300_000)
+    cwd = sandboxCwd()
+    await installTracerApi(cwd)
+    for (const version of OTEL_API_VERSIONS) {
+      const application = join(cwd, `application-${version}`)
+      await installApi(application, version)
+      await Promise.all(['basic.js', 'api.mjs'].map(fixture => cp(join(cwd, fixture), join(application, fixture))))
+    }
+    await rm(join(cwd, 'node_modules/@opentelemetry/api'), { recursive: true })
+    await cp(join(cwd, 'application-1.9.1/node_modules/@opentelemetry/api'),
+      join(cwd, 'node_modules/@opentelemetry/api'), { recursive: true })
+    deployed = await mkdtemp(join(tmpdir(), 'dd-otel-bundle-'))
+    await mkdir(join(deployed, 'node_modules'))
+    await symlink(join(cwd, 'node_modules/dd-trace'), join(deployed, 'node_modules/dd-trace'), 'junction')
+    assert.throws(() => createRequire(join(deployed, 'index.js')).resolve('@opentelemetry/api'), {
+      code: 'MODULE_NOT_FOUND',
+    })
+    agent = await new FakeAgent().start()
+  })
+
+  afterEach(async () => {
+    await stopProc(proc)
+  })
+
+  after(async () => {
+    await agent?.stop()
+    if (deployed) await rm(deployed, { recursive: true, force: true })
+  })
+
+  for (const bundler of ['esbuild', 'webpack']) {
+    for (const version of OTEL_API_VERSIONS) {
+      for (const format of ['commonjs', 'esm']) {
+        it(`selects the external application API (${bundler}, ${version}, ${format})`, async () => {
+          const application = join(cwd, `application-${version}`)
+          const entry = join(application, format === 'commonjs' ? 'basic.js' : 'api.mjs')
+          const output = `${bundler}-${version}-${format}.${bundler === 'esbuild' && format === 'esm' ? 'mjs' : 'cjs'}`
+          await bundleApplication(cwd, entry, join(deployed, output), bundler, format)
+
+          const deployedApi = join(deployed, 'node_modules/@opentelemetry/api')
+          await rm(deployedApi, { recursive: true, force: true })
+          await cp(join(application, 'node_modules/@opentelemetry/api'), deployedApi, { recursive: true })
+          assert.strictEqual(JSON.parse(await readFile(join(deployedApi, 'package.json'), 'utf8')).version, version)
+          proc = fork(join(deployed, output), ['provider-first'], {
+            cwd: deployed,
+            env: { DD_TRACE_AGENT_PORT: agent.port, DD_TRACE_STARTUP_LOGS: 'false' },
+          })
+          await check(agent, proc, 5000, ({ payload }) => {
+            assert.ok(payload.some(trace => trace.some(span => span.name === 'otel-sub')))
+          })
         })
+      }
+    }
+  }
+
+  for (const bundler of ['esbuild', 'webpack']) {
+    it(`preserves an embedded API's native exports (${bundler})`, async () => {
+      const entry = join(cwd, 'application-1.9.1/native-exports.cjs')
+      await writeFile(entry, `
+        const assert = require('node:assert/strict')
+        const tracer = require('dd-trace').init()
+        const api = require('@opentelemetry/api')
+        assert.equal(api.trace.getTracer('native').startSpan('noop').isRecording(), false)
+        assert.equal(api.context.active(), api.ROOT_CONTEXT)
+        tracer.trace('native-bundled-api', span => {
+          const carrier = {}
+          tracer.inject(span.context(), 'text_map', carrier)
+          assert.equal(carrier['x-datadog-trace-id'], span.context().toTraceId())
+        })
+      `)
+      const output = join(deployed, `${bundler}-native-exports.cjs`)
+      await bundleApplication(cwd, entry, output, bundler, 'commonjs', false)
+      proc = fork(output, [], {
+        cwd: deployed,
+        env: { DD_TRACE_AGENT_PORT: agent.port, DD_TRACE_STARTUP_LOGS: 'false' },
+      })
+      await check(agent, proc, 5000, ({ payload }) => {
+        assert.ok(payload.some(trace => trace.some(span => span.name === 'native-bundled-api')))
       })
     })
   }
+
+  it('uses the application API when the tracer copy is absent', async () => {
+    await rm(join(cwd, 'node_modules/dd-trace/node_modules/@opentelemetry/api'), { recursive: true })
+    proc = fork(join(cwd, 'basic.js'), ['provider-first'], {
+      cwd,
+      env: { DD_TRACE_AGENT_PORT: agent.port, DD_TRACE_STARTUP_LOGS: 'false' },
+    })
+    await check(agent, proc, 5000, ({ payload }) => {
+      assert.ok(payload.some(trace => trace.some(span => span.name === 'otel-sub')))
+    })
+  })
+
+  it('preserves native tracing when both API copies are absent', async () => {
+    await rm(join(cwd, 'node_modules/dd-trace/node_modules/@opentelemetry/api'), { recursive: true, force: true })
+    await rm(join(cwd, 'node_modules/@opentelemetry/api'), { recursive: true })
+    const filename = join(cwd, 'native.cjs')
+    await writeFile(filename, `
+      const assert = require('node:assert/strict')
+      const tracer = require('dd-trace').init()
+      assert.throws(() => tracer.TracerProvider, { code: 'MODULE_NOT_FOUND' })
+      tracer.trace('native-without-otel', span => {
+        const carrier = {}
+        tracer.inject(span.context(), 'text_map', carrier)
+        assert.equal(carrier['x-datadog-trace-id'], span.context().toTraceId())
+      })
+    `)
+    proc = fork(filename, [], {
+      cwd,
+      env: {
+        DD_TRACE_AGENT_PORT: agent.port,
+        DD_TRACE_STARTUP_LOGS: 'false',
+        DD_LOGS_OTEL_ENABLED: 'true',
+        DD_METRICS_OTEL_ENABLED: 'true',
+        OTEL_LOGS_EXPORTER: 'otlp',
+        OTEL_METRICS_EXPORTER: 'otlp',
+      },
+    })
+    await check(agent, proc, 5000, ({ payload }) => {
+      assert.ok(payload.some(trace => trace.some(span => span.name === 'native-without-otel')))
+    })
+  })
 })
 
 for (const [sdkVersion, apiVersion] of [

@@ -2,7 +2,7 @@
 
 const os = require('os')
 
-const { metrics } = require('@opentelemetry/api')
+const { metrics } = require('../api')
 
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
