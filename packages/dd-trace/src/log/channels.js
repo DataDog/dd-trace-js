@@ -25,6 +25,10 @@ class LogChannel {
     this._level = getChannelLogLevel(level)
   }
 
+  getLevel () {
+    return Object.keys(Level).find(name => Level[name] === this._level) ?? 'none'
+  }
+
   subscribe (logger) {
     if (Level.trace >= this._level) {
       traceChannel.subscribe(logger.trace)
