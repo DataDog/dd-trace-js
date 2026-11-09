@@ -42,10 +42,12 @@ describe('Plugin', () => {
       describe('stateful', () => {
         let server
         let client
+        let serverTransport
 
         beforeEach(async () => {
           server = createServer()
-          const [clientTransport, serverTransport] = clientModule.InMemoryTransport.createLinkedPair()
+          const [clientTransport, receiver] = clientModule.InMemoryTransport.createLinkedPair()
+          serverTransport = receiver
           await server.connect(serverTransport)
           client = new clientModule.Client({ name: 'test-client', version: '1.0.0' })
           await client.connect(clientTransport)
@@ -129,6 +131,25 @@ describe('Plugin', () => {
 
           const [, result] = await Promise.all([traceAssertion, client.callTool({ name: 'error-tool', arguments: {} })])
           assert.equal(result.isError, true)
+        })
+
+        it('injects the active context on ping', async () => {
+          let pingRequest
+          const onmessage = serverTransport.onmessage
+          serverTransport.onmessage = (message, extra) => {
+            if (message.method === 'ping') pingRequest = message
+            onmessage.call(serverTransport, message, extra)
+          }
+
+          const parent = tracer.startSpan('ping-parent')
+          try {
+            const result = await tracer.scope().activate(parent, () => client.ping())
+            assert.deepStrictEqual(result, {})
+            const headers = pingRequest?.params?._meta?._dd_trace_context
+            assert.strictEqual(headers?.['x-datadog-parent-id'], parent.context().toSpanId())
+          } finally {
+            parent.finish()
+          }
         })
       })
 
