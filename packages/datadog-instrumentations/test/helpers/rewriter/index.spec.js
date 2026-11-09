@@ -1656,24 +1656,6 @@ describe('check-require-cache', () => {
     )
   })
 
-  it('rewrites a target that contains any of several source signatures', () => {
-    const filename = resolve(__dirname, 'node_modules', 'test', 'activation.js')
-    const source = 'function work () { return true }\n'
-    const target = {
-      moduleName: 'bullmq',
-      filePath: 'activation.js',
-      activationName: 'bullmq',
-      sourceMatch: ['function derive(', 'function work'],
-    }
-    const missing = { ...target, sourceMatch: ['function derive(', 'function other'] }
-    const rewriteBundled = rewriter.createBundlerRewriter(require.resolve('dc-polyfill'))
-
-    assert.notStrictEqual(rewriter.rewrite(source, filename, 'commonjs', target), source)
-    assert.notStrictEqual(rewriteBundled(source, filename, 'commonjs', target).code, source)
-    assert.strictEqual(rewriter.rewrite(source, filename, 'commonjs', missing), source)
-    assert.strictEqual(rewriteBundled(source, filename, 'commonjs', missing).code, source)
-  })
-
   it('reports a successfully rewritten pure ESM module without CommonJS syntax', async () => {
     const filename = resolve(__dirname, 'node_modules', 'test', 'activation.js')
     const source = "'use strict'\nexport const ddTraceOrchestrionDc = 'application binding'\n" +

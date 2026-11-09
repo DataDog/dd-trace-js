@@ -18,7 +18,7 @@ const NODE_MODULES = '/node_modules/'
  * @property {string} moduleName
  * @property {string} filePath
  * @property {boolean} [activate]
- * @property {string|string[]} [sourceMatch]
+ * @property {string} [sourceMatch]
  */
 
 /**

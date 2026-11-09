@@ -126,14 +126,6 @@ function finishPendingServerRequests (protocol) {
   }
 }
 
-// On close, SDK 1.x clears the abort controller map, but 2.x swaps in a new map, so the wrapped `delete` never
-// runs for requests still in flight. Stateless 2.x servers close right after sending each response.
-for (const name of ['@modelcontextprotocol/sdk', '@modelcontextprotocol/client', '@modelcontextprotocol/server']) {
-  channel(`tracing:orchestrion:${name}:Protocol__onclose:start`).subscribe(({ self }) => {
-    finishPendingServerRequests(self)
-  })
-}
-
 function wrapProtocol (Protocol) {
   // Inject trace context into MCP request metadata so out-of-process MCP servers
   // can parent server spans to the client operation span.
@@ -196,6 +188,17 @@ function wrapProtocol (Protocol) {
   shimmer.wrap(Protocol.prototype, 'setRequestHandler', function (original) {
     return function setRequestHandlerWithTrace () {
       wrapRequestHandlers(this)
+      return original.apply(this, arguments)
+    }
+  })
+
+  // On close, SDK 1.x clears the abort controller map, but 2.x swaps in a new map, so the wrapped `delete` never
+  // runs for requests still in flight. Stateless 2.x servers close right after sending each response.
+  // Orchestrion cannot target this in 2.x: Protocol sits in its own hashed chunk, and the rewriter allows one source
+  // marker per package pattern, which the Client and McpServer chunks already use.
+  shimmer.wrap(Protocol.prototype, '_onclose', function (original) {
+    return function _oncloseWithTrace () {
+      finishPendingServerRequests(this)
       return original.apply(this, arguments)
     }
   })

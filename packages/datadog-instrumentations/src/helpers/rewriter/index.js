@@ -19,7 +19,7 @@ const { getRewriteTarget } = require('./targets')
  *   { code: string, map?: string|object }} transform
  *
  * @typedef {(content: string|Buffer|ArrayBuffer|Uint8Array, filename: string, format?: string,
- *   target?: { moduleName: string, filePath: string, activate?: boolean, sourceMatch?: string|string[] },
+ *   target?: { moduleName: string, filePath: string, activate?: boolean, sourceMatch?: string },
  *   sourceMap?: string|object) =>
  *   { code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }} BundlerRewriter
  */
@@ -46,17 +46,6 @@ let matcherEsm
 const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
 
 /**
- * A hashed chunk is a target when it contains any of the source markers of its package pattern.
- *
- * @param {string} source
- * @param {string|string[]} sourceMatch
- */
-function includesSourceMatch (source, sourceMatch) {
-  if (typeof sourceMatch === 'string') return source.includes(sourceMatch)
-  return sourceMatch.some(marker => source.includes(marker))
-}
-
-/**
  * Loader hooks hand `file://` URLs to the rewriter while CommonJS and bundler
  * callers pass plain paths. `fileURLToPath` is the only correct conversion: a
  * plain scheme strip leaves Windows paths rooted at `/C:/` and keeps
@@ -74,7 +63,7 @@ function normalizeFilename (filename) {
  * @param {string|Buffer|ArrayBuffer|Uint8Array} content
  * @param {string} filename
  * @param {string} [format]
- * @param {{ moduleName: string, filePath: string, activate?: boolean, sourceMatch?: string|string[] }} [target]
+ * @param {{ moduleName: string, filePath: string, activate?: boolean, sourceMatch?: string }} [target]
  * @returns {string|Buffer|ArrayBuffer|Uint8Array}
  */
 function rewrite (content, filename, format, target) {
@@ -93,7 +82,7 @@ function rewrite (content, filename, format, target) {
     if (!version) return content
 
     const matchedSource = sourceMatch && getSourceText(content)
-    if (sourceMatch && !includesSourceMatch(matchedSource, sourceMatch)) return content
+    if (sourceMatch && !matchedSource?.includes(sourceMatch)) return content
 
     const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
 
@@ -161,7 +150,7 @@ function createBundlerRewriter (dcModule) {
       let matchedSource
       if (sourceMatch) {
         matchedSource = getSourceText(content)
-        if (!includesSourceMatch(matchedSource, sourceMatch)) return { code: content, map: sourceMap }
+        if (!matchedSource.includes(sourceMatch)) return { code: content, map: sourceMap }
       }
 
       const transformer = matcher.getTransformer(moduleName, version, filePath)
