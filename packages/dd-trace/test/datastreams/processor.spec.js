@@ -228,11 +228,7 @@ describe('DataStreamsProcessor', () => {
     processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
 
-    sinon.assert.calledWith(DataStreamsWriter, {
-      hostname: config.hostname,
-      port: config.port,
-      url: config.url,
-    })
+    sinon.assert.calledWith(DataStreamsWriter, config)
     assert.ok(processor.buckets instanceof TimeBuckets)
     assert.strictEqual(processor.hostname, hostname())
     assert.strictEqual(processor.enabled, config.dsmEnabled)

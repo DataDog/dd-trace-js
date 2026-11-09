@@ -115,9 +115,8 @@ interface Tracer extends opentracing.Tracer {
   init (options?: tracer.TracerOptions): this;
 
   /**
-   * Sets the URL for the trace agent. This should only be called _after_
-   * init() is called, only in cases where the URL needs to be set after
-   * initialization.
+   * Sets the Agent URL after initialization, including active Agent-backed products.
+   * Later remote configuration can replace this value. Invalid URLs preserve the previous destination.
    */
   setUrl (url: string): this;
 

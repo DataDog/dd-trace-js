@@ -9,11 +9,7 @@ class SpanStatsExporter {
 
   constructor (config) {
     this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
-    this._url = config.url
-    this._writer = new Writer({
-      url: this._url,
-      deliveryTracker: this.#serverlessDeliveryTracker,
-    })
+    this._writer = new Writer({ url: config.url, deliveryTracker: this.#serverlessDeliveryTracker }, config)
   }
 
   export (payload, done) {

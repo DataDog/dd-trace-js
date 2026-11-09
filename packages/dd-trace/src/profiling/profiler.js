@@ -287,6 +287,15 @@ class Profiler extends EventEmitter {
     return true
   }
 
+  /** @param {import('../config/config-base')} config */
+  configure (config) {
+    if (!this.enabled || this.#exporters.every(exporter =>
+      exporter.configure === undefined || exporter.getExportUrl().href === /** @type {URL} */ (config.url).href)) return
+
+    for (const exporter of this.#exporters) exporter.configure?.(config)
+    for (const profiler of this.#profilers) profiler.refreshExportConfiguration?.()
+  }
+
   #nearOOMExport (profileType, encodedProfile, info) {
     const start = this.#lastStart
     const end = new Date()

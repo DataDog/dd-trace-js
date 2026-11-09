@@ -141,6 +141,120 @@ describe('Config', () => {
     existsSyncParam = undefined
   })
 
+  describe('runtime programmatic configuration', () => {
+    const initial = 'http://initial:8126/'
+    const remote = 'http://remote:8126/'
+    const updated = 'http://updated:8126/'
+
+    it('preserves the latest accepted writer through recalculation and remote removal', () => {
+      const config = getConfig({ url: initial })
+      config.setProgrammaticConfig({ url: updated })
+      assert.strictEqual(config.url.href, updated)
+      assert.strictEqual(config.getOrigin('url'), 'code')
+
+      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
+      assert.strictEqual(config.url.href, remote)
+      assert.strictEqual(config.getOrigin('url'), 'remote_config')
+
+      config.setProgrammaticConfig({ url: updated })
+      config.setRemoteConfig(null)
+      assert.strictEqual(config.url.href, updated)
+      assert.strictEqual(config.getOrigin('url'), 'code')
+    })
+
+    it('reasserts values in a newly received remote transaction', () => {
+      const config = getConfig({ url: initial })
+      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
+      config.setProgrammaticConfig({ url: updated })
+      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
+      assert.strictEqual(config.url.href, remote)
+      config.setRemoteConfig(null)
+      assert.strictEqual(config.url.href, updated)
+    })
+
+    it('restores the programmatic URL when its remote replacement is removed', () => {
+      const config = getConfig({ url: initial })
+      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
+      config.setRemoteConfig(null)
+      assert.strictEqual(config.url.href, initial)
+    })
+
+    it('retains explicit URLs through unrelated calculations', () => {
+      const config = getConfig({ url: initial })
+      const url = config.url
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      assert.strictEqual(config.url, url)
+      assert.strictEqual(config.url.href, initial)
+      assert.strictEqual(config.getOrigin('url'), 'code')
+    })
+
+    it('distinguishes runtime URL overrides from initialization and remote configuration', () => {
+      const config = getConfig({ url: initial })
+      assert.strictEqual(config.hasRuntimeUrlOverride(), false)
+      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
+      config.setRemoteConfig(null)
+      assert.strictEqual(config.hasRuntimeUrlOverride(), false)
+      config.setProgrammaticConfig({ url: updated })
+      assert.strictEqual(config.hasRuntimeUrlOverride(), true)
+      config.setRemoteConfig({ DD_TRACE_AGENT_URL: remote })
+      assert.strictEqual(config.hasRuntimeUrlOverride(), false)
+      config.setRemoteConfig(null)
+      assert.strictEqual(config.hasRuntimeUrlOverride(), true)
+    })
+
+    for (const value of ['http://AGENT:80', 'https://agent:443/', 'unix:///tmp/agent.socket']) {
+      it(`normalizes and retains ${value}`, () => {
+        const config = getConfig({ remoteConfig: { enabled: false } })
+        config.setProgrammaticConfig({ url: value })
+        assert.strictEqual(config.url.href, new URL(value).href)
+        assert.strictEqual(config.getOrigin('url'), 'code')
+        config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+        assert.strictEqual(config.url.href, new URL(value).href)
+      })
+    }
+
+    it('publishes LLMObs runtime options together and preserves arrival order', () => {
+      const config = getConfig({ llmobs: { mlApp: 'original', agentlessEnabled: false } })
+      const updates = []
+      const listener = config => updates.push({ ...config.llmobs })
+      channel('datadog:config:update').subscribe(listener)
+      try {
+        config.setProgrammaticConfig({ llmobs: { enabled: true, mlApp: 'updated', agentlessEnabled: undefined } })
+        assert.strictEqual(updates.length, 1)
+        assert.strictEqual(updates[0].DD_LLMOBS_ENABLED, true)
+        assert.strictEqual(updates[0].DD_LLMOBS_ML_APP, 'updated')
+        assert.strictEqual(updates[0].DD_LLMOBS_AGENTLESS_ENABLED, undefined)
+        config.setRemoteConfig({ DD_LLMOBS_ENABLED: 'false' })
+        assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+        config.setProgrammaticConfig({ llmobs: { enabled: true } })
+        config.setRemoteConfig(null)
+        assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+        config.setProgrammaticConfig({ llmobs: { enabled: false } })
+        config.setProgrammaticConfig({ url: updated })
+        assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+      } finally {
+        channel('datadog:config:update').unsubscribe(listener)
+      }
+    })
+
+    it('rejects invalid URLs without changing configuration or publishing', () => {
+      const config = getConfig({ url: initial })
+      const listener = sinon.spy()
+      channel('datadog:config:update').subscribe(listener)
+      try {
+        for (const url of ['', 'invalid', undefined]) {
+          config.setProgrammaticConfig({ url })
+          assert.strictEqual(config.url.href, initial)
+          assert.strictEqual(config.getOrigin('url'), 'code')
+        }
+        sinon.assert.notCalled(listener)
+        assert.strictEqual(config.hasRuntimeUrlOverride(), false)
+      } finally {
+        channel('datadog:config:update').unsubscribe(listener)
+      }
+    })
+  })
+
   describe('config-helper', () => {
     it('enables tRPC tracing by default', () => {
       assert.strictEqual(getConfig().DD_TRACE_TRPC_ENABLED, true)

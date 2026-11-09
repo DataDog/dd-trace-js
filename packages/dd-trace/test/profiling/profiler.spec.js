@@ -163,6 +163,27 @@ describe('profiler', function () {
       clock.restore()
     })
 
+    it('updates Agent exporters and the OOM command without restarting samplers', () => {
+      const config = makeStartOptions()
+      config.url = new URL('http://original:8126')
+      let destination = config.url
+      exporter.getExportUrl = () => destination
+      exporter.configure = sinon.spy(config => { destination = config.url })
+      spaceProfiler.refreshExportConfiguration = sinon.spy()
+      profiler.start(config)
+      config.url = new URL('unix:///tmp/updated-agent.socket')
+      profiler.configure(config)
+      profiler.configure(config)
+
+      sinon.assert.calledOnce(wallProfiler.start)
+      sinon.assert.calledOnce(spaceProfiler.start)
+      sinon.assert.notCalled(wallProfiler.stop)
+      sinon.assert.notCalled(spaceProfiler.stop)
+      sinon.assert.calledOnce(exporter.configure)
+      sinon.assert.calledOnce(spaceProfiler.refreshExportConfiguration)
+      assert.strictEqual(destination, config.url)
+    })
+
     it('should start the internal time profilers', async () => {
       await profiler.start(makeStartOptions())
 

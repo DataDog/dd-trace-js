@@ -37,16 +37,17 @@ describe('Tracer', () => {
     it('should pass the sampling options to the priority sampler', () => {
       const env = 'test'
       const sampler = { sampleRate: 0.5 }
-      const options = { env, sampler }
+      const options = { ...config, env, sampler }
       tracer.configure(options)
       sinon.assert.calledWith(tracer._prioritySampler.configure, env, sampler)
     })
   })
 
-  describe('setUrl', () => {
-    it('should pass the setUrl call to the exporter', () => {
-      tracer.setUrl('http://example.com')
-      sinon.assert.calledWith(tracer._exporter.setUrl, 'http://example.com')
+  describe('Agent reconfiguration', () => {
+    it('updates the Agent exporter from effective configuration', () => {
+      const url = new URL('http://example.com')
+      tracer.configure({ ...config, url })
+      sinon.assert.calledOnceWithExactly(tracer._exporter.setUrl, url)
     })
   })
 

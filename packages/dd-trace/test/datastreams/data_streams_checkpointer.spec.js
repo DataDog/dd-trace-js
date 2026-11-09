@@ -25,10 +25,8 @@ describe('data streams checkpointer manual api', () => {
     process.env.DD_DATA_STREAMS_ENABLED = 'true'
     tracer = await agent.load(null, { dsmEnabled: true })
 
-    // Compute expected hashes using the actual service/env/propagationHash that the processor will use
-    const proc = tracer._tracer._dataStreamsProcessor
-    const service = proc.service
-    const env = proc.env
+    const getConfig = require('../../src/config')
+    const { service, env } = getConfig()
     const phash = propagationHash.getHash()
 
     const producerHash = computePathwayHash(

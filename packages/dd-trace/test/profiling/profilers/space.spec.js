@@ -248,6 +248,27 @@ describe('profilers/native/space', () => {
     assert.deepStrictEqual(exportCommand, [])
   })
 
+  it('refreshes the OOM destination without restarting heap sampling', () => {
+    const exporter = new AgentExporter({ url: new URL('http://original:8126'), DD_PROFILING_UPLOAD_TIMEOUT: 60_000 })
+    const profiler = makeSpace(NativeSpaceProfiler, {
+      oomMonitoringEnabled: true,
+      exportStrategies: ['process'],
+      exporters: [exporter],
+    })
+    profiler.start()
+    const url = new URL('unix:///tmp/updated-agent.socket')
+    exporter.configure({ url })
+    profiler.refreshExportConfiguration()
+
+    sinon.assert.calledOnce(pprof.heap.start)
+    sinon.assert.notCalled(pprof.heap.stop)
+    sinon.assert.calledTwice(pprof.heap.monitorOutOfMemory)
+    assert.strictEqual(pprof.heap.monitorOutOfMemory.secondCall.args[3][2], url.href)
+    profiler.stop()
+    profiler.refreshExportConfiguration()
+    sinon.assert.calledTwice(pprof.heap.monitorOutOfMemory)
+  })
+
   it('should re-register the OOM export command with refreshed tags', () => {
     const url = new URL('http://127.0.0.1:8126/')
     const tags = { 'runtime-id': 'initial-id' }

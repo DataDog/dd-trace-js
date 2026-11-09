@@ -59,6 +59,16 @@ describe('span-stats writer', () => {
   })
 
   describe('flush', () => {
+    it('uses the current Agent configuration on later sends', () => {
+      const config = { url }
+      writer = new Writer({ url }, config)
+      encoder.count.returns(1)
+      writer.flush()
+      config.url = new URL('unix:///tmp/updated-agent.socket')
+      writer.flush()
+      assert.strictEqual(request.lastCall.args[1].url, config.url)
+    })
+
     it('should skip flushing if empty', () => {
       writer.flush()
 

@@ -89,6 +89,10 @@ class NativeSpaceProfiler {
 
   getInfo () {}
 
+  refreshExportConfiguration () {
+    this.#identityRefreshListener?.()
+  }
+
   encode (profile) {
     return encodeProfileAsync(profile)
   }

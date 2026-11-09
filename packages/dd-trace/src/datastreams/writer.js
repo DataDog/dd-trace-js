@@ -27,8 +27,10 @@ function makeRequest (data, url, cb) {
 }
 
 class DataStreamsWriter {
+  #config
+
   constructor (config) {
-    this._url = config.url
+    this.#config = config
   }
 
   flush (payload) {
@@ -55,22 +57,13 @@ class DataStreamsWriter {
         log.error('Error zipping datastream', err)
         return
       }
-      makeRequest(compressedData, this._url, (err, res) => {
+      makeRequest(compressedData, this.#config.url, (err, res) => {
         log.debug('Response from the agent:', res)
         if (err) {
           log.error('Error sending datastream', err)
         }
       })
     })
-  }
-
-  setUrl (url) {
-    try {
-      url = new URL(url)
-      this._url = url
-    } catch (e) {
-      log.warn(e.stack)
-    }
   }
 }
 
