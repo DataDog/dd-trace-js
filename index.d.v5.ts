@@ -213,7 +213,9 @@ interface Tracer extends opentracing.Tracer {
   /**
    * OpenFeature Provider with agentless and Agent Remote Config delivery.
    *
-   * Agentless delivery is enabled by default and starts when the provider is first accessed.
+   * Agentless delivery is enabled by default and starts when the provider is first accessed. The default agentless
+   * endpoint requires DD_API_KEY. Without it, provider initialization fails at once. A custom agentless base URL
+   * and Remote Config delivery do not need the key.
    *
    * @env DD_FEATURE_FLAGS_ENABLED
    * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
@@ -992,7 +994,8 @@ declare namespace tracer {
         enabled?: boolean
         /**
          * Timeout in milliseconds for OpenFeature provider initialization.
-         * If configuration is not received within this time, initialization fails.
+         * If configuration is not received within this time, initialization fails. It fails at once when the agentless
+         * configuration source cannot start, such as the default endpoint without DD_API_KEY.
          * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable.
          *
          * @default 30000

@@ -655,7 +655,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
       sinon.assert.calledOnceWithExactly(writer.warn, DIAGNOSTIC)
     })
 
-    it('does not write the diagnostic when startup logs are disabled', () => {
+    it('does not write the diagnostic when startup logs are explicitly disabled', () => {
       mockConfig.startupLogs = false
 
       // eslint-disable-next-line no-new

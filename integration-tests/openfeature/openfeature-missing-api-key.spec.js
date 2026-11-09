@@ -81,7 +81,7 @@ describe('OpenFeature agentless configuration without an API key', () => {
     await waitForOutput(DIAGNOSTIC)
   })
 
-  it('does not write the diagnostic when startup logs are disabled', async () => {
+  it('does not write the diagnostic when startup logs are explicitly disabled', async () => {
     await start({ DD_TRACE_STARTUP_LOGS: 'false' })
 
     await assert.rejects(
