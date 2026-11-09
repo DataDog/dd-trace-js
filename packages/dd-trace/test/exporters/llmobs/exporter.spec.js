@@ -77,6 +77,8 @@ describe('LLMObsExporter', () => {
             config.DD_API_KEY = 'test-api-key'
             const jsStats = { export: sinon.stub().callsFake((payload, done) => done?.()) }
             const otlpStats = {
+              protocol: 'http/protobuf',
+              getStartupResourceAttributes: () => ({}),
               export: sinon.stub().callsFake((payload, bucketSize, done) => done?.()),
               flush: sinon.stub().callsFake(done => done?.()),
             }
