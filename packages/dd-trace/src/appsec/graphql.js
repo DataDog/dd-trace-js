@@ -70,7 +70,9 @@ function onGraphqlStartResolver (data) {
   // occurrence run again instead of reading it back as "allowed".
   if (cacheKey !== undefined && result !== undefined && !result.timeout) {
     if (knownActions === undefined) {
-      fieldsWithoutArgumentsActions.set(req, new Map([[cacheKey, blockingAction]]))
+      const blockingActions = new Map()
+      blockingActions.add(cacheKey, blockingAction)
+      fieldsWithoutArgumentsActions.set(req, blockingActions)
     } else {
       knownActions.set(cacheKey, blockingAction)
     }
