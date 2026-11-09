@@ -97,7 +97,6 @@ const DataStreamsProcessor = lazyClass(() => require('./processor').DataStreamsP
   'recordOffset',
   'setOffset',
   'trackTransaction',
-  'setUrl',
   'trySampleSchema',
   'canSampleSchema',
   'getSchema',

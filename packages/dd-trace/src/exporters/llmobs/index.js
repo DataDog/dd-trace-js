@@ -40,11 +40,29 @@ class LLMObsExporter extends BufferingExporter {
     const agentlessEnabled = useAgentlessExporter ?? globalAgentlessEnabled ?? config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED
 
     if (agentlessEnabled === undefined) {
-      fetchAgentInfo(config.url, (err) => {
-        this.#initialize(err != null)
-      }, { keepProcessAlive: true })
+      this.#discover()
     } else {
       this.#initialize(agentlessEnabled)
+    }
+  }
+
+  #discover () {
+    const url = this._config.url
+    fetchAgentInfo(url, (error) => {
+      if (url.href === this._config.url.href) {
+        this.#initialize(error != null)
+      } else {
+        this.#discover()
+      }
+    }, { keepProcessAlive: true })
+  }
+
+  /** @param {ReturnType<import('../../config')>} config */
+  configure (config) {
+    if (config.hasRuntimeUrlOverride() || this._isInitialized && !this.#agentless) {
+      this.setUrl(config.url)
+    } else if (!this._isInitialized) {
+      this._url = undefined
     }
   }
 

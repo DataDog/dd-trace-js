@@ -15,7 +15,7 @@ const { getConfigFresh } = require('../../helpers/config')
 
 describe('sdk prompts', () => {
   it('exposes Prompt Management only through a stable prompts namespace', () => {
-    const llmobs = new LLMObsSDK(null, { disable () {} }, getConfigFresh({}))
+    const llmobs = new LLMObsSDK(null, getConfigFresh({}))
 
     assert.strictEqual(llmobs.prompts, llmobs.prompts)
     assert.strictEqual(typeof llmobs.prompts.getPrompt, 'function')
@@ -33,7 +33,7 @@ describe('sdk prompts', () => {
       }),
     }
     const getProvider = sinon.stub().returns(provider)
-    const llmobs = new LLMObsSDK(null, { disable () {} }, config, getProvider)
+    const llmobs = new LLMObsSDK(null, config, getProvider)
 
     sinon.assert.notCalled(getProvider)
 
@@ -59,7 +59,7 @@ describe('sdk prompts', () => {
     cache.set(cacheKey('greeting', ['latest']), new ManagedPrompt({
       id: 'greeting', version: '1', source: 'cache', template: 'Hello',
     }))
-    const llmobs = new LLMObsSDK(null, { disable () {} }, config)
+    const llmobs = new LLMObsSDK(null, config)
 
     llmobs.prompts.clearPromptCache({ hot: false })
 
@@ -70,7 +70,7 @@ describe('sdk prompts', () => {
   it('rejects instead of throwing when lazy manager creation fails', async () => {
     const config = getConfigFresh({})
     config.site = 'datadoghq.com@collector.example'
-    const llmobs = new LLMObsSDK(null, { disable () {} }, config)
+    const llmobs = new LLMObsSDK(null, config)
     const expected = {
       name: 'PromptAuthError',
       detail: 'DD_SITE is invalid for prompt operations',

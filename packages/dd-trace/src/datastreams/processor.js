@@ -213,22 +213,9 @@ class TimeBuckets extends Map {
 }
 
 class DataStreamsProcessor {
-  constructor ({
-    dsmEnabled,
-    hostname,
-    port,
-    url,
-    env,
-    tags,
-    version,
-    service,
-    flushInterval,
-  } = {}) {
-    this.writer = new DataStreamsWriter({
-      hostname,
-      port,
-      url,
-    })
+  constructor (config = {}) {
+    const { dsmEnabled, env, tags, version, service, flushInterval } = config
+    this.writer = new DataStreamsWriter(config)
     this.bucketSizeNs = 1e10
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
@@ -477,10 +464,6 @@ class DataStreamsProcessor {
     return {
       Stats: serializedBuckets,
     }
-  }
-
-  setUrl (url) {
-    this.writer.setUrl(url)
   }
 
   trySampleSchema (topic) {

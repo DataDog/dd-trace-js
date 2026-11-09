@@ -53,8 +53,67 @@ describe('LLMObsExporter', () => {
       tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: undefined },
       llmobs: { DD_LLMOBS_AGENTLESS_ENABLED: undefined },
       url: new URL('http://agent:8126'),
+      hasRuntimeUrlOverride: sinon.stub().returns(false),
     }
   }
+
+  it('repeats discovery when the Agent changes before its response arrives', () => {
+    const config = getConfig()
+    const exporter = new Exporter(config, {})
+    config.url = new URL('http://updated:8126')
+    exporter.configure(config)
+    fetchAgentInfo.firstCall.args[1](new Error('Previous Agent unavailable'))
+
+    sinon.assert.notCalled(AgentlessExporter)
+    sinon.assert.notCalled(AgentExporter)
+    sinon.assert.calledTwice(fetchAgentInfo)
+    assert.strictEqual(fetchAgentInfo.secondCall.args[0], config.url)
+    fetchAgentInfo.secondCall.args[1](null, {})
+    exporter.export([{ name: 'updated' }])
+    sinon.assert.calledOnce(AgentExporter)
+    sinon.assert.calledOnce(agentExporter.export)
+  })
+
+  it('preserves direct intake on remote updates and honors explicit setters', () => {
+    const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = true
+    const exporter = new Exporter(config, {})
+    config.url = new URL('http://updated:8126')
+    exporter.configure(config)
+    sinon.assert.notCalled(agentlessExporter.setUrl)
+
+    config.hasRuntimeUrlOverride.returns(true)
+    exporter.configure(config)
+    sinon.assert.calledOnceWithExactly(agentlessExporter.setUrl, config.url)
+  })
+
+  for (const error of [undefined, new Error('Agent unavailable')]) {
+    it(`discards a superseded programmatic URL during ${error ? 'failed' : 'successful'} discovery`, () => {
+      const config = getConfig()
+      const exporter = new Exporter(config, {})
+      config.url = new URL('http://programmatic:8126')
+      config.hasRuntimeUrlOverride.returns(true)
+      exporter.configure(config)
+      config.url = new URL('http://remote:8126')
+      config.hasRuntimeUrlOverride.returns(false)
+      exporter.configure(config)
+      fetchAgentInfo.firstCall.args[1](undefined, {})
+      fetchAgentInfo.secondCall.args[1](error, {})
+
+      sinon.assert.notCalled(agentExporter.setUrl)
+      sinon.assert.notCalled(agentlessExporter.setUrl)
+      sinon.assert.calledOnceWithExactly(error ? AgentlessExporter : AgentExporter, config, {})
+    })
+  }
+
+  it('updates an active Agent transport for remote configuration', () => {
+    const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = false
+    const exporter = new Exporter(config, {})
+    config.url = new URL('http://updated:8126')
+    exporter.configure(config)
+    sinon.assert.calledOnceWithExactly(agentExporter.setUrl, config.url)
+  })
 
   it('buffers traces and drains them to the Agent exporter when discovery succeeds', () => {
     const config = getConfig()

@@ -33,11 +33,6 @@ describe('DataStreamWriter unix', () => {
     port: '',
   }
 
-  it('should construct unix config', () => {
-    writer = new DataStreamsWriter(unixConfig)
-    assert.strictEqual(writer._url, unixConfig.url)
-  })
-
   it("should call 'request' through flush with correct options", () => {
     writer = new DataStreamsWriter(unixConfig)
     writer.flush({})
@@ -56,6 +51,15 @@ describe('DataStreamWriter unix', () => {
       },
       url: unixConfig.url,
     })
+  })
+
+  it('uses the current destination for later exports', () => {
+    const config = { url: new URL('http://original:8126') }
+    const writer = new DataStreamsWriter(config)
+    writer.flush({})
+    config.url = new URL('unix:///tmp/updated-agent.socket')
+    writer.flush({})
+    assert.strictEqual(stubRequest.lastCall.args[1].url, config.url)
   })
 
   it('drops the payload and logs when msgpack encoding hits the chunk cap', () => {

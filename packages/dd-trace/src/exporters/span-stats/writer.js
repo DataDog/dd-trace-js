@@ -9,14 +9,22 @@ const request = require('../common/request')
 const log = require('../../log')
 
 class Writer extends BaseWriter {
-  constructor ({ url }) {
-    super(...arguments)
-    this._url = url
+  #config
+
+  /**
+   * @param {Pick<import('../../config/config-base'), 'url'> & {
+   *   deliveryTracker?: import('../../serverless/telemetry-delivery-tracker')
+   * }} options
+   * @param {Pick<import('../../config/config-base'), 'url'>} [config]
+   */
+  constructor (options, config = options) {
+    super(/** @type {ConstructorParameters<typeof BaseWriter>[0]} */ (options))
+    this.#config = config
     this._encoder = new SpanStatsEncoder(this)
   }
 
   _sendPayload (data, _, done) {
-    makeRequest(data, this._url, (err, res) => {
+    makeRequest(data, this.#config.url, (err, res) => {
       if (err) {
         log.error('Error sending span stats', err)
         done()

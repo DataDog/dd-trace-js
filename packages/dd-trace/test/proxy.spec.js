@@ -64,8 +64,17 @@ describe('TracerProxy', () => {
   let supportsServerlessTelemetryRetention
   let flushServerlessTelemetry
   let otelThreadCtx
+  let configUpdateChannel
 
   beforeEach(() => {
+    const configListeners = new Set()
+    configUpdateChannel = {
+      subscribe (listener) { configListeners.add(listener) },
+      unsubscribe (listener) { configListeners.delete(listener) },
+      publish (config) {
+        for (const listener of configListeners) listener(config)
+      },
+    }
     process.env.DD_TRACE_MOCHA_ENABLED = 'false'
 
     aiguardSdk = {
@@ -197,7 +206,8 @@ describe('TracerProxy', () => {
       runtimeMetrics: {
         enabled: false,
       },
-      setRemoteConfig: sinon.stub(),
+      setRemoteConfig: sinon.stub().callsFake(() => configUpdateChannel.publish(config)),
+      setProgrammaticConfig: sinon.stub(),
       llmobs: {},
     }
     Config = sinon.stub().returns(config)
@@ -301,6 +311,9 @@ describe('TracerProxy', () => {
     })
 
     ProxyClass = proxyquire('../src/proxy', {
+      'dc-polyfill': {
+        channel: name => name === 'datadog:config:update' ? configUpdateChannel : dc.channel(name),
+      },
       './tracer': DatadogTracer,
       './noop/proxy': NoopProxy,
       './config': Config,
@@ -598,14 +611,31 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(dynamicInstrumentation.stop)
       })
 
-      it('starts and configures Dynamic Instrumentation when enabled', () => {
+      it('starts Dynamic Instrumentation once when enabled', () => {
         config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED = true
 
         proxy.init()
 
         sinon.assert.calledOnceWithExactly(dynamicInstrumentation.start, config, rc)
-        sinon.assert.calledOnceWithExactly(dynamicInstrumentation.configure, config)
+        sinon.assert.notCalled(dynamicInstrumentation.configure)
       })
+
+      for (const isCiVisibility of [false, true]) {
+        it(`keeps Dynamic Instrumentation inactive without Remote Configuration in CI mode ${isCiVisibility}`, () => {
+          config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED = true
+          config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = isCiVisibility
+          config.isCiVisibility = isCiVisibility
+          config.setProgrammaticConfig.callsFake(() => configUpdateChannel.publish(config))
+
+          proxy.init()
+          proxy.setUrl('http://updated:8126')
+
+          sinon.assert.notCalled(dynamicInstrumentation.start)
+          sinon.assert.notCalled(dynamicInstrumentation.configure)
+          sinon.assert.notCalled(dynamicInstrumentation.isStarted)
+          sinon.assert.notCalled(RemoteConfig)
+        })
+      }
 
       it('should enable the IAST rewriter when IAST is enabled', () => {
         config.iast.DD_IAST_ENABLED = true
@@ -883,6 +913,7 @@ describe('TracerProxy', () => {
         config.setRemoteConfig.callsFake(conf => {
           config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
             conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
+          configUpdateChannel.publish(config)
         })
         proxy.init()
 
@@ -901,6 +932,7 @@ describe('TracerProxy', () => {
         config.setRemoteConfig.callsFake(conf => {
           config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
             conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
+          configUpdateChannel.publish(config)
         })
         proxy.init()
 
@@ -1083,6 +1115,7 @@ describe('TracerProxy', () => {
         /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
+          configUpdateChannel.publish(config)
         }
 
         proxy.init()
@@ -1102,6 +1135,7 @@ describe('TracerProxy', () => {
         /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
           config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
+          configUpdateChannel.publish(config)
         }
 
         proxy.init()
@@ -1119,6 +1153,9 @@ describe('TracerProxy', () => {
 
       it('should support applying remote config', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
+          'dc-polyfill': {
+            channel: name => name === 'datadog:config:update' ? configUpdateChannel : dc.channel(name),
+          },
           './tracer': DatadogTracer,
           './aiguard': aiguard,
           './aiguard/sdk': AIGuardSdk,
@@ -1152,6 +1189,9 @@ describe('TracerProxy', () => {
 
       it('should support applying remote config (only call disable if enabled before)', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
+          'dc-polyfill': {
+            channel: name => name === 'datadog:config:update' ? configUpdateChannel : dc.channel(name),
+          },
           './tracer': DatadogTracer,
           './config': Config,
           './aiguard': aiguard,
@@ -1167,6 +1207,7 @@ describe('TracerProxy', () => {
         config.iast.DD_IAST_ENABLED = true
         config.setRemoteConfig = conf => {
           config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED === 'true'
+          configUpdateChannel.publish(config)
         }
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -1328,7 +1369,6 @@ describe('TracerProxy', () => {
       })
 
       it('should publish the config on the config-update channel during init', () => {
-        const configUpdateChannel = dc.channel('datadog:config:update')
         const subscriber = sinon.spy()
         configUpdateChannel.subscribe(subscriber)
 
@@ -1503,10 +1543,10 @@ describe('TracerProxy', () => {
     })
 
     describe('setUrl', () => {
-      it('should call the underlying DatadogTracer', () => {
+      it('ignores calls before initialization', () => {
         const returnValue = proxy.setUrl('http://example.com')
 
-        sinon.assert.calledWith(noop.setUrl, 'http://example.com')
+        sinon.assert.notCalled(config.setProgrammaticConfig)
         assert.strictEqual(returnValue, proxy)
       })
     })
@@ -1744,11 +1784,21 @@ describe('TracerProxy', () => {
     })
 
     describe('setUrl', () => {
-      it('should call the underlying DatadogTracer', () => {
+      it('should update canonical configuration', () => {
         const returnValue = proxy.setUrl('http://example.com')
 
-        sinon.assert.calledWith(tracer.setUrl, 'http://example.com')
+        sinon.assert.calledOnceWithExactly(config.setProgrammaticConfig, { url: 'http://example.com' })
         assert.strictEqual(returnValue, proxy)
+      })
+
+      it('logs a runtime consumer failure without throwing from setUrl', () => {
+        const error = new Error('configuration failed')
+        tracer.configure = sinon.stub().throws(error)
+        config.setProgrammaticConfig.callsFake(() => configUpdateChannel.publish(config))
+
+        assert.strictEqual(proxy.setUrl('http://example.com'), proxy)
+
+        sinon.assert.calledOnceWithExactly(log.error, 'Error reconfiguring tracer', error)
       })
     })
 
@@ -1824,6 +1874,7 @@ describe('TracerProxy', () => {
 
       diagnosticsChannelMock = {
         channel: sinon.stub().callsFake((name) => {
+          if (name === 'datadog:config:update') return configUpdateChannel
           if (microVmChannelNames.has(name)) return channelMock
           if (!otherChannelMocks.has(name)) {
             otherChannelMocks.set(name, { subscribe: sinon.stub(), unsubscribe: sinon.stub(), publish: sinon.stub() })
@@ -2154,7 +2205,9 @@ describe('TracerProxy', () => {
         './flare': flare,
         './openfeature': openfeature,
         './openfeature/flagging_provider': OpenFeatureProvider,
-        // dc-polyfill intentionally NOT mocked — this test exercises the real shared channel.
+        'dc-polyfill': {
+          channel: name => name === 'datadog:config:update' ? configUpdateChannel : dc.channel(name),
+        },
       })
 
       microProxy = new MicroVmProxy()

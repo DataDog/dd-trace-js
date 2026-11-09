@@ -33,6 +33,11 @@ class AgentExporter {
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
   }
 
+  /** @param {import('../../config/config-base')} config */
+  configure (config) {
+    if (/** @type {URL} */ (config.url).href !== this._url.href) this.setUrl(config.url)
+  }
+
   setUrl (url) {
     try {
       url = new URL(url)
