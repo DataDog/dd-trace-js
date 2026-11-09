@@ -7,6 +7,24 @@ const { AUTO_KEEP } = require('../../../../ext/priority')
 const TRACE_ID_128 = '_dd.p.tid'
 
 class DatadogSpanContext {
+  /**
+   * @param {DatadogSpanContext} context
+   * @param {import('../id').Identifier} spanId
+   */
+  static withSpanId (context, spanId) {
+    return new DatadogSpanContext({
+      traceId: context._traceId,
+      spanId,
+      isRemote: context._isRemote,
+      sampling: context._sampling,
+      baggageItems: context._baggageItems,
+      trace: context._trace,
+      traceparent: context._traceparent,
+      tracestate: context._tracestate,
+      links: context._links,
+    })
+  }
+
   constructor (props) {
     props ||= {}
 

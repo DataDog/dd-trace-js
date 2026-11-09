@@ -156,6 +156,25 @@ describe('Plugin', () => {
         })
 
         describe('publish', () => {
+          it('uses the active publisher when message context is incomplete', async () => {
+            const [topic] = await pubsub.createTopic(topicName)
+            let publisherContext
+            const expected = agent.assertSomeTraces(traces => {
+              const span = traces.flat().find(span => span.name === expectedSchema.send.opName)
+              assert.ok(span)
+              assert.strictEqual(span.parent_id.toString(), publisherContext.toSpanId())
+              assert.strictEqual(span.trace_id.toString(), publisherContext.toTraceId())
+            }, { spanResourceMatch: /^publish to Topic /, rejectFirst: true })
+            const publishing = tracer.trace('publisher', span => {
+              publisherContext = span.context()
+              return publish(topic, {
+                data: Buffer.from('hello'),
+                attributes: { 'x-datadog-trace-id': '42' },
+              })
+            })
+            await Promise.all([publishing, expected])
+          })
+
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.send.opName,
@@ -256,6 +275,51 @@ describe('Plugin', () => {
             })
             return expectedSpanPromise
           })
+
+          for (const activePublisher of [false, true]) {
+            it(`preserves trace metadata with an active publisher: ${activePublisher}`, async () => {
+              const upper = '6af1eb9300000000'
+              const tags = `_dd.p.tid=${upper},_dd.p.dm=-0,_dd.p.llmobs_parent_id=44,_dd.p.llmobs_sd=0`
+              const attributes = {
+                'x-datadog-trace-id': '42',
+                'x-datadog-parent-id': '43',
+                'x-datadog-sampling-priority': '2',
+                'x-datadog-tags': tags,
+                'ot-baggage-user': 'alice',
+                traceparent: `00-${upper}000000000000002a-000000000000002b-01`,
+                tracestate: 'vendor=value,dd=s:2;t.dm:-0',
+              }
+              const [topic] = await pubsub.createTopic(topicName)
+              const [sub] = await topic.createSubscription('foo')
+              const expectedSpan = expectSpanWithDefaults({
+                service: expectedSchema.receive.serviceName,
+                meta: { 'span.kind': 'consumer' },
+              })
+              let receivedAttributes
+              let carrier
+              sub.once('message', message => {
+                receivedAttributes = message.attributes
+                carrier = {}
+                tracer.inject(tracer.scope().active(), 'text_map', carrier)
+                message.ack()
+              })
+
+              const publishing = activePublisher
+                ? tracer.trace('publisher', { childOf: tracer.extract('text_map', attributes) }, () => {
+                  return publish(topic, { data: Buffer.from('hello') })
+                })
+                : publish(topic, { data: Buffer.from('hello'), attributes })
+              await Promise.all([publishing, expectedSpan])
+
+              assert.strictEqual(receivedAttributes['_dd.pubsub_request.p.tid'], upper)
+              assert.strictEqual(carrier['x-datadog-trace-id'], '42')
+              assert.strictEqual(carrier['x-datadog-sampling-priority'], '2')
+              assert.strictEqual(carrier['ot-baggage-user'], 'alice')
+              assert.ok(carrier.tracestate.split(',').includes('vendor=value'))
+              assert.deepStrictEqual(carrier['x-datadog-tags'].split(',').sort(), tags.split(',').sort())
+              assert.strictEqual(carrier.traceparent.split('-')[1], upper + '000000000000002a')
+            })
+          }
 
           it('should be instrumented w/ error', async () => {
             const error = new Error('bad')

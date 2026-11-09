@@ -106,7 +106,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
     const isFirstMessage = batchIndex === 0
     if (isFirstMessage && batchRequestSpanId) {
-      const pubsubRequestContext = reconstructPubSubRequestContext(message.attributes)
+      const pubsubRequestContext = reconstructPubSubRequestContext(message.attributes, childOf)
       if (pubsubRequestContext) {
         childOf = pubsubRequestContext
       }

@@ -5,9 +5,6 @@ const {
   readDatadogSamplingPriority,
   readDatadogTraceId,
   readTraceparent,
-  writeDatadogParentId,
-  writeDatadogSamplingPriority,
-  writeDatadogTraceId,
 } = require('../../dd-trace/src/carrier')
 const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastreams')
 const id = require('../../dd-trace/src/id')
@@ -71,6 +68,9 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     const topic = request.topic
     const messageCount = messages.length
     const hasTraceContext = messages[0]?.attributes && readDatadogTraceId(messages[0].attributes)
+    const parentContext = hasTraceContext && readDatadogParentId(messages[0].attributes)
+      ? this.tracer.extract('text_map', messages[0].attributes)
+      : undefined
 
     /**
      * Batch Publishing Strategy:
@@ -89,22 +89,10 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       }
     }
 
-    const firstAttrs = messages[0]?.attributes
-    const traceId = firstAttrs && readDatadogTraceId(firstAttrs)
-    const spanId = firstAttrs && readDatadogParentId(firstAttrs)
-    const parentData = traceId && spanId
-      ? {
-          traceId,
-          spanId,
-          traceIdUpper: firstAttrs['_dd.p.tid'],
-          samplingPriority: readDatadogSamplingPriority(firstAttrs),
-        }
-      : null
-
     const lastSlash = topic.lastIndexOf('/')
     const topicName = lastSlash === -1 ? topic : topic.slice(lastSlash + 1)
     const batchSpan = this.startSpan({
-      childOf: parentData ? this.#extractParentContext(parentData) : undefined,
+      childOf: parentContext,
       resource: `${api} to Topic ${topicName}`,
       meta: {
         'gcloud.project_id': projectId,
@@ -206,16 +194,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         ? Number.parseInt(samplingPriority, 10)
         : undefined,
     }
-  }
-
-  #extractParentContext (data) {
-    const carrier = /** @type {Record<string, unknown>} */ ({})
-    writeDatadogTraceId(carrier, data.traceId)
-    writeDatadogParentId(carrier, data.spanId)
-    if (data.traceIdUpper) carrier['_dd.p.tid'] = data.traceIdUpper
-    if (data.samplingPriority) writeDatadogSamplingPriority(carrier, String(data.samplingPriority))
-
-    return this.tracer.extract('text_map', carrier)
   }
 }
 

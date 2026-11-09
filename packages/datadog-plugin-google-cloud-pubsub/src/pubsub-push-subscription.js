@@ -68,9 +68,9 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     }
 
     const originalContext = this.#extractContext(messageData)
-    const pubsubRequestContext = reconstructPubSubRequestContext(messageData.attrs) || originalContext
+    const pubsubRequestContext = reconstructPubSubRequestContext(messageData.attrs, originalContext) || originalContext
     const isSameTrace = pubsubRequestContext &&
-      originalContext?.toTraceId() === pubsubRequestContext.toTraceId()
+      originalContext?.toTraceId(true) === pubsubRequestContext.toTraceId(true)
 
     /**
      * Create receive span, choosing parent context:

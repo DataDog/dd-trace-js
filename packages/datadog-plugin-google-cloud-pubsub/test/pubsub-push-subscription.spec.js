@@ -4,6 +4,7 @@
 process.env.K_SERVICE = 'test-service'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const { setTimeout: wait } = require('node:timers/promises')
 
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
@@ -41,9 +42,11 @@ describe('Push Subscription Plugin', () => {
   })
 
   // Helper to create a simple HTTP server that responds OK to /push-endpoint
-  function createServer () {
+  /** @param {(req: import('node:http').IncomingMessage) => void} [onRequest] */
+  function createServer (onRequest) {
     return http.createServer((req, res) => {
       if (req.method === 'POST' && req.url.startsWith('/push-endpoint')) {
+        onRequest?.(req)
         req.on('data', () => {})
         req.on('end', () => {
           res.writeHead(200)
@@ -81,6 +84,57 @@ describe('Push Subscription Plugin', () => {
   }
 
   describe('Push subscription with raw HTTP server', () => {
+    for (const [upper, batchUpper] of [
+      [undefined, undefined],
+      ['6af1eb9300000000', '6af1eb9300000000'],
+      ['6af1eb9300000000', '6af1eb9400000000'],
+    ]) {
+      it(`preserves the selected trace metadata for upper IDs ${upper} / ${batchUpper}`, async () => {
+        const tracer = require('../../dd-trace')
+        const tags = '_dd.p.dm=-0,_dd.p.llmobs_parent_id=44,_dd.p.llmobs_sd=0' +
+          (upper ? `,_dd.p.tid=${upper}` : '')
+        let carrier
+        appListener = createServer(() => {
+          carrier = {}
+          tracer.inject(tracer.scope().active(), 'text_map', carrier)
+        })
+        appListener.listen(0, 'localhost')
+        await once(appListener, 'listening')
+        const sameTrace = upper === batchUpper
+        const expected = agent.assertSomeTraces(traces => {
+          const span = findPubSubSpan(traces)
+          assert.strictEqual(span.parent_id.toString(), sameTrace ? '44' : '43')
+          assert.strictEqual(span.trace_id.toString(), '42')
+          if (sameTrace) {
+            assert.strictEqual(span.meta['_dd.span_links'], undefined)
+          } else {
+            const links = JSON.parse(span.meta['_dd.span_links'])
+            assert.strictEqual(links[0].trace_id, batchUpper + '000000000000002a')
+          }
+        })
+        const headers = {
+          'x-datadog-trace-id': '42',
+          'x-datadog-parent-id': '43',
+          'x-datadog-sampling-priority': '2',
+          'x-datadog-tags': tags,
+          'ot-baggage-user': 'alice',
+          traceparent: `00-${upper ?? '0000000000000000'}000000000000002a-000000000000002b-01`,
+          tracestate: 'vendor=value,dd=s:2;t.dm:-0',
+          '_dd.pubsub_request.trace_id': '000000000000002a',
+          '_dd.pubsub_request.span_id': '000000000000002c',
+        }
+        if (batchUpper) headers['_dd.pubsub_request.p.tid'] = batchUpper
+        await Promise.all([sendPushRequest(appListener.address().port, headers), expected])
+
+        assert.strictEqual(carrier['x-datadog-trace-id'], '42')
+        assert.strictEqual(carrier['x-datadog-sampling-priority'], '2')
+        assert.strictEqual(carrier['ot-baggage-user'], 'alice')
+        assert.ok(carrier.tracestate.split(',').includes('vendor=value'))
+        assert.deepStrictEqual(carrier['x-datadog-tags'].split(',').sort(), tags.split(',').sort())
+        assert.strictEqual(carrier.traceparent.split('-')[1], (upper ?? '0000000000000000') + '000000000000002a')
+      })
+    }
+
     it('should create pubsub.push.receive span with delivery duration', (done) => {
       const messageId = 'http-test-789'
       const publishStartTime = Date.now().toString()
