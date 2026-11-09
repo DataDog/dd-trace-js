@@ -138,7 +138,7 @@ describe('generate supported integrations', () => {
       getPackageVersions: async dependency => packageVersions[dependency],
     })
 
-    assert.deepStrictEqual(rows.map(row => [row.dependencyName, row.versions.map(version => ({
+    assert.deepStrictEqual(rows.map(row => [row.libraryName, row.versions.map(version => ({
       node: version.testedRuntimes.node, tested: version.tested,
     }))]), [
       ['@cucumber/cucumber', [
@@ -207,7 +207,7 @@ describe('generate supported integrations', () => {
       }
 
       assert.deepStrictEqual(rows, [{
-        dependencyName: '@wdio/local-runner',
+        libraryName: '@wdio/local-runner',
         integrationName: 'mocha',
         autoInstrumented: true,
         versions,
@@ -231,12 +231,12 @@ describe('generate supported integrations', () => {
  * @param {string} supportedRange
  * @param {string[]} testedVersions
  * @param {string} [nodeVersion]
- * @returns {{ dependencyName: string, integrationName: string, autoInstrumented: boolean,
+ * @returns {{ libraryName: string, integrationName: string, autoInstrumented: boolean,
  *   versions: Array<{ testedRuntimes: { node: string[] }, supportedRange: string, tested: string[] }> }}
  */
 function supportedIntegration (dependency, integration, supportedRange, testedVersions, nodeVersion = '26.2.0') {
   return {
-    dependencyName: dependency,
+    libraryName: dependency,
     integrationName: integration,
     autoInstrumented: true,
     versions: [{
