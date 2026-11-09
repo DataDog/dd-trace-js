@@ -36,8 +36,7 @@ describe('trpc ESM', () => {
       await spawnPluginIntegrationTestProcAndExpectExit(
         sandboxCwd(),
         'server.mjs',
-        agent.port,
-        { TRPC_TRACE_MODE: 'traced' }
+        agent.port
       )
       await httpTrace
 

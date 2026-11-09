@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
 
-if (process.env.TRPC_TRACE_MODE === 'traced') {
-  await import('dd-trace/init.js')
-}
+import 'dd-trace/init.js'
 
 const [{ initTRPC }, { createExpressMiddleware }, { default: express }] = await Promise.all([
   import('@trpc/server'),
