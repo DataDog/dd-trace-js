@@ -1,6 +1,6 @@
 'use strict'
 
-const SpanContext = require('../../dd-trace/src/opentracing/span_context')
+const { DatadogSpanContext: SpanContext, withSpanId } = require('../../dd-trace/src/opentracing/span-context')
 const id = require('../../dd-trace/src/id')
 
 /**
@@ -19,7 +19,7 @@ function reconstructPubSubRequestContext (attributes, originalContext) {
   const parentId = id(spanId, 16)
 
   if (originalContext?.toTraceId(true) === traceId128) {
-    return SpanContext.withSpanId(originalContext, parentId)
+    return withSpanId(originalContext, parentId)
   }
 
   const tags = {}
