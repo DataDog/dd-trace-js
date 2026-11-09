@@ -58,6 +58,7 @@ describe('Next.js native OTel HTTP semantics', () => {
 
       assert.strictEqual(span.error, 1)
       assert.strictEqual(span.meta['error.type'], 'TypeError')
+      assert.strictEqual(span.meta['error.message'], 'handler failed')
     })
   }
 
