@@ -1,5 +1,6 @@
 'use strict'
 
+const { TELEMETRY_DISTRIBUTION_RELATIVE_ACCURACY } = require('../constants')
 const { sendData } = require('./send-data')
 
 let LogCollapsingLowestDenseDDSketch
@@ -42,7 +43,7 @@ function createSketch () {
   if (LogCollapsingLowestDenseDDSketch === undefined) {
     ({ LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js'))
   }
-  return new LogCollapsingLowestDenseDDSketch({ relativeAccuracy: 1 / 129 })
+  return new LogCollapsingLowestDenseDDSketch({ relativeAccuracy: TELEMETRY_DISTRIBUTION_RELATIVE_ACCURACY })
 }
 
 class Metric {
