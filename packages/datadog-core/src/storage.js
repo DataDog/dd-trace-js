@@ -128,7 +128,7 @@ if (!isACFActive) {
  * For convenience, we use the `storage` function as a registry of namespaces
  * corresponding to DatadogStorage instances. This lets us have separate
  * storages for separate purposes.
- * @type {Map<string, DatadogStorage>}
+ * @type {Record<string, DatadogStorage>}
  */
 const storages = Object.create(null)
 

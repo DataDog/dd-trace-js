@@ -283,7 +283,7 @@ export interface GeneratedConfig {
   DD_TRACE_HAPI_ENABLED: boolean;
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HONO_ENABLED: boolean;
-  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string | undefined;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;
@@ -381,6 +381,7 @@ export interface GeneratedConfig {
   DD_TRACE_Q_ENABLED: boolean;
   DD_TRACE_REACT_DOM_ENABLED: boolean;
   DD_TRACE_REACT_ENABLED: boolean;
+  DD_TRACE_REACT_ROUTER_ENABLED: boolean;
   DD_TRACE_REDIS_CLIENT_ENABLED: boolean;
   DD_TRACE_REDIS_ENABLED: boolean;
   DD_TRACE_REQUEST_ENABLED: boolean;
@@ -400,6 +401,7 @@ export interface GeneratedConfig {
   DD_TRACE_SUPABASE_ENABLED: boolean;
   DD_TRACE_TAGS: Record<string, string> | undefined;
   DD_TRACE_TEDIOUS_ENABLED: boolean;
+  DD_TRACE_TYPESAFE_ENABLED: boolean;
   DD_TRACE_UNDICI_ENABLED: boolean;
   DD_TRACE_URL_ENABLED: boolean;
   DD_TRACE_VITEST_ENABLED: boolean;
@@ -439,6 +441,7 @@ export interface GeneratedConfig {
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
     DD_FEATURE_FLAGS_ENABLED: boolean;
     DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED: boolean;
+    DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED: boolean;
     DD_FLAGGING_EVALUATION_COUNTS_ENABLED: boolean;
   };
   flushInterval: number;
@@ -726,6 +729,7 @@ export interface GeneratedEnvVarConfig {
   DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
   DD_FEATURE_FLAGS_ENABLED: boolean;
   DD_FEATURE_FLAGS_EVALUATION_TELEMETRY_PER_SUBJECT_OPT_OUT_ENABLED: boolean;
+  DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED: boolean;
   DD_FLAGGING_EVALUATION_COUNTS_ENABLED: boolean;
   DD_GIT_BRANCH: string | undefined;
   DD_GIT_COMMIT_AUTHOR_DATE: string | undefined;
@@ -997,7 +1001,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
   DD_TRACE_HEADER_TAGS: string[];
   DD_TRACE_HONO_ENABLED: boolean;
-  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string;
+  DD_TRACE_HTTP_CLIENT_ERROR_STATUSES: string | undefined;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP_SERVER_ERROR_STATUSES: string;
   DD_TRACE_HTTP2_ENABLED: boolean;
@@ -1105,6 +1109,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_RATE_LIMIT: number;
   DD_TRACE_REACT_DOM_ENABLED: boolean;
   DD_TRACE_REACT_ENABLED: boolean;
+  DD_TRACE_REACT_ROUTER_ENABLED: boolean;
   DD_TRACE_REDIS_CLIENT_ENABLED: boolean;
   DD_TRACE_REDIS_ENABLED: boolean;
   DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: boolean;
@@ -1132,6 +1137,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_TAGS: Record<string, string> | undefined;
   DD_TRACE_TEDIOUS_ENABLED: boolean;
   DD_TRACE_TELEMETRY_ENABLED: boolean;
+  DD_TRACE_TYPESAFE_ENABLED: boolean;
   DD_TRACE_UNDICI_ENABLED: boolean;
   DD_TRACE_URL: string | URL;
   DD_TRACE_URL_ENABLED: boolean;

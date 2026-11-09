@@ -1,6 +1,8 @@
 'use strict'
 
 const { MAX_EVALUATION_TIMESTAMP_MS } = require('../constants/constants')
+const { snapshotFeatures } = require('./split-features')
+
 const { snapshotEvaluationContext } = require('./flag-evaluation-context')
 const {
   recordContextTruncated, recordDropped, recordHookError, recordTargetingKeyOmitted,
@@ -82,6 +84,9 @@ class FlagEvalEVPHook {
         flagKey: hookContext.flagKey,
         variant: evaluationDetails.variant,
         allocationKey: typeof metadata?.__dd_allocation_key === 'string' ? metadata.__dd_allocation_key : undefined,
+        features: metadata?.__dd_has_evaluation_features === true
+          ? snapshotFeatures(metadata, '__dd_evaluation_feature.')
+          : undefined,
         runtimeDefault: evaluationDetails.variant === undefined,
         errorCode: evaluationDetails.errorCode,
         targetingKey,

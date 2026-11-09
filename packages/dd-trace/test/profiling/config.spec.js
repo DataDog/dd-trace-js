@@ -403,6 +403,22 @@ describe('config', () => {
     )
   })
 
+  it('should not duplicate the wall profiler when the cpu alias meets DD_PROFILING_WALLTIME_ENABLED', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'cpu',
+      DD_PROFILING_WALLTIME_ENABLED: '1',
+    }
+
+    const { config } = getProfilerConfig()
+
+    assert.deepStrictEqual(
+      config.profilers.map(profiler => profiler.constructor),
+      samplingContextsAvailable
+        ? [WallProfiler, EventsProfiler]
+        : [WallProfiler]
+    )
+  })
+
   it('should prioritize non-experimental env variables and warn about experimental ones', function () {
     if (!samplingContextsAvailable) {
       this.skip()

@@ -110,7 +110,7 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(metrics['http.response.status_code'], 500)
       assert.strictEqual(meta['error.type'], '500')
       assert.ok(!('http.url' in meta))
-      assert.ok(!('http.endpoint' in meta))
+      assert.strictEqual(meta['http.endpoint'], '/u')
       assert.ok(!('http.useragent' in meta))
       assert.ok(!('http.client_ip' in meta))
     })
@@ -239,27 +239,18 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(span.resource, 'GET /users/{id}')
     })
 
-    it('marks a server 5xx as an error with error.type, but never a server 4xx', () => {
-      const e503 = run({ 'span.kind': 'server', 'http.method': 'GET', 'http.status_code': '503', 'http.url': 'http://h/p' })
-      assert.strictEqual(e503.meta['error.type'], '503')
-      assert.strictEqual(e503.error, 1)
+    for (const kind of ['client', 'server']) {
+      for (const status of ['200', '404', '503', '600']) {
+        for (const error of [0, 1]) {
+          it(`preserves error=${error} for a ${kind} response with status ${status}`, () => {
+            const span = run({ 'span.kind': kind, 'http.method': 'GET', 'http.status_code': status }, {}, error)
 
-      const e404 = run({ 'span.kind': 'server', 'http.method': 'GET', 'http.status_code': '404', 'http.url': 'http://h/p' })
-      assert.ok(!('error.type' in e404.meta))
-    })
-
-    it('sets error.type for client 4xx and 5xx', () => {
-      assert.strictEqual(
-        run({ 'span.kind': 'client', 'http.method': 'GET', 'http.status_code': '404', 'http.url': 'http://h/p' })
-          .meta['error.type'],
-        '404'
-      )
-      assert.strictEqual(
-        run({ 'span.kind': 'client', 'http.method': 'GET', 'http.status_code': '503', 'http.url': 'http://h/p' })
-          .meta['error.type'],
-        '503'
-      )
-    })
+            assert.strictEqual(span.error, error)
+            assert.strictEqual(span.meta['error.type'], error ? status : undefined)
+          })
+        }
+      }
+    }
 
     it('skips the status-code metric and error.type when the status is non-numeric', () => {
       const { meta, metrics } = run({
@@ -267,7 +258,7 @@ describe('http-otel-semantics', () => {
         'http.method': 'GET',
         'http.status_code': 'bogus',
         'http.url': 'http://h/p',
-      })
+      }, {}, 1)
 
       assert.ok(!('http.response.status_code' in metrics))
       assert.ok(!('error.type' in meta))

@@ -58,8 +58,9 @@ const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
 } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
-const { DD_MAJOR, NODE_MAJOR } = require('../../version')
+const { NODE_MAJOR } = require('../../version')
 const { getBabelDependencies } = require('./babel-dependencies')
+const { oldest: oldestJestVersion } = require('./versions')
 
 const testFile = 'ci-visibility/run-jest.js'
 const expectedCoverageFiles = [
@@ -70,7 +71,6 @@ const expectedCoverageFiles = [
 const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 
 const requestedJestVersion = process.env.JEST_VERSION || 'latest'
-const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const jestMajor = JEST_VERSION === 'latest' ? Infinity : Number(JEST_VERSION.split('.')[0])
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
@@ -1126,6 +1126,39 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         eventsPromise,
         once(childProcess, 'exit'),
       ])
+      assert.strictEqual(exitCode, 0)
+    })
+
+    it('resolves helper mocks relative to their module while preserving native retry ownership', async () => {
+      receiver.setSettings({
+        itr_enabled: true, code_coverage: true, tests_skipping: false, flaky_test_retries_enabled: true,
+      })
+      const coveragePromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov').then(request => {
+        const files = request.payload.flatMap(coverage => coverage.content.coverages)
+          .flatMap(coverage => coverage.files).map(file => file.filename)
+        assert.ok(files.includes('ci-visibility/jest-relative-mock/helpers/dependency.js'), files.join(', '))
+        assert.ok(!files.includes('ci-visibility/jest-relative-mock/dependency.js'), files.join(', '))
+      })
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          ENABLE_CODE_COVERAGE: '1',
+          SHOULD_CHECK_RESULTS: '1',
+          TESTS_TO_RUN: 'jest-relative-mock/relative-mock-test.js',
+        },
+      })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]).sort(), ['fail', 'fail', 'pass'])
+          const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retries.length, 2)
+          assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext))
+        })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), coveragePromise, eventsPromise])
       assert.strictEqual(exitCode, 0)
     })
 
@@ -3243,52 +3276,58 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(exitCode, 0)
     })
 
-    it('bails out of EFD if the percentage of new tests is too high', (done) => {
-      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
-      // Tests from ci-visibility/test/ci-visibility-test* will be considered new
-      receiver.setKnownTests({ jest: {} })
+    for (const logLevel of ['warn', 'error']) {
+      it(`bails out of EFD if the percentage of new tests is too high (${logLevel} logging)`, async () => {
+        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        // Tests from ci-visibility/test/ci-visibility-test* will be considered new
+        receiver.setKnownTests({ jest: {} })
 
-      const NUM_RETRIES_EFD = 3
-      receiver.setSettings({
-        early_flake_detection: {
-          enabled: true,
-          slow_test_retries: {
-            '5s': NUM_RETRIES_EFD,
+        const NUM_RETRIES_EFD = 3
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD,
+            },
+            faulty_session_threshold: 1,
           },
-          faulty_session_threshold: 1,
-        },
-        known_tests_enabled: true,
-      })
-
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-
-          const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
-
-          const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          assert.strictEqual(tests.length, 2)
-
-          const newTests = tests.filter(
-            test => test.meta[TEST_IS_NEW] === 'true'
-          )
-          // no new tests
-          assert.strictEqual(newTests.length, 0)
+          known_tests_enabled: true,
         })
 
-      childProcess = exec(runTestsCommand, {
-        cwd,
-        env: {
-          ...getCiVisEvpProxyConfig(receiver.port),
-          TESTS_TO_RUN: 'test/ci-visibility-test',
-        },
-      })
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => done()).catch(done)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2)
+
+            const newTests = tests.filter(
+              test => test.meta[TEST_IS_NEW] === 'true'
+            )
+            // no new tests
+            assert.strictEqual(newTests.length, 0)
+          })
+
+        childProcess = exec(runTestsCommand, {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_TRACE_DEBUG: '1',
+            DD_TRACE_LOG_LEVEL: logLevel,
+            TESTS_TO_RUN: 'test/ci-visibility-test',
+          },
+        })
+
+        childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+        await Promise.all([once(childProcess, 'close'), eventsPromise])
+        const warning = 'Early flake detection is disabled because the number of new suites is too high.'
+        assert.strictEqual(testOutput.includes(warning), logLevel === 'warn', testOutput)
       })
-    })
+    }
 
     it('works with jsdom', (done) => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
@@ -3638,59 +3677,68 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
       })
 
-      it('does not detect new tests if known tests are faulty', async () => {
-        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
-        receiver.setKnownTests({
-          // invalid known tests
-          'no-jest': {},
-        })
-
-        const NUM_RETRIES_EFD = 3
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES_EFD,
-            },
-            faulty_session_threshold: 100,
-          },
-          known_tests_enabled: true,
-        })
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-            assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
-
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.strictEqual(tests.length, 4)
-            const newTests = tests.filter(
-              test => test.meta[TEST_IS_NEW] === 'true'
-            )
-            assert.strictEqual(newTests.length, 0)
+      for (const logLevel of ['warn', 'error']) {
+        it(`does not detect new tests if known tests are faulty (${logLevel} logging)`, async () => {
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+          receiver.setKnownTests({
+            // invalid known tests
+            'no-jest': {},
           })
 
-        childProcess = exec(
-          runTestsCommand,
-          {
-            cwd,
-            env: {
-              ...getCiVisEvpProxyConfig(receiver.port),
-              TESTS_TO_RUN: 'test/efd-parallel/ci-visibility-test',
-              RUN_IN_PARALLEL: 'true',
+          const NUM_RETRIES_EFD = 3
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD,
+              },
+              faulty_session_threshold: 100,
             },
-          }
-        )
+            known_tests_enabled: true,
+          })
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          eventsPromise,
-        ])
-      })
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+              assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              assert.strictEqual(tests.length, 4)
+              const newTests = tests.filter(
+                test => test.meta[TEST_IS_NEW] === 'true'
+              )
+              assert.strictEqual(newTests.length, 0)
+            })
+
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                DD_TRACE_DEBUG: '1',
+                DD_TRACE_LOG_LEVEL: logLevel,
+                TESTS_TO_RUN: 'test/efd-parallel/ci-visibility-test',
+                RUN_IN_PARALLEL: 'true',
+              },
+            }
+          )
+
+          childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+          await Promise.all([
+            once(childProcess, 'close'),
+            eventsPromise,
+          ])
+          const warning =
+            'Early flake detection is disabled because the known tests response does not contain Jest tests.'
+          assert.strictEqual(testOutput.includes(warning), logLevel === 'warn', testOutput)
+        })
+      }
 
       onlyLatestIt('works with snapshot tests', async () => {
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
@@ -4551,6 +4599,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const tests = payloads.flatMap(({ payload }) => payload.events)
               .filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, Math.min(nativeRetries, 2) + 1)
+            const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retries.length, Math.min(nativeRetries, 2))
+            assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
             const last = tests.at(-1)
             assert.strictEqual(last.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
             assert.strictEqual(last.meta[TEST_FINAL_STATUS], 'fail')

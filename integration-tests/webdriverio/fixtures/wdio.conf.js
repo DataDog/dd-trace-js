@@ -54,6 +54,22 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  exclusions: {
+    maxInstances: 1,
+    specs: ['./test-exclusions.e2e.js'],
+  },
+  exclusionsPassing: {
+    maxInstances: 1,
+    specs: ['./test-exclusions-passing.e2e.js'],
+  },
+  exclusionsNative: {
+    maxInstances: 1,
+    specs: ['./test-exclusions-native.e2e.js'],
+  },
+  exclusionsProtected: {
+    maxInstances: 1,
+    specs: ['./test-exclusions-protected.e2e.js'],
+  },
   videosBrowser: {
     injectGlobals: false,
     maxInstances: 1,

@@ -55,10 +55,21 @@ const missingInstrumentationHooks = [
   'langchain',
   'langgraph',
   'postgres',
+  'react-router',
   'supabase',
+  'typesafe',
 ]
 
-const hooklessOrchestrionPlugins = new Set(['azure-cosmos', 'bullmq', 'langchain', 'langgraph', 'postgres', 'supabase'])
+const hooklessOrchestrionPlugins = new Set([
+  'azure-cosmos',
+  'bullmq',
+  'langchain',
+  'langgraph',
+  'postgres',
+  'react-router',
+  'supabase',
+  'typesafe',
+])
 
 function extractPluginIds (source, re, index) {
   const ids = new Set()
@@ -202,6 +213,7 @@ describe('Plugin Structure Validation', () => {
       'bullmq',
       'mercurius',
       'postgres',
+      'react-router',
     ]
 
     for (const name of names) {

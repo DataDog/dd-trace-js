@@ -72,6 +72,15 @@ describe('OpenFeature Base FFE Writer transport', () => {
     clock.restore()
   })
 
+  it('preserves request error text when the writer supplies no formatter', async () => {
+    request.yieldsAsync(new Error('response-body-canary: targeting-key-canary'), '', 500)
+    writer.send('{}', 1)
+    await clock.tickAsync(0)
+    sinon.assert.calledWithExactly(log.error,
+      '%s failed to send %d events to %s (status=%s, cause=%s); events dropped',
+      'FlagEvaluationWriter', 1, 'http://localhost:8126', 500, 'response-body-canary: targeting-key-canary')
+  })
+
   it('provides a send-once shared path with logical SDK identity', () => {
     const directUrl = new URL('https://event-platform-intake.datadoghq.com')
     writer.setRoute({

@@ -32,6 +32,7 @@ const registry = [
   },
   { instrumentations: require('./instrumentations/graphql') },
   { instrumentations: require('./instrumentations/graphql-jit') },
+  { instrumentations: require('./instrumentations/jest') },
   { activate: true, instrumentations: require('./instrumentations/langchain') },
   { activate: true, instrumentations: require('./instrumentations/langgraph') },
   { activate: true, instrumentations: require('./instrumentations/mercurius') },
@@ -39,12 +40,21 @@ const registry = [
   { instrumentations: require('./instrumentations/openai-agents') },
   { instrumentations: require('./instrumentations/playwright') },
   { activate: true, instrumentations: require('./instrumentations/postgres') },
+  {
+    activate: /** @type {ActivationConfig} */ ({ setup: () => require('../../react-router') }),
+    instrumentations: require('./instrumentations/react-router'),
+  },
+  { instrumentations: require('./instrumentations/vitest') },
   { instrumentations: require('./instrumentations/webdriverio') },
   {
     activate: { setup: () => require('../../aws-durable-execution-sdk-js') },
     instrumentations: require('./instrumentations/aws-durable-execution-sdk-js'),
   },
   { activate: true, instrumentations: require('./instrumentations/supabase') },
+  {
+    activate: { setup: () => require('../../typesafe') },
+    instrumentations: require('./instrumentations/typesafe'),
+  },
 ]
 
 const activatedModules = new Set()

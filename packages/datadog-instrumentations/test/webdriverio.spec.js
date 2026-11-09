@@ -20,6 +20,7 @@ const log = require('../../dd-trace/src/log')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
 const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { preventFailureSuppression, noAutoRetry } = require('../../../ci/test-annotations')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { detectRum, stopRumSession, stopRumSessionAndReportActivity } = require('../src/rum-browser-scripts')
 const {
@@ -29,6 +30,7 @@ const {
   getOnTestHandler,
   getOnTestEndHandler,
   getOnTestRetryHandler,
+  getTestProperties,
   patchFailedTestReplayHookUp,
   resetRunState,
   runnableWrapper,
@@ -249,6 +251,11 @@ describe('webdriverio instrumentation', () => {
     const runOrder = []
     let resolveReplay
     class Runnable {
+      retries (count) {
+        if (arguments.length) this._retries = count
+        return this._retries
+      }
+
       run () {
         runOrder.push('run')
         return 'done'
@@ -741,11 +748,129 @@ describe('webdriverio instrumentation', () => {
     assert.notStrictEqual(rewrittenSource, source)
     assert.match(rewrittenSource, /orchestrion:@wdio\/utils:executeAsync/)
     assert.match(rewrittenSource, /orchestrion:@wdio\/utils:testFrameworkFnWrapper/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/utils:runSpec/)
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rumCleanupCallback/)
     assert.strictEqual(rewrittenSource.match(/__apm\$ctx\.rumStartCallback/g)?.length, 1)
     assert.match(rewrittenSource, /__apm\$ctx\.retryCallback/)
+  })
+
+  for (const pending of [false, true]) {
+    for (const [mustFail, noAutoRetryEnabled] of [[false, false], [true, false], [false, true], [true, true]]) {
+      const description = `pending=${pending}, protected=${mustFail}, excluded=${noAutoRetryEnabled}`
+      it(`preserves Mocha declaration policy (${description})`, async () => {
+        const source = fs.readFileSync(utilsFixturePath, 'utf8')
+        const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-wdio-mocha-annotations-'))
+        const output = path.join(directory, 'index.mjs')
+        fs.writeFileSync(output, rewrittenSource)
+        const plugin = new MochaPlugin({ _exporter: {} }, { testOptimization: {} })
+        plugin.configure({ enabled: true, tracing: {} })
+        const suite = new MochaSuite('annotations')
+        const file = path.join(process.cwd(), 'annotations.spec.js')
+        const original = sinon.spy()
+        let callback = original
+        if (mustFail) callback = preventFailureSuppression(callback)
+        if (noAutoRetryEnabled) callback = noAutoRetry(callback)
+        /**
+         * @param {string} title
+         * @param {import('mocha').Func} fn
+         */
+        const declare = (title, fn) => {
+          const test = new MochaTest(title, pending ? undefined : fn)
+          test.file = file
+          suite.addTest(test)
+          return test
+        }
+        try {
+          const { runSpec } = await import(pathToFileURL(output))
+          const test = runSpec('protected', callback, declare)
+          const assignments = {
+            mocha: {
+              suites: {
+                'annotations.spec.js': {
+                  tests: {
+                    'annotations protected': {
+                      properties: {
+                        disabled: true, quarantined: true, attempt_to_fix: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          }
+          // Policy selection sees the native runnable before any user callback executes.
+          for (const runnable of pending ? [test] : [test, test.clone()]) {
+            assert.deepStrictEqual(getTestProperties(runnable, assignments), {
+              isDisabled: !mustFail, isQuarantined: !mustFail, isAttemptToFix: !noAutoRetryEnabled,
+            })
+          }
+          sinon.assert.notCalled(original)
+          assert.strictEqual(Boolean(test.isPending()), pending)
+          if (!pending) {
+            const receiver = {}
+            test.fn.call(receiver, 'argument')
+            sinon.assert.calledOnceWithExactly(original, 'argument')
+            sinon.assert.calledOn(original, receiver)
+          }
+        } finally {
+          plugin.configure(false)
+          fs.rmSync(directory, { recursive: true, force: true })
+        }
+      })
+    }
+  }
+
+  it('captures Jasmine automation exclusions before the wrapped callback can execute', async () => {
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-jasmine-annotations-'))
+    const output = path.join(directory, 'index.mjs')
+    fs.writeFileSync(output, rewrittenSource)
+    const { plugin } = createJasminePlugin({
+      isFlakyTestRetriesEnabled: true,
+      isTestManagementTestsEnabled: true,
+      testManagementTests: {
+        mocha: {
+          suites: {
+            'annotations.spec.js': {
+              tests: {
+                protected: { properties: { disabled: true, quarantined: true, attempt_to_fix: true } },
+              },
+            },
+          },
+        },
+      },
+    })
+    const file = path.join(process.cwd(), 'annotations.spec.js')
+    const original = sinon.spy()
+    try {
+      const { runSpec } = await import(pathToFileURL(output))
+      const result = createJasmineResult('protected', file, 'failed')
+      runSpec('protected', preventFailureSuppression(noAutoRetry(original)), () => ({ id: result.id }))
+      reportJasmineSpecStarted(result, file)
+      const test = plugin._webdriverioJasmineState.tests.get(result.id)
+      sinon.assert.notCalled(original)
+      assert.strictEqual(test.testAnnotations.mustFail, true)
+      assert.strictEqual(test.testAnnotations.noAutoRetry, true)
+      assert.strictEqual(test.isDisabled, false)
+      assert.strictEqual(test.isQuarantined, false)
+      assert.strictEqual(test.isAttemptToFix, false)
+      assert.strictEqual(test.isAtr, false)
+      assert.deepStrictEqual(test.assignedProperties, { disabled: true, quarantined: true, attempt_to_fix: true })
+      const controlResult = createJasmineResult('control', file, 'passed')
+      runSpec('control', original, () => ({ id: controlResult.id }))
+      reportJasmineSpecStarted(controlResult, file)
+      const control = plugin._webdriverioJasmineState.tests.get(controlResult.id)
+      assert.strictEqual(control.testAnnotations.mustFail, false)
+      assert.strictEqual(control.testAnnotations.noAutoRetry, false)
+      assert.strictEqual(control.isAtr, true)
+    } finally {
+      plugin.configure(false)
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
   })
 
   it('rewrites the WebdriverIO 10.1 executeAsync retry branch', () => {
