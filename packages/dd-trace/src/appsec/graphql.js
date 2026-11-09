@@ -71,7 +71,7 @@ function onGraphqlStartResolver (data) {
   if (cacheKey !== undefined && result !== undefined && !result.timeout) {
     if (knownActions === undefined) {
       const blockingActions = new Map()
-      blockingActions.add(cacheKey, blockingAction)
+      blockingActions.set(cacheKey, blockingAction)
       fieldsWithoutArgumentsActions.set(req, blockingActions)
     } else {
       knownActions.set(cacheKey, blockingAction)
