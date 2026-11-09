@@ -60,10 +60,7 @@ const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
 const META_IS_MIDDLEWARE = 'middlewareInvoke'
 const encounteredMiddleware = new WeakSet()
 
-class BlockedRequestError extends Error {
-  name = 'BlockedRequestError'
-  message = 'Request blocked by Datadog App and API Protection'
-}
+const abortReasons = new WeakSet()
 
 // `next.span_type` value Next.js sets on its own OTel root request span; the whole detection surface.
 const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
@@ -302,7 +299,7 @@ function isNoFallbackError (error) {
 
 /** @param {unknown} error */
 function isIgnoredError (error) {
-  return error instanceof BlockedRequestError || isNoFallbackError(error)
+  return abortReasons.has(/** @type {object} */ (error)) || isNoFallbackError(error)
 }
 
 /**
@@ -365,8 +362,6 @@ addHook({
 
 function wrapOnRequestError (onRequestError) {
   return function (req, error) {
-    // A blocked request is not an application error: skip Next.js logging and the user onRequestError hook.
-    if (error instanceof BlockedRequestError) return Promise.resolve()
     if (error) publishError(req, undefined, error)
     return onRequestError.apply(this, arguments)
   }
@@ -651,7 +646,9 @@ function publishBodyParsed (request, body) {
   bodyParsedChannel.publish({ body, abortController })
 
   if (abortController?.signal.aborted) {
-    throw new BlockedRequestError()
+    const { reason } = abortController.signal
+    abortReasons.add(reason)
+    throw reason
   }
 }
 

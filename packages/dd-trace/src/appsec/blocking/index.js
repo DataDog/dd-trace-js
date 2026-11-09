@@ -40,6 +40,14 @@ const responseBlockedSet = new WeakSet()
 
 const blockDelegations = new WeakMap()
 
+// Abort reason for instrumentations that must reject an operation the application awaits.
+class BlockedRequestError extends Error {
+  constructor () {
+    super('Request blocked by Datadog App and API Protection')
+    this.name = 'BlockedRequestError'
+  }
+}
+
 const specificBlockingTypes = {
   GRAPHQL: 'graphqlJson',
 }
@@ -142,7 +150,7 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     rootSpan.setTag('appsec.blocked', 'true')
 
     responseBlockedSet.add(res)
-    abortController?.abort()
+    abortController?.abort(new BlockedRequestError())
 
     return true
   } catch (err) {

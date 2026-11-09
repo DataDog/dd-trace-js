@@ -151,7 +151,6 @@ describe('test suite', () => {
 
         describe('with a blocking rule', () => {
           const appDirTest = appName === 'app-dir' ? it : it.skip
-          const onRequestErrorTest = appName === 'app-dir' && satisfies(realVersion, '>=15.4.1') ? it : it.skip
 
           async function assertBlocked (request, spanMeta) {
             const [response] = await Promise.all([
@@ -205,14 +204,14 @@ describe('test suite', () => {
             )
           })
 
-          onRequestErrorTest('should not report a blocked request body to Next.js error handling', async () => {
+          appDirTest('should let Next.js error handling report a blocked request body', async () => {
             await assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test`, {
                 key: 'blockattack',
               }, { validateStatus: false })
             )
 
-            assert.doesNotMatch(serverData.stderr, /BlockedRequestError/)
+            assert.match(serverData.stderr, /BlockedRequestError\]?: Request blocked by Datadog App and API Protection/)
           })
 
           appDirTest('should not block an attack in a request created by the route handler', async () => {
