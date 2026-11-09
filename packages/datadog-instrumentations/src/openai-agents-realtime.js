@@ -70,7 +70,7 @@ function connect (ctx) {
       : options.callId
         ? connectionOptions('wss://api.openai.com/v1/realtime?call_id=' + options.callId)
         : defaultUrls.get(transport) || connectionOptions('wss://api.openai.com/v1/realtime')
-    const retrieveAudio = getValueFromEnvSources('DD_OPENAI_REALTIME_AUDIO_RETRIEVAL_ENABLED') !== false
+    const retrieveAudio = getValueFromEnvSources('DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED') !== false
     const connection = createSession({
       model: options.model ?? transport.currentModel,
       basePath: effective.basePath,

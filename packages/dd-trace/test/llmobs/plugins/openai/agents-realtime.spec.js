@@ -279,99 +279,105 @@ describe('Agents SDK realtime automatic tracing', () => {
         assert.ok(llmobsSpans.every(span => Object.keys(span.metrics).every(key => !key.startsWith('ml_obs.'))))
       })
 
-      it(mode + ' traces ordinary WebSocket audio without call_id or injected retrievals', async () => {
-        const sdk = await loadSdk(mode, version)
-        const socket = new ReplaySocket()
-        const clock = sinon.useFakeTimers({ now: EPOCH, toFake: ['Date'] })
-        let connectedUrl
-        transport = new sdk.OpenAIRealtimeWebSocket({
-          createWebSocket: ({ url }) => {
-            connectedUrl = new URL(url)
-            return Promise.resolve(socket)
-          },
-        })
-        const receivedAudio = []
-        transport.on('audio', event => receivedAudio.push(event))
-        await transport.connect({ apiKey: 'synthetic-key', model: 'gpt-realtime' })
-        assert.strictEqual(connectedUrl.searchParams.has('call_id'), false)
-        assert.strictEqual(connectedUrl.searchParams.get('model'), 'gpt-realtime')
-        socket.deliver({
-          type: 'session.created',
-          event_id: 'session-event',
-          session: {
-            id: 'ordinary-session',
-            type: 'realtime',
-            model: 'gpt-realtime',
-            tracing: null,
-            output_modalities: ['audio'],
-            audio: {
-              input: { format: { type: 'audio/pcm', rate: 24000 }, transcription: null },
-              output: { format: { type: 'audio/pcm', rate: 24000 }, voice: 'alloy' },
-            },
-          },
-        })
-        clock.tick(1000)
-        const input = Buffer.alloc(48000, 1)
-        transport.sendAudio(input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength))
-        socket.deliver({ type: 'input_audio_buffer.speech_started', item_id: 'u1', audio_start_ms: 0 })
-        socket.deliver({ type: 'input_audio_buffer.speech_stopped', item_id: 'u1', audio_end_ms: 1000 })
-        socket.deliver({ type: 'input_audio_buffer.committed', item_id: 'u1' })
-        socket.deliver({
-          type: 'conversation.item.input_audio_transcription.completed',
-          item_id: 'u1',
-          content_index: 0,
-          transcript: 'Synthetic user speech',
-        })
-        socket.deliver({ type: 'response.created', response: { id: 'r1', conversation_id: 'conversation' } })
-        clock.tick(100)
-        socket.deliver({
-          type: 'response.output_audio.delta',
-          event_id: 'audio-event',
-          response_id: 'r1',
-          item_id: 'a1',
-          output_index: 0,
-          content_index: 0,
-          delta: Buffer.alloc(24000, 2).toString('base64'),
-        })
-        socket.deliver({
-          type: 'response.output_audio_transcript.done',
-          response_id: 'r1',
-          item_id: 'a1',
-          output_index: 0,
-          content_index: 0,
-          transcript: 'Synthetic answer',
-        })
-        clock.tick(50)
-        socket.deliver({
-          type: 'response.done',
-          response: {
-            id: 'r1',
-            status: 'completed',
-            model: 'gpt-realtime',
-            output: [],
-            usage: { input_tokens: 10, output_tokens: 20 },
-          },
-        })
-        transport.close()
-        const { llmobsSpans } = await getEvents(4)
-        const llm = llmobsSpans.find(span => span.name === 'OpenAI.createRealtimeResponse')
-        assert.strictEqual(receivedAudio.length, 1)
-        assert.strictEqual(llmobsSpans.filter(span => span.name === 'realtime audio turn').length, 1)
-        assert.strictEqual(llmobsSpans.filter(span => span.name === 'user speech').length, 1)
-        assert.strictEqual(llmobsSpans.filter(span => span.name === 'agent speech').length, 1)
-        assert.strictEqual(llm.meta.model_name, 'gpt-realtime')
-        assert.strictEqual(llm.meta.model_provider, 'openai')
-        assert.deepStrictEqual(llm.metrics, { input_tokens: 10, output_tokens: 20, total_tokens: 30 })
-        assert.strictEqual(Buffer.from(llm.meta.input.messages[0].audio_parts[0].content, 'base64').length, 48044)
-        assert.strictEqual(Buffer.from(llm.meta.output.messages[0].audio_parts[0].content, 'base64').length, 24044)
-        assert.strictEqual(new Set(llmobsSpans.map(span => span.session_id)).size, 1)
-        assert.ok(llmobsSpans.every(span => span.session_id))
-        assert.ok(socket.sent.some(event => event.type === 'input_audio_buffer.append'))
-        assert.ok(socket.sent.every(event => !event.event_id?.startsWith('ddtrace_realtime_audio_')))
-      })
+      for (const enabled of [true, false]) {
+        describe(mode + ' ordinary WebSocket with sideband retrieval enabled=' + enabled, () => {
+          useEnv({ DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED: String(enabled) })
 
-      describe(mode + ' with tracer audio retrieval disabled', () => {
-        useEnv({ DD_OPENAI_REALTIME_AUDIO_RETRIEVAL_ENABLED: 'false' })
+          it('captures streamed audio without call_id or injected retrievals', async () => {
+            const sdk = await loadSdk(mode, version)
+            const socket = new ReplaySocket()
+            const clock = sinon.useFakeTimers({ now: EPOCH, toFake: ['Date'] })
+            let connectedUrl
+            transport = new sdk.OpenAIRealtimeWebSocket({
+              createWebSocket: ({ url }) => {
+                connectedUrl = new URL(url)
+                return Promise.resolve(socket)
+              },
+            })
+            const receivedAudio = []
+            transport.on('audio', event => receivedAudio.push(event))
+            await transport.connect({ apiKey: 'synthetic-key', model: 'gpt-realtime' })
+            assert.strictEqual(connectedUrl.searchParams.has('call_id'), false)
+            assert.strictEqual(connectedUrl.searchParams.get('model'), 'gpt-realtime')
+            socket.deliver({
+              type: 'session.created',
+              event_id: 'session-event',
+              session: {
+                id: 'ordinary-session',
+                type: 'realtime',
+                model: 'gpt-realtime',
+                tracing: null,
+                output_modalities: ['audio'],
+                audio: {
+                  input: { format: { type: 'audio/pcm', rate: 24000 }, transcription: null },
+                  output: { format: { type: 'audio/pcm', rate: 24000 }, voice: 'alloy' },
+                },
+              },
+            })
+            clock.tick(1000)
+            const input = Buffer.alloc(48000, 1)
+            transport.sendAudio(input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength))
+            socket.deliver({ type: 'input_audio_buffer.speech_started', item_id: 'u1', audio_start_ms: 0 })
+            socket.deliver({ type: 'input_audio_buffer.speech_stopped', item_id: 'u1', audio_end_ms: 1000 })
+            socket.deliver({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+            socket.deliver({
+              type: 'conversation.item.input_audio_transcription.completed',
+              item_id: 'u1',
+              content_index: 0,
+              transcript: 'Synthetic user speech',
+            })
+            socket.deliver({ type: 'response.created', response: { id: 'r1', conversation_id: 'conversation' } })
+            clock.tick(100)
+            socket.deliver({
+              type: 'response.output_audio.delta',
+              event_id: 'audio-event',
+              response_id: 'r1',
+              item_id: 'a1',
+              output_index: 0,
+              content_index: 0,
+              delta: Buffer.alloc(24000, 2).toString('base64'),
+            })
+            socket.deliver({
+              type: 'response.output_audio_transcript.done',
+              response_id: 'r1',
+              item_id: 'a1',
+              output_index: 0,
+              content_index: 0,
+              transcript: 'Synthetic answer',
+            })
+            clock.tick(50)
+            socket.deliver({
+              type: 'response.done',
+              response: {
+                id: 'r1',
+                status: 'completed',
+                model: 'gpt-realtime',
+                output: [],
+                usage: { input_tokens: 10, output_tokens: 20 },
+              },
+            })
+            transport.close()
+            const { llmobsSpans } = await getEvents(4)
+            const llm = llmobsSpans.find(span => span.name === 'OpenAI.createRealtimeResponse')
+            assert.strictEqual(receivedAudio.length, 1)
+            assert.strictEqual(llmobsSpans.filter(span => span.name === 'realtime audio turn').length, 1)
+            assert.strictEqual(llmobsSpans.filter(span => span.name === 'user speech').length, 1)
+            assert.strictEqual(llmobsSpans.filter(span => span.name === 'agent speech').length, 1)
+            assert.strictEqual(llm.meta.model_name, 'gpt-realtime')
+            assert.strictEqual(llm.meta.model_provider, 'openai')
+            assert.deepStrictEqual(llm.metrics, { input_tokens: 10, output_tokens: 20, total_tokens: 30 })
+            assert.strictEqual(Buffer.from(llm.meta.input.messages[0].audio_parts[0].content, 'base64').length, 48044)
+            assert.strictEqual(Buffer.from(llm.meta.output.messages[0].audio_parts[0].content, 'base64').length, 24044)
+            assert.strictEqual(new Set(llmobsSpans.map(span => span.session_id)).size, 1)
+            assert.ok(llmobsSpans.every(span => span.session_id))
+            assert.ok(socket.sent.some(event => event.type === 'input_audio_buffer.append'))
+            assert.ok(socket.sent.every(event => !event.event_id?.startsWith('ddtrace_realtime_audio_')))
+          })
+        })
+      }
+
+      describe(mode + ' with tracer sideband audio retrieval disabled', () => {
+        useEnv({ DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED: 'false' })
 
         it('keeps SDK/application requests, passive audio capture, and application errors', async () => {
           const sdk = await loadSdk(mode, version)

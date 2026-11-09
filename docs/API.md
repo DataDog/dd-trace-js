@@ -306,12 +306,14 @@ nonnegative safe integers; explicit zeros are preserved and absent or invalid
 counts are omitted. Modality and cache counts remain subsets of inclusive totals.
 Datadog calculates model costs and aggregate cost/token metrics server-side.
 
-When LLM Observability consumes audio, sideband instrumentation can request stored
-conversation items. `DD_OPENAI_REALTIME_AUDIO_RETRIEVAL_ENABLED` defaults to
-`true`. Set it to `false` before connecting to disable only tracer-issued
-retrievals, while preserving Realtime timing, transcripts, tools, usage, and
-passive capture of audio already received. SDK and application retrieval requests
-are unaffected. Errors for tracer-owned retrieval requests stay internal; SDK
+When LLM Observability consumes audio, Agents SDK sideband connections using
+`call_id` can request stored conversation items to retrieve audio carried over SIP
+or WebRTC. `DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED` defaults to
+`true`. Set it to `false` before connecting to disable these tracer-issued
+sideband retrievals. This setting preserves streamed audio capture on ordinary
+Realtime WebSocket connections, passive capture of audio already received, and
+SDK/application retrieval requests. Realtime timing, transcripts, tools, and usage
+also remain enabled. Errors for tracer-owned retrieval requests stay internal; SDK
 and application request errors retain their normal behavior. Retrieval is bounded
 and falls back to transcripts when unavailable, incomplete, or too large.
 Interrupted items honor the server truncation boundary. Successful retrievals use
