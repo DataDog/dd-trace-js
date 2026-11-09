@@ -136,7 +136,7 @@ describe('generate supported integrations', () => {
     for (const row of rows) {
       const major = row.integrationName === 'azure-service-bus' ? 7 : 6
       assert.deepStrictEqual(row.versions, [{
-        testedRuntimes: { node: ['26.2.0'] },
+        testedRuntimes: { node: ['26.2.0', '24.16.0'] },
         supportedRange: `>=${major}.0.0`,
         tested: [`${major}.0.0`, `${major}.0.4`],
       }])
