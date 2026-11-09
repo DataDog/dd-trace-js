@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const Module = require('node:module')
-const { exec, execFileSync, execSync } = require('node:child_process')
+const { exec, execFile, execFileSync, execSync } = require('node:child_process')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
@@ -325,8 +325,8 @@ describe('vitest no-worker init instrumentation selection', () => {
       }
     }
 
-    function configureNoWorkerReporter (ctx, testSpecifications) {
-      noWorkerInit.configure(ctx, '3.2.6', testSpecifications, {
+    function configureNoWorkerReporter (ctx, testSpecifications, frameworkVersion = '3.2.6') {
+      noWorkerInit.configure(ctx, frameworkVersion, testSpecifications, {
         knownTestsBySuite: {},
         modifiedFiles: {},
         repositoryRoot: '/repo',
@@ -396,9 +396,32 @@ describe('vitest no-worker init instrumentation selection', () => {
       configureNoWorkerReporter(ctx)
 
       assert.strictEqual(ctx.config.includeTaskLocation, true)
-      assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-runner-setup.mjs')
+      assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-node-setup.mjs')
       assert.deepStrictEqual(ctx.config.setupFiles.slice(1), ['/repo/user-setup.mjs'])
     })
+
+    for (const [frameworkVersion, browserSetupFile] of [
+      ['3.2.6', 'vitest-no-worker-init-runner-setup.mjs'],
+      ['5.0.0', 'vitest-no-worker-init-v5-setup.mjs'],
+    ]) {
+      for (const browserInitiallyEnabled of [false, true]) {
+        const nextMode = browserInitiallyEnabled ? 'Node' : 'browser'
+        it(`replaces the Datadog setup when switching to ${nextMode} with Vitest ${frameworkVersion}`, () => {
+          const ctx = getNoWorkerReporterContext()
+          const userSetupFiles = ['/repo/user-setup.mjs', '/repo/other-setup.mjs']
+          ctx.config.browser = { enabled: browserInitiallyEnabled }
+          ctx.config.setupFiles = [...userSetupFiles]
+          configureNoWorkerReporter(ctx, undefined, frameworkVersion)
+
+          ctx.config.browser.enabled = !browserInitiallyEnabled
+          configureNoWorkerReporter(ctx, undefined, frameworkVersion)
+
+          const expectedSetupFile = browserInitiallyEnabled ? 'vitest-no-worker-init-node-setup.mjs' : browserSetupFile
+          assert.strictEqual(path.basename(ctx.config.setupFiles[0]), expectedSetupFile)
+          assert.deepStrictEqual(ctx.config.setupFiles.slice(1), userSetupFiles)
+        })
+      }
+    }
 
     it('allows Vite to serve the Datadog setup when dd-trace is linked outside the browser project', () => {
       const ctx = getNoWorkerReporterContext()
@@ -469,7 +492,7 @@ describe('vitest no-worker init instrumentation selection', () => {
       assert.strictEqual(project.options, undefined)
     })
 
-    for (const [description, project] of [
+    for (const [description, project, pool] of [
       ['the project API', { isBrowserEnabled: () => true }],
       ['serialized configuration', {
         get config () {
@@ -481,18 +504,38 @@ describe('vitest no-worker init instrumentation selection', () => {
           },
         },
       }],
+      ['pool metadata', {}, 'browser'],
     ]) {
-      it(`installs the Vite access plugin for Browser Mode detected through ${description}`, () => {
+      it(`installs browser setup and Vite access for ${description}`, () => {
         const ctx = getNoWorkerReporterContext()
+        ctx.config.browser = { enabled: false }
 
-        configureNoWorkerReporter(ctx, [[project, { filepath: '/repo/test.mjs' }]])
+        configureNoWorkerReporter(ctx, [[project, { filepath: '/repo/test.mjs', pool }]])
 
+        assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-runner-setup.mjs')
         assert.strictEqual(project.options.plugins[0].name, 'datadog:vitest-browser-setup-file')
         assert.strictEqual(
           typeof project.options.browser.commands.__dd_vitest_efd_suite_admission,
           'function'
         )
       })
+
+      for (const browserFirst of [false, true]) {
+        it(`keeps Node and browser setup separate for ${description} (browser first=${browserFirst})`, () => {
+          const ctx = getNoWorkerReporterContext()
+          const nodeProject = { config: { pool: 'forks' } }
+          const testSpecifications = [
+            [nodeProject, { filepath: '/repo/node.test.mjs', pool: 'forks' }],
+            [project, { filepath: '/repo/browser.test.mjs', pool }],
+          ]
+          if (browserFirst) testSpecifications.reverse()
+
+          configureNoWorkerReporter(ctx, testSpecifications)
+
+          assert.strictEqual(path.basename(nodeProject.config.setupFiles[0]), 'vitest-no-worker-init-node-setup.mjs')
+          assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-runner-setup.mjs')
+        })
+      }
     }
 
     it('disables RUM correlation when browser files can run in parallel', () => {
@@ -1028,14 +1071,9 @@ SUPPORTED_VERSIONS.forEach((version) => {
       await receiver.stop()
     })
 
-    async function runVitest (extraEnv = {}, command = './node_modules/.bin/vitest run') {
-      childProcess = exec(
-        command,
-        {
-          cwd,
-          env: getNoWorkerInitEnv(receiver, extraEnv),
-        }
-      )
+    async function runVitest (extraEnv = {}, command = './node_modules/.bin/vitest run', runCwd = cwd) {
+      const options = { cwd: runCwd, env: getNoWorkerInitEnv(receiver, extraEnv) }
+      childProcess = Array.isArray(command) ? execFile(process.execPath, command, options) : exec(command, options)
 
       childProcess.stdout.on('data', data => { testOutput += data })
       childProcess.stderr.on('data', data => { testOutput += data })
@@ -1057,6 +1095,93 @@ SUPPORTED_VERSIONS.forEach((version) => {
     }
 
     for (const poolConfig of ['forks', 'threads']) {
+      for (const conflictingRootCopy of [false, true]) {
+        it(`uses active Vitest below the test root in ${poolConfig} (root copy=${conflictingRootCopy})`, async () => {
+          const root = path.dirname(cwd)
+          const rootVitest = path.join(root, 'node_modules/vitest')
+          try {
+            if (conflictingRootCopy) {
+              fs.mkdirSync(rootVitest, { recursive: true })
+              fs.writeFileSync(path.join(rootVitest, 'package.json'), JSON.stringify({
+                name: 'vitest',
+                version: '0.0.0',
+                module: './index.mjs',
+                exports: { './package.json': './package.json' },
+              }))
+              fs.writeFileSync(path.join(rootVitest, 'index.mjs'),
+                'throw new Error("Loaded the inactive Vitest installation from the configured root")\n')
+            }
+            const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+              assertEventCounts(events, { test_session_end: 1, test_module_end: 1, test_suite_end: 1, test: 1 })
+              assert.strictEqual(getEventContents(events, 'test')[0].meta[TEST_STATUS], 'pass')
+            })
+            const [exitCode] = await Promise.all([
+              runVitest({
+                TEST_DIR: `${path.basename(cwd)}/ci-visibility/vitest-tests/vitest-worker-env.mjs`,
+                POOL_CONFIG: poolConfig,
+                EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
+                EXPECT_NO_DD_TRACE_INIT: '1',
+              }, [
+                path.join(cwd, 'node_modules/vitest/vitest.mjs'), 'run', '--root', root,
+                '--config', path.join(cwd, 'vitest.config.mjs'),
+              ]),
+              payloadsPromise,
+            ])
+            assert.strictEqual(exitCode, 0, testOutput)
+          } finally {
+            if (conflictingRootCopy) fs.rmSync(rootVitest, { recursive: true, force: true })
+          }
+        })
+      }
+
+      it(`resolves Vitest from the project with an external tracer in ${poolConfig} workers`, async () => {
+        const externalRoot = fs.mkdtempSync(path.join(path.dirname(cwd), 'external-dd-trace-'))
+        const externalModules = path.join(externalRoot, 'node_modules')
+        const externalTracer = path.join(externalModules, 'dd-trace')
+        const projectModules = path.join(cwd, 'node_modules')
+        fs.mkdirSync(externalModules)
+
+        try {
+          fs.cpSync(path.join(projectModules, 'dd-trace'), externalTracer, { recursive: true })
+          for (const name of fs.readdirSync(projectModules)) {
+            if (name === 'dd-trace' || name === 'vitest' || name === '@vitest' || name.startsWith('.')) continue
+            fs.symlinkSync(path.join(projectModules, name), path.join(externalModules, name), 'junction')
+          }
+          const fallbackVitest = path.join(externalModules, 'vitest')
+          fs.mkdirSync(fallbackVitest)
+          fs.writeFileSync(path.join(fallbackVitest, 'package.json'), JSON.stringify({
+            name: 'vitest',
+            version: '0.0.0',
+            module: './index.mjs',
+            exports: { './package.json': './package.json' },
+          }))
+          fs.writeFileSync(path.join(fallbackVitest, 'index.mjs'),
+            'throw new Error("Loaded Vitest from the tracer instead of the test project")\n')
+
+          const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+            assertEventCounts(events, { test_session_end: 1, test_module_end: 1, test_suite_end: 1, test: 1 })
+            assert.strictEqual(getEventContents(events, 'test')[0].meta[TEST_STATUS], 'pass')
+          })
+          const [exitCode] = await Promise.all([
+            runVitest({
+              NODE_OPTIONS: `--no-warnings --import ${JSON.stringify(path.join(externalTracer, 'register.js'))} ` +
+                `-r ${JSON.stringify(path.join(externalTracer, 'ci/init.js'))}`,
+              TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+              POOL_CONFIG: poolConfig,
+              EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
+              EXPECT_NO_DD_TRACE_INIT: '1',
+            }, [
+              path.join(projectModules, 'vitest/vitest.mjs'), 'run', '--root', cwd,
+              '--config', path.join(cwd, 'vitest.config.mjs'),
+            ], path.dirname(cwd)),
+            payloadsPromise,
+          ])
+          assert.strictEqual(exitCode, 0, testOutput)
+        } finally {
+          fs.rmSync(externalRoot, { recursive: true, force: true })
+        }
+      })
+
       it(`runs and reports tests without initializing dd-trace in ${poolConfig} workers`, async () => {
         const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
           assertEventCounts(events, {

@@ -965,3 +965,35 @@ ATR, EFD and Attempt to Fix. Explicit native retries on a test or suite remain
 available and are reported as framework retries. Developer skips and TIA retain
 their ordinary selection semantics. Backend-assigned property tags remain visible
 when the execution policy is overridden; observed annotation tags are true-only.
+
+## Cypress test automation exclusions
+
+With Cypress 12 and later, annotate the callback passed to `it` or `specify` using
+`preventFailureSuppression` and `noAutoRetry` from `dd-trace/ci/test-annotations`.
+Both helpers compose in the same way as the Jest examples above. Skipped declarations,
+loop-generated cases, and allowed native retries retain their annotation tags.
+
+`preventFailureSuppression` overrides Datadog quarantine and disabling while preserving
+normal test selection, explicit skips, and Test Impact Analysis. `noAutoRetry` excludes
+Datadog ATR, EFD, and Attempt to Fix. Explicit Cypress retries configured on a test,
+suite, or globally remain available and are reported as framework retries. Test isolation
+must remain enabled for Datadog automatic retry controls to apply.
+
+Management tags continue to describe backend assignments. Annotation tags describe the
+observed callback, and effective execution/final status follows the exclusions.
+
+
+## WebdriverIO test automation exclusions
+
+With the WebdriverIO Mocha or Jasmine adapter (WebdriverIO 9 and later), apply
+`preventFailureSuppression` and `noAutoRetry` from `dd-trace/ci/test-annotations`
+to callbacks passed to `it` or `xit`. The helpers compose as in the Jest example.
+They apply to every declaration generated in a loop and retain annotation tags
+on explicit skips and permitted native retries.
+
+`preventFailureSuppression` overrides Datadog quarantine and disabling without
+blocking retries. `noAutoRetry` excludes Datadog ATR, EFD, and Attempt to Fix;
+native Mocha retries and explicit WebdriverIO Jasmine retries remain available and
+are reported as framework retries.
+Both helpers preserve ordinary selection and expected-failure behavior. Management
+property tags retain backend assignments even when their execution policy is overridden.

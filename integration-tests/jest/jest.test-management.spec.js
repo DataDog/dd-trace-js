@@ -55,13 +55,12 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const { DD_MAJOR } = require('../../version')
 const { getBabelDependencies } = require('./babel-dependencies')
+const { oldest: oldestJestVersion } = require('./versions')
 
 const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 
 const requestedJestVersion = process.env.JEST_VERSION || 'latest'
-const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
 const supportsImportedGlobals = JEST_VERSION === 'latest' || satisfies(JEST_VERSION, '>=26.0.0')

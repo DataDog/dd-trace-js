@@ -330,6 +330,7 @@
 /packages/dd-trace/test/log-submission/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/fixtures/otel-startup.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/opentracing/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-capabilities
@@ -358,12 +359,12 @@
 
 /scripts/generate-config-types.js @DataDog/apm-sdk-capabilities
 /scripts/generate-supported-integrations.js @DataDog/apm-sdk-capabilities
+/scripts/generate-supported-integrations.spec.mjs @DataDog/apm-sdk-capabilities
 /scripts/helpers/test-file-index.js @DataDog/apm-sdk-capabilities
 /scripts/helpers/test-file-index.spec.js @DataDog/apm-sdk-capabilities
 /scripts/verify-exercised-tests.js @DataDog/apm-sdk-capabilities
 /scripts/verify-exercised-tests.spec.mjs @DataDog/apm-sdk-capabilities
-/supported_versions_output.json @DataDog/apm-sdk-capabilities
-/supported_versions_table.csv @DataDog/apm-sdk-capabilities
+/scripts/test/vendor-licenses.spec.js @DataDog/lang-platform-js
 
 # Feature Flagging
 /integration-tests/esbuild/*openfeature* @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
