@@ -119,11 +119,10 @@ function wrapAbortControllers (protocol) {
 }
 
 function wrapProtocol (Protocol) {
-  // Inject trace context into MCP request metadata so out-of-process MCP servers
-  // can parent server spans to the client operation span.
+  // Shimmer replaces request metadata before the SDK reads it because Orchestrion's lifecycle cannot replace arguments.
   shimmer.wrap(Protocol.prototype, 'request', function (original) {
     return function requestWithTraceContext (request, resultSchema, options) {
-      if (!clientRequestInjectCh.hasSubscribers || !TRACED_METHOD_PREFIX.test(request?.method)) {
+      if (!clientRequestInjectCh.hasSubscribers || typeof request?.method !== 'string') {
         return original.apply(this, arguments)
       }
 

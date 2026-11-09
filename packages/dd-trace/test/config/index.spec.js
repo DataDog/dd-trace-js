@@ -4812,6 +4812,35 @@ describe('Config', () => {
     })
   })
 
+  context('MCP distributed tracing', () => {
+    it('enables propagation by default and reports its origin', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_MCP_DISTRIBUTED_TRACING, true)
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [{
+        name: 'DD_MCP_DISTRIBUTED_TRACING', value: true, origin: 'default',
+      }])
+    })
+
+    for (const { value, expected } of [
+      { value: 'true', expected: true },
+      { value: '1', expected: true },
+      { value: 'false', expected: false },
+      { value: '0', expected: false },
+    ]) {
+      it(`parses DD_MCP_DISTRIBUTED_TRACING=${value} and reports the environment origin`, () => {
+        process.env.DD_MCP_DISTRIBUTED_TRACING = value
+
+        const config = getConfig()
+
+        assert.strictEqual(config.DD_MCP_DISTRIBUTED_TRACING, expected)
+        assertConfigUpdateContains(updateConfig.firstCall.args[0], [{
+          name: 'DD_MCP_DISTRIBUTED_TRACING', value: expected, origin: 'env_var',
+        }])
+      })
+    }
+  })
+
   context('llmobs config', () => {
     it('should use canonical LLMObs names internally', () => {
       const config = getConfig({
