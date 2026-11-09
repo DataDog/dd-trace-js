@@ -921,14 +921,22 @@ class RealtimeSession {
   #describeTurn (turn, now) {
     const { input } = turn
 
-    // The VAD speech onset when we have it. The first buffered frame only approximates the onset,
-    // for a client that appends audio solely while the user talks (client-side turn detection).
-    const userStart = this.#playback ? input.speechStartTime : input.speechStartTime ?? input.audio.startTime
     const inputFormat = segmentFormat(input.audio, this.#inputAudioMime, this.#inputAudioRate)
     const outputFormat = segmentFormat(turn.audio, this.#outputAudioMime, this.#outputAudioRate)
     const inputDurationMs = segmentDurationMs(
       input.audio.totalDecodedBytes, inputFormat.mimeType, inputFormat.sampleRate
     )
+    // Manual sideband commits have an end boundary but no VAD onset. Complete
+    // retrieved audio can anchor their start; a retrieval's arrival time cannot.
+    const manualStart = this.#playback && input.speechEndTime !== undefined &&
+      input.audio.chunks.length > 0 && inputDurationMs > 0
+      ? input.speechEndTime - inputDurationMs
+      : undefined
+    // The VAD speech onset when we have it. The first buffered frame only approximates the onset,
+    // for a client that appends audio solely while the user talks (client-side turn detection).
+    const userStart = this.#playback
+      ? input.speechStartTime ?? manualStart
+      : input.speechStartTime ?? input.audio.startTime
     const userEnd = input.speechEndTime ??
       (userStart === undefined || inputDurationMs === undefined ? undefined : userStart + inputDurationMs)
 

@@ -440,6 +440,49 @@ describe('Agents SDK realtime automatic tracing', () => {
         })
       })
 
+      it(mode + ' emits caller speech for manually committed sideband audio', async () => {
+        const sdk = await loadSdk(mode, version)
+        const socket = new ReplaySocket()
+        const clock = sinon.useFakeTimers({ now: EPOCH, toFake: ['Date'] })
+        transport = new sdk.OpenAIRealtimeSIP({ createWebSocket: () => Promise.resolve(socket) })
+        await transport.connect({ callId: 'manual-call', apiKey: 'synthetic-key', model: 'gpt-realtime' })
+        clock.tick(2000)
+        socket.deliver({ type: 'input_audio_buffer.committed', item_id: 'manual-input' })
+        clock.tick(500)
+        socket.deliver({
+          type: 'conversation.item.retrieved',
+          item: {
+            id: 'manual-input',
+            type: 'message',
+            role: 'user',
+            status: 'completed',
+            content: [{
+              type: 'input_audio',
+              format: 'pcm16',
+              audio: Buffer.alloc(48000).toString('base64'),
+              transcript: 'Manual caller input',
+            }],
+          },
+        })
+        socket.deliver({ type: 'response.created', response: { id: 'manual-response' } })
+        clock.tick(100)
+        socket.deliver({
+          type: 'response.done',
+          response: { id: 'manual-response', status: 'completed', model: 'gpt-realtime', output: [] },
+        })
+        transport.close()
+        const { llmobsSpans } = await getEvents(3)
+        const root = llmobsSpans.find(span => span.name === 'realtime audio turn')
+        const speech = llmobsSpans.find(span => span.name === 'user speech')
+        const llm = llmobsSpans.find(span => span.name === 'OpenAI.createRealtimeResponse')
+        assert.strictEqual(speech.start_ns, (EPOCH + 1000) * 1e6)
+        assert.strictEqual(speech.duration, 1e9)
+        assert.strictEqual(root.start_ns, speech.start_ns)
+        assert.strictEqual(llm.start_ns, (EPOCH + 2000) * 1e6)
+        assert.strictEqual(Buffer.from(llm.meta.input.messages[0].audio_parts[0].content, 'base64').length, 48044)
+        assert.strictEqual(llm.session_id, 'manual-call')
+      })
+
       it(mode + ' follows constructor, override, reconnect and call-ID URL precedence', async () => {
         const sdk = await loadSdk(mode, version)
         const fixture = loadFixture('sideband-tool')

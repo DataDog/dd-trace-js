@@ -411,6 +411,33 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
     assert.ok(h.emitted[1].agentSpeech)
   })
 
+  for (const delayedFirstRetrieval of [false, true]) {
+    it('preserves later queued playback across a handoff (delayed retrieval=' + delayedFirstRetrieval + ')', () => {
+      const h = harness()
+      h.start('r1', ['a1'])
+      if (!delayedFirstRetrieval) h.retrieve('a1')
+      h.start('r2', ['a2'], false)
+      h.retrieve('a2', 480000)
+      h.start('r3', ['a3'], false)
+      h.retrieve('a3')
+      h.clock.tick(1000)
+      h.send({ type: 'output_audio_buffer.started', response_id: 'r2' })
+      if (delayedFirstRetrieval) h.retrieve('a1')
+      assert.strictEqual(h.emitted.length, 1, 'only the earlier completed response can finish at handoff')
+      h.clock.tick(6000)
+      assert.strictEqual(h.emitted.length, 1, 'the third response remains queued while the second plays')
+      h.send({ type: 'output_audio_buffer.started', response_id: 'r3' })
+      assert.strictEqual(h.emitted.length, 2)
+      h.clock.tick(1000)
+      h.send({ type: 'output_audio_buffer.stopped', response_id: 'r3' })
+      assert.strictEqual(h.emitted.length, 3)
+      assert.strictEqual(h.emitted[2].output.audio.length, 48000)
+      assert.deepStrictEqual(h.emitted[2].agentSpeech, {
+        startTime: 1007000, finishTime: 1008000, transcript: 'synthetic output',
+      })
+    })
+  }
+
   it('flushes active and unstarted queued audio on disconnect', () => {
     const h = harness()
     h.start('playing', ['a1'])
@@ -1009,6 +1036,66 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
     h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
     assert.strictEqual(h.emitted[0].llm.startTime, 1002000)
   })
+
+  for (const codec of [
+    { format: 'pcm16', bytes: 48000 },
+    { format: 'g711_ulaw', bytes: 8000 },
+    { format: 'g711_alaw', bytes: 8000 },
+  ]) {
+    it('anchors manual sideband input to its commit using retrieved ' + codec.format + ' audio', () => {
+      const h = harness()
+      h.clock.tick(2000)
+      h.send({ type: 'input_audio_buffer.committed', item_id: 'manual1' })
+      h.clock.tick(500)
+      h.send({
+        type: 'conversation.item.retrieved',
+        item: {
+          id: 'manual1',
+          role: 'user',
+          content: [{
+            type: 'input_audio',
+            format: codec.format,
+            audio: Buffer.alloc(codec.bytes).toString('base64'),
+            transcript: 'manual input',
+          }],
+        },
+      })
+      h.send({ type: 'response.created', response: { id: 'r1' } })
+      h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+      assert.strictEqual(h.emitted.length, 1)
+      assert.deepStrictEqual(h.emitted[0].userSpeech, {
+        startTime: 1001000, finishTime: 1002000, transcript: 'manual input',
+      })
+      assert.strictEqual(h.emitted[0].root.startTime, 1001000)
+      assert.strictEqual(h.emitted[0].llm.startTime, 1002000)
+      assert.strictEqual(h.emitted[0].input.audio.length, codec.bytes)
+    })
+  }
+
+  for (const [name, expectedParts, content] of [
+    ['empty', 1, [{ type: 'input_audio', format: 'pcm16', audio: '' }]],
+    ['unsupported', 1, [{ type: 'input_audio', format: 'opus', audio: Buffer.alloc(100).toString('base64') }]],
+    ['incomplete', 2, [{ type: 'input_audio', format: 'pcm16', audio: Buffer.alloc(48000).toString('base64') }]],
+  ]) {
+    it('omits unanchored manual speech for ' + name + ' retrieved audio', () => {
+      const h = harness()
+      h.send({ type: 'input_audio_buffer.committed', item_id: 'manual1' })
+      h.send({
+        type: 'conversation.item.done',
+        item: {
+          id: 'manual1', role: 'user', content: Array.from({ length: expectedParts }, () => ({ type: 'input_audio' })),
+        },
+      })
+      h.send({ type: 'response.created', response: { id: 'r1' } })
+      h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+      h.send({ type: 'conversation.item.retrieved', item: { id: 'manual1', role: 'user', content } })
+      h.clock.tick(5000)
+      assert.strictEqual(h.emitted.length, 1)
+      assert.strictEqual(h.emitted[0].userSpeech, undefined)
+      assert.strictEqual(h.emitted[0].root.startTime, 1000000)
+      assert.strictEqual(h.emitted[0].llm.startTime, 1000000)
+    })
+  }
 
   it('uses the latest manual commit while preserving pending text and tool results', () => {
     const h = harness()

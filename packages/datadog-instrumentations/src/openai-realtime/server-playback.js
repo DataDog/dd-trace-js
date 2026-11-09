@@ -236,23 +236,26 @@ class ServerPlayback {
     } else if (type === 'output_audio_buffer.started') {
       const entry = this.#turns.get(String(event.response_id))
       if (entry) {
+        const active = this.#active
+        entry.hasAudio = true
+        entry.turn.serverSpeech.startTime ??= now
+        // Install the new dependency before finishing older turns: removing the old
+        // active turn must not shorten waits for responses still queued after this one.
+        this.#active = entry
         for (const previous of this.#turns.values()) {
-          if (previous !== entry && previous.held && previous.hasAudio &&
+          if (previous === entry) break
+          if (previous.held && previous.hasAudio &&
               previous.turn.serverSpeech.startTime === undefined && !previous.stopped) {
             this.#finish(previous, now, true)
           }
         }
-        entry.hasAudio = true
-        entry.turn.serverSpeech.startTime ??= now
-        if (this.#active && this.#active !== entry) {
-          const previous = this.#active
+        if (active && active !== entry) {
           // A response-specific start supplies the handoff boundary even when the
           // shared output buffer never drains between a tool preamble and its answer.
-          previous.stopped = true
-          previous.turn.serverSpeech.finishTime = now
-          this.#check(previous, now)
+          active.stopped = true
+          active.turn.serverSpeech.finishTime = now
+          this.#check(active, now)
         }
-        this.#active = entry
         this.#check(entry, now)
       }
     } else if (type === 'output_audio_buffer.stopped' || type === 'output_audio_buffer.cleared') {

@@ -324,6 +324,8 @@ If a formatless retrieval could use a different codec from the captured item,
 the recording is omitted and any available transcript is retained.
 Input clips use paired VAD offsets to include prefix padding at the correct start,
 with wall-clock precision limited by sideband event delivery.
+Manually committed sideband input without a VAD onset can use complete retrieved
+audio to derive its start from the commit boundary and clip duration.
 Response-specific playback starts preserve boundaries across a shared output
 buffer. When a normally drained buffer spans responses without every start event,
 complete retrieved audio durations can reconstruct the missing boundaries; those
