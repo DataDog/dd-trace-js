@@ -30,7 +30,7 @@ function getRewriteTarget (filename) {
   if (nodeModulesIndex === -1) return
 
   const modulePath = filename.slice(nodeModulesIndex + NODE_MODULES.length)
-  let moduleName = Object.hasOwn(targets, modulePath) ? targets[modulePath] : undefined
+  let moduleName = targets[modulePath]
   let sourceMatch
   if (!moduleName) {
     for (const { name, prefix, pattern, sourceMatch: expectedSource } of targetPatterns) {
