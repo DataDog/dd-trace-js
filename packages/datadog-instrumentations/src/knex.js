@@ -62,13 +62,13 @@ addHook({
       const rawResult = raw.apply(this, args)
       shimmer.wrap(rawResult, 'then', originalThen => function (...args) {
         return rawQuerySubscribes.runStores(context, () => {
-          args[0] = wrapCallbackWithFinish(args[0], finish, context)
-          if (args[1]) args[1] = wrapCallbackWithFinish(args[1], finish, context)
+          args[0] = wrapCallbackWithFinish(args[0], context)
+          if (args[1]) args[1] = wrapCallbackWithFinish(args[1], context)
 
           const originalThenResult = originalThen.apply(this, args)
 
           shimmer.wrap(originalThenResult, 'catch', originalCatch => function (...args) {
-            args[0] = wrapCallbackWithFinish(args[0], finish, context)
+            args[0] = wrapCallbackWithFinish(args[0], context)
             return originalCatch.apply(this, args)
           })
 
@@ -78,7 +78,7 @@ addHook({
 
       shimmer.wrap(rawResult, 'asCallback', originalAsCallback => function (...args) {
         return rawQuerySubscribes.runStores(context, () => {
-          args[0] = wrapCallbackWithFinish(args[0], finish, context)
+          args[0] = wrapCallbackWithFinish(args[0], context)
           return originalAsCallback.apply(this, args)
         })
       })
@@ -118,7 +118,11 @@ addHook({
   return Transaction
 })
 
-function wrapCallbackWithFinish (callback, finish, context) {
+/**
+ * @param {unknown} callback
+ * @param {object} context
+ */
+function wrapCallbackWithFinish (callback, context) {
   if (typeof callback !== 'function') return callback
 
   return shimmer.wrapFunction(callback, callback => function (...args) {

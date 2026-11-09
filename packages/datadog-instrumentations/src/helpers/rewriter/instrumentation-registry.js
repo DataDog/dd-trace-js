@@ -32,6 +32,7 @@ const registry = [
   },
   { instrumentations: require('./instrumentations/graphql') },
   { instrumentations: require('./instrumentations/graphql-jit') },
+  { instrumentations: require('./instrumentations/jest') },
   { activate: true, instrumentations: require('./instrumentations/langchain') },
   { activate: true, instrumentations: require('./instrumentations/langgraph') },
   { activate: true, instrumentations: require('./instrumentations/mercurius') },
@@ -39,9 +40,27 @@ const registry = [
   { instrumentations: require('./instrumentations/openai-agents') },
   { instrumentations: require('./instrumentations/playwright') },
   { activate: true, instrumentations: require('./instrumentations/postgres') },
-  { instrumentations: require('./instrumentations/webdriverio') },
-  { instrumentations: require('./instrumentations/aws-durable-execution-sdk-js') },
+  {
+    activate: /** @type {ActivationConfig} */ ({ setup: () => require('../../react-router') }),
+    instrumentations: require('./instrumentations/react-router'),
+  },
+  { instrumentations: require('./instrumentations/vitest') },
+  {
+    activate: {
+      modules: ['@wdio/cli', '@wdio/jasmine-framework', '@wdio/local-runner', '@wdio/utils', 'webdriverio'],
+      setup: activation => require('../../webdriverio').recordLocalRunnerVersion(activation),
+    },
+    instrumentations: require('./instrumentations/webdriverio'),
+  },
+  {
+    activate: { setup: () => require('../../aws-durable-execution-sdk-js') },
+    instrumentations: require('./instrumentations/aws-durable-execution-sdk-js'),
+  },
   { activate: true, instrumentations: require('./instrumentations/supabase') },
+  {
+    activate: { setup: () => require('../../typesafe') },
+    instrumentations: require('./instrumentations/typesafe'),
+  },
 ]
 
 const activatedModules = new Set()

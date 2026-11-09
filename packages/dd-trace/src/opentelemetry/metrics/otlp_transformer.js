@@ -18,7 +18,7 @@ const AGGREGATION_TEMPORALITY_CUMULATIVE = protoAggregationTemporality.values.AG
  * OtlpTransformer transforms metrics to OTLP format.
  *
  * This implementation follows the OTLP Metrics v1.7.0 Data Model specification:
- * https://opentelemetry.io/docs/specs/otlp/#metrics-data-model
+ * https://github.com/open-telemetry/opentelemetry-proto/blob/v1.7.0/opentelemetry/proto/metrics/v1/metrics.proto
  *
  * @class OtlpTransformer
  * @augments OtlpTransformerBase

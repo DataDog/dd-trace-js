@@ -23,10 +23,12 @@ describe('Tracer', () => {
   let PrioritySampler
   let prioritySampler
   let AgentExporter
+  let LLMObsExporter
   let SpanProcessor
   let processor
   let exporter
   let agentExporter
+  let llmobsExporter
   let otlpExporter
   let createOtlpTraceExporter
   let createOtlpSpanStatsExporter
@@ -63,6 +65,8 @@ describe('Tracer', () => {
       export: sinon.spy(),
     }
     AgentExporter = sinon.stub().returns(agentExporter)
+    llmobsExporter = { export: sinon.spy() }
+    LLMObsExporter = sinon.stub().returns(llmobsExporter)
     otlpExporter = {
       export: sinon.spy(),
       getStartupResourceAttributes: sinon.stub().returns({}),
@@ -140,7 +144,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     sinon.assert.calledWith(exporter, 'electron')
-    sinon.assert.calledWithExactly(SpanProcessor, agentExporter, prioritySampler, config, undefined, false)
+    sinon.assert.calledWithExactly(SpanProcessor, agentExporter, prioritySampler, config, undefined)
   })
 
   it('should use the OTLP exporter with a non-Electron trace exporter', () => {
@@ -150,7 +154,17 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     sinon.assert.calledWith(createOtlpTraceExporter, config)
-    sinon.assert.calledWithExactly(SpanProcessor, otlpExporter, prioritySampler, config, undefined, true)
+    sinon.assert.calledWithExactly(SpanProcessor, otlpExporter, prioritySampler, config, undefined)
+  })
+
+  it('should preserve the agentless exporter when the OTLP exporter is enabled', () => {
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agentless'
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledWith(exporter, 'agentless')
+    sinon.assert.calledWithExactly(SpanProcessor, agentExporter, prioritySampler, config, undefined)
   })
 
   it('returns the initialized tracing and span-metrics configuration after later changes', () => {
@@ -183,6 +197,78 @@ describe('Tracer', () => {
 
     sinon.assert.calledWith(AgentExporter, config, sampler)
     sinon.assert.calledWith(SpanProcessor, agentExporter, sampler, config)
+  })
+
+  it('uses the configured LLMObs exporter', () => {
+    config.llmobs = {
+      DD_LLMOBS_ENABLED: true,
+      DD_LLMOBS_AGENTLESS_ENABLED: undefined,
+    }
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agentless'
+    exporter.returns(LLMObsExporter)
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledWithExactly(exporter, 'llmobs')
+    sinon.assert.calledOnceWithExactly(LLMObsExporter, config, prioritySampler)
+    sinon.assert.calledWith(SpanProcessor, llmobsExporter, prioritySampler, config)
+    sinon.assert.notCalled(AgentExporter)
+  })
+
+  for (const name of [undefined, '', 'agent', 'agentless']) {
+    it(`selects LLMObs without changing the configured exporter ${name}`, () => {
+      config.llmobs = { DD_LLMOBS_ENABLED: true }
+      config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = name
+      exporter.returns(LLMObsExporter)
+
+      tracer = new Tracer(config)
+
+      sinon.assert.calledOnceWithExactly(exporter, 'llmobs')
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, name)
+      sinon.assert.calledOnceWithExactly(LLMObsExporter, config, prioritySampler)
+    })
+  }
+
+  for (const name of ['electron', 'log']) {
+    it(`preserves the ${name} exporter when LLMObs is enabled`, () => {
+      config.llmobs = { DD_LLMOBS_ENABLED: true }
+      config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = name
+
+      tracer = new Tracer(config)
+
+      sinon.assert.calledOnceWithExactly(exporter, name)
+    })
+  }
+
+  it('preserves the configured exporter when LLMObs is disabled', () => {
+    config.llmobs = { DD_LLMOBS_ENABLED: false }
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agentless'
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledOnceWithExactly(exporter, 'agentless')
+  })
+
+  it('preserves the configured exporter in Test Optimization mode with LLMObs enabled', () => {
+    config.llmobs = { DD_LLMOBS_ENABLED: true }
+    config.isCiVisibility = true
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agent'
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledOnceWithExactly(exporter, 'agent')
+    sinon.assert.notCalled(createOtlpTraceExporter)
+  })
+
+  it('preserves OTLP when LLMObs is enabled', () => {
+    config.llmobs = { DD_LLMOBS_ENABLED: true }
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledOnceWithExactly(createOtlpTraceExporter, config)
+    sinon.assert.notCalled(exporter)
   })
 
   describe('startSpan', () => {

@@ -459,6 +459,18 @@ module.exports = [
       filePath: 'build/index.js',
     },
     functionQuery: {
+      expressionName: 'runSpec',
+      kind: 'Sync',
+    },
+    channelName: 'runSpec',
+  },
+  {
+    module: {
+      name: '@wdio/utils',
+      versionRange: '>=9.0.0',
+      filePath: 'build/index.js',
+    },
+    functionQuery: {
       expressionName: 'testFrameworkFnWrapper',
       kind: 'Async',
     },
@@ -537,7 +549,10 @@ module.exports = [
     },
     astQuery: 'AssignmentExpression[left.object.object.name="Spec"]' +
       '[left.object.property.name="prototype"][left.property.name="execute"] > FunctionExpression',
+    // A method name keeps the original function expression, so the start context
+    // carries `self` (the legacy Spec) that the WebdriverIO Jasmine lifecycle reads.
     functionQuery: {
+      methodName: 'execute',
       kind: 'Sync',
     },
     channelName: 'Spec_execute',

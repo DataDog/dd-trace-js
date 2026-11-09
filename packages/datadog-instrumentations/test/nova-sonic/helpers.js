@@ -15,6 +15,19 @@ function event (name, data) {
   return { chunk: { bytes: Buffer.from(JSON.stringify({ event: { [name]: data } })) } }
 }
 
+function namedUsage ({ input, output, inputText, outputText, inputAudio, outputAudio }, at) {
+  return record('usageEvent', {
+    totalInputTokens: input,
+    totalOutputTokens: output,
+    details: {
+      total: {
+        input: { textTokens: inputText, speechTokens: inputAudio },
+        output: { textTokens: outputText, speechTokens: outputAudio },
+      },
+    },
+  }, at)
+}
+
 function pcm (milliseconds, rate = 24_000, sample = 2) {
   const raw = Buffer.alloc(Math.floor(milliseconds * rate / 1000) * 2)
   for (let i = 0; i < raw.length; i += 2) raw.writeInt16LE(sample, i)
@@ -61,4 +74,4 @@ function speech ({ id = '1', offset = 0, at = 0, outputMs = 100, input = INPUT, 
   ]
 }
 
-module.exports = { INPUT, OUTPUT, MODEL, EPOCH, event, pcm, record, fixture, speech }
+module.exports = { INPUT, OUTPUT, MODEL, EPOCH, event, pcm, record, fixture, speech, namedUsage }

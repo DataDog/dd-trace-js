@@ -1,7 +1,10 @@
 'use strict'
 
-const { AUTO_REJECT } = require('../../../ext/priority')
+const { channel } = require('dc-polyfill')
+
+const { AUTO_KEEP, AUTO_REJECT } = require('../../../ext/priority')
 const log = require('./log')
+const { usesOtlpTraceExporter } = require('./exporter')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
@@ -10,30 +13,23 @@ const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
 const TraceState = require('./opentracing/propagation/tracestate')
 const { APM_TRACING_ENABLED_KEY, SDK_OTLP_EXPORT_KEY } = require('./constants')
 
+const traceSampledCh = channel('dd-trace:trace:sampled')
+
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 let otelSampling
 
-/**
- * Adds first-class OTLP trace context to a DD-formatted span.
- *
- * @param {import('./opentracing/span')} span
- * @param {boolean} isFirstSpanInChunk
- * @param {string | false} processTagsValue
- */
-function formatOtlpSpan (span, isFirstSpanInChunk, processTagsValue) {
-  const formattedSpan = spanFormat(span, isFirstSpanInChunk, processTagsValue)
-  const context = span.context()
+/** @param {import('./opentracing/span_context')} context */
+function serializeOtlpTraceState (context) {
   const traceState = context._tracestate?.clone() ?? new TraceState()
   otelSampling ??= require('./otel-sampling')
   otelSampling.updateOtelTraceState(context, traceState)
-  formattedSpan.trace_state = traceState.toString()
-  return formattedSpan
+  return traceState.toString()
 }
 
 class SpanProcessor {
-  #formatSpan
+  #exportOtlpTraces
 
   /**
    * @readonly
@@ -41,12 +37,12 @@ class SpanProcessor {
    */
   #spanMetricsStartupConfig
 
-  constructor (exporter, prioritySampler, config, otlpStatsExporter, exportOtlpTraces) {
+  constructor (exporter, prioritySampler, config, otlpStatsExporter) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
-    this.#formatSpan = exportOtlpTraces ? formatOtlpSpan : spanFormat
+    this.#exportOtlpTraces = usesOtlpTraceExporter(config)
 
     if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
         !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
@@ -66,7 +62,6 @@ class SpanProcessor {
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
-    this._nativeExport = config.OTEL_TRACES_EXPORTER !== 'otlp'
   }
 
   /**
@@ -112,35 +107,48 @@ class SpanProcessor {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
+      const discard = this.#isDiscarded(spanContext)
+      const willExport = !discard && trace.isRecording !== false
+
+      if (traceSampledCh.hasSubscribers) {
+        traceSampledCh.publish({
+          spans: finished,
+          willExport,
+        })
+      }
+
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
-      const discard = this.#isDiscarded(spanContext)
-      const formatSpan = this.#formatSpan
+      const exportOtlpTraces = this.#exportOtlpTraces && !(spanContext._sampling.priority < AUTO_KEEP)
+      let traceState
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else if (!discard) {
-          const formattedSpan = formatSpan(span, isFirstSpanInChunk, this._processTags)
+          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          if (exportOtlpTraces) {
+            traceState ??= serializeOtlpTraceState(spanContext)
+            formattedSpan.trace_state = traceState
+          }
           if (stampApmDisabled) {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
           }
           // Stamped after formatting so a span tag with the same key can't override it.
-          if (isFirstSpanInChunk && this._nativeExport) {
+          if (isFirstSpanInChunk && !this.#exportOtlpTraces) {
             formattedSpan.meta[SDK_OTLP_EXPORT_KEY] = 'false'
           }
           isFirstSpanInChunk = false
-          // Span stats read Datadog HTTP tag names from the formatted span, so
-          // record them before the OTel rename — an export-only transform.
-          this._stats?.onSpanFinished(formattedSpan)
           if (this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
             applyHttpOtelSemantics(formattedSpan)
           }
+          // Trace metrics must aggregate the same names and attributes the OTLP exporter emits.
+          this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
         }
       }
 
-      if (!discard && formatted.length !== 0 && trace.isRecording !== false) {
+      if (willExport && formatted.length !== 0) {
         this._exporter.export(formatted)
       }
 

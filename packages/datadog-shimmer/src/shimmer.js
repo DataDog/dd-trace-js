@@ -314,11 +314,11 @@ function assertMethod (target, name, method) {
     let message = 'No target object provided'
 
     if (target) {
-      if (typeof target !== 'object' && typeof target !== 'function') {
-        message = 'Invalid target'
-      } else {
+      if (typeof target === 'object' || typeof target === 'function') {
         name = String(name)
         message = method ? `Original method ${name} is not a function` : `No original method ${name}`
+      } else {
+        message = 'Invalid target'
       }
     }
 

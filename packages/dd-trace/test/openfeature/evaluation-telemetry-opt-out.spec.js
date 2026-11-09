@@ -388,7 +388,7 @@ describe('evaluation telemetry opt-out', () => {
       assert.strictEqual(result.errorCode, errorCode)
       if (failure === 'not-ready') provider.setConfiguration(configuration())
       assert.deepStrictEqual(signals(), {
-        evaluations: 0, metrics: 0, spanTags: 0, exposures: failure === 'after-hook' ? 1 : 0, customerHooks: 1,
+        evaluations: 0, metrics: 0, spanTags: 0, exposures: 0, customerHooks: 1,
       })
     })
   }
@@ -483,7 +483,9 @@ describe('evaluation telemetry opt-out', () => {
       messages.length = 0
       const client = OpenFeature.getClient('debug')
       await client.getBooleanValue('flag', false, { targetingKey: 'subject', [parameter]: true })
-      assert.strictEqual(messages.filter(message => message.startsWith('Feature Flags: evaluated flag:')).length, 1)
+      const evaluated = messages.filter(message => message.startsWith('Feature Flags: evaluated flag ('))
+      assert.strictEqual(evaluated.length, 1)
+      assert.match(evaluated[0], /context=\{ targetingKey: 'subject'/)
       assert.strictEqual(signals().evaluations, 0)
     } finally {
       debugChannel.unsubscribe(onDebug)

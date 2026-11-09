@@ -5,6 +5,7 @@ const path = require('node:path')
 
 const log = require('../log')
 const { getNumFromKnownTests } = require('../plugins/util/test')
+const resolveRunfilePath = require('./resolve-runfile-path')
 const { parseKnownTestsResponse } = require('./early-flake-detection/get-known-tests')
 const {
   logSkippableSuitesResponse,
@@ -38,16 +39,12 @@ const HTTP_CACHE_FOLDER_NAME = 'http'
 
 const ENV_MANIFEST_FILE = 'TEST_OPTIMIZATION_MANIFEST_FILE'
 const ENV_MANIFEST_FILE_ALIAS = 'DD_TEST_OPTIMIZATION_MANIFEST_FILE'
-const ENV_RUNFILES_DIR = 'RUNFILES_DIR'
-const ENV_RUNFILES_MANIFEST_FILE = 'RUNFILES_MANIFEST_FILE'
-const ENV_TEST_SRCDIR = 'TEST_SRCDIR'
 
 const SETTINGS_FILE_NAME = 'settings.json'
 const KNOWN_TESTS_FILE_NAME = 'known_tests.json'
 const SKIPPABLE_TESTS_FILE_NAME = 'skippable_tests.json'
 const TEST_MANAGEMENT_FILE_NAME = 'test_management.json'
 
-const RUNFILES_MANIFEST_SEPARATOR = ' '
 const DEFAULT_VALIDATION_MAX_FILE_BYTES = 1024 * 1024
 const DEFAULT_VALIDATION_MAX_ENTRIES = 100_000
 const DEFAULT_VALIDATION_MAX_NESTING_DEPTH = 32
@@ -250,7 +247,7 @@ class TestOptimizationHttpCache {
     const manifestFile = this._env[ENV_MANIFEST_FILE] || this._env[ENV_MANIFEST_FILE_ALIAS]
     if (!manifestFile) return
 
-    const resolvedManifestPath = this._resolveRunfilePath(manifestFile)
+    const resolvedManifestPath = resolveRunfilePath(manifestFile, this._env)
     if (fs.existsSync(resolvedManifestPath)) {
       return resolvedManifestPath
     }
@@ -277,54 +274,6 @@ class TestOptimizationHttpCache {
       return resolvedManifestPath
     } catch (err) {
       this._setError(err.message)
-    }
-  }
-
-  _resolveRunfilePath (manifestFile) {
-    if (fs.existsSync(manifestFile)) {
-      return manifestFile
-    }
-
-    const runfilesDir = this._env[ENV_RUNFILES_DIR]
-    if (runfilesDir) {
-      const candidate = path.join(runfilesDir, manifestFile)
-      if (fs.existsSync(candidate)) {
-        return candidate
-      }
-    }
-
-    const runfilesManifestCandidate = this._resolveRunfilePathFromManifest(manifestFile)
-    if (runfilesManifestCandidate) {
-      return runfilesManifestCandidate
-    }
-
-    const testSrcdir = this._env[ENV_TEST_SRCDIR]
-    if (testSrcdir) {
-      const candidate = path.join(testSrcdir, manifestFile)
-      if (fs.existsSync(candidate)) {
-        return candidate
-      }
-    }
-
-    return manifestFile
-  }
-
-  _resolveRunfilePathFromManifest (manifestFile) {
-    const runfilesManifest = this._env[ENV_RUNFILES_MANIFEST_FILE]
-    if (!runfilesManifest || !fs.existsSync(runfilesManifest)) return
-
-    try {
-      const lines = fs.readFileSync(runfilesManifest, 'utf8').split('\n')
-      for (const line of lines) {
-        const separatorIndex = line.indexOf(RUNFILES_MANIFEST_SEPARATOR)
-        if (separatorIndex <= 0) continue
-        if (line.slice(0, separatorIndex) !== manifestFile) continue
-
-        const resolvedPath = line.slice(separatorIndex + 1).trim()
-        if (resolvedPath) return resolvedPath
-      }
-    } catch (err) {
-      log.debug('Failed to resolve Test Optimization HTTP cache manifest from %s: %s', runfilesManifest, err.message)
     }
   }
 

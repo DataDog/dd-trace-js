@@ -10,6 +10,11 @@ const RealtimeSession = require('./session')
 /**
  * @typedef {import('./session').TurnDescriptor} TurnDescriptor
  * @typedef {import('./turns').ResponseTurn} ResponseTurn
+ * @typedef {{
+ *   session: RealtimeSession,
+ *   socket: object | undefined,
+ *   finalize: (failed?: boolean) => void,
+ * }} Connection
  */
 
 // One span per phase of a turn. `user speech` and `agent speech` share a channel: they differ only
@@ -36,7 +41,7 @@ const audioChannel = dc.channel('dd-trace:openai:realtime:audio')
 const USER_SPEECH = { operation: 'createRealtimeUserSpeech', llmobsName: 'user speech' }
 const AGENT_SPEECH = { operation: 'createRealtimeAgentSpeech', llmobsName: 'agent speech' }
 
-/** @type {WeakMap<object, { session: RealtimeSession, finalize: () => void }>} */
+/** @type {WeakMap<object, Connection>} */
 const connections = new WeakMap()
 
 /**
@@ -92,7 +97,7 @@ function captureContext (turn) {
  * Start tracking a connection, reading the model and base path off the URL the SDK already built.
  *
  * @param {object} emitter
- * @returns {{ session: RealtimeSession, finalize: () => void }}
+ * @returns {Connection}
  */
 function createConnection (emitter) {
   let model
@@ -135,7 +140,7 @@ function createConnection (emitter) {
     session.finishSession(Date.now(), failed)
   }
 
-  const connection = { session, finalize }
+  const connection = { session, socket: emitter.socket, finalize }
   attachSocketClose(emitter, finalize)
   return connection
 }
@@ -181,14 +186,21 @@ function attachSocketClose (emitter, finalize) {
 
 /**
  * @param {object} emitter
- * @returns {{ session: RealtimeSession, finalize: () => void } | undefined}
+ * @returns {Connection | undefined}
  */
 function getConnection (emitter) {
   const connection = connections.get(emitter)
-  if (connection !== undefined) return connection
+  if (connection !== undefined) {
+    if (connection.socket === emitter.socket) return connection
+
+    // Opt-in SDK recovery keeps the emitter but replaces its socket with a new server session.
+    // Retire the old state before attaching close and exit cleanup to the replacement.
+    connection.finalize(true)
+    connections.delete(emitter)
+  }
 
   // Nothing is listening, so never allocate. Checked only on the miss path, so an established
-  // connection pays one WeakMap lookup per event.
+  // connection reuses its state while the socket is unchanged.
   if (!turnChannel.start.hasSubscribers) return
 
   const created = createConnection(emitter)

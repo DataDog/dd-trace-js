@@ -25,6 +25,14 @@ const pureIntegrations = {
 
 const subscriberOnlyIntegrations = {
   'claude-agent-sdk': ['@anthropic-ai/claude-agent-sdk'],
+  'aws-durable-execution-sdk-js': ['@aws/durable-execution-sdk-js'],
+  webdriverio: ['@wdio/cli', '@wdio/local-runner', '@wdio/jasmine-framework', 'webdriverio', '@wdio/utils'],
+}
+
+// Rewrite targets of an entry that narrows activation. They are internal files of the WebdriverIO project,
+// reached through the packages above, and are never installed as fixtures on their own.
+const rewriteOnlyModules = {
+  webdriverio: ['@wdio/config', '@wdio/runner', 'webdriver', 'jasmine-core'],
 }
 
 describe('plugin fixture discovery', () => {
@@ -55,6 +63,16 @@ describe('plugin fixture discovery', () => {
       const expected = [...getHooks(names).values()]
       assert.ok(expected.length > 0, `${plugin} should have rewriter declarations`)
       assert.deepEqual(getInstrumentation(plugin), expected)
+    }
+  })
+
+  it('leaves rewrite-only packages of a narrowed entry out of fixture discovery', () => {
+    for (const [plugin, names] of Object.entries(rewriteOnlyModules)) {
+      const discovered = new Set(getInstrumentation(plugin).map(declaration => declaration.name))
+      assert.ok(getHooks(names).size > 0, `${plugin} should rewrite ${names.join(', ')}`)
+      for (const name of names) {
+        assert.equal(discovered.has(name), false, `${name} should not be a ${plugin} fixture`)
+      }
     }
   })
 
@@ -97,17 +115,17 @@ describe('plugin fixture discovery', () => {
 
   it('selects BullMQ and its Redis external through the installer entrypoint', () => {
     withInstallerFixture({ PLUGINS: 'bullmq', PACKAGE_VERSION_RANGE: '5.66.0' }, fixtureRoot => {
-      const workspace = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json')))
+      const workspace = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'), 'utf8'))
       assert.ok(workspace.workspaces.packages.includes('bullmq@5.66.0'))
       assert.ok(workspace.workspaces.packages.includes('redis'))
-      const redis = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'redis', 'package.json')))
+      const redis = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'redis', 'package.json'), 'utf8'))
       assert.match(redis.dependencies.redis, /^>=4/)
     })
   })
 
   it('applies PACKAGE_VERSION_RANGE to the Supabase client external through the installer entrypoint', () => {
     withInstallerFixture({ PLUGINS: 'supabase', PACKAGE_VERSION_RANGE: '2.115.0' }, fixtureRoot => {
-      const { packages } = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'))).workspaces
+      const { packages } = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'), 'utf8')).workspaces
       assert.ok(packages.includes('@supabase/supabase-js@2.115.0'))
       assert.ok(!packages.includes('@supabase/supabase-js@2.112.2'))
     })

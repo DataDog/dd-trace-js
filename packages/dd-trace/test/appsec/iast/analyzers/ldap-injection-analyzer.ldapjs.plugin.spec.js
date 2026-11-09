@@ -5,7 +5,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { afterEach, beforeEach, describe } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
@@ -216,4 +216,8 @@ describe('ldap-injection-analyzer with ldapjs', () => {
       })
     })
   })
+
+  // TODO: ldapjs-promise >=4 bundles its own LDAP client instead of wrapping ldapjs, so it is not instrumented yet
+  // and its tested range is capped in test/plugins/externals.js.
+  it.skip('ldapjs-promise >=4 is not instrumented yet', () => {})
 })

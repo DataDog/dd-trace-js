@@ -83,10 +83,10 @@ function createWrapAddListener (ch, mappings) {
   }
 }
 
-function createWrapRemoveListener (mappings) {
+function createWrapRemoveListener () {
   return function wrapRemoveListener (removeListener) {
     return function (channel, listener) {
-      const mapping = mappings[channel]
+      const mapping = listeners[channel]
 
       if (mapping) {
         const wrapper = mapping.get(listener)
@@ -212,10 +212,10 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
     wrap(ipcRenderer, 'sendToHost', createWrapSend(rendererSendCh))
 
     wrap(ipcRenderer, 'addListener', createWrapAddListener(rendererReceiveCh, listeners))
-    wrap(ipcRenderer, 'off', createWrapRemoveListener(listeners))
+    wrap(ipcRenderer, 'off', createWrapRemoveListener())
     wrap(ipcRenderer, 'on', createWrapAddListener(rendererReceiveCh, listeners))
     wrap(ipcRenderer, 'once', createWrapAddListener(rendererReceiveCh, listeners))
-    wrap(ipcRenderer, 'removeListener', createWrapRemoveListener(listeners))
+    wrap(ipcRenderer, 'removeListener', createWrapRemoveListener())
     wrap(ipcRenderer, 'removeAllListeners', createWrapRemoveAllListeners(listeners))
 
     ipcRenderer.send('datadog:apm:renderer:patched')
@@ -223,12 +223,12 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
     wrap(ipcMain, 'addListener', createWrapAddListener(mainReceiveCh, listeners))
     wrap(ipcMain, 'handle', createWrapAddListener(mainHandleCh, handlers))
     wrap(ipcMain, 'handleOnce', createWrapAddListener(mainHandleCh, handlers))
-    wrap(ipcMain, 'off', createWrapRemoveListener(listeners))
+    wrap(ipcMain, 'off', createWrapRemoveListener())
     wrap(ipcMain, 'on', createWrapAddListener(mainReceiveCh, listeners))
     wrap(ipcMain, 'once', createWrapAddListener(mainReceiveCh, listeners))
     wrap(ipcMain, 'removeAllListeners', createWrapRemoveAllListeners(listeners))
     wrap(ipcMain, 'removeHandler', createWrapRemoveAllListeners(handlers))
-    wrap(ipcMain, 'removeListener', createWrapRemoveListener(listeners))
+    wrap(ipcMain, 'removeListener', createWrapRemoveListener())
 
     ipcMain.once('datadog:apm:renderer:patched', event => rendererPatchedCh.publish(event))
 

@@ -27,6 +27,7 @@ const {
 } = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
+const telemetry = require('../../telemetry')
 const { getSegment } = require('../../util')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -114,10 +115,14 @@ function isValidRetryCount (value) {
  * @param {unknown} retryPolicy - Candidate retry policy.
  */
 function isValidCachedEfdRetryPolicy (retryPolicy) {
-  if (retryPolicy === null || typeof retryPolicy !== 'object' || Array.isArray(retryPolicy)) return false
-  if (!isValidRetryCount(retryPolicy.schedulingRetryCount)) return false
-  if (!Array.isArray(retryPolicy.durationRetryCounts) ||
-    retryPolicy.durationRetryCounts.length !== EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length) {
+  if (
+    retryPolicy === null ||
+    typeof retryPolicy !== 'object' ||
+    Array.isArray(retryPolicy) ||
+    !isValidRetryCount(retryPolicy.schedulingRetryCount) ||
+    !Array.isArray(retryPolicy.durationRetryCounts) ||
+    retryPolicy.durationRetryCounts.length !== EMPTY_EFD_RETRY_POLICY.durationRetryCounts.length
+  ) {
     return false
   }
 
@@ -152,9 +157,11 @@ function isValidCachedSettings (settings) {
   }
   if (settings.isDiEnabled && !settings.isFlakyTestRetriesEnabled) return false
   if (settings.isEarlyFlakeDetectionEnabled && !settings.isKnownTestsEnabled) return false
-  if (!isValidCachedEfdRetryPolicy(settings.earlyFlakeDetectionRetryPolicy)) return false
-  if (!isNonNegativeSafeInteger(settings.earlyFlakeDetectionFaultyThreshold) ||
-    settings.earlyFlakeDetectionFaultyThreshold > 100) {
+  if (
+    !isValidCachedEfdRetryPolicy(settings.earlyFlakeDetectionRetryPolicy) ||
+    !isNonNegativeSafeInteger(settings.earlyFlakeDetectionFaultyThreshold) ||
+    settings.earlyFlakeDetectionFaultyThreshold > 100
+  ) {
     return false
   }
   return settings.testManagementAttemptToFixRetries === undefined ||
@@ -258,7 +265,8 @@ class CiVisibilityExporter extends BufferingExporter {
       }
     })
 
-    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.flush(() => {}))
+    // Final upload errors are recorded after telemetry's initial app-closing drain.
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => this.flush(() => telemetry.flush()))
   }
 
   shouldRequestSkippableSuites () {
@@ -618,7 +626,7 @@ class CiVisibilityExporter extends BufferingExporter {
         repositoryUrl,
         (err) => {
           if (err) {
-            log.error('Error uploading git metadata: %s', err.message)
+            log.error('Error uploading git metadata', err)
           } else {
             log.debug('Successfully uploaded git metadata')
           }

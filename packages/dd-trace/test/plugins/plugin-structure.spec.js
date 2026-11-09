@@ -55,10 +55,21 @@ const missingInstrumentationHooks = [
   'langchain',
   'langgraph',
   'postgres',
+  'react-router',
   'supabase',
+  'typesafe',
 ]
 
-const hooklessOrchestrionPlugins = new Set(['azure-cosmos', 'bullmq', 'langchain', 'langgraph', 'postgres', 'supabase'])
+const hooklessOrchestrionPlugins = new Set([
+  'azure-cosmos',
+  'bullmq',
+  'langchain',
+  'langgraph',
+  'postgres',
+  'react-router',
+  'supabase',
+  'typesafe',
+])
 
 function extractPluginIds (source, re, index) {
   const ids = new Set()
@@ -199,15 +210,26 @@ describe('Plugin Structure Validation', () => {
       '@supabase/postgrest-js',
       '@supabase/realtime-js',
       '@supabase/storage-js',
+      '@wdio/cli',
+      '@wdio/jasmine-framework',
+      '@wdio/local-runner',
+      '@wdio/utils',
       'bullmq',
       'mercurius',
       'postgres',
+      'react-router',
+      'webdriverio',
     ]
 
     for (const name of names) {
       assert.equal(hooks[name], undefined)
       assert.equal(isRewriteTargetName(name), true)
       assert.equal(isRewriteActivationEnabled(name), true)
+    }
+    for (const name of ['@wdio/config', '@wdio/runner', 'webdriver', 'jasmine-core']) {
+      assert.equal(hooks[name], undefined)
+      assert.equal(isRewriteTargetName(name), true)
+      assert.equal(isRewriteActivationEnabled(name), false)
     }
     assert.equal(isRewriteActivationEnabled('graphql'), false)
     assert.equal(typeof hooks.graphql, 'function')

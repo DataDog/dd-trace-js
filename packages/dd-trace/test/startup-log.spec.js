@@ -334,6 +334,7 @@ describe('OTel exporters', () => {
     delete process.env.OTEL_TRACES_EXPORTER
     delete process.env.OTEL_METRICS_EXPORTER
     delete process.env.OTEL_LOGS_EXPORTER
+    delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
     delete process.env.DD_METRICS_OTEL_ENABLED
     delete process.env.DD_LOGS_OTEL_ENABLED
   }
@@ -366,11 +367,63 @@ describe('OTel exporters', () => {
     assert.strictEqual(startupLogObj().OTEL_TRACES_EXPORTER, 'none')
   })
 
-  it('OTEL_TRACES_EXPORTER should be none in Test Optimization mode even when exporter is otlp', () => {
-    // Test Optimization keeps test spans on the citestcycle endpoint, so the OTLP
-    // trace exporter is not used regardless of OTEL_TRACES_EXPORTER (see opentracing/tracer.js).
+  it('OTEL_TRACES_EXPORTER should be none when Test Optimization disables OTel semantics', () => {
+    // Test Optimization keeps test spans on the citestcycle endpoint, so neither OTel semantics nor an explicit
+    // OTEL_TRACES_EXPORTER=otlp changes its effective trace exporter.
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     assert.strictEqual(startupLogObj({ isCiVisibility: true }).OTEL_TRACES_EXPORTER, 'none')
+  })
+
+  it('OTEL_TRACES_EXPORTER should be none with the Electron exporter', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    assert.strictEqual(
+      startupLogObj({ experimental: { exporter: 'electron' } }).OTEL_TRACES_EXPORTER,
+      'none'
+    )
+  })
+
+  it('OTEL_TRACES_EXPORTER should be otlp when Lambda explicitly requests OTLP without an endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.OTEL_STARTUP_LAMBDA_EXTENSION = 'false'
+
+    try {
+      assert.strictEqual(startupLogObj().OTEL_TRACES_EXPORTER, 'otlp')
+    } finally {
+      delete process.env.OTEL_STARTUP_LAMBDA_EXTENSION
+      delete process.env.AWS_LAMBDA_FUNCTION_NAME
+    }
+  })
+
+  it('OTEL_TRACES_EXPORTER should be otlp when Lambda semantics uses the default endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_STARTUP_LAMBDA_EXTENSION = 'true'
+
+    try {
+      assert.strictEqual(startupLogObj().OTEL_TRACES_EXPORTER, 'otlp')
+    } finally {
+      delete process.env.OTEL_STARTUP_LAMBDA_EXTENSION
+      delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    }
+  })
+
+  it('OTEL_TRACES_EXPORTER should be otlp when Lambda semantics has an explicit endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318'
+    process.env.OTEL_STARTUP_LAMBDA_EXTENSION = 'false'
+
+    try {
+      assert.strictEqual(startupLogObj().OTEL_TRACES_EXPORTER, 'otlp')
+    } finally {
+      delete process.env.OTEL_STARTUP_LAMBDA_EXTENSION
+      delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    }
   })
 
   it('OTEL_METRICS_EXPORTER should be otlp when DD_METRICS_OTEL_ENABLED is true', () => {

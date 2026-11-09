@@ -32,6 +32,14 @@ if (process.env.OTEL_STARTUP_EXISTING_PROVIDER === 'metrics') {
   logsApi.setGlobalLoggerProvider(previousProvider)
   getProvider = () => logsApi.getLoggerProvider()
 }
+if (process.env.OTEL_STARTUP_LAMBDA_EXTENSION !== undefined) {
+  const fs = require('node:fs')
+  const { DATADOG_LAMBDA_EXTENSION_PATH, DATADOG_MINI_AGENT_PATH } = require('../../src/constants')
+  const existsSync = fs.existsSync
+  fs.existsSync = path => path === DATADOG_LAMBDA_EXTENSION_PATH || path === DATADOG_MINI_AGENT_PATH
+    ? process.env.OTEL_STARTUP_LAMBDA_EXTENSION === 'true'
+    : existsSync(path)
+}
 const tracer = require('../../../../').init(options)
 const { tracerInfo } = require('../../src/startup-log')
 const startupLines = lines.filter(line => line.startsWith('DATADOG TRACER CONFIGURATION - '))

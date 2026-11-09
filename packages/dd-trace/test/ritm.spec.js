@@ -1,7 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const Module = require('node:module')
+const vm = require('node:vm')
 
 const sinon = require('sinon')
 const dc = require('dc-polyfill')
@@ -198,6 +200,28 @@ describe('Ritm', () => {
       } else {
         delete require.cache[prefixedKey]
       }
+    }
+  })
+
+  it('does not mistake a bundler external factory cache for Node require.cache', () => {
+    const filename = require.resolve('../src/ritm')
+    const nativeRequire = Module.createRequire(filename)
+    const bundledRequire = name => nativeRequire(name)
+    // External factories enter the bundle cache with empty exports before calling native require.
+    bundledRequire.cache = { net: { exports: {} }, 'node:net': { exports: {} } }
+    const mod = new Module(filename)
+    const factory = vm.runInThisContext(Module.wrap(fs.readFileSync(filename, 'utf8')))
+    factory(mod.exports, bundledRequire, mod, filename, __dirname)
+    const onRequire = sinon.spy(exports => exports)
+    const hook = mod.exports(['net'], onRequire)
+    try {
+      const net = require('net')
+      assert.equal(typeof net.isIP, 'function')
+      assert.equal(require('net'), net)
+      assert.equal(require('node:net'), net)
+      sinon.assert.calledOnce(onRequire)
+    } finally {
+      hook.unhook()
     }
   })
 

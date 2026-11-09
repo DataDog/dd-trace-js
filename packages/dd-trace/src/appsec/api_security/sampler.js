@@ -58,9 +58,7 @@ function disable () {
  * @returns {'sample' | 'missing_route' | 'skip'}
  */
 function sampleRootSpanRequest (rootSpan, request, record = false) {
-  if (!enabled) return SamplingDecision.SKIP
-
-  if (!rootSpan) return SamplingDecision.SKIP
+  if (!enabled || !rootSpan) return SamplingDecision.SKIP
 
   const { method, statusCode, route, blocked = false } = request ?? {}
 
@@ -102,9 +100,7 @@ function sampleRequest (req, res, record = false) {
   if (!enabled) return SamplingDecision.SKIP
 
   const rootSpan = web.root(req)
-  if (!rootSpan) return SamplingDecision.SKIP
-
-  if (isRejected(rootSpan)) return SamplingDecision.SKIP
+  if (!rootSpan || isRejected(rootSpan)) return SamplingDecision.SKIP
 
   const statusCode = res.statusCode
   const route = getRouteOrEndpoint(web.getContext(req), statusCode)

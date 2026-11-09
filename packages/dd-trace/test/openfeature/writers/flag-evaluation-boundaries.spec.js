@@ -31,9 +31,9 @@ describe('flag evaluation independent privacy boundaries', () => {
     for (const length of [16_383, 16_384]) {
       it(`preserves protected counts and privacy at identity length ${length}`, () => {
         const aggregator = new FlagEvaluationAggregator()
-        // These dimensions add 44 characters around the targeting key in the JSON identity.
-        const first = 'x'.repeat(length - 45) + 'a'
-        const second = 'x'.repeat(length - 45) + 'b'
+        // These dimensions add 49 characters around the targeting key in the JSON identity.
+        const first = 'x'.repeat(length - 50) + 'a'
+        const second = 'x'.repeat(length - 50) + 'b'
         for (const targetingKey of [first, second, first]) {
           aggregator.add({ ...event, targetingKey, observeFullEvaluationData: false })
         }

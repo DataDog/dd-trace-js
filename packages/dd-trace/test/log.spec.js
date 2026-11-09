@@ -265,13 +265,18 @@ describe('log', () => {
     })
 
     it('should call the logger in a noop context', () => {
+      const stores = []
       logger.debug = () => {
-        assert.ok('noop' in storage('legacy').getStore())
-        assert.strictEqual(storage('legacy').getStore().noop, true)
+        stores.push(storage('legacy').getStore())
       }
 
       loadConfiguredLog({ logger })
+      const parent = storage('legacy').getStore()
       log.debug('debug')
+
+      assert.strictEqual(stores.length, 1)
+      assert.strictEqual(stores[0]?.noop, true)
+      assert.strictEqual(storage('legacy').getStore(), parent)
     })
 
     describe('debug', () => {

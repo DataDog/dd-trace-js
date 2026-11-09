@@ -1,0 +1,11 @@
+_v: 1
+name: cucumber
+display_name: Cucumber.js
+description: Instruments Cucumber.js test sessions, suites, scenarios, and steps for Test Optimization, including test
+  results, retries, skipping, code coverage, test management, and failed test replay.
+packages:
+- name: '@cucumber/cucumber'
+category:
+- test.execution
+systems: []
+creation_date: '2021-05-21'

@@ -105,6 +105,7 @@
 /integration-tests/electron/ @DataDog/apm-idm-js
 /integration-tests/esbuild/ @DataDog/apm-idm-js
 /integration-tests/turbopack/ @DataDog/apm-idm-js
+/integration-tests/vite/ @DataDog/apm-idm-js
 /integration-tests/webpack/ @DataDog/apm-idm-js
 /integration-tests/pino/ @DataDog/apm-idm-js
 /integration-tests/pino.spec.js @DataDog/apm-idm-js
@@ -282,6 +283,7 @@
 /packages/datadog-plugin-google-cloud-vertexai/ @DataDog/ml-observability
 /packages/datadog-plugin-langchain/ @DataDog/ml-observability
 /packages/datadog-plugin-openai/ @DataDog/ml-observability
+/packages/dd-trace/src/exporters/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/src/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/test/llmobs/ @DataDog/ml-observability
 /packages/dd-trace/test/plugins/util/llm.spec.js @DataDog/ml-observability
@@ -317,6 +319,7 @@
 /integration-tests/remote_config.spec.js @DataDog/apm-sdk-capabilities
 /integration-tests/telemetry-forwarder.sh @DataDog/apm-sdk-capabilities
 /integration-tests/telemetry.spec.js @DataDog/apm-sdk-capabilities
+/integration-tests/telemetry/ @DataDog/apm-sdk-capabilities
 
 /packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-capabilities
@@ -345,6 +348,7 @@
 /packages/dd-trace/test/sampling_rule.spec.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/custom-metrics.spec.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/custom-metrics-app.js @DataDog/apm-sdk-capabilities
+/packages/dd-trace/test/custom-metrics-test-optimization-app.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/fixtures/config/span-sampling-rules.json @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/helpers/config.js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/src/runtime_metrics/ @DataDog/apm-sdk-capabilities
@@ -355,12 +359,11 @@
 
 /scripts/generate-config-types.js @DataDog/apm-sdk-capabilities
 /scripts/generate-supported-integrations.js @DataDog/apm-sdk-capabilities
+/scripts/generate-supported-integrations.spec.mjs @DataDog/apm-sdk-capabilities
 /scripts/helpers/test-file-index.js @DataDog/apm-sdk-capabilities
 /scripts/helpers/test-file-index.spec.js @DataDog/apm-sdk-capabilities
 /scripts/verify-exercised-tests.js @DataDog/apm-sdk-capabilities
 /scripts/verify-exercised-tests.spec.mjs @DataDog/apm-sdk-capabilities
-/supported_versions_output.json @DataDog/apm-sdk-capabilities
-/supported_versions_table.csv @DataDog/apm-sdk-capabilities
 
 # Feature Flagging
 /integration-tests/esbuild/*openfeature* @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
@@ -380,7 +383,7 @@
 /.github/actions/upload-junit-artifacts/action.yaml @DataDog/ci-app-libraries @dd-octo-sts
 /.github/editorconfig-checker/ @Datadog/lang-platform-js
 /.github/playwright/ @DataDog/ci-app-libraries
-/.github/selenium/ @DataDog/ci-app-libraries
+/.github/browser-tools/ @DataDog/ci-app-libraries
 /.github/chainguard/ @DataDog/sdlc-security
 /.github/codeql_config.yml @DataDog/sdlc-security
 /.github/workflows/*.yml @DataDog/lang-platform-js @dd-octo-sts
@@ -430,6 +433,7 @@
 /packages/dd-trace/src/web-tags-cache.js @DataDog/profiling-js
 /packages/dd-trace/test/exporters/common/form-data.spec.js @DataDog/profiling-js
 /packages/dd-trace/test/otel-thread-ctx.spec.js @DataDog/profiling-js
+/packages/dd-trace/test/fixtures/otel-thread-ctx-retention.js @DataDog/profiling-js
 /packages/dd-trace/test/profiler.spec.js @DataDog/profiling-js
 /packages/dd-trace/test/storage-channels.spec.js @DataDog/profiling-js @DataDog/apm-sdk-capabilities
 /packages/dd-trace/test/web-tags-cache.spec.js @DataDog/profiling-js
@@ -464,6 +468,7 @@
 /benchmark/sirun/id/ @DataDog/lang-platform-js
 /benchmark/sirun/log/ @DataDog/lang-platform-js
 /benchmark/sirun/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
+/benchmark/sirun/openfeature-initialization/ @DataDog/feature-flagging-and-experimentation-sdk
 /benchmark/sirun/runtime-metrics/ @DataDog/lang-platform-js
 /benchmark/sirun/scope/ @DataDog/lang-platform-js
 /benchmark/sirun/shimmer-runtime/ @DataDog/lang-platform-js
@@ -490,6 +495,7 @@
 /integration-tests/package-guardrails/ @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
 /integration-tests/process-lifecycle.spec.js @DataDog/lang-platform-js
+/integration-tests/sandbox.spec.js @DataDog/lang-platform-js
 /integration-tests/startup/ @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
 /integration-tests/tsconfig.json @DataDog/lang-platform-js
@@ -501,6 +507,7 @@
 /packages/dd-trace/src/bootstrap.js @DataDog/lang-platform-js
 /packages/dd-trace/src/constants.js @DataDog/lang-platform-js
 /packages/dd-trace/src/dogstatsd.js @DataDog/lang-platform-js
+/packages/dd-trace/src/esm-module-load.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporter.js @DataDog/lang-platform-js
 /packages/dd-trace/src/feature-registry.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
@@ -528,6 +535,7 @@
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/evp_proxy/ @DataDog/lang-platform-js
+/packages/dd-trace/test/esm-module-load.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/esm-named-exports.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporter.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporters/ @DataDog/lang-platform-js
@@ -535,6 +543,7 @@
 /packages/dd-trace/test/flare.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/guardrails/ @DataDog/lang-platform-js
 /packages/dd-trace/test/heap_snapshots.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/helpers/load-as-bundled.js @DataDog/lang-platform-js
 /packages/dd-trace/test/histogram.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/id.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/iitm.spec.js @DataDog/lang-platform-js
@@ -572,8 +581,10 @@
 # Multiple teams
 /devdocs/ @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
 /docs/ @DataDog/apm-idm-js @DataDog/lang-platform-js
-/docs/API.md @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
-/docs/test.ts @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
+/docs/API.md @DataDog/apm-idm-js
+/docs/test.ts @DataDog/apm-idm-js
+/index.d.ts @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
+/index.d.v*.ts @DataDog/apm-sdk-capabilities @DataDog/apm-idm-js
 /.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
 /eslint-rules/* @DataDog/apm-sdk-capabilities @DataDog/lang-platform-js
 /ext/exporters.* @DataDog/apm-idm-js @DataDog/ci-app-libraries @DataDog/lang-platform-js
@@ -598,5 +609,5 @@
 /integration-tests/appsec/iast-esbuild-cjs/package.json @DataDog/asm-js @dd-octo-sts
 /.github/editorconfig-checker/Dockerfile @Datadog/lang-platform-js @dd-octo-sts
 /.github/playwright/Dockerfile @DataDog/ci-app-libraries @dd-octo-sts
-/.github/selenium/Dockerfile @DataDog/ci-app-libraries @dd-octo-sts
+/.github/browser-tools/Dockerfile @DataDog/ci-app-libraries @dd-octo-sts
 /benchmark/sirun/Dockerfile* @DataDog/lang-platform-js @dd-octo-sts

@@ -14,9 +14,9 @@ const { testBooleanAndStringFlags: configuration } =
 const tracerVersion = require('../../../../package.json').version
 
 describe('Feature Flags shared event delivery', () => {
-  let clock, config, discover, requests, provider, exposures, evaluations, handlers, client
+  let clock, config, discover, requests, Provider, provider, exposures, evaluations, handlers, client
 
-  beforeEach(async () => {
+  beforeEach(() => {
     clock = sinon.useFakeTimers()
     handlers = new Set(globalThis[Symbol.for('dd-trace')].beforeExitHandlers)
     requests = []
@@ -57,7 +57,7 @@ describe('Feature Flags shared event delivery', () => {
       './flag-evaluations': Writer,
       './util': strategy,
     })
-    const Provider = proxyquire('../../src/openfeature/flagging_provider', {
+    Provider = proxyquire('../../src/openfeature/flagging_provider', {
       './writers/flag-eval-evp-hook': Hook,
       './configuration_source': { create: sinon.stub() },
     })
@@ -65,12 +65,6 @@ describe('Feature Flags shared event delivery', () => {
       './writers/exposures': proxyquire('../../src/openfeature/writers/exposures', { './base': Base }),
       './writers/util': strategy,
     })
-    // This is the same construction order and config identity as tracer.openfeature.
-    provider = new Provider({}, config)
-    exposures.enable(config)
-    provider.setConfiguration(configuration)
-    await OpenFeature.setProviderAndWait('shared-delivery', provider)
-    client = OpenFeature.getClient('shared-delivery')
   })
 
   afterEach(async () => {
@@ -86,6 +80,15 @@ describe('Feature Flags shared event delivery', () => {
     clock.restore()
   })
 
+  async function initialize () {
+    // This is the same construction order and config identity as tracer.openfeature.
+    provider = new Provider({}, config)
+    exposures.enable(config)
+    provider.setConfiguration(configuration)
+    await OpenFeature.setProviderAndWait('shared-delivery', provider)
+    client = OpenFeature.getClient('shared-delivery')
+  }
+
   async function evaluate (targetingKey) {
     assert.strictEqual(await client.getBooleanValue('test-boolean-flag', false, { targetingKey }), true)
     channel('ffe:writers:flush').publish()
@@ -97,9 +100,51 @@ describe('Feature Flags shared event delivery', () => {
     request.callback(error, '', status)
   }
 
+  for (const { source, route, expectedPath } of [
+    { source: 'agentless', route: undefined, expectedPath: '/api/v2/flagevaluation' },
+    { source: 'agentless', route: '/prefix/evp_proxy/v4', expectedPath: '/prefix/evp_proxy/v4/api/v2/flagevaluation' },
+    {
+      source: 'remote_config',
+      route: '/prefix/evp_proxy/v2',
+      expectedPath: '/prefix/evp_proxy/v2/api/v2/flagevaluation',
+    },
+  ]) {
+    it(`keeps evaluations, hooks and counts without exposures over ${source} ${route ?? 'direct intake'}`, async () => {
+      config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = source
+      config.featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED = false
+      await initialize()
+      const afterEvaluation = sinon.spy()
+      client.addHooks({ after: afterEvaluation })
+
+      sinon.assert.calledOnce(discover)
+      discover.firstCall.args[2](null, route ? { url: config.url, basePath: route } : undefined)
+      await evaluate('customer')
+
+      sinon.assert.calledOnce(afterEvaluation)
+      assert.strictEqual(channel('ffe:exposure:submit').hasSubscribers, false)
+      assert.strictEqual(requests.length, 1)
+      assert.strictEqual(requests[0].options.path, expectedPath)
+      respond(requests[0], null, 202)
+    })
+  }
+
+  it('evaluates locally without event delivery when both exposures and counts are disabled', async () => {
+    config.featureFlags.DD_FEATURE_FLAGS_EXPOSURES_DATADOG_LOGGING_ENABLED = false
+    config.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED = false
+    await initialize()
+
+    assert.strictEqual(await client.getBooleanValue('test-boolean-flag', false, { targetingKey: 'customer' }), true)
+    channel('ffe:writers:flush').publish()
+
+    sinon.assert.notCalled(discover)
+    assert.deepStrictEqual(requests, [])
+    assert.strictEqual(channel('ffe:exposure:submit').hasSubscribers, false)
+  })
+
   for (const failedSignal of ['exposures', 'flagevaluation']) {
     for (const failure of [404, 503, 'ECONNRESET']) {
       it(`shares ${failedSignal} fallback after ${failure} without unsafe replay`, async () => {
+        await initialize()
         sinon.assert.calledOnce(discover)
         discover.firstCall.args[2](null, { url: config.url, basePath: '/prefix/evp_proxy/v4' })
         await evaluate('before-fallback')
@@ -142,6 +187,7 @@ describe('Feature Flags shared event delivery', () => {
   }
 
   it('keeps exposure routing alive when the provider closes', async () => {
+    await initialize()
     sinon.assert.calledOnce(discover)
     provider.onClose()
     discover.firstCall.args[2](null, { url: config.url, basePath: '/prefix/evp_proxy/v4' })

@@ -11,6 +11,7 @@ const finishCh = channel('apm:cassandra-driver:query:finish')
 const errorCh = channel('apm:cassandra-driver:query:error')
 const connectCh = channel('apm:cassandra-driver:query:connect')
 
+/** @type {Record<string, unknown> & { error?: Error }} */
 let startCtx = {}
 
 addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
@@ -24,23 +25,23 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
     startCtx = { keyspace: this.keyspace, query: queries, contactPoints: this.options && this.options.contactPoints }
     return startCh.runStores(startCtx, () => {
       if (typeof cb === 'function') {
-        arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
+        arguments[lastIndex] = wrapCallback(startCtx, cb)
       }
 
       try {
         const res = batch.apply(this, arguments)
         if (typeof res === 'function') {
-          return wrapCallback(finishCh, errorCh, startCtx, res)
+          return wrapCallback(startCtx, res)
         }
         if (!res) {
           return res
         }
         return res.then(
-          () => finish(finishCh, errorCh, startCtx),
-          err => finish(finishCh, errorCh, startCtx, err)
+          () => finish(startCtx),
+          err => finish(startCtx, err)
         )
       } catch (e) {
-        finish(finishCh, errorCh, startCtx, e)
+        finish(startCtx, e)
         throw e
       }
     })
@@ -58,8 +59,8 @@ addHook({ name: 'cassandra-driver', versions: ['>=4.4'], patchDefault: false }, 
       const promise = _execute.apply(this, arguments)
 
       promise.then(
-        () => finish(finishCh, errorCh, startCtx),
-        err => finish(finishCh, errorCh, startCtx, err)
+        () => finish(startCtx),
+        err => finish(startCtx, err)
       )
       return promise
     })
@@ -74,10 +75,7 @@ const isValid = (args) => {
 addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'], patchDefault: false }, (cassandra) => {
   shimmer.wrap(cassandra.Client.prototype, '_innerExecute', _innerExecute =>
     function (query, params, execOptions, callback) {
-      if (!startCh.hasSubscribers) {
-        return _innerExecute.apply(this, arguments)
-      }
-      if (!isValid(arguments)) {
+      if (!startCh.hasSubscribers || !isValid(arguments)) {
         return _innerExecute.apply(this, arguments)
       }
 
@@ -87,13 +85,13 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'], patchDefault: false }
         const cb = arguments[lastIndex]
 
         if (typeof cb === 'function') {
-          arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
+          arguments[lastIndex] = wrapCallback(startCtx, cb)
         }
 
         try {
           return _innerExecute.apply(this, arguments)
         } catch (e) {
-          finish(finishCh, errorCh, startCtx, e)
+          finish(startCtx, e)
           throw e
         }
       })
@@ -156,7 +154,11 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 3.2'], file: 'lib/request-ha
   return RequestHandler
 })
 
-function finish (finishCh, errorCh, ctx, error) {
+/**
+ * @param {Record<string, unknown> & { error?: Error }} ctx
+ * @param {Error} [error]
+ */
+function finish (ctx, error) {
   if (error) {
     ctx.error = error
     errorCh.publish(ctx)
@@ -164,19 +166,22 @@ function finish (finishCh, errorCh, ctx, error) {
   finishCh.runStores(ctx, () => {})
 }
 
-function wrapCallback (finishCh, errorCh, ctx, callback) {
+/**
+ * @param {Record<string, unknown> & { error?: Error }} ctx
+ * @param {Parameters<typeof finishCh.runStores>[1]} callback
+ */
+function wrapCallback (ctx, callback) {
   return shimmer.wrapCallback(callback, callback => function (err) {
     if (err) {
       ctx.error = err
       errorCh.publish(ctx)
     }
-    return finishCh.runStores(ctx, callback, this, ...arguments)
+    return finishCh.runStores(
+      ctx, /** @type {Parameters<typeof finishCh.runStores>[1]} */ (callback), this, ...arguments
+    )
   })
 }
 
 function isRequestValid (exec, args, length) {
-  if (!exec) return false
-  if (args.length !== length || typeof args[length - 1] !== 'function') return false
-
-  return true
+  return !!exec && args.length === length && typeof args[length - 1] === 'function'
 }

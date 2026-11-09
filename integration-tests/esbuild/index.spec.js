@@ -10,6 +10,7 @@ const pathModule = require('node:path')
 const fs = require('node:fs')
 
 const { describe, before, it } = require('mocha')
+const semver = require('semver')
 
 // sub process must be executed inside TEST_DIR
 const TEST_DIR = pathModule.join(__dirname, '.')
@@ -106,6 +107,15 @@ esbuildVersions.forEach((version) => {
         timeout,
       })
     })
+
+    for (const format of ['cjs', 'esm']) {
+      it(`instruments Orchestrion integrations in ${format} bundles`, function () {
+        const { engines } = require(pathModule.join(TEST_DIR, 'node_modules/@langchain/core/package.json'))
+        if (!semver.satisfies(process.versions.node, engines.node)) this.skip()
+
+        execSync(`node ./build-and-test-orchestrion.js ${format}`, { timeout })
+      })
+    }
 
     describe('ESM', () => {
       afterEach(() => {

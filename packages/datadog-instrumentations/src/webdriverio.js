@@ -23,7 +23,7 @@ const {
   TEST_SUITE_EXECUTION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
 const { publishWithCompletion } = require('./helpers/channel')
-const { addHook, channel, tracingChannel } = require('./helpers/instrument')
+const { channel, tracingChannel } = require('./helpers/instrument')
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
@@ -97,7 +97,8 @@ if (loadCh.hasSubscribers) {
 
 const coordinatorStates = new WeakMap()
 const emptyShardConfigurations = new WeakSet()
-const localRunnerVersions = new WeakMap()
+// A WebdriverIO process runs a single @wdio/local-runner version.
+let localRunnerVersion
 const rumBrowsers = new Set()
 const rumCorrelationBrowsers = new Set()
 const rumRunnerBrowsers = new WeakSet()
@@ -115,15 +116,14 @@ function getCurrentRumContext () {
   return globalThis.window
 }
 
-addHook({
-  name: '@wdio/local-runner',
-  versions: ['>=9.0.0'],
-  file: 'build/index.js',
-  patchDefault: true,
-}, (LocalRunner, version) => {
-  localRunnerVersions.set(LocalRunner, version)
-  return LocalRunner
-})
+/**
+ * @param {import('./helpers/rewriter/instrumentation-registry').Activation} activation
+ */
+function recordLocalRunnerVersion ({ moduleName, version }) {
+  if (moduleName === '@wdio/local-runner') localRunnerVersion = version
+}
+
+exports.recordLocalRunnerVersion = recordLocalRunnerVersion
 
 /**
  * Returns whether this browser can preload and clean correlation across every browsing context.
@@ -297,8 +297,7 @@ async function preloadRumNavigation () {
   try {
     const browser = this
     const testExecutionId = getRumTestExecutionId(browser)
-    if (!canCorrelateRumBrowser(browser)) return
-    if (!rumRunnerBrowsers.has(browser)) return
+    if (!canCorrelateRumBrowser(browser) || !rumRunnerBrowsers.has(browser)) return
 
     retainRumBrowser(browser)
     if (!testExecutionId) return
@@ -371,9 +370,7 @@ async function handleRumNavigation (context) {
       log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
     }
     const testExecutionId = getRumTestExecutionId(browser, isRumActive)
-    if (sampledOut) return
-
-    if (!testExecutionId) {
+    if (sampledOut || !testExecutionId) {
       return
     }
     if (!isRumActive && browser.isBidi) return
@@ -1168,7 +1165,7 @@ function getCoordinatorState (localRunner) {
     initializationCallbacks: [],
     sessionStarted: false,
     finished: false,
-    frameworkVersion: localRunnerVersions.get(localRunner.constructor),
+    frameworkVersion: localRunnerVersion,
     testFrameworkAdapter: getRunnerConfiguration(localRunner)?.framework,
     activeWorkers: 0,
     attemptToFixExecutions: new Map(),
@@ -1736,9 +1733,7 @@ function handleWorkerMessage (state, workerRecord, message) {
         requestId,
       },
     })
-    if (!requestId || !uploadCh.hasSubscribers) {
-      respond(new Error('WebdriverIO media upload is not available'))
-    } else {
+    if (requestId && uploadCh.hasSubscribers) {
       try {
         let signal
         if (isVideo) {
@@ -1754,6 +1749,8 @@ function handleWorkerMessage (state, workerRecord, message) {
         log.error('WebdriverIO media upload error: %s', error?.message || String(error))
         respond(error)
       }
+    } else {
+      respond(new Error('WebdriverIO media upload is not available'))
     }
     return
   }

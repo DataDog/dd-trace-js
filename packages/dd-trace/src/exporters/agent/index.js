@@ -44,7 +44,7 @@ class AgentExporter {
   }
 
   export (spans) {
-    this._writer.append(spans)
+    const appended = this._writer.append(spans)
 
     const { flushInterval } = this._config
 
@@ -57,6 +57,8 @@ class AgentExporter {
       }, flushInterval)
       this.#timer.unref?.()
     }
+
+    return appended
   }
 
   flush (done) {

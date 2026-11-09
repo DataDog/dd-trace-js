@@ -19,7 +19,9 @@ const { storage } = require('../../datadog-core')
 const log = require('../../dd-trace/src/log')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
+const { getActivationSetup } = require('../src/helpers/rewriter/instrumentation-registry')
 const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { preventFailureSuppression, noAutoRetry } = require('../../../ci/test-annotations')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { detectRum, stopRumSession, stopRumSessionAndReportActivity } = require('../src/rum-browser-scripts')
 const {
@@ -29,6 +31,7 @@ const {
   getOnTestHandler,
   getOnTestEndHandler,
   getOnTestRetryHandler,
+  getTestProperties,
   patchFailedTestReplayHookUp,
   resetRunState,
   runnableWrapper,
@@ -199,6 +202,9 @@ async function cleanupPendingRumTest () {
   await context.rumCleanupCallback()
 }
 
+// Port 1 is reserved and never bound, so intake requests fail immediately instead of reaching a backend.
+const UNREACHABLE_INTAKE_URL = 'http://127.0.0.1:1'
+
 describe('webdriverio instrumentation', () => {
   it('suppresses tests only below the suite with a failing suite hook', () => {
     const testStartCh = channel('ci:mocha:test:start')
@@ -249,6 +255,11 @@ describe('webdriverio instrumentation', () => {
     const runOrder = []
     let resolveReplay
     class Runnable {
+      retries (count) {
+        if (arguments.length) this._retries = count
+        return this._retries
+      }
+
       run () {
         runOrder.push('run')
         return 'done'
@@ -365,6 +376,50 @@ describe('webdriverio instrumentation', () => {
         resetRunState({ tests: [], suites: [] })
       }
     })
+  }
+
+  /** @type {Array<[string, string, string, boolean]>} */
+  const activationTargets = [
+    ['@wdio/cli', launcherFixturePath, 'build/index.js', true],
+    ['@wdio/jasmine-framework', jasmineFixturePath, 'build/index.js', true],
+    ['@wdio/local-runner', fixturePath, 'build/index.js', true],
+    ['@wdio/utils', utilsFixturePath, 'build/index.js', true],
+    ['webdriverio', browserFixturePath, 'build/index.js', true],
+    ['webdriverio', browserFixturePath, 'build/node.js', true],
+    ['@wdio/config', path.join(__dirname, 'fixtures', 'webdriverio-config.mjs'), 'build/node/index.js', false],
+    ['@wdio/runner', runnerFixturePath, 'build/index.js', false],
+    ['webdriver', webdriverFixturePath, 'build/index.js', false],
+    ['webdriver', webdriverFixturePath, 'build/node.js', false],
+    ['jasmine-core', jasmineCoreFixturePath, 'lib/jasmine-core/jasmine.js', false],
+  ]
+
+  for (const mode of ['regular', 'test-optimization']) {
+    for (const [moduleName, sourcePath, filePath, activate] of activationTargets) {
+      const behavior = activate ? 'activates runtime setup' : 'rewrites without activating runtime setup'
+      it(`${behavior} for ${moduleName}/${filePath} in ${mode} mode`, async () => {
+        await execFileAsync(process.execPath, [
+          '--import', path.join(__dirname, '../../../register.js'),
+          path.join(__dirname, 'fixtures', 'webdriverio-activation.js'),
+          moduleName, sourcePath, filePath, mode, String(activate),
+        ], {
+          env: {
+            ...process.env,
+            NODE_OPTIONS: '',
+            DD_INJECT_FORCE: 'true',
+            DD_CIVISIBILITY_ENABLED: 'true',
+            // These assertions only read channel subscriptions, so the child needs no backend. Agentless
+            // mode pointed at a closed port keeps it off the network: agent mode would instead hold the
+            // process alive for the full 5s agent-info discovery wherever no agent is listening.
+            DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
+            DD_CIVISIBILITY_AGENTLESS_URL: UNREACHABLE_INTAKE_URL,
+            DD_API_KEY: '1',
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+            DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+          },
+        })
+      })
+    }
   }
 
   it('detects RUM before its initialization configuration is available', () => {
@@ -741,11 +796,129 @@ describe('webdriverio instrumentation', () => {
     assert.notStrictEqual(rewrittenSource, source)
     assert.match(rewrittenSource, /orchestrion:@wdio\/utils:executeAsync/)
     assert.match(rewrittenSource, /orchestrion:@wdio\/utils:testFrameworkFnWrapper/)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/utils:runSpec/)
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rumCleanupCallback/)
     assert.strictEqual(rewrittenSource.match(/__apm\$ctx\.rumStartCallback/g)?.length, 1)
     assert.match(rewrittenSource, /__apm\$ctx\.retryCallback/)
+  })
+
+  for (const pending of [false, true]) {
+    for (const [mustFail, noAutoRetryEnabled] of [[false, false], [true, false], [false, true], [true, true]]) {
+      const description = `pending=${pending}, protected=${mustFail}, excluded=${noAutoRetryEnabled}`
+      it(`preserves Mocha declaration policy (${description})`, async () => {
+        const source = fs.readFileSync(utilsFixturePath, 'utf8')
+        const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-wdio-mocha-annotations-'))
+        const output = path.join(directory, 'index.mjs')
+        fs.writeFileSync(output, rewrittenSource)
+        const plugin = new MochaPlugin({ _exporter: {} }, { testOptimization: {} })
+        plugin.configure({ enabled: true, tracing: {} })
+        const suite = new MochaSuite('annotations')
+        const file = path.join(process.cwd(), 'annotations.spec.js')
+        const original = sinon.spy()
+        let callback = original
+        if (mustFail) callback = preventFailureSuppression(callback)
+        if (noAutoRetryEnabled) callback = noAutoRetry(callback)
+        /**
+         * @param {string} title
+         * @param {import('mocha').Func} fn
+         */
+        const declare = (title, fn) => {
+          const test = new MochaTest(title, pending ? undefined : fn)
+          test.file = file
+          suite.addTest(test)
+          return test
+        }
+        try {
+          const { runSpec } = await import(pathToFileURL(output))
+          const test = runSpec('protected', callback, declare)
+          const assignments = {
+            mocha: {
+              suites: {
+                'annotations.spec.js': {
+                  tests: {
+                    'annotations protected': {
+                      properties: {
+                        disabled: true, quarantined: true, attempt_to_fix: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          }
+          // Policy selection sees the native runnable before any user callback executes.
+          for (const runnable of pending ? [test] : [test, test.clone()]) {
+            assert.deepStrictEqual(getTestProperties(runnable, assignments), {
+              isDisabled: !mustFail, isQuarantined: !mustFail, isAttemptToFix: !noAutoRetryEnabled,
+            })
+          }
+          sinon.assert.notCalled(original)
+          assert.strictEqual(Boolean(test.isPending()), pending)
+          if (!pending) {
+            const receiver = {}
+            test.fn.call(receiver, 'argument')
+            sinon.assert.calledOnceWithExactly(original, 'argument')
+            sinon.assert.calledOn(original, receiver)
+          }
+        } finally {
+          plugin.configure(false)
+          fs.rmSync(directory, { recursive: true, force: true })
+        }
+      })
+    }
+  }
+
+  it('captures Jasmine automation exclusions before the wrapped callback can execute', async () => {
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-jasmine-annotations-'))
+    const output = path.join(directory, 'index.mjs')
+    fs.writeFileSync(output, rewrittenSource)
+    const { plugin } = createJasminePlugin({
+      isFlakyTestRetriesEnabled: true,
+      isTestManagementTestsEnabled: true,
+      testManagementTests: {
+        mocha: {
+          suites: {
+            'annotations.spec.js': {
+              tests: {
+                protected: { properties: { disabled: true, quarantined: true, attempt_to_fix: true } },
+              },
+            },
+          },
+        },
+      },
+    })
+    const file = path.join(process.cwd(), 'annotations.spec.js')
+    const original = sinon.spy()
+    try {
+      const { runSpec } = await import(pathToFileURL(output))
+      const result = createJasmineResult('protected', file, 'failed')
+      runSpec('protected', preventFailureSuppression(noAutoRetry(original)), () => ({ id: result.id }))
+      reportJasmineSpecStarted(result, file)
+      const test = plugin._webdriverioJasmineState.tests.get(result.id)
+      sinon.assert.notCalled(original)
+      assert.strictEqual(test.testAnnotations.mustFail, true)
+      assert.strictEqual(test.testAnnotations.noAutoRetry, true)
+      assert.strictEqual(test.isDisabled, false)
+      assert.strictEqual(test.isQuarantined, false)
+      assert.strictEqual(test.isAttemptToFix, false)
+      assert.strictEqual(test.isAtr, false)
+      assert.deepStrictEqual(test.assignedProperties, { disabled: true, quarantined: true, attempt_to_fix: true })
+      const controlResult = createJasmineResult('control', file, 'passed')
+      runSpec('control', original, () => ({ id: controlResult.id }))
+      reportJasmineSpecStarted(controlResult, file)
+      const control = plugin._webdriverioJasmineState.tests.get(controlResult.id)
+      assert.strictEqual(control.testAnnotations.mustFail, false)
+      assert.strictEqual(control.testAnnotations.noAutoRetry, false)
+      assert.strictEqual(control.isAtr, true)
+    } finally {
+      plugin.configure(false)
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
   })
 
   it('rewrites the WebdriverIO 10.1 executeAsync retry branch', () => {
@@ -1499,6 +1672,27 @@ describe('webdriverio instrumentation', () => {
     assert.notStrictEqual(rewrittenSource, source)
     assert.match(rewrittenSource, /orchestrion:jasmine-core:Spec_execute/)
     assert.match(rewrittenSource, /orchestrion:jasmine-core:Spec_attemptDone/)
+  })
+
+  it('exposes the legacy Jasmine spec when its execution starts', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-jasmine-core-'))
+    const outputPath = path.join(directory, 'jasmine.js')
+    const source = fs.readFileSync(jasmineCoreFixturePath, 'utf8')
+    fs.writeFileSync(outputPath, rewriter.rewrite(source, jasmineCoreFixtureModulePath))
+    const executeCh = tracingChannel('orchestrion:jasmine-core:Spec_execute')
+    let startSelf
+    const onStart = context => { startSelf = context.self }
+    executeCh.start.subscribe(onStart)
+    try {
+      const { Spec } = require(outputPath)
+      const spec = new Spec()
+      spec.execute(onComplete => onComplete(), () => {})
+      // The WebdriverIO Jasmine lifecycle reads the spec here to install retries and test management.
+      assert.strictEqual(startSelf, spec)
+    } finally {
+      executeCh.start.unsubscribe(onStart)
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
   })
 
   for (const [version, fixturePath, modulePath, target] of [
@@ -5938,7 +6132,8 @@ describe('webdriverio instrumentation', () => {
     testSessionFinishCh.subscribe(onSessionFinish)
 
     try {
-      require('../src/webdriverio')
+      const setup = getActivationSetup('@wdio/utils')
+      setup({ moduleName: '@wdio/utils', version: '9.32.0' })
 
       const localRunner = {
         config: {
@@ -5964,6 +6159,70 @@ describe('webdriverio instrumentation', () => {
       libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
       testSessionStartCh.unsubscribe(onSessionStart)
       testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('records the local-runner version after another package activates and reports empty workers', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const testSessionStartCh = channel('ci:mocha:session:start')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const testSuiteStartCh = channel('ci:mocha:test-suite:start')
+    const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+    const configurationRequests = []
+    const sessionStarts = []
+    const suiteStarts = []
+    const suiteFinishes = []
+    const onTestFinish = () => {}
+    const onLibraryConfiguration = request => {
+      configurationRequests.push(request)
+      request.onDone({ libraryConfig: {}, repositoryRoot: process.cwd() })
+    }
+    const onSessionStart = event => sessionStarts.push(event)
+    const onSessionFinish = event => event.onDone()
+    const onSuiteStart = event => suiteStarts.push(event)
+    const onSuiteFinish = event => suiteFinishes.push(event)
+
+    testFinishCh.subscribe(onTestFinish)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    testSessionStartCh.subscribe(onSessionStart)
+    testSessionFinishCh.subscribe(onSessionFinish)
+    testSuiteStartCh.subscribe(onSuiteStart)
+    testSuiteFinishCh.subscribe(onSuiteFinish)
+
+    try {
+      const setup = getActivationSetup('@wdio/cli')
+      assert.strictEqual(setup, getActivationSetup('@wdio/local-runner'))
+      assert.strictEqual(setup, getActivationSetup('@wdio/utils'))
+      setup({ moduleName: '@wdio/cli', version: '9.31.0' })
+      setup({ moduleName: '@wdio/local-runner', version: '9.30.0' })
+      setup({ moduleName: '@wdio/utils', version: '9.32.0' })
+
+      const localRunner = { config: { framework: 'mocha', rootDir: process.cwd() } }
+      const worker = createWorker()
+      const file = path.join(process.cwd(), 'empty.spec.js')
+      registerWorker(localRunner, worker, file)
+      worker.emit('message', { name: 'testFrameworkInit', content: { hasTests: false } })
+
+      assert.strictEqual(configurationRequests.length, 1)
+      assert.strictEqual(configurationRequests[0].frameworkVersion, '9.30.0')
+      assert.strictEqual(sessionStarts.length, 1)
+      assert.strictEqual(sessionStarts[0].frameworkVersion, '9.30.0')
+      assert.strictEqual(suiteStarts.length, 1)
+      assert.strictEqual(suiteStarts[0].testSuiteAbsolutePath, file)
+      assert.strictEqual(suiteFinishes.length, 1)
+      assert.strictEqual(suiteFinishes[0].status, 'skip')
+
+      worker.emit('exit', { exitCode: 0, retries: 0 })
+      await finishLocalRunner(localRunner)
+    } finally {
+      require('../src/webdriverio').recordLocalRunnerVersion({ moduleName: '@wdio/local-runner' })
+      testFinishCh.unsubscribe(onTestFinish)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      testSessionStartCh.unsubscribe(onSessionStart)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+      testSuiteStartCh.unsubscribe(onSuiteStart)
+      testSuiteFinishCh.unsubscribe(onSuiteFinish)
     }
   })
 

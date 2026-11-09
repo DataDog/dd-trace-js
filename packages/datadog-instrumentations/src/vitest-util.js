@@ -33,7 +33,7 @@ const testManagementTestsCh = channel('ci:vitest:test-management-tests')
 const modifiedFilesCh = channel('ci:vitest:modified-files')
 
 const CLOSING_SCRIPT_TAG_RE = /<\/script/i
-const SERIALIZED_CONTEXT_PREFIX = '\u0000dd-vitest-context:'
+const SERIALIZED_CONTEXT_PREFIX = '\0dd-vitest-context:'
 
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
 const workerReportCoverageCh = channel('ci:vitest:worker-report:coverage')
@@ -182,6 +182,7 @@ function getProvidedContext () {
       _ddDynamicAtrBuckets: dynamicAtrBuckets,
       _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesIncludesUnnamedProject,
       _ddFlakyTestRetriesProjectNames: flakyTestRetriesProjectNames,
+      _ddFlakyTestRetriesUseRetryMarker: flakyTestRetriesUseRetryMarker,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
       _ddTestSessionId: testSessionId,
       _ddTestModuleId: testModuleId,
@@ -211,6 +212,7 @@ function getProvidedContext () {
       dynamicAtrBuckets,
       flakyTestRetriesIncludesUnnamedProject,
       flakyTestRetriesProjectNames,
+      flakyTestRetriesUseRetryMarker,
       isImpactedTestsEnabled,
       testSessionId,
       testModuleId,
@@ -254,8 +256,9 @@ function getProvidedContext () {
 }
 
 function isFlakyTestRetriesEnabledForTask (providedContext, task) {
-  if (!providedContext.isFlakyTestRetriesEnabled) return false
-  if (providedContext.isDynamicAtrEnabled && !task.retry?.__ddTestOptAtr) return false
+  if (!providedContext.isFlakyTestRetriesEnabled || task.meta?.__ddTestOptNativeRetry) return false
+  if ((providedContext.isDynamicAtrEnabled || providedContext.flakyTestRetriesUseRetryMarker) &&
+    !task.retry?.__ddTestOptAtr) return false
 
   const { flakyTestRetriesProjectNames } = providedContext
   if (!Array.isArray(flakyTestRetriesProjectNames)) return true
@@ -299,7 +302,7 @@ function getVitestTestProperties (providedContext, testSuiteAbsolutePath, testNa
 
   return {
     testSuite: testProperties?.testSuite,
-    isNew: Array.isArray(knownTests) ? !knownTests.includes(testName) : false,
+    isNew: Array.isArray(knownTests) && !knownTests.includes(testName),
     isModified: testProperties?.isModified === true,
     isAttemptToFix: testManagementProperties.isAttemptToFix,
     isDisabled: testManagementProperties.isDisabled,
