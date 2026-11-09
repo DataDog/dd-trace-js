@@ -8,6 +8,7 @@ const exporters = require('../../../../ext/exporters')
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
+const stringifyTagValue = require('../tag-value')
 const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
 const DSMTextMapPropagator = require('./propagation/text_map_dsm')
@@ -119,7 +120,7 @@ class DatadogTracer {
       // as per spec, allow the setting of service name through options; set it
       // after all tags are merged so config/options values take precedence
       // eslint-disable-next-line eslint-rules/eslint-prefer-set-service-name
-      ctx.setTag('service.name', String(options.tags.service))
+      ctx.setTag('service.name', stringifyTagValue(options.tags.service, 'service'))
     } else {
       // eslint-disable-next-line eslint-rules/eslint-prefer-set-service-name
       ctx.setTag('service.name', this._service)
