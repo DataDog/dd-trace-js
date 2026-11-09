@@ -139,8 +139,14 @@ class DatadogSpanContext {
 /**
  * @param {DatadogSpanContext} context
  * @param {import('../id').Identifier} spanId
+ * @param {boolean} preserveOriginal
  */
-function withSpanId (context, spanId) {
+function withSpanId (context, spanId, preserveOriginal) {
+  if (!preserveOriginal) {
+    context._spanId = spanId
+    return context
+  }
+
   return new DatadogSpanContext({
     traceId: context._traceId,
     spanId,

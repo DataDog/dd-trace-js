@@ -84,6 +84,65 @@ describe('Push Subscription Plugin', () => {
   }
 
   describe('Push subscription with raw HTTP server', () => {
+    for (const behavior of ['continue', 'restart', 'ignore']) {
+      describe(`with extraction behavior ${behavior}`, () => {
+        let previousBehavior
+
+        before(async () => {
+          previousBehavior = process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+          process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = behavior.toUpperCase()
+          await agent.close()
+          await agent.load(['http'], { client: false })
+        })
+
+        after(async () => {
+          if (previousBehavior === undefined) delete process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+          else process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = previousBehavior
+          await agent.close()
+          await agent.load(['http'], { client: false })
+        })
+
+        it('preserves the message link when selecting the batch parent', async () => {
+          const tracer = require('../../dd-trace')
+          let carrier
+          appListener = createServer(() => {
+            carrier = {}
+            tracer.inject(tracer.scope().active(), 'text_map', carrier)
+          })
+          appListener.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const expected = agent.assertSomeTraces(traces => {
+            const span = findPubSubSpan(traces)
+            assert.strictEqual(span.parent_id.toString(), behavior === 'continue' ? '44' : '0')
+            if (behavior === 'continue') {
+              assert.strictEqual(span.trace_id.toString(), '42')
+              assert.strictEqual(span.meta['_dd.span_links'], undefined)
+            } else {
+              assert.notStrictEqual(span.trace_id.toString(), '42')
+              if (behavior === 'restart') {
+                const links = JSON.parse(span.meta['_dd.span_links'])
+                assert.strictEqual(links.length, 1)
+                assert.strictEqual(links[0].span_id, '000000000000002b')
+                assert.strictEqual(links[0].trace_id, '0000000000000000000000000000002a')
+                assert.strictEqual(links[0].attributes.reason, 'propagation_behavior_extract')
+              } else {
+                assert.strictEqual(span.meta['_dd.span_links'], undefined)
+              }
+            }
+          })
+          await Promise.all([sendPushRequest(appListener.address().port, {
+            'x-datadog-trace-id': '42',
+            'x-datadog-parent-id': '43',
+            'x-datadog-sampling-priority': '2',
+            'ot-baggage-user': 'alice',
+            '_dd.pubsub_request.trace_id': '000000000000002a',
+            '_dd.pubsub_request.span_id': '000000000000002c',
+          }), expected])
+          assert.strictEqual(carrier['ot-baggage-user'], behavior === 'ignore' ? undefined : 'alice')
+        })
+      })
+    }
+
     for (const [upper, batchUpper] of [
       [undefined, undefined],
       ['6af1eb9300000000', '6af1eb9300000000'],
@@ -134,6 +193,30 @@ describe('Push Subscription Plugin', () => {
         assert.strictEqual(carrier.traceparent.split('-')[1], (upper ?? '0000000000000000') + '000000000000002a')
       })
     }
+
+    it('preserves terminated-context links when selecting the batch parent', async () => {
+      appListener = createServer()
+      appListener.listen(0, 'localhost')
+      await once(appListener, 'listening')
+      const expected = agent.assertSomeTraces(traces => {
+        const span = findPubSubSpan(traces)
+        assert.strictEqual(span.parent_id.toString(), '44')
+        assert.strictEqual(span.trace_id.toString(), '42')
+        const links = JSON.parse(span.meta['_dd.span_links'])
+        assert.strictEqual(links.length, 1)
+        assert.strictEqual(links[0].span_id, '0000000000000028')
+        assert.strictEqual(links[0].trace_id, '00000000000000000000000000000029')
+        assert.strictEqual(links[0].attributes.reason, 'terminated_context')
+      })
+      await Promise.all([sendPushRequest(appListener.address().port, {
+        'x-datadog-trace-id': '42',
+        'x-datadog-parent-id': '43',
+        'x-datadog-sampling-priority': '2',
+        traceparent: '00-00000000000000000000000000000029-0000000000000028-01',
+        '_dd.pubsub_request.trace_id': '000000000000002a',
+        '_dd.pubsub_request.span_id': '000000000000002c',
+      }), expected])
+    })
 
     it('should create pubsub.push.receive span with delivery duration', (done) => {
       const messageId = 'http-test-789'

@@ -276,6 +276,70 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
 
+          for (const behavior of ['continue', 'restart', 'ignore']) {
+            describe(`with extraction behavior ${behavior}`, () => {
+              let previousBehavior
+
+              before(() => {
+                previousBehavior = process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+                process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = behavior.toUpperCase()
+              })
+
+              after(() => {
+                if (previousBehavior === undefined) delete process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+                else process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = previousBehavior
+              })
+
+              it('respects extraction behavior when selecting the batch parent', async () => {
+                const [topic] = await pubsub.createTopic(topicName)
+                const [sub] = await topic.createSubscription('foo')
+                let carrier
+                try {
+                  tracer.use('google-cloud-pubsub', false)
+                  await publish(topic, {
+                    data: Buffer.from('hello'),
+                    attributes: {
+                      'x-datadog-trace-id': '42',
+                      'x-datadog-parent-id': '43',
+                      'x-datadog-sampling-priority': '2',
+                      'ot-baggage-user': 'alice',
+                      '_dd.pubsub_request.trace_id': '000000000000002a',
+                      '_dd.pubsub_request.span_id': '000000000000002c',
+                      '_dd.batch.index': '0',
+                    },
+                  })
+                  tracer.use('google-cloud-pubsub', { dsmEnabled: false })
+                  const expected = new Promise(resolve => {
+                    sub.once('message', message => {
+                      carrier = {}
+                      tracer.inject(tracer.scope().active(), 'text_map', carrier)
+                      resolve(agent.assertSomeTraces(traces => {
+                        const span = traces.flat().find(span => span.name === expectedSchema.receive.opName)
+                        assert.ok(span)
+                        assert.strictEqual(span.parent_id.toString(), behavior === 'continue' ? '44' : '0')
+                        if (behavior === 'continue') {
+                          assert.strictEqual(span.trace_id.toString(), '42')
+                        } else {
+                          assert.notStrictEqual(span.trace_id.toString(), '42')
+                        }
+                        assert.deepStrictEqual(JSON.parse(span.meta['_dd.span_links']), [{
+                          trace_id: '000000000000002a',
+                          span_id: '000000000000002c',
+                          flags: 0,
+                        }])
+                      }))
+                      message.ack()
+                    })
+                  })
+                  await expected
+                  assert.strictEqual(carrier['ot-baggage-user'], behavior === 'ignore' ? undefined : 'alice')
+                } finally {
+                  await sub.close()
+                }
+              })
+            })
+          }
+
           for (const activePublisher of [false, true]) {
             it(`preserves trace metadata with an active publisher: ${activePublisher}`, async () => {
               const upper = '6af1eb9300000000'
