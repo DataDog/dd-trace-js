@@ -45,8 +45,8 @@ class DatabasePlugin extends StoragePlugin {
 
   /**
    * @param {string} serviceName
-   * @param {import('../../../..').Span} span
-   * @param {object} peerData
+   * @param {import('../opentracing/span')} span
+   * @param {Record<string, unknown> | undefined} peerData
    */
   #createDBMPropagationCommentService (serviceName, span, peerData) {
     const spanTags = span.context().getTags()
@@ -71,7 +71,7 @@ class DatabasePlugin extends StoragePlugin {
   }
 
   /**
-   * @param {import('../../../..').Span} span
+   * @param {import('../opentracing/span')} span
    * @param {string} serviceName
    * @param {boolean} disableFullMode
    */
@@ -109,7 +109,7 @@ class DatabasePlugin extends StoragePlugin {
   }
 
   /**
-   * @param {import('../../../..').Span} span
+   * @param {import('../opentracing/span')} span
    * @param {string} query
    * @param {string} serviceName
    * @param {boolean} disableFullMode
@@ -143,7 +143,7 @@ class DatabasePlugin extends StoragePlugin {
 }
 
 /**
- * @param {string | number | undefined | null} value
+ * @param {unknown} value
  */
 function encode (value) {
   if (!value) return ''

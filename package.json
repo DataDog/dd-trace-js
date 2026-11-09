@@ -158,6 +158,7 @@
     "webpack.js",
     "ext/**/*",
     "index.d.ts",
+    "span-tags.d.ts",
     "index.electron.js",
     "index.js",
     "init.js",

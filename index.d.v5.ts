@@ -2,6 +2,10 @@ import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from 
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
+import {
+  LegacySpanTagsContext, NoInferSpanTags, SpanOptionsTags, SpanTagInputForKey, SpanTagNumericKey, SpanTagValueForKey,
+  SpecialSpanTags, ValidatedLegacySpanOptionsTags, ValidatedLegacySpanTags, ValidatedSpanTags
+} from "./span-tags";
 
 declare const baseEvaluatorBrand: unique symbol
 declare const baseSummaryEvaluatorBrand: unique symbol
@@ -84,9 +88,9 @@ interface Tracer extends opentracing.Tracer {
    * @param {tracer.SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
    */
-  startSpan<Tags extends object = object> (
+  startSpan<Options extends SpanOptionsBase = tracer.SpanOptions> (
     name: string,
-    options?: SpanOptionsWithTags<Tags>
+    ...options: [options?: Options] & NoInferSpanTags<[options?: SpanOptionsInput<Options>]>
   ): tracer.Span;
 
   /**
@@ -115,7 +119,9 @@ interface Tracer extends opentracing.Tracer {
   /**
    * Initializes the tracer. This should be called before importing other libraries.
    */
-  init<Tags extends object = object> (options?: TracerOptionsWithTags<Tags>): this;
+  init<Options extends tracer.TracerOptions = tracer.TracerOptions> (
+    ...options: [options?: Options] & NoInferSpanTags<[options?: TracerOptionsInput<Options>]>
+  ): this;
 
   /**
    * Sets the URL for the trace agent. This should only be called _after_
@@ -152,10 +158,11 @@ interface Tracer extends opentracing.Tracer {
    */
   trace<T> (name: string, fn: (span: tracer.Span) => T): T;
   trace<T> (name: string, fn: (span: tracer.Span, done: (error?: Error) => void) => T): T;
-  trace<T, Tags extends object = object> (
+  trace<T, Options extends TraceOptionsBase = tracer.TraceOptions & tracer.SpanOptions> (
     name: string,
-    options: tracer.TraceOptions & SpanOptionsWithTags<Tags>,
-    fn: (span?: tracer.Span, done?: (error?: Error) => void) => T
+    ...args: [options: Options, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T] &
+      NoInferSpanTags<[options: tracer.TraceOptions & SpanOptionsInput<Options>,
+        fn: (span?: tracer.Span, done?: (error?: Error) => void) => T]>
   ): T;
 
   /**
@@ -173,15 +180,17 @@ interface Tracer extends opentracing.Tracer {
    * which case the span will finish at the end of the function execution.
    */
   wrap<T = (...args: any[]) => any> (name: string, fn: T): T;
-  wrap<T = (...args: any[]) => any, Tags extends object = object> (
+  wrap<T = (...args: any[]) => any, Options extends TraceOptionsBase = tracer.TraceOptions & tracer.SpanOptions> (
     name: string,
-    options: tracer.TraceOptions & SpanOptionsWithTags<Tags>,
-    fn: T
+    ...args: [options: Options, fn: T] &
+      NoInferSpanTags<[options: tracer.TraceOptions & SpanOptionsInput<Options> &
+        (Options extends (...args: never[]) => unknown ? never : unknown), fn: T]>
   ): T;
-  wrap<T = (...args: any[]) => any, Tags extends object = object> (
+  wrap<T = (...args: any[]) => any, Options extends TraceOptionsBase = tracer.TraceOptions & tracer.SpanOptions> (
     name: string,
-    options: (...args: any[]) => tracer.TraceOptions & SpanOptionsWithTags<Tags>,
-    fn: T
+    ...args: [options: (...args: any[]) => Options & { tags?: LegacySpanTagsContext | SpanOptionsTags<Options> }, fn: T] &
+      NoInferSpanTags<[options: (...args: any[]) => tracer.TraceOptions & SpanOptionsInput<Options> &
+        { tags?: LegacySpanTagsContext | SpanOptionsTags<Options> }, fn: T]>
   ): T;
 
   /**
@@ -391,76 +400,23 @@ interface Plugins {
   "ws": tracer.plugins.ws;
 }
 
-type SpanTagScalar = string | number | boolean | Buffer | URL
-type SpanErrorTag = boolean | number | Error | {
-  message: string
-  name?: string
-  stack?: string
-  code?: string | number
-}
-type BooleanOnlySpanTag = 'analytics.event' | 'manual.drop' | 'manual.keep'
-type StringOnlySpanTag =
-  | 'error.message'
-  | 'error.stack'
-  | 'error.type'
-  | 'resource.name'
-  | 'service.name'
-  | 'span.kind'
-  | 'span.type'
-type ValidatedSpanTagObject<Value extends object> =
-  keyof Value extends never ? never :
-  Extract<keyof Value, symbol> extends never ? Value extends {
-    [Key in keyof Value]:
-      [Exclude<Value[Key], undefined>] extends [never] ? never :
-      Exclude<Value[Key], undefined> extends SpanTagScalar ? Value[Key] : never
-  } ? Value : never :
-  never
-type ValidatedSpanTagValue<Value> =
-  Value extends SpanTagScalar ? Value :
-  Value extends Error ? never :
-  Value extends readonly unknown[] ? never :
-  Value extends (...args: never[]) => unknown ? never :
-  Value extends object ? ValidatedSpanTagObject<Value> :
-  never
-type SpanTagValueForSingleKey<Key, Value> =
-  Key extends 'error'
-    ? Value extends SpanErrorTag ? Value : never
-    : Key extends BooleanOnlySpanTag
-      ? Value extends boolean ? Value : never
-      : Key extends StringOnlySpanTag
-        ? Value extends string ? Value : never
-        : Key extends 'http.status_code'
-          ? Value extends string | number ? Value : never
-          : Key extends 'sampling.priority'
-            ? Value extends number ? Value : never
-            : ValidatedSpanTagValue<Value>
-type InvalidSpanTagKey<Key, Value> =
-  Key extends unknown
-    ? [Value] extends [SpanTagValueForSingleKey<Key, Value>] ? never : Key
-    : never
-type SpanTagValueForKey<Key, Value> =
-  [InvalidSpanTagKey<Key, Value>] extends [never] ? Value : never
-type ValidatedSpanTags<Tags extends object> =
-  Tags extends readonly unknown[] ? never :
-  Tags extends (...args: never[]) => unknown ? never :
-  keyof Tags extends never ? Tags :
-  Extract<keyof Tags, symbol> extends never ? {
-    [Key in keyof Tags]:
-      [Exclude<Tags[Key], undefined>] extends [never]
-        ? never
-        : SpanTagValueForKey<Key, Exclude<Tags[Key], undefined>>
-  } : never
 type SpanTagsOption<Tags extends object> =
-  { tags?: Tags } &
-  (object extends Tags ? object : { tags?: ValidatedSpanTags<Tags> })
-type SpanOptionsWithTags<Tags extends object> = Omit<tracer.SpanOptions, 'tags'> & SpanTagsOption<Tags>
+  { tags?: ValidatedSpanTags<Tags> & { service?: SpecialSpanTags['service.name'] } }
+type SpanOptionsBase = Omit<tracer.SpanOptions, 'tags'> & { tags?: unknown }
+type TraceOptionsBase = tracer.TraceOptions & SpanOptionsBase
+type SpanOptionsWithTags<Tags> = Omit<tracer.SpanOptions, 'tags'> & {
+  tags?: ValidatedLegacySpanOptionsTags<NoInferSpanTags<Tags>> | string
+}
 type TracerOptionsWithTags<Tags extends object> = Omit<tracer.TracerOptions, 'tags'> & SpanTagsOption<Tags>
+type SpanOptionsInput<Options> = SpanOptionsWithTags<SpanOptionsTags<Options>>
+type TracerOptionsInput<Options> = TracerOptionsWithTags<SpanOptionsTags<Options> & object>
 
 declare namespace tracer {
   export interface PluginOptions extends Plugins {}
   export type PluginName = keyof PluginOptions;
 
-  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
+  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf' | 'tags'> & {
+    tags?: opentracing.SpanOptions['tags'] | string;
   /**
    * Set childOf to 'null' to create a root span without a parent, even when a parent span
    * exists in the current async context. If 'undefined' the parent will be inferred from the
@@ -519,27 +475,32 @@ declare namespace tracer {
     context (): SpanContext;
 
     /**
-     * Records an exception as a span event without marking the span as failed.
-     *
-     * @param exception The exception to record.
-     * @param attributes Additional attributes for the exception event.
-     */
-    recordException (exception: Exception, attributes?: SpanEventAttributes): void;
-
-    /**
      * Adds a tag to the span.
      *
      * @param key The tag name.
      * @param value The tag value.
      */
-    setTag<Key extends string, Value> (key: Key, value: Value & SpanTagValueForKey<Key, Value>): this;
+    setTag<Key extends string> (key: SpanTagNumericKey<Key>, value: number | boolean): this;
+    setTag<Key extends string> (key: Key, value: SpanTagInputForKey<Key>): this;
+    setTag<Key extends string, Value> (key: Key, value: Value & SpanTagValueForKey<Key, NoInferSpanTags<Value>>): this;
 
     /**
      * Adds tags to the span.
      *
      * @param keyValueMap The tags to add.
      */
-    addTags<Tags extends object> (keyValueMap: Tags & ValidatedSpanTags<Tags>): this;
+    addTags (keyValueMap: string): this;
+    addTags<Args extends [keyValueMap: unknown]> (
+      ...keyValueMap: Args & NoInferSpanTags<[keyValueMap: Args[0] & ValidatedLegacySpanTags<Args[0]>]>
+    ): this;
+
+    /**
+     * Records an exception as a span event without marking the span as failed.
+     *
+     * @param exception The exception to record.
+     * @param attributes Additional attributes for the exception event.
+     */
+    recordException (exception: Exception, attributes?: SpanEventAttributes): void;
 
     /**
      * Causally links another span to the current span

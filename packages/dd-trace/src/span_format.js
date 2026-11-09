@@ -8,6 +8,7 @@ const {
   MAX_METRIC_KEY_LENGTH,
 } = require('./encode/tags-processors')
 const id = require('./id')
+const stringifyTagValue = require('./tag-value')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
 const { TRACING_FIELD_NAME } = require('./process-tags')
@@ -41,11 +42,10 @@ const { IGNORE_OTEL_ERROR } = constants
  * @property {string | undefined} type
  * @property {number} error
  * @property {Record<string, string>} meta
- * @property {Record<string, number>} metrics
+ * @property {Record<string, number | string>} metrics
  * @property {Record<string, unknown> | undefined} meta_struct
  * @property {number} start
  * @property {number} duration
- * @property {Array} links
  * @property {Array<SpanEvent> | undefined} span_events
  * @property {string} [trace_state] W3C tracestate, populated only for OTLP export.
  *
@@ -221,7 +221,7 @@ function extractTags (formattedSpan, span) {
         break
       // HACK: remove when Datadog supports numeric status code
       case 'http.status_code': {
-        const stringValue = value && String(value)
+        const stringValue = value && stringifyTagValue(value, tag)
         if (typeof stringValue === 'string') {
           meta[tag] = stringValue.length > MAX_META_VALUE_LENGTH
             ? `${stringValue.slice(0, MAX_META_VALUE_LENGTH)}...`
@@ -383,7 +383,7 @@ function extractError (formattedSpan, error) {
  * @param {unknown} value
  */
 function writeErrorMeta (meta, key, value) {
-  const stringValue = typeof value === 'string' ? value : String(value)
+  const stringValue = typeof value === 'string' ? value : stringifyTagValue(value, key)
   meta[key] = stringValue.length > MAX_META_VALUE_LENGTH
     ? `${stringValue.slice(0, MAX_META_VALUE_LENGTH)}...`
     : stringValue
@@ -396,7 +396,7 @@ function writeErrorMeta (meta, key, value) {
  * recursion (nested object values) without re-entering the inlined paths.
  *
  * @param {Record<string, string>} meta
- * @param {Record<string, number>} metrics
+ * @param {FormattedSpan['metrics']} metrics
  * @param {string} key
  * @param {unknown} value
  * @param {boolean} [nested]

@@ -51,7 +51,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {Record<string, string>} tags
+   * @param {Record<string, unknown>} tags
    */
   getPeerService (tags) {
     /**
@@ -86,7 +86,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {Record<string, string>} peerData
+   * @param {Record<string, unknown>} peerData
    */
   getPeerServiceRemap (peerData) {
     /**
@@ -94,7 +94,7 @@ class OutboundPlugin extends TracingPlugin {
      * peer service and add the value we overrode.
      */
     const peerService = peerData[PEER_SERVICE_KEY]
-    const mappedService = this._tracerConfig.peerServiceMapping?.[peerService]
+    const mappedService = this._tracerConfig.peerServiceMapping?.[/** @type {string} */ (peerService)]
     if (peerService && mappedService) {
       return {
         ...peerData,

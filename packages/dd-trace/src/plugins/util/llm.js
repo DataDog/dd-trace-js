@@ -28,7 +28,7 @@ function normalize (text, limit = 128) {
  * Determines whether a prompt completion should be sampled based on the configured sampling rate.
  *
  * @param {Sampler} sampler
- * @param {import('../../../../..').Span|import('../../../../..').SpanContext} span
+ * @param {import('../../opentracing/span') | import('../../opentracing/span_context')} span
  */
 function isPromptCompletionSampled (sampler, span) {
   return sampler.isSampled(span)
@@ -50,7 +50,7 @@ module.exports = function makeUtilities (integrationName, tracerConfig) {
     /**
      * Determines whether a prompt completion should be sampled based on the configured sampling rate.
      *
-     * @param {import('../../../../..').Span|import('../../../../..').SpanContext} span
+     * @param {import('../../opentracing/span') | import('../../opentracing/span_context')} span
      */
     isPromptCompletionSampled: (span) => isPromptCompletionSampled(sampler, span),
   }

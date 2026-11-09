@@ -5,6 +5,7 @@ const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
@@ -96,6 +97,136 @@ describe('spanFormat', () => {
     }
 
     spanFormat = require('../src/span_format')
+  })
+
+  describe('tag string conversion warnings', () => {
+    let warn
+
+    beforeEach(() => {
+      warn = sinon.spy()
+      const stringifyTagValue = proxyquire('../src/tag-value', { './log': { warn } })
+      spanFormat = proxyquire('../src/span_format', { './tag-value': stringifyTagValue })
+    })
+
+    it('warns once across repeated spans and different text tag keys', () => {
+      spanContext._tags[ERROR_MESSAGE] = { code: 'failed' }
+      spanContext._tags[ERROR_STACK] = [{}]
+      spanContext._tags['http.status_code'] = {}
+
+      trace = spanFormat(span)
+      spanFormat(span)
+      spanContext2._tags = { [ERROR_TYPE]: {} }
+      span.context.returns(spanContext2)
+      spanFormat(span)
+
+      sinon.assert.calledOnce(warn)
+      assert.strictEqual(warn.firstCall.args[1], ERROR_MESSAGE)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '[object Object]')
+      assert.strictEqual(trace.meta[ERROR_STACK], '[object Object]')
+      assert.strictEqual(trace.meta['http.status_code'], '[object Object]')
+    })
+
+    it('preserves useful conversions without warning', () => {
+      const values = [
+        [42, '42'],
+        [true, 'true'],
+        [1n, '1'],
+        [Symbol('value'), 'Symbol(value)'],
+        [new Error('failed'), 'Error: failed'],
+        [Buffer.from('failed'), 'failed'],
+        [new URL('https://example.com'), 'https://example.com/'],
+        [[null, 'first', 42], ',first,42'],
+        [{ toString: () => 'custom' }, 'custom'],
+        [{ [Symbol.toPrimitive]: () => 'custom' }, 'custom'],
+        [{ toString: () => ({}), valueOf: () => 42 }, '42'],
+        [{ toString: null, valueOf: () => 42 }, '42'],
+        [{ [Symbol.toPrimitive]: undefined, toString: () => 'custom' }, 'custom'],
+      ]
+      for (const [value, expected] of values) {
+        spanContext._tags[ERROR_MESSAGE] = value
+        spanContext._tags['http.status_code'] = value
+        trace = spanFormat(span)
+        assert.strictEqual(trace.meta[ERROR_MESSAGE], expected)
+        assert.strictEqual(trace.meta['http.status_code'], expected)
+      }
+      sinon.assert.notCalled(warn)
+    })
+
+    it('does not warn about intentional literal placeholder strings', () => {
+      spanContext._tags[ERROR_MESSAGE] = '[object Object]'
+      spanContext._tags['http.status_code'] = '[object Object]'
+      trace = spanFormat(span)
+
+      sinon.assert.notCalled(warn)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '[object Object]')
+      assert.strictEqual(trace.meta['http.status_code'], '[object Object]')
+    })
+
+    it('invokes a user conversion hook and its getter only once', () => {
+      const convert = sinon.stub().returns('[object Object]')
+      const getConvert = sinon.stub().returns(convert)
+      const value = Object.defineProperty({}, Symbol.toPrimitive, { get: getConvert })
+      spanContext._tags[ERROR_MESSAGE] = value
+      trace = spanFormat(span)
+
+      sinon.assert.calledOnce(getConvert)
+      sinon.assert.calledOnceWithExactly(convert, 'string')
+      sinon.assert.calledOnce(warn)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '[object Object]')
+    })
+
+    it('warns for an extracted Error-like message', () => {
+      spanContext._tags.error = { message: { code: 'failed' }, name: 'Failure' }
+      trace = spanFormat(span)
+
+      sinon.assert.calledOnce(warn)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '[object Object]')
+      assert.strictEqual(trace.meta[ERROR_TYPE], 'Failure')
+    })
+
+    it('preserves a failed conversion without warning', () => {
+      spanContext._tags[ERROR_MESSAGE] = Object.create(null)
+      assert.throws(() => spanFormat(span), { name: 'TypeError' })
+
+      sinon.assert.notCalled(warn)
+      spanContext._tags[ERROR_MESSAGE] = 'failed'
+      assert.strictEqual(spanFormat(span).meta[ERROR_MESSAGE], 'failed')
+    })
+
+    it('sets the warning flag before a logger can re-enter formatting', () => {
+      spanContext._tags[ERROR_MESSAGE] = {}
+      warn = sinon.spy(() => spanFormat(span))
+      const stringifyTagValue = proxyquire('../src/tag-value', { './log': { warn } })
+      spanFormat = proxyquire('../src/span_format', { './tag-value': stringifyTagValue })
+      trace = spanFormat(span)
+
+      sinon.assert.calledOnce(warn)
+      assert.strictEqual(trace.meta[ERROR_MESSAGE], '[object Object]')
+    })
+
+    it('does not warn when fs.operation metadata is skipped', () => {
+      spanContext._name = 'fs.operation'
+      spanContext._tags[ERROR_MESSAGE] = {}
+      spanContext._tags.error = { message: {} }
+      trace = spanFormat(span)
+
+      sinon.assert.notCalled(warn)
+      assert.ok(!Object.hasOwn(trace.meta, ERROR_MESSAGE))
+      assert.strictEqual(trace.name, 'fs.operation')
+    })
+
+    it('does not warn when nullish metadata and a falsy status are skipped', () => {
+      spanContext._tags[ERROR_MESSAGE] = null
+      spanContext._tags[ERROR_STACK] = undefined
+      spanContext._tags['http.status_code'] = 0
+      trace = spanFormat(span)
+
+      sinon.assert.notCalled(warn)
+      assert.ok(!Object.hasOwn(trace.meta, ERROR_MESSAGE))
+      assert.ok(!Object.hasOwn(trace.meta, ERROR_STACK))
+      assert.ok(!Object.hasOwn(trace.meta, 'http.status_code'))
+      assert.strictEqual(trace.name, 'operation')
+    })
   })
 
   describe('spanFormat', () => {
