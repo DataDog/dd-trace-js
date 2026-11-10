@@ -173,6 +173,77 @@ describe('postgres native query lifecycle', () => {
         span => assert.strictEqual(span.error, 1))
     })
 
+    it('adds no listeners to COPY streams', async () => {
+      await sql.unsafe('CREATE TEMP TABLE native_copy_listeners(value int)')
+      for (const direction of ['readable', 'writable']) {
+        const statement = direction === 'readable'
+          ? 'COPY (SELECT 3) TO STDOUT'
+          : 'COPY native_copy_listeners FROM STDIN'
+        await traced(statement, async () => {
+          const stream = await sql.unsafe(statement)[direction]()
+          try {
+            assert.deepStrictEqual(stream.eventNames(), [])
+          } finally {
+            const closed = once(stream, 'close')
+            stream.destroy()
+            stream.destroy()
+            await closed
+          }
+        })
+      }
+    })
+
+    it('finishes COPY spans when disabled after the stream is returned', async () => {
+      await sql.unsafe('CREATE TEMP TABLE native_copy_disabled(value int)')
+      const statement = 'COPY native_copy_disabled FROM STDIN'
+      await traced(statement, async () => {
+        const stream = await sql.unsafe(statement).writable()
+        tracer.use('postgres', { enabled: false })
+        const completed = once(stream, 'finish')
+        stream.end('4\n')
+        await completed
+      })
+    })
+
+    it('records COPY connection failures after the stream is returned', async () => {
+      await sql.unsafe('CREATE TEMP TABLE native_copy_disconnected(value int)')
+      const statement = 'COPY native_copy_disconnected FROM STDIN'
+      await traced(statement, async () => {
+        const stream = await sql.unsafe(statement).writable()
+        const failed = once(stream, 'error')
+        const ended = sql.end({ timeout: 0 })
+        const [errors] = await Promise.all([failed, ended])
+        assert.strictEqual(errors[0].code, 'CONNECTION_DESTROYED')
+      }, span => assert.strictEqual(span.error, 1))
+    })
+
+    it('ignores COPY completion when another subscriber observed a disabled start', async () => {
+      await sql.unsafe('CREATE TEMP TABLE native_copy_late(value int)')
+      const channel = dc.channel('tracing:postgres:query:start')
+      const observed = []
+      const observe = ctx => { observed.push(ctx.query) }
+      channel.subscribe(observe)
+      try {
+        for (const direction of ['readable', 'writable']) {
+          tracer.use('postgres', { enabled: false })
+          const statement = direction === 'readable'
+            ? 'COPY (SELECT 5) TO STDOUT'
+            : 'COPY native_copy_late FROM STDIN'
+          const stream = await sql.unsafe(statement)[direction]()
+          tracer.use('postgres', {})
+          const absent = agent.assertNoTraces(() => assert.fail('disabled COPY created a span'), {
+            spanResourceMatch: /^COPY/, timeoutMs: 200,
+          })
+          const closed = once(stream, 'close')
+          stream.destroy()
+          await Promise.all([closed, absent])
+          assert.strictEqual(observed.includes(statement), true)
+        }
+      } finally {
+        channel.unsubscribe(observe)
+      }
+    })
+
     it('keeps COPY spans open until their streams finish', async () => {
       const resource = 'COPY (SELECT 1) TO STDOUT'
       await traced(resource, async () => {

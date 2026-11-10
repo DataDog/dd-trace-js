@@ -68,6 +68,15 @@ instrumentations.push({
   astQuery: 'Program',
   transform: 'postgresNativeTransactionEnd',
   channelName: 'query:prepare',
+}, {
+  module: {
+    name: 'postgres',
+    versionRange: '>=4.0.0',
+    filePath: 'src/connection.js',
+  },
+  astQuery: 'Program',
+  transform: 'postgresNativeCopy',
+  channelName: 'query:copy',
 })
 
 module.exports = instrumentations

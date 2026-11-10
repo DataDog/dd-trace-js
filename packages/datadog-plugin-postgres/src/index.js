@@ -1,6 +1,5 @@
 'use strict'
 
-const { errorMonitor } = require('node:events')
 const { performance } = require('node:perf_hooks')
 const { Readable, Writable } = require('node:stream')
 
@@ -10,6 +9,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 
 const ACQUIRE_START_CHANNEL = 'tracing:orchestrion:postgres:query:acquire:start'
 const PREPARE_START_CHANNEL = 'tracing:orchestrion:postgres:query:prepare:start'
+const COPY_START_CHANNEL = 'tracing:orchestrion:postgres:query:copy:start'
 
 /**
  * @typedef {object} PostgresContext
@@ -37,6 +37,10 @@ const PREPARE_START_CHANNEL = 'tracing:orchestrion:postgres:query:prepare:start'
  * @property {PostgresQuery | NativePostgresContext} query
  * @property {string} [resource]
  * @property {string} statement
+ *
+ * @typedef {object} PostgresCopyContext
+ * @property {Error | null} error
+ * @property {NativePostgresContext} query
  *
  * @typedef {object} PostgresQuery
  *
@@ -67,6 +71,20 @@ class PostgresPreparationPlugin extends Plugin {
   }
 }
 
+class PostgresCopyPlugin extends Plugin {
+  static id = 'postgres'
+
+  /**
+   * @param {(ctx: PostgresCopyContext) => void} finish
+   * @param {object} tracer
+   * @param {import('../../dd-trace/src/config/config-base')} tracerConfig
+   */
+  constructor (finish, tracer, tracerConfig) {
+    super(tracer, tracerConfig)
+    this.addSub(COPY_START_CHANNEL, finish)
+  }
+}
+
 class PostgresPlugin extends DatabasePlugin {
   static id = 'postgres'
   static prefix = 'tracing:orchestrion:postgres:query'
@@ -94,8 +112,18 @@ class PostgresPlugin extends DatabasePlugin {
     this.addSub('tracing:postgres:query:error', ctx => {
       if (ctx.currentStore) this.addError(ctx.error, ctx.currentStore.span)
     })
-    this.addSub('tracing:postgres:query:asyncEnd', ctx => this.#nativeEnd(ctx))
+    this.addSub('tracing:postgres:query:asyncEnd', ctx => {
+      if (!(ctx.result instanceof Readable || ctx.result instanceof Writable)) this.#finishNative(ctx)
+    })
     this.#preparation = new PostgresPreparationPlugin(this.#prepare.bind(this), tracer, tracerConfig)
+    const copy = new PostgresCopyPlugin(ctx => {
+      const store = ctx.query.currentStore
+      if (store === undefined) return
+      if (ctx.error) this.addError(ctx.error, store.span)
+      this.#finishNative(ctx.query)
+    }, tracer, tracerConfig)
+    // Complete in-flight COPY spans even after this plugin is disabled.
+    copy.configure(true)
   }
 
   /**
@@ -158,33 +186,6 @@ class PostgresPlugin extends DatabasePlugin {
       store.span.setTag('resource.name', this.maybeTruncate(ctx.query))
     }
     return store
-  }
-
-  /**
-   * @param {NativePostgresContext} ctx
-   */
-  #nativeEnd (ctx) {
-    if (ctx.currentStore === undefined) return
-
-    const stream = ctx.result
-    if (stream instanceof Readable || stream instanceof Writable) {
-      let finished = false
-      const finish = error => {
-        if (finished) return
-        finished = true
-        stream.removeListener('end', finish)
-        stream.removeListener('finish', finish)
-        stream.removeListener('close', finish)
-        stream.removeListener(errorMonitor, finish)
-        if (error) this.addError(error, ctx.currentStore.span)
-        this.#finishNative(ctx)
-      }
-      stream.once(errorMonitor, finish)
-      stream.once('close', finish)
-      stream.once(stream instanceof Readable ? 'end' : 'finish', finish)
-    } else {
-      this.#finishNative(ctx)
-    }
   }
 
   /**

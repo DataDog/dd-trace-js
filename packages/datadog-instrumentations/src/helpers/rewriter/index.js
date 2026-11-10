@@ -198,6 +198,7 @@ function createMatcher (dcModule) {
     waitForAsyncEnd,
   } = require('./transforms')
   const {
+    postgresNativeCopy,
     postgresNativePreparation,
     postgresNativeTransactionEnd,
     postgresQueryAcquire,
@@ -217,6 +218,7 @@ function createMatcher (dcModule) {
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
   matcher.addTransform('publishDurableOrchestrationFailure', publishDurableOrchestrationFailure)
+  matcher.addTransform('postgresNativeCopy', postgresNativeCopy)
   matcher.addTransform('postgresNativePreparation', postgresNativePreparation)
   matcher.addTransform('postgresNativeTransactionEnd', postgresNativeTransactionEnd)
   matcher.addTransform('postgresQueryAcquire', postgresQueryAcquire)

@@ -12,12 +12,44 @@ const POSTGRES_SIMPLE_DBM_QUERIES = '__ddTracePostgresSimpleDbmQueries'
 const POSTGRES_STATEMENT = 'this.string ?? (this.tagged && this.strings?.length !== 1 ? undefined : this.strings?.[0])'
 
 module.exports = {
+  postgresNativeCopy,
   postgresNativePreparation,
   postgresNativeTransactionEnd,
   postgresQueryAcquire,
   postgresQueryHandlers,
   postgresQueryLifecycle,
   postgresQueryPreparation,
+}
+
+/**
+ * @param {object} state
+ * @param {import('estree').Program} program
+ */
+function postgresNativeCopy (state, program) {
+  const channelVariable = injectPostgresTracingChannel(state, program)
+  const writable = query(program, 'FunctionDeclaration[id.name="writable"] Property[key.name="destroy"]')
+  const abandoned = query(program, 'FunctionDeclaration[id.name="abandoned"] > BlockStatement > ReturnStatement')
+  assert(writable.length === 1 && abandoned.length <= 1, 'postgresNativeCopy: stream destruction changed')
+
+  const publish = `
+    if (item.trace && ${channelVariable}.start.hasSubscribers) {
+      ${channelVariable}.start.publish({ query: item.trace, error });
+    }
+  `
+  writable[0].value.body.body.unshift(...parse(publish).body)
+
+  if (abandoned.length) {
+    abandoned[0].argument.body.body.unshift(...parse(publish).body)
+  } else {
+    const streams = query(program, 'FunctionDeclaration[id.name="CopyOutResponse"] NewExpression')
+    assert(streams.length === 1, 'postgresNativeCopy: readable construction changed')
+    streams[0].arguments[0].properties.push(...parse(`({
+      destroy(error, callback) {
+        ${publish}
+        callback(error);
+      }
+    })`).body[0].expression.properties)
+  }
 }
 
 /**
