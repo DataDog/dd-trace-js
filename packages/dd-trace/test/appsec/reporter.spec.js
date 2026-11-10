@@ -13,6 +13,7 @@ const { USER_KEEP } = require('../../../../ext/priority')
 const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')
 const { withRequest } = require('../../src/appsec/store')
+const Span = require('../../src/opentracing/span')
 
 describe('reporter', () => {
   let Reporter
@@ -805,6 +806,61 @@ describe('reporter', () => {
   })
 
   describe('reportAttributes', () => {
+    describe('attribute retention', () => {
+      beforeEach(() => {
+        span = new Span({ _config: {} }, {}, {}, { operationName: 'web.request' })
+        web.root.returns(span)
+      })
+
+      it('keeps the first redirect target while adding attributes from later evaluations', () => {
+        const tag = 'appsec.api.redirection.move_target'
+        Reporter.reportAttributes({ [tag]: '/redirect?totalRedirects=2' })
+        Reporter.reportAttributes({ [tag]: '/redirect?totalRedirects=1', 'custom.output': 42 })
+        Reporter.reportAttributes({ [tag]: '/mirror/200' })
+
+        assert.strictEqual(span.context().getTag(tag), '/redirect?totalRedirects=2')
+        assert.strictEqual(span.context().getTag('custom.output'), 42)
+      })
+
+      for (const value of [0, false, '', null]) {
+        it(`keeps an existing attribute whose value is ${JSON.stringify(value)}`, () => {
+          Reporter.reportAttributes({ 'custom.output': value })
+          Reporter.reportAttributes({ 'custom.output': 'replacement' })
+
+          assert.strictEqual(span.context().getTag('custom.output'), value)
+        })
+      }
+
+      it('keeps the first encoded schema and adds schemas discovered later', () => {
+        const requestSchema = [{ query: [8] }]
+        const responseSchema = [{ result: [4] }]
+        Reporter.reportAttributes({ '_dd.appsec.s.req.query': requestSchema })
+        Reporter.reportAttributes({
+          '_dd.appsec.s.req.query': [{ replacement: [2] }],
+          '_dd.appsec.s.res.body': responseSchema,
+        })
+
+        for (const [tag, expected] of [
+          ['_dd.appsec.s.req.query', requestSchema],
+          ['_dd.appsec.s.res.body', responseSchema],
+        ]) {
+          const encoded = span.context().getTag(tag)
+          assert.deepStrictEqual(JSON.parse(zlib.gunzipSync(Buffer.from(encoded, 'base64'))), expected)
+        }
+      })
+
+      it('tracks attributes independently for explicit root spans', () => {
+        const otherSpan = new Span({ _config: {} }, {}, {}, { operationName: 'aws.lambda' })
+        const tag = 'appsec.api.redirection.move_target'
+        Reporter.reportAttributes({ [tag]: '/first-request' }, undefined, span)
+        Reporter.reportAttributes({ [tag]: '/second-request' }, undefined, otherSpan)
+        Reporter.reportAttributes({ [tag]: '/later-hop' }, undefined, otherSpan)
+
+        assert.strictEqual(span.context().getTag(tag), '/first-request')
+        assert.strictEqual(otherSpan.context().getTag(tag), '/second-request')
+      })
+    })
+
     it('should not call addTags if parameter is undefined', () => {
       Reporter.reportAttributes(undefined)
       sinon.assert.notCalled(span.addTags)

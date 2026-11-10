@@ -559,7 +559,12 @@ function reportAttributes (attributes, req, rootSpan) {
   if (!rootSpan) return
 
   const tags = {}
+  const spanContext = rootSpan.context()
   for (let [tag, value] of Object.entries(attributes)) {
+    // Subcontexts do not share attribute deduplication.
+    // Keep the first value across evaluations, including successive hops in a redirect chain.
+    if (spanContext.hasTag(tag)) continue
+
     if (isSchemaAttribute(tag)) {
       const gzippedValue = zlib.gzipSync(JSON.stringify(value))
       value = gzippedValue.toString('base64')

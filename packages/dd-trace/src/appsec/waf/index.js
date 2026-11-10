@@ -132,6 +132,8 @@ function run (data, req, raspRule, rootSpan) {
   }
 
   const wafContext = waf.wafManager.getWAFContext(req)
+  if (!wafContext) return
+
   const result = wafContext.run(data, raspRule, req, rootSpan)
 
   if (result?.keep) {
