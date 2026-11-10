@@ -39,7 +39,7 @@
     "@cucumber/cucumber": "13.3.0",
     "@datadog/openfeature-node-server": "2.5.0",
     "@elastic/elasticsearch": "9.5.1",
-    "@elastic/transport": "9.4.1",
+    "@elastic/transport": "9.6.0",
     "@electron/packager": "20.3.0",
     "@fastify/cookie": "11.1.5",
     "@fastify/multipart": "10.1.8",
