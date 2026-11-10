@@ -1161,11 +1161,32 @@ function forwardOptionalTagOptions<Options extends { tags?: Record<string, strin
   tracerV5.init(options)
   tracer.trace('optional', options, () => 42)
   tracerV5.trace('optional', options, () => 42)
+  tracer.wrap('optional', options, () => 42)
+  tracerV5.wrap('optional', options, () => 42)
   tracer.wrap('optional', () => options, () => 42)
   tracerV5.wrap('optional', () => options, () => 42)
 }
 
 void forwardOptionalTagOptions
+
+function forwardWrapOptions<Options extends SpanOptions> (options: Options) {
+  const wrapped: () => number = tracer.wrap('generic', options, () => 42)
+  void wrapped
+}
+
+function forwardLegacyWrapOptions<Options extends tracerV5.SpanOptions> (options: Options) {
+  const wrapped: () => number = tracerV5.wrap('generic', options, () => 42)
+  void wrapped
+}
+
+function forwardResourceOptions<Options extends { resource: string }> (options: Options) {
+  tracer.wrap('resource', options, () => 42)
+  tracerV5.wrap('resource', options, () => 42)
+}
+
+forwardWrapOptions({ tags: { region: 'eu' } })
+forwardLegacyWrapOptions({ tags: 'region:eu' })
+forwardResourceOptions({ resource: 'daily-sync' })
 
 tracer.init({ tags: { service: 'custom-service', custom: { id: '42' } } })
 tracerV5.init({ tags: { service: 'custom-service', custom: { id: '42' } } })
