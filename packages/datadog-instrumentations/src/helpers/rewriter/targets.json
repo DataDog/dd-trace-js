@@ -96,6 +96,7 @@
   "postgres/cjs/src/query.js": "postgres",
   "postgres/src/connection.js": "postgres",
   "postgres/src/index.js": "postgres",
+  "postgres/src/pool.js": "postgres",
   "postgres/src/query.js": "postgres",
   "react-router/dist/development/index.js": "react-router",
   "react-router/dist/development/lib/server-runtime/routeMatching.js": "react-router",

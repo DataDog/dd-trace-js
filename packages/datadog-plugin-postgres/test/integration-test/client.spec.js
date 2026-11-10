@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const semver = require('semver')
+
 const {
   checkSpansForServiceName,
   FakeAgent,
@@ -18,7 +20,7 @@ describe('esm', () => {
   let agent
   let proc
 
-  withVersions('postgres', 'postgres', version => {
+  withVersions('postgres', 'postgres', '>=3', (version, moduleName, resolvedVersion) => {
     useSandbox([`'postgres@${version}'`], false, [
       './packages/datadog-plugin-postgres/test/integration-test/*',
     ])
@@ -60,7 +62,8 @@ describe('esm', () => {
       }).timeout(20000)
     }
 
-    it('does not trace when the Query class loads before tracing', async () => {
+    it('handles the Query class loading before tracing', async () => {
+      const native = semver.gte(resolvedVersion, '4.0.0')
       const messages = []
       const onMessage = message => messages.push(message)
       agent.on('message', onMessage)
@@ -68,11 +71,13 @@ describe('esm', () => {
       try {
         proc = await spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
-          'partial-rewrite.cjs',
+          native ? 'native.mjs' : 'partial-rewrite.cjs',
           agent.port,
           {
             DD_DBM_PROPAGATION_MODE: 'service',
-            NODE_OPTIONS: '--require=./preload-query.cjs',
+            NODE_OPTIONS: native
+              ? '--loader=dd-trace/loader-hook.mjs --import=./preload-query.mjs'
+              : '--require=./preload-query.cjs',
           }
         )
       } finally {
@@ -80,7 +85,7 @@ describe('esm', () => {
       }
 
       const spans = messages.flatMap(({ payload }) => Array.isArray(payload) ? payload.flat() : [])
-      assert.strictEqual(spans.some(span => span.meta?.component === 'postgres'), false)
+      assert.strictEqual(spans.some(span => span.meta?.component === 'postgres'), native)
     }).timeout(20000)
   })
 })

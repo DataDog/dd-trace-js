@@ -298,6 +298,12 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="pino"></h5>
 <h5 id="playwright"></h5>
 <h5 id="postgres"></h5>
+
+Postgres.js 4 uses native diagnostic channels for query spans. COPY spans finish when their streams complete.
+Database Monitoring sends service metadata in `service` and `dynamic_service` modes.
+Full mode also sends trace context with unprepared statements.
+SQL comments preserve the query's `text` and the span resource.
+
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="react-router"></h5>
