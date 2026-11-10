@@ -294,12 +294,27 @@ module.exports = class PluginManager {
       sharedConfig.variables = DD_TRACE_GRAPHQL_VARIABLES
       sharedConfig.errorExtensions = DD_TRACE_GRAPHQL_ERROR_EXTENSIONS
     } else if (name === 'aws-lambda') {
-      Object.assign(sharedConfig, lambda, {
+      Object.assign(sharedConfig, {
         addSpanPointers: DD_TRACE_AWS_ADD_SPAN_POINTERS,
         apiKey: DD_API_KEY,
+        apiKeyKms: lambda?.DD_KMS_API_KEY,
+        apiKeySecretArn: lambda?.DD_API_KEY_SECRET_ARN,
         apmFlushDeadlineMs: DD_APM_FLUSH_DEADLINE_MILLISECONDS,
+        captureLambdaPayload: lambda?.DD_CAPTURE_LAMBDA_PAYLOAD,
+        captureLambdaPayloadMaxDepth: lambda?.DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH,
+        coldStartTraceSkipLib: lambda?.DD_COLD_START_TRACE_SKIP_LIB,
+        coldStartTracing: lambda?.DD_COLD_START_TRACING,
+        createInferredSpan: lambda?.DD_TRACE_MANAGED_SERVICES,
         dataStreamsEnabled: dsmEnabled,
+        decodeAuthorizerContext: lambda?.DD_DECODE_AUTHORIZER_CONTEXT,
+        encodeAuthorizerContext: lambda?.DD_ENCODE_AUTHORIZER_CONTEXT,
+        enhancedMetrics: lambda?.DD_ENHANCED_METRICS,
+        fipsMode: lambda?.DD_LAMBDA_FIPS_MODE,
+        logForwarding: lambda?.DD_FLUSH_TO_LOG,
         logInjection,
+        mergeXrayTraces: lambda?.DD_MERGE_XRAY_TRACES,
+        minColdStartTraceDurationMs: lambda?.DD_MIN_COLD_START_DURATION,
+        serviceRepresentationEnabled: lambda?.DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED,
       })
     }
 

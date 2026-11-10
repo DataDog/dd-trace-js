@@ -479,7 +479,7 @@ describe('Config', () => {
           if (value === undefined) delete process.env.DD_LAMBDA_HANDLER_COMPLETION
           else process.env.DD_LAMBDA_HANDLER_COMPLETION = value
           const config = getConfig(undefined, { ddMajor })
-          assert.strictEqual(config.DD_LAMBDA_HANDLER_COMPLETION, expected)
+          assert.strictEqual(config.lambda.DD_LAMBDA_HANDLER_COMPLETION, expected)
           if (expected !== 'auto') {
             assertConfigUpdateContains(updateConfig.lastCall.args[0], [{
               name: 'DD_LAMBDA_HANDLER_COMPLETION', value, origin: 'env_var',
@@ -493,21 +493,23 @@ describe('Config', () => {
       const config = getConfig()
 
       assert.deepStrictEqual(config.lambda, {
-        apiKeyKms: undefined,
-        apiKeySecretArn: undefined,
-        captureLambdaPayload: false,
-        captureLambdaPayloadMaxDepth: 10,
-        coldStartTraceSkipLib: './opentracing/tracer',
-        coldStartTracing: true,
-        createInferredSpan: true,
-        decodeAuthorizerContext: true,
-        encodeAuthorizerContext: true,
-        enhancedMetrics: true,
-        fipsMode: false,
-        logForwarding: false,
-        mergeXrayTraces: false,
-        minColdStartTraceDurationMs: 3,
-        serviceRepresentationEnabled: true,
+        DD_API_KEY_SECRET_ARN: undefined,
+        DD_CAPTURE_LAMBDA_PAYLOAD: false,
+        DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: 10,
+        DD_COLD_START_TRACE_SKIP_LIB: './opentracing/tracer',
+        DD_COLD_START_TRACING: true,
+        DD_DECODE_AUTHORIZER_CONTEXT: true,
+        DD_ENCODE_AUTHORIZER_CONTEXT: true,
+        DD_ENHANCED_METRICS: true,
+        DD_FLUSH_TO_LOG: false,
+        DD_KMS_API_KEY: undefined,
+        DD_LAMBDA_FIPS_MODE: false,
+        DD_LAMBDA_HANDLER_COMPLETION: 'auto',
+        DD_MERGE_XRAY_TRACES: false,
+        DD_MIN_COLD_START_DURATION: 3,
+        DD_TRACE_AWS_LAMBDA_ENABLED: true,
+        DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: true,
+        DD_TRACE_MANAGED_SERVICES: true,
       })
     })
 
@@ -524,8 +526,10 @@ describe('Config', () => {
         DD_FLUSH_TO_LOG: 'true',
         DD_KMS_API_KEY: 'kms-ciphertext',
         DD_LAMBDA_FIPS_MODE: 'true',
+        DD_LAMBDA_HANDLER_COMPLETION: 'callback',
         DD_MERGE_XRAY_TRACES: 'true',
         DD_MIN_COLD_START_DURATION: '7',
+        DD_TRACE_AWS_LAMBDA_ENABLED: 'false',
         DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: 'false',
         DD_TRACE_MANAGED_SERVICES: 'false',
       })
@@ -533,26 +537,62 @@ describe('Config', () => {
       const config = getConfig()
 
       assert.deepStrictEqual(config.lambda, {
-        apiKeyKms: 'kms-ciphertext',
-        apiKeySecretArn: 'secret-arn',
-        captureLambdaPayload: true,
-        captureLambdaPayloadMaxDepth: 4,
-        coldStartTraceSkipLib: 'aws-sdk,express',
-        coldStartTracing: false,
-        createInferredSpan: false,
-        decodeAuthorizerContext: false,
-        encodeAuthorizerContext: false,
-        enhancedMetrics: false,
-        fipsMode: true,
-        logForwarding: true,
-        mergeXrayTraces: true,
-        minColdStartTraceDurationMs: 7,
-        serviceRepresentationEnabled: false,
+        DD_API_KEY_SECRET_ARN: 'secret-arn',
+        DD_CAPTURE_LAMBDA_PAYLOAD: true,
+        DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: 4,
+        DD_COLD_START_TRACE_SKIP_LIB: 'aws-sdk,express',
+        DD_COLD_START_TRACING: false,
+        DD_DECODE_AUTHORIZER_CONTEXT: false,
+        DD_ENCODE_AUTHORIZER_CONTEXT: false,
+        DD_ENHANCED_METRICS: false,
+        DD_FLUSH_TO_LOG: true,
+        DD_KMS_API_KEY: 'kms-ciphertext',
+        DD_LAMBDA_FIPS_MODE: true,
+        DD_LAMBDA_HANDLER_COMPLETION: 'callback',
+        DD_MERGE_XRAY_TRACES: true,
+        DD_MIN_COLD_START_DURATION: 7,
+        DD_TRACE_AWS_LAMBDA_ENABLED: false,
+        DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: false,
+        DD_TRACE_MANAGED_SERVICES: false,
       })
-      assert.strictEqual(config.getOrigin('lambda.apiKeySecretArn'), 'env_var')
-      assert.strictEqual(config.getOrigin('lambda.captureLambdaPayloadMaxDepth'), 'env_var')
-      assert.strictEqual(config.getOrigin('lambda.fipsMode'), 'env_var')
+      assert.strictEqual(config.getOrigin('lambda.DD_API_KEY_SECRET_ARN'), 'env_var')
+      assert.strictEqual(config.getOrigin('lambda.DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH'), 'env_var')
+      assert.strictEqual(config.getOrigin('lambda.DD_LAMBDA_FIPS_MODE'), 'env_var')
     })
+
+    for (const ddMajor of [5, 6, 7]) {
+      it(`ignores programmatic Lambda configuration on v${ddMajor}`, () => {
+        process.env.DD_ENHANCED_METRICS = 'false'
+        const expected = getConfig(undefined, { ddMajor }).lambda
+        const config = getConfig({
+          lambda: {
+            apiKeyKms: 'programmatic-kms',
+            apiKeySecretArn: 'programmatic-secret',
+            captureLambdaPayload: true,
+            captureLambdaPayloadMaxDepth: 1,
+            coldStartTraceSkipLib: 'programmatic-module',
+            coldStartTracing: false,
+            createInferredSpan: false,
+            decodeAuthorizerContext: false,
+            encodeAuthorizerContext: false,
+            enhancedMetrics: true,
+            fipsMode: true,
+            logForwarding: true,
+            mergeXrayTraces: true,
+            minColdStartTraceDurationMs: 1,
+            serviceRepresentationEnabled: false,
+            DD_ENHANCED_METRICS: true,
+          },
+        }, { ddMajor })
+
+        assert.deepStrictEqual(config.lambda, expected)
+        assert.strictEqual(config.lambda.DD_ENHANCED_METRICS, false)
+        assert.strictEqual(config.getOrigin('lambda.DD_ENHANCED_METRICS'), 'env_var')
+        assert.ok(!updateConfig.lastCall.args[0].some(entry =>
+          entry.origin === 'code' && (entry.name.startsWith('lambda.') || entry.name === 'DD_ENHANCED_METRICS')
+        ))
+      })
+    }
 
     for (const ddMajor of [5, 6, 7]) {
       for (const value of ['true', '1']) {
@@ -574,14 +614,14 @@ describe('Config', () => {
       process.env.AWS_REGION = 'us-gov-west-1'
       let config = getConfig()
 
-      assert.strictEqual(config.lambda.fipsMode, true)
-      assert.strictEqual(config.getOrigin('lambda.fipsMode'), 'calculated')
+      assert.strictEqual(config.lambda.DD_LAMBDA_FIPS_MODE, true)
+      assert.strictEqual(config.getOrigin('lambda.DD_LAMBDA_FIPS_MODE'), 'calculated')
 
       process.env.DD_LAMBDA_FIPS_MODE = 'false'
       config = getConfig()
 
-      assert.strictEqual(config.lambda.fipsMode, false)
-      assert.strictEqual(config.getOrigin('lambda.fipsMode'), 'env_var')
+      assert.strictEqual(config.lambda.DD_LAMBDA_FIPS_MODE, false)
+      assert.strictEqual(config.getOrigin('lambda.DD_LAMBDA_FIPS_MODE'), 'env_var')
     })
 
     it('reuses the global log-injection setting instead of creating a Lambda alias', () => {

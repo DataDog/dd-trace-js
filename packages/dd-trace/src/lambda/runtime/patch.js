@@ -5,7 +5,6 @@ const { types: { isModuleNamespaceObject } } = require('node:util')
 
 const { datadog } = require('../handler')
 const { withTimeoutMonitor, wrapLambdaHandler } = require('../wrap')
-const { isTrue } = require('../../util')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
@@ -63,17 +62,17 @@ function patchLambdaModule (handlerPath) {
 }
 
 /**
- * Default-off migration gate: only the final shim may delegate invocation-span ownership.
+ * Only internal migration builds may delegate invocation-span ownership from the final shim.
  * Old shims retain timeout monitoring, including their selected-completion helper hooks.
- * Explicit facade wrapping is opt-in and independent of this gate. Retiring the gate requires
- * proven ownership routing for supported old shims, or an explicit support retirement.
+ * Explicit facade wrapping is opt-in and independent of the automatic hooks.
  *
  * @param {Function} handler Customer handler.
  * @param {Record<string, unknown>} [config] Per-handler overrides.
  * @returns {Function} Monitored or invocation-wrapped handler.
  */
 function instrumentLambdaHandler (handler, config) {
-  return isTrue(getValueFromEnvSources('DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS'))
+  // eslint-disable-next-line no-constant-condition
+  return false // [internal only] turn this to `true` when testing during migration
     ? wrapLambdaHandler(handler, config)
     : withTimeoutMonitor(handler)
 }

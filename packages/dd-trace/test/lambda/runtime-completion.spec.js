@@ -83,7 +83,6 @@ describe('Lambda runtime completion handoff', () => {
       LAMBDA_TASK_ROOT: '/var/task',
       DD_TRACE_ENABLED: 'true',
       DD_APM_FLUSH_DEADLINE_MILLISECONDS: '25',
-      DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS: 'true',
     }
     delete process.env.DD_LAMBDA_HANDLER_COMPLETION
     delete process.env.DD_LAMBDA_HANDLER
@@ -116,13 +115,15 @@ describe('Lambda runtime completion handoff', () => {
         addHook: (options, hook) => { if (!options.file) hooks.push(hook) },
       },
     })
-    return entry === 'layer' ? hooks[0]({ handler }).handler : hooks[0]({ datadog: h => h }).datadog(handler)
+    return entry === 'layer'
+      ? hooks[0]({ handler: facade.wrap(handler) }).handler
+      : hooks[0]({ datadog: facade.wrap }).datadog(handler)
   }
 
   for (const mode of ['auto', 'callback']) {
     for (const entry of ['facade', 'layer', 'npm']) {
       for (const outcome of ['callback', 'succeed', 'done', 'fail', 'promise', 'reject', 'throw']) {
-        it(`delivers ${outcome} through ${entry} in ${mode} mode after finishing the span`, async () => {
+        it(`delivers ${outcome} through ${entry} with explicit ${mode} wrapping after finishing the span`, async () => {
           const failed = ['fail', 'reject', 'throw'].includes(outcome)
           const error = new Error('handler failure')
           const ric = runtime(() => {

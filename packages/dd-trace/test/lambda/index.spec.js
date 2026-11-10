@@ -88,10 +88,7 @@ describe('lambda', () => {
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
-      // dd-trace is timeout-monitoring only unless DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS is set, so
-      // it does not promisify the handler and the caller's callback is the one that fires. When
-      // the gate is on, `promisifiedHandler` intercepts the callback instead and the result
-      // arrives through the returned promise.
+      // Automatic hooks only monitor timeouts, so the caller's callback receives the result.
       let result
       const wrappedHandler = datadog(app.callbackHandler)
       wrappedHandler(_event, _context, (_error, response) => {
@@ -159,7 +156,6 @@ describe('lambda', () => {
       process.env.DD_LAMBDA_HANDLER = 'handler.handler'
       // The boundary channels come from the aws-lambda plugin, which only creates the span when
       // dd-trace owns it.
-      process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
       const tracer = await loadAgent()
       const traces = []
       const exporter = sinon.stub(tracer._tracer._exporter, 'export').callsFake(trace => traces.push(trace))
@@ -183,8 +179,9 @@ describe('lambda', () => {
         }
         const context = { getRemainingTimeInMillis: () => 150 }
 
-        // The plugin owns this invocation; do not wrap it in the old span-owning shim as well.
-        await app.handler(event, context)
+        // The explicit facade owns this invocation after the automatic hook adds its monitor.
+        const handler = require('../../../../lambda').wrap(app.handler)
+        await handler(event, context)
         assertExactlyOneLambdaSpan(traces)
 
         assert.strictEqual(starts.length, 1)

@@ -6,17 +6,6 @@ const { writeDatadogTraceId, writeDatadogParentId, writeDatadogSamplingPriority 
 const { wrapLambdaHandler } = require('./wrap')
 
 /**
- * Wraps an AWS Lambda handler with the dd-trace Lambda invocation lifecycle.
- *
- * @param {Function} handler AWS Lambda handler.
- * @param {Record<string, unknown>} [config] Per-handler Lambda configuration overrides.
- * @returns {Function} The wrapped handler.
- */
-function wrap (handler, config) {
-  return wrapLambdaHandler(handler, config)
-}
-
-/**
  * Returns Datadog propagation headers for the active Lambda invocation span.
  *
  * @returns {Record<string, string>} Trace propagation headers, or an empty object outside an invocation.
@@ -81,5 +70,5 @@ module.exports = {
   reportInitFailure,
   sendDistributionMetric,
   sendDistributionMetricWithDate,
-  wrap,
+  wrap: wrapLambdaHandler,
 }

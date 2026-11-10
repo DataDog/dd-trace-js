@@ -121,7 +121,6 @@ export interface GeneratedConfig {
   DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD: number;
   DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: boolean;
   DD_LAMBDA_HANDLER: string | undefined;
-  DD_LAMBDA_HANDLER_COMPLETION: "auto" | "return" | "callback";
   DD_LLMOBS_PROMPTS_CACHE_DIR: string | undefined;
   DD_LLMOBS_PROMPTS_CACHE_TTL: number;
   DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: boolean;
@@ -177,7 +176,6 @@ export interface GeneratedConfig {
   DD_TRACE_AVSC_ENABLED: boolean;
   DD_TRACE_AWS_ADD_SPAN_POINTERS: boolean;
   DD_TRACE_AWS_DURABLE_EXECUTION_SDK_JS_ENABLED: boolean;
-  DD_TRACE_AWS_LAMBDA_ENABLED: boolean;
   DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED: boolean;
   DD_TRACE_AWS_SDK_AWS_ENABLED: boolean;
   DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED: boolean;
@@ -310,7 +308,6 @@ export interface GeneratedConfig {
   DD_TRACE_KOA_ROUTE_ENABLED: boolean;
   DD_TRACE_KOA_ROUTER_ENABLED: boolean;
   DD_TRACE_KOA_WEBSOCKET_ENABLED: boolean;
-  DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS: boolean;
   DD_TRACE_LANGCHAIN_ANTHROPIC_ENABLED: boolean;
   DD_TRACE_LANGCHAIN_COHERE_ENABLED: boolean;
   DD_TRACE_LANGCHAIN_CORE_ENABLED: boolean;
@@ -466,21 +463,23 @@ export interface GeneratedConfig {
   };
   inferredProxyServicesEnabled: boolean;
   lambda: {
-    apiKeyKms: string | undefined;
-    apiKeySecretArn: string | undefined;
-    captureLambdaPayload: boolean;
-    captureLambdaPayloadMaxDepth: number;
-    coldStartTraceSkipLib: string;
-    coldStartTracing: boolean;
-    createInferredSpan: boolean;
-    decodeAuthorizerContext: boolean;
-    encodeAuthorizerContext: boolean;
-    enhancedMetrics: boolean;
-    fipsMode: boolean;
-    logForwarding: boolean;
-    mergeXrayTraces: boolean;
-    minColdStartTraceDurationMs: number;
-    serviceRepresentationEnabled: boolean;
+    DD_API_KEY_SECRET_ARN: string | undefined;
+    DD_CAPTURE_LAMBDA_PAYLOAD: boolean;
+    DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: number;
+    DD_COLD_START_TRACE_SKIP_LIB: string;
+    DD_COLD_START_TRACING: boolean;
+    DD_DECODE_AUTHORIZER_CONTEXT: boolean;
+    DD_ENCODE_AUTHORIZER_CONTEXT: boolean;
+    DD_ENHANCED_METRICS: boolean;
+    DD_FLUSH_TO_LOG: boolean;
+    DD_KMS_API_KEY: string | undefined;
+    DD_LAMBDA_FIPS_MODE: boolean;
+    DD_LAMBDA_HANDLER_COMPLETION: "auto" | "return" | "callback";
+    DD_MERGE_XRAY_TRACES: boolean;
+    DD_MIN_COLD_START_DURATION: number;
+    DD_TRACE_AWS_LAMBDA_ENABLED: boolean;
+    DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: boolean;
+    DD_TRACE_MANAGED_SERVICES: boolean;
   };
   langchain: {
     DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
@@ -1062,7 +1061,6 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_KOA_ROUTE_ENABLED: boolean;
   DD_TRACE_KOA_ROUTER_ENABLED: boolean;
   DD_TRACE_KOA_WEBSOCKET_ENABLED: boolean;
-  DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS: boolean;
   DD_TRACE_LANGCHAIN_ANTHROPIC_ENABLED: boolean;
   DD_TRACE_LANGCHAIN_COHERE_ENABLED: boolean;
   DD_TRACE_LANGCHAIN_CORE_ENABLED: boolean;

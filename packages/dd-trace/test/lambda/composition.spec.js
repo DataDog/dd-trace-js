@@ -32,7 +32,6 @@ describe('Lambda facade and hook composition', () => {
       DD_APM_FLUSH_DEADLINE_MILLISECONDS: '25',
     }
     delete process.env.DD_LAMBDA_HANDLER
-    delete process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS
     delete process.env.DD_LAMBDA_HANDLER_COMPLETION
     tracer = await agent.load('aws-lambda', {}, { experimental: { exporter: 'agent' } })
     facade = require('../../../../lambda')
@@ -67,6 +66,17 @@ describe('Lambda facade and hook composition', () => {
     return hooks[0]({ datadog }).datadog(handler)
   }
 
+  /**
+   * @param {string} entry Invocation entry point.
+   * @param {Function} handler Customer handler.
+   * @returns {Function} Explicit facade wrapper composed with the selected hook.
+   */
+  function wrap (entry, handler) {
+    if (entry === 'facade') return facade.wrap(handler)
+    if (entry === 'layer') return patch(entry, facade.wrap(handler))
+    return patch(entry, handler, facade.wrap)
+  }
+
   for (const mode of ['return', 'callback']) {
     it(`keeps response streaming arguments and metadata in ${mode} mode`, async () => {
       const stream = {}
@@ -90,7 +100,6 @@ describe('Lambda facade and hook composition', () => {
         for (const failure of [false, true]) {
           it(`waits for a ${shape} callback through ${entry} with failure ${failure}`, async () => {
             process.env.DD_LAMBDA_HANDLER_COMPLETION = 'CALLBACK'
-            process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
             let complete
             let active
             let child
@@ -103,7 +112,7 @@ describe('Lambda facade and hook composition', () => {
             const handler = shape === 'rest'
               ? (...args) => capture(args[2])
               : (_event, _context, callback = () => {}) => capture(callback)
-            const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+            const wrapped = wrap(entry, handler)
             const error = new Error('callback completion failure')
             let settled = false
             const result = wrapped({}, context)
@@ -212,7 +221,7 @@ describe('Lambda facade and hook composition', () => {
     })
 
     for (const entry of ['layer', 'npm']) {
-      it(`leaves synchronous returns with the ${entry} gate off`, async () => {
+      it(`leaves synchronous returns with the ${entry} shim`, async () => {
         process.env.DD_LAMBDA_HANDLER_COMPLETION = 'callback'
         const shim = h => tracer.wrap('aws.lambda', {}, promisifiedHandler(h))
         let wrapped = patch(entry, () => 'legacy result', shim)
@@ -230,7 +239,6 @@ describe('Lambda facade and hook composition', () => {
       for (const outcome of ['undefined', 'throw', 'reject', 'promise']) {
         it(`finishes ${outcome} through ${entry} without a stale timeout`, async () => {
           process.env.DD_LAMBDA_HANDLER_COMPLETION = 'return'
-          process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
           const error = new Error('return completion failure')
           const receiver = {}
           const event = {}
@@ -246,7 +254,7 @@ describe('Lambda facade and hook composition', () => {
             if (outcome === 'reject') return Promise.reject(error)
             if (outcome === 'promise') return Promise.resolve('done')
           }
-          const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+          const wrapped = wrap(entry, handler)
           let settled = false
           const result = wrapped.call(receiver, event, context, () => {})
           const observed = result.then(value => {
@@ -354,7 +362,7 @@ describe('Lambda facade and hook composition', () => {
     })
 
     for (const entry of ['layer', 'npm']) {
-      it(`leaves legacy context completion with the ${entry} gate off`, async () => {
+      it(`leaves legacy context completion with the ${entry} shim`, async () => {
         process.env.DD_LAMBDA_HANDLER_COMPLETION = 'return'
         let complete
         const handler = (_event, ctx) => { complete = ctx.succeed }
@@ -376,7 +384,6 @@ describe('Lambda facade and hook composition', () => {
   for (const entry of ['facade', 'layer', 'npm']) {
     for (const owner of entry === 'facade' ? ['plugin'] : ['shim', 'plugin']) {
       it(`monitors the ${owner} span through ${entry}, flushing its unfinished child exactly once`, async () => {
-        process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = String(owner === 'plugin')
         let active
         let child
         const handler = () => {
@@ -390,11 +397,10 @@ describe('Lambda facade and hook composition', () => {
         Object.freeze(handler)
         const shim = h => tracer.wrap('aws.lambda', {}, promisifiedHandler(h))
         let wrapped
-        if (entry === 'facade') wrapped = facade.wrap(handler)
-        else if (entry === 'npm') wrapped = patch(entry, handler, owner === 'shim' ? shim : facade.wrap)
+        if (owner === 'plugin') wrapped = wrap(entry, handler)
         else {
-          wrapped = patch(entry, handler)
-          if (owner === 'shim') wrapped = shim(wrapped)
+          wrapped = patch(entry, handler, shim)
+          if (entry === 'layer') wrapped = shim(wrapped)
         }
 
         assert.strictEqual(await wrapped({}, context), 'done')
@@ -413,37 +419,33 @@ describe('Lambda facade and hook composition', () => {
   }
 
   for (const branch of ['layer', 'npm']) {
-    for (const gate of [false, true]) {
-      for (const first of ['facade', 'hook']) {
-        it(`is idempotent with ${first} first, ${branch} hook, and span gate ${gate}`, async () => {
-          process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = String(gate)
-          const starts = []
-          const subscriber = message => starts.push(message)
-          invocationChannel.start.subscribe(subscriber)
-          try {
-            const handler = Object.freeze(() => 'done')
-            const earlier = Object.freeze(first === 'facade' ? facade.wrap(handler) : patch(branch, handler))
-            const wrapped = first === 'facade' ? patch(branch, earlier) : facade.wrap(earlier)
-            assert.strictEqual(facade.wrap(handler), wrapped)
-            assert.strictEqual(patch(branch, handler), wrapped)
-            assert.strictEqual(facade.wrap(wrapped), wrapped)
-            assert.strictEqual(patch(branch, wrapped), wrapped)
-            assert.strictEqual(await wrapped({}, context), 'done')
-            assertExactlyOneLambdaSpan(traces)
-            assert.strictEqual(starts.length, 1)
-            assert.strictEqual(clock.countTimers(), 0)
-          } finally {
-            invocationChannel.start.unsubscribe(subscriber)
-          }
-        })
-      }
+    for (const first of ['facade', 'hook']) {
+      it(`is idempotent with ${first} first and ${branch} hook`, async () => {
+        const starts = []
+        const subscriber = message => starts.push(message)
+        invocationChannel.start.subscribe(subscriber)
+        try {
+          const handler = Object.freeze(() => 'done')
+          const earlier = Object.freeze(first === 'facade' ? facade.wrap(handler) : patch(branch, handler))
+          const wrapped = first === 'facade' ? patch(branch, earlier) : facade.wrap(earlier)
+          assert.strictEqual(facade.wrap(handler), wrapped)
+          assert.strictEqual(patch(branch, handler), wrapped)
+          assert.strictEqual(facade.wrap(wrapped), wrapped)
+          assert.strictEqual(patch(branch, wrapped), wrapped)
+          assert.strictEqual(await wrapped({}, context), 'done')
+          assertExactlyOneLambdaSpan(traces)
+          assert.strictEqual(starts.length, 1)
+          assert.strictEqual(clock.countTimers(), 0)
+        } finally {
+          invocationChannel.start.unsubscribe(subscriber)
+        }
+      })
     }
   }
 
   for (const entry of ['facade', 'layer', 'npm']) {
     for (const streaming of [false, true]) {
       it(`avoids reading completion accessors through ${entry} with streaming ${streaming}`, async () => {
-        process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
         const unexpected = sinon.stub().throws(new Error('completion accessors must not run'))
         // The completion adapter can install its own methods; the monitor must not read or wrap
         // the original context methods before that adapter selects invocation completion.
@@ -454,7 +456,7 @@ describe('Lambda facade and hook composition', () => {
           ? (_event, _stream, _context) => Promise.resolve('done')
           : (_event, _context, callback) => callback(null, 'done')
         if (streaming) handler[HANDLER_STREAMING] = STREAM_RESPONSE
-        const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+        const wrapped = wrap(entry, handler)
         const args = streaming ? [{}, {}, context] : [{}, context]
         assert.strictEqual(await wrapped(...args), 'done')
         assert.strictEqual(unexpected.callCount, 0)
@@ -465,7 +467,6 @@ describe('Lambda facade and hook composition', () => {
 
     for (const shape of ['plain', 'rest', 'default']) {
       it(`clears the selected synchronous ${shape} completion through ${entry}`, async () => {
-        process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
         let lateCallback
         const value = { ok: true }
         const handlers = {
@@ -474,7 +475,7 @@ describe('Lambda facade and hook composition', () => {
           default: (_event, _context, callback = () => {}) => { lateCallback = callback; return value },
         }
         const handler = handlers[shape]
-        const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+        const wrapped = wrap(entry, handler)
         assert.strictEqual(await wrapped({}, context, () => {}), value)
         assertExactlyOneLambdaSpan(traces)
         // Watching the raw handler would retain this timer because a callback was supplied,
@@ -497,12 +498,11 @@ describe('Lambda facade and hook composition', () => {
     }
 
     it(`preserves safe streaming metadata through ${entry}`, async () => {
-      process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
       const highWaterMark = Symbol.for('aws.lambda.runtime.handler.streaming.highWaterMark')
       const handler = (_event, _stream, _context) => Promise.resolve('streamed')
       handler[HANDLER_STREAMING] = STREAM_RESPONSE
       handler[highWaterMark] = 16384
-      const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+      const wrapped = wrap(entry, handler)
       assert.strictEqual(wrapped[HANDLER_STREAMING], STREAM_RESPONSE)
       assert.strictEqual(wrapped[highWaterMark], 16384)
       assert.strictEqual(wrapped.length, 3)
@@ -513,7 +513,6 @@ describe('Lambda facade and hook composition', () => {
 
     for (const shape of ['accessors', 'proxy']) {
       it(`does not execute ${shape} when composing ${entry}`, async () => {
-        process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
         const unexpected = sinon.stub().throws(new Error('metadata access must not run'))
         let handler = () => 'safe'
         if (shape === 'proxy') {
@@ -530,7 +529,7 @@ describe('Lambda facade and hook composition', () => {
             Object.defineProperty(handler, name, { get: unexpected })
           }
         }
-        const wrapped = entry === 'facade' ? facade.wrap(handler) : patch(entry, handler, facade.wrap)
+        const wrapped = wrap(entry, handler)
         assert.strictEqual(await wrapped({}, context), 'safe')
         assert.strictEqual(unexpected.callCount, 0)
         assertExactlyOneLambdaSpan(traces)

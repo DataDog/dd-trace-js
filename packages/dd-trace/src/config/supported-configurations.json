@@ -36,9 +36,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "configurationNames": [
-          "lambda.apiKeySecretArn"
-        ],
+        "namespace": "lambda",
         "default": null,
         "sensitive": true
       }
@@ -47,9 +45,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "configurationNames": [
-          "lambda.captureLambdaPayload"
-        ],
+        "namespace": "lambda",
         "default": "false"
       }
     ],
@@ -57,9 +53,7 @@
       {
         "implementation": "B",
         "type": "int",
-        "configurationNames": [
-          "lambda.captureLambdaPayloadMaxDepth"
-        ],
+        "namespace": "lambda",
         "default": "10",
         "allowed": "\\d+"
       }
@@ -68,9 +62,7 @@
       {
         "implementation": "B",
         "type": "string",
-        "configurationNames": [
-          "lambda.coldStartTraceSkipLib"
-        ],
+        "namespace": "lambda",
         "default": "./opentracing/tracer"
       }
     ],
@@ -78,9 +70,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "configurationNames": [
-          "lambda.coldStartTracing"
-        ],
+        "namespace": "lambda",
         "default": "true"
       }
     ],
@@ -88,9 +78,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "configurationNames": [
-          "lambda.decodeAuthorizerContext"
-        ],
+        "namespace": "lambda",
         "default": "true"
       }
     ],
@@ -98,9 +86,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "configurationNames": [
-          "lambda.encodeAuthorizerContext"
-        ],
+        "namespace": "lambda",
         "default": "true"
       }
     ],
@@ -108,9 +94,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "configurationNames": [
-          "lambda.enhancedMetrics"
-        ],
+        "namespace": "lambda",
         "default": "true"
       }
     ],
@@ -118,9 +102,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "configurationNames": [
-          "lambda.logForwarding"
-        ],
+        "namespace": "lambda",
         "default": "false"
       }
     ],
@@ -128,9 +110,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "configurationNames": [
-          "lambda.apiKeyKms"
-        ],
+        "namespace": "lambda",
         "default": null,
         "sensitive": true
       }
@@ -139,9 +119,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "configurationNames": [
-          "lambda.fipsMode"
-        ],
+        "namespace": "lambda",
         "default": "false"
       }
     ],
@@ -149,9 +127,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "configurationNames": [
-          "lambda.mergeXrayTraces"
-        ],
+        "namespace": "lambda",
         "default": "false"
       }
     ],
@@ -159,9 +135,7 @@
       {
         "implementation": "B",
         "type": "int",
-        "configurationNames": [
-          "lambda.minColdStartTraceDurationMs"
-        ],
+        "namespace": "lambda",
         "default": "3",
         "allowed": "\\d+"
       }
@@ -169,6 +143,7 @@
     "DD_TRACE_AWS_LAMBDA_ENABLED": [
       {
         "implementation": "B",
+        "namespace": "lambda",
         "type": "boolean",
         "default": "true"
       }
@@ -177,9 +152,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "configurationNames": [
-          "lambda.serviceRepresentationEnabled"
-        ],
+        "namespace": "lambda",
         "default": "true"
       }
     ],
@@ -187,9 +160,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "configurationNames": [
-          "lambda.createInferredSpan"
-        ],
+        "namespace": "lambda",
         "default": "true"
       }
     ],
@@ -1604,6 +1575,7 @@
     "DD_LAMBDA_HANDLER_COMPLETION": [
       {
         "implementation": "A",
+        "namespace": "lambda",
         "type": "string",
         "default": "auto",
         "allowed": "auto|return|callback",
@@ -3572,13 +3544,6 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true"
-      }
-    ],
-    "DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS": [
-      {
-        "implementation": "B",
-        "type": "boolean",
-        "default": "false"
       }
     ],
     "DD_TRACE_LANGCHAIN_ANTHROPIC_ENABLED": [

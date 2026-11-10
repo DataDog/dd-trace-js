@@ -233,57 +233,6 @@ tracer.use('openai', {
 <h5 id="avsc"></h5>
 <h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-lambda"></h5>
-
-`dd-trace/lambda.wrap(handler, options)` owns handler completion when explicitly used, or when
-`DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS=true` enables the migration wrapper. Its completion policy defaults to
-`auto`, preserving legacy callback/context completion, including waiting when a buffered handler returns `undefined`.
-
-For a buffered handler whose return value or Promise defines completion, set
-`DD_LAMBDA_HANDLER_COMPLETION=return` before the handler is loaded, or pass `handlerCompletion: 'return'`:
-
-```js
-const { wrap } = require('dd-trace/lambda')
-
-exports.handler = wrap(function (event) {
-  console.log(event)
-  // A synchronous undefined return now completes the invocation.
-}, { handlerCompletion: 'return' })
-```
-
-In `return` mode, an ordinary return (including `undefined`) completes immediately, a returned Promise or thenable
-is awaited, and a thrown error rejects the invocation. The adapter preserves `this` and arguments and does not install
-callback or context completion methods. Use this mode only when the handler does not signal completion through a
-callback or `context.done/succeed/fail`; delayed work must be represented by its returned Promise. Timeout monitoring
-remains active until that return-based completion. Response-streaming behavior is unchanged.
-
-For a buffered callback handler with rest/default parameters or an incidental synchronous return value, use
-`DD_LAMBDA_HANDLER_COMPLETION=callback` or `handlerCompletion: 'callback'`:
-
-```js
-exports.handler = wrap(function (event, context, callback = () => {}) {
-  setImmediate(() => callback(null, { statusCode: 200 }))
-  return { requestStarted: true } // Ignored; the callback supplies the result.
-}, { handlerCompletion: 'callback' })
-```
-
-In `callback` mode, ordinary return values are ignored regardless of the handler's declared parameter count.
-The adapter supplies a callback even when the caller omits it, and also accepts `context.done/succeed/fail`.
-Returned Promises and thenables still race callback/context completion, as in `auto`; the first settlement wins.
-Synchronous throws reject unless a callback/context method has already selected completion. A handler that neither
-calls back, completes through context, nor returns an eventually settled Promise remains pending. Response-streaming
-handlers retain their return-based completion.
-
-Buffered wrappers retain the original Lambda context object and forward selected native callback/context completion.
-A successful native callback still honors `callbackWaitsForEmptyEventLoop`; timeout monitoring remains active while the
-runtime waits for the event loop to drain. Returned Promise results remain under the caller's control, including any
-outer wrapper that transforms the result before returning it to Lambda.
-
-A per-handler `handlerCompletion` option overrides the environment setting; `'auto'` explicitly selects legacy behavior.
-The environment setting is case-insensitive; unsupported values fall back to `auto`. The policy is selected when the
-handler is first wrapped. Repeated wrapping reuses the existing wrapper, so set the environment before automatic hooks
-load the handler. The setting does not change the completion adapter in an existing shim when the migration gate is off.
-Neither explicit mode requires a separate shim completion feature.
-
 <h5 id="aws-sdk"></h5>
 
 For Amazon Bedrock LLM Observability integrations, see the

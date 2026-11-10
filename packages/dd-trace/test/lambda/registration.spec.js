@@ -39,7 +39,6 @@ describe('lambda', () => {
       process.env = { ...oldEnv }
       delete process.env.DD_LAMBDA_HANDLER
       delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
-      delete process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS
       // Drop cached `runtime/patch` so its module-level `addHook` calls run
       // against the test's current env (each test sets its own
       // `DD_LAMBDA_HANDLER`).
@@ -367,7 +366,7 @@ describe('lambda', () => {
       assert.strictEqual(typeof fakeModule.datadog(() => 'user'), 'function')
     })
 
-    it('adds timeout monitoring but no span by default (transition double-wrap gate)', () => {
+    it('adds timeout monitoring without an invocation span', () => {
       process.env.LAMBDA_TASK_ROOT = '/var/task'
 
       const { hookCalls } = loadLambdaWithHookSpy()
@@ -378,36 +377,15 @@ describe('lambda', () => {
 
       // Two independent concerns. Timeout monitoring always applies - it is what dd-trace's
       // Lambda support did before the migration, and dropping it would delete the feature.
-      // Span creation is what the gate withholds: the released shim already owns the invocation
-      // span, so a second one is two roots in two traces.
+      // The released shim owns the invocation span; the automatic hook only monitors timeouts.
       const instrumented = fakeModule.datadog(userHandler)
       assert.notStrictEqual(instrumented, userHandler, 'timeout monitor must still wrap')
       assert.strictEqual(instrumented[WRAPPED], undefined, 'no span-creating wrapper')
     })
 
-    it('dd-wraps the shim handler when DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS is set', () => {
-      process.env.LAMBDA_TASK_ROOT = '/var/task'
-      process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
-
-      const { hookCalls } = loadLambdaWithHookSpy()
-
-      const userHandler = () => 'user'
-      const fakeModule = { datadog: handler => handler }
-      hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
-
-      const wrapped = fakeModule.datadog(userHandler)
-      assert.notStrictEqual(wrapped, userHandler)
-      // The span-creating wrapper marks itself; that marker is the discriminator between
-      // monitor-only and monitor-plus-span.
-      assert.strictEqual(wrapped[WRAPPED], wrapped)
-    })
-
     it('is idempotent across repeated patching', () => {
-      // Each re-patch must return the same instrumented function. When the monitor did not
-      // memoize, `wrapHandler` received a fresh inner closure every time, its marker could not
-      // match, and the wrappers stacked - three invocation-start publications for one invoke.
+      // Repeated hooks reuse one monitor without stacking wrappers on the customer handler.
       process.env.LAMBDA_TASK_ROOT = '/var/task'
-      process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
 
       const { hookCalls } = loadLambdaWithHookSpy()
 
@@ -421,31 +399,27 @@ describe('lambda', () => {
       assert.strictEqual(fakeModule.datadog(first), first)
     })
 
-    for (const gate of [false, true]) {
-      it(`preserves npm wrapper configuration, receiver, and extra arguments with span gate ${gate}`, () => {
-        process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = String(gate)
-        const { hookCalls } = loadLambdaWithHookSpy()
-        const userHandler = () => 'user'
-        const config = { traceExtractor: () => ({}), enhancedMetrics: false }
-        const extra = {}
-        const receiver = {}
-        const fakeModule = {
-          datadog (handler, actualConfig, actualExtra) {
-            assert.strictEqual(this, receiver)
-            assert.notStrictEqual(handler, userHandler)
-            assert.strictEqual(actualConfig, config)
-            assert.strictEqual(actualExtra, extra)
-            return handler
-          },
-        }
-        hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
-        assert.strictEqual(typeof fakeModule.datadog.call(receiver, userHandler, config, extra), 'function')
-      })
-    }
+    it('preserves npm wrapper configuration, receiver, and extra arguments', () => {
+      const { hookCalls } = loadLambdaWithHookSpy()
+      const userHandler = () => 'user'
+      const config = { traceExtractor: () => ({}), enhancedMetrics: false }
+      const extra = {}
+      const receiver = {}
+      const fakeModule = {
+        datadog (handler, actualConfig, actualExtra) {
+          assert.strictEqual(this, receiver)
+          assert.notStrictEqual(handler, userHandler)
+          assert.strictEqual(actualConfig, config)
+          assert.strictEqual(actualExtra, extra)
+          return handler
+        },
+      }
+      hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
+      assert.strictEqual(typeof fakeModule.datadog.call(receiver, userHandler, config, extra), 'function')
+    })
 
     it('monitors timeouts on the DD_LAMBDA_HANDLER path too, not just the shim module path', () => {
-      // The gate originally covered only the datadog-lambda-js module hook, so the layer path -
-      // the one customers actually run - kept creating a second span. Both branches must agree.
+      // Both automatic hook paths monitor timeouts while the shim owns the invocation span.
       process.env.LAMBDA_TASK_ROOT = '/var/task'
       process.env.DD_LAMBDA_HANDLER = 'handler.myEntry'
 
@@ -457,7 +431,7 @@ describe('lambda', () => {
       hookCalls[0].onrequire(fakeModule, fixturePath, undefined, '0.0.0')
 
       assert.notStrictEqual(fakeModule.myEntry, userHandler, 'timeout monitor must wrap')
-      assert.strictEqual(fakeModule.myEntry[WRAPPED], undefined, 'no span with the gate off')
+      assert.strictEqual(fakeModule.myEntry[WRAPPED], undefined, 'no span-creating wrapper')
       delete instrumentations[fixturePath]
     })
 
