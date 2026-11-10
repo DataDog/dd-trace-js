@@ -128,8 +128,12 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       'messaging.operation': 'receive',
     }
 
+    let batchContext
     if (batchRequestTraceId && batchRequestSpanId) {
       meta['pubsub.batch.request_trace_id'] = batchRequestTraceId
+      batchContext = pubsubRequestContext || reconstructPubSubRequestContext(
+        message.attributes, null, this._tracerConfig.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+      )
     }
 
     const metrics = {
@@ -158,12 +162,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       metrics,
     }, ctx)
 
-    if (batchRequestTraceId && batchRequestSpanId) {
-      const batchContext = pubsubRequestContext || reconstructPubSubRequestContext(
-        message.attributes, null, this._tracerConfig.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
-      )
-      if (batchContext) span.addLink({ context: batchContext })
-    }
+    if (batchContext) span.addLink({ context: batchContext })
 
     if (message.publishTime) {
       span.setTag('pubsub.publish_time', message.publishTime.toISOString())

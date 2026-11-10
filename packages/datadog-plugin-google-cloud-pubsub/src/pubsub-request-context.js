@@ -5,7 +5,7 @@ const id = require('../../dd-trace/src/id')
 
 /**
  * @param {Record<string, string>} attributes
- * @param {SpanContext | null} originalContext
+ * @param {SpanContext | null | undefined} originalContext
  * @param {import('../../dd-trace/src/config/config-base')['DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT']} propagationBehavior
  * @returns {import('../../dd-trace/src/opentracing/span_context') | null}
  */
