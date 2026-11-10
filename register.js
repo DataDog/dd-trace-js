@@ -28,7 +28,12 @@ if (shouldRegisterSyncLoaderHooks()) {
 
 if (!isSyncLoaderRegistered) {
   const { getLoaderRegisterOptions } = require('./packages/dd-trace/src/esm-module-load')
-  register('./loader-hook.mjs', parentURL, getLoaderRegisterOptions())
+  // Node.js 27 removes `module.register` (nodejs/node#67090); it must not abort the application's preload.
+  try {
+    register('./loader-hook.mjs', parentURL, getLoaderRegisterOptions())
+  } catch (error) {
+    process.emitWarning(`dd-trace could not register loader hooks. ${error.message}`)
+  }
 }
 
 function shouldRegisterSyncLoaderHooks () {

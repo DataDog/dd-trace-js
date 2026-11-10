@@ -151,6 +151,21 @@ describe('register.js', () => {
       /dd-trace could not register synchronous loader hooks.*support detection failure/
     )
   })
+
+  it('warns instead of throwing if module.register has been removed', () => {
+    const error = new Error('module.register() has been removed')
+    error.code = 'ERR_MODULE_REGISTER_REMOVED'
+    const register = sinon.stub().throws(error)
+
+    loadRegister({
+      register,
+      registerSyncLoaderHooks: sinon.stub().returns(false),
+      supportsSyncHooks: () => true,
+    })
+
+    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL), asyncLoaderOptions)
+    sinon.assert.calledWithMatch(emitWarning, /^dd-trace could not register loader hooks\. .*has been removed$/)
+  })
 })
 
 function createThrowingLoaderHook (error) {
