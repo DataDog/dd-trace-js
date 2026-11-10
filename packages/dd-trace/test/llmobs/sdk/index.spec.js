@@ -1782,6 +1782,27 @@ describe('sdk', () => {
       })
     })
 
+    it('keeps inherited experiment tags alongside tags from a nested context', () => {
+      const experimentTags = { experiment_id: 'exp-1', run_id: 'run-1', run_iteration: 1 }
+
+      llmobs.trace({ kind: 'experiment', name: 'task', _experimentTags: experimentTags }, () => {
+        llmobs.trace({ kind: 'workflow', name: 'answer' }, () => {
+          llmobs.annotationContext({ tags: { team: 'ml' } }, () => {
+            llmobs.trace({ kind: 'llm', name: 'call' }, span => {
+              assertObjectContains(LLMObsTagger.tagMap.get(span), {
+                '_ml_obs.tags': { ...experimentTags, team: 'ml' },
+              })
+            })
+          })
+        })
+      })
+
+      // Spans started after the experiment span ends do not inherit its tags.
+      llmobs.trace({ kind: 'workflow', name: 'unrelated' }, span => {
+        assert.strictEqual(LLMObsTagger.tagMap.get(span)['_ml_obs.tags'], undefined)
+      })
+    })
+
     describe('agent', () => {
       const MANIFEST = '_ml_obs.meta.metadata._dd.agent_manifest'
       const VERSION = '_ml_obs.agent_version'
