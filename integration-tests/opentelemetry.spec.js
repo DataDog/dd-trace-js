@@ -3,8 +3,11 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 
-const { fork } = require('child_process')
-const { join } = require('path')
+const { fork } = require('node:child_process')
+const { join } = require('node:path')
+
+const semver = require('semver')
+
 const httpRequest = require('../packages/dd-trace/test/setup/helpers/http-client')
 const latestVersions = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
@@ -119,6 +122,61 @@ describe('OpenTelemetry API version compatibility', function () {
   }
 })
 
+for (const [sdkVersion, apiVersion] of [
+  ['0.222.0', '1.9.1'],
+  [latestVersions['@opentelemetry/sdk-node'], latestVersions['@opentelemetry/api']],
+]) {
+  describe(`OpenTelemetry SDK provider (${sdkVersion})`, function () {
+    this.timeout(20_000)
+
+    let agent
+    let proc
+    let cwd
+
+    useSandbox([`@opentelemetry/sdk-node@${sdkVersion}`, `@opentelemetry/api@${apiVersion}`])
+
+    before(async function () {
+      cwd = sandboxCwd()
+      const { engines } = require(join(cwd, 'node_modules/@opentelemetry/sdk-node/package.json'))
+      if (!semver.satisfies(process.versions.node, engines.node)) {
+        // SDK releases can require a newer runtime than the tracer.
+        this.skip()
+      }
+      agent = await new FakeAgent().start()
+    })
+
+    afterEach(async () => {
+      await stopProc(proc)
+    })
+
+    after(async () => {
+      await agent?.stop()
+    })
+
+    for (const format of ['commonjs', 'esm']) {
+      it(`delivers spans to the tracer and user processor with ${format}`, async () => {
+        const fixture = format === 'esm'
+          ? 'opentelemetry/fixtures/sdk-node-span-processor.mjs'
+          : 'opentelemetry/sdk-node-span-processor.js'
+        proc = fork(join(cwd, fixture), {
+          cwd,
+          execArgv: format === 'esm' ? ['--loader=dd-trace/loader-hook.mjs'] : [],
+          env: {
+            DD_TRACE_AGENT_PORT: agent.port,
+            DD_TRACE_OTEL_ENABLED: '1',
+            DD_INJECT_FORCE: process.env.DD_INJECT_FORCE,
+          },
+        })
+
+        await check(agent, proc, 5000, ({ payload }) => {
+          const trace = payload.find(trace => trace.length === 1 && trace[0].name === 'otel-sub')
+          assert.ok(trace)
+        })
+      })
+    }
+  })
+}
+
 describe('opentelemetry', function () {
   this.timeout(20_000)
 
@@ -139,8 +197,13 @@ describe('opentelemetry', function () {
 
   useSandbox(dependencies)
 
-  before(async () => {
+  before(async function () {
     cwd = sandboxCwd()
+    const { engines } = require(join(cwd, 'node_modules/@opentelemetry/sdk-node/package.json'))
+    if (!semver.satisfies(process.versions.node, engines.node)) {
+      // SDK releases can require a newer runtime than the tracer.
+      this.skip()
+    }
     agent = await new FakeAgent().start()
   })
 
@@ -491,23 +554,6 @@ describe('opentelemetry', function () {
 
   it('should auto-instrument @opentelemetry/sdk-node', async () => {
     proc = fork(join(cwd, 'opentelemetry/env-var.js'), {
-      cwd,
-      env: {
-        DD_TRACE_AGENT_PORT: agent?.port,
-      },
-    })
-    await check(agent, proc, timeout, ({ payload }) => {
-      const trace = payload.find(trace => trace.length === 1 && trace[0].name === 'otel-sub')
-      assert.ok(trace)
-    })
-  })
-
-  it('should deliver spans to a user span processor configured on @opentelemetry/sdk-node', async () => {
-    // Regression guard: sdk-node 0.220+ passes span processors through the
-    // provider constructor. The fixture exits non-zero if its own processor
-    // never saw the span, so the tracer producing the DD span while dropping
-    // the user's processor fails here rather than passing silently.
-    proc = fork(join(cwd, 'opentelemetry/sdk-node-span-processor.js'), {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent?.port,

@@ -9,7 +9,7 @@ const { getEnvironmentVariable } = require('./config/helper')
 const { reseed } = require('./id')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
-const { setStartupLogPluginManager, startupLog } = require('./startup-log')
+const { setStartupLogConfig, setStartupLogPluginManager, startupLog } = require('./startup-log')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
@@ -277,14 +277,16 @@ class Tracer extends NoopProxy {
       // OTel logs/metrics pipelines must be initialized BEFORE runtimeMetrics.start so that
       // when the OTLP runtime metrics module calls metrics.getMeterProvider(), it gets the
       // real provider, otherwise instruments register on the noop provider and never export.
+      let logs
+      let metrics
       if (config.DD_LOGS_OTEL_ENABLED) {
         const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
-        initializeOpenTelemetryLogs(config)
+        logs = initializeOpenTelemetryLogs(config)
       }
 
       if (config.DD_METRICS_OTEL_ENABLED) {
         const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
-        initializeOpenTelemetryMetrics(config)
+        metrics = initializeOpenTelemetryMetrics(config)
       }
 
       if (config.runtimeMetrics.enabled) {
@@ -294,7 +296,10 @@ class Tracer extends NoopProxy {
         registerTelemetryFlusher(done => runtimeMetrics.flush(done), { afterTrace: true })
       }
 
-      this.#updateTracing(config)
+      const tracing = this.#updateTracing(config)
+      setStartupLogConfig(config, { ...tracing, logs, metrics })
+      setStartupLogPluginManager(this._pluginManager)
+      startupLog()
 
       if (config.iast.DD_IAST_ENABLED) {
         this._modules.rewriter.enable(config)
@@ -409,8 +414,11 @@ class Tracer extends NoopProxy {
 
   /**
    * @param {import('./config/config-base')} config - Tracer configuration
+   * @returns {import('./opentelemetry/startup-config').Pipelines | undefined}
    */
   #updateTracing (config) {
+    /** @type {import('./opentelemetry/startup-config').Pipelines | undefined} */
+    let startupPipelines
     if (config.DD_TRACE_ENABLED !== false) {
       const aiguardEnabled = config.aiguard.DD_AI_GUARD_ENABLED === true &&
         config.DD_API_KEY !== undefined &&
@@ -430,6 +438,7 @@ class Tracer extends NoopProxy {
           ? require('./standalone').configure(config)
           : undefined
         this._tracer = new DatadogTracer(config, prioritySampler)
+        startupPipelines = this._tracer.getStartupConfig()
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
@@ -460,11 +469,10 @@ class Tracer extends NoopProxy {
       this._tracer.configure(config)
       this._pluginManager.configure(config)
       dynamicInstrumentation?.configure(config)
-      setStartupLogPluginManager(this._pluginManager)
-      startupLog()
     }
 
     initializeServerlessTelemetry(this._serverlessTelemetry)
+    return startupPipelines
   }
 
   /**

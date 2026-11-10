@@ -25,6 +25,7 @@ const { assertObjectContains, getCiVisAgentlessConfig } = require('../helpers')
 const {
   PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT,
   describePlaywrightTestManagement,
+  getUniqueOutputDir,
 } = require('./playwright-test-management')
 
 const ATF_MANAGEMENT_TESTS = {
@@ -82,6 +83,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
           cwd: runtime.cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
+            PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
             PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
           },
         }
@@ -330,6 +332,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
               cwd: runtime.cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
                 PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
@@ -460,6 +463,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
             cwd: runtime.cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
               PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-test-management',
             },
@@ -612,6 +616,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
             cwd: runtime.cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
               TEST_DIR: './ci-visibility/playwright-tests-test-management',
               SHOULD_ALWAYS_PASS: '1',
               SHOULD_INCLUDE_SKIPPED_TEST: '1',
@@ -659,6 +664,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
             cwd: runtime.cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
+              PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
               TEST_DIR: './ci-visibility/playwright-did-not-run',
               ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true',
             },
@@ -740,6 +746,7 @@ describePlaywrightTestManagement(({ contextNewVersions, it, runtime }) => {
           cwd: runtime.cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
+            PLAYWRIGHT_OUTPUT_DIR: getUniqueOutputDir('test-management-attempt-to-fix'),
             PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
             TEST_DIR: './ci-visibility/playwright-tests-test-management',
             DD_TRACE_DEBUG: '1',
