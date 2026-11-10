@@ -59,9 +59,7 @@ const SRC_FILES = [
 
 const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   '.mochamultireporterrc.js',
-  'ci/diagnose.js',
   'ci/init.js',
-  'ci/test-optimization-validation/command-runner.js',
   'ci/vitest-no-worker-init-setup.mjs',
   'nyc.config.js',
   'packages/datadog-esbuild/index.js',
@@ -70,7 +68,6 @@ const PROCESS_ENV_DISABLE_ALLOW_FILES = [
   'packages/datadog-instrumentations/src/mocha/main.js',
   'packages/datadog-instrumentations/src/vitest.js',
   'packages/datadog-webpack/src/log.js',
-  'packages/dd-trace/src/ci-visibility/exporters/ci-validation/index.js',
   'packages/dd-trace/src/ci-visibility/test-optimization-cache.js',
   'packages/dd-trace/src/ci-visibility/test-optimization-http-cache.js',
   'packages/dd-trace/src/config/helper.js',
