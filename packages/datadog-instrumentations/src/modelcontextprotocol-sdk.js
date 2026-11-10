@@ -4,11 +4,14 @@ const { tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, getHooks } = require('./helpers/instrument')
 
-for (const name of ['@modelcontextprotocol/sdk', '@modelcontextprotocol/client']) {
+for (const name of ['@modelcontextprotocol/sdk', '@modelcontextprotocol/client', '@modelcontextprotocol/server']) {
   for (const hook of getHooks(name).values()) {
     addHook(hook, exports => exports)
   }
 }
+
+// SDK 2.x servers are traced only through Orchestrion; their per-request state lives in its own module.
+require('./modelcontextprotocol-sdk/server')
 
 const serverRequestCh = tracingChannel('apm:mcp:server:request')
 const clientRequestInjectCh = channel('apm:mcp:client:request:inject')
@@ -267,7 +270,7 @@ addHook({
 
 // SDK 2.x clients bundle Protocol into a chunk file whose name changes with every release, and the client package
 // pattern already uses its one source marker for the Client chunk. The package entry re-exports Protocol, so hook it
-// instead. SDK 2.x servers are instrumented in modelcontextprotocol-server.js.
+// instead.
 addHook({ name: '@modelcontextprotocol/client', versions: ['>=2'] }, exports => {
   wrapProtocolRequest(exports.Protocol)
   return exports

@@ -1,14 +1,9 @@
 'use strict'
 
 // MCP TypeScript SDK 2.x server (`@modelcontextprotocol/server`). Orchestrion rewrites the SDK's bundled chunks (see
-// rewriter/instrumentations/modelcontextprotocol-server.js); this file keeps the per-request state those hooks share.
+// rewriter/instrumentations/modelcontextprotocol-sdk.js); this file keeps the per-request state those hooks share.
 
 const { tracingChannel } = require('dc-polyfill')
-const { addHook, getHooks } = require('./helpers/instrument')
-
-for (const hook of getHooks('@modelcontextprotocol/server').values()) {
-  addHook(hook, exports => exports)
-}
 
 const requestCh = tracingChannel('orchestrion:@modelcontextprotocol/server:Protocol__onrequest')
 const wrapHandlerCh = tracingChannel('orchestrion:@modelcontextprotocol/server:Server__wrapHandler')
@@ -72,22 +67,9 @@ wrapHandlerCh.end.subscribe(ctx => {
 
     requestCtx.handlerContext = handlerContext
 
-    let result
-    try {
-      result = handler.apply(this, arguments)
-    } catch (error) {
-      requestCtx.error = error
-      finishRequest(protocol, requestId)
-      throw error
-    }
-
-    if (typeof result?.then !== 'function') {
-      requestCtx.result = result
-      finishRequest(protocol, requestId)
-      return result
-    }
-
-    result.then(value => {
+    // Server._wrapHandler returns async handlers, so the outcome always arrives through the returned promise.
+    const result = handler.apply(this, arguments)
+    Promise.resolve(result).then(value => {
       requestCtx.result = value
       finishRequest(protocol, requestId)
     }, error => {

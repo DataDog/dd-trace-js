@@ -79,11 +79,8 @@ function formatServerInput (request) {
     params = hasKeptMeta ? { ...rest, _meta: keptMeta } : rest
   }
 
-  try {
-    return JSON.stringify({ method: request.method, params, jsonrpc: '2.0', id: request.id })
-  } catch {
-    return ''
-  }
+  // The request arrived as parsed JSON, so it always serializes again.
+  return JSON.stringify({ method: request.method, params, jsonrpc: '2.0', id: request.id })
 }
 
 /**

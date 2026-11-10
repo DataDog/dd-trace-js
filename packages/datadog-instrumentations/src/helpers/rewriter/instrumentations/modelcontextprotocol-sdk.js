@@ -50,8 +50,39 @@ const protocolEntries = ['dist/esm/shared/protocol.js', 'dist/cjs/shared/protoco
   channelName: 'Protocol__onclose',
 }))
 
+// SDK 2.x server chunk prefixes have stayed the same since 2.0: `src-` holds Protocol, and `mcp-` holds Server and
+// McpServer. Their per-request state lives in modelcontextprotocol-sdk/server.js.
+const V2_PROTOCOL_CHUNK = /^dist\/src-[\w-]+\.[cm]js$/
+const V2_SERVER_CHUNK = /^dist\/mcp-[\w-]+\.[cm]js$/
+
+/**
+ * @param {RegExp} filePath
+ * @param {string} sourceMatch
+ * @param {{ methodName: string, className: string, kind: 'Sync'|'Async' }} functionQuery
+ * @param {string} channelName
+ */
+function serverV2Entry (filePath, sourceMatch, functionQuery, channelName) {
+  return {
+    module: { name: '@modelcontextprotocol/server', versionRange: '>=2', filePath, sourceMatch },
+    functionQuery,
+    channelName,
+  }
+}
+
+const serverV2Entries = [
+  serverV2Entry(V2_PROTOCOL_CHUNK, 'var Protocol = class',
+    { methodName: '_onrequest', className: 'Protocol', kind: 'Sync' }, 'Protocol__onrequest'),
+  serverV2Entry(V2_PROTOCOL_CHUNK, 'var Protocol = class',
+    { methodName: '_onclose', className: 'Protocol', kind: 'Sync' }, 'Protocol__onclose'),
+  serverV2Entry(V2_SERVER_CHUNK, 'var McpServer = class',
+    { methodName: '_wrapHandler', className: 'Server', kind: 'Sync' }, 'Server__wrapHandler'),
+  serverV2Entry(V2_SERVER_CHUNK, 'var McpServer = class',
+    { methodName: 'executeToolHandler', className: 'McpServer', kind: 'Async' }, 'McpServer_executeToolHandler'),
+]
+
 module.exports = [
   ...CLIENT_METHODS.flatMap(clientEntries),
   ...SERVER_METHODS.flatMap(serverEntries),
   ...protocolEntries,
+  ...serverV2Entries,
 ]
