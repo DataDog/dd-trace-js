@@ -1782,12 +1782,13 @@ describe('sdk', () => {
       })
     })
 
-    it('keeps inherited experiment tags alongside tags from a nested context', () => {
+    it('keeps inherited experiment tags alongside, and authoritative over, tags from a nested context', () => {
       const experimentTags = { experiment_id: 'exp-1', run_id: 'run-1', run_iteration: 1 }
 
       llmobs.trace({ kind: 'experiment', name: 'task', _experimentTags: experimentTags }, () => {
         llmobs.trace({ kind: 'workflow', name: 'answer' }, () => {
-          llmobs.annotationContext({ tags: { team: 'ml' } }, () => {
+          // A colliding run_id must not reassign the span to another run.
+          llmobs.annotationContext({ tags: { team: 'ml', run_id: 'user-run' } }, () => {
             llmobs.trace({ kind: 'llm', name: 'call' }, span => {
               assertObjectContains(LLMObsTagger.tagMap.get(span), {
                 '_ml_obs.tags': { ...experimentTags, team: 'ml' },

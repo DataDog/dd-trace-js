@@ -183,20 +183,21 @@ class LLMObsTagger {
     this.#tagSamplingDecision(span, parent)
     this.#tagAgentAttribution(span, parent)
 
-    // Experiment context flows down the span tree, matching Python, which carries it on the span context.
-    // It stays out of annotationContext so a user's nested annotationContext({ tags }) cannot replace it.
-    const experimentTags = _experimentTags ?? registry.get(parent)?.[EXPERIMENT_TAGS]
-    if (experimentTags) {
-      this._setTag(span, EXPERIMENT_TAGS, experimentTags)
-      this.tagSpanTags(span, experimentTags)
-    }
-
     // apply annotation context
     const annotationContext = storage.getStore()?.annotationContext
 
     // apply annotation context tags
     const tags = annotationContext?.tags
     if (tags) this.tagSpanTags(span, tags)
+
+    // Experiment context flows down the span tree, matching Python, which carries it on the span context.
+    // It stays out of annotationContext and is applied after its tags, so a user's nested
+    // annotationContext({ tags }) can neither replace it nor reassign the span to another run.
+    const experimentTags = _experimentTags ?? registry.get(parent)?.[EXPERIMENT_TAGS]
+    if (experimentTags) {
+      this._setTag(span, EXPERIMENT_TAGS, experimentTags)
+      this.tagSpanTags(span, experimentTags)
+    }
 
     // apply after tags so only keys present at span start are accepted.
     if (annotationContext?.costTags != null) {
