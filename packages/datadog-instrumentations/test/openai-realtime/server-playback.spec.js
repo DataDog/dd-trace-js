@@ -332,8 +332,13 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
     })
   }
 
-  for (const unavailable of ['disabled', 'failed', 'exhausted']) {
-    it('releases transcription ownership when dispatch is ' + unavailable, () => {
+  const unavailableDispatch = [
+    ['disabled', false], ['failed', false], ['exhausted', false], ['failed', true], ['exhausted', true],
+  ]
+  for (const [unavailable, siblingDispatch] of unavailableDispatch) {
+    const title = 'releases transcription ownership when dispatch is ' + unavailable +
+      ' (sibling dispatch=' + siblingDispatch + ')'
+    it(title, () => {
       const h = harness({ retrieveAudio: unavailable !== 'disabled' })
       h.send({ type: 'session.updated', session: { input_audio_transcription: { model: 'whisper-1' } } })
       h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
@@ -353,12 +358,19 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
       }
       h.send({ type: 'response.created', response: { id: 'r1' } })
       h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+      if (siblingDispatch) {
+        h.send({ type: 'input_audio_buffer.committed', item_id: 'u2' })
+        h.send({ type: 'conversation.item.done', item: { id: 'u2', content: [{ type: 'input_audio' }] } })
+        h.send({ type: 'conversation.item.input_audio_transcription.failed', item_id: 'u2' })
+      }
       h.send({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u1', transcript: 'input' })
       assert.strictEqual(h.emitted.length, 0, 'leave the synchronous SDK handler time to send')
       h.clock.tick(0)
       assert.strictEqual(h.emitted.length, 1, 'no SDK request arrived, so release on the next immediate')
       assert.strictEqual(h.emitted[0].input.transcript, 'input')
-      assert.strictEqual(h.requests.length, unavailable === 'disabled' ? 0 : unavailable === 'failed' ? 1 : 2)
+      const priorRequests = unavailable === 'disabled' ? 0 : unavailable === 'failed' ? 1 : 2
+      assert.strictEqual(h.requests.length, priorRequests + Number(siblingDispatch))
+      if (siblingDispatch) assert.strictEqual(h.requests.at(-1).itemId, 'u2')
       h.clock.tick(10000)
       assert.strictEqual(h.emitted.length, 1)
       h.session.finishSession(h.clock.now)
