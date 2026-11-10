@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
-const { register } = require('node:module')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
@@ -11,7 +10,7 @@ const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
-register('../../../loader-hook.mjs', pathToFileURL(__filename))
+require('../../../register')
 
 /**
  * @template T

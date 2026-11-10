@@ -34,9 +34,11 @@ describe('postgres native diagnostics', () => {
         const messages = []
         agent.on('message', message => messages.push(message))
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(
+        const completed = spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(), 'native.mjs', agent.port, { DD_DBM_PROPAGATION_MODE: mode }
         )
+        proc = completed.proc
+        await completed
 
         const spans = messages.flatMap(({ payload }) => Array.isArray(payload) ? payload.flat() : [])
           .filter(span => span.meta?.component === 'postgres')

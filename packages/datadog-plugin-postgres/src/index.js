@@ -13,7 +13,7 @@ const PREPARE_START_CHANNEL = 'tracing:orchestrion:postgres:query:prepare:start'
 
 /**
  * @typedef {object} PostgresContext
- * @property {{ span: import('../../..').Span }} currentStore
+ * @property {PostgresStore} currentStore
  * @property {string} database
  * @property {unknown} [error]
  * @property {string} [host]
@@ -25,22 +25,23 @@ const PREPARE_START_CHANNEL = 'tracing:orchestrion:postgres:query:prepare:start'
  * @property {string} [statement]
  * @property {string} user
  *
- * @typedef {object} PostgresDbmState
- * @property {string} service
+ * @typedef {object} PostgresStore
+ * @property {import('../../..').Span} span
+ * @property {string} [dbmService]
  * @property {string} [statement]
  *
  * @typedef {object} PostgresPreparationContext
  * @property {string} [host]
  * @property {number} [port]
  * @property {boolean} prepared
- * @property {PostgresQuery} query
+ * @property {PostgresQuery | NativePostgresContext} query
  * @property {string} [resource]
  * @property {string} statement
  *
  * @typedef {object} PostgresQuery
  *
  * @typedef {object} NativePostgresContext
- * @property {{ span: import('../../..').Span }} currentStore
+ * @property {PostgresStore} [currentStore]
  * @property {string} database
  * @property {Error} [error]
  * @property {string | null} host
@@ -73,20 +74,14 @@ class PostgresPlugin extends DatabasePlugin {
   /** @type {boolean} */
   #dbmEnabled = false
 
-  /** @type {WeakMap<PostgresQuery, PostgresDbmState>} */
-  #dbmQueries = new WeakMap()
+  /** @type {WeakMap<PostgresQuery, PostgresContext>} */
+  #contexts = new WeakMap()
 
   /** @type {PostgresPreparationPlugin} */
   #preparation
 
   /** @type {{ name: string, source: string | undefined }} */
   #service
-
-  /** @type {WeakMap<PostgresQuery, import('../../..').Span>} */
-  #spans = new WeakMap()
-
-  /** @type {WeakMap<PostgresQuery, PostgresContext>} */
-  #waitContexts = new WeakMap()
 
   /**
    * @param {object} tracer
@@ -96,7 +91,9 @@ class PostgresPlugin extends DatabasePlugin {
     super(tracer, tracerConfig)
     this.addSub(ACQUIRE_START_CHANNEL, ctx => this.#finishPoolWait(ctx.query))
     this.addBind('tracing:postgres:query:start', ctx => this.#nativeStart(ctx))
-    this.addSub('tracing:postgres:query:error', ctx => this.error({ query: ctx, error: ctx.error }))
+    this.addSub('tracing:postgres:query:error', ctx => {
+      if (ctx.currentStore) this.addError(ctx.error, ctx.currentStore.span)
+    })
     this.addSub('tracing:postgres:query:asyncEnd', ctx => this.#nativeEnd(ctx))
     this.#preparation = new PostgresPreparationPlugin(this.#prepare.bind(this), tracer, tracerConfig)
   }
@@ -119,15 +116,14 @@ class PostgresPlugin extends DatabasePlugin {
    * @returns {object}
    */
   bindStart (ctx) {
-    this.#waitContexts.set(ctx.query, ctx)
-    return this.#start(ctx, ctx.query)
+    this.#contexts.set(ctx.query, ctx)
+    return this.#start(ctx)
   }
 
   /**
    * @param {PostgresContext | NativePostgresContext} ctx
-   * @param {PostgresQuery} query
    */
-  #start (ctx, query) {
+  #start (ctx) {
     const { database, host, port, user } = ctx
     const service = this.#service
 
@@ -149,10 +145,7 @@ class PostgresPlugin extends DatabasePlugin {
       })
     }
 
-    this.#spans.set(query, span)
-    if (this.#dbmEnabled) {
-      this.#dbmQueries.set(query, { service: service.name })
-    }
+    if (this.#dbmEnabled) ctx.currentStore.dbmService = service.name
     return ctx.currentStore
   }
 
@@ -160,7 +153,7 @@ class PostgresPlugin extends DatabasePlugin {
    * @param {NativePostgresContext} ctx
    */
   #nativeStart (ctx) {
-    const store = this.#start(ctx, ctx)
+    const store = this.#start(ctx)
     if (typeof ctx.query === 'string') {
       store.span.setTag('resource.name', this.maybeTruncate(ctx.query))
     }
@@ -171,14 +164,19 @@ class PostgresPlugin extends DatabasePlugin {
    * @param {NativePostgresContext} ctx
    */
   #nativeEnd (ctx) {
+    if (ctx.currentStore === undefined) return
+
     const stream = ctx.result
     if (stream instanceof Readable || stream instanceof Writable) {
+      let finished = false
       const finish = error => {
+        if (finished) return
+        finished = true
         stream.removeListener('end', finish)
         stream.removeListener('finish', finish)
         stream.removeListener('close', finish)
         stream.removeListener(errorMonitor, finish)
-        if (error) this.error({ query: ctx, error })
+        if (error) this.addError(error, ctx.currentStore.span)
         this.#finishNative(ctx)
       }
       stream.once(errorMonitor, finish)
@@ -193,24 +191,27 @@ class PostgresPlugin extends DatabasePlugin {
    * @param {NativePostgresContext} ctx
    */
   #finishNative (ctx) {
-    const span = this.#spans.get(ctx)
-    if (span === undefined) return
+    const store = ctx.currentStore
+    if (store === undefined) return
+    const { span } = store
 
     if (ctx.host !== null) {
       span.addTags({ 'out.host': ctx.host, [CLIENT_PORT_KEY]: ctx.port })
     }
     span.setTag('db.pool.wait_time_ms', ctx.sent === null ? 0 : ctx.sent - ctx.queued)
-    this.#end(ctx, ctx.query)
+    if (store.statement === undefined && typeof ctx.query === 'string') {
+      span.setTag('resource.name', this.maybeTruncate(ctx.query))
+    }
+    this.finish(ctx)
   }
 
   /**
    * @param {PostgresQuery} query
    */
   #finishPoolWait (query) {
-    const ctx = this.#waitContexts.get(query)
-    if (ctx === undefined) return
+    const ctx = this.#contexts.get(query)
+    if (ctx === undefined || ctx.poolWaitFinished) return
 
-    this.#waitContexts.delete(query)
     ctx.poolWaitFinished = true
     const waitTime = ctx.poolWaitStartMs === undefined ? 0 : performance.now() - ctx.poolWaitStartMs
     ctx.currentStore.span.setTag('db.pool.wait_time_ms', waitTime)
@@ -220,23 +221,23 @@ class PostgresPlugin extends DatabasePlugin {
    * @param {PostgresPreparationContext} ctx
    */
   #prepare (ctx) {
-    const state = this.#dbmQueries.get(ctx.query)
-    const span = this.#spans.get(ctx.query)
-    if (state === undefined || span === undefined) return
+    const store = ctx.query.currentStore ?? this.#contexts.get(ctx.query)?.currentStore
+    if (store?.dbmService === undefined) return
+    const { span } = store
 
-    state.statement = ctx.resource ?? ctx.statement
-    span.setTag('resource.name', this.maybeTruncate(state.statement))
+    store.statement = ctx.resource ?? ctx.statement
+    span.setTag('resource.name', this.maybeTruncate(store.statement))
     if (ctx.host !== undefined) {
       span.addTags({ 'out.host': ctx.host, [CLIENT_PORT_KEY]: ctx.port })
     }
-    ctx.statement = this.injectDbmQuery(span, ctx.statement, state.service, ctx.prepared)
+    ctx.statement = this.injectDbmQuery(span, ctx.statement, store.dbmService, ctx.prepared)
   }
 
   /**
    * @param {Pick<PostgresContext, 'query' | 'error'>} ctx
    */
   error (ctx) {
-    const span = this.#spans.get(ctx.query)
+    const span = this.#contexts.get(ctx.query)?.currentStore.span
     if (span !== undefined) {
       this.addError(ctx.error, span)
     }
@@ -246,30 +247,20 @@ class PostgresPlugin extends DatabasePlugin {
    * @param {PostgresContext} result
    */
   asyncEnd (result) {
-    this.#end(result.query, result.statement, result.pid)
-  }
-
-  /**
-   * @param {PostgresQuery} query
-   * @param {string | null | undefined} statement
-   * @param {number} [pid]
-   */
-  #end (query, statement, pid) {
-    const dbmState = this.#dbmQueries.get(query)
-    const span = this.#spans.get(query)
-
-    this.#dbmQueries.delete(query)
-    if (span === undefined) return
+    const { query, statement, pid } = result
+    const ctx = this.#contexts.get(query)
+    if (ctx === undefined) return
+    const { currentStore: { span, statement: originalStatement } } = ctx
 
     this.#finishPoolWait(query)
-    this.#spans.delete(query)
+    this.#contexts.delete(query)
 
-    if (dbmState?.statement === undefined && typeof statement === 'string') {
+    if (originalStatement === undefined && typeof statement === 'string') {
       span.setTag('resource.name', this.maybeTruncate(statement))
     }
 
     span.setTag('db.pid', pid)
-    this.finish({ currentStore: { span } })
+    this.finish(ctx)
   }
 }
 

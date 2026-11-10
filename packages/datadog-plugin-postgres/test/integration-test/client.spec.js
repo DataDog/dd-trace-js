@@ -51,12 +51,14 @@ describe('esm', () => {
           assert.ok(querySpan.metrics['db.pool.wait_time_ms'] > 0)
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(
+        const completed = spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           variants[variant],
           agent.port,
           { DD_DBM_PROPAGATION_MODE: 'service' }
         )
+        proc = completed.proc
+        await completed
 
         await traceReceived
       }).timeout(20000)
@@ -69,7 +71,7 @@ describe('esm', () => {
       agent.on('message', onMessage)
 
       try {
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(
+        const completed = spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           native ? 'native.mjs' : 'partial-rewrite.cjs',
           agent.port,
@@ -80,6 +82,8 @@ describe('esm', () => {
               : '--require=./preload-query.cjs',
           }
         )
+        proc = completed.proc
+        await completed
       } finally {
         agent.removeListener('message', onMessage)
       }
