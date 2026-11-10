@@ -481,13 +481,16 @@ Any error from the awaited handler will automatically be added to the span.
 
 Tag values may be strings, numbers, booleans, `Buffer` or `URL` instances, or flat objects containing those
 values. Flat objects are expanded by one level, so `{ tags: { request: { method: 'GET' } } }` produces the
-`request.method` tag. `Error` and error-shaped values are also supported for the `error` tag.
+`request.method` tag. Numeric typed arrays are expanded into indexed tags, such as `payload.0`.
+Objects, class instances, and functions contribute their own enumerable properties.
 
-Arrays, nested objects, functions, symbols, bigint values, nullish values, typed arrays other than `Buffer`, and
-other built-in object types are not supported. Reserved tags use narrower values: service, resource, span type,
-span kind, and error metadata tags require strings; manual sampling and analytics event tags require booleans;
-`sampling.priority` requires a number; `http.status_code` accepts a string or number; and `error` accepts boolean
-or numeric flags, `Error` instances, and error-shaped objects.
+For ordinary tags, arrays, symbols, bigint values, nullish values, and object fields beyond the first level are omitted.
+`service.name`, `resource.name`, and `span.type` accept strings. Error metadata tags and `http.status_code` also accept
+primitive values, `Buffer`, and `URL` instances for text conversion; nullish metadata and falsy status values are omitted.
+The `error` tag accepts flags, `Error` instances, and error-shaped values.
+
+Manual sampling tags request a decision for any own value except `false`. Analytics event tags accept flags,
+including numeric values. `sampling.priority` accepts numbers and numeric strings.
 
 <h3 id="recording-handled-exceptions">Recording handled exceptions</h3>
 
