@@ -183,8 +183,7 @@ interface Tracer extends opentracing.Tracer {
   wrap<T = (...args: any[]) => any, Options extends TraceOptionsBase = tracer.TraceOptions & tracer.SpanOptions> (
     name: string,
     ...args: [options: Options, fn: T] &
-      NoInferSpanTags<[options: tracer.TraceOptions & SpanOptionsInput<Options> &
-        (Options extends (...args: never[]) => unknown ? never : unknown), fn: T]>
+      NoInferSpanTags<[options: tracer.TraceOptions & SpanOptionsInput<Options>, fn: T]>
   ): T;
   wrap<T = (...args: any[]) => any, Options extends TraceOptionsBase = tracer.TraceOptions & tracer.SpanOptions> (
     name: string,
