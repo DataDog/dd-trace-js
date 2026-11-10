@@ -49,7 +49,17 @@ function harness ({ retain = true } = {}) {
       content: [{ type: 'output_audio', format: 'pcm16', audio: Buffer.alloc(bytes, sample).toString('base64') }],
     },
   })
-  return { clock, session, send, start, retrieve, requests, emitted, item }
+  const retrieveInput = (id, bytes = 48000, transcript = '', status = 'completed') => send({
+    type: 'conversation.item.retrieved',
+    item: {
+      id,
+      type: 'message',
+      role: 'user',
+      status,
+      content: [{ type: 'input_audio', format: 'pcm16', audio: Buffer.alloc(bytes, 1).toString('base64'), transcript }],
+    },
+  })
+  return { clock, session, send, start, retrieve, retrieveInput, requests, emitted, item }
 }
 
 describe('OpenAI server-owned playback lifecycle edges', () => {
@@ -80,6 +90,281 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
     assert.strictEqual(h.emitted.length, 1)
     assert.strictEqual(h.emitted[0].agentSpeech, undefined)
     assert.strictEqual(h.emitted[0].output.audio.length, 0, 'playback was never observed complete')
+  })
+
+  for (const status of ['completed', 'in_progress', undefined]) {
+    it('reuses only completed retrieved snapshots before response.done (status=' + status + ')', () => {
+      const h = harness()
+      h.send({ type: 'response.created', response: { id: 'r1', conversation_id: 'conversation' } })
+      h.send({ type: 'response.output_item.added', response_id: 'r1', item: h.item('a1', 'in_progress') })
+      h.send({ type: 'output_audio_buffer.started', response_id: 'r1' })
+      h.session.onClientEvent({ type: 'conversation.item.retrieve', item_id: 'a1' }, h.clock.now)
+      h.send({
+        type: 'conversation.item.retrieved',
+        item: {
+          ...h.item('a1'),
+          status,
+          content: [{ type: 'output_audio', format: 'pcm16', audio: Buffer.alloc(48000).toString('base64') }],
+        },
+      })
+      h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [h.item('a1')] } })
+      h.clock.tick(0)
+      assert.strictEqual(h.requests.length, status === 'completed' ? 0 : 1)
+      if (status !== 'completed') h.retrieve('a1')
+      h.clock.tick(1000)
+      h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+      assert.strictEqual(h.emitted.length, 1)
+      assert.strictEqual(h.emitted[0].output.audio.length, 48000)
+    })
+  }
+
+  it('refetches a completed snapshot when a later expected audio part is missing', () => {
+    const h = harness()
+    h.start()
+    h.retrieve('a1')
+    const message = h.item('a1')
+    message.content.push({ type: 'output_audio', transcript: 'second part' })
+    const before = h.requests.length
+    h.send({ type: 'response.output_item.done', response_id: 'r1', item: message })
+    h.clock.tick(0)
+    assert.strictEqual(h.requests.length, before + 1)
+    h.session.finishSession(h.clock.now)
+  })
+
+  it('bounds the decoded cache before allocation and recovers after a turn releases capacity', () => {
+    const h = harness()
+    const decode = sinon.spy(Buffer, 'allocUnsafeSlow')
+    for (let i = 0; i < 4; i++) {
+      h.start('r' + i, ['a' + i], i === 0)
+      h.retrieve('a' + i, LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+    }
+    assert.strictEqual(decode.callCount, 4)
+    assert.ok(decode.getCalls().every(call => call.args[0] === LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES))
+    h.start('overflow', ['overflow-audio'], false)
+    h.retrieve('overflow-audio', 2)
+    assert.strictEqual(decode.callCount, 4, 'the first PCM sample beyond 12 MiB must not allocate')
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r0' })
+    h.session.onClientEvent({ type: 'conversation.item.retrieve', item_id: 'overflow-audio' }, h.clock.now)
+    h.retrieve('overflow-audio', 2)
+    assert.strictEqual(decode.callCount, 5)
+    h.send({ type: 'output_audio_buffer.started', response_id: 'overflow' })
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'overflow' })
+    assert.strictEqual(h.emitted.at(-1).output.audio.length, 2)
+    assert.strictEqual(h.emitted.at(-1).output.audioPresent, true)
+  })
+
+  it('shares the cache budget across caller and agent audio', () => {
+    const h = harness()
+    const decode = sinon.spy(Buffer, 'allocUnsafeSlow')
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+    h.retrieveInput('u1', LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+    for (let i = 0; i < 3; i++) {
+      h.start('r' + i, ['a' + i], i === 0)
+      h.retrieve('a' + i, LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+    }
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u2' })
+    h.retrieveInput('u2', 2)
+    assert.strictEqual(decode.callCount, 4)
+    h.session.finishSession(h.clock.now)
+  })
+
+  it('cancels a superseded input wait rather than retaining its timer', () => {
+    const h = harness()
+    h.send({ type: 'session.updated', session: { input_audio_transcription: { model: 'whisper-1' } } })
+    const commit = id => {
+      h.send({ type: 'input_audio_buffer.committed', item_id: id })
+      h.send({ type: 'conversation.item.done', item: { id, role: 'user', content: [{ type: 'input_audio' }] } })
+    }
+    commit('u1')
+    assert.strictEqual(h.clock.countTimers(), 1)
+    h.clock.tick(1000)
+    commit('u2')
+    assert.strictEqual(h.clock.countTimers(), 1)
+    h.clock.tick(1501)
+    assert.strictEqual(h.requests.length, 0)
+    h.clock.tick(1000)
+    assert.deepStrictEqual(h.requests.map(request => request.itemId), ['u2'])
+    h.session.finishSession(h.clock.now)
+    assert.strictEqual(h.clock.countTimers(), 0)
+  })
+
+  it('charges the original backing allocation after truncation shortens a view', () => {
+    const h = harness()
+    const decode = sinon.spy(Buffer, 'allocUnsafeSlow')
+    for (let i = 0; i < 4; i++) {
+      h.start('r' + i, ['a' + i], i === 0)
+      h.retrieve('a' + i, LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+    }
+    h.send({ type: 'conversation.item.truncated', item_id: 'a0', content_index: 0, audio_end_ms: 1 })
+    h.start('overflow', ['overflow-audio'], false)
+    h.retrieve('overflow-audio', 2)
+    assert.strictEqual(decode.callCount, 4, 'a 48-byte view still retains its full 3 MiB backing store')
+    h.session.finishSession(h.clock.now)
+  })
+
+  it('releases replacement backing before admitting a fresh full-budget snapshot', () => {
+    const h = harness()
+    const decode = sinon.spy(Buffer, 'allocUnsafeSlow')
+    for (let i = 0; i < 4; i++) {
+      h.start('r' + i, ['a' + i], i === 0)
+      h.retrieve('a' + i, LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+    }
+    h.retrieve('a0', LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES, 2)
+    assert.strictEqual(decode.callCount, 5)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r0' })
+    assert.strictEqual(h.emitted[0].output.audio[0], 2)
+    h.session.finishSession(h.clock.now)
+  })
+
+  it('drops a whole logical clip when session pressure prevents another part', () => {
+    const h = harness()
+    for (let i = 0; i < 3; i++) {
+      h.start('r' + i, ['a' + i], i === 0)
+      h.retrieve('a' + i, LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+    }
+    h.start('multipart', ['m1', 'm2'], false)
+    h.retrieve('m1', LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES / 2)
+    h.start('other', ['other-audio'], false)
+    h.retrieve('other-audio', LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES / 2)
+    const decode = sinon.spy(Buffer, 'allocUnsafeSlow')
+    h.retrieve('m2', 2)
+    assert.strictEqual(decode.callCount, 0)
+    h.send({ type: 'output_audio_buffer.started', response_id: 'multipart' })
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'multipart' })
+    const turn = h.emitted.find(turn => turn.agentSpeech?.startTime !== undefined && turn.output.audio.length === 0)
+    assert.ok(turn, 'pressure must keep a marker rather than attach the retained prefix')
+    assert.strictEqual(turn.output.audioPresent, true)
+    assert.strictEqual(turn.output.transcript, 'synthetic output')
+    h.session.finishSession(h.clock.now)
+  })
+
+  it('releases orphan input buffers when item pressure retires an untracked turn', () => {
+    const h = harness()
+    for (let i = 0; i < 16; i++) {
+      h.send({ type: 'response.created', response: { id: 'generating-' + i, conversation_id: null } })
+    }
+    h.clock.tick(70000)
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'orphan' })
+    h.retrieveInput('orphan', LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+    h.send({ type: 'response.created', response: { id: 'overflow' } })
+    for (let i = 0; i < 256; i++) {
+      h.send({ type: 'response.output_item.added', response_id: 'generating-0', item: h.item('a-' + i, 'in_progress') })
+    }
+    h.send({ type: 'response.done', response: { id: 'overflow', status: 'completed', output: [] } })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].input.audio.length, 0)
+    assert.strictEqual(h.emitted[0].input.audioPresent, true)
+    h.session.finishSession(h.clock.now)
+  })
+
+  it('does not refetch its own completed audio while later output is still generating', () => {
+    const h = harness()
+    h.send({ type: 'response.created', response: { id: 'r1' } })
+    h.send({ type: 'output_audio_buffer.started', response_id: 'r1' })
+    h.send({ type: 'response.output_item.done', response_id: 'r1', item: h.item('a1') })
+    h.clock.tick(0)
+    assert.strictEqual(h.requests.length, 1)
+    h.retrieve('a1')
+    h.send({
+      type: 'response.done',
+      response: {
+        id: 'r1',
+        status: 'completed',
+        output: [h.item('a1'),
+          { id: 'f1', type: 'function_call', call_id: 'call1', name: 'check_availability', arguments: '{}' }],
+      },
+    })
+    h.clock.tick(0)
+    assert.strictEqual(h.requests.length, 1)
+    h.clock.tick(1000)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].output.audio.length, 48000)
+    assert.strictEqual(h.emitted[0].output.toolCalls[0].name, 'check_availability')
+  })
+
+  it('never exposes unwritten bytes from malformed base64', () => {
+    const h = harness()
+    h.start()
+    h.send({
+      type: 'conversation.item.retrieved',
+      item: { ...h.item('a1'), content: [{ type: 'output_audio', format: 'pcm16', audio: '!!!!' }] },
+    })
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].output.audio.length, 0)
+    assert.strictEqual(h.emitted[0].output.audioPresent, true)
+  })
+
+  for (const terminal of ['completed', 'failed', 'timeout', 'close']) {
+    it('prefers SDK input retrieval with a bounded ' + terminal + ' path', () => {
+      const h = harness()
+      h.send({ type: 'session.updated', session: { input_audio_transcription: { model: 'whisper-1' } } })
+      h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+      h.send({ type: 'conversation.item.done', item: { id: 'u1', role: 'user', content: [{ type: 'input_audio' }] } })
+      h.clock.tick(2499)
+      assert.strictEqual(h.requests.length, 0)
+      if (terminal === 'close') {
+        h.session.finishSession(h.clock.now)
+        h.clock.tick(10000)
+        assert.strictEqual(h.requests.length, 0)
+        return
+      }
+      if (terminal !== 'timeout') {
+        h.send({ type: 'conversation.item.input_audio_transcription.' + terminal, item_id: 'u1', transcript: 'input' })
+        if (terminal === 'completed') {
+          h.session.onClientEvent({ type: 'conversation.item.retrieve', item_id: 'u1' }, h.clock.now)
+        }
+      }
+      h.clock.tick(1)
+      if (terminal === 'timeout') {
+        assert.strictEqual(h.requests.length, 0, 'fallback dispatch runs on the next immediate')
+        h.clock.tick(1)
+      }
+      assert.strictEqual(h.requests.length, terminal === 'completed' ? 0 : 1)
+      h.retrieveInput('u1', 48000, 'input')
+      h.send({ type: 'response.created', response: { id: 'r1' } })
+      h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+      assert.strictEqual(h.emitted.length, 1)
+      assert.strictEqual(h.emitted[0].input.audio.length, 48000)
+      h.clock.tick(10000)
+      assert.strictEqual(h.requests.length, terminal === 'completed' ? 0 : 1)
+    })
+  }
+
+  it('keeps deferred caller retrieval out of another item dispatch batch', () => {
+    const h = harness()
+    h.send({ type: 'session.updated', session: { input_audio_transcription: { model: 'whisper-1' } } })
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+    h.send({ type: 'conversation.item.done', item: { id: 'u1', role: 'user', content: [{ type: 'input_audio' }] } })
+    h.start()
+    assert.deepStrictEqual(h.requests.map(request => request.itemId), ['a1'])
+    h.send({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u1', transcript: 'input' })
+    h.session.onClientEvent({ type: 'conversation.item.retrieve', item_id: 'u1' }, h.clock.now)
+    h.retrieveInput('u1', 48000, 'input')
+    h.retrieve('a1')
+    h.clock.tick(1000)
+    h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].input.audio.length, 48000)
+    assert.deepStrictEqual(h.requests.map(request => request.itemId), ['a1'])
+  })
+
+  it('keeps caller timing stable when the agent audio is truncated', () => {
+    const h = harness()
+    h.clock.tick(1000)
+    h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+    h.retrieveInput('u1')
+    h.start()
+    h.retrieve('a1', 96000)
+    h.clock.tick(500)
+    h.send({ type: 'output_audio_buffer.cleared', response_id: 'r1' })
+    h.send({ type: 'conversation.item.truncated', item_id: 'a1', content_index: 0, audio_end_ms: 500 })
+    assert.strictEqual(h.emitted.length, 1)
+    assert.strictEqual(h.emitted[0].userSpeech.startTime, 1000000)
+    assert.strictEqual(h.emitted[0].userSpeech.finishTime, 1001000)
+    assert.strictEqual(h.emitted[0].agentSpeech.finishTime, 1001500)
+    assert.strictEqual(h.emitted[0].output.audio.length, 24000)
   })
 
   it('falls back without audio when a retrieval command is rejected', () => {
@@ -256,6 +541,7 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
     const h = harness()
     h.send({ type: 'session.updated', session: { input_audio_transcription: { model: 'whisper-1' } } })
     h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+    h.retrieveInput('u1')
     h.start('r1', ['a1'])
     h.start('r2', ['a2'], false)
     h.retrieve('a1')
@@ -639,7 +925,7 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
   it('evicts a completed turn before an older turn still generating', () => {
     const h = harness()
     h.send({ type: 'response.created', response: { id: 'generating' } })
-    for (let i = 0; i < 127; i++) h.start('held-' + i, ['audio-' + i], false)
+    for (let i = 0; i < 15; i++) h.start('held-' + i, ['audio-' + i], false)
     assert.strictEqual(h.emitted.length, 0)
     h.start('newest', ['audio-newest'], false)
     assert.strictEqual(h.emitted.length, 1)
@@ -955,10 +1241,10 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
       const part = bytes => ({ type: 'output_audio', format: 'pcm16', audio: Buffer.alloc(bytes).toString('base64') })
       const content = [part(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES / 2),
         part(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES / 2 + extra)]
-      const decode = sinon.spy(Buffer, 'from')
+      const decode = sinon.spy(Buffer, 'allocUnsafeSlow')
       h.send({ type: 'conversation.item.retrieved', item: { ...h.item('a1'), content } })
       h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
-      assert.strictEqual(decode.getCalls().filter(call => call.args[1] === 'base64').length, extra ? 0 : 2)
+      assert.strictEqual(decode.callCount, extra ? 0 : 2)
       assert.strictEqual(h.emitted.length, 1)
       assert.strictEqual(h.emitted[0].output.audio.length, extra ? 0 : LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
       assert.strictEqual(h.emitted[0].output.audioPresent, true)
@@ -970,7 +1256,7 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
     h.start('r1', ['a1', 'a2'])
     h.retrieve('a1', LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
     const audio = Buffer.alloc(1).toString('base64')
-    const decode = sinon.spy(Buffer, 'from')
+    const decode = sinon.spy(Buffer, 'allocUnsafeSlow')
     h.send({
       type: 'conversation.item.retrieved',
       item: {
@@ -978,7 +1264,7 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
       },
     })
     h.send({ type: 'output_audio_buffer.stopped', response_id: 'r1' })
-    assert.strictEqual(decode.getCalls().filter(call => call.args[1] === 'base64').length, 0)
+    assert.strictEqual(decode.callCount, 0)
     assert.strictEqual(h.emitted[0].output.audio.length, 0)
     assert.strictEqual(h.emitted[0].output.audioPresent, true)
   })
@@ -1127,16 +1413,12 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
     h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
     h.send({ type: 'response.created', response: { id: 'r1' } })
     h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
-    h.send({
-      type: 'conversation.item.retrieved',
-      item: {
-        id: 'u1', role: 'user', content: [{ type: 'input_audio', transcript: '' }],
-      },
-    })
+    h.retrieveInput('u1', 24000)
     assert.strictEqual(h.emitted.length, 0)
     h.send({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u1', transcript: 'ASR' })
     assert.strictEqual(h.emitted.length, 1)
     assert.strictEqual(h.emitted[0].input.transcript, 'ASR')
+    assert.strictEqual(h.emitted[0].input.audio.length, 24000)
   })
 
   it('subtracts replaced audio parts from the decode budget', () => {

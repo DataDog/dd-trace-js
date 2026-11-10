@@ -57,19 +57,18 @@ function listen (ctx) {
 
 /** @param {object} ctx */
 function connect (ctx) {
-  if (!turnChannel.start.hasSubscribers) return
   try {
+    const options = ctx.arguments?.[0] || {}
+    if (options.url) ctx.realtimeDefaultUrl = connectionOptions(options.url)
+    if (!turnChannel.start.hasSubscribers) return
     listen(ctx)
     const transport = ctx.self
-    const options = ctx.arguments?.[0] || {}
     const previous = records.get(transport)
     if (previous && !previous.closed && !previous.detached) return
     // Match the SDK's precedence. An explicit URL wins even when callId is also supplied.
-    const effective = options.url
-      ? connectionOptions(options.url)
-      : options.callId
-        ? connectionOptions('wss://api.openai.com/v1/realtime?call_id=' + options.callId)
-        : defaultUrls.get(transport) || connectionOptions('wss://api.openai.com/v1/realtime')
+    const effective = ctx.realtimeDefaultUrl ?? (options.callId
+      ? connectionOptions('wss://api.openai.com/v1/realtime?call_id=' + options.callId)
+      : defaultUrls.get(transport) || connectionOptions('wss://api.openai.com/v1/realtime'))
     const retrieveAudio = getValueFromEnvSources('DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED') !== false
     const connection = createSession({
       model: options.model ?? transport.currentModel,
@@ -96,7 +95,6 @@ function connect (ctx) {
     }
     records.set(transport, record)
     ctx.realtimeConnection = record
-    if (options.url) ctx.realtimeDefaultUrl = effective
   } catch (error) {
     log.debug('Error starting Agents realtime instrumentation: %s', error?.message)
   }
@@ -105,10 +103,11 @@ function connect (ctx) {
 /** @param {object} ctx */
 function connected (ctx) {
   try {
+    if (ctx.error) return
+    // The SDK retains successful URL overrides even while tracing is disabled.
+    if (ctx.realtimeDefaultUrl) defaultUrls.set(ctx.self, ctx.realtimeDefaultUrl)
     const record = ctx.realtimeConnection
     if (record && !record.closed) {
-      // A rejected connect restores the SDK's previous default, so only remember successful changes.
-      if (ctx.realtimeDefaultUrl) defaultUrls.set(ctx.self, ctx.realtimeDefaultUrl)
       attachSocketClose({ socket: ctx.self.connectionState?.websocket }, record.finalize)
     }
   } catch (error) {

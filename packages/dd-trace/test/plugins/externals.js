@@ -590,7 +590,7 @@ module.exports = {
   openai: [
     {
       name: '@openai/agents-realtime',
-      versions: ['0.20.0', '0.21.0'],
+      versions: ['>=0.20.0'],
       node: '>=22',
     },
     {

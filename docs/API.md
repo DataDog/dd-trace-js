@@ -292,7 +292,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="nyc"></h5>
 <h5 id="openai"></h5>
 
-OpenAI Realtime tracing also recognizes `@openai/agents-realtime` 0.20.x–0.21.x
+OpenAI Realtime tracing also recognizes `@openai/agents-realtime` >=0.20.0
 (WebSocket and SIP/`call_id` sideband connections), including URLs supplied to
 the transport constructor or connect options. It uses the `openai` plugin
 configuration and `DD_OPENAI_REALTIME_ENABLED` switch. Each response retains the
@@ -310,12 +310,20 @@ When LLM Observability consumes audio, Agents SDK sideband connections using
 `call_id` can request stored conversation items to retrieve audio carried over SIP
 or WebRTC. `DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED` defaults to
 `true`. Set it to `false` before connecting to disable these tracer-issued
-sideband retrievals. This setting preserves streamed audio capture on ordinary
+sideband retrievals. The switch is resolved from environment and
+stable configuration when connecting; existing connections keep their setting. This setting preserves streamed audio capture on ordinary
 Realtime WebSocket connections, passive capture of audio already received, and
 SDK/application retrieval requests. Realtime timing, transcripts, tools, and usage
-also remain enabled. Errors for tracer-owned retrieval requests stay internal; SDK
+also remain enabled. Errors linked to tracer-owned request IDs stay internal; SDK
 and application request errors retain their normal behavior. Retrieval is bounded
 and falls back to transcripts when unavailable, incomplete, or too large.
+The shared decoded retrieval cache is limited to 12 MiB per connection, with at
+most 16 tracked playback turns and a 3 MiB limit per input/output clip. The cache
+budget includes retained backing allocations of shortened clips; SDK history,
+encoded messages, conversion buffers, and emitted consumers have separate ownership.
+Transcribed input gives the SDK its first retrieval opportunity, with a bounded
+fallback when transcription is delayed or fails. Completed cached snapshots are
+reused; missing or unfinished content can still require a fresh request.
 Interrupted items honor the server truncation boundary. Successful retrievals use
 the SDK's shared transport, so application listeners can receive additional
 `conversation.item.retrieved` and SDK history-update events, including the retrieved
@@ -336,6 +344,8 @@ recordings retain the timing fallback. Interrupted windows without per-response
 boundaries are not reconstructed. ESM applications must register the tracer loader
 before importing the SDK. This path is tested with SDK 0.20.0 and 0.21.0 using
 CJS/ESM protocol replays, plus live WebRTC/SIP sideband calls on SDK 0.20.0.
+The dependency test matrix includes the supported floor and latest pinned SDK
+versions, so automated pin updates exercise hook matching and request observation.
 Playback with missing per-response start events remains a live validation gap.
 
 <h5 id="openai-agents"></h5>

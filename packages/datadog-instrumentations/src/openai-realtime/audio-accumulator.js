@@ -245,7 +245,8 @@ class AudioAccumulator {
     this.mimeType = mimeType
     this.sampleRate = sampleRate
     this.#retain = this.#shouldRetain()
-    const retainedBytes = buffers.reduce((sum, buffer) => sum + buffer.length, 0)
+    let retainedBytes = 0
+    for (const buffer of buffers) retainedBytes += buffer.length
     this.oversize = totalDecodedBytes > LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES || retainedBytes !== totalDecodedBytes
     if (!this.#retain || this.oversize) return
     this.chunks = buffers

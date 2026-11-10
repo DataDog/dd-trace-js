@@ -336,7 +336,8 @@ class RealtimeSession {
           if (pending.itemId !== itemId) this.#inputTranscripts.delete(pending.itemId)
           pending.itemId = itemId
           if (this.#playback) pending.speechItemId = itemId
-          this.#playback?.rememberInput(pending)
+          this.#playback?.rememberInput(pending, this.#inputTranscriptionEnabled &&
+            itemId !== undefined && !this.#inputTranscripts.has(itemId))
           if (!this.#playback || pending.speechEndTime === undefined) pending.speechEndTime = now
           return
         }
@@ -929,7 +930,7 @@ class RealtimeSession {
     // Manual sideband commits have an end boundary but no VAD onset. Complete
     // retrieved audio can anchor their start; a retrieval's arrival time cannot.
     const manualStart = this.#playback && input.speechEndTime !== undefined &&
-      input.audio.chunks.length > 0 && inputDurationMs > 0
+      input.audio.chunks.length > 0 && inputDurationMs !== undefined && inputDurationMs > 0
       ? input.speechEndTime - inputDurationMs
       : undefined
     // The VAD speech onset when we have it. The first buffered frame only approximates the onset,

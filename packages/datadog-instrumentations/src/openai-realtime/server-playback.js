@@ -19,8 +19,16 @@ const log = require('../../../dd-trace/src/log')
  *   audioIncomplete: boolean,
  *   stopped: boolean,
  *   outOfBand: boolean,
+ *   format: { mimeType: string, sampleRate: number },
+ *   transcriptPending: boolean,
+ *   cleared: boolean,
+ *   truncated: boolean,
+ *   ambiguous?: boolean,
+ *   timer?: ReturnType<typeof setTimeout>,
+ *   deadline?: number,
+ *   phase?: "audio" | "queued" | "playback",
  *   playbackWindow?: PlaybackWindow,
- *   output: Map<string, { wanted: boolean, inFlight: boolean }>,
+ *   output: Map<string, { wanted: boolean, inFlight: boolean, parts: Map<number, { buffer?: Buffer }> }>,
  * }} PlaybackEntry
  * @typedef {{
  *   entries: PlaybackEntry[],
@@ -32,7 +40,10 @@ const log = require('../../../dd-trace/src/log')
 
 const AUDIO_WAIT_MS = 5000
 const PLAYBACK_WAIT_MS = 120_000
-const MAX_TURNS = 128
+const INPUT_TRANSCRIPT_WAIT_MS = AUDIO_WAIT_MS / 2
+const MAX_CACHED_AUDIO_BYTES = LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES * 4
+const AUDIO_CONTENT_TYPES = new Set(['audio', 'input_audio', 'output_audio'])
+const MAX_TURNS = 16
 const MAX_ITEMS = 256
 
 /**
@@ -78,8 +89,11 @@ class ServerPlayback {
     this.#outputFormat = output
   }
 
-  /** @param {import('./turns').InputTurn} input */
-  rememberInput (input) {
+  /**
+   * @param {import('./turns').InputTurn} input
+   * @param {boolean} [waitingForTranscript]
+   */
+  rememberInput (input, waitingForTranscript = false) {
     if (input.itemId !== undefined) {
       const previous = this.#inputs.get(input)
       if (previous && previous.id !== input.itemId) {
@@ -88,7 +102,10 @@ class ServerPlayback {
       }
       input.audio.present = true
       const item = this.#bind(input.itemId, input, undefined, 'user')
-      if (item) this.#inputs.set(input, item)
+      if (item) {
+        item.waitingForTranscript = waitingForTranscript
+        this.#inputs.set(input, item)
+      }
     }
   }
 
@@ -97,6 +114,9 @@ class ServerPlayback {
     const previous = this.#inputs.get(input)
     if (!previous) return
     this.#inputs.delete(input)
+    this.#clearInputWait(previous)
+    previous.parts.clear()
+    input.audio.clear()
     this.#items.delete(previous.id)
     for (const [id, item] of this.#requests) {
       if (item === previous) this.#requests.delete(id)
@@ -183,6 +203,7 @@ class ServerPlayback {
     if (event?.type !== 'conversation.item.retrieve') return
     const item = this.#items.get(String(event.item_id))
     if (!item) return
+    this.#clearInputWait(item)
     item.inFlight = true
     item.wanted = false
     if (event.event_id) this.#requests.set(String(event.event_id), item)
@@ -202,6 +223,18 @@ class ServerPlayback {
       if (item && this.#hasAudio(event.item)) {
         this.#expectAudio(item, event.item)
         this.#rebuild(item, now)
+        this.#want(item)
+      }
+    } else if (type === 'conversation.item.input_audio_transcription.completed' ||
+        type === 'conversation.item.input_audio_transcription.failed') {
+      const item = this.#items.get(String(event.item_id))
+      if (item) {
+        this.#clearInputWait(item)
+        // The SDK retrieves after completed transcription. Hold the turn while
+        // its synchronous handler sends, even when tracer retrieval is disabled.
+        if (type.endsWith('.completed') && this.#shouldRetainAudio() && !this.#hasRetrievedAudio(item)) {
+          item.wanted = true
+        }
         this.#want(item)
       }
     } else if (type === 'conversation.item.retrieved') {
@@ -317,13 +350,18 @@ class ServerPlayback {
     this.#closed = true
     clearImmediate(this.#scheduled)
     for (const entry of this.#turns.values()) this.#finish(entry, now, true)
+    for (const item of this.#items.values()) {
+      this.#clearInputWait(item)
+      item.parts.clear()
+      if (item.role === 'user') this.#inputs.delete(item.side)
+    }
     this.#items.clear()
     this.#requests.clear()
   }
 
   /** @param {object} message */
   #hasAudio (message) {
-    return message?.content?.some(part => ['audio', 'input_audio', 'output_audio'].includes(part.type))
+    return message?.content?.some(part => AUDIO_CONTENT_TYPES.has(part.type))
   }
 
   /**
@@ -359,7 +397,7 @@ class ServerPlayback {
    */
   #expectAudio (item, message) {
     for (const [index, part] of (message.content || []).entries()) {
-      if (['audio', 'input_audio', 'output_audio'].includes(part.type)) {
+      if (AUDIO_CONTENT_TYPES.has(part.type)) {
         item.expected.add(index)
         item.hasAudio = true
       }
@@ -379,8 +417,16 @@ class ServerPlayback {
         if (!this.#evictHeld(Date.now())) break
       }
       if (this.#items.size >= MAX_ITEMS) {
-        const orphan = [...this.#items.values()].find(candidate => !candidate.entry)
+        let orphan
+        for (const candidate of this.#items.values()) {
+          if (!candidate.entry) { orphan = candidate; break }
+        }
         if (!orphan) return
+        this.#clearInputWait(orphan)
+        orphan.parts.clear()
+        orphan.side.audio.clear()
+        orphan.side.audio.present = orphan.hasAudio
+        this.#inputs.delete(orphan.side)
         this.#items.delete(orphan.id)
         for (const [eventId, request] of this.#requests) {
           if (request === orphan) this.#requests.delete(eventId)
@@ -401,6 +447,9 @@ class ServerPlayback {
         wanted: false,
         attempts: 0,
         failed: false,
+        retrievedComplete: false,
+        waitingForTranscript: false,
+        inputTimer: undefined,
       }
       this.#items.set(id, item)
     }
@@ -410,14 +459,31 @@ class ServerPlayback {
 
   /** @param {object} item */
   #want (item) {
+    const requestItem = this.#requestItem
     if (item.lastContentIndex < 0 || item.failed || item.attempts >= 2 ||
-        !this.#shouldRetainAudio() || !this.#requestItem || item.inFlight) return
+        !this.#shouldRetainAudio() || !requestItem || item.inFlight || this.#hasRetrievedAudio(item)) return
     item.wanted = true
+    if (item.waitingForTranscript) {
+      if (!item.inputTimer) {
+        // Leave half the existing audio wait for a fallback reply if transcription
+        // never arrives; normal completions let the SDK issue its own retrieval.
+        item.inputTimer = setTimeout(() => {
+          item.inputTimer = undefined
+          if (this.#closed || this.#items.get(item.id) !== item) return
+          item.waitingForTranscript = false
+          item.wanted = false
+          this.#want(item)
+        }, INPUT_TRANSCRIPT_WAIT_MS)
+        item.inputTimer.unref?.()
+      }
+      return
+    }
     if (this.#scheduled || this.#closed) return
     this.#scheduled = setImmediate(() => {
       this.#scheduled = undefined
       for (const candidate of this.#items.values()) {
-        if (!candidate.wanted || candidate.inFlight || candidate.lastContentIndex < 0) continue
+        if (!candidate.wanted || candidate.inFlight || candidate.waitingForTranscript ||
+            candidate.lastContentIndex < 0) continue
         candidate.wanted = false
         if (!this.#shouldRetainAudio()) { this.#check(candidate.entry, Date.now()); continue }
         const eventId = this.#requestPrefix + (++this.#sequence)
@@ -425,7 +491,7 @@ class ServerPlayback {
         candidate.attempts++
         this.#requests.set(eventId, candidate)
         try {
-          this.#requestItem(candidate.id, eventId)
+          requestItem(candidate.id, eventId)
         } catch (error) {
           candidate.inFlight = false
           candidate.failed = true
@@ -444,7 +510,9 @@ class ServerPlayback {
   #retrieve (message, now) {
     const item = this.#items.get(String(message?.id))
     if (!item) return
+    this.#clearInputWait(item)
     item.inFlight = item.wanted = false
+    item.retrievedComplete = message.status === 'completed'
     let receivedTranscript = false
     if (message.content) {
       const items = item.role === 'assistant' ? item.entry.output.values() : [item]
@@ -482,18 +550,80 @@ class ServerPlayback {
         }
         index++
       }
-      // Preflight the entire logical clip, including other items, before allocating decoded audio.
-      const retain = total <= LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES && this.#shouldRetainAudio()
+      // Credit replaced allocations only after both owners have released them.
+      if (updates.length) {
+        item.side.audio.clear()
+        for (const { index } of updates) item.parts.delete(index)
+      }
+      let incomingBytes = 0
+      for (const update of updates) if (update.knownFormat) incomingBytes += update.bytes
+      const retain = total <= LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES && this.#shouldRetainAudio() &&
+        this.#cachedAudioBytes() + incomingBytes <= MAX_CACHED_AUDIO_BYTES
+      if (!retain && updates.length) this.#dropCachedAudio(item)
       for (const { index, audio, bytes, mimeType, sampleRate, knownFormat } of updates) {
-        const buffer = retain && knownFormat
-          ? Buffer.from(audio.slice(0, Math.ceil(bytes / 3) * 4), 'base64').subarray(0, bytes)
-          : undefined
+        let buffer
+        if (retain && knownFormat) {
+          // Dedicated backing stores make cache accounting exact even after a
+          // truncation creates a shorter view. Never expose unwritten bytes.
+          const decoded = Buffer.allocUnsafeSlow(bytes)
+          const written = decoded.write(audio, 0, bytes, 'base64')
+          buffer = decoded.subarray(0, written)
+        }
         item.parts.set(index, { bytes, buffer, mimeType, sampleRate })
       }
     }
     this.#rebuild(item, now)
     if (receivedTranscript) this.#onTranscript?.(item.id, item.side.transcript, now)
     this.#check(item.entry, now)
+  }
+
+  /**
+   * @param {{ inputTimer?: ReturnType<typeof setTimeout>, waitingForTranscript: boolean }} item
+   */
+  #clearInputWait (item) {
+    clearTimeout(item.inputTimer)
+    item.inputTimer = undefined
+    item.waitingForTranscript = false
+  }
+
+  /**
+   * @param {{ retrievedComplete: boolean, expected: Set<number>, lastContentIndex: number,
+   *   parts: Map<number, { buffer?: Buffer, bytes: number }> }} item
+   */
+  #hasRetrievedAudio (item) {
+    if (!item.retrievedComplete) return false
+    let hasAudio = false
+    for (const index of item.expected) {
+      if (index > item.lastContentIndex) continue
+      const part = item.parts.get(index)
+      if (!part?.buffer || part.buffer.length !== part.bytes) return false
+      hasAudio = true
+    }
+    return hasAudio
+  }
+
+  /** Count owned backing allocations, including the hidden tail of truncated views. */
+  #cachedAudioBytes () {
+    let total = 0
+    for (const item of this.#items.values()) {
+      for (const part of item.parts.values()) total += part.buffer?.buffer.byteLength ?? 0
+    }
+    return total
+  }
+
+  /**
+   * @param {{ role: string, entry?: PlaybackEntry, parts: Map<number, { buffer?: Buffer }>,
+   *   side: { audio: import('./audio-accumulator') } }} item
+   */
+  #dropCachedAudio (item) {
+    if (item.role === 'assistant' && item.entry) {
+      for (const output of item.entry.output.values()) {
+        for (const part of output.parts.values()) part.buffer = undefined
+      }
+    } else {
+      for (const part of item.parts.values()) part.buffer = undefined
+    }
+    item.side.audio.clear()
   }
 
   /**
@@ -524,14 +654,20 @@ class ServerPlayback {
         parts.push(part)
       }
     }
-    const total = parts.reduce((sum, part) => sum + part.bytes, 0)
+    let total = 0
+    const first = parts[0]
+    for (const part of parts) {
+      total += part.bytes
+      if (part.buffer === undefined || part.mimeType !== first?.mimeType ||
+          part.sampleRate !== first?.sampleRate) complete = false
+    }
     if (total > LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES) {
       for (const part of parts) part.buffer = undefined
+      complete = false
     }
-    const first = parts[0]
-    complete &&= parts.every(part => part.buffer !== undefined &&
-      part.mimeType === first?.mimeType && part.sampleRate === first?.sampleRate)
-    item.side.audio.replaceBuffers(complete ? parts.map(part => part.buffer) : [], total, now,
+    const buffers = []
+    if (complete) for (const part of parts) buffers.push(part.buffer)
+    item.side.audio.replaceBuffers(buffers, total, now,
       first?.mimeType || '', first?.sampleRate || 0)
     item.side.audio.present ||= item.role === 'assistant' ? item.entry.hasAudio : item.hasAudio
   }
@@ -717,7 +853,12 @@ class ServerPlayback {
       this.#releaseQueuedWaits()
     }
     for (const [id, item] of this.#items) {
-      if (item.entry === entry) this.#items.delete(id)
+      if (item.entry === entry) {
+        this.#clearInputWait(item)
+        item.parts.clear()
+        if (item.role === 'user') this.#inputs.delete(item.side)
+        this.#items.delete(id)
+      }
     }
     for (const [id, item] of this.#requests) {
       if (item.entry === entry) this.#requests.delete(id)

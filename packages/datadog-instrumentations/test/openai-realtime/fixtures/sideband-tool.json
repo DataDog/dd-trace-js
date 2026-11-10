@@ -2556,7 +2556,7 @@
           "id": "item_12",
           "type": "function_call_output",
           "call_id": "call_1",
-          "output": "{\"available\":true,\"date\":\"2026-10-30\",\"time\":\"19:00\",\"guests\":4,\"synthetic\":true}"
+          "output": "{\"available\":true,\"synthetic\":true}"
         }
       }
     },
@@ -2571,7 +2571,7 @@
           "id": "item_12",
           "type": "function_call_output",
           "call_id": "call_1",
-          "output": "{\"available\":true,\"date\":\"2026-10-30\",\"time\":\"19:00\",\"guests\":4,\"synthetic\":true}"
+          "output": "{\"available\":true,\"synthetic\":true}"
         }
       }
     },
