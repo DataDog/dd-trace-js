@@ -551,8 +551,8 @@ export default [
       'eslint-rules/eslint-no-call-result-invocation': 'error',
       'eslint-rules/eslint-no-private-tags-access': ['error', {
         allowFiles: [
-          // The span context implementation defines and reads `_tags` directly.
-          'packages/dd-trace/src/opentracing/span-context.js',
+          // The span_context implementation defines and reads `_tags` directly.
+          'packages/dd-trace/src/opentracing/span_context.js',
           // Unrelated `_tags` fields on other classes (not span contexts).
           'packages/dd-trace/src/dogstatsd.js',
           'packages/dd-trace/src/datastreams/processor.js',

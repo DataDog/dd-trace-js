@@ -104,9 +104,10 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
     let childOf = this.tracer.extract('text_map', message.attributes)
 
+    let pubsubRequestContext
     const isFirstMessage = batchIndex === 0
     if (isFirstMessage && batchRequestSpanId) {
-      const pubsubRequestContext = reconstructPubSubRequestContext(
+      pubsubRequestContext = reconstructPubSubRequestContext(
         message.attributes, childOf, this._tracerConfig.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
       )
       if (pubsubRequestContext) {
@@ -129,12 +130,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
     if (batchRequestTraceId && batchRequestSpanId) {
       meta['pubsub.batch.request_trace_id'] = batchRequestTraceId
-      // Use JSON format like producer for proper span link parsing
-      meta['_dd.span_links'] = JSON.stringify([{
-        trace_id: batchRequestTraceId,
-        span_id: batchRequestSpanId,
-        flags: 0,
-      }])
     }
 
     const metrics = {
@@ -162,6 +157,13 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       meta,
       metrics,
     }, ctx)
+
+    if (batchRequestTraceId && batchRequestSpanId) {
+      const batchContext = pubsubRequestContext || reconstructPubSubRequestContext(
+        message.attributes, null, this._tracerConfig.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+      )
+      if (batchContext) span.addLink({ context: batchContext })
+    }
 
     if (message.publishTime) {
       span.setTag('pubsub.publish_time', message.publishTime.toISOString())

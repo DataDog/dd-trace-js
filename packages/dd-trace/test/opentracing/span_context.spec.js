@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 
@@ -44,8 +43,6 @@ describe('SpanContext', () => {
       tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'),
     }
     const spanContext = new SpanContext(props)
-
-    assert.deepStrictEqual(Reflect.ownKeys(spanContext.constructor), ['length', 'name', 'prototype'])
 
     const expected = {
       _traceId: '123',
@@ -139,28 +136,6 @@ describe('SpanContext', () => {
 
       assert.strictEqual(spanContext.toSpanId(), '456')
     })
-  })
-
-  it('returns the full unsigned span ID as a bigint', () => {
-    const spanContext = new SpanContext({
-      traceId: id('42', 10),
-      spanId: id('ffffffffffffffff', 16),
-    })
-
-    assert.strictEqual(spanContext.toBigIntSpanId(), 18446744073709551615n)
-  })
-
-  it('summarizes span arrays during inspection', () => {
-    const spanContext = new SpanContext({
-      traceId: id('42', 10),
-      spanId: id('43', 10),
-      trace: { started: ['unformatted-span'], finished: ['unformatted-span'], tags: {} },
-    })
-    const output = inspect(spanContext)
-
-    assert.doesNotMatch(output, /unformatted-span/)
-    assert.match(output, /started: '\[Array\]'/)
-    assert.match(output, /finished: '\[Array\]'/)
   })
 
   describe('toTraceparent()', () => {

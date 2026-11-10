@@ -8,6 +8,7 @@ const {
 } = require('../../dd-trace/src/carrier')
 const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastreams')
 const id = require('../../dd-trace/src/id')
+const SpanContext = require('../../dd-trace/src/opentracing/span_context')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
@@ -81,11 +82,11 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
      * - Inject batch span context + metadata into all message attributes for downstream
      *   consumers to reconstruct the trace and understand batch relationships
      */
-    const spanLinkData = []
+    const spanLinks = []
     if (hasTraceContext) {
       for (let i = 1; i < messageCount; i++) {
         const link = this.#extractSpanLink(messages[i].attributes)
-        if (link) spanLinkData.push(link)
+        if (link) spanLinks.push(link)
       }
     }
 
@@ -101,7 +102,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         'span.kind': 'producer',
         '_dd.base_service': this.tracer._service,
         '_dd.serviceoverride.type': 'integration',
-        'pubsub.linked_message_count': spanLinkData.length || undefined,
+        'pubsub.linked_message_count': spanLinks.length || undefined,
         operation: messageCount > 1 ? 'batched.pubsub.request' : 'pubsub.request',
       },
       metrics: {
@@ -118,15 +119,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     const batchTraceIdHex = fullTraceIdHex.slice(-16)
     const batchTraceIdUpper = spanCtx._trace.tags['_dd.p.tid']
 
-    if (spanLinkData.length) {
-      batchSpan.setTag('_dd.span_links', JSON.stringify(
-        spanLinkData.map(link => ({
-          trace_id: link.traceId,
-          span_id: link.spanId,
-          flags: link.samplingPriority || 0,
-        }))
-      ))
-    }
+    if (spanLinks.length) batchSpan.addLinks(spanLinks)
 
     const messageCountStr = String(messageCount)
     const startTimeStr = String(Math.floor(batchSpan._startTime))
@@ -177,22 +170,18 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     const spanId = readDatadogParentId(attrs)
     if (!traceId || !spanId) return null
 
-    // Convert to hex strings
-    const lowerHex = id(traceId).toString(16)
-    const spanIdHex = id(spanId).toString(16)
-
-    // Build full 128-bit trace ID
-    const traceIdHex = attrs['_dd.p.tid']
-      ? attrs['_dd.p.tid'] + lowerHex
-      : lowerHex.padStart(32, '0')
-
     const samplingPriority = readDatadogSamplingPriority(attrs)
     return {
-      traceId: traceIdHex,
-      spanId: spanIdHex,
-      samplingPriority: samplingPriority
-        ? Number.parseInt(samplingPriority, 10)
-        : undefined,
+      context: new SpanContext({
+        traceId: id(traceId, 10),
+        spanId: id(spanId, 10),
+        sampling: { priority: samplingPriority ? Number.parseInt(samplingPriority, 10) : 0 },
+        trace: {
+          started: [],
+          finished: [],
+          tags: attrs['_dd.p.tid'] ? { '_dd.p.tid': attrs['_dd.p.tid'] } : {},
+        },
+      }),
     }
   }
 }
