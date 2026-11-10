@@ -1,13 +1,18 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const {
   DISTRIBUTED_TRACE_META_KEY,
   forPackage,
+  getRegisteredToolName,
+  isTracedServerRequest,
   tagErrorResult,
 } = require('./utils')
+
+const SERVER_V2_PREFIX = 'tracing:orchestrion:@modelcontextprotocol/server'
 
 const MCP_REQUEST_SPAN_NAME = 'mcp.request'
 const CLIENT_TOOL_CALL_RESOURCE = 'client_tool_call'
@@ -119,9 +124,10 @@ class McpServerRequestPlugin extends McpPlugin {
   static prefix = 'tracing:apm:mcp:server:request'
   static spanName = MCP_REQUEST_SPAN_NAME
   static kind = 'server'
-  getResource (ctx) { return getServerRequestResource(ctx.request) }
+  getRequest (ctx) { return ctx.request }
+  getResource (ctx) { return getServerRequestResource(this.getRequest(ctx)) }
   getChildOf (ctx) {
-    const traceContext = ctx.request?.params?._meta?.[DISTRIBUTED_TRACE_META_KEY]
+    const traceContext = this.getRequest(ctx)?.params?._meta?.[DISTRIBUTED_TRACE_META_KEY]
     if (!traceContext || typeof traceContext !== 'object') return
 
     const childOf = this.tracer.extract('text_map', traceContext)
@@ -161,6 +167,32 @@ class McpServerToolCallPlugin extends McpPlugin {
   onEnd (span, ctx) { tagErrorResult(span, ctx.result) }
 }
 
+// SDK 2.x server spans come from Orchestrion hooks on the bundled server chunks. They keep the 1.x components, so
+// spans do not depend on the SDK major version.
+class McpServerV2RequestPlugin extends McpServerRequestPlugin {
+  static id = 'modelcontextprotocol_server_v2'
+  static component = 'modelcontextprotocol_server'
+  static prefix = `${SERVER_V2_PREFIX}:Protocol__onrequest`
+
+  getRequest (ctx) { return ctx.arguments?.[0] }
+
+  bindStart (ctx) {
+    if (!isTracedServerRequest(this.getRequest(ctx))) return storage('legacy').getStore()
+    return super.bindStart(ctx)
+  }
+}
+
+class McpServerV2ToolCallPlugin extends McpPlugin {
+  static id = 'modelcontextprotocol_server_tool_v2'
+  static component = 'modelcontextprotocol_server_tool'
+  static prefix = `${SERVER_V2_PREFIX}:McpServer_executeToolHandler`
+  static spanName = 'mcp.server.tool.call'
+  static kind = 'internal'
+
+  getResource (ctx) { return getRegisteredToolName(ctx.self, ctx.arguments?.[0]) }
+  onEnd (span, ctx) { tagErrorResult(span, ctx.result) }
+}
+
 const clientPlugins = [
   McpToolCallPlugin,
   McpListToolsPlugin,
@@ -176,5 +208,6 @@ module.exports = [
   ...clientPlugins.map(Plugin => forPackage(Plugin, '@modelcontextprotocol/client')),
   McpServerRequestPlugin,
   McpServerToolCallPlugin,
-  forPackage(McpServerToolCallPlugin, '@modelcontextprotocol/server'),
+  McpServerV2RequestPlugin,
+  McpServerV2ToolCallPlugin,
 ]

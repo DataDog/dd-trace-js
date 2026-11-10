@@ -2,7 +2,8 @@ _v: 1
 name: modelcontextprotocol-sdk
 display_name: Model Context Protocol SDK
 description: Instruments Model Context Protocol SDK client and server tool, resource, and prompt operations, including
-  server tool execution, distributed trace propagation, and LLM Observability for client tool calls and tool discovery.
+  server tool execution, distributed trace propagation, and LLM Observability for client and server tool calls and
+  tool discovery.
 packages:
 - name: '@modelcontextprotocol/sdk'
 - name: '@modelcontextprotocol/client'

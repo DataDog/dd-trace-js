@@ -19,7 +19,7 @@ describe('esm with SDK 2.x', () => {
   let agent
   let proc
 
-  withVersions('modelcontextprotocol-sdk', ['@modelcontextprotocol/server'], version => {
+  withVersions('modelcontextprotocol-server', ['@modelcontextprotocol/server'], version => {
     useSandbox([
       `@modelcontextprotocol/server@${version}`,
       `@modelcontextprotocol/client@${version}`,

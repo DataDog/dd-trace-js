@@ -3,6 +3,28 @@
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
 const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
+const TRACED_METHOD_PREFIX = /^(?:tools|resources|prompts)\//
+
+/**
+ * @param {{ method?: unknown } | undefined} request
+ */
+function isTracedServerRequest (request) {
+  return typeof request?.method === 'string' && TRACED_METHOD_PREFIX.test(request.method)
+}
+
+/**
+ * SDK 2.x tool objects carry no name, and McpServer keys them by name, so the current key also covers renames.
+ *
+ * @param {{ _registeredTools?: Record<string, unknown> } | undefined} server
+ * @param {unknown} tool
+ */
+function getRegisteredToolName (server, tool) {
+  const tools = server?._registeredTools
+  if (!tools) return
+  for (const name of Object.keys(tools)) {
+    if (tools[name] === tool) return name
+  }
+}
 
 function getFirstTextContent (content) {
   if (!Array.isArray(content)) return
@@ -44,5 +66,7 @@ function forPackage (Plugin, packageName) {
 module.exports = {
   DISTRIBUTED_TRACE_META_KEY,
   forPackage,
+  getRegisteredToolName,
+  isTracedServerRequest,
   tagErrorResult,
 }

@@ -4,7 +4,7 @@ const { tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, getHooks } = require('./helpers/instrument')
 
-for (const name of ['@modelcontextprotocol/sdk', '@modelcontextprotocol/client', '@modelcontextprotocol/server']) {
+for (const name of ['@modelcontextprotocol/sdk', '@modelcontextprotocol/client']) {
   for (const hook of getHooks(name).values()) {
     addHook(hook, exports => exports)
   }
@@ -55,8 +55,7 @@ function wrapRequestHandler (protocol, handler) {
   if (wrappedRequestHandlers.has(handler)) return handler
 
   const wrappedHandler = function requestHandlerWithTrace (request, extra) {
-    // SDK 1.x passes `extra.requestId`; 2.x passes a context carrying `mcpReq.id`.
-    const ctx = getPendingContext(protocol, extra?.requestId ?? extra?.mcpReq?.id)
+    const ctx = getPendingContext(protocol, extra?.requestId)
     if (!ctx) return handler.apply(this, arguments)
 
     let result
@@ -113,22 +112,23 @@ function wrapAbortControllers (protocol) {
   })
 }
 
-function finishPendingServerRequests (protocol) {
-  const pending = pendingContexts.get(protocol)
+// Protocol._onclose aborts the handlers still in flight and clears the abort controller map. Finish their spans first:
+// their client never gets a response.
+channel('tracing:orchestrion:@modelcontextprotocol/sdk:Protocol__onclose:start').subscribe(({ self }) => {
+  const pending = pendingContexts.get(self)
   if (!pending) return
 
   for (const [requestId, ctx] of pending) {
-    // The close aborts a handler that has not settled, so the client never gets its response.
     if (!Object.hasOwn(ctx, 'result') && !ctx.error) {
       ctx.error = { name: 'McpError', message: 'Connection closed' }
     }
-    finishServerRequest(protocol, requestId)
+    finishServerRequest(self, requestId)
   }
-}
+})
 
-function wrapProtocol (Protocol) {
-  // Inject trace context into MCP request metadata so out-of-process MCP servers
-  // can parent server spans to the client operation span.
+// Inject trace context into MCP request metadata so out-of-process MCP servers
+// can parent server spans to the client operation span.
+function wrapProtocolRequest (Protocol) {
   shimmer.wrap(Protocol.prototype, 'request', function (original) {
     return function requestWithTraceContext (request, resultSchema, options) {
       if (!clientRequestInjectCh.hasSubscribers || !TRACED_METHOD_PREFIX.test(request?.method)) {
@@ -145,6 +145,10 @@ function wrapProtocol (Protocol) {
       return original.call(this, addTraceContextToRequest(request, ctx.traceContext), resultSchema, options)
     }
   })
+}
+
+function wrapProtocol (Protocol) {
+  wrapProtocolRequest(Protocol)
 
   // Start spans in _onrequest — this runs inside the express POST /mcp handler's
   // async context, so ALS correctly parents server spans under the HTTP span.
@@ -188,17 +192,6 @@ function wrapProtocol (Protocol) {
   shimmer.wrap(Protocol.prototype, 'setRequestHandler', function (original) {
     return function setRequestHandlerWithTrace () {
       wrapRequestHandlers(this)
-      return original.apply(this, arguments)
-    }
-  })
-
-  // On close, SDK 1.x clears the abort controller map, but 2.x swaps in a new map, so the wrapped `delete` never
-  // runs for requests still in flight. Stateless 2.x servers close right after sending each response.
-  // Orchestrion cannot target this in 2.x: Protocol sits in its own hashed chunk, and the rewriter allows one source
-  // marker per package pattern, which the Client and McpServer chunks already use.
-  shimmer.wrap(Protocol.prototype, '_onclose', function (original) {
-    return function _oncloseWithTrace () {
-      finishPendingServerRequests(this)
       return original.apply(this, arguments)
     }
   })
@@ -272,17 +265,10 @@ addHook({
   return exports
 })
 
-// SDK 2.x splits into separate client and server packages, each bundling its own Protocol copy into chunk files
-// whose names change with every release. The package entry re-exports the classes, so hook it instead. These reuse
-// the 1.x shimmer wrappers: they share state with the request handler and abort controller maps, which each Protocol
-// instance creates at runtime and only shimmer can patch.
+// SDK 2.x clients bundle Protocol into a chunk file whose name changes with every release, and the client package
+// pattern already uses its one source marker for the Client chunk. The package entry re-exports Protocol, so hook it
+// instead. SDK 2.x servers are instrumented in modelcontextprotocol-server.js.
 addHook({ name: '@modelcontextprotocol/client', versions: ['>=2'] }, exports => {
-  wrapProtocol(exports.Protocol)
-  return exports
-})
-
-addHook({ name: '@modelcontextprotocol/server', versions: ['>=2'] }, exports => {
-  wrapProtocol(exports.Protocol)
-  wrapMcpServer(exports.McpServer)
+  wrapProtocolRequest(exports.Protocol)
   return exports
 })

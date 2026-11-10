@@ -2,7 +2,7 @@
 
 const { forPackage } = require('../../../../../datadog-plugin-modelcontextprotocol-sdk/src/utils')
 const LLMObsPlugin = require('../base')
-const { formatInput, formatOutput } = require('./utils')
+const { formatInput, formatOutput, formatServerInput, getClientInfoTags } = require('./utils')
 
 class McpToolCallLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_mcp_tool_call'
@@ -66,9 +66,52 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
   }
 }
 
-const plugins = [McpToolCallLLMObsPlugin, McpListToolsLLMObsPlugin]
+// SDK 2.x server: one tool span per tools/call request, on the server request span.
+class McpServerToolCallLLMObsPlugin extends LLMObsPlugin {
+  static id = 'llmobs_mcp_server_tool_call'
+  static integration = 'modelcontextprotocol-sdk'
+  static prefix = 'tracing:orchestrion:@modelcontextprotocol/server:Protocol__onrequest'
+
+  getLLMObsSpanRegisterOptions (ctx) {
+    const request = ctx.arguments?.[0]
+    if (request?.method !== 'tools/call') return
+
+    return {
+      kind: 'tool',
+      name: request.params?.name || 'unknown_tool',
+    }
+  }
+
+  setLLMObsTags (ctx) {
+    const span = ctx.currentStore?.span
+    const request = ctx.arguments?.[0]
+    if (!span || request?.method !== 'tools/call') return
+
+    const spanTags = {
+      mcp_method: request.method,
+      mcp_tool: request.params?.name || 'unknown_tool',
+      mcp_tool_kind: 'server',
+      ...getClientInfoTags(request, ctx.self),
+    }
+    const sessionId = ctx.handlerContext?.sessionId
+    if (sessionId) spanTags.mcp_session_id = String(sessionId)
+
+    this._tagger.tagSpanTags(span, spanTags)
+
+    let output
+    if (!ctx.error && ctx.result !== undefined) {
+      try {
+        output = JSON.stringify(ctx.result)
+      } catch {}
+    }
+    this._tagger.tagTextIO(span, formatServerInput(request), output)
+  }
+}
+
+const clientPlugins = [McpToolCallLLMObsPlugin, McpListToolsLLMObsPlugin]
 
 module.exports = [
-  ...plugins,
-  ...plugins.map(Plugin => forPackage(Plugin, '@modelcontextprotocol/client')),
+  ...clientPlugins,
+  ...clientPlugins.map(Plugin => forPackage(Plugin, '@modelcontextprotocol/client')),
+  McpServerToolCallLLMObsPlugin,
 ]
