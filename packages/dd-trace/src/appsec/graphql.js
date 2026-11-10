@@ -24,9 +24,9 @@ const { updateBlockFailureMetric } = require('./telemetry')
 const graphqlRequestData = new WeakMap()
 
 /**
- * Per request, the blocking action of every field checked with empty arguments or Boolean inclusion directives,
- * `undefined` when the WAF requested none. Identical payloads return the same action while the request's WAF
- * context keeps the same persistent inputs. List queries resolve the same fields once per item.
+ * Per request, the blocking action of every field checked with empty arguments or inclusion directives,
+ * including variable directives represented by `if: undefined`. Identical payloads return the same action while
+ * the request's WAF context keeps the same persistent inputs. List queries resolve the same fields once per item.
  *
  * @type {WeakMap<object, Map<string, object | undefined>>}
  */
@@ -116,7 +116,7 @@ function getFieldCacheKey (resolverInfo) {
     const argumentNames = Object.keys(directive)
     if (argumentNames.length !== 1 || argumentNames[0] !== 'if') return
     const value = directive.if
-    if (typeof value !== 'boolean') return
+    if (value !== undefined && typeof value !== 'boolean') return
     cacheKey += `:${name}:${value}`
   }
   return cacheKey
