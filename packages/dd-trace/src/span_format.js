@@ -42,7 +42,7 @@ const { IGNORE_OTEL_ERROR } = constants
  * @property {string | undefined} type
  * @property {number} error
  * @property {Record<string, string>} meta
- * @property {Record<string, number | string>} metrics
+ * @property {Record<string, number>} metrics
  * @property {Record<string, unknown> | undefined} meta_struct
  * @property {number} start
  * @property {number} duration
@@ -431,10 +431,7 @@ function addMixedTag (meta, metrics, key, value, nested) {
       // Special case for Node.js Buffer and URL
       // TODO(BridgeAR)[31.03.2025]: Figure out if all typed arrays should be treated as buffers.
       if (isNodeBuffer(value) || isUrl(value)) {
-        if (key.length > MAX_METRIC_KEY_LENGTH) {
-          key = `${key.slice(0, MAX_METRIC_KEY_LENGTH)}...`
-        }
-        metrics[key] = value.toString()
+        addMixedTag(meta, metrics, key, value.toString(), nested)
       } else if (!Array.isArray(value) && !nested) {
         for (const [prop, val] of Object.entries(value)) {
           addMixedTag(meta, metrics, `${key}.${prop}`, val, true)
@@ -443,12 +440,14 @@ function addMixedTag (meta, metrics, key, value, nested) {
   }
 }
 
+/** @param {unknown} obj */
 function isNodeBuffer (obj) {
   return obj.constructor && obj.constructor.name === 'Buffer' &&
     typeof obj.readInt8 === 'function' &&
     typeof obj.toString === 'function'
 }
 
+/** @param {unknown} obj */
 function isUrl (obj) {
   return obj.constructor && obj.constructor.name === 'URL' &&
     typeof obj.href === 'string' &&

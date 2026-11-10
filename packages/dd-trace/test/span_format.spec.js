@@ -346,14 +346,11 @@ describe('spanFormat', () => {
       span.context()._tags[acceptedMetricKey] = 11
 
       // First-rejected lengths (limit + 1) get sliced and gain a `...` suffix.
-      // Cover all four typed branches in `addMixedTag`: string / number /
-      // boolean / Buffer (the URL branch shares the boolean/buffer truncation
-      // line).
       const overlongMetaKey = `${'c'.repeat(MAX_META_KEY_LENGTH)}X`
       const overlongMetaValue = `${'d'.repeat(MAX_META_VALUE_LENGTH)}Y`
       const overlongMetricKey = `${'e'.repeat(MAX_METRIC_KEY_LENGTH)}Z`
       const overlongBoolKey = `${'f'.repeat(MAX_METRIC_KEY_LENGTH)}Q`
-      const overlongBufferKey = `${'g'.repeat(MAX_METRIC_KEY_LENGTH)}R`
+      const overlongBufferKey = `${'g'.repeat(MAX_META_KEY_LENGTH)}R`
       span.context()._tags[overlongMetaKey] = overlongMetaValue
       span.context()._tags[overlongMetricKey] = 42
       span.context()._tags[overlongBoolKey] = true
@@ -370,14 +367,15 @@ describe('spanFormat', () => {
       const truncatedMetaValue = `${overlongMetaValue.slice(0, MAX_META_VALUE_LENGTH)}...`
       const truncatedMetricKey = `${overlongMetricKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
       const truncatedBoolKey = `${overlongBoolKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
-      const truncatedBufferKey = `${overlongBufferKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+      const truncatedBufferKey = `${overlongBufferKey.slice(0, MAX_META_KEY_LENGTH)}...`
       const truncatedServiceValue = `${overlongServiceValue.slice(0, MAX_META_VALUE_LENGTH)}...`
       assert.strictEqual(trace.meta[acceptedMetaKey], acceptedMetaValue)
       assert.strictEqual(trace.meta[truncatedMetaKey], truncatedMetaValue)
       assert.strictEqual(trace.metrics[acceptedMetricKey], 11)
       assert.strictEqual(trace.metrics[truncatedMetricKey], 42)
       assert.strictEqual(trace.metrics[truncatedBoolKey], 1)
-      assert.strictEqual(trace.metrics[truncatedBufferKey], 'payload')
+      assert.ok(!Object.hasOwn(trace.metrics, truncatedBufferKey))
+      assert.strictEqual(trace.meta[truncatedBufferKey], 'payload')
       assert.strictEqual(trace.service, truncatedServiceValue)
     })
 
@@ -778,26 +776,54 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.metrics.metric, 50)
     })
 
-    it('should extract buffer tags as stringified metrics', () => {
+    it('should extract buffer tags as string metadata', () => {
       spanContext._tags.payload = Buffer.from('hello')
 
       trace = spanFormat(span)
 
-      assert.strictEqual(trace.metrics.payload, 'hello')
+      assert.ok(!Object.hasOwn(trace.metrics, 'payload'))
+      assert.strictEqual(trace.meta.payload, 'hello')
     })
 
-    it('should extract URL tags as stringified metrics', () => {
-      // `addMixedTag`'s default branch routes both `Buffer` and `URL` to
-      // metrics as `value.toString()`. The Buffer half is covered above;
-      // pin the URL half so a future tightening that drops `isUrl` from
-      // the helper surfaces here.
+    it('should extract URL tags as string metadata', () => {
       const url = new URL('https://example.com/foo?bar=1')
       spanContext._tags.endpoint = url
 
       trace = spanFormat(span)
 
-      assert.strictEqual(trace.metrics.endpoint, url.toString())
+      assert.ok(!Object.hasOwn(trace.metrics, 'endpoint'))
+      assert.strictEqual(trace.meta.endpoint, url.toString())
     })
+
+    for (const nested of [false, true]) {
+      for (const kind of ['Buffer', 'URL']) {
+        it(`should apply metadata limits to ${nested ? 'nested' : 'top-level'} ${kind} tags`, () => {
+          const { MAX_META_KEY_LENGTH, MAX_META_VALUE_LENGTH } = require('../src/encode/tags-processors')
+          const prefix = nested ? 'nested.' : ''
+          const acceptedKey = 'a'.repeat(MAX_META_KEY_LENGTH - prefix.length)
+          const rejectedKey = 'b'.repeat(MAX_META_KEY_LENGTH - prefix.length + 1)
+          const valuePrefix = kind === 'URL' ? 'https://example.com/' : ''
+          const acceptedValue = valuePrefix + 'v'.repeat(MAX_META_VALUE_LENGTH - valuePrefix.length)
+          const rejectedValue = `${acceptedValue}X`
+          const tags = {
+            [acceptedKey]: kind === 'Buffer' ? Buffer.from(acceptedValue) : new URL(acceptedValue),
+            [rejectedKey]: kind === 'Buffer' ? Buffer.from(rejectedValue) : new URL(rejectedValue),
+            empty: kind === 'Buffer' ? Buffer.alloc(0) : new URL('https://example.com/'),
+          }
+          spanContext._tags = nested ? { nested: tags } : tags
+
+          trace = spanFormat(span)
+
+          const truncatedKey = `${`${prefix}${rejectedKey}`.slice(0, MAX_META_KEY_LENGTH)}...`
+          assert.ok(!Object.hasOwn(trace.metrics, `${prefix}${acceptedKey}`))
+          assert.ok(!Object.hasOwn(trace.metrics, truncatedKey))
+          assert.ok(!Object.hasOwn(trace.metrics, `${prefix}empty`))
+          assert.strictEqual(trace.meta[`${prefix}${acceptedKey}`], acceptedValue)
+          assert.strictEqual(trace.meta[truncatedKey], `${acceptedValue}...`)
+          assert.strictEqual(trace.meta[`${prefix}empty`], kind === 'Buffer' ? '' : 'https://example.com/')
+        })
+      }
+    }
 
     it('should extract boolean tags as metrics', () => {
       spanContext._tags = { yes: true, no: false }

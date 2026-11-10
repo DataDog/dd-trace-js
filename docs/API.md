@@ -482,6 +482,7 @@ Any error from the awaited handler will automatically be added to the span.
 Tag values may be strings, numbers, booleans, `Buffer` or `URL` instances, or flat objects containing those
 values. Flat objects are expanded by one level, so `{ tags: { request: { method: 'GET' } } }` produces the
 `request.method` tag. Numeric typed arrays are expanded into indexed tags, such as `payload.0`.
+`Buffer` and `URL` values are converted to string tags.
 Objects, class instances, and functions contribute their own enumerable properties.
 
 For ordinary tags, arrays, symbols, bigint values, nullish values, and object fields beyond the first level are omitted.
