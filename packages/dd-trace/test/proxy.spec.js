@@ -507,6 +507,71 @@ describe('TracerProxy', () => {
         }
       })
 
+      for (const [name, sdkPath, method] of [
+        ['appsec', '../src/appsec/sdk', 'trackCustomEvent'],
+        ['llmobs', '../src/llmobs/sdk', 'trace'],
+      ]) {
+        it(`defers the ${name} SDK in Test Optimization until first access`, () => {
+          const entrypoint = path.resolve(__dirname, '../../../ci/init')
+          const sdkModule = require.resolve(sdkPath)
+          const script = `
+            const tracer = require(${JSON.stringify(entrypoint)})
+            const sdkModule = ${JSON.stringify(sdkModule)}
+            const loadedBefore = require.cache[sdkModule] !== undefined
+            const sdk = tracer[${JSON.stringify(name)}]
+            const callSucceeded = ${JSON.stringify(name)} === 'llmobs'
+              ? sdk.trace({ kind: 'workflow', name: 'sdk-test' }, () => 42) === 42
+              : sdk.trackCustomEvent('sdk-test', {}) === undefined
+            process.stdout.write(JSON.stringify({
+              loadedBefore,
+              loadedAfter: require.cache[sdkModule] !== undefined,
+              sameInstance: sdk === tracer[${JSON.stringify(name)}],
+              method: typeof sdk[${JSON.stringify(method)}],
+              callSucceeded,
+            }), () => process.exit(0))
+          `
+          const inherited = Object.fromEntries(Object.entries(process.env)
+            .filter(([key]) => !/^(DD_|_DD_|OTEL_)/.test(key)))
+          const result = spawnSync(process.execPath, ['--eval', script], {
+            encoding: 'utf8',
+            timeout: 10_000,
+            env: {
+              ...inherited,
+              DD_INJECT_FORCE: process.env.DD_INJECT_FORCE,
+              DD_APPSEC_ENABLED: 'false',
+              DD_LLMOBS_ENABLED: 'false',
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+              DD_CRASHTRACKING_ENABLED: 'false',
+              JEST_WORKER_ID: '1',
+            },
+          })
+
+          assert.strictEqual(result.status, 0, result.stderr)
+          assert.deepStrictEqual(JSON.parse(result.stdout), {
+            loadedBefore: false,
+            loadedAfter: true,
+            sameInstance: true,
+            method: 'function',
+            callSucceeded: true,
+          })
+        })
+      }
+
+      it('preserves AppSec SDK calls after deferred Test Optimization initialization', () => {
+        config.isCiVisibility = true
+        config.telemetry = { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false }
+        proxy.init()
+        sinon.assert.notCalled(AppsecSdk)
+
+        const metadata = { key: 'value' }
+        proxy.appsec.trackCustomEvent('test-event', metadata)
+        proxy.appsec.trackCustomEvent('second-event', metadata)
+
+        sinon.assert.calledOnceWithExactly(AppsecSdk, tracer, config)
+        sinon.assert.calledWithExactly(appsecSdk.trackCustomEvent, 'test-event', metadata)
+        sinon.assert.calledWithExactly(appsecSdk.trackCustomEvent, 'second-event', metadata)
+      })
+
       it('does not load Dynamic Instrumentation while disabled', () => {
         proxy.init()
 
