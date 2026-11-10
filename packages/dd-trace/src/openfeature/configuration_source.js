@@ -10,6 +10,11 @@ const AGENTLESS_START_MESSAGE = 'Feature Flags: starting agentless configuration
 const REMOTE_CONFIG_DISABLED_WARNING = 'Feature Flags: configuration source is remote_config but Remote ' +
   'Configuration is disabled; flag evaluations will return their default values. Set ' +
   'DD_REMOTE_CONFIGURATION_ENABLED=true or DD_FEATURE_FLAGS_CONFIGURATION_SOURCE=agentless'
+// The CDN attributes configuration requests to the DD-Service header only when it matches this, and drops any other
+// value.
+const USAGE_SERVICE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$/
+const USAGE_SERVICE_REJECTED_MESSAGE = 'Feature Flags: service %s does not match the format the CDN attributes ' +
+  'usage to; DD-Service header not sent'
 
 /**
  * @typedef {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} UniversalFlagConfiguration
@@ -62,6 +67,7 @@ function create (config, applyConfiguration) {
       requestTimeoutMs: requestTimeoutSeconds * 1000,
       apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
       env: config.env,
+      service: usageService(config.service),
     }, applyConfiguration)
   } catch (error) {
     log.error('Unable to configure Feature Flagging configuration source', error)
@@ -105,6 +111,18 @@ function endpoint (config, configuredBaseUrl) {
   }
 
   return url
+}
+
+/**
+ * Selects the service sent as DD-Service. A value the CDN would drop is not sent: besides being wasted, a header
+ * value with characters outside Latin-1 makes Node.js throw, which would end the polling loop.
+ *
+ * @param {string | undefined} service - Tracer service name.
+ */
+function usageService (service) {
+  const accepted = service !== undefined && USAGE_SERVICE_PATTERN.test(service)
+  if (service && !accepted) log.debug(USAGE_SERVICE_REJECTED_MESSAGE, service)
+  return accepted ? service : undefined
 }
 
 /**

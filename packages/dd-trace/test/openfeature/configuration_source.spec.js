@@ -262,6 +262,55 @@ describe('OpenFeature configuration source', () => {
     sinon.assert.notCalled(log.error)
   })
 
+  it('passes the tracer service so the CDN can attribute usage to it', () => {
+    config.service = 'checkout'
+
+    assert.strictEqual(createSourceConfig().service, 'checkout')
+  })
+
+  it('passes the service to a custom endpoint, unlike the API key', () => {
+    config.service = 'checkout'
+    config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
+      'https://flags.example.test/custom/ufc'
+
+    const resolved = createSourceConfig()
+
+    assert.strictEqual(resolved.service, 'checkout')
+    assert.strictEqual(resolved.apiKey, undefined)
+  })
+
+  it('passes a service at the edges of the format the CDN accepts', () => {
+    for (const service of ['a', 'svc_name.v2:api/edge-1', `a${'b'.repeat(99)}`]) {
+      AgentlessConfigurationSource.resetHistory()
+      config.service = service
+
+      assert.strictEqual(createSourceConfig().service, service)
+    }
+  })
+
+  // The CDN drops any other value, and Node.js throws on header characters outside Latin-1, which would end polling.
+  it('does not pass a service the CDN would drop or Node.js cannot send', () => {
+    for (const service of [`a${'b'.repeat(100)}`, '_svc', 'my service', '支付', 'bad\nvalue']) {
+      AgentlessConfigurationSource.resetHistory()
+      log.debug.resetHistory()
+      config.service = service
+
+      assert.strictEqual(createSourceConfig().service, undefined, service)
+      sinon.assert.calledWithExactly(
+        log.debug,
+        'Feature Flags: service %s does not match the format the CDN attributes usage to; DD-Service header not sent',
+        service
+      )
+    }
+  })
+
+  it('does not pass an empty service', () => {
+    config.service = ''
+
+    assert.strictEqual(createSourceConfig().service, undefined)
+    sinon.assert.calledOnce(log.debug)
+  })
+
   it('requires a Datadog API key for the default Datadog Feature Flagging endpoint', () => {
     delete config.DD_API_KEY
 
