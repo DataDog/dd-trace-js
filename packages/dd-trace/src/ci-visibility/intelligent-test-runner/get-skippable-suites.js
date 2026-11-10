@@ -28,12 +28,11 @@ function parseSkippableSuitesResponse (
     isCoverageReportUploadEnabled = false,
     isLineCoverageSupported = true,
     validateRequiredFields = false,
-    validationMode = false,
   } = {}
 ) {
   const parsedResponse = parseJsonResponse(rawJson)
   if (validateRequiredFields) {
-    validateSkippableTestsResponse(parsedResponse, { validationMode })
+    validateSkippableTestsResponse(parsedResponse)
   }
   let coverage
   const coverageByFilename = parsedResponse.meta?.coverage
