@@ -16,6 +16,12 @@ const { datadogVite } = require('../../../vite')
 const ROLLDOWN = { meta: { rolldownVersion: '1.0.0', viteVersion: '8.0.0' } }
 const ROLLUP = { meta: { rollupVersion: '4.0.0', viteVersion: '7.0.0' } }
 const OPTIONAL_DEPENDENCIES = Object.keys(require('../../../package.json').optionalDependencies)
+// Installed in this repository, so they are bundled.
+const BUNDLED_OPTIONAL_DEPENDENCIES = ['@opentelemetry/api', '@opentelemetry/api-logs']
+const NATIVE_OPTIONAL_DEPENDENCIES = OPTIONAL_DEPENDENCIES.filter(name => !BUNDLED_OPTIONAL_DEPENDENCIES.includes(name))
+const TRACER_DIRECTORY = `${fs.realpathSync(path.join(__dirname, '../../..')).replaceAll('\\', '/')}/`
+const TRACER_MODULE = `${TRACER_DIRECTORY}packages/dd-trace/src/runtime_metrics/runtime_metrics.js`
+const OTHER_TRACER_COPY_MODULE = '/app/node_modules/dd-trace/packages/dd-trace/src/runtime_metrics/runtime_metrics.js'
 const directories = []
 
 describe('datadogVite', () => {
@@ -82,16 +88,58 @@ describe('datadogVite', () => {
   })
 
   describe('optional tracer dependencies', () => {
-    it('externalizes every optional dependency and its subpaths on Rolldown', () => {
+    it('externalizes optional dependencies imported by the tracer on Rolldown, bundling installed ones', () => {
+      const external = configureEnvironment(ROLLDOWN, {}).build.rolldownOptions.external
+
+      for (const name of NATIVE_OPTIONAL_DEPENDENCIES) {
+        assert.equal(isExternal(external, name, TRACER_MODULE), true, name)
+        assert.equal(isExternal(external, `${name}/subpath`, TRACER_MODULE), true, name)
+        assert.equal(isExternal(external, name, OTHER_TRACER_COPY_MODULE), true, name)
+        assert.equal(isExternal(external, name, OTHER_TRACER_COPY_MODULE.replaceAll('/', '\\')), true, name)
+      }
+      for (const name of BUNDLED_OPTIONAL_DEPENDENCIES) {
+        assert.equal(isExternal(external, name, TRACER_MODULE), false, name)
+      }
+      for (const name of ['express', '@opentelemetry/api-extra', '@datadog/pprof-extra', 'my-oxc-parser']) {
+        assert.equal(isExternal(external, name, TRACER_MODULE), false, name)
+      }
+    })
+
+    it('bundles the application imports of optional dependencies on Rolldown', () => {
       const external = configureEnvironment(ROLLDOWN, {}).build.rolldownOptions.external
 
       for (const name of OPTIONAL_DEPENDENCIES) {
-        assert.equal(isExternal(external, name), true, name)
-        assert.equal(isExternal(external, `${name}/subpath`), true, name)
-      }
-      for (const name of ['express', '@opentelemetry/api-extra', '@datadog/pprof-extra', 'my-oxc-parser']) {
         assert.equal(isExternal(external, name), false, name)
+        assert.equal(isExternal(external, name, '/app/node_modules/library/index.js'), false, name)
+        assert.equal(external(name, undefined, false), false, name)
       }
+    })
+
+    it('keeps missing pure JavaScript optional dependencies out of the bundle with either bundler', () => {
+      const missing = new Set(['@opentelemetry/api-logs'])
+      const createRequire = sinon.spy(filename => {
+        const tracerRequire = require('node:module').createRequire(filename)
+        return {
+          resolve (/** @type {string} */ name) {
+            if (!missing.has(name)) return tracerRequire.resolve(name)
+            throw Object.assign(new Error(`Cannot find module '${name}'`), { code: 'MODULE_NOT_FOUND' })
+          },
+        }
+      })
+      const { datadogVite } = proxyquire('../index', { 'node:module': { createRequire } })
+      const configure = (context, config) => {
+        datadogVite().configEnvironment.call(context, 'ssr', config)
+        return config.build
+      }
+
+      const { external } = configure(ROLLDOWN, {}).rolldownOptions
+      const { ignore } = configure(ROLLUP, {}).commonjsOptions
+
+      assert.equal(isExternal(external, '@opentelemetry/api-logs', TRACER_MODULE), true)
+      assert.equal(isExternal(external, '@opentelemetry/api', TRACER_MODULE), false)
+      assert.equal(ignore('@opentelemetry/api-logs'), true)
+      assert.equal(ignore('@opentelemetry/api'), false)
+      sinon.assert.alwaysCalledWithExactly(createRequire, `${TRACER_DIRECTORY}index.js`)
     })
 
     it('merges every external shape on Rolldown', () => {
@@ -110,13 +158,14 @@ describe('datadogVite', () => {
         const external = configureEnvironment(ROLLDOWN, { build: { rolldownOptions: { external: userExternal } } })
           .build.rolldownOptions.external
 
-        assert.ok(typeof external === 'function' || external.every(entry => typeof entry !== 'function'))
-        assert.equal(isExternal(external, '@datadog/native-metrics'), true)
+        assert.equal(typeof external, 'function')
+        assert.equal(isExternal(external, '@datadog/native-metrics', TRACER_MODULE), true)
+        assert.equal(isExternal(external, '@datadog/native-metrics'), false)
         assert.equal(isExternal(external, 'express'), false)
         for (const id of userIds) assert.equal(isExternal(external, id), true, id)
       }
       sinon.assert.calledWithExactly(userFunction, 'electron', '/app/main.js', false)
-      sinon.assert.neverCalledWith(userFunction, '@datadog/native-metrics')
+      sinon.assert.neverCalledWith(userFunction, '@datadog/native-metrics', TRACER_MODULE)
     })
 
     it('reuses the aliased rollupOptions and stays idempotent across environments on Rolldown', () => {
@@ -128,7 +177,7 @@ describe('datadogVite', () => {
       plugin.configEnvironment.call(ROLLDOWN, 'ssr', { build: { rollupOptions } })
 
       assert.strictEqual(rollupOptions.external, once)
-      assert.equal(once.length, 2)
+      assert.equal(isExternal(once, 'electron'), true)
 
       const userFunction = () => false
       const functionOptions = { external: userFunction }
@@ -148,7 +197,8 @@ describe('datadogVite', () => {
         const { build } = configureEnvironment(ROLLUP, { build: { commonjsOptions: { ignore: userIgnore } } })
         const { ignore } = build.commonjsOptions
 
-        for (const name of OPTIONAL_DEPENDENCIES) assert.equal(ignore(`${name}/subpath`), true, name)
+        for (const name of NATIVE_OPTIONAL_DEPENDENCIES) assert.equal(ignore(`${name}/subpath`), true, name)
+        for (const name of BUNDLED_OPTIONAL_DEPENDENCIES) assert.equal(ignore(name), false, name)
         assert.equal(ignore('express'), false)
         assert.equal(ignore('user-ignored'), userIgnore !== undefined)
         assert.equal(build.rollupOptions, undefined)
@@ -162,6 +212,54 @@ describe('datadogVite', () => {
       const once = commonjsOptions.ignore
       plugin.configEnvironment.call(undefined, 'ssr', { build: { commonjsOptions } })
       assert.strictEqual(commonjsOptions.ignore, once)
+    })
+  })
+
+  describe('CommonJS globals in ESM output', () => {
+    it('defines require, __filename and __dirname in every Rollup ESM chunk', async () => {
+      const plugin = datadogVite()
+
+      for (const format of [undefined, 'es', 'esm', 'module']) {
+        const output = { format, intro: 'const userIntro = true;' }
+        const { intro } = plugin.outputOptions.call(ROLLUP, output)
+
+        assert.equal(output.intro, 'const userIntro = true;')
+        assert.match(intro, /^import .+\nconst userIntro = true;$/s, format)
+      }
+
+      const projectDir = createProject()
+      const { intro } = plugin.outputOptions.call(ROLLUP, {})
+      const chunk = write(projectDir, 'dist/chunk.mjs',
+        `${intro}export default [typeof require('node:path').join, __filename, __dirname]\n`)
+      const names = ['require', '__filename', '__dirname']
+      const descriptors = names.map(name => Object.getOwnPropertyDescriptor(globalThis, name))
+      for (const name of names) delete globalThis[name]
+      try {
+        const { default: globals } = await import(pathToFileURL(chunk).href)
+        assert.deepStrictEqual(globals, ['function', fs.realpathSync(chunk), path.dirname(fs.realpathSync(chunk))])
+      } finally {
+        for (const [index, name] of names.entries()) {
+          delete globalThis[name]
+          if (descriptors[index]) Object.defineProperty(globalThis, name, descriptors[index])
+        }
+      }
+    })
+
+    it('composes a user intro function', async () => {
+      const userIntro = sinon.stub().resolves('const userIntro = true;')
+      const { intro } = datadogVite().outputOptions.call(ROLLUP, { intro: userIntro })
+
+      const code = await intro({ isEntry: true })
+      assert.match(code, /^import \{ createRequire as \$dd_createRequire \} from 'node:module';\n.+\nconst userIntro = true;$/s)
+      sinon.assert.calledOnceWithExactly(userIntro, { isEntry: true })
+    })
+
+    it('leaves CommonJS output and Rolldown untouched', () => {
+      const plugin = datadogVite()
+
+      assert.equal(plugin.outputOptions.call(ROLLUP, { format: 'cjs' }), undefined)
+      assert.equal(plugin.outputOptions.call(ROLLDOWN, { format: 'es' }), undefined)
+      assert.equal(plugin.outputOptions.call(ROLLDOWN, {}), undefined)
     })
   })
 
@@ -489,9 +587,10 @@ function configureEnvironment (context, config, name = 'ssr') {
  *
  * @param {string | RegExp | Array<string | RegExp> | Function} external
  * @param {string} id
+ * @param {string | undefined} [parentId]
  */
-function isExternal (external, id) {
-  if (typeof external === 'function') return Boolean(external(id, '/app/main.js', false))
+function isExternal (external, id, parentId = '/app/main.js') {
+  if (typeof external === 'function') return Boolean(external(id, parentId, false))
   return [external].flat().some(entry => typeof entry === 'string' ? entry === id : entry.test(id))
 }
 
