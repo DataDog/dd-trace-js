@@ -204,6 +204,30 @@ describe('test suite', () => {
             )
           })
 
+          appDirTest('should block an attack in a cloned request body', () => {
+            return assertBlocked(
+              httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test-clone`, {
+                key: 'blockattack',
+              }, { validateStatus: false })
+            )
+          })
+
+          appDirTest('should block an attack read from a clone before the request body', () => {
+            return assertBlocked(
+              httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test-clone-peek`, {
+                key: 'blockattack',
+              }, { validateStatus: false })
+            )
+          })
+
+          appDirTest('should block an attack in the body of a clone of a cloned request', () => {
+            return assertBlocked(
+              httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test-clone-chain`, {
+                key: 'blockattack',
+              }, { validateStatus: false })
+            )
+          })
+
           appDirTest('should let Next.js error handling report a blocked request body', async () => {
             await assertBlocked(
               httpRequest.post(`http://127.0.0.1:${serverData.port}/api/test`, {

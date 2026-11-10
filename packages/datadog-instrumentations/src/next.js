@@ -61,6 +61,7 @@ const META_IS_MIDDLEWARE = 'middlewareInvoke'
 const encounteredMiddleware = new WeakSet()
 
 const abortReasons = new WeakSet()
+const incomingRequestClones = new WeakSet()
 
 // `next.span_type` value Next.js sets on its own OTel root request span; the whole detection surface.
 const NEXT_BASE_SERVER_HANDLE_REQUEST = 'BaseServer.handleRequest'
@@ -636,13 +637,19 @@ addHook({
 
 /**
  * @param {Request} request
+ */
+function isIncomingRequest (request) {
+  return 'nextUrl' in request || incomingRequestClones.has(request)
+}
+
+/**
+ * @param {Request} request
  * @param {unknown} body
  */
 function publishBodyParsed (request, body) {
   if (!bodyParsedChannel.hasSubscribers) return
 
-  // The wrapped prototype is the global Request one: only the incoming NextRequest can block the user request.
-  const abortController = 'nextUrl' in request ? new AbortController() : undefined
+  const abortController = isIncomingRequest(request) ? new AbortController() : undefined
   bodyParsedChannel.publish({ body, abortController })
 
   if (abortController?.signal.aborted) {
@@ -680,6 +687,18 @@ addHook({
       publishBodyParsed(this, normalizedBody)
 
       return body
+    }
+  })
+
+  shimmer.wrap(requestProto, 'clone', function (originalClone) {
+    return function wrappedClone () {
+      const clone = originalClone.apply(this, arguments)
+
+      if (bodyParsedChannel.hasSubscribers && isIncomingRequest(this)) {
+        incomingRequestClones.add(clone)
+      }
+
+      return clone
     }
   })
 
