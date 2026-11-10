@@ -50,6 +50,7 @@ describe('sdk', () => {
     sinon.spy(LLMObsSpanProcessor.prototype, 'process')
     sinon.spy(LLMObsSpanProcessor.prototype, 'format')
     sinon.spy(tracer._tracer._processor, 'process')
+    sinon.stub(tracer._tracer, 'flushAll')
 
     // stub writer functionality
     sinon.stub(LLMObsEvalMetricsWriter.prototype, 'append')
@@ -71,6 +72,7 @@ describe('sdk', () => {
     LLMObsSpanProcessor.prototype.process.resetHistory()
     LLMObsSpanProcessor.prototype.format.resetHistory()
     tracer._tracer._processor.process.resetHistory()
+    tracer._tracer.flushAll.resetHistory()
 
     LLMObsEvalMetricsWriter.prototype.append.resetHistory()
     LLMObsEvalMetricsWriter.prototype.flush.resetHistory()
@@ -1064,8 +1066,20 @@ describe('sdk', () => {
       })
     })
     describe('version option', () => {
+      beforeEach(() => {
+        sinon.spy(tracer._tracer._exporter, 'export')
+      })
+
+      afterEach(() => {
+        tracer._tracer._exporter.export.restore()
+      })
+
       function emittedTags (name) {
-        return LLMObsSpanWriter.prototype.append.getCalls().find(call => call.args[0].name === name)?.args[0].tags
+        const span = tracer._tracer._exporter.export.getCalls()
+          .flatMap(call => call.args[0])
+          .find(span => span.name === name)
+        assert.ok(span, `Expected an exported span named ${name}`)
+        return Object.entries(span.meta_struct._llmobs.tags).map(([key, value]) => `${key}:${value}`)
       }
 
       it('reports the version on an agent span started with trace, and not on the APM span options', () => {
@@ -1516,16 +1530,18 @@ describe('sdk', () => {
         })
       })
 
-      it('emits the manifest named after the span and the version tag on the span event', () => {
-        llmobs.trace({ kind: 'agent', name: 'travel_desk_span' }, () => {
+      it('emits the manifest named after the span and the version tag on the APM span', () => {
+        let agentSpan
+        llmobs.trace({ kind: 'agent', name: 'travel_desk_span' }, span => {
+          agentSpan = span
           llmobs.annotate({ agent: { version: '2.1.0', model: 'gpt-4o' } })
         })
 
-        const event = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
-        assert.deepStrictEqual(event.meta.metadata, {
+        assert.deepStrictEqual(agentSpan.meta_struct._llmobs.meta.metadata, {
           _dd: { agent_manifest: { framework: 'manual', model: 'gpt-4o', name: 'travel_desk_span' } },
         })
-        assert.ok(event.tags.includes('agent_version:2.1.0'))
+        assert.strictEqual(agentSpan.meta_struct._llmobs.tags.agent_version, '2.1.0')
+        sinon.assert.notCalled(LLMObsSpanWriter.prototype.append)
       })
 
       it('does not store a manifest for a version-only agent', () => {
@@ -1573,10 +1589,10 @@ describe('sdk', () => {
           llmobs.annotate({ tags: { team: 'ml', agent_version: 'from_tags' }, agent: { version: '1.0.0' } })
         })
 
-        const { tags } = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
-        assert.ok(tags.includes('team:ml'))
-        assert.ok(tags.includes('agent_version:1.0.0'))
-        assert.ok(!tags.includes('agent_version:from_tags'))
+        const span = tracer._tracer._processor.process.getCall(0).args[0]
+        const { tags } = span.meta_struct._llmobs
+        assert.strictEqual(tags.team, 'ml')
+        assert.strictEqual(tags.agent_version, '1.0.0')
       })
 
       it('drops the agent on a non-agent span with a warning', () => {
@@ -1845,8 +1861,8 @@ describe('sdk', () => {
       }
 
       function emittedEvent (name) {
-        const call = LLMObsSpanWriter.prototype.append.getCalls().find(call => call.args[0].name === name)
-        return call?.args[0]
+        const call = LLMObsSpanProcessor.prototype.process.getCalls().find(call => call.args[0]._name === name)
+        return call?.args[0].meta_struct?._llmobs
       }
 
       function createPluginTagger () {
@@ -1863,9 +1879,9 @@ describe('sdk', () => {
           })
         })
 
-        assert.ok(emittedEvent('agent').tags.includes('agent_version:1.0.0'))
+        assert.strictEqual(emittedEvent('agent').tags.agent_version, '1.0.0')
         const workflow = emittedEvent('workflow')
-        assert.ok(!workflow.tags.some(tag => tag.startsWith('agent_version:')))
+        assert.strictEqual(workflow.tags.agent_version, undefined)
         assert.strictEqual(workflow.meta.metadata, undefined)
       })
 
@@ -1878,8 +1894,8 @@ describe('sdk', () => {
           })
         })
 
-        assert.ok(emittedEvent('llm').tags.includes('agent_version:1.0.0'))
-        assert.ok(!emittedEvent('workflow').tags.some(tag => tag.startsWith('agent_version:')))
+        assert.strictEqual(emittedEvent('llm').tags.agent_version, '1.0.0')
+        assert.strictEqual(emittedEvent('workflow').tags.agent_version, undefined)
       })
 
       it('emits the manifest and version on the span event', () => {
@@ -1891,7 +1907,7 @@ describe('sdk', () => {
         assert.deepStrictEqual(event.meta.metadata, {
           _dd: { agent_manifest: { framework: 'manual', instructions: 'Book travel.', name: 'travel_desk' } },
         })
-        assert.ok(event.tags.includes('agent_version:1.0.0'))
+        assert.strictEqual(event.tags.agent_version, '1.0.0')
       })
 
       it('declares every agent span in the block, nested and sibling ones included', () => {
@@ -1960,7 +1976,7 @@ describe('sdk', () => {
           })
         })
 
-        assert.ok(emittedEvent('agent').tags.includes('agent_version:1.0.0'))
+        assert.strictEqual(emittedEvent('agent').tags.agent_version, '1.0.0')
       })
 
       it('lets a direct annotation override the context declaration on a nested agent span', () => {
@@ -2055,10 +2071,10 @@ describe('sdk', () => {
           })
         })
 
-        assert.ok(emittedEvent('agent').tags.includes('agent_version:from_agent'))
-        assert.ok(emittedEvent('tool').tags.includes('agent_version:from_agent'))
-        assert.ok(!emittedEvent('tool').tags.includes('agent_version:from_tags'))
-        assert.ok(emittedEvent('workflow').tags.includes('agent_version:from_tags'))
+        assert.strictEqual(emittedEvent('agent').tags.agent_version, 'from_agent')
+        assert.strictEqual(emittedEvent('tool').tags.agent_version, 'from_agent')
+        assert.notStrictEqual(emittedEvent('tool').tags.agent_version, 'from_tags')
+        assert.strictEqual(emittedEvent('workflow').tags.agent_version, 'from_tags')
       })
 
       it('does not write annotations into the context tags object', () => {
@@ -2126,8 +2142,8 @@ describe('sdk', () => {
           }
         })
 
-        assert.ok(emittedEvent('plugin.llm').tags.includes('agent_version:1.0.0'))
-        assert.ok(emittedEvent('plugin.tool').tags.includes('agent_version:1.0.0'))
+        assert.strictEqual(emittedEvent('plugin.llm').tags.agent_version, '1.0.0')
+        assert.strictEqual(emittedEvent('plugin.tool').tags.agent_version, '1.0.0')
       })
 
       it('reports the context version on the llm and tool spans of an integration agent', () => {
@@ -2146,7 +2162,7 @@ describe('sdk', () => {
         })
 
         for (const name of ['claude_agent_sdk.query', 'plugin.llm', 'plugin.tool']) {
-          assert.ok(emittedEvent(name).tags.includes('agent_version:1.0.0'), name)
+          assert.strictEqual(emittedEvent(name).tags.agent_version, '1.0.0', name)
         }
       })
 
@@ -2162,7 +2178,7 @@ describe('sdk', () => {
         })
 
         const event = emittedEvent('Agent (subagent)')
-        assert.ok(event.tags.includes('agent_version:1.0.0'))
+        assert.strictEqual(event.tags.agent_version, '1.0.0')
         assert.deepStrictEqual(event.meta.metadata._dd.agent_manifest, { framework: 'manual', name: 'travel_desk' })
       })
     })
@@ -3110,20 +3126,29 @@ describe('sdk', () => {
 
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.flush)
       sinon.assert.notCalled(LLMObsSpanWriter.prototype.flush)
+      sinon.assert.notCalled(tracer._tracer.flushAll)
       tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
-    it('flushes the evaluation writer and span writer', () => {
+    it('flushes the LLMObs writers before the APM exporter', () => {
       llmobs.flush()
 
-      sinon.assert.called(LLMObsEvalMetricsWriter.prototype.flush)
-      sinon.assert.called(LLMObsSpanWriter.prototype.flush)
+      sinon.assert.calledOnce(LLMObsEvalMetricsWriter.prototype.flush)
+      sinon.assert.calledOnce(LLMObsSpanWriter.prototype.flush)
+      sinon.assert.calledOnce(tracer._tracer.flushAll)
+      sinon.assert.callOrder(
+        LLMObsSpanWriter.prototype.flush,
+        LLMObsEvalMetricsWriter.prototype.flush,
+        tracer._tracer.flushAll
+      )
     })
 
-    it('logs if there was an error flushing', () => {
+    it('flushes the APM exporter if an LLMObs writer throws', () => {
       LLMObsEvalMetricsWriter.prototype.flush.throws(new Error('boom'))
 
       llmobs.flush()
+
+      sinon.assert.calledOnce(tracer._tracer.flushAll)
     })
   })
 

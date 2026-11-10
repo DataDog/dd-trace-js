@@ -334,7 +334,15 @@ const parsers = {
       // DD_TAGS is a special case. It may be a map of key-value pairs separated by spaces.
       raw = raw.replaceAll(/\s+/g, ',')
     }
-    tagger.add(entries, raw, valueSeparator)
+    if (valueSeparator === '=' && raw.includes('%')) {
+      try {
+        tagger.add(entries, raw, valueSeparator, true)
+      } catch {
+        return
+      }
+    } else {
+      tagger.add(entries, raw, valueSeparator)
+    }
     return entries
   },
   JSON (raw) {
@@ -432,6 +440,7 @@ const programmaticTypeCoercions = {
 }
 
 module.exports = {
+  VALID_PROPAGATION_STYLES,
   parsers,
   programmaticTypeCoercions,
   transformers,

@@ -59,9 +59,9 @@ const {
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { FINAL_FLUSH_TIMEOUT } = require('../../packages/dd-trace/src/ci-visibility/final-flush')
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
-const { DD_MAJOR } = require('../../version')
 const { version: ddTraceVersion } = require('../../package.json')
 const { getBabelDependencies } = require('./babel-dependencies')
+const { oldest: oldestJestVersion } = require('./versions')
 
 const testFile = 'ci-visibility/run-jest.js'
 const expectedStdout = 'Test Suites: 2 passed'
@@ -72,7 +72,6 @@ const unsupportedTestRunnerWarning =
   'suite and test events may be incomplete.'
 
 const requestedJestVersion = process.env.JEST_VERSION || 'latest'
-const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
 const isJest28OrNewer = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28

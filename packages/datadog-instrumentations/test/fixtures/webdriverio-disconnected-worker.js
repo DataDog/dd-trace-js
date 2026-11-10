@@ -60,6 +60,8 @@ function exerciseWorkerMessages () {
       }
     }
 
+    ui () {}
+
     /**
      * @returns {object}
      */

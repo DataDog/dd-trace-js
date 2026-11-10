@@ -25,6 +25,7 @@ const {
 const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const ciVisibilityLog = require('../../../src/log')
+const telemetry = require('../../../src/telemetry')
 const { incrementCountMetric: actualIncrementCountMetric } = require('../../../src/ci-visibility/telemetry')
 const { uploadCoverageReport: actualUploadCoverageReportRequest } =
   require('../../../src/ci-visibility/requests/upload-coverage-report')
@@ -1384,6 +1385,43 @@ describe('CI Visibility Exporter', () => {
         callbackError
       )
     })
+
+    for (const outcome of ['success', 'error', 'timeout']) {
+      it(`flushes telemetry after the shutdown data flush completes with ${outcome}`, () => {
+        const clock = sinon.useFakeTimers()
+        const flushTelemetry = sinon.stub(telemetry, 'flush')
+        const logError = sinon.stub(ciVisibilityLog, 'error')
+        const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+        let beforeExitHandler
+        try {
+          const exporter = new CiVisibilityExporter({ url })
+          beforeExitHandler = [...beforeExitHandlers].at(-1)
+          let completeWriter
+          exporter._isInitialized = true
+          exporter._writer = { flush: done => { completeWriter = done } }
+
+          beforeExitHandler()
+          sinon.assert.notCalled(flushTelemetry)
+
+          const error = outcome === 'error' ? new Error('Upload failed') : undefined
+          if (outcome === 'timeout') clock.tick(FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY)
+          else completeWriter(error)
+
+          sinon.assert.calledOnceWithExactly(flushTelemetry)
+          if (outcome === 'success') {
+            sinon.assert.notCalled(logError)
+          } else {
+            sinon.assert.calledOnce(logError)
+            sinon.assert.callOrder(logError, flushTelemetry)
+            if (outcome === 'error') assert.strictEqual(logError.firstCall.args[1], error)
+            else assert.strictEqual(logError.firstCall.args[1].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+          }
+        } finally {
+          beforeExitHandlers.delete(beforeExitHandler)
+          clock.restore()
+        }
+      })
+    }
 
     it('reuses an expired final flush when exporter initialization never completes', () => {
       const clock = sinon.useFakeTimers()
