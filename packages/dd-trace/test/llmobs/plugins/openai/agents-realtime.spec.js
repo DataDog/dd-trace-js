@@ -91,7 +91,8 @@ describe('Agents SDK realtime automatic tracing', () => {
       sinon.restore()
     })
 
-    for (const mode of ['cjs', 'esm']) {
+    // Exercise ESM activation before a CommonJS load can install the runtime subscribers.
+    for (const mode of ['esm', 'cjs']) {
       for (const name of ['sideband-tool', 'sideband-interruption']) {
         it(mode + ' replays ' + name + ' through the real SIP SDK and preserves the span contract', async () => {
           const fixture = JSON.parse(fs.readFileSync(path.join(__dirname,

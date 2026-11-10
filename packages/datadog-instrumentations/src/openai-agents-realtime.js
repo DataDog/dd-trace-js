@@ -5,7 +5,6 @@ const dc = require('dc-polyfill')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, getHooks } = require('./helpers/instrument')
 const { attachSocketClose, createSession, realtimeEnabled } = require('./openai-realtime')
 
 const turnChannel = dc.tracingChannel('apm:openai:realtime:turn')
@@ -138,7 +137,6 @@ function failed (ctx) {
 }
 
 if (realtimeEnabled()) {
-  for (const hook of getHooks('@openai/agents-realtime').values()) addHook(hook, exports => exports)
   dc.tracingChannel('orchestrion:@openai/agents-realtime:constructor').end.subscribe(listen)
   const connection = dc.tracingChannel('orchestrion:@openai/agents-realtime:connect')
   connection.start.subscribe(connect)
