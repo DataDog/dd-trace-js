@@ -29,6 +29,7 @@ const { NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
 
 const min = NODE_MAJOR >= 25 ? '>=13' : '>=10.2'
+const compiledRuntimeVersion = '15.4.1'
 
 /**
  * @param {'app-page'|'app-route'|'pages-api'} runtime
@@ -36,7 +37,7 @@ const min = NODE_MAJOR >= 25 ? '>=13' : '>=10.2'
  */
 function applyCompiledRuntimeHook (runtime, runtimeExports) {
   const hook = instrumentations.next.find(hook => hook.filePattern?.includes(`${runtime}[`)).hook
-  hook(runtimeExports)
+  hook(runtimeExports, compiledRuntimeVersion)
 }
 
 /** @param {{ NoFallbackError: typeof Error }} runtimeExports */
@@ -1317,7 +1318,7 @@ describe('compiled Next runtimes', () => {
       const routeModule = new RouteModule()
 
       const hook = getHook(runtime)
-      hook({ [exportName]: RouteModule })
+      hook({ [exportName]: RouteModule }, compiledRuntimeVersion)
 
       if (runtime !== 'pages-api') {
         assert.strictEqual(routeModule.prepare(...args), returned.prepare)
