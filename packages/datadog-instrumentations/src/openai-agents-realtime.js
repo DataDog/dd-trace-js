@@ -103,7 +103,7 @@ function connect (ctx) {
 /** @param {object} ctx */
 function connected (ctx) {
   try {
-    if (ctx.error) return
+    if (ctx.realtimeConnectFailed) return
     // The SDK retains successful URL overrides even while tracing is disabled.
     if (ctx.realtimeDefaultUrl) defaultUrls.set(ctx.self, ctx.realtimeDefaultUrl)
     const record = ctx.realtimeConnection
@@ -133,6 +133,7 @@ function closed (ctx) {
 
 /** @param {object} ctx */
 function failed (ctx) {
+  ctx.realtimeConnectFailed = true
   ctx.realtimeConnection?.finalize(true)
 }
 

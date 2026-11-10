@@ -8,7 +8,7 @@ const sinon = require('sinon')
 const RealtimeSession = require('../../src/openai-realtime/session')
 const { LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES } = require('../../../dd-trace/src/llmobs/constants/audio')
 
-function harness ({ retain = true } = {}) {
+function harness ({ retain = true, retrieveAudio = true } = {}) {
   const clock = sinon.useFakeTimers({ now: 1_000_000 })
   const emitted = []
   const requests = []
@@ -17,7 +17,7 @@ function harness ({ retain = true } = {}) {
     captureContext: () => {},
     serverPlayback: true,
     shouldRetainAudio: () => retain,
-    requestItem: (itemId, eventId) => requests.push({ itemId, eventId }),
+    requestItem: retrieveAudio ? (itemId, eventId) => requests.push({ itemId, eventId }) : undefined,
   })
   const send = event => session.onServerEvent(event, clock.now)
   const item = (id, status = 'completed') => ({
@@ -329,6 +329,39 @@ describe('OpenAI server-owned playback lifecycle edges', () => {
       assert.strictEqual(h.emitted[0].input.audio.length, 48000)
       h.clock.tick(10000)
       assert.strictEqual(h.requests.length, terminal === 'completed' ? 0 : 1)
+    })
+  }
+
+  for (const unavailable of ['disabled', 'failed', 'exhausted']) {
+    it('releases transcription ownership when dispatch is ' + unavailable, () => {
+      const h = harness({ retrieveAudio: unavailable !== 'disabled' })
+      h.send({ type: 'session.updated', session: { input_audio_transcription: { model: 'whisper-1' } } })
+      h.send({ type: 'input_audio_buffer.committed', item_id: 'u1' })
+      h.send({ type: 'conversation.item.done', item: { id: 'u1', role: 'user', content: [{ type: 'input_audio' }] } })
+      if (unavailable !== 'disabled') {
+        h.clock.tick(2501)
+        assert.strictEqual(h.requests.length, 1)
+        if (unavailable === 'failed') {
+          h.send({ type: 'error', error: { event_id: h.requests[0].eventId } })
+        } else {
+          h.retrieveInput('u1', 4, '', 'in_progress')
+          h.send({ type: 'conversation.item.done', item: { id: 'u1', content: [{ type: 'input_audio' }] } })
+          h.clock.tick(0)
+          assert.strictEqual(h.requests.length, 2)
+          h.retrieveInput('u1', 4, '', 'in_progress')
+        }
+      }
+      h.send({ type: 'response.created', response: { id: 'r1' } })
+      h.send({ type: 'response.done', response: { id: 'r1', status: 'completed', output: [] } })
+      h.send({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u1', transcript: 'input' })
+      assert.strictEqual(h.emitted.length, 0, 'leave the synchronous SDK handler time to send')
+      h.clock.tick(0)
+      assert.strictEqual(h.emitted.length, 1, 'no SDK request arrived, so release on the next immediate')
+      assert.strictEqual(h.emitted[0].input.transcript, 'input')
+      assert.strictEqual(h.requests.length, unavailable === 'disabled' ? 0 : unavailable === 'failed' ? 1 : 2)
+      h.clock.tick(10000)
+      assert.strictEqual(h.emitted.length, 1)
+      h.session.finishSession(h.clock.now)
     })
   }
 

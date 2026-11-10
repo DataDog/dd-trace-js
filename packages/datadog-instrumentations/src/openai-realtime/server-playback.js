@@ -234,6 +234,7 @@ class ServerPlayback {
         // its synchronous handler sends, even when tracer retrieval is disabled.
         if (type.endsWith('.completed') && this.#shouldRetainAudio() && !this.#hasRetrievedAudio(item)) {
           item.wanted = true
+          this.#scheduleRequests()
         }
         this.#want(item)
       }
@@ -478,6 +479,15 @@ class ServerPlayback {
       }
       return
     }
+    this.#scheduleRequests()
+  }
+
+  /**
+   * Let the SDK claim requests synchronously, then release passive waits when
+   * neither the SDK nor the tracer can send.
+   */
+  #scheduleRequests () {
+    const requestItem = this.#requestItem
     if (this.#scheduled || this.#closed) return
     this.#scheduled = setImmediate(() => {
       this.#scheduled = undefined
@@ -485,7 +495,10 @@ class ServerPlayback {
         if (!candidate.wanted || candidate.inFlight || candidate.waitingForTranscript ||
             candidate.lastContentIndex < 0) continue
         candidate.wanted = false
-        if (!this.#shouldRetainAudio()) { this.#check(candidate.entry, Date.now()); continue }
+        if (!this.#shouldRetainAudio() || !requestItem || candidate.failed || candidate.attempts >= 2) {
+          this.#check(candidate.entry, Date.now())
+          continue
+        }
         const eventId = this.#requestPrefix + (++this.#sequence)
         candidate.inFlight = true
         candidate.attempts++

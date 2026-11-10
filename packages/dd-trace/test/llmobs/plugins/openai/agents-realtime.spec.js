@@ -493,143 +493,181 @@ describe('Agents SDK realtime automatic tracing', () => {
         assert.strictEqual(llm.session_id, 'manual-call')
       })
 
+      const failures = [
+        ['Error', new Error('synthetic connection failure')],
+        ['undefined', undefined],
+        ['null', null],
+        ['false', false],
+        ['zero', 0],
+      ]
       for (const initialSideband of [false, true]) {
-        it(mode + ' retains disabled-connect URL changes (initial sideband=' + initialSideband + ')', async () => {
-          const sdk = await loadSdk(mode, version)
-          const tracer = require('../../../../../..')
-          let socket
-          let failNext = false
-          const urls = []
-          transport = new sdk.OpenAIRealtimeWebSocket({
-            url: initialSideband
-              ? 'wss://constructor.example.test/realtime?call_id=constructor-call'
-              : 'wss://constructor.example.test/realtime?model=gpt-realtime',
-            createWebSocket: ({ url }) => {
-              urls.push(String(url))
-              if (failNext) { failNext = false; return Promise.reject(new Error('synthetic connection failure')) }
-              socket = new ReplaySocket()
-              return Promise.resolve(socket)
-            },
-          })
-          transport.on('error', () => {})
-          try {
-            tracer.use('openai', { enabled: false })
-            assert.strictEqual(dc.tracingChannel('apm:openai:realtime:turn').start.hasSubscribers, false)
-            await transport.connect({
-              apiKey: 'synthetic-key',
-              url: initialSideband
-                ? 'wss://updated.example.test/realtime?model=gpt-realtime'
-                : 'wss://updated.example.test/realtime?call_id=updated-call',
-            })
-            transport.close()
-            failNext = true
-            await assert.rejects(transport.connect({
-              apiKey: 'synthetic-key', url: 'wss://failed.example.test/realtime?call_id=failed-call',
-            }), /synthetic connection failure/)
-            tracer.use('openai', { enabled: true })
-            await transport.connect({ apiKey: 'synthetic-key', model: 'gpt-realtime' })
-            const session = materialize(loadFixture('sideband-tool').events.find(row =>
-              row.event.type === 'session.updated').event)
-            socket.deliver(session)
-            socket.deliver({ type: 'response.created', response: { id: 'toggle-response' } })
-            if (initialSideband) {
-              socket.deliver({
-                type: 'response.output_audio.delta',
-                event_id: 'toggle-audio',
-                response_id: 'toggle-response',
-                item_id: 'toggle-item',
-                output_index: 0,
-                content_index: 0,
-                delta: Buffer.alloc(24000).toString('base64'),
+        for (const failureEnabled of [false, true]) {
+          for (const [failureName, failure] of failures) {
+            const title = mode + ' retains disabled-connect URL changes (initial sideband=' + initialSideband +
+              ', failure enabled=' + failureEnabled + ', reason=' + failureName + ')'
+            it(title, async () => {
+              const sdk = await loadSdk(mode, version)
+              const tracer = require('../../../../../..')
+              let socket
+              let failNext = false
+              const urls = []
+              transport = new sdk.OpenAIRealtimeWebSocket({
+                url: initialSideband
+                  ? 'wss://constructor.example.test/realtime?call_id=constructor-call'
+                  : 'wss://constructor.example.test/realtime?model=gpt-realtime',
+                createWebSocket: ({ url }) => {
+                  urls.push(String(url))
+                  if (failNext) { failNext = false; return Promise.reject(failure) }
+                  socket = new ReplaySocket()
+                  return Promise.resolve(socket)
+                },
               })
-            }
-            socket.deliver({
-              type: 'response.done',
-              response: {
-                id: 'toggle-response',
-                status: 'completed',
-                model: 'gpt-realtime',
-                output: initialSideband
-                  ? [{
-                      id: 'toggle-item',
-                      type: 'message',
-                      role: 'assistant',
-                      status: 'completed',
-                      content: [{ type: 'output_audio', transcript: 'ordinary answer' }],
-                    }]
-                  : [],
-              },
+              transport.on('error', () => {})
+              try {
+                tracer.use('openai', { enabled: false })
+                assert.strictEqual(dc.tracingChannel('apm:openai:realtime:turn').start.hasSubscribers, false)
+                await transport.connect({
+                  apiKey: 'synthetic-key',
+                  url: initialSideband
+                    ? 'wss://updated.example.test/realtime?model=gpt-realtime'
+                    : 'wss://updated.example.test/realtime?call_id=updated-call',
+                })
+                transport.close()
+                tracer.use('openai', { enabled: failureEnabled })
+                failNext = true
+                await assert.rejects(transport.connect({
+                  apiKey: 'synthetic-key', url: 'wss://failed.example.test/realtime?call_id=failed-call',
+                }), reason => reason === failure)
+                tracer.use('openai', { enabled: true })
+                await transport.connect({ apiKey: 'synthetic-key', model: 'gpt-realtime' })
+                const session = materialize(loadFixture('sideband-tool').events.find(row =>
+                  row.event.type === 'session.updated').event)
+                socket.deliver(session)
+                socket.deliver({ type: 'response.created', response: { id: 'toggle-response' } })
+                if (initialSideband) {
+                  socket.deliver({
+                    type: 'response.output_audio.delta',
+                    event_id: 'toggle-audio',
+                    response_id: 'toggle-response',
+                    item_id: 'toggle-item',
+                    output_index: 0,
+                    content_index: 0,
+                    delta: Buffer.alloc(24000).toString('base64'),
+                  })
+                }
+                socket.deliver({
+                  type: 'response.done',
+                  response: {
+                    id: 'toggle-response',
+                    status: 'completed',
+                    model: 'gpt-realtime',
+                    output: initialSideband
+                      ? [{
+                          id: 'toggle-item',
+                          type: 'message',
+                          role: 'assistant',
+                          status: 'completed',
+                          content: [{ type: 'output_audio', transcript: 'ordinary answer' }],
+                        }]
+                      : [],
+                  },
+                })
+                await new Promise(resolve => setImmediate(resolve))
+                if (initialSideband) {
+                  assert.ok(socket.sent.every(event => !event.event_id?.startsWith('ddtrace_realtime_audio_')))
+                }
+                transport.close()
+                const { llmobsSpans } = await getEvents(initialSideband ? 3 : 2)
+                const actualUrl = new URL(urls.at(-1))
+                assert.strictEqual(actualUrl.hostname, 'updated.example.test')
+                assert.strictEqual(actualUrl.searchParams.get('call_id'), initialSideband ? null : 'updated-call')
+                const sessions = new Set(llmobsSpans.map(span => span.session_id))
+                assert.strictEqual(sessions.size, 1)
+                if (initialSideband) {
+                  assert.ok(llmobsSpans.every(span => span.session_id && span.session_id !== 'constructor-call'))
+                  assert.strictEqual(llmobsSpans.filter(span => span.name === 'agent speech').length, 1)
+                  const llm = llmobsSpans.find(span => span.name === 'OpenAI.createRealtimeResponse')
+                  const audio = llm.meta.output.messages[0].audio_parts[0].content
+                  assert.strictEqual(Buffer.from(audio, 'base64').length, 24044)
+                } else {
+                  assert.strictEqual(sessions.has('updated-call'), true)
+                }
+              } finally {
+                tracer.use('openai', { enabled: true })
+              }
             })
-            await new Promise(resolve => setImmediate(resolve))
-            if (initialSideband) {
-              assert.ok(socket.sent.every(event => !event.event_id?.startsWith('ddtrace_realtime_audio_')))
-            }
-            transport.close()
-            const { llmobsSpans } = await getEvents(initialSideband ? 3 : 2)
-            const actualUrl = new URL(urls.at(-1))
-            assert.strictEqual(actualUrl.hostname, 'updated.example.test')
-            assert.strictEqual(actualUrl.searchParams.get('call_id'), initialSideband ? null : 'updated-call')
-            const sessions = new Set(llmobsSpans.map(span => span.session_id))
-            assert.strictEqual(sessions.size, 1)
-            if (initialSideband) {
-              assert.ok(llmobsSpans.every(span => span.session_id && span.session_id !== 'constructor-call'))
-              assert.strictEqual(llmobsSpans.filter(span => span.name === 'agent speech').length, 1)
-              const llm = llmobsSpans.find(span => span.name === 'OpenAI.createRealtimeResponse')
-              const audio = llm.meta.output.messages[0].audio_parts[0].content
-              assert.strictEqual(Buffer.from(audio, 'base64').length, 24044)
-            } else {
-              assert.strictEqual(sessions.has('updated-call'), true)
-            }
-          } finally {
-            tracer.use('openai', { enabled: true })
           }
-        })
+        }
       }
 
       for (const enabled of [true, false]) {
         describe(mode + ' SDK input retrieval with tracer retrieval enabled=' + enabled, () => {
           useEnv({ DD_OPENAI_REALTIME_SIDEBAND_AUDIO_RETRIEVAL_ENABLED: String(enabled) })
 
-          it('captures the SDK caller retrieval after generation has completed', async () => {
-            const sdk = await loadSdk(mode, version)
-            const fixture = loadFixture('sideband-tool')
-            const socket = new ReplaySocket()
-            const clock = sinon.useFakeTimers({ now: EPOCH, toFake: ['Date'] })
-            transport = new sdk.OpenAIRealtimeSIP({ createWebSocket: () => Promise.resolve(socket) })
-            await transport.connect({ callId: 'sdk-input-call', apiKey: 'synthetic-key', model: 'gpt-realtime' })
-            socket.deliver(materialize(fixture.events.find(row => row.event.type === 'session.updated').event))
-            const transcript = fixture.events.find(row =>
-              row.event.type === 'conversation.item.input_audio_transcription.completed').event
-            const itemId = transcript.item_id
-            clock.tick(2000)
-            socket.deliver(materialize(fixture.events.find(row =>
-              row.event.type === 'input_audio_buffer.committed' && row.event.item_id === itemId).event))
-            socket.deliver(materialize(fixture.events.find(row =>
-              row.event.type === 'conversation.item.done' && row.event.item.id === itemId).event))
-            await new Promise(resolve => setImmediate(resolve))
-            assert.strictEqual(socket.sent.filter(event => event.type === 'conversation.item.retrieve').length, 0)
-            const response = fixture.events.find(row => row.event.type === 'response.done' &&
-              row.event.response.output.some(item => item.type === 'function_call')).event
-            socket.deliver({ type: 'response.created', response: { id: response.response.id } })
-            socket.deliver(materialize(response))
-            clock.tick(200)
-            socket.deliver(materialize(transcript))
-            await new Promise(resolve => setImmediate(resolve))
-            assert.deepStrictEqual(socket.sent.filter(event => event.type === 'conversation.item.retrieve'), [
-              { type: 'conversation.item.retrieve', item_id: itemId },
-            ])
-            const retrieval = fixture.events.find(row => row.event.type === 'conversation.item.retrieved' &&
-              row.event.item.id === itemId && row.event.item.content[0].transcript)
-            socket.deliver(materialize(retrieval.event))
-            transport.close()
-            const { llmobsSpans } = await getEvents(3)
-            const llm = llmobsSpans.find(span => span.name === 'OpenAI.createRealtimeResponse')
-            const encoded = llm.meta.input.messages[0].audio_parts[0].content
-            assert.strictEqual(Buffer.from(encoded, 'base64').length,
-              retrieval.event.item.content[0].audio.$syntheticAudioBytes + 44)
-            assert.ok(llmobsSpans.every(span => span.session_id === 'sdk-input-call'))
-            assert.strictEqual(socket.sent.filter(event => event.type === 'conversation.item.retrieve').length, 1)
-          })
+          for (const sdkRetrieves of [true, false]) {
+            const title = 'captures caller retrieval after generation (SDK parses transcription=' + sdkRetrieves + ')'
+            it(title, async () => {
+              const sdk = await loadSdk(mode, version)
+              const fixture = loadFixture('sideband-tool')
+              const socket = new ReplaySocket()
+              const clock = sinon.useFakeTimers({ now: EPOCH, toFake: ['Date'] })
+              const turns = []
+              const channel = dc.tracingChannel('apm:openai:realtime:turn')
+              const observe = ctx => turns.push(ctx.turn)
+              channel.start.subscribe(observe)
+              try {
+                transport = new sdk.OpenAIRealtimeSIP({ createWebSocket: () => Promise.resolve(socket) })
+                await transport.connect({ callId: 'sdk-input-call', apiKey: 'synthetic-key', model: 'gpt-realtime' })
+                socket.deliver(materialize(fixture.events.find(row => row.event.type === 'session.updated').event))
+                const transcript = materialize(fixture.events.find(row =>
+                  row.event.type === 'conversation.item.input_audio_transcription.completed').event)
+                // This protocol-valid shape is parsed as generic by SDK0.20/0.21.
+                if (!sdkRetrieves) delete transcript.usage.input_token_details
+                const itemId = transcript.item_id
+                clock.tick(2000)
+                socket.deliver(materialize(fixture.events.find(row =>
+                  row.event.type === 'input_audio_buffer.committed' && row.event.item_id === itemId).event))
+                socket.deliver(materialize(fixture.events.find(row =>
+                  row.event.type === 'conversation.item.done' && row.event.item.id === itemId).event))
+                await new Promise(resolve => setImmediate(resolve))
+                assert.strictEqual(socket.sent.filter(event => event.type === 'conversation.item.retrieve').length, 0)
+                const response = fixture.events.find(row => row.event.type === 'response.done' &&
+                  row.event.response.output.some(item => item.type === 'function_call')).event
+                socket.deliver({ type: 'response.created', response: { id: response.response.id } })
+                socket.deliver(materialize(response))
+                clock.tick(200)
+                socket.deliver(transcript)
+                await new Promise(resolve => setImmediate(resolve))
+                const requests = socket.sent.filter(event => event.type === 'conversation.item.retrieve')
+                const retrieved = sdkRetrieves || enabled
+                assert.strictEqual(requests.length, retrieved ? 1 : 0)
+                const retrieval = fixture.events.find(row => row.event.type === 'conversation.item.retrieved' &&
+                  row.event.item.id === itemId && row.event.item.content[0].transcript)
+                if (retrieved) {
+                  assert.strictEqual(requests[0].item_id, itemId)
+                  if (sdkRetrieves) assert.strictEqual(requests[0].event_id, undefined)
+                  else assert.match(requests[0].event_id, /^ddtrace_realtime_audio_/)
+                  socket.deliver(materialize(retrieval.event))
+                }
+                assert.strictEqual(turns.length, 1, 'do not wait for a request the SDK never sent')
+                transport.close()
+                const { llmobsSpans } = await getEvents(retrieved ? 3 : 2)
+                const llm = llmobsSpans.find(span => span.name === 'OpenAI.createRealtimeResponse')
+                const parts = llm.meta.input.messages[0].audio_parts
+                if (retrieved) {
+                  assert.strictEqual(Buffer.from(parts[0].content, 'base64').length,
+                    retrieval.event.item.content[0].audio.$syntheticAudioBytes + 44)
+                } else {
+                  assert.ok(!parts?.some(part => part.content))
+                }
+                assert.ok(llmobsSpans.every(span => span.session_id === 'sdk-input-call'))
+                assert.strictEqual(socket.sent.filter(event => event.type === 'conversation.item.retrieve').length,
+                  retrieved ? 1 : 0)
+              } finally {
+                channel.start.unsubscribe(observe)
+              }
+            })
+          }
         })
       }
 
