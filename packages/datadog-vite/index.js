@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('node:fs')
+const { createRequire } = require('node:module')
 const path = require('node:path')
 
 const { instrument, packagePathPattern } = require('../datadog-instrumentations/src/helpers/bundler-transform')
@@ -14,13 +15,25 @@ const TRACER_DIRECTORY = `${fs.realpathSync(path.join(__dirname, '..', '..')).re
 // Optional dependencies of the tracer, required lazily. They must stay out of the bundle: some are native addons and
 // any of them may be missing at runtime.
 const OPTIONAL_DEPENDENCY_PATTERN =
-  /^(?:@datadog\/(?:libdatadog(?:-extras)?|native-appsec|native-iast-taint-tracking|native-metrics|pprof|wasm-js-rewriter)|@opentelemetry\/api(?:-logs)?|oxc-parser)(?:\/|$)/
+  /^(@datadog\/(?:libdatadog(?:-extras)?|native-appsec|native-iast-taint-tracking|native-metrics|pprof|wasm-js-rewriter)|@opentelemetry\/api(?:-logs)?|oxc-parser)(?:\/|$)/
+// Pure JavaScript optional dependencies the application may import too. When installed, they are bundled, so the
+// tracer and the application share one copy that does not need to be deployed next to the bundle.
+const BUNDLED_WHEN_INSTALLED = ['@opentelemetry/api', '@opentelemetry/api-logs']
+// Rollup leaves `require`, `__filename` and `__dirname` as free variables in ESM output, where Node.js lacks them.
+const ESM_COMMONJS_GLOBALS = 'import { createRequire as $dd_createRequire } from \'node:module\';\n' +
+  'import { fileURLToPath as $dd_fileURLToPath } from \'node:url\';\n' +
+  'import { dirname as $dd_dirname } from \'node:path\';\n' +
+  'globalThis.require ??= $dd_createRequire(import.meta.url);\n' +
+  'globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);\n' +
+  'globalThis.__dirname ??= $dd_dirname(globalThis.__filename);\n'
+const ESM_FORMATS = new Set(['es', 'esm', 'module'])
 const mergedFunctions = new WeakSet()
 
 /**
- * @typedef {string | RegExp | Array<string | RegExp> |
- *   ((id: string, parentId: string | undefined, isResolved: boolean) => unknown)} External
- * @typedef {{ keepNames?: boolean }} OutputOptions
+ * @typedef {(id: string, parentId: string | undefined, isResolved: boolean) => unknown} ExternalFunction
+ * @typedef {string | RegExp | ExternalFunction | Array<string | RegExp | ExternalFunction>} External
+ * @typedef {string | ((chunk: object) => string | Promise<string>)} Addon
+ * @typedef {{ format?: string, intro?: Addon, keepNames?: boolean }} OutputOptions
  * @typedef {{ external?: External, output?: OutputOptions | OutputOptions[] }} BundlerOptions
  * @typedef {{
  *   commonjsOptions?: { ignore?: string[] | ((id: string) => boolean) },
@@ -49,6 +62,7 @@ const mergedFunctions = new WeakSet()
 function datadogVite () {
   const injectGitMetadata = getValueFromEnvSources('DD_BUNDLER_INJECT_GIT_METADATA') !== false
   const skippedEnvironments = new Set()
+  const installed = getInstalledDependencies()
   /** @type {string|undefined} */
   let gitIntro
 
@@ -83,7 +97,19 @@ function datadogVite () {
       const consumer = config.consumer ?? (name === 'client' ? 'client' : 'server')
       if (!isNodeBuild(consumer, config.build)) return
       config.build ??= {}
-      configureBuild(name, config.build, consumer, isRolldown(this))
+      configureBuild(name, config.build, consumer, isRolldown(this), installed)
+    },
+
+    /**
+     * Rolldown defines its own `require` in ESM output. Every chunk gets the globals, since a shared chunk evaluates
+     * before the entry chunk importing it.
+     *
+     * @this {HookContext}
+     * @param {OutputOptions} output
+     */
+    outputOptions (output) {
+      if (isRolldown(this) || !ESM_FORMATS.has(output.format ?? 'es')) return
+      return { ...output, intro: prependAddon(ESM_COMMONJS_GLOBALS, output.intro) }
     },
 
     /**
@@ -192,23 +218,73 @@ function isMinifiedByEsbuild (consumer, build) {
 }
 
 /**
+ * Resolves the optional dependencies that are bundled when installed the way the bundled tracer would.
+ *
+ * @returns {Set<string>}
+ */
+function getInstalledDependencies () {
+  const tracerRequire = createRequire(`${TRACER_DIRECTORY}index.js`)
+  const installed = new Set()
+  for (const name of BUNDLED_WHEN_INSTALLED) {
+    try {
+      tracerRequire.resolve(name)
+      installed.add(name)
+    } catch {
+      log.debug('Keeping %s external to the bundle: it is not installed', name)
+    }
+  }
+  return installed
+}
+
+/**
+ * @param {string} id
+ * @param {Set<string>} installed
+ */
+function isOptionalDependency (id, installed) {
+  const match = OPTIONAL_DEPENDENCY_PATTERN.exec(id)
+  return match !== null && !installed.has(match[1])
+}
+
+/**
+ * @param {string | undefined} id
+ */
+function isTracerModule (id) {
+  if (id === undefined) return false
+  const normalized = id.replaceAll('\\', '/')
+  return normalized.startsWith(TRACER_DIRECTORY) || normalized.includes('/node_modules/dd-trace/')
+}
+
+/**
+ * @param {Addon} code
+ * @param {Addon | undefined} addon
+ * @returns {Addon}
+ */
+function prependAddon (code, addon) {
+  if (typeof addon === 'function') return async chunk => `${code}${await addon(chunk)}`
+  return addon ? `${code}${addon}` : code
+}
+
+/**
  * @param {string} name
  * @param {BuildOptions} build
  * @param {string} consumer
  * @param {boolean} rolldown
+ * @param {Set<string>} installed
  */
-function configureBuild (name, build, consumer, rolldown) {
+function configureBuild (name, build, consumer, rolldown, installed) {
   const minify = getMinify(build.minify, consumer, rolldown)
   if (rolldown) {
     // Vite 8 aliases `rollupOptions` to `rolldownOptions`; reuse whichever object the configuration already has.
     const options = build.rolldownOptions ?? build.rollupOptions ?? (build.rolldownOptions = {})
-    options.external = mergeExternal(options.external)
+    options.external = mergeExternal(options.external, installed)
     if (minify) enableOutputKeepNames(name, options)
   } else {
     // Rollup hoists external `require` calls to the top of the chunk, which would load optional dependencies eagerly
-    // and crash when they are missing. Ignored `require` calls stay where they are.
+    // and crash when they are missing. Ignored `require` calls stay where they are. The option only receives the
+    // required id, so it also applies to other bundled CommonJS modules; those dependencies are native addons or
+    // missing, which these modules could not bundle either.
     const commonjsOptions = build.commonjsOptions ??= {}
-    commonjsOptions.ignore = mergeIgnore(commonjsOptions.ignore)
+    commonjsOptions.ignore = mergeIgnore(commonjsOptions.ignore, installed)
   }
   if (minify === 'terser') {
     const terserOptions = build.terserOptions ??= {}
@@ -246,32 +322,32 @@ function enableOutputKeepNames (name, options) {
 }
 
 /**
- * @param {External} [external]
- * @returns {External}
+ * Only imports from the tracer are externalized, so the application still bundles its own imports of these packages.
+ *
+ * @param {External | null | undefined} external
+ * @param {Set<string>} installed
+ * @returns {ExternalFunction}
  */
-function mergeExternal (external) {
-  if (external === undefined || external === null) return [OPTIONAL_DEPENDENCY_PATTERN]
-  if (typeof external === 'function') {
-    if (mergedFunctions.has(external)) return external
-    /** @type {External} */
-    const merged = (id, parentId, isResolved) =>
-      OPTIONAL_DEPENDENCY_PATTERN.test(id) || external(id, parentId, isResolved)
-    mergedFunctions.add(merged)
-    return merged
-  }
-  const externals = Array.isArray(external) ? external : [external]
-  if (externals.some(entry => typeof entry === 'function')) return mergeExternal(matchAny(externals))
-  return externals.includes(OPTIONAL_DEPENDENCY_PATTERN) ? externals : [...externals, OPTIONAL_DEPENDENCY_PATTERN]
+function mergeExternal (external, installed) {
+  if (typeof external === 'function' && mergedFunctions.has(external)) return external
+  const user = external === undefined || external === null ? undefined : matchAny(external)
+  /** @type {ExternalFunction} */
+  const merged = (id, parentId, isResolved) =>
+    (isOptionalDependency(id, installed) && isTracerModule(parentId)) || Boolean(user?.(id, parentId, isResolved))
+  mergedFunctions.add(merged)
+  return merged
 }
 
 /**
  * Vite concatenates arrays when merging configurations, so a function returned by one plugin or the user can end up
  * in an array, which the bundler rejects.
  *
- * @param {Array<string | RegExp | Function>} externals
- * @returns {External}
+ * @param {External} external
+ * @returns {ExternalFunction}
  */
-function matchAny (externals) {
+function matchAny (external) {
+  if (typeof external === 'function') return external
+  const externals = Array.isArray(external) ? external : [external]
   return (id, parentId, isResolved) => externals.some(entry => {
     if (typeof entry === 'function') return entry(id, parentId, isResolved)
     return typeof entry === 'string' ? entry === id : entry.test(id)
@@ -279,17 +355,18 @@ function matchAny (externals) {
 }
 
 /**
- * @param {string[] | ((id: string) => boolean)} [ignore]
+ * @param {string[] | ((id: string) => boolean) | undefined} ignore
+ * @param {Set<string>} installed
  * @returns {(id: string) => boolean}
  */
-function mergeIgnore (ignore) {
+function mergeIgnore (ignore, installed) {
   if (typeof ignore === 'function' && mergedFunctions.has(ignore)) return ignore
   let merged
   if (typeof ignore === 'function') {
-    merged = (/** @type {string} */ id) => OPTIONAL_DEPENDENCY_PATTERN.test(id) || ignore(id)
+    merged = (/** @type {string} */ id) => isOptionalDependency(id, installed) || ignore(id)
   } else {
     const ids = new Set(ignore)
-    merged = (/** @type {string} */ id) => OPTIONAL_DEPENDENCY_PATTERN.test(id) || ids.has(id)
+    merged = (/** @type {string} */ id) => isOptionalDependency(id, installed) || ids.has(id)
   }
   mergedFunctions.add(merged)
   return merged
