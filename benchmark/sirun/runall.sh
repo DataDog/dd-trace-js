@@ -134,6 +134,25 @@ if [[ -d /app/candidate/.git && -n "${COMMIT_SHA:-}" && -n "${CI_COMMIT_SHA:-}" 
   fi
 fi
 
+# Diagnostics for variants over the time limit: one variant on one core sometimes
+# runs ~50% slower than its siblings, CPU-bound. Record the busy share of its core
+# and that core's SMT siblings (often outside this pod's cpuset) during the run.
+function core_and_siblings {
+  local LIST PART
+  LIST=$(cat "/sys/devices/system/cpu/cpu$1/topology/thread_siblings_list" 2>/dev/null || echo "$1")
+  for PART in ${LIST//,/ }; do
+    if [[ ${PART} == *-* ]]; then seq "${PART%-*}" "${PART#*-}"; else echo "${PART}"; fi
+  done
+}
+
+# Prints "cpuN busy total" jiffies for each CPU given.
+function cpu_ticks {
+  local CPU
+  for CPU in "$@"; do
+    awk -v c="cpu${CPU}" '$1 == c { print c, $2+$3+$4+$7+$8+$9, $2+$3+$4+$5+$6+$7+$8+$9 }' /proc/stat 2>/dev/null
+  done
+}
+
 # Run a variant from the suite root. Background calls get their own shell and
 # affinity variables, while all result and failure files remain append-only.
 function run_variant {
@@ -150,6 +169,8 @@ function run_variant {
   local STARTED_AT_NS
   local ELAPSED_MS
   local ELAPSED_SECONDS
+  local DIAG_CPUS
+  local TICKS_BEFORE
 
   export CPU_AFFINITY CPU_AFFINITY_SECOND
   export SIRUN_VARIANT=$V
@@ -163,6 +184,8 @@ function run_variant {
 
   cd "${D}"
   VARIANT_OUT=$(mktemp)
+  DIAG_CPUS=$(core_and_siblings "${CPU_AFFINITY}" | tr '\n' ' ')
+  TICKS_BEFORE=$(cpu_ticks ${DIAG_CPUS})
   STARTED_AT_NS=$(date +%s%N)
   time timeout --kill-after=5s "${VARIANT_HARD_TIMEOUT_SECONDS}s" \
     node ../run-one-variant.js >> ../results.ndjson 2>"${VARIANT_OUT}" || STATUS=$?
@@ -185,6 +208,12 @@ function run_variant {
   elif [[ ${STATUS} -eq 0 ]]; then
     echo "${D}/${V} FAILED: completed in ${ELAPSED_SECONDS}s, exceeding the " \
       "${VARIANT_MAX_SECONDS}-second variant limit on core ${CPU_AFFINITY}" >&2
+    echo "  busy share during the run of core ${CPU_AFFINITY} and its SMT siblings:" >&2
+    awk 'NR == FNR { b[$1] = $2; t[$1] = $3; next }
+      ($3 - t[$1]) > 0 { printf "    %s: %.0f%%\n", $1, 100 * ($2 - b[$1]) / ($3 - t[$1]) }' \
+      <(echo "${TICKS_BEFORE}") <(cpu_ticks ${DIAG_CPUS}) >&2 || true
+    grep -E '^(processor|cpu MHz)' /proc/cpuinfo 2>/dev/null | paste - - \
+      | awk -v l=" ${DIAG_CPUS}" '{ if (index(l, " " $3 " ")) printf "    cpu%s: %s MHz\n", $3, $NF }' >&2 || true
     cat "${VARIANT_OUT}" >&2
     echo "${D}/${V}" >> "$FAILURES_FILE"
   else
