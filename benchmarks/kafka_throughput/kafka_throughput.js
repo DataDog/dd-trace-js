@@ -126,8 +126,6 @@ async function runWorker (kafka, topic, groupId) {
   await producer.connect()
   await consumer.connect()
   await consumer.subscribe({ topic, fromBeginning: true })
-  // Setup: pre-fetch the topic metadata on the producer; zero messages means no produce request.
-  await producer.send({ topic, messages: [], acks: -1 })
 
   let consumed = 0
   let consumeStart
@@ -143,6 +141,9 @@ async function runWorker (kafka, topic, groupId) {
   const consumePhase = new Promise(resolve => { startConsumePhase = resolve })
 
   try {
+    // Setup: pre-fetch the topic metadata on the producer; zero messages means no produce request.
+    await producer.send({ topic, messages: [], acks: -1 })
+
     // Setup: join the consumer group and receive the partition assignment
     // before anything is produced -- the topic is still empty, so this polls
     // no records, matching Java's joinGroup(). Not timed.

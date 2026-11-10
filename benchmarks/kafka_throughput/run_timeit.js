@@ -16,10 +16,10 @@
  *         "process.internal_duration_ms.median": <ms>,
  *         "process.internal_duration_ms.std_err": <ms>,
  *         "process.rss_bytes.median": <bytes>,
+ *         "process.iteration_wall_ms.median": <ms>,
  *         "phase.produce_ms.median": <ms>,
  *         "phase.consume_ms.median": <ms>,
  *         "config.commit_every": <COMMIT_EVERY>,
- *         "process.iteration_wall_ms.median": <ms>,
  *         "config.num_threads": <NUM_THREADS>
  *       }
  *     }

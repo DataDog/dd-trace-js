@@ -30,7 +30,7 @@ Node.js counterpart of the Python `benchmarks/kafka_throughput` workload
 ## Running locally
 
 Requires a Kafka broker on `localhost:9092`. `dd-trace` is not a dependency;
-install it (e.g. `npm install ../..` from a source checkout) for the traced
+install it (e.g. `npm install --no-save ../..` from a source checkout) for the traced
 scenarios.
 
 ```bash
