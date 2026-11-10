@@ -64,7 +64,6 @@ module.exports = {
   ai: () => require('../ai'),
   amqp10: () => require('../amqp10'),
   amqplib: () => require('../amqplib'),
-  'async-mutex': () => require('../async-mutex'),
   avsc: () => require('../avsc'),
   'aws-sdk': () => require('../aws-sdk'),
   bluebird: () => require('../bluebird'),

@@ -3,7 +3,7 @@ import { Mutex } from 'async-mutex'
 import express from 'express'
 import dc from 'dc-polyfill'
 
-const acquireStartCh = dc.channel('tracing:apm:async-mutex:acquire:start')
+const acquireStartCh = dc.channel('tracing:orchestrion:async-mutex:Semaphore_acquire:start')
 let counter = 0
 acquireStartCh.subscribe(() => {
   counter += 1
