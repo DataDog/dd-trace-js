@@ -32,6 +32,14 @@ class AsyncMutexPlugin extends TracingPlugin {
     return ctx.currentStore
   }
 
+  end (ctx) {
+    if (ctx.error === undefined) return
+
+    this.finish(ctx)
+
+    return ctx.parentStore
+  }
+
   asyncEnd (ctx) {
     this.finish(ctx)
 

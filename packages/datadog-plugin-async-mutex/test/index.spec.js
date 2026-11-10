@@ -109,6 +109,24 @@ createIntegrationTestSuite('async-mutex', 'async-mutex', {}, (meta) => {
       assert.equal(semaphore.getValue(), 2)
     })
 
+    for (const weight of [0, -1]) {
+      it(`finishes and marks the span when acquire throws synchronously on weight ${weight}`, async () => {
+        const traceAssertion = agent.assertFirstTraceSpan({
+          name: 'async-mutex.acquire',
+          error: 1,
+          meta: {
+            component: 'async-mutex',
+            'error.message': `invalid weight ${weight}: must be positive`,
+          },
+        })
+
+        const semaphore = new meta.mod.Semaphore(1)
+        assert.throws(() => semaphore.acquire(weight), /invalid weight/)
+
+        return traceAssertion
+      })
+    }
+
     it('reports a cancelled acquire as an error', async () => {
       const semaphore = new meta.mod.Semaphore(1)
       const [, release] = await semaphore.acquire()
