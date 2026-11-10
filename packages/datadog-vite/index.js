@@ -20,12 +20,14 @@ const OPTIONAL_DEPENDENCY_PATTERN =
 // tracer and the application share one copy that does not need to be deployed next to the bundle.
 const BUNDLED_WHEN_INSTALLED = ['@opentelemetry/api', '@opentelemetry/api-logs']
 // Rollup leaves `require`, `__filename` and `__dirname` as free variables in ESM output, where Node.js lacks them.
-const ESM_COMMONJS_GLOBALS = 'import { createRequire as $dd_createRequire } from \'node:module\';\n' +
+// Rollup reserves these names in every chunk, so declaring them cannot collide with bundled code, and keeping them
+// chunk-local resolves each chunk against its own location instead of whichever bundle loaded first.
+const ESM_COMMONJS_BINDINGS = 'import { createRequire as $dd_createRequire } from \'node:module\';\n' +
   'import { fileURLToPath as $dd_fileURLToPath } from \'node:url\';\n' +
   'import { dirname as $dd_dirname } from \'node:path\';\n' +
-  'globalThis.require ??= $dd_createRequire(import.meta.url);\n' +
-  'globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);\n' +
-  'globalThis.__dirname ??= $dd_dirname(globalThis.__filename);\n'
+  'const require = $dd_createRequire(import.meta.url);\n' +
+  'const __filename = $dd_fileURLToPath(import.meta.url);\n' +
+  'const __dirname = $dd_dirname(__filename);\n'
 const ESM_FORMATS = new Set(['es', 'esm', 'module'])
 const mergedFunctions = new WeakSet()
 
@@ -101,15 +103,15 @@ function datadogVite () {
     },
 
     /**
-     * Rolldown defines its own `require` in ESM output. Every chunk gets the globals, since a shared chunk evaluates
-     * before the entry chunk importing it.
+     * Rolldown defines its own `require` in ESM output. Every chunk gets the bindings, since free variables in one
+     * chunk cannot see declarations in another.
      *
      * @this {HookContext}
      * @param {OutputOptions} output
      */
     outputOptions (output) {
       if (isRolldown(this) || !ESM_FORMATS.has(output.format ?? 'es')) return
-      return { ...output, intro: prependAddon(ESM_COMMONJS_GLOBALS, output.intro) }
+      return { ...output, intro: prependAddon(ESM_COMMONJS_BINDINGS, output.intro) }
     },
 
     /**

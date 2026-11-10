@@ -227,22 +227,21 @@ describe('datadogVite', () => {
         assert.match(intro, /^import .+\nconst userIntro = true;$/s, format)
       }
 
-      const projectDir = createProject()
-      const { intro } = plugin.outputOptions.call(ROLLUP, {})
-      const chunk = write(projectDir, 'dist/chunk.mjs',
-        `${intro}export default [typeof require('node:path').join, __filename, __dirname]\n`)
+      // Bundles built in different directories resolve against their own installation, without process-wide globals.
       const names = ['require', '__filename', '__dirname']
-      const descriptors = names.map(name => Object.getOwnPropertyDescriptor(globalThis, name))
-      for (const name of names) delete globalThis[name]
-      try {
-        const { default: globals } = await import(pathToFileURL(chunk).href)
-        assert.deepStrictEqual(globals, ['function', fs.realpathSync(chunk), path.dirname(fs.realpathSync(chunk))])
-      } finally {
-        for (const [index, name] of names.entries()) {
-          delete globalThis[name]
-          if (descriptors[index]) Object.defineProperty(globalThis, name, descriptors[index])
-        }
+      const globals = names.map(name => Object.getOwnPropertyDescriptor(globalThis, name))
+      const { intro } = plugin.outputOptions.call(ROLLUP, {})
+      for (const installation of ['first', 'second']) {
+        const projectDir = createProject()
+        write(createPackage(projectDir, '@datadog/native-metrics', { main: 'index.js' }), 'index.js',
+          `module.exports = '${installation}'\n`)
+        const chunk = fs.realpathSync(write(projectDir, 'dist/chunk.mjs',
+          `${intro}export default [require('@datadog/native-metrics'), __filename, __dirname]\n`))
+
+        const { default: bindings } = await import(pathToFileURL(chunk).href)
+        assert.deepStrictEqual(bindings, [installation, chunk, path.dirname(chunk)])
       }
+      assert.deepStrictEqual(names.map(name => Object.getOwnPropertyDescriptor(globalThis, name)), globals)
     })
 
     it('composes a user intro function', async () => {
