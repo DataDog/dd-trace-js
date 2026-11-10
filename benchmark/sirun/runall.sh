@@ -153,6 +153,19 @@ function cpu_ticks {
   done
 }
 
+# Prints the busy share of each CPU since TICKS_BEFORE (from cpu_ticks), and its MHz.
+function print_cpu_contention {
+  local CORE=$1
+  local CPUS=$2
+  local TICKS_BEFORE=$3
+  echo "  busy share during the run of core ${CORE} and its SMT siblings:" >&2
+  awk 'NR == FNR { b[$1] = $2; t[$1] = $3; next }
+    ($3 - t[$1]) > 0 { printf "    %s: %.0f%%\n", $1, 100 * ($2 - b[$1]) / ($3 - t[$1]) }' \
+    <(echo "${TICKS_BEFORE}") <(cpu_ticks ${CPUS}) >&2 || true
+  grep -E '^(processor|cpu MHz)' /proc/cpuinfo 2>/dev/null | paste - - \
+    | awk -v l=" ${CPUS}" '{ if (index(l, " " $3 " ")) printf "    cpu%s: %s MHz\n", $3, $NF }' >&2 || true
+}
+
 # Run a variant from the suite root. Background calls get their own shell and
 # affinity variables, while all result and failure files remain append-only.
 function run_variant {
@@ -203,17 +216,13 @@ function run_variant {
   elif [[ ${STATUS} -eq 124 ]]; then
     echo "${D}/${V} FAILED: did not finish within the " \
       "${VARIANT_HARD_TIMEOUT_SECONDS}-second safety limit on core ${CPU_AFFINITY}" >&2
+    print_cpu_contention "${CPU_AFFINITY}" "${DIAG_CPUS}" "${TICKS_BEFORE}"
     cat "${VARIANT_OUT}" >&2
     echo "${D}/${V}" >> "$FAILURES_FILE"
   elif [[ ${STATUS} -eq 0 ]]; then
     echo "${D}/${V} FAILED: completed in ${ELAPSED_SECONDS}s, exceeding the " \
       "${VARIANT_MAX_SECONDS}-second variant limit on core ${CPU_AFFINITY}" >&2
-    echo "  busy share during the run of core ${CPU_AFFINITY} and its SMT siblings:" >&2
-    awk 'NR == FNR { b[$1] = $2; t[$1] = $3; next }
-      ($3 - t[$1]) > 0 { printf "    %s: %.0f%%\n", $1, 100 * ($2 - b[$1]) / ($3 - t[$1]) }' \
-      <(echo "${TICKS_BEFORE}") <(cpu_ticks ${DIAG_CPUS}) >&2 || true
-    grep -E '^(processor|cpu MHz)' /proc/cpuinfo 2>/dev/null | paste - - \
-      | awk -v l=" ${DIAG_CPUS}" '{ if (index(l, " " $3 " ")) printf "    cpu%s: %s MHz\n", $3, $NF }' >&2 || true
+    print_cpu_contention "${CPU_AFFINITY}" "${DIAG_CPUS}" "${TICKS_BEFORE}"
     cat "${VARIANT_OUT}" >&2
     echo "${D}/${V}" >> "$FAILURES_FILE"
   else
