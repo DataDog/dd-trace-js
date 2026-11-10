@@ -71,8 +71,18 @@ module.exports = {
   plugins: [
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
-      excludedPackageTest: packageName => !include.has(packageName),
-      renderLicenses: modules => modules[0].licenseText,
+      handleMissingLicenseText: (packageName, licenseType) => licenseType,
+      // Module order depends on the installer's layout, so the first module does not identify the entry package.
+      renderLicenses: modules => modules
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map(licenseModule => {
+          if (!licenseModule.licenseText) {
+            throw new Error(`No license text resolved for bundled package '${licenseModule.name}'`)
+          }
+          return `${licenseModule.name}\n\n${licenseModule.licenseText.trim()}\n`
+        })
+        .join(`\n${'-'.repeat(78)}\n\n`),
       stats: {
         warnings: false,
       },
