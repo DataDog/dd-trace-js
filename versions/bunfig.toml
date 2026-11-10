@@ -20,5 +20,4 @@ minimumReleaseAgeExcludes = [
   "@datadog/pprof",
   "@datadog/sketches-js",
   "@datadog/wasm-js-rewriter",
-  "import-in-the-middle@3.5.3",
 ]

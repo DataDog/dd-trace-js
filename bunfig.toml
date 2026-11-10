@@ -8,7 +8,6 @@ linker = "hoisted"
 minimumReleaseAge = 259200
 
 # Our publishing pipeline is the trust boundary for internal packages.
-# Reviewed upstream releases have version-specific exceptions.
 minimumReleaseAgeExcludes = [
   "@datadog/datadog-ci",
   "@datadog/flagging-core",
@@ -20,28 +19,4 @@ minimumReleaseAgeExcludes = [
   "@datadog/pprof",
   "@datadog/sketches-js",
   "@datadog/wasm-js-rewriter",
-  "@playwright/test@1.65.0",
-  "@wdio/cli@10.2.0",
-  "@wdio/config@10.2.0",
-  "@wdio/display-server@10.2.0",
-  "@wdio/dot-reporter@10.2.0",
-  "@wdio/globals@10.2.0",
-  "@wdio/jasmine-framework@10.2.0",
-  "@wdio/local-runner@10.2.0",
-  "@wdio/logger@10.2.0",
-  "@wdio/mocha-framework@10.2.0",
-  "@wdio/protocols@10.2.0",
-  "@wdio/repl@10.2.0",
-  "@wdio/reporter@10.2.0",
-  "@wdio/runner@10.2.0",
-  "@wdio/session@10.2.0",
-  "@wdio/snapshot@10.2.0",
-  "@wdio/types@10.2.0",
-  "@wdio/utils@10.2.0",
-  "create-wdio@10.2.0",
-  "import-in-the-middle@3.5.3",
-  "playwright-core@1.65.0",
-  "playwright@1.65.0",
-  "webdriver@10.2.0",
-  "webdriverio@10.2.0",
 ]
