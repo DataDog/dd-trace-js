@@ -85,6 +85,26 @@ async function makeGraphqlRequest (port, variables, derivativeParam, extraHeader
   }, { headers, maxRedirects: 0 })
 }
 
+/**
+ * Earlier tests block identical requests and their traces can arrive late, so only accept the trace of this request.
+ *
+ * @param {number} port
+ * @param {number} status
+ * @param {string} userAgent
+ */
+function assertBlockedRequestTrace (port, status, userAgent) {
+  return Promise.all([
+    agent.assertSomeTraces(payload => {
+      assert.strictEqual(payload[0][0].meta['http.useragent'], userAgent)
+      assert.strictEqual(payload[0][0].meta['appsec.blocked'], 'true')
+    }),
+    assert.rejects(
+      makeGraphqlRequest(port, { title: 'testattack' }, 'lower', { 'user-agent': userAgent }),
+      error => error.response.status === status
+    ),
+  ])
+}
+
 function postGraphqlQuery (port, query) {
   return httpRequest.post(`http://localhost:${port}/graphql`, { query }, {
     headers: { 'content-type': 'application/json' },
@@ -141,15 +161,8 @@ function graphqlCommonTests (config) {
       }
     })
 
-    it('Should set appsec.blocked on blocked attack', (done) => {
-      agent.assertSomeTraces(payload => {
-        assert.strictEqual(payload[0][0].meta['appsec.blocked'], 'true')
-        done()
-      })
-
-      makeGraphqlRequest(config.port, { title: 'testattack' }, 'lower').then(() => {
-        done(new Error('block expected'))
-      })
+    it('Should set appsec.blocked on blocked attack', () => {
+      return assertBlockedRequestTrace(config.port, 403, 'graphql-blocked-with-content')
     })
 
     it('Should not block a safe request', async () => {
@@ -319,15 +332,8 @@ function graphqlCommonTests (config) {
       }
     })
 
-    it('Should set appsec.blocked on blocked attack', (done) => {
-      agent.assertSomeTraces(payload => {
-        assert.strictEqual(payload[0][0].meta['appsec.blocked'], 'true')
-        done()
-      })
-
-      makeGraphqlRequest(config.port, { title: 'testattack' }, 'lower').then(() => {
-        done(new Error('block expected'))
-      })
+    it('Should set appsec.blocked on blocked attack', () => {
+      return assertBlockedRequestTrace(config.port, 301, 'graphql-blocked-with-redirect')
     })
 
     it('Should not block a safe request', async () => {
