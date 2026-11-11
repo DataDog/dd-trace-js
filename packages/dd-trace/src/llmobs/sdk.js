@@ -88,7 +88,9 @@ class LLMObs extends NoopLLMObs {
 
   /**
    * Submit a completed conversation's reported USD costs without provider requests.
-   * Invalid or unfinished billing returns false. Absent provider amounts require an override.
+   * Invalid, unfinished, disabled, or locally rejected observations return false.
+   * Absent provider amounts require an override. Delivery and component enrichment are supported
+   * for 24 hours after Datadog first accepts a known total; retries do not reset this window.
    * @param {object} conversation SDK conversation-details response or verified webhook data.
    * @param {import('../../../../index').llmobs.ConversationCostOptions} [options] Billing source and override.
    */
@@ -97,7 +99,7 @@ class LLMObs extends NoopLLMObs {
     try {
       const event = buildConversationCostEvent(conversation, {
         ...options,
-        mlApp: options.mlApp || this._config.llmobs.DD_LLMOBS_ML_APP || '',
+        mlApp: options.mlApp || this._config.llmobs.DD_LLMOBS_ML_APP || this._config.service || '',
         service: this._config.service,
         env: this._config.env,
         version: this._config.version,

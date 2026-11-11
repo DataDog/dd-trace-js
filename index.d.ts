@@ -3894,7 +3894,9 @@ declare namespace tracer {
 
       /**
        * Submit reported USD billing from a completed ElevenLabs details response or verified webhook data.
-       * Makes no provider requests. Returns false for unfinished, invalid, or disabled billing, or unavailable billing without an override.
+       * Makes no provider requests. Returns true only when the observation was queued locally.
+       * Backend acceptance and delivery are asynchronous. Delivery and component enrichment have a 24-hour
+       * window after Datadog first accepts a known total; retries do not reset it. An initial report can be older.
        */
       submitConversationCost (conversation: object, options?: llmobs.ConversationCostOptions): boolean
 
@@ -4538,6 +4540,7 @@ declare namespace tracer {
       source?: 'conversation_details' | 'post_call_transcription'
       /** User total override in USD. An explicit zero is preserved. */
       totalCost?: number
+      /** Application name; defaults to the configured LLMObs application or service name. */
       mlApp?: string
     }
 

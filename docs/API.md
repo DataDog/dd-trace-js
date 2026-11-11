@@ -1032,7 +1032,7 @@ property tags retain backend assignments even when their execution policy is ove
 
 ## Conversation billing (unreleased)
 
-`tracer.llmobs.submitConversationCost(conversation, options)` submits an application-obtained, completed ElevenLabs conversation-details response or verified post-call transcription webhook data. It makes no provider requests and returns `false` for invalid or unfinished data, or absent billing without an override.
+`tracer.llmobs.submitConversationCost(conversation, options)` submits an application-obtained, completed ElevenLabs conversation-details response or verified post-call transcription webhook data. It makes no provider requests and returns `false` for disabled, invalid, unfinished, or locally rejected observations, or absent billing without an override.
 
 ```javascript
 // details is the response already obtained by your application.
@@ -1044,6 +1044,6 @@ tracer.llmobs.submitConversationCost(verifiedEvent.data, {
 })
 ```
 
-Options are `provider` (`'elevenlabs'`), `source` (`'conversation_details'` or `'post_call_transcription'`), `mlApp`, and `totalCost` (a finite, nonnegative USD override, including zero). Supply an override on the first submission. Returns describe local validation/submission; delivery and conflict rejection are asynchronous.
+Options are `provider` (`'elevenlabs'`), `source` (`'conversation_details'` or `'post_call_transcription'`), `mlApp`, and `totalCost` (a finite, nonnegative USD override, including zero). The application name defaults to the configured LLMObs application, then the service name. Supply an override on the first submission. The boolean result reports whether the observation was queued locally; backend acceptance, conflict rejection, and delivery are asynchronous.
 
-The provider's conversation total includes its reported LLM and platform prices. Datadog records it once on a dedicated workflow, preserves unknown values and per-amount provenance, and rejects changes to accepted amounts. Repeated and late observations use stable IDs. This API does not allocate the total to turns or backfill per-turn token usage. Backend availability and released tracer versions are required before enabling this feature.
+The provider's conversation total includes its reported LLM and platform prices. Datadog records it once on a dedicated workflow, preserves unknown values and per-amount provenance, and rejects changes to accepted amounts. Repeated and late observations use stable IDs. Delivery and component enrichment are supported for 24 hours after Datadog first accepts a known total; retries do not reset that window. An initial report may describe an older conversation. Expired enrichment is rejected without changing the accepted charge. This API does not allocate the total to turns or backfill per-turn token usage. Backend availability and released tracer versions are required before enabling this feature.

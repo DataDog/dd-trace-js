@@ -295,8 +295,7 @@ function handleProviderCostAppend (message) {
   try {
     // Subscription lifetime is owned by the currently enabled writer.
     const currentWriter = /** @type {LLMObsSpanWriter} */ (spanWriter)
-    currentWriter.append(event, routing)
-    message.submitted = true
+    message.submitted = currentWriter.append(event, routing) === true
   } catch (error) {
     log.warn('Could not append provider conversation billing: %s', error.message)
   }

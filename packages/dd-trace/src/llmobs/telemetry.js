@@ -27,7 +27,7 @@ function extractIntegrationFromTags (tags) {
 }
 
 function extractTagsFromSpanEvent (event) {
-  const spanKind = event.meta?.['span.kind'] || ''
+  const spanKind = event.meta?.['span.kind'] || event.meta?.span?.kind || ''
   const integration = extractIntegrationFromTags(event.tags)
   const error = event.status === 'error'
   const autoinstrumented = integration != null
