@@ -376,6 +376,93 @@ describe('Lambda runtime completion handoff', () => {
     assertExactlyOneLambdaSpan(traces)
   })
 
+  describe('queued callbacks during completion selection', () => {
+    for (const mode of ['auto', 'callback']) {
+      for (const outcome of ['promise', 'reject', 'throw', 'then getter']) {
+        for (const depth of [1, 2]) {
+          for (const callbackFails of [false, true]) {
+            it(`keeps ${outcome} selected with ${depth} microtasks and callback failure ${callbackFails} in ${mode}`,
+              async () => {
+                process.env.DD_LAMBDA_HANDLER_COMPLETION = mode
+                const error = new Error('selected failure')
+                const failed = outcome !== 'promise'
+                const ric = runtime()
+                let nativeCallbackCalls = 0
+                const wrapped = facade.wrap((_event, _context, callback) => {
+                  const complete = () => callback(callbackFails ? new Error('losing callback') : null, 'callback')
+                  queueMicrotask(depth === 1 ? complete : () => queueMicrotask(complete))
+                  if (outcome === 'throw') throw error
+                  if (outcome === 'then getter') return { get then () { throw error } }
+                  return failed ? Promise.reject(error) : Promise.resolve('promise')
+                })
+                const result = ric.invoke((event, context, callback) => wrapped(event, context, (...values) => {
+                  nativeCallbackCalls++
+                  return callback(...values)
+                }))
+                if (failed) await assert.rejects(result, failure => failure === error)
+                else assert.strictEqual(await result, 'promise')
+                await clock.tickAsync(0)
+
+                assert.strictEqual(nativeCallbackCalls, 0)
+                assert.strictEqual(ric.posts.length, 1)
+                if (failed) assert.strictEqual(ric.posts[0].error, error)
+                else assert.strictEqual(ric.posts[0].value, 'promise')
+                const span = assertExactlyOneLambdaSpan(traces)
+                assert.strictEqual(span.error, failed ? 1 : 0)
+                assert.strictEqual(clock.countTimers(), 0)
+              })
+          }
+        }
+      }
+
+      for (const callbackFails of [false, true]) {
+        it(`forwards a synchronous callback immediately with failure ${callbackFails} in ${mode}`, async () => {
+          const ric = runtime()
+          const error = new Error('callback failure')
+          const wrapped = facade.wrap((_event, _context, callback) => {
+            callback(callbackFails ? error : null, 'callback')
+            assert.strictEqual(ric.posts.length, 1)
+            return Promise.resolve('losing promise')
+          }, { handlerCompletion: mode })
+          const result = ric.invoke(wrapped)
+          if (callbackFails) await assert.rejects(result, failure => failure === error)
+          else assert.strictEqual(await result, 'callback')
+          await clock.tickAsync(0)
+
+          assert.strictEqual(ric.posts.length, 1)
+          if (callbackFails) assert.strictEqual(ric.posts[0].error, error)
+          else assert.strictEqual(ric.posts[0].value, 'callback')
+          assertExactlyOneLambdaSpan(traces)
+          assert.strictEqual(clock.countTimers(), 0)
+        })
+      }
+
+      for (const method of ['done', 'succeed', 'fail']) {
+        it(`keeps a queued callback before duplicate context.${method} in ${mode}`, async () => {
+          const ric = runtime()
+          let rejectPromise
+          const wrapped = facade.wrap((_event, context, callback) => {
+            queueMicrotask(() => {
+              callback(null, 'callback')
+              if (method === 'done') context.done(null, 'duplicate')
+              if (method === 'succeed') context.succeed('duplicate')
+              if (method === 'fail') context.fail(new Error('duplicate'))
+            })
+            return new Promise((resolve, reject) => { rejectPromise = reject })
+          }, { handlerCompletion: mode })
+          const result = ric.invoke(wrapped)
+          assert.strictEqual(await result, 'callback')
+          rejectPromise(new Error('losing promise'))
+          await clock.tickAsync(0)
+
+          assert.deepStrictEqual(ric.posts, [{ error: null, value: 'callback' }])
+          assertExactlyOneLambdaSpan(traces)
+          assert.strictEqual(clock.countTimers(), 0)
+        })
+      }
+    }
+  })
+
   describe('late callbacks during outer post-processing', () => {
     for (const mode of ['auto', 'callback']) {
       for (const outcome of ['promise', 'reject', 'throw', 'thenable']) {

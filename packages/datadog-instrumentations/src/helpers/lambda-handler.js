@@ -53,6 +53,9 @@ function invokeHandler (handler, receiver, args, completionMode, invocation) {
   let callbackSettled = false
   let nativeCompleted = false
   let acceptsCallback = true
+  let racePending = false
+  /** @type {(() => unknown) | undefined} */
+  let pendingNativeCompletion
   let modifiedCallback = noop
   let modifiedLegacyDoneCallback = noop
   let modifiedLegacySucceedCallback = noop
@@ -66,16 +69,26 @@ function invokeHandler (handler, receiver, args, completionMode, invocation) {
         if (failed) reject(error)
         else resolve(result)
       }
-      // Return completion can precede an outer wrapper's final result. Ignore late callbacks,
-      // but allow context methods to deliver that result through the runtime's Promise continuation.
-      if (!invocation || nativeCompleted || (callback && (!acceptsCallback || invocation.completed))) return
-      // The monitor observes a supplied callback, including a runtime's event-loop-drain policy.
-      // Context methods and synthetic callbacks complete the lifecycle here before native delivery.
-      if (first && !(callback && invocation.callbackObserved)) invocation.complete(error, result, failed)
-      if (typeof original === 'function') {
-        nativeCompleted = true
-        return Reflect.apply(original, self, values)
+      if (!invocation) return
+      const forward = () => {
+        // Return completion can precede an outer wrapper's final result. Ignore late callbacks,
+        // but allow context methods to deliver that result through the runtime's Promise continuation.
+        if (nativeCompleted || (callback && (!acceptsCallback || invocation.completed))) return
+        // The monitor observes a supplied callback, including a runtime's event-loop-drain policy.
+        // Context methods and synthetic callbacks finish the lifecycle before native delivery.
+        if (first && !(callback && invocation.callbackObserved)) invocation.complete(error, result, failed)
+        if (typeof original === 'function') {
+          nativeCompleted = true
+          return Reflect.apply(original, self, values)
+        }
       }
+      // A callback can run before the already-settled Promise's race reaction. Deliver only the winner.
+      // Hold duplicate context completions too, so they cannot overtake the first pending callback.
+      if (racePending) {
+        if (first) pendingNativeCompletion = forward
+        return
+      }
+      return forward()
     }
     modifiedCallback = function (error, result) {
       return complete(error, result, error != null, originalCallback, this, arguments, true)
@@ -122,10 +135,35 @@ function invokeHandler (handler, receiver, args, completionMode, invocation) {
   try {
     result = Reflect.apply(handler, receiver, invocationArgs)
     if (result !== undefined && typeof result?.then === 'function') {
-      return Promise.race([callbackPromise, result])
+      racePending = true
+      return new Promise((resolve, reject) => {
+        /**
+         * @param {boolean} fromCallback Whether the callback/context contender won.
+         * @param {boolean} failed Whether the selected completion failed.
+         * @param {unknown} value Selected result or failure.
+         */
+        const settle = (fromCallback, failed, value) => {
+          if (!racePending) return
+          racePending = false
+          acceptsCallback = fromCallback
+          const forward = pendingNativeCompletion
+          pendingNativeCompletion = undefined
+          if (failed) reject(value)
+          else resolve(value)
+          if (fromCallback) forward?.()
+        }
+        // Register the original contenders in Promise.race order, without chaining either one first.
+        callbackPromise.then(value => settle(true, false, value), error => settle(true, true, error))
+        try {
+          Promise.resolve(result).then(value => settle(false, false, value), error => settle(false, true, error))
+        } catch (error) {
+          settle(false, true, error)
+        }
+      })
     }
   } catch (error) {
     if (callbackSettled) return callbackPromise
+    acceptsCallback = false
     // A thrown handler or then getter can leave a callback scheduled after this rejection.
     callbackPromise.catch(noop)
     return Promise.reject(error)
