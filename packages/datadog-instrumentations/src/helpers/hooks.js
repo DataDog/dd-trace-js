@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  '@elevenlabs/elevenlabs-js': () => require('../elevenlabs'),
   // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
