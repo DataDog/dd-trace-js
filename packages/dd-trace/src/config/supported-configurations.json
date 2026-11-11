@@ -1654,9 +1654,9 @@
     ],
     "DD_PROFILING_ALLOCATION_ENABLED": [
       {
-        "implementation": "B",
+        "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
