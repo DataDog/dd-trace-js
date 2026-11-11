@@ -1,6 +1,8 @@
 'use strict'
 
 // The published Node SDK is CommonJS; ESM imports resolve to these same files.
+// Public message callbacks run after tool dispatch, and startSession resolves after audio startup.
+// These version-gated funnels preserve those earlier observation points; real-SDK CJS/ESM tests cover them.
 module.exports = [
   ...['startSession', '_onWebSocketOpen', '_handleMessage', '_onWebSocketClose', 'endSession'].map(methodName => ({
     module: {

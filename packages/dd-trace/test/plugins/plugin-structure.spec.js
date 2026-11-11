@@ -118,7 +118,7 @@ describe('Plugin Structure Validation', () => {
 
   const instrumentationFiles = new Set(
     fs.readdirSync(instrumentationsDir)
-      .filter(file => file.endsWith('.js'))
+      .filter(file => file.endsWith('.js') || fs.existsSync(path.join(instrumentationsDir, file, 'index.js')))
       .map(file => file.replace('.js', ''))
   )
 
@@ -144,7 +144,7 @@ describe('Plugin Structure Validation', () => {
           return
         }
 
-        assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation file: ${pluginId}.js`)
+        assert.strictEqual(instrumentationFiles.has(pluginId), true, `Missing instrumentation entry point: ${pluginId}`)
       })
     })
   })

@@ -2,10 +2,10 @@
 
 const dc = require('dc-polyfill')
 
-const log = require('../../dd-trace/src/log')
-const { addBeforeExitFinalizer } = require('../../dd-trace/src/before-exit')
-const shimmer = require('../../datadog-shimmer')
-const Session = require('./elevenlabs/session')
+const log = require('../../../dd-trace/src/log')
+const { addBeforeExitFinalizer } = require('../../../dd-trace/src/before-exit')
+const shimmer = require('../../../datadog-shimmer')
+const Session = require('./session')
 
 const spanCh = dc.tracingChannel('apm:elevenlabs:span')
 const finishCh = dc.channel('apm:elevenlabs:finish')
@@ -32,7 +32,7 @@ function run (scope, fn) { return scope.runInContext ? scope.runInContext(fn) : 
 
 /**
  * @param {Session} session
- * @param {import('./elevenlabs/session').Turn} turn
+ * @param {import('./session').Turn} turn
  */
 function begin (session, turn) {
   run(session.scope, () => {
@@ -54,7 +54,7 @@ function begin (session, turn) {
 
 /**
  * @param {Session} session
- * @param {import('./elevenlabs/session').Turn} turn
+ * @param {import('./session').Turn} turn
  */
 function finish (session, turn) {
   const text = [...turn.responses.values()].filter(Boolean).join('\n').slice(0, 100_000)
@@ -70,7 +70,7 @@ function finish (session, turn) {
       finishCh.publish(ctx)
     }
     turn.tools.clear()
-    /** @type {[string, import('./elevenlabs/audio').AudioBuffer, number, string][]} */
+    /** @type {[string, import('./audio').AudioBuffer, number, string][]} */
     const phases = [
       ['user speech', turn.input, session.inputRate, turn.userText],
       ['agent speech', turn.output, session.outputRate, text],
