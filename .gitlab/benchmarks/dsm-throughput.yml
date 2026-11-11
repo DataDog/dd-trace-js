@@ -14,6 +14,8 @@ variables:
 
 dsm_throughput:
   stage: benchmarks
+  # Not gating yet: allow_failure jobs post no GitHub status, so the DSM overhead gate never turns checks red.
+  allow_failure: true
   needs: []
   tags: ["runner:apm-k8s-same-cpu"]
   image: $DSM_THROUGHPUT_CI_IMAGE
