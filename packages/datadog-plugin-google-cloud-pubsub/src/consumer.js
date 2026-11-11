@@ -128,6 +128,11 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       'messaging.operation': 'receive',
     }
 
+    // Without a known topic the resource falls back to the subscription, which is not a destination.
+    if (topic) {
+      meta['messaging.destination.name'] = topicName
+    }
+
     let batchContext
     if (batchRequestTraceId && batchRequestSpanId) {
       meta['pubsub.batch.request_trace_id'] = batchRequestTraceId
