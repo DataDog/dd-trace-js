@@ -144,6 +144,70 @@ describe('sdk', () => {
       assert.deepStrictEqual(event.meta.expected_output, expectedOutput)
     })
 
+    it('uses the expected output returned by the user span processor', async () => {
+      const client = experimentClient()
+      const expectedOutput = { answer: 'sensitive' }
+      const redactedExpectedOutput = { answer: 'REDACTED' }
+      const dataset = Dataset.fromExisting(client, 'demo', '', 'ds', 'proj', [
+        new DatasetRecord({ question: '2+2' }, expectedOutput, {}, 'record-1'),
+      ], 1, 1)
+      let processedExpectedOutput
+
+      llmobs.registerProcessor(span => {
+        processedExpectedOutput = span.expectedOutput
+        span.expectedOutput = redactedExpectedOutput
+        return span
+      })
+      try {
+        await new Experiment(client, {
+          name: 'redacted-expected-output',
+          dataset,
+          task: () => ({ answer: '4' }),
+        }, llmobs).run()
+      } finally {
+        llmobs.deregisterProcessor()
+      }
+
+      assert.deepStrictEqual(processedExpectedOutput, expectedOutput)
+      sinon.assert.calledOnce(LLMObsSpanProcessor.prototype.process)
+      const event = LLMObsSpanProcessor.prototype.process.firstCall.firstArg.meta_struct._llmobs
+      assert.deepStrictEqual(event.meta.expected_output, redactedExpectedOutput)
+    })
+
+    for (const [description, removeExpectedOutput] of [
+      ['deletes expected output', span => { delete span.expectedOutput }],
+      ['sets expected output to undefined', span => { span.expectedOutput = undefined }],
+    ]) {
+      it(`lets the user span processor remove all experiment I/O when it ${description}`, async () => {
+        const client = experimentClient()
+        const dataset = Dataset.fromExisting(client, 'demo', '', 'ds', 'proj', [
+          new DatasetRecord({ question: 'sensitive' }, { answer: 'sensitive' }, {}, 'record-1'),
+        ], 1, 1)
+
+        llmobs.registerProcessor(span => {
+          span.input = []
+          span.output = []
+          removeExpectedOutput(span)
+          return span
+        })
+        try {
+          await new Experiment(client, {
+            name: 'removed-experiment-io',
+            dataset,
+            task: () => ({ answer: 'sensitive' }),
+          }, llmobs).run()
+        } finally {
+          llmobs.deregisterProcessor()
+        }
+
+        sinon.assert.calledOnce(LLMObsSpanProcessor.prototype.process)
+        const event = LLMObsSpanProcessor.prototype.process.firstCall.firstArg.meta_struct._llmobs
+        assert.deepStrictEqual(event.meta.input, {})
+        assert.deepStrictEqual(event.meta.output, {})
+        assert.strictEqual(Object.hasOwn(event.meta, 'expected_output'), false)
+      })
+    }
+
     it('includes expected output when the experiment task fails', async () => {
       const client = experimentClient()
       const expectedOutput = { answer: '4' }

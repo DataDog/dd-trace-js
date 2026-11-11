@@ -770,6 +770,10 @@ llmobs.registerProcessor((llmobsSpan) => {
     })
   }
 
+  if (llmobsSpan.expectedOutput !== undefined) {
+    llmobsSpan.expectedOutput = { redacted: true }
+  }
+
   return llmobsSpan
 })
 

@@ -4710,6 +4710,12 @@ declare namespace tracer {
       output: { content: JSONType, role?: string }[]
 
       /**
+       * The expected output associated with an experiment span.
+       * Delete this property or set it to `undefined` to omit the expected output.
+       */
+      expectedOutput?: JSONType
+
+      /**
        * Get a tag from the span.
        * @param key The key of the tag to get.
        * @returns The value of the tag, or `undefined` if the tag does not exist.
